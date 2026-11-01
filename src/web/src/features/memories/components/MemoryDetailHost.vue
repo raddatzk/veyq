@@ -98,6 +98,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     :personal-scope="personalScope"
     :core-actions="coreActions"
     :cover-editing="cover.editor.value !== null"
+    :can-set-cover="cover.canSet(node)"
     :can-report="reportsMedia"
     :chapters="chapters"
     :rights="rights"

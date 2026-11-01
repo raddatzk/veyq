@@ -64,7 +64,7 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
   ...over,
 })
 
-function mountDialog(extra: { contribute?: boolean } = { contribute: true }) {
+function mountDialog(extra: { contribute?: boolean; readonly?: boolean } = { contribute: true }) {
   return mount(FolderShareDialog, {
     props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
     global: { plugins: [realI18n()], stubs },
@@ -222,6 +222,32 @@ describe('FolderShareDialog — the folder\'s links', () => {
     await flushPromises()
     expect(byLabel(other, t('share.revoke')).exists()).toBe(false)
     expect(byLabel(other, t('share.copy')).exists(), 'control: the row renders its actions').toBe(true)
+  })
+
+  // Owner decision 2026-11-01: during a pending deletion the dialog stays to SEE the links; the server refuses every share
+  // write in the grace window (a revoke too), so it offers none - only the copy, and says why.
+  it('a pending deletion (`readonly`): the links are listed and copied, nothing is minted or changed', async () => {
+    const list = [row({ shareId: 'live' }), row({ shareId: 'off', enabled: false }), row({ shareId: 'renew', enabled: false, reissueRequired: true })]
+    listSharesFor.mockResolvedValue(list)
+    const w = mountDialog({ contribute: true, readonly: true })
+    await flushPromises()
+    await w.find('.folder-share-fold').trigger('click')
+    expect(w.findAll('.folder-share-row')).toHaveLength(3)
+    expect(byLabel(w, t('share.copy')).exists(), 'the live link copies').toBe(true)
+    expect(w.text()).toContain(t('share.pendingDeletion'))
+    expect(w.find('.folder-share-new').exists(), 'no new link').toBe(false)
+    for (const label of ['share.edit', 'share.reissue', 'share.reactivate', 'share.revoke', 'share.delete']) {
+      expect(byLabel(w, t(label)).exists(), label).toBe(false)
+    }
+    // control: the same list outside a pending deletion offers them
+    const live = mountDialog({ contribute: true })
+    await flushPromises()
+    await live.find('.folder-share-fold').trigger('click')
+    expect(live.find('.folder-share-new').exists()).toBe(true)
+    for (const label of ['share.edit', 'share.reissue', 'share.reactivate', 'share.revoke', 'share.delete']) {
+      expect(byLabel(live, t(label)).exists(), label).toBe(true)
+    }
+    expect(live.text()).not.toContain(t('share.pendingDeletion'))
   })
 
   it('deletes a switched-off link after the folder-worded confirm', async () => {

@@ -82,7 +82,7 @@ import type { Level } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import { registry, type LevelActionContext, type LevelMenuItem, type NodeShareOffer } from '../applications/registry'
 import { createLevelActions } from './levelActions'
-import { folderRights, targetOf, type Access, type TreeSource } from '../access'
+import { folderRights, rowRightsOf, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
 import { setLevelTab, useLevelTab } from '../../shared/state/useLevelTab'
 import { compareByCreation, displayNamesOf } from './location'
@@ -200,7 +200,7 @@ const newMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 const folderActions = computed(() =>
   standardNodeActions(
     t,
-    { share: rights.value.share, rename: rights.value.rename, move: rights.value.move, remove: rights.value.deleteNode },
+    rights.value,
     {
       share: () => emit('share', { contribute: rights.value.shareContribute }),
       rename: () => emit('renameFolder'),
@@ -372,8 +372,7 @@ function unblockedItem(node: TreeNode): Item {
 }
 /** A sub-folder's part in core's default actions and in a selection: core's matrix for THAT folder (`folderRights`). */
 function folderParts(node: TreeNode): Pick<LevelRow, 'standard' | 'selection'> {
-  const c = folderRights(props.access, targetOf(props.tree, node))
-  return { standard: { rename: c.rename, move: c.move, delete: c.deleteNode }, selection: { move: c.move, delete: c.deleteNode } }
+  return rowRightsOf(folderRights(props.access, targetOf(props.tree, node)))
 }
 
 // --- the selection (inbox #421) ------------------------------------------------------------------------------------------

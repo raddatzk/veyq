@@ -42,7 +42,7 @@ export function standardRowActions(t: Translate, node: TreeNode, row: Pick<Level
   const remove = row.selection?.remove
   return standardNodeActions(
     t,
-    { rename: !!granted.rename && !!doors.rename, move: !!granted.move && !!doors.move, remove: !!granted.delete && !!doors.remove },
+    { rename: !!granted.rename && !!doors.rename, move: !!granted.move && !!doors.move, delete: !!granted.delete && !!doors.remove },
     {
       rename: () => doors.rename?.(node),
       move: () => doors.move?.(node),

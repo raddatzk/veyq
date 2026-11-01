@@ -90,6 +90,9 @@ const props = defineProps<{
   coreActions?: readonly CoreHeaderAction[]
   /** Core's cover dialog is open over this page (the host mounts it): the lightbox then leaves the keyboard to it. */
   coverEditing?: boolean
+  /** The cover tile may open core's cover dialog: core's `coverRights` for this node, the host's answer (inbox #411).
+   *  Absent: it may not (fail closed). */
+  canSetCover?: boolean
   /** The lightbox offers "Report" (uc.moderation.report): the host's answer, core's rule (`canReport`). */
   canReport?: boolean
 }>()
@@ -191,7 +194,7 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   // (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
   ...standardNodeActions(
     t,
-    { rename: can.value.rename, move: can.value.move, remove: can.value.deleteNode },
+    { rename: can.value.rename, move: can.value.move, delete: can.value.delete },
     { rename: () => emit('rename'), move: () => emit('move'), remove: () => emit('delete') },
   ),
 ])
@@ -608,7 +611,7 @@ watch(
           type="button"
           class="memory-cover-preview"
           :class="{ 'is-empty': !coverSrc, 'is-compact': compact }"
-          :disabled="!memoryKey || !can.setCover"
+          :disabled="!memoryKey || !canSetCover"
           :aria-label="storedCover ? t('node.cover.change') : t('node.cover.set')"
           :title="storedCover ? t('node.cover.change') : t('node.cover.set')"
           @click="emit('editCover')"

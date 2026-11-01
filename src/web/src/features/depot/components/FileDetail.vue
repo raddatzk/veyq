@@ -193,7 +193,7 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   },
   ...standardNodeActions(
     t,
-    { share: rights.value.share, rename: rights.value.rename, move: rights.value.moveNode, remove: rights.value.deleteNode },
+    rights.value,
     { share: () => emit('share', { contribute: rights.value.shareContribute }), rename: () => emit('rename'), move: () => source.move?.(props.node), remove: () => emit('delete') },
   ),
 ])

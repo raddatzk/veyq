@@ -142,10 +142,13 @@ function openReissue(share: ManagedShare) {
   reissueFrom.value = share
   createOpen.value = true
 }
+// A pending deletion (`readonly`, the host's): the server refuses every change below, so none is offered - the list and
+// the copy stay (`NodeShareDialogProps.readonly`).
+const changes = computed(() => !props.readonly)
 // Renew: the owner's own share, enabled or not; anyone's share once it is off (the new one is then theirs).
-const canReissue = (share: ManagedShare) => share.mine || !share.enabled
+const canReissue = (share: ManagedShare) => changes.value && (share.mine || !share.enabled)
 // Edit: the caller's own link, whose recovery copy re-opens `K_share`.
-const canEdit = (share: ManagedShare) => share.mine && !!share.sealedShareKey
+const canEdit = (share: ManagedShare) => changes.value && share.mine && !!share.sealedShareKey
 async function onSaved() {
   await loadShares()
 }
@@ -225,8 +228,9 @@ function fmtDate(d: Date): string {
   <VeyqDialog :visible="true" :header="headerTitle" class="share-dialog" @update:visible="emit('close')">
     <div class="share-manage-head">
       <p class="share-intro">{{ introText }}</p>
-      <VeyqButton class="share-new-button" :label="createLabel" icon="plus" @click="openCreate" />
+      <VeyqButton v-if="changes" class="share-new-button" :label="createLabel" icon="plus" @click="openCreate" />
     </div>
+    <p v-if="!changes" class="share-intro share-pending">{{ t('share.pendingDeletion') }}</p>
 
     <p v-if="loadError" class="share-error">{{ t('share.loadFailed') }}</p>
     <p v-else-if="!visibleShares.length" class="share-empty">{{ emptyLabel }}</p>
@@ -298,7 +302,7 @@ function fmtDate(d: Date): string {
                 @click="openReissue(share)"
               />
               <VeyqButton
-                v-if="!share.enabled && !share.reissueRequired"
+                v-if="changes && !share.enabled && !share.reissueRequired"
                 icon="refresh"
                 :aria-label="t('share.reactivate')"
                 :title="t('share.reactivate')"
@@ -308,7 +312,7 @@ function fmtDate(d: Date): string {
                 @click="onReactivate(share)"
               />
               <VeyqButton
-                v-else-if="share.enabled && share.mine"
+                v-else-if="changes && share.enabled && share.mine"
                 icon="ban"
                 :aria-label="t('share.revoke')"
                 :title="t('share.revoke')"
@@ -321,7 +325,7 @@ function fmtDate(d: Date): string {
                    (its owner, or anyone once the owner left): deleting a co-member's parked link would destroy their
                    note and password copy. -->
               <VeyqButton
-                v-if="!share.enabled && share.deletable"
+                v-if="changes && !share.enabled && share.deletable"
                 icon="trash"
                 :aria-label="t('share.delete')"
                 :title="t('share.delete')"

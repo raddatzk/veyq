@@ -142,7 +142,9 @@ How each of these is built — the modules, the seams core asks, the web registr
   link's role only removes functions. So the registry's contract does not know which of the two is looking: a view
   receives who looks and the tree that session reads, and what it offers is its application's **rights function**,
   pure and fail-closed, the role matrix of [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
-  decision 6 in code. A right holds only where the matrix allows it **and** the session's data source implements the
+  decision 6 in code. What every node may do whatever its kind — be shared, renamed, moved, deleted — is core's one
+  answer (`nodeRights`), which each rights function, core's own for `FOLDER` too, may only narrow, never widen: a rule
+  written once cannot drift between applications. A right holds only where the matrix allows it **and** the session's data source implements the
   operation, so a function a guest's source does not have cannot appear. The one guest-only page is a `WRITE_ONLY`
   link's drop, whose guest holds no key. Rejected: a rights object that defaults to allowed, with the operations as
   optional props that fall back to the member's calls — the legacy plaintext client's design; a forgotten prop there

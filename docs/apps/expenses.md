@@ -219,7 +219,12 @@ A share is the member's view with functions removed. On a Pot:
 | deactivate, activate, delete and remove participants | ✓ | ✗ | ✗ |
 | own categories, base currency (the Pot's meta) | ✓ | ✗ | ✗ |
 | create a Pot | ✓ | ✗ | ✗ |
+| rename, move, delete the Pot | ✓ | ✗ | ✗ |
+| share the Pot (its `READ` / `READ_WRITE` links) | ✓ | ✗ | ✗ |
 
+A Pot's share, rename, move and delete are core's (`nodeRights`, `src/web/src/core/access.ts`), as for every kind:
+Expenses switched off keeps only the delete; while the space is pending deletion nothing is written, but the share
+dialog stays to see and copy the Pot's links - it mints and changes none, as the server refuses every share write then.
 A `WRITE_ONLY` link on a Pot does not exist. A deleted Pot goes to the space's trash like any node; a deleted entry
 stays inside the Pot (§ Entries).
 

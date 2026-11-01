@@ -1,12 +1,15 @@
+// @vitest-environment happy-dom
 // Depot's rights matrix (`rights.ts`, inbox #401; the table in `docs/apps/depot.md` § Guests). Every row names
 // the rights it grants; every other right must be false — a default flipped to true, a role or a kind falling through,
-// a guest deleting or renaming: each is red here.
+// a guest deleting or renaming: each is red here. The registry is the real one `src/test/setup.ts` fills (a DOM
+// environment), so the Depot switch is read through core's `applicationWritable`.
 import { describe, it, expect } from 'vitest'
 import { canUploadFolder, depotRights, NO_DEPOT_RIGHTS, type DepotRights } from './rights'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { Access, RightsTarget } from '../../core/access'
+import { nodeRights, type Access, type RightsTarget } from '../../core/access'
 import { memberAccessOf, guestAccessOf } from '../../test/models'
+import { accessShapes, rightsTargets, widerThanCore } from '../../test/nodeRightsShapes'
 import { DEPOT, MEMORIES } from '../platform/capabilities'
 
 const at = (kind: string | null, o: Partial<RightsTarget> = {}): RightsTarget => ({ kind, inIdentityFolder: false, shareable: kind === DROPBOX_KIND || kind === FOLDER_KIND || kind === FILE_KIND, ...o })
@@ -19,47 +22,50 @@ const READ = guestAccessOf('READ')
 const RW = guestAccessOf('READ_WRITE')
 const WO = guestAccessOf('WRITE_ONLY')
 
+const BOX = ['download', 'move', 'delete', 'moveGuestFolder', 'deleteGuestFolder'] as const
+const FILE = ['download', 'replace', 'rename', 'move', 'delete'] as const
+
 const rows: [string, Access, RightsTarget, DepotRights][] = [
-  // --- member at a level ---
-  ['member at the scope root', member, at(null), grants('download', 'upload', 'replace', 'rename', 'deleteFile', 'createDropBox', 'moveFile')],
-  ['member in a folder', member, at(FOLDER_KIND), grants('download', 'upload', 'replace', 'rename', 'deleteFile', 'createDropBox', 'moveFile')],
-  // …and moves a file out of it (a move out of a drop box is a member's, #358, #377 (a)); nothing is placed in it
-  ['member in a guest\'s identity folder: download, delete and move out per file (#391, #358)', member, at(FOLDER_KIND, { inIdentityFolder: true }), grants('download', 'deleteFile', 'moveFile')],
+  // --- member at a level: what the level takes (a file's rename, move and delete are its own row's, below) ---
+  ['member at the scope root', member, at(null), grants('download', 'upload', 'replace', 'createDropBox')],
+  ['member in a folder', member, at(FOLDER_KIND), grants('download', 'upload', 'replace', 'createDropBox')],
+  // nothing is placed in a guest's identity folder (its files are deleted and moved out one by one: the FILE rows)
+  ['member in a guest\'s identity folder: download only at the level', member, at(FOLDER_KIND, { inIdentityFolder: true }), grants('download')],
   ['member, pending deletion: download only', pending, at(FOLDER_KIND), grants('download')],
-  ['member at the scope root, drop box off: no createDropBox (#440 gap 2)', memberAccessOf({ publicSharesDropBox: false }), at(null), grants('download', 'upload', 'replace', 'rename', 'deleteFile', 'moveFile')],
-  ['member in a folder, drop box off: no createDropBox', memberAccessOf({ publicSharesDropBox: false }), at(FOLDER_KIND), grants('download', 'upload', 'replace', 'rename', 'deleteFile', 'moveFile')],
+  ['member at the scope root, drop box off: no createDropBox (#440 gap 2)', memberAccessOf({ publicSharesDropBox: false }), at(null), grants('download', 'upload', 'replace')],
+  ['member in a folder, drop box off: no createDropBox', memberAccessOf({ publicSharesDropBox: false }), at(FOLDER_KIND), grants('download', 'upload', 'replace')],
   ['member, pending deletion, identity folder', pending, at(FOLDER_KIND, { inIdentityFolder: true }), grants('download')],
   // --- member on a drop box ---
-  ['member on a drop box: moves it, and its guests\' folders out', member, at(DROPBOX_KIND), grants('download', 'share', 'deleteFile', 'deleteNode', 'moveFile', 'moveNode')],
+  ['member on a drop box: moves it, and its guests\' folders out', member, at(DROPBOX_KIND), grants(...BOX, 'shareUpload')],
   // drop box leaf: its links are WRITE_ONLY, so the READ leaf does not touch them (D9)
-  ['member on a drop box, drop box off', memberAccessOf({ publicSharesDropBox: false }), at(DROPBOX_KIND), grants('download', 'deleteFile', 'deleteNode', 'moveFile', 'moveNode')],
-  ['member on a drop box, public shares off: its WRITE_ONLY links are not the READ leaf\'s', memberAccessOf({ publicShares: false }), at(DROPBOX_KIND), grants('download', 'share', 'deleteFile', 'deleteNode', 'moveFile', 'moveNode')],
-  ['member on a drop box the registry will not share', member, at(DROPBOX_KIND, { shareable: false }), grants('download', 'deleteFile', 'deleteNode', 'moveFile', 'moveNode')],
-  ['member on a drop box, pending deletion: its links are a read', pending, at(DROPBOX_KIND), grants('download', 'share')],
-  // --- member on an opened file (FileDetail) ---
-  ['member on an opened file: everything', member, at(FILE_KIND), grants('download', 'replace', 'rename', 'share', 'shareContribute', 'deleteNode', 'moveNode')],
-  ['member on an opened file, public shares off', memberAccessOf({ publicShares: false }), at(FILE_KIND), grants('download', 'replace', 'rename', 'shareContribute', 'deleteNode', 'moveNode')],
-  ['member on an opened file, contribute off: READ link stays, no READ_WRITE role', memberAccessOf({ publicSharesContribute: false }), at(FILE_KIND), grants('download', 'replace', 'rename', 'share', 'deleteNode', 'moveNode')],
-  ['member on an opened file, drop box off: file share untouched', memberAccessOf({ publicSharesDropBox: false }), at(FILE_KIND), grants('download', 'replace', 'rename', 'share', 'shareContribute', 'deleteNode', 'moveNode')],
-  ['member on an opened file the registry will not share', member, at(FILE_KIND, { shareable: false }), grants('download', 'replace', 'rename', 'deleteNode', 'moveNode')],
-  ['member on an opened file, pending deletion: download and its links (a read)', pending, at(FILE_KIND), grants('download', 'share', 'shareContribute')],
-  ['member on a guest\'s file in an identity folder: download, delete, move out; no replace, rename, share', member, at(FILE_KIND, { inIdentityFolder: true }), grants('download', 'deleteNode', 'moveNode')],
+  ['member on a drop box, drop box off', memberAccessOf({ publicSharesDropBox: false }), at(DROPBOX_KIND), grants(...BOX)],
+  ['member on a drop box, public shares off: its WRITE_ONLY links are not the READ leaf\'s', memberAccessOf({ publicShares: false }), at(DROPBOX_KIND), grants(...BOX, 'shareUpload')],
+  ['member on a drop box the registry will not share', member, at(DROPBOX_KIND, { shareable: false }), grants(...BOX)],
+  ['member on a drop box, pending deletion: its links are a read', pending, at(DROPBOX_KIND), grants('download', 'shareUpload')],
+  // --- member on a file (its row, FileDetail) ---
+  ['member on a file: everything', member, at(FILE_KIND), grants(...FILE, 'share', 'shareContribute')],
+  ['member on a file, public shares off', memberAccessOf({ publicShares: false }), at(FILE_KIND), grants(...FILE, 'shareContribute')],
+  ['member on a file, contribute off: READ link stays, no READ_WRITE role', memberAccessOf({ publicSharesContribute: false }), at(FILE_KIND), grants(...FILE, 'share')],
+  ['member on a file, drop box off: file share untouched', memberAccessOf({ publicSharesDropBox: false }), at(FILE_KIND), grants(...FILE, 'share', 'shareContribute')],
+  ['member on a file the registry will not share', member, at(FILE_KIND, { shareable: false }), grants(...FILE)],
+  ['member on a file, pending deletion: download and its links (a read)', pending, at(FILE_KIND), grants('download', 'share', 'shareContribute')],
+  ['member on a guest\'s file in an identity folder: download, delete, move out; no replace, rename, share (#391, #377 (a))', member, at(FILE_KIND, { inIdentityFolder: true }), grants('download', 'delete', 'move')],
   // --- member, Depot switched off (uc.platform.switch-application-off): read-only, but a delete and its restore stay ---
-  ['member in a folder, Depot off: download and delete a file only', depotOff, at(FOLDER_KIND), grants('download', 'deleteFile')],
-  ['member on a drop box, Depot off: download, delete; no link, no move', depotOff, at(DROPBOX_KIND), grants('download', 'deleteFile', 'deleteNode')],
-  ['member on an opened file, Depot off: download and delete it; no replace, rename, move or link', depotOff, at(FILE_KIND), grants('download', 'deleteNode')],
-  ['member on an opened file, Memories off: untouched (another application\'s switch)', memberAccessOf({ applicationsOff: new Set([MEMORIES]) }), at(FILE_KIND), grants('download', 'replace', 'rename', 'share', 'shareContribute', 'deleteNode', 'moveNode')],
+  ['member in a folder, Depot off: download only at the level', depotOff, at(FOLDER_KIND), grants('download')],
+  ['member on a drop box, Depot off: download, delete it and its guests\' folders; no link, no move', depotOff, at(DROPBOX_KIND), grants('download', 'delete', 'deleteGuestFolder')],
+  ['member on a file, Depot off: download and delete it; no replace, rename, move or link', depotOff, at(FILE_KIND), grants('download', 'delete')],
+  ['member on a file, Memories off: untouched (another application\'s switch)', memberAccessOf({ applicationsOff: new Set([MEMORIES]) }), at(FILE_KIND), grants(...FILE, 'share', 'shareContribute')],
   ['member on another application\'s kind', member, at('MEMORY'), grants()],
   // --- guest READ ---
   ['READ guest in a folder', READ, at(FOLDER_KIND), grants('download')],
   ['READ guest on a drop box below its link', READ, at(DROPBOX_KIND), grants('download')],
-  ['READ guest on an opened file (a single-file link, or inside a folder link): download only', READ, at(FILE_KIND), grants('download')],
+  ['READ guest on a file (a single-file link, or inside a folder link): download only', READ, at(FILE_KIND), grants('download')],
   // --- guest READ_WRITE ---
-  ['READ_WRITE guest in a folder: upload, replace and move, no rename, no delete', RW, at(FOLDER_KIND), grants('download', 'upload', 'replace', 'moveFile')],
-  ['READ_WRITE guest in an identity folder: nothing placed, nothing moved out (#377 (a))', RW, at(FOLDER_KIND, { inIdentityFolder: true }), grants('download')],
-  ['READ_WRITE guest on a drop box below its link: read-only, no move (#380)', RW, at(DROPBOX_KIND), grants('download')],
+  ['READ_WRITE guest in a folder: upload and replace, no rename, no delete', RW, at(FOLDER_KIND), grants('download', 'upload', 'replace')],
+  ['READ_WRITE guest in an identity folder: nothing placed (#377 (a))', RW, at(FOLDER_KIND, { inIdentityFolder: true }), grants('download')],
+  ['READ_WRITE guest on a drop box below its link: read-only, no move (#380)', RW, at(DROPBOX_KIND, { parentKind: FOLDER_KIND }), grants('download')],
   ['READ_WRITE guest on the root of a single-file link: download and replace, no move (the root stays)', RW, at(FILE_KIND), grants('download', 'replace')],
-  ['READ_WRITE guest on a file inside a folder link: download, replace, move between folders', RW, at(FILE_KIND, { parentKind: FOLDER_KIND }), grants('download', 'replace', 'moveNode')],
+  ['READ_WRITE guest on a file inside a folder link: download, replace, move between folders', RW, at(FILE_KIND, { parentKind: FOLDER_KIND }), grants('download', 'replace', 'move')],
   ['READ_WRITE guest on a file in an identity folder: download only (#377 (a))', RW, at(FILE_KIND, { parentKind: FOLDER_KIND, inIdentityFolder: true }), grants('download')],
   ['READ_WRITE guest on a file whose parent is no folder: not moved', RW, at(FILE_KIND, { parentKind: DROPBOX_KIND }), grants('download', 'replace')],
   // --- guest WRITE_ONLY ---
@@ -87,25 +93,40 @@ describe('depotRights: the matrix', () => {
       for (const kind of [null, FOLDER_KIND, DROPBOX_KIND, FILE_KIND]) {
         for (const inIdentityFolder of [false, true]) {
           const c = depotRights(guestAccessOf(role), { kind, inIdentityFolder, shareable: true })
-          expect([c.rename, c.deleteFile, c.deleteNode, c.share, c.createDropBox], `${role} at ${kind}`).toEqual([false, false, false, false, false])
+          expect([c.rename, c.delete, c.deleteGuestFolder, c.share, c.shareUpload, c.createDropBox], `${role} at ${kind}`).toEqual([false, false, false, false, false, false])
         }
       }
     }
   })
 
-  // inbox #358 / #377 (a): a guest moves a file only as a contributor, only in a folder, never in or out of a drop box.
+  // inbox #358 / #377 (a): a guest moves a file only as a contributor, only out of a folder, never in or out of a drop box.
   it('a guest moves only a READ_WRITE folder\'s files, never a drop box nor in an identity folder', () => {
     for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {
       for (const kind of [null, FOLDER_KIND, DROPBOX_KIND, FILE_KIND]) {
         for (const inIdentityFolder of [false, true]) {
           for (const parentKind of [undefined, FOLDER_KIND]) {
             const c = depotRights(guestAccessOf(role), { kind, inIdentityFolder, shareable: true, parentKind })
-            expect(c.moveFile, `${role} at ${kind}, identity ${inIdentityFolder}`).toBe(role === 'READ_WRITE' && kind === FOLDER_KIND && !inIdentityFolder)
-            // the opened file itself: only out of a folder it was read in (never the link's root), never in an identity folder
-            expect(c.moveNode, `${role} at ${kind}, parent ${parentKind}, identity ${inIdentityFolder}`)
+            // a file: only out of a folder it was read in (never the link's root), never in an identity folder
+            expect(c.move, `${role} at ${kind}, parent ${parentKind}, identity ${inIdentityFolder}`)
               .toBe(role === 'READ_WRITE' && kind === FILE_KIND && parentKind === FOLDER_KIND && !inIdentityFolder)
+            expect(c.moveGuestFolder, `${role} at ${kind}`).toBe(false)
           }
         }
+      }
+    }
+  })
+
+  // Core owns the node-generic rights (`nodeRights`); Depot may only narrow them - a drop box's guests' folders included,
+  // each an identity folder whose parent is the drop box.
+  it('is never wider than core\'s node rights, for every access shape and target', () => {
+    expect(widerThanCore(depotRights, [DEPOT, MEMORIES], [FILE_KIND, DROPBOX_KIND, 'MEMORY'])).toEqual([])
+    const guestFolder: RightsTarget = { kind: FOLDER_KIND, inIdentityFolder: true, shareable: false, parentKind: DROPBOX_KIND }
+    for (const [name, access] of accessShapes([DEPOT])) {
+      const folder = nodeRights(access, guestFolder)
+      for (const target of rightsTargets([DROPBOX_KIND])) {
+        const c = depotRights(access, target)
+        expect(!c.moveGuestFolder || folder.move, `${name}: moveGuestFolder`).toBe(true)
+        expect(!c.deleteGuestFolder || folder.delete, `${name}: deleteGuestFolder`).toBe(true)
       }
     }
   })

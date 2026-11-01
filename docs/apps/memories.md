@@ -181,7 +181,9 @@ uc.sharing.share-public-viewer:folder-share-root). A folder guest's create of a 
 One view per kind serves a member and a guest ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 Consequences, inbox #401); what it shows is `memoryRights(access, target)` (`src/web/src/features/memories/rights.ts`,
 pinned row by row in `rights.test.ts`): pure, every right false unless a row grants it, an unknown role or kind
-grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
+grants nothing. Its share, rename, move and delete of the node are core's `nodeRights`, which Memories only narrows (a
+guest moves a Memory, never a chapter); the cover is core's action with core's right (`coverRights`). On an opened
+`MEMORY` or `CHAPTER` (the detail):
 
 | Right | member | member, scope pending deletion | `READ` | `READ_WRITE` | `WRITE_ONLY` |
 |---|---|---|---|---|---|
@@ -196,14 +198,14 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | move the node (core's move dialog, inbox #358) | ✓ a Memory to the root or a folder, a chapter into another Memory | ✗ | ✗ | ✓ a Memory a folder of the subtree holds, between the subtree's folders; ✗ a chapter, the link's root | ✗ |
 | copy the node (core's "Copy to…", [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)) | ✓ a Memory with its chapters to the root or a folder, a chapter into a Memory: each medium's original and its existing tiers read by frame and uploaded as they are under fresh keys, its sealed facts (capture time and its correction, coordinates, place name, EXIF) sealed anew - nothing decoded (`exportImport.ts`, `addCopiedMedia`, [ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md) decision 11); an uploaded cover as its blob, a photo cover by its medium; participants and contributors do not come along | ✗ | ✗ | ✗ | ✗ |
 | item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
-| share (and the uploader link) | the instance's `core.public-shares` (and, for the READ_WRITE role, `.contribute`; for the uploader link, `.drop-box`) | the same | ✗ | ✗ | ✗ |
+| share (and the uploader link) | the instance's `core.public-shares` (and, for the READ_WRITE role, `.contribute`; for the uploader link, `.drop-box`) | the same: the dialog lists and copies the links, mints and changes none (the server refuses every share write then) | ✗ | ✗ | ✗ |
 
 At a folder level (Memories' rows in core's one list): a member creates a Memory (not during a pending deletion, never in a guest's
 identity folder); a share guest creates none — the "New" menu offers a guest no Memory (ADR 0080 decision 6); every role that reads opens
 one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's), and a guest's move
 the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unknown at the link's root). A level's selection
 (core's Select mode, inbox #421) reads the same matrix per Memory (`LevelRow.selection`): it moves with the selection where
-`move` says yes and is deleted with it where `deleteNode` does (core's delete, as the Memory's own page asks the host for),
+`move` says yes and is deleted with it where `delete` does (core's delete, as the Memory's own page asks the host for),
 so a guest's selection moves a Memory a folder holds and deletes none. These are the matrix
 half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
 most a guest page can ever offer. Memories' source is `src/web/src/features/memories/source.ts` (inbox #401 S4): the

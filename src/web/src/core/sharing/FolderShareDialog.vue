@@ -114,8 +114,11 @@ function roleLabel(r: ShareRole): string {
   return r === ShareRole.ReadWrite ? t('share.folder.roleContributor') : t('share.roleViewer')
 }
 const titleFor = (s: ManagedShare) => decoded.value.get(s.shareId)?.name || roleLabel(s.role)
+// A pending deletion (`readonly`, the host's): the server refuses every change below, so none is offered - the list and
+// the copy stay (`NodeShareDialogProps.readonly`).
+const changes = computed(() => !props.readonly)
 // Renew: the owner's own link, live or not; anyone's link once it is off (the new one is then theirs).
-const canReissue = (s: ManagedShare) => s.mine || !s.enabled
+const canReissue = (s: ManagedShare) => changes.value && (s.mine || !s.enabled)
 
 async function loadShares() {
   loadError.value = false
@@ -289,7 +292,7 @@ const editing = ref<ManagedShare | null>(null)
 const currentPassword = ref('')
 const editError = ref(false)
 /** Edit: the caller's own link, whose recovery copy re-opens `K_share` — the Memory dialog's rule. */
-const canEdit = (s: ManagedShare) => s.mine && !!s.sealedShareKey
+const canEdit = (s: ManagedShare) => changes.value && s.mine && !!s.sealedShareKey
 // ADR 0076 point 5 (#303): a link without a write verifier refuses every new guest as READ_WRITE, and an edit cannot add
 // one — only a renew stores it. So graded READ_WRITE, such a link warns and offers that renew.
 const roleNeedsReissue = computed(
@@ -591,7 +594,8 @@ function onDialogVisible(visible: boolean) {
     <!-- The list of the folder's links. -->
     <div v-else class="veyq-form">
       <p class="veyq-form-copy">{{ t(copyKey('intro')) }}</p>
-      <VeyqButton class="folder-share-new" :label="t('share.createNew')" icon="plus" @click="openCreate" />
+      <VeyqButton v-if="changes" class="folder-share-new" :label="t('share.createNew')" icon="plus" @click="openCreate" />
+      <p v-else class="veyq-form-copy folder-share-pending">{{ t('share.pendingDeletion') }}</p>
 
       <p v-if="loadError" class="veyq-form-error">{{ t('share.loadFailed') }}</p>
       <p v-else-if="!folderShares.length" class="veyq-empty veyq-empty-inline">{{ t('share.none') }}</p>
@@ -673,7 +677,7 @@ function onDialogVisible(visible: boolean) {
                   @click="onReissue(share)"
                 />
                 <VeyqButton
-                  v-if="!share.enabled && !share.reissueRequired"
+                  v-if="changes && !share.enabled && !share.reissueRequired"
                   class="veyq-icon-button"
                   icon="refresh"
                   :aria-label="t('share.reactivate')"
@@ -684,7 +688,7 @@ function onDialogVisible(visible: boolean) {
                   @click="onReactivate(share)"
                 />
                 <VeyqButton
-                  v-else-if="share.enabled && share.mine"
+                  v-else-if="changes && share.enabled && share.mine"
                   class="veyq-icon-button"
                   icon="ban"
                   :aria-label="t('share.revoke')"
@@ -696,7 +700,7 @@ function onDialogVisible(visible: boolean) {
                 />
                 <!-- Delete only a switched-off link, and only where the server's gate lets it through (ADR 0029 §7). -->
                 <VeyqButton
-                  v-if="!share.enabled && share.deletable"
+                  v-if="changes && !share.enabled && share.deletable"
                   class="veyq-icon-button"
                   icon="trash"
                   :aria-label="t('share.delete')"

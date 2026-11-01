@@ -23,9 +23,10 @@ vi.mock('./node/tree', async (importOriginal) => ({
 }))
 
 import {
-  folderRights, memberAccess, memberTreeSource, targetOf,
-  type Access, type RightsTarget, type FolderRights, type GuestAccess, type MemberAccess, type TreeSource,
+  folderRights, memberAccess, memberTreeSource, nodeRights, NO_NODE_RIGHTS, rowRightsOf, targetOf,
+  type Access, type RightsTarget, type FolderRights, type GuestAccess, type MemberAccess, type NodeRights, type TreeSource,
 } from './access'
+import { rightsTargets, widerThanCore } from '../test/nodeRightsShapes'
 import { createRegistry } from './applications/registry'
 import { FOLDER_KIND } from './node/kind'
 import type { TreeNode } from './node/tree'
@@ -187,10 +188,97 @@ describe('targetOf: the node as a rights function is asked about it', () => {
   })
 })
 
+// Core's node-generic rights (`nodeRights`, owner 2026-11-01): the base every rights function narrows. ALPHA is an
+// application's kind (registered per test, so its switch can be off), BETA another application's, OMEGA nobody's.
+describe('nodeRights: core\'s base for every kind', () => {
+  beforeEach(() => {
+    holder.reg!.registerApplication({ id: 'alpha', name: 'alpha.name', kinds: ['ALPHA'] })
+    holder.reg!.registerApplication({ id: 'beta', name: 'beta.name', kinds: ['BETA'] })
+  })
+  const at = (kind: string | null, o: Partial<RightsTarget> = {}): RightsTarget => ({ kind, inIdentityFolder: false, shareable: kind !== null, ...o })
+  const grants = (...keys: (keyof NodeRights)[]): NodeRights => ({ ...NO_NODE_RIGHTS, ...Object.fromEntries(keys.map((k) => [k, true])) })
+  const ALL: (keyof NodeRights)[] = ['share', 'shareContribute', 'shareUpload', 'rename', 'move', 'delete']
+  const member = memberAccessOf()
+  const pending = memberAccessOf({ readonly: true })
+  const alphaOff = memberAccessOf({ applicationsOff: new Set(['alpha']) })
+  const RW = guestAccessOf('READ_WRITE')
+
+  const rows: [string, Access, RightsTarget, NodeRights][] = [
+    // a member: everything; each leaf on its own (the server ANDs the path, ADR 0088 decision 3)
+    ['member on an application\'s node', member, at('ALPHA'), grants(...ALL)],
+    ['member on a folder', member, at(FOLDER_KIND), grants(...ALL)],
+    ['member on nobody\'s kind (never switched off)', member, at('OMEGA'), grants(...ALL)],
+    ['member, READ links off', memberAccessOf({ publicShares: false }), at('ALPHA'), grants('shareContribute', 'shareUpload', 'rename', 'move', 'delete')],
+    ['member, contribute off', memberAccessOf({ publicSharesContribute: false }), at('ALPHA'), grants('share', 'shareUpload', 'rename', 'move', 'delete')],
+    ['member, drop box off', memberAccessOf({ publicSharesDropBox: false }), at('ALPHA'), grants('share', 'shareContribute', 'rename', 'move', 'delete')],
+    ['member, a kind with no share dialog', member, at('ALPHA', { shareable: false }), grants('rename', 'move', 'delete')],
+    // a pending deletion: no write, but the share dialog stays to see the links (owner 2026-11-01)
+    ['member, pending deletion: the share dialog only', pending, at('ALPHA'), grants('share', 'shareContribute', 'shareUpload')],
+    ['member, pending deletion, a folder', pending, at(FOLDER_KIND), grants('share', 'shareContribute', 'shareUpload')],
+    // the application switch: read-only, but the delete to the trash stays (the server's exemption); no new link
+    ['member, its application off: delete only', alphaOff, at('ALPHA'), grants('delete')],
+    ['member, another application off: untouched', alphaOff, at('BETA'), grants(...ALL)],
+    ['member, its application off and pending deletion: nothing', memberAccessOf({ readonly: true, applicationsOff: new Set(['alpha']) }), at('ALPHA'), grants()],
+    // a guest's identity folder: only moved out of and deleted in
+    ['member in a guest\'s identity folder: move out, delete', member, at('ALPHA', { inIdentityFolder: true }), grants('move', 'delete')],
+    ['member, pending deletion, in an identity folder: nothing', pending, at('ALPHA', { inIdentityFolder: true }), grants()],
+    // the scope root is no node
+    ['member at the scope root', member, at(null), grants()],
+    // a guest: core's move between folders for a contributor, nothing else in any role
+    ['READ_WRITE guest on a node a folder holds: move', RW, at('ALPHA', { parentKind: FOLDER_KIND }), grants('move')],
+    ['READ_WRITE guest at its link\'s root (parent unknown)', RW, at('ALPHA'), grants()],
+    ['READ_WRITE guest on a node another kind holds', RW, at('ALPHA', { parentKind: 'BETA' }), grants()],
+    ['READ_WRITE guest at the scope root\'s top level (never the guest\'s)', RW, at('ALPHA', { parentKind: null }), grants()],
+    ['READ_WRITE guest in an identity folder', RW, at('ALPHA', { parentKind: FOLDER_KIND, inIdentityFolder: true }), grants()],
+    ['READ_WRITE guest, its application off (a guest is not told the switch)', guestAccessOf('READ_WRITE'), at('ALPHA', { parentKind: FOLDER_KIND }), grants('move')],
+    ['READ guest', guestAccessOf('READ'), at('ALPHA', { parentKind: FOLDER_KIND }), grants()],
+    ['WRITE_ONLY guest', guestAccessOf('WRITE_ONLY'), at('ALPHA', { parentKind: FOLDER_KIND }), grants()],
+    ['an unknown role', guestAccessOf('OWNER'), at('ALPHA', { parentKind: FOLDER_KIND }), grants()],
+    ['an unknown mode', { mode: 'operator' } as unknown as Access, at('ALPHA'), grants()],
+  ]
+  it.each(rows)('%s', (_label, access, target, expected) => {
+    expect(nodeRights(access, target)).toEqual(expected)
+  })
+
+  it('defaults to nothing', () => {
+    for (const [k, v] of Object.entries(NO_NODE_RIGHTS)) expect(v, k).toBe(false)
+    expect(Object.isFrozen(NO_NODE_RIGHTS)).toBe(true)
+  })
+
+  it('no guest role shares, renames or deletes, wherever it stands', () => {
+    for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {
+      for (const target of rightsTargets(['ALPHA'])) {
+        const c = nodeRights(guestAccessOf(role), target)
+        expect([c.share, c.shareContribute, c.shareUpload, c.rename, c.delete], `${role} ${JSON.stringify(target)}`).toEqual([false, false, false, false, false])
+      }
+    }
+  })
+
+  it('a pending deletion keeps every share right a member has and takes every write', () => {
+    for (const target of rightsTargets(['ALPHA'])) {
+      const live = nodeRights(member, target)
+      const grace = nodeRights(pending, target)
+      expect([grace.share, grace.shareContribute, grace.shareUpload], JSON.stringify(target)).toEqual([live.share, live.shareContribute, live.shareUpload])
+      expect([grace.rename, grace.move, grace.delete], JSON.stringify(target)).toEqual([false, false, false])
+    }
+  })
+
+  it('a row\'s default actions and its selection read the one answer (`rowRightsOf`)', () => {
+    expect(rowRightsOf({ rename: true, move: false, delete: true })).toEqual({
+      standard: { rename: true, move: false, delete: true },
+      selection: { move: false, delete: true },
+    })
+  })
+})
+
 // Core's matrix for FOLDER (`folderRights`). Every row names the rights it grants; every other right must be
 // false — so a right that turns true by accident (a default flipped, a role or kind falling through) is red.
 describe('folderRights: core\'s fail-closed matrix', () => {
-  const NONE: FolderRights = { navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, shareContribute: false, nodeTrash: false, move: false }
+  it('is never wider than core\'s node rights, for every access shape and target', () => {
+    expect(widerThanCore(folderRights, [], ['ALPHA'])).toEqual([])
+  })
+
+  const NONE: FolderRights = { navigate: false, createFolder: false, rename: false, delete: false, share: false, shareContribute: false, nodeTrash: false, move: false }
   const at = (kind: string | null, o: Partial<RightsTarget> = {}): RightsTarget => ({ kind, inIdentityFolder: false, shareable: kind === FOLDER_KIND, ...o })
   const grants = (...keys: (keyof FolderRights)[]) => ({ ...NONE, ...Object.fromEntries(keys.map((k) => [k, true])) })
   const member = memberAccessOf()
@@ -203,11 +291,11 @@ describe('folderRights: core\'s fail-closed matrix', () => {
   const rows: [string, Access, RightsTarget, FolderRights][] = [
     // member
     ['member at the scope root', member, at(null), grants('navigate', 'createFolder', 'nodeTrash')],
-    ['member in a folder', member, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'shareContribute', 'nodeTrash', 'move')],
-    ['member in a folder at the scope root\'s top level', member, at(FOLDER_KIND, { parentKind: null }), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'shareContribute', 'nodeTrash', 'move')],
-    ['member in a folder, public links off', noLinks, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'nodeTrash', 'move')],
-    ['member in a folder, contribute off: shares, offers no READ_WRITE', noContribute, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'nodeTrash', 'move')],
-    ['member in a folder, kind not shareable', member, at(FOLDER_KIND, { shareable: false }), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'nodeTrash', 'move')],
+    ['member in a folder', member, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'delete', 'share', 'shareContribute', 'nodeTrash', 'move')],
+    ['member in a folder at the scope root\'s top level', member, at(FOLDER_KIND, { parentKind: null }), grants('navigate', 'createFolder', 'rename', 'delete', 'share', 'shareContribute', 'nodeTrash', 'move')],
+    ['member in a folder, public links off', noLinks, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'delete', 'nodeTrash', 'move')],
+    ['member in a folder, contribute off: shares, offers no READ_WRITE', noContribute, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'delete', 'share', 'nodeTrash', 'move')],
+    ['member in a folder, kind not shareable', member, at(FOLDER_KIND, { shareable: false }), grants('navigate', 'createFolder', 'rename', 'delete', 'nodeTrash', 'move')],
     ['member, pending deletion, root', pending, at(null), grants('navigate')],
     ['member, pending deletion, folder (links are a read)', pending, at(FOLDER_KIND), grants('navigate', 'share', 'shareContribute')],
     // a member's move OUT of a drop box is the identity folder's one placement (inbox #358, #377 (a))
@@ -239,7 +327,7 @@ describe('folderRights: core\'s fail-closed matrix', () => {
         for (const inIdentityFolder of [false, true]) {
           for (const parentKind of [undefined, null, FOLDER_KIND, 'ALPHA']) {
             const c = folderRights(guestAccessOf(role), { kind, inIdentityFolder, shareable: true, parentKind })
-            expect([c.rename, c.deleteNode, c.share, c.shareContribute, c.nodeTrash]).toEqual([false, false, false, false, false])
+            expect([c.rename, c.delete, c.share, c.shareContribute, c.nodeTrash]).toEqual([false, false, false, false, false])
             // a move only for READ_WRITE, only of a folder a folder holds, never in an identity folder (#358, #377 (a))
             const mayMove = role === 'READ_WRITE' && kind === FOLDER_KIND && !inIdentityFolder && parentKind === FOLDER_KIND
             expect(c.move, `${role} at ${kind} in ${parentKind}, identity ${inIdentityFolder}`).toBe(mayMove)

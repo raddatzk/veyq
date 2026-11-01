@@ -1,8 +1,11 @@
+// @vitest-environment happy-dom
 // Memories' rights matrix (`rights.ts`, inbox #401; the table in `docs/apps/memories.md` § What a guest may
 // do). Every row names the rights it grants; every other right must be false — a default flipped to true, a role or a
-// kind falling through, a guest reaching a member-only function: each is red here.
+// kind falling through, a guest reaching a member-only function: each is red here. The registry is the real one
+// `src/test/setup.ts` fills (a DOM environment), so the Memories switch is read through core's `applicationWritable`.
 import { describe, it, expect } from 'vitest'
 import { memoryRights, NO_MEMORY_RIGHTS, type MemoryRights } from './rights'
+import { widerThanCore } from '../../test/nodeRightsShapes'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { Access, RightsTarget } from '../../core/access'
@@ -23,8 +26,8 @@ const WO = guestAccessOf('WRITE_ONLY')
 
 /** A member on an opened Memory or chapter, as the detail has always offered it (cr-0049 … cr-0113). */
 const MEMBER_ON_NODE: Grant = {
-  navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setCover: true, setBanner: true, mark: true,
-  share: true, shareContribute: true, shareUpload: true, rename: true, deleteNode: true, move: true, mediaTrash: true, buckets: true,
+  navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setBanner: true, mark: true,
+  share: true, shareContribute: true, shareUpload: true, rename: true, delete: true, move: true, mediaTrash: true, buckets: true,
 }
 
 const rows: [string, Access, RightsTarget, Grant][] = [
@@ -47,7 +50,7 @@ const rows: [string, Access, RightsTarget, Grant][] = [
   // --- member, Memories switched off (uc.platform.switch-application-off): read-only, but a delete and its restore stay ---
   ['member, Memories off, in a folder: no new Memory', memoriesOff, at(FOLDER_KIND), { navigate: true }],
   ['member, Memories off, on a Memory: reads, downloads, marks, trash and delete; no write, no new link', memoriesOff, at(MEMORY_KIND), {
-    navigate: true, download: true, mark: true, mediaTrash: true, buckets: true, participants: true, deleteMedia: 'any', deleteNode: true,
+    navigate: true, download: true, mark: true, mediaTrash: true, buckets: true, participants: true, deleteMedia: 'any', delete: true,
   }],
   ['member, Depot off, on a Memory: untouched (another application\'s switch)', memberAccessOf({ applicationsOff: new Set([DEPOT]) }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true }],
   ['member, Memories off and pending deletion: no delete either', memberAccessOf({ readonly: true, applicationsOff: new Set([MEMORIES]) }), at(MEMORY_KIND), {
@@ -88,6 +91,11 @@ describe('memoryRights: the matrix', () => {
     for (const [k, v] of Object.entries(NO_MEMORY_RIGHTS)) expect(v, k).toBe(k === 'deleteMedia' ? 'none' : false)
     expect(Object.isFrozen(NO_MEMORY_RIGHTS)).toBe(true)
   })
+
+  // Core owns the node-generic rights (`nodeRights`); Memories may only narrow them.
+  it('is never wider than core\'s node rights, for every access shape and target', () => {
+    expect(widerThanCore(memoryRights, [MEMORIES, DEPOT], [MEMORY_KIND, CHAPTER_KIND, FILE])).toEqual([])
+  })
 })
 
 // Rule 2 of #401: item marks (K_SC at E_0), the node's sealed meta, the media trash, the organizer, the
@@ -95,7 +103,7 @@ describe('memoryRights: the matrix', () => {
 // new Memory (owner decision 2026-10-14: the server lets no guest create one, core's `GuestCreatableKinds`).
 describe('memoryRights: member-only functions', () => {
   const MEMBER_ONLY: (keyof MemoryRights)[] = [
-    'mark', 'editMeta', 'setCover', 'setBanner', 'share', 'shareUpload', 'rename', 'deleteNode', 'mediaTrash', 'buckets', 'createChapter', 'createMemory',
+    'mark', 'editMeta', 'setBanner', 'share', 'shareUpload', 'rename', 'delete', 'mediaTrash', 'buckets', 'createChapter', 'createMemory',
   ]
   it('no guest role grants any of them', () => {
     for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {

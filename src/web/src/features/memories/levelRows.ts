@@ -25,7 +25,7 @@ import { parentContentKey, type TreeNode } from '../../core/node/tree'
 import { nodeById } from '../../core/node/browse'
 import { treeStore } from '../../core/node/treeStore'
 import { activeSpace } from '../../app/activeSpace'
-import { targetOf, type TreeSource } from '../../core/access'
+import { rowRightsOf, targetOf, type TreeSource } from '../../core/access'
 import { collectLocatedPins, collectLocatedPinsBy } from './spaceMap'
 import { memoryRights } from './rights'
 import { memoryDetails, NO_FACTS, unsealRowFacts, type MemoryRowFacts } from './memoryRowDetails'
@@ -108,10 +108,9 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
       details: memoryDetails(facts.value.get(node.id) ?? NO_FACTS, t, locale.value),
       primary: { label: node.name, onClick: () => host.open(node) },
       actions: [],
-      standard: { rename: c.rename, move: c.move, delete: c.deleteNode },
-      // With a selection of the level (inbox #421): the same matrix for THIS node; its delete is core's `deleteNode`, as the
-      // Memory's own page asks the host for.
-      selection: { move: c.move, delete: c.deleteNode },
+      // Core's default actions and a selection of the level (inbox #421) read the same answer for THIS node; its delete is
+      // core's `deleteNode`, as the Memory's own page asks the host for.
+      ...rowRightsOf(c),
     }
   }
 

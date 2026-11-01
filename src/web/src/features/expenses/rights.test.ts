@@ -1,6 +1,10 @@
+// @vitest-environment happy-dom
 // The Expenses rights matrix (docs/apps/expenses.md § Rights, ADR 0108 decision 6), one row at a time — and fail
-// closed: every case that grants something stands beside the one that differs in a single input and grants it not.
+// closed: every case that grants something stands beside the one that differs in a single input and grants it not. The
+// registry is the real one `src/test/setup.ts` fills (a DOM environment), so the Expenses switch is read through core's
+// `applicationWritable`.
 import { describe, it, expect } from 'vitest'
+import { widerThanCore } from '../../test/nodeRightsShapes'
 import { ShareRole } from '../../api/generated/sharing'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { RightsTarget } from '../../core/access'
@@ -17,7 +21,7 @@ describe('expensesRights', () => {
   it('a member does everything on a Pot, and sees each revision\'s writer', () => {
     expect(expensesRights(memberAccessOf(), pot)).toEqual({
       view: true, writeEntries: true, addPeople: true, addMembers: true, managePeople: true, settings: true, writers: true, createPot: false,
-      share: true, shareContribute: true, renameNode: true, moveNode: true, deleteNode: true,
+      share: true, shareContribute: true, rename: true, move: true, delete: true,
     })
   })
 
@@ -25,7 +29,7 @@ describe('expensesRights', () => {
     const r = expensesRights(guestAccessOf(ShareRole.ReadWrite), pot)
     expect(r).toEqual({ ...NO_EXPENSES_RIGHTS, view: true, writeEntries: true, addPeople: true })
     // the member-only steps, each false here and true for a member (above)
-    expect([r.managePeople, r.settings, r.writers, r.share, r.renameNode, r.moveNode, r.deleteNode]).toEqual([false, false, false, false, false, false, false])
+    expect([r.managePeople, r.settings, r.writers, r.share, r.rename, r.move, r.delete]).toEqual([false, false, false, false, false, false, false])
     // it adds names only: the space's members are a member's to see (ADR 0108 decision 2; control: the member above)
     expect(r.addMembers).toBe(false)
   })
@@ -43,12 +47,20 @@ describe('expensesRights', () => {
 
   it('Expenses switched off: read-only — the trash stays (control: on, the same member writes)', () => {
     const off = expensesRights(memberAccessOf({ applicationsOff: new Set([EXPENSES]) }), pot)
-    expect(off).toEqual({ ...NO_EXPENSES_RIGHTS, view: true, writers: true, deleteNode: true })
+    expect(off).toEqual({ ...NO_EXPENSES_RIGHTS, view: true, writers: true, delete: true })
     expect(expensesRights(memberAccessOf({ applicationsOff: new Set(['depot']) }), pot).writeEntries).toBe(true)
   })
 
-  it('a scope pending deletion takes no write, not even the trash', () => {
-    expect(expensesRights(memberAccessOf({ readonly: true }), pot)).toEqual({ ...NO_EXPENSES_RIGHTS, view: true, writers: true })
+  // Owner decision 2026-11-01: as on every kind, the share dialog stays to see the Pot's links (it mints none then, the
+  // host's `readonly`); every write goes (control: the member above writes).
+  it('a scope pending deletion takes every write, not even the trash, but keeps the share dialog', () => {
+    expect(expensesRights(memberAccessOf({ readonly: true }), pot)).toEqual({ ...NO_EXPENSES_RIGHTS, view: true, writers: true, share: true, shareContribute: true })
+    expect(expensesRights(memberAccessOf({ readonly: true, publicShares: false, publicSharesContribute: false }), pot).share).toBe(false)
+  })
+
+  // Core owns the node-generic rights (`nodeRights`); Expenses may only narrow them.
+  it('is never wider than core\'s node rights, for every access shape and target', () => {
+    expect(widerThanCore(expensesRights, [EXPENSES, 'depot'], [POT_KIND, 'MEMORY'])).toEqual([])
   })
 
   it('a share needs the instance\'s links and a shareable Pot; READ_WRITE needs the contribute leaf', () => {

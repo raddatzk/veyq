@@ -3,36 +3,31 @@
 // member and a share guest see the same view with functions removed. The matrix is written down once, in
 // `docs/apps/depot.md` § Guests (ADR 0080 decision 6); this is its code. Every field defaults to false: an unknown mode,
 // role or kind grants nothing.
+//
+// **The node-generic rights are core's** (`nodeRights`, core/access.ts): share, rename, move and delete of the node on
+// screen - a file, a drop box - start from core's answer and Depot only narrows them (a drop box is never renamed, a guest
+// moves no drop box); `rights.test.ts` asserts that no answer here is wider than core's. A file row asks about ITS file,
+// as the file's own page does, so a row and the page cannot disagree.
 import { FOLDER_KIND } from '../../core/node/kind'
-import { folderRights, type Access, type RightsTarget, type MemberAccess } from '../../core/access'
+import {
+  applicationWritable, folderRights, nodeRights, type Access, type NodeRights, type RightsTarget, type MemberAccess,
+} from '../../core/access'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
-import { DEPOT } from '../platform/capabilities'
 
-export interface DepotRights {
+export interface DepotRights extends NodeRights {
   /** Download a file of the level, open a drop box or one of its guests' folders. */
   download: boolean
   /** Upload new files into the level (a member and a contributor: a `FILE` node each; a drop box's own guest: into its
    *  identity folder). */
   upload: boolean
-  /** Replace a file's content (or upload into one that holds none). */
+  /** Replace a file's content (or upload into one that holds none): at a level, by uploading a file of the same name. */
   replace: boolean
-  /** Rename a file. */
-  rename: boolean
-  /** Delete a file (into the scope's trash) — also a guest's folder of a drop box. */
-  deleteFile: boolean
   /** Create a drop box at this level (needs `core.public-shares.drop-box`: the server refuses the node without it). */
   createDropBox: boolean
-  /** Manage the node's public links: an opened file's READ / READ_WRITE ones, a drop box's WRITE_ONLY ones. */
-  share: boolean
-  /** The file's share dialog offers the READ_WRITE (contribute) role for a new link (`core.public-shares.contribute`). A
-   *  drop box's dialog has no role to offer, so it is false there. */
-  shareContribute: boolean
-  /** Delete the drop box on screen. */
-  deleteNode: boolean
-  /** Move a file of the level elsewhere — also a guest's folder out of a drop box (core's `MoveNodeDialog`, inbox #358). */
-  moveFile: boolean
-  /** Move the drop box on screen elsewhere. */
-  moveNode: boolean
+  /** On a drop box: move one of its guests' folders out of it (core's `MoveNodeDialog`, inbox #377 (a)). */
+  moveGuestFolder: boolean
+  /** On a drop box: delete one of its guests' folders (into the scope's trash, inbox #391). */
+  deleteGuestFolder: boolean
 }
 
 export const NO_DEPOT_RIGHTS: Readonly<DepotRights> = Object.freeze({
@@ -40,84 +35,77 @@ export const NO_DEPOT_RIGHTS: Readonly<DepotRights> = Object.freeze({
   upload: false,
   replace: false,
   rename: false,
-  deleteFile: false,
+  delete: false,
+  move: false,
   createDropBox: false,
   share: false,
   shareContribute: false,
-  deleteNode: false,
-  moveFile: false,
-  moveNode: false,
+  shareUpload: false,
+  moveGuestFolder: false,
+  deleteGuestFolder: false,
 })
 
 /** The Depot matrix (see the header; the table is `docs/apps/depot.md`). `at` is the node on screen: a folder level whose
- *  files and drop boxes the sections show (`FOLDER`; null at a member's scope root), an opened drop box, or an opened
- *  file (`FileDetail`: the page of one file, the root of a single-file link included). On an opened file `replace`,
- *  `rename`, `share`, `deleteNode` and `moveNode` are about THAT file. */
+ *  files and drop boxes the sections show (`FOLDER`; null at a member's scope root), an opened drop box, or a file (its
+ *  row, or `FileDetail`: the page of one file, the root of a single-file link included). `share`, `rename`, `move` and
+ *  `delete` are about THAT node: none at a level (a folder is core's, `folderRights`). */
 export function depotRights(access: Access, at: RightsTarget): DepotRights {
   if (access.mode === 'member') return memberRights(access, at)
-  if (access.mode === 'guest') return guestRights(access.role, at)
+  if (access.mode === 'guest') return guestRights(access, at)
   return NO_DEPOT_RIGHTS
 }
+
+/** A guest's folder of a drop box as core is asked about it: an identity folder whose parent is the drop box. */
+const GUEST_FOLDER: RightsTarget = Object.freeze({ kind: FOLDER_KIND, inIdentityFolder: true, shareable: false, parentKind: DROPBOX_KIND })
 
 function memberRights(access: MemberAccess, at: RightsTarget): DepotRights {
   // Depot switched off is read-only (uc.platform.switch-application-off): no upload, replace, rename, move or new link —
   // but a delete to the trash and its restore stay, as does downloading (the server's exemptions).
-  const on = !access.applicationsOff.has(DEPOT)
-  const remove = !access.readonly
-  const write = remove && on
+  const write = !access.readonly && applicationWritable(access, FILE_KIND)
   // Nothing is placed in a guest's identity folder (a server placement rule), but a member removes what a guest sent,
   // file by file (inbox #391), and moves it out (a move out of a drop box is a member's, inbox #377 (a); the move dialog
   // offers no identity folder as a destination).
   const place = write && !at.inIdentityFolder
   if (at.kind === null || at.kind === FOLDER_KIND) {
-    return {
-      ...NO_DEPOT_RIGHTS,
-      download: true,
-      upload: place,
-      replace: place,
-      rename: place,
-      deleteFile: remove,
-      createDropBox: place && access.publicSharesDropBox,
-      moveFile: write,
-    }
+    return { ...NO_DEPOT_RIGHTS, download: true, upload: place, replace: place, createDropBox: place && access.publicSharesDropBox }
   }
+  const node = nodeRights(access, at)
   if (at.kind === FILE_KIND) {
-    // The opened file: what its row offers, plus its own share (not in a guest's identity folder, where the guest's
-    // folder is the owner's to delete or move out only) and delete/move of itself. Download stays during a pending
-    // deletion; a share's links are a read there, like a drop box's.
-    const shareable = at.shareable && !at.inIdentityFolder
+    // The file: download, replace its content, and core's share, rename, move and delete of it (in a guest's identity
+    // folder core leaves a delete and a move out). Download stays during a pending deletion; its links are a read there.
     return {
       ...NO_DEPOT_RIGHTS,
       download: true,
       replace: place,
-      rename: place,
-      share: on && access.publicShares && shareable,
-      shareContribute: on && access.publicSharesContribute && shareable,
-      deleteNode: remove,
-      moveNode: write,
+      share: node.share,
+      shareContribute: node.shareContribute,
+      rename: node.rename,
+      move: node.move,
+      delete: node.delete,
     }
   }
   if (at.kind === DROPBOX_KIND) {
     // A drop box's listing and links stay readable during a pending deletion; deleting or moving it, or a guest's folder
     // (out of it: the folder's identity ends, ADR 0080 decision 11), is a write. Its links are WRITE_ONLY ones, so its
-    // share needs the drop-box leaf, not the READ one.
+    // share is the uploader one (the drop-box leaf, not the READ one). It is never renamed here.
+    const folder = nodeRights(access, GUEST_FOLDER)
     return {
       ...NO_DEPOT_RIGHTS,
       download: true,
-      share: on && access.publicSharesDropBox && at.shareable,
-      deleteFile: remove,
-      deleteNode: remove,
-      moveFile: write,
-      moveNode: write,
+      shareUpload: node.shareUpload,
+      move: node.move,
+      delete: node.delete,
+      moveGuestFolder: folder.move && write,
+      deleteGuestFolder: folder.delete,
     }
   }
   return NO_DEPOT_RIGHTS
 }
 
-function guestRights(role: string, at: RightsTarget): DepotRights {
+function guestRights(access: Access, at: RightsTarget): DepotRights {
   // A guest is never at the scope root.
-  if (at.kind === null) return NO_DEPOT_RIGHTS
-  switch (role) {
+  if (access.mode !== 'guest' || at.kind === null) return NO_DEPOT_RIGHTS
+  switch (access.role) {
     case 'READ':
       return at.kind === FOLDER_KIND || at.kind === DROPBOX_KIND || at.kind === FILE_KIND
         ? { ...NO_DEPOT_RIGHTS, download: true }
@@ -130,18 +118,13 @@ function guestRights(role: string, at: RightsTarget): DepotRights {
       // yet; a guest deletes no file (ADR 0080 decision 6: no node that holds anything).
       if (at.kind === FOLDER_KIND) {
         const place = !at.inIdentityFolder
-        return { ...NO_DEPOT_RIGHTS, download: true, upload: place, replace: place, moveFile: place }
+        return { ...NO_DEPOT_RIGHTS, download: true, upload: place, replace: place }
       }
       if (at.kind === FILE_KIND) {
-        // An opened file (the link's root, or one inside a folder link): download, and replace the content (the owner's
-        // file too, after the question); moved only out of a folder into the subtree's other folders, never the link's
-        // root (whose parent lies above the link) nor in or out of an identity folder. No rename, no delete.
-        return {
-          ...NO_DEPOT_RIGHTS,
-          download: true,
-          replace: !at.inIdentityFolder,
-          moveNode: at.parentKind === FOLDER_KIND && !at.inIdentityFolder,
-        }
+        // A file (the link's root, or one inside a folder link): download, and replace the content (the owner's file
+        // too, after the question); core's move - only out of a folder into the subtree's other folders, never the
+        // link's root (whose parent lies above the link) nor in or out of an identity folder. No rename, no delete.
+        return { ...NO_DEPOT_RIGHTS, download: true, replace: !at.inIdentityFolder, move: nodeRights(access, at).move }
       }
       return at.kind === DROPBOX_KIND ? { ...NO_DEPOT_RIGHTS, download: true } : NO_DEPOT_RIGHTS
     case 'WRITE_ONLY':

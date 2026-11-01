@@ -10,12 +10,17 @@
 //   opened subtree (`core/sharing/guestAccess.ts`, over `walkSubtree`). Navigation always goes through `linkTo`, so a guest's link keeps its `#k=`
 //   fragment (src/web/CLAUDE.md, the breadcrumb trap) and a member's stays a slug path in the fragment.
 //
-// **Rights are the applications'**, pure and FAIL-CLOSED: `memoryRights` (features/memories/rights.ts),
-// `depotRights` (features/depot/rights.ts), and core's own `folderRights` here for the one kind core
-// owns. Every right defaults to false; an unknown mode, role or kind grants nothing. The role matrix each one encodes is
-// written down in its `docs/apps/<application>.md` (ADR 0080 decision 6). A right is the matrix's half; the other
-// half — that the data source implements the operation at all — is the application's source (Depot's `source.ts` since
-// inbox #401 S3, Memories' `source.ts` since S4): a control is shown only where both say yes.
+// **Rights: core's base, the application narrows** (owner 2026-11-01). What every node may do whatever its kind - be
+// shared, renamed, moved, deleted - is ONE answer, core's {@link nodeRights}: who looks (member or guest role), a pending
+// deletion, the application switch ({@link applicationWritable}), the instance's public-share leaves, the kind's share
+// dialog, a guest's identity folder and the scope root. Each application's rights function - `memoryRights`
+// (features/memories/rights.ts), `depotRights` (features/depot/rights.ts), `expensesRights` (features/expenses/rights.ts) -
+// and core's own `folderRights` here for the one kind core owns start from that answer and only AND their own conditions
+// onto it, never granting what it denies (each one's `rights.test.ts` asserts so over every access shape). All are pure
+// and FAIL-CLOSED: every right defaults to false; an unknown mode, role or kind grants nothing. The role matrix each one
+// encodes is written down in its `docs/apps/<application>.md` (ADR 0080 decision 6). A right is the matrix's half; the
+// other half - that the data source implements the operation at all - is the application's source (Depot's `source.ts`
+// since inbox #401 S3, Memories' `source.ts` since S4): a control is shown only where both say yes.
 //
 // Core imports no application here (`validate_web_core_imports_no_applications.py`).
 import type { RouteLocationRaw } from 'vue-router'
@@ -194,66 +199,125 @@ export function memberTreeSource(from: {
   }
 }
 
-/** What a level of core's own kind offers (core's `LevelView`: its toolbar, the folder's overview card, the folders
- *  section). Every field false unless granted. */
-export interface FolderRights {
-  /** Open a sub-folder. */
-  navigate: boolean
-  /** Create a folder at this level. */
-  createFolder: boolean
-  /** Rename the folder on screen. */
-  rename: boolean
-  /** Delete the folder on screen (into the scope's trash). */
-  deleteNode: boolean
-  /** Manage the folder's public links. */
+/** The node-generic rights of the node on screen (owner 2026-11-01): core's ONE answer for every kind, the base each
+ *  application's rights function - and core's own {@link folderRights} - narrows (AND), never widens. One name per
+ *  right, used everywhere: a level row's `standard` and `selection` ({@link rowRightsOf}), a header's
+ *  `standardNodeActions` flags. */
+export interface NodeRights {
+  /** Open the node's share dialog: list and copy its `READ` / `READ_WRITE` links (`core.public-shares`). Listing is a
+   *  read, so a pending deletion keeps it; the dialog then mints none and changes none (the host's
+   *  `NodeShareDialogProps.readonly`: the server refuses every share write during the grace window). */
   share: boolean
   /** The share dialog offers the READ_WRITE (contribute) role for a new link (`core.public-shares.contribute`); handed to
    *  the dialog as a prop by the host (`NodeShareDialogProps.contribute`), never read there. */
   shareContribute: boolean
+  /** The node's uploader (`WRITE_ONLY`) links (`core.public-shares.drop-box`): Memories' uploader link, a drop box's
+   *  links - the same reading of a pending deletion as {@link share}. */
+  shareUpload: boolean
+  /** Rename the node (core's name dialog). */
+  rename: boolean
+  /** Move the node elsewhere (core's `MoveNodeDialog`, inbox #358). */
+  move: boolean
+  /** Delete the node (into the scope's trash). */
+  delete: boolean
+}
+
+export const NO_NODE_RIGHTS: Readonly<NodeRights> = Object.freeze({
+  share: false, shareContribute: false, shareUpload: false, rename: false, move: false, delete: false,
+})
+
+/**
+ * Core's answer for the node `at` describes; the scope root (`kind` null) is no node and grants nothing. Fail-closed: an
+ * unknown mode or role grants nothing.
+ *
+ * - **Member:** rename and move need a scope not pending deletion (`readonly`) and the node's application switched on
+ *   ({@link applicationWritable}); a delete needs only the first - an application switched off keeps the delete to the
+ *   trash (the server's exemption). A share needs the application on, a kind whose descriptor brings a share dialog
+ *   (`at.shareable`) and ONE instance leaf each - `publicShares`, `publicSharesContribute`, `publicSharesDropBox`, never
+ *   two ANDed (the server ANDs the path, ADR 0088) - and survives a pending deletion (listing links is a read). In a
+ *   guest's identity folder nothing is renamed and nothing shared (ADR 0080 decision 11): a member only moves out of it
+ *   and deletes there.
+ * - **Guest:** no share, rename or delete in any role (ADR 0080 decision 6: a guest deletes no node; its rename is the
+ *   server's but offered nowhere yet). **`READ_WRITE`** moves a node a `FOLDER` holds between the subtree's folders
+ *   (core decides between folders, `FolderGuestNodeRules`) - never the link's root (its parent lies above the link:
+ *   `parentKind` unknown), never in or of an identity folder (only a member moves out of a drop box, inbox #377 (a)). A
+ *   guest's page is not told the application switch: the server refuses its write.
+ */
+export function nodeRights(access: Access, at: RightsTarget): NodeRights {
+  if (at.kind === null) return NO_NODE_RIGHTS
+  if (access.mode === 'member') {
+    const on = applicationWritable(access, at.kind)
+    const write = !access.readonly && on
+    const shareable = on && at.shareable && !at.inIdentityFolder
+    return {
+      share: shareable && access.publicShares,
+      shareContribute: shareable && access.publicSharesContribute,
+      shareUpload: shareable && access.publicSharesDropBox,
+      rename: write && !at.inIdentityFolder,
+      move: write,
+      delete: !access.readonly,
+    }
+  }
+  if (access.mode === 'guest' && access.role === 'READ_WRITE') {
+    return { ...NO_NODE_RIGHTS, move: at.parentKind === FOLDER_KIND && !at.inIdentityFolder }
+  }
+  return NO_NODE_RIGHTS
+}
+
+/** What a level row's core default actions and a selection read (`LevelRow.standard`, `LevelRow.selection`), from ONE
+ *  rights answer for THAT node - so a row's rename, move and delete and its part in a selection never disagree. */
+export function rowRightsOf(r: Pick<NodeRights, 'rename' | 'move' | 'delete'>): {
+  standard: { rename: boolean; move: boolean; delete: boolean }
+  selection: { move: boolean; delete: boolean }
+} {
+  return { standard: { rename: r.rename, move: r.move, delete: r.delete }, selection: { move: r.move, delete: r.delete } }
+}
+
+/** What a level of core's own kind offers (core's `LevelView`: its toolbar, the folder's overview card, the folders
+ *  section): {@link NodeRights} for the folder on screen, narrowed, and the level's own. Every field false unless
+ *  granted. A folder takes no uploader link (no `WRITE_ONLY` link roots at a folder, `ShareRoots`), so it has no
+ *  `shareUpload`. */
+export interface FolderRights extends Omit<NodeRights, 'shareUpload'> {
+  /** Open a sub-folder. */
+  navigate: boolean
+  /** Create a folder at this level. */
+  createFolder: boolean
   /** Open the scope's node trash (its restore is a write). */
   nodeTrash: boolean
-  /** Move the folder on screen elsewhere (core's `MoveNodeDialog`, inbox #358). */
-  move: boolean
 }
 
 const NO_FOLDER_RIGHTS: FolderRights = Object.freeze({
-  navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, shareContribute: false, nodeTrash: false,
+  navigate: false, createFolder: false, rename: false, delete: false, share: false, shareContribute: false, nodeTrash: false,
   move: false,
 })
 
 /**
- * Core's matrix for a `FOLDER` level (`kind` FOLDER, or null at a member's scope root). Fail-closed: any other kind, an
- * unknown mode or role grants nothing.
+ * Core's matrix for a `FOLDER` level (`kind` FOLDER, or null at a member's scope root): {@link nodeRights} for the
+ * folder on screen (nothing at the scope root, which is no folder), narrowed by the folder's own rule, plus what the level
+ * itself offers. Fail-closed: any other kind, an unknown mode or role grants nothing.
  *
- * - **Member:** everything, but no write during a pending deletion and no placement in a guest's identity folder (a
- *   member deletes there file by file — the application's section — never the folder's own rename/delete here). A
- *   share needs the instance's `publicShares`, a shareable kind and a folder (none at the scope root, none of an identity
- *   folder), and its dialog offers the contribute role where `publicSharesContribute` is on; listing links is a read, so
- *   a pending deletion keeps it. A folder moves — a guest's identity folder too:
- *   a member's move OUT of a drop box is the one placement it takes (ADR 0080 decision 11, inbox #377 (a)); nothing
- *   moves INTO one (the move dialog offers no such destination, the server refuses it).
- * - **Guest `READ`:** navigate. **`READ_WRITE`:** navigate, create a folder (core's `FolderGuestNodeRules`), and move the
- *   folder on screen when a `FOLDER` holds it — never the link's root (its parent lies above the link), never in or of
- *   an identity folder (only a member moves out of a drop box, inbox #377 (a)). Rename is the server's but offered
- *   nowhere yet; a guest deletes no node (ADR 0080 decision 6). **`WRITE_ONLY`:** nothing — no folder is a
- *   `WRITE_ONLY` root (`ShareRoots`).
+ * - **Member:** core's answer, but no delete of a guest's identity folder here (a member deletes there file by file -
+ *   the application's section - or the folder from its drop box, never the folder's own delete). A folder moves - a
+ *   guest's identity folder too: a member's move OUT of a drop box is the one placement it takes (ADR 0080 decision 11,
+ *   inbox #377 (a)); nothing moves INTO one (the move dialog offers no such destination, the server refuses it). The level
+ *   creates a folder and opens the node trash, neither during a pending deletion nor in an identity folder.
+ * - **Guest `READ`:** navigate. **`READ_WRITE`:** navigate, create a folder (core's `FolderGuestNodeRules`), and core's
+ *   move. **`WRITE_ONLY`:** nothing - no folder is a `WRITE_ONLY` root (`ShareRoots`).
  */
 export function folderRights(access: Access, at: RightsTarget): FolderRights {
   if (at.kind !== FOLDER_KIND && !(at.kind === null && access.mode === 'member')) return NO_FOLDER_RIGHTS
+  const node = nodeRights(access, at)
   if (access.mode === 'member') {
-    const write = !access.readonly && !at.inIdentityFolder
-    const folder = at.kind === FOLDER_KIND
-    const shareableFolder = at.shareable && folder && !at.inIdentityFolder
+    const place = !access.readonly && !at.inIdentityFolder
     return {
-      ...NO_FOLDER_RIGHTS,
       navigate: true,
-      createFolder: write,
-      rename: write && folder,
-      deleteNode: write && folder,
-      share: access.publicShares && shareableFolder,
-      shareContribute: access.publicSharesContribute && shareableFolder,
-      nodeTrash: !access.readonly && !at.inIdentityFolder,
-      move: !access.readonly && folder,
+      createFolder: place,
+      nodeTrash: place,
+      share: node.share,
+      shareContribute: node.shareContribute,
+      rename: node.rename,
+      move: node.move,
+      delete: node.delete && !at.inIdentityFolder,
     }
   }
   if (access.mode === 'guest') {
@@ -261,12 +325,7 @@ export function folderRights(access: Access, at: RightsTarget): FolderRights {
       case 'READ':
         return { ...NO_FOLDER_RIGHTS, navigate: true }
       case 'READ_WRITE':
-        return {
-          ...NO_FOLDER_RIGHTS,
-          navigate: true,
-          createFolder: !at.inIdentityFolder,
-          move: at.kind === FOLDER_KIND && !at.inIdentityFolder && at.parentKind === FOLDER_KIND,
-        }
+        return { ...NO_FOLDER_RIGHTS, navigate: true, createFolder: !at.inIdentityFolder, move: node.move }
       default:
         return NO_FOLDER_RIGHTS
     }
