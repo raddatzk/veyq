@@ -1,5 +1,5 @@
 // "Copy to…" as a CORE action (uc.platform.copy-node), contributed to the two places a node shows its
-// actions - the header's `coreActions` and the level list's `coreRowActions` - beside the application's own "Move to…"
+// actions - a node's header and its row, through `core/node/coreNodeActions.ts` - beside the application's own "Move to…"
 // (`placement: { after: 'move' }`), with no change to any application's action list. Gated by {@link canCopy}: a copy is a
 // member flow (ADR 0082 decision 5, as the import), so a share guest - whatever the role - is never offered one.
 import { registry } from '../applications/registry'

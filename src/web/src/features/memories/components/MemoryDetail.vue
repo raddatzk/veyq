@@ -54,7 +54,7 @@ import { useUploaderNames } from '../useUploaderNames'
 import MemoryCoverImage from './MemoryCoverImage.vue'
 import MemoryCard from './MemoryCard.vue'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
-import { standardNodeActions, type CoreHeaderAction, type NodeHeaderAction } from '../../../core/node/nodeHeader'
+import { standardNodeActions, type NodeHeaderAction } from '../../../core/node/nodeHeader'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -86,8 +86,6 @@ const props = defineProps<{
   rights: MemoryRights
   /** The session's data source (see the header). Required: there is no default door to fall back to. */
   source: MemorySource
-  /** Core's actions of the header (the favorite heart, inbox #409), built by the host from its `access`. */
-  coreActions?: readonly CoreHeaderAction[]
   /** Core's cover dialog is open over this page (the host mounts it): the lightbox then leaves the keyboard to it. */
   coverEditing?: boolean
   /** The cover tile may open core's cover dialog: core's `coverRights` for this node, the host's answer (inbox #411).
@@ -605,7 +603,7 @@ watch(
     <!-- Core's header (`NodeHeader`, inbox #406): the cover is the leading visual — it IS the "set / edit cover" button —
          the count is the subtitle, the date and place chips the meta row, and the actions are the rights answers
          below (`headerActions`), the same list a share guest gets with fewer entries. -->
-    <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :actions="headerActions" :core-actions="coreActions" :order="MEMORY_HEADER_ORDER">
+    <NodeHeader :node="node" :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :actions="headerActions" :order="MEMORY_HEADER_ORDER">
       <template #leading="{ compact }">
         <button
           type="button"

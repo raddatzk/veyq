@@ -12,10 +12,11 @@ vi.mock('../../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () 
 vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn(async () => {}) }))
 vi.mock('../../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import MemoryDetailHost from './MemoryDetailHost.vue'
+import { mountNodePage } from '../../../test/nodePage'
 import { MEMORY_KIND } from '../kinds'
 import { addMedia, listMedia, type MediaDeriver } from '../media'
 import { blobApi } from '../../../api/client'
@@ -66,7 +67,8 @@ afterEach(() => {
 async function mountHost(access: NodeDetailProps['access'], wrappedMeta: string | null = null) {
   const node = treeNode({ id: ID, kind: MEMORY_KIND, name: 'Rom 2026', parentId: null, wrappedMeta, metaRevision: wrappedMeta ? 3 : 0 })
   const tree = { ...memberTreeOf(() => [node], { scopeId: SCOPE }), keyOf: () => KEY }
-  const w = mount(MemoryDetailHost, {
+  // As the hosts mount it: core's frame (`NodePage`) supplies core's header actions and the dialog of its cover action.
+  const w = mountNodePage(MemoryDetailHost, {
     props: { node, scopeId: SCOPE, epochs: null, contentKey: KEY, children: { folders: [], byKind: new Map() }, access, tree } as unknown as NodeDetailProps,
     global: { plugins: [realI18n()] },
   })

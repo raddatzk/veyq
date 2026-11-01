@@ -3,7 +3,7 @@
 // display time (never stored), each folder's file count; a folder opens, a folder is deleted after a confirm, and the
 // drop box's own share and delete go to the host.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 
 const { showUndo } = vi.hoisted(() => ({ showUndo: vi.fn() }))
 vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn(async () => {}) }))
@@ -38,6 +38,7 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
+import { mountNodePage } from '../../../test/nodePage'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const node = (id: string, kind: string, name: string, parentId: string | null, over: Partial<TreeNode> = {}): TreeNode => treeNode({
@@ -52,7 +53,7 @@ const BEN = node('c0000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Ben', BOX
 /** `dropBox`: the instance offers drop-box links (`core.public-shares.drop-box`, the share button's capability); the READ
  *  leaf `publicShares` stays on or off on its own (`publicShares`). */
 function mountDetail(dropBox = true, publicShares = true) {
-  return mount(DropBoxDetail, {
+  return mountNodePage(DropBoxDetail, {
     props: {
       node: BOX, scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps["children"],
       access: memberAccessOf({ scopeId: SCOPE, publicSharesDropBox: dropBox, publicShares }), tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
@@ -85,7 +86,7 @@ describe('DropBoxDetail', () => {
     // a member whose keys are open (core's `canDownload`); with them locked, none
     expect(mountDetail().find('.veyq-node-header-actions button[data-action="download"]').exists()).toBe(false)
     const epochs = epochsOf(new Uint8Array(32).fill(4))
-    const w = mount(DropBoxDetail, {
+    const w = mountNodePage(DropBoxDetail, {
       props: {
         node: BOX, scopeId: SCOPE, epochs, contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps['children'],
         access: memberAccessOf({ scopeId: SCOPE, epochs }), tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
@@ -110,7 +111,7 @@ describe('DropBoxDetail', () => {
     const pairs: [string, string[]][] = []
     for (const row of w.findAll('.dropbox-row-open')) {
       await row.trigger('click')
-      const opened = (w.emitted('openNode') as TreeNode[][]).at(-1)![0]
+      const opened = (w.findComponent(DropBoxDetail).emitted('openNode') as TreeNode[][]).at(-1)![0]
       pairs.push([row.find('.veyq-row-title').text(), slugPathOf(treeStore.nodes, opened.id)])
     }
     expect(pairs).toEqual([
@@ -126,12 +127,12 @@ describe('DropBoxDetail', () => {
     const w = mountDetail()
     await w.find(`button[aria-label="${t('depot.dropBox.moveFolder', { name: 'Anna (2)' })}"]`).trigger('click')
     await w.find(`.veyq-node-header button[aria-label="${t('node.move.action')}"]`).trigger('click')
-    expect(w.emitted('move')).toEqual([[ANNA_2], [BOX]])
+    expect(w.findComponent(DropBoxDetail).emitted('move')).toEqual([[ANNA_2], [BOX]])
   })
 
   it('a drop box\'s header in its priority (ADR 0110): favorite, share, download, cover, move, copy; delete in the ⋯', async () => {
     const epochs = epochsOf(new Uint8Array(32).fill(4))
-    const w = mount(DropBoxDetail, {
+    const w = mountNodePage(DropBoxDetail, {
       props: {
         node: BOX, scopeId: SCOPE, epochs, contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps['children'],
         access: memberAccessOf({ scopeId: SCOPE, publicSharesDropBox: true, publicShares: true, epochs }), tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
@@ -146,7 +147,7 @@ describe('DropBoxDetail', () => {
   it('opens a folder, and hands share and delete of the drop box to the host', async () => {
     const w = mountDetail()
     await w.find('button[aria-label="Open Anna (2)"]').trigger('click')
-    expect(w.emitted('openNode')).toEqual([[ANNA_2]])
+    expect(w.findComponent(DropBoxDetail).emitted('openNode')).toEqual([[ANNA_2]])
     // inbox #385 (b): both sit on core's header card, the one a folder opens with — the drop box's icon and name on it
     const card = w.find('.veyq-node-header')
     expect(card.find('.veyq-node-header-title').text()).toBe(BOX.name)
@@ -154,8 +155,8 @@ describe('DropBoxDetail', () => {
     await card.find('button[aria-label="Share link"]').trigger('click')
     expect(card.find('button[aria-label="Delete drop box"]').exists(), 'delete is never a button (ADR 0110)').toBe(false)
     expect((await chooseHeaderEntry(w, 'delete')).textContent?.trim()).toBe('Delete drop box')
-    expect(w.emitted('share')).toEqual([[{ contribute: false }]]) // a drop box's dialog has no role to offer
-    expect(w.emitted('delete')).toHaveLength(1)
+    expect(w.findComponent(DropBoxDetail).emitted('share')).toEqual([[{ contribute: false }]]) // a drop box's dialog has no role to offer
+    expect(w.findComponent(DropBoxDetail).emitted('delete')).toHaveLength(1)
     // control: no share offered where the host says the kind cannot be shared
     expect(mountDetail(false).find('button[aria-label="Share link"]').exists()).toBe(false)
     // …and the READ leaf is not the drop box's: public shares off alone keeps the WRITE_ONLY links manageable
@@ -192,7 +193,7 @@ describe('DropBoxDetail - its cover', () => {
       v: 1, cover: uploadedCover({ blobId: 'b-1', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: BOX.id }),
     })))),
   })
-  const mountWith = (box: TreeNode, over: Partial<ReturnType<typeof memberAccessOf>> = {}) => mount(DropBoxDetail, {
+  const mountWith = (box: TreeNode, over: Partial<ReturnType<typeof memberAccessOf>> = {}) => mountNodePage(DropBoxDetail, {
     props: {
       node: box, scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps['children'],
       access: memberAccessOf({ scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), ...over }),

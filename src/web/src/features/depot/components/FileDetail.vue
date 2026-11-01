@@ -44,10 +44,6 @@ import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions, type NodeHeaderAction } from '../../../core/node/nodeHeader'
-import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
-import { copyHeaderActions } from '../../../core/export/copyActions'
-import { reportHeaderActions, reportNodes } from '../../../core/report/reportActions'
-import { useReportOffered } from '../../../core/report/report'
 import { enqueue, removeFile, useUploadQueue, APPLICATION_OFF, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
@@ -71,16 +67,8 @@ import { guestDisplayName } from '../../../core/sharing/guestIdentity'
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 const { t, locale } = useI18n()
-// Core's heart (inbox #409): the same for every kind; a guest gets none.
-// A file downloads as itself (the header's own download): core adds no ZIP download for it (ADR 0082 decision 4).
-// …and core's "Copy to…" (uc.platform.copy-node) beside the move, a member's.
-// Core's Report (uc.moderation.report) beside the heart and the copy, for whoever sees the file.
-const reportOn = useReportOffered()
-const coreActions = computed(() => [
-  ...favoriteHeaderActions(t, toast.error, props.access, props.node),
-  ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
-  ...reportHeaderActions(t, reportOn.value, props.access, props.node, () => reportNodes(props.access, props.tree, [props.node], null)),
-])
+// Core's own actions (the heart, "Copy to…", Report) come with core's header for this node (`NodeHeader`'s `node`); a file
+// downloads as itself (the header's own download below), so core offers no ZIP download for it (ADR 0082 decision 4).
 const { ask } = useConfirm()
 const toast = useToast()
 const { batches } = useUploadQueue()
@@ -306,7 +294,7 @@ async function replaceAnyway(n: Notice) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the file's own actions, then what it holds. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="file" :title="node.name" :actions="headerActions" :core-actions="coreActions" :order="FILE_HEADER_ORDER">
+    <NodeHeader :node="node" icon="file" :title="node.name" :actions="headerActions" :order="FILE_HEADER_ORDER">
       <template v-if="uploader" #meta>
         <p class="file-detail-uploader" data-testid="file-uploader">
           <!-- The space is real text, so the line reads "Uploaded by Anna" to assistive technology too; the avatar is decorative. -->

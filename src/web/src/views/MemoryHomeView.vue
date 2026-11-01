@@ -10,7 +10,10 @@
 // (`core/node/LevelView.vue`), which asks the registry for each application's rows. A move of any node — the folder
 // on screen, an application's row, an opened node, a drop box's guest folder — is core's `core/node/MoveNodeDialog.vue`
 // through the member's door (`nodeMover`, inbox #358); a level's selection of several moves through core's
-// `core/node/MoveNodesDialog.vue` by the same door, and is deleted after one question (`DeleteNodesDialog`, inbox #421).
+// `core/node/MoveNodesDialog.vue` by the same door, and is deleted after one question (`DeleteNodesDialog`, inbox #421) -
+// as is one node, from its row or from its own page's header (the folder on screen, an opened node): one question, the
+// kind's own (`core/node/deleteQuestion.ts`), and one Undo. An opened node's page is core's frame
+// (`core/node/components/NodePage.vue`) around the kind's `detail`, which supplies core's own header actions.
 // A copy of one node or of a selection is core's `core/export/CopyNodesDialog.vue` (uc.platform.copy-node), a member's only.
 // The fragment is a slug path derived from the names (ADR 0015), so
 // after every write that re-reads the tree the node on screen is followed to its path in the new tree (`stayOn`): a
@@ -29,8 +32,7 @@ import { setBreadcrumb } from '../app/breadcrumb'
 import { treeStore, loadTree, pollTree } from '../core/node/treeStore'
 import { useLevelLive } from '../core/node/useLevelLive'
 import { childrenOf, breadcrumbOf, displayNameOf, nodeById } from '../core/node/browse'
-import { nodeContentKey, restoreNode, sameKeyOr } from '../core/node/tree'
-import { useTrashUndo } from '../core/node/trashUndo'
+import { nodeContentKey, sameKeyOr } from '../core/node/tree'
 import { parseHash, resolveSlugPath, hashForNode, personHash, TENANT_SCOPE } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
 import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
@@ -39,7 +41,7 @@ import { useCapabilities } from '../shared/state/useCapabilities'
 import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
 import type { TreeNode } from '../core/node/tree'
 import VeyqMessage from '../shared/ui/VeyqMessage.vue'
-import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
+import NodePage from '../core/node/components/NodePage.vue'
 import DeleteNodesDialog from '../core/node/components/DeleteNodesDialog.vue'
 import type { SelectedForDelete } from '../core/node/selection'
 import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
@@ -63,7 +65,6 @@ import StatementNotice from '../features/moderation/statement/StatementNotice.vu
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
-const offerUndo = useTrashUndo()
 const { hasCapability, isSwitchedOff, erasureDay } = useCapabilities()
 
 // Pending-deletion (cr-0090): the active GROUP is being deleted — the shell shows a banner and the browse hides
@@ -215,8 +216,10 @@ const createDialog = computed(() => {
 const moving = ref<{ node: TreeNode; shown: string | null } | null>(null)
 // A level's selection being moved (inbox #421), and what was on screen.
 const movingMany = ref<{ nodes: TreeNode[]; shown: string | null } | null>(null)
-// A level's selection being deleted (inbox #421): one question, core's `DeleteNodesDialog`.
-const deletingMany = ref<{ items: SelectedForDelete[]; shown: string | null } | null>(null)
+// What is being deleted, after one question (core's `DeleteNodesDialog`, with its Undo): a level's selection (inbox #421), a
+// row's node - or the node a page is about (`leaving`: the folder on screen or an opened node, from its header), whose page
+// is left for its parent once it went.
+const deletingMany = ref<{ items: SelectedForDelete[]; shown: string | null; leaving?: TreeNode } | null>(null)
 const mover = nodeMover(() => access.value)
 // ADR 0082: the node being downloaded as a ZIP (core's `ExportSubtreeDialog`), and the download being imported under the folder on screen.
 const exporting = ref<TreeNode | null>(null)
@@ -226,7 +229,6 @@ const copying = shallowRef<{ nodes: TreeNode[]; shown: string | null } | null>(n
 function startCopy(nodes: TreeNode[]) {
   copying.value = { nodes, shown: currentNodeId.value }
 }
-const deleteVisible = ref(false)
 const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
 
 // The tree's live refresh (inbox #408): while a page of the space's tree is on screen — a folder level, and an opened
@@ -242,10 +244,9 @@ const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node
 const { ticks: liveTick } = useLevelLive({
   active: () => activeSpace.status === 'ready' && !treeStore.error && !treeStore.gone && !place.value.person,
   paused: () =>
-    !!nameDialog.value || !!createKind.value || !!moving.value || !!movingMany.value || !!deletingMany.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
+    !!nameDialog.value || !!createKind.value || !!moving.value || !!movingMany.value || !!deletingMany.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
   read: (signal) => pollTree(signal),
 })
-const deleteTarget = ref<TreeNode | null>(null)
 
 // The breadcrumb root label reflects the **active** scope (the tenant's name vs. Personal), not the URL token —
 // a no-grant member sees `Personal` at the token-less `/` because the tenant home fell back to Personal. It is also the
@@ -329,9 +330,10 @@ function startRename(node: TreeNode) {
   createKind.value = null
   nameDialog.value = { mode: 'rename', node, shown: currentNodeId.value }
 }
+/** The node a page is about, deleted from its header: the row's question and Undo; the Undo keeps the parent - where the
+ *  member lands - on screen, as a row's keeps the level. */
 function startDelete(node: TreeNode) {
-  deleteTarget.value = node
-  deleteVisible.value = true
+  deletingMany.value = { items: [{ node }], shown: node.parentId, leaving: node }
 }
 /** Remember what is on screen: a move of it (or of a folder above it) changes its path. */
 function startMove(node: TreeNode) {
@@ -346,6 +348,15 @@ function startMoveMany(nodes: TreeNode[]) {
 }
 function startDeleteMany(items: SelectedForDelete[]) {
   deletingMany.value = { items, shown: currentNodeId.value }
+}
+/** The delete re-read the tree: a page whose node went is left for its parent, one whose node was refused stays; else what
+ *  was on screen stays on screen. */
+function onDeletedMany() {
+  const d = deletingMany.value
+  if (!d) return
+  if (!d.leaving) stayOn(d.shown)
+  else if (nodeById(treeStore.nodes, d.leaving.id)) stayOn(d.leaving.id)
+  else void router.push({ hash: hashForNode(treeStore.nodes, d.leaving.parentId, currentScope.value) })
 }
 /** The undo moved it back (after the dialog closed): follow it back the same way. */
 function afterUndo(shown: string | null) {
@@ -383,25 +394,6 @@ async function onTrashRestored() {
   await loadTree()
   stayOn(shown)
 }
-async function onDeleteDone() {
-  const deleted = deleteTarget.value
-  const parentId = deleted?.parentId ?? null
-  await loadTree()
-  void router.push({ hash: hashForNode(treeStore.nodes, parentId, currentScope.value) })
-  // It went to the trash: said, with an undo that restores it as the trash dialog does (inbox #385 (c)); the restored
-  // node reappears where it belonged, the position (wherever the member is by then) stays, renumbered as a trash
-  // dialog's restore is.
-  const scopeId = activeSpace.scopeId
-  const keys = epochs.value
-  if (deleted && scopeId && keys) {
-    offerUndo(deleted.name, async () => {
-      const shown = currentNodeId.value
-      await restoreNode(scopeId, keys, treeStore.nodes, deleted)
-      await loadTree()
-      stayOn(shown)
-    })
-  }
-}
 </script>
 
 <template>
@@ -438,9 +430,9 @@ async function onDeleteDone() {
         <p class="home-state-unsupported node-blocked">{{ t('node.blockedByOperator') }}</p>
         <StatementNotice :target-id="currentNode.id" />
       </template>
-      <component
-        :is="kindDetail"
+      <NodePage
         v-else-if="kindDetail && currentNode && activeSpace.scopeId"
+        :detail="kindDetail"
         :node="currentNode"
         :scope-id="activeSpace.scopeId"
         :epochs="epochs"
@@ -508,13 +500,6 @@ async function onDeleteDone() {
       @done="onMutationDone"
       @close="createKind = null"
     />
-    <DeleteNodeDialog
-      v-if="deleteVisible && epochs && activeSpace.scopeId && deleteTarget"
-      :scope-id="activeSpace.scopeId"
-      :node="deleteTarget"
-      @done="onDeleteDone"
-      @close="deleteVisible = false"
-    />
     <DeleteNodesDialog
       v-if="deletingMany && epochs && activeSpace.scopeId"
       :scope-id="activeSpace.scopeId"
@@ -522,7 +507,7 @@ async function onDeleteDone() {
       :items="deletingMany.items"
       :name-of="(n: TreeNode) => displayNameOf(treeStore.nodes, n)"
       :after-undo="afterUndo(deletingMany.shown)"
-      @done="stayOn(deletingMany?.shown ?? null)"
+      @done="onDeletedMany"
       @close="deletingMany = null"
     />
     <ExportSubtreeDialog

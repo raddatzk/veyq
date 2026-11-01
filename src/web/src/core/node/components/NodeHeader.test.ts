@@ -1,14 +1,19 @@
 // @vitest-environment happy-dom
 // Core's `NodeHeader` (inbox #406, ADR 0110): the data it is fed is all it draws. An action that may be a button is a real
 // labelled icon-only button that calls its handler on a real click, an action that is not `shown` is not rendered, a
-// disabled one does not fire, core's own actions are merged around the application's, the kind's `order` comes first, and
+// disabled one does not fire, core's own actions - asked of the view around it for the header's `node` - are merged around
+// the application's, the kind's `order` comes first, and
 // delete and report are never buttons but the ⋯ menu's last entries. Unmeasured (no layout here) every other action is a
 // button; a measured row moves what does not fit into the menu (the count itself is `../nodeHeader.test.ts`'s).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import NodeHeader from './NodeHeader.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
-import { mergeHeaderActions, standardNodeActions, type NodeHeaderAction } from '../nodeHeader'
+import { mergeHeaderActions, standardNodeActions, type CoreHeaderAction, type NodeHeaderAction } from '../nodeHeader'
+import { coreNodeActionsKey, type CoreNodeActions } from '../coreNodeActions'
+import type { UseNodeCover } from '../cover/useNodeCover'
+import type { TreeNode } from '../tree'
+import { treeNode } from '../../../test/models'
 import { realI18n, t } from '../../../test/i18n'
 import { chooseHeaderEntry, headerButtonIds, headerMenuIds, openHeaderMenu } from '../../../test/nodeHeader'
 
@@ -17,8 +22,18 @@ afterEach(() => {
   while (mounted.length) mounted.pop()!.unmount()
   vi.restoreAllMocks()
 })
-const mountHeader = (props: InstanceType<typeof NodeHeader>['$props'], slots: Record<string, string> = {}) => {
-  const w = mount(NodeHeader, { props, slots, global: { plugins: [realI18n()] }, attachTo: document.body })
+type HeaderProps = Omit<InstanceType<typeof NodeHeader>['$props'], 'node'> & { node?: TreeNode | null }
+/** The node a header heads in these tests, and a view around it that supplies `core` as core's actions of a node. */
+const NODE = treeNode({ id: 'b0000000-0000-4000-8000-000000000001', kind: 'FOLDER', name: 'T' })
+const asked: (TreeNode | null)[] = []
+const coreView = (core: readonly CoreHeaderAction[]): CoreNodeActions => ({
+  cover: {} as UseNodeCover,
+  header: (node) => (asked.push(node), node ? [...core] : []),
+  row: () => [],
+})
+const mountHeader = (props: HeaderProps, slots: Record<string, string> = {}, core: readonly CoreHeaderAction[] | null = null) => {
+  const provide = core ? { [coreNodeActionsKey as symbol]: coreView(core) } : {}
+  const w = mount(NodeHeader, { props: { node: core ? NODE : null, ...props }, slots, global: { plugins: [realI18n()], provide }, attachTo: document.body })
   mounted.push(w)
   return w
 }
@@ -80,23 +95,21 @@ describe('NodeHeader', () => {
   })
 
   it('the kind\'s order puts its listed ids first, in that order; an unlisted action still renders, after them', () => {
-    const w = mountHeader({
-      title: 'T',
-      actions: [act('share'), act('rename'), act('upload')],
-      coreActions: [{ ...act('favorite'), placement: 'before' as const }, act('download'), act('later')],
-      order: ['favorite', 'upload', 'download', 'share', 'missing'],
-    })
+    const w = mountHeader(
+      { title: 'T', actions: [act('share'), act('rename'), act('upload')], order: ['favorite', 'upload', 'download', 'share', 'missing'] },
+      {},
+      [{ ...act('favorite'), placement: 'before' as const }, act('download'), act('later')],
+    )
     expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'download', 'share', 'rename', 'later'])
   })
 
   it('delete and report are never buttons: the ⋯ menu\'s last entries, report then delete', async () => {
     const remove = vi.fn()
-    const w = mountHeader({
-      title: 'Trips',
-      actions: [act('delete', { severity: 'danger', onClick: remove }), act('share')],
-      coreActions: [{ ...act('report'), menuOnly: true }, act('copy')],
-      order: ['share'],
-    })
+    const w = mountHeader(
+      { title: 'Trips', actions: [act('delete', { severity: 'danger', onClick: remove }), act('share')], order: ['share'] },
+      {},
+      [{ ...act('report'), menuOnly: true }, act('copy')],
+    )
     expect(headerButtonIds(w)).toEqual(['share', 'copy'])
     expect(w.find('button[data-action="delete"]').exists()).toBe(false)
     expect(w.find('button[data-action="report"]').exists()).toBe(false)
@@ -281,12 +294,21 @@ describe('NodeHeader', () => {
   })
 
   it('core\'s own actions sit before or after the application\'s, gated like any other', () => {
-    const w = mountHeader({
-      title: 'T',
-      actions: [act('app')],
-      coreActions: [act('c-after'), { ...act('c-before'), placement: 'before' as const }, act('c-off', { shown: false })],
-    })
+    const w = mountHeader({ title: 'T', actions: [act('app')] }, {}, [act('c-after'), { ...act('c-before'), placement: 'before' as const }, act('c-off', { shown: false })])
     expect(labels(w)).toEqual(['L-c-before', 'L-app', 'L-c-after'])
+  })
+
+  // Core's actions come centrally (ADR 0110): the header asks the view around it for ITS node; the page builds none.
+  it('asks the view around it for core\'s actions of the node it heads - none for the space\'s top level, none without a view', () => {
+    asked.length = 0
+    const w = mountHeader({ title: 'T', actions: [act('app')] }, {}, [{ ...act('report'), menuOnly: true }])
+    expect(asked.map((n) => n?.id)).toContain(NODE.id)
+    expect(w.find('.veyq-node-header-more').exists(), 'core\'s report in the menu').toBe(true)
+    asked.length = 0
+    const top = mountHeader({ title: 'Space', node: null }, {}, [act('favorite')])
+    expect(asked).toEqual([null])
+    expect(top.find('.veyq-node-header-actions').exists()).toBe(false)
+    expect(mountHeader({ title: 'T', node: NODE, actions: [act('app')] }).findAll('.veyq-node-header-action').map((b) => b.attributes('data-action'))).toEqual(['app'])
   })
 })
 

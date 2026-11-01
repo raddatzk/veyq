@@ -1,5 +1,5 @@
 // The favorite heart as a CORE action (inbox #409, ADR 0068): one action model, contributed to the two places a node shows
-// its actions - `NodeHeader`'s `coreActions` and the level list's `coreRowActions` (`core/node/nodeHeader.ts`,
+// its actions - a node's header and its row, through `core/node/coreNodeActions.ts` (`core/node/nodeHeader.ts`,
 // `core/node/levelRow.ts`) - for EVERY kind, with no change to any application. The answer is
 // `favoriteRights` (member only, fail closed); the state is `favoritesStore` (pressed = pinned).
 //

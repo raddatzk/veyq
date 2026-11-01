@@ -61,6 +61,14 @@ big cover are date, place and participants*; *and on a desktop the title and the
    sit beside a name in a narrow header. Its inputs are the header's width (which its layout does not change) and fixed
    sizes — never the name's text or the layout in force — so it cannot flip back and forth, and a 375 px phone is
    compact for every kind.
+9. **Core's actions come centrally, never from the page.** Favorite, cover, copy, download and report are core's for
+   every node, each gated by its own core rights function and failing closed. The page names the node its header heads;
+   the header takes core's actions for that node from the core view around it — core's node page, which both hosts
+   mount around every kind's page, and the folder level — and merges them with the kind's own. No application builds,
+   lists or forwards one, so none can leave one out: report — the notice mechanism the DSA asks of a host (Art. 16),
+   offered on whatever a person sees ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+   § 1) — is on every node's header by construction, and a test walks every registered kind's page to prove it. A
+   kind's order (decision 5) may still name a core action's id for its priority.
 
 ## Consequences
 

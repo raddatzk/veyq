@@ -1,5 +1,5 @@
 // "Download" as a CORE action (ADR 0082 decision 4: there is no "Export"), contributed to the two places a node shows its
-// actions - the header's `coreActions` and the level list's `coreRowActions` - for every kind that downloads as a ZIP, with
+// actions - a node's header and its row, through `core/node/coreNodeActions.ts` - for every kind that downloads as a ZIP, with
 // no change to any application. A kind that IS one file (`downloadsAsFile`: Depot's file) downloads as itself through its
 // own action, so core adds none for it. Gated by {@link canDownload}: a member whose keys are open, or a `READ` /
 // `READ_WRITE` share guest (decision 5: the member view with rights removed), on a folder or a kind that brings an export

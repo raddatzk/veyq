@@ -11,7 +11,8 @@
 //
 // **An action is already a rights answer.** The caller builds the list from its fail-closed rights function
 // (`core/access.ts`, `../rights.ts`): an action it was not granted is `shown: false` or simply left out, and the
-// header decides nothing of its own. A share guest gets the same header as a member with fewer actions (inbox #401) —
+// header decides nothing of its own. Core's own actions (heart, cover, copy, download, report) are not the page's to
+// build: the header takes them for its `node` from the view around it (`coreNodeActions.ts`). A share guest gets the same header as a member with fewer actions (inbox #401) —
 // there is no guest-only header.
 
 import type { VeyqIconName } from '../../shared/ui/icons'
@@ -41,12 +42,12 @@ export interface NodeHeaderAction {
   menuOnly?: boolean
 }
 
-/** A core-owned action (e.g. a future favorite heart that every node gets, whatever its application): contributed by
- *  core next to the application's own, gated by a core rights function, never supplied by the application. */
 /** Where a core action goes among the application's: before them, after them, or right after the application's action of
  *  that id (core's "Copy to…" beside "Move to…") - after them all where the application offers no such action. */
 export type CoreActionPlacement = 'before' | 'after' | { after: string }
 
+/** A core-owned action (the favorite heart, the cover, copy, download, report - `coreNodeActions.ts`): contributed by core
+ *  next to the application's own, gated by a core rights function, never supplied by the application. */
 export interface CoreHeaderAction extends NodeHeaderAction {
   /** Before or after the application's actions, or beside one of them. Default `after`. */
   placement?: CoreActionPlacement
@@ -63,7 +64,8 @@ export function placeCoreActions<A extends { id: string }, C extends A & { place
 }
 
 /** The header's action row: core's contributions around the application's list (stable order within each group). This
- *  is where a core action plugs in — `NodeHeader` takes them as `coreActions`; no application change is needed. */
+ *  is where a core action plugs in — `NodeHeader` merges what `coreNodeActions.ts` supplies for its node; no application
+ *  change is needed. */
 export function mergeHeaderActions(core: readonly CoreHeaderAction[], app: readonly NodeHeaderAction[]): NodeHeaderAction[] {
   return placeCoreActions(core, app)
 }

@@ -15,22 +15,18 @@ import { computed } from 'vue'
 import type { NodeDetailProps, NodeDetailEmits } from '../../../core/applications/registry'
 import { CHAPTER_KIND } from '../kinds'
 import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
-import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
-import { downloadHeaderActions } from '../../../core/export/downloadActions'
-import { copyHeaderActions } from '../../../core/export/copyActions'
-import { canReport, reportHeaderActions, reportNodes, reportScope } from '../../../core/report/reportActions'
+import { canReport, reportScope } from '../../../core/report/reportActions'
 import { openReport, useReportOffered } from '../../../core/report/report'
 import { mediumReportKeys, type MediaItem } from '../media'
 import { useNodeCover } from '../../../core/node/cover/useNodeCover'
+import { injectCoreNodeActions } from '../../../core/node/coreNodeActions'
 import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
-import { useI18n } from 'vue-i18n'
 import { patchNodeMeta } from '../../../core/node/treeStore'
 import { keyAt } from '../../spaces/epochs'
 import { memoryRights } from '../rights'
 import { targetOf } from '../../../core/access'
 import { guestMemorySource, memberMemorySource } from '../source'
 import MemoryDetail from './MemoryDetail.vue'
-import { useToast } from '../../../shared/state/useToast'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
@@ -55,22 +51,15 @@ const itemMarkKey = computed<Uint8Array | null>(() => {
   return eks ? keyAt(eks, 0) : null
 })
 const personalScope = computed(() => !guest && activeSpace.kind === 'PERSONAL')
-const { t } = useI18n()
-const toast = useToast()
-// Core's heart (inbox #409) and cover action (inbox #411): the same actions every kind's header gets; a guest's list is empty.
-// The cover DIALOG is core's too (`CoverEditor`, mounted below): a cover is set only by an upload there. The Memory only says
-// where an equal picture is already stored (its descriptor's `cover.findStored`), so the cover shares it.
-const cover = useNodeCover(() => props.access, () => props.tree, () => [props.node])
+// Core's own actions (the heart, the cover, "Copy to…", the download, Report) come with core's header for this node
+// (`MemoryDetail` hands `NodeHeader` its `node`). The cover tile - the header's leading visual - opens core's cover DIALOG
+// too, the page's one (core's frame `NodePage` mounts it; mounted bare, this view has its own, `CoverEditor` below): a
+// cover is set only by an upload there. The Memory only says where an equal picture is already stored (its descriptor's
+// `cover.findStored`), so the cover shares it.
+const page = injectCoreNodeActions()
+const cover = page?.cover ?? useNodeCover(() => props.access, () => props.tree, () => [props.node])
 const reportOn = useReportOffered()
-// …and core's "Copy to…" (uc.platform.copy-node) beside the move, a member's, where this build copies the kind.
-const coreActions = computed(() => [
-  ...favoriteHeaderActions(t, toast.error, props.access, props.node),
-  ...cover.headerActions(props.node),
-  ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
-  ...downloadHeaderActions(t, props.access, props.node, () => emit('download')),
-  ...reportHeaderActions(t, reportOn.value, props.access, props.node, () => reportNodes(props.access, props.tree, [props.node], null)),
-])
-// Core's "Report" (uc.moderation.report) for the Memory itself in the header, and for one medium in the lightbox: the
+// Core's "Report" (uc.moderation.report) for one medium in the lightbox, beside the header's for the Memory itself: the
 // medium is this application's item, so its keys are Memories' to name (`mediumReportKeys`).
 const reportsMedia = computed(() => reportOn.value && canReport(props.access))
 function onReportMedium(item: MediaItem) {
@@ -96,7 +85,6 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     :memory-key="contentKey"
     :scope-key="itemMarkKey"
     :personal-scope="personalScope"
-    :core-actions="coreActions"
     :cover-editing="cover.editor.value !== null"
     :can-set-cover="cover.canSet(node)"
     :can-report="reportsMedia"
@@ -114,5 +102,5 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     @edit-cover="cover.open(node)"
     @report-medium="onReportMedium"
   />
-  <CoverEditor :cover="cover" />
+  <CoverEditor v-if="!page" :cover="cover" />
 </template>

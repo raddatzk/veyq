@@ -135,3 +135,77 @@ describe('DeleteNodesDialog', () => {
     expect(toast.error).toHaveBeenCalledWith(t('node.deleteMany.undoFailed', { names: t('node.deleteMany.quoted', { name: 'Lissabon' }) }))
   })
 })
+
+// ONE node - a row's default delete, a selection of one, and a page's own node from its header (the folder on screen, an
+// opened node: the member's host, inbox #385 (c)) - is asked that node's own question (`deleteQuestion.ts`, inbox #375,
+// #395), with the same Undo: a folder its own, a kind's registered `deleteTitle` / `deleteCopy`, else the neutral words.
+describe('DeleteNodesDialog - one node: its kind\'s own question', () => {
+  const one = (kind: string) => treeNode({ id: 'n1', kind, name: 'Rom 2026' })
+  const title = () => document.body.querySelector('.delete-nodes-dialog .veyq-dialog__title')?.textContent?.trim()
+  const copy = () => document.body.querySelector('.delete-nodes-dialog .dialog-copy')?.textContent?.trim()
+  const asked = async (kind: string, locale?: 'en' | 'de') => {
+    const w = mountDialog([{ node: one(kind) }])
+    await flushPromises()
+    if (locale) {
+      const { i18n } = await import('../../../i18n')
+      i18n.global.locale.value = locale
+      await w.vm.$nextTick()
+    }
+    const q = { title: title(), copy: copy() }
+    w.unmount()
+    return q
+  }
+
+  it('titles a folder as a folder and warns about its subtree', async () => {
+    const q = await asked(FOLDER_KIND)
+    expect(q.title).toContain(t('node.deleteFolderTitle'))
+    expect(q.copy).toBe(t('node.deleteFolderCopy', { name: 'Rom 2026' }))
+  })
+
+  it('titles a node by its kind\'s deleteTitle and says its deleteCopy - a Memory, a chapter, a drop box, a file', async () => {
+    expect((await asked('MEMORY')).title).toContain('Delete Memory')
+    expect((await asked('CHAPTER')).title).toContain('Delete chapter')
+    expect((await asked('DEPOT_DROPBOX')).title).toContain('Delete drop box')
+    expect((await asked('DEPOT_DROPBOX')).copy).toBe(t('depot.dropBox.deleteConfirm', { name: 'Rom 2026' }))
+    expect((await asked('MEMORY')).copy).toBe(t('node.deleteCopy', { name: 'Rom 2026' }))
+    expect((await asked('FILE')).copy).toBe(t('depot.deleteConfirm', { name: 'Rom 2026' }))
+    expect((await asked('FILE')).title).toContain(t('depot.deleteTitle'))
+  })
+
+  it('falls back to the neutral "Delete" for a kind nobody registered', async () => {
+    const q = await asked('SOME_NEWER_KIND')
+    expect(q.title).toContain(t('node.delete'))
+    expect(q.title).not.toMatch(/Memory/)
+  })
+
+  // inbox #385 (d): every node delete is a move to the space's trash, so the copy says that - never that it cannot be
+  // undone - in both languages, with the name in the language's own quotes.
+  it('says the node moves to the trash, never that the delete cannot be undone, in both languages', async () => {
+    const { i18n } = await import('../../../i18n')
+    for (const [locale, trash, quoted, never] of [
+      ['en', 'trash', '“Rom 2026”', 'undone'],
+      ['de', 'Papierkorb', '„Rom 2026“', 'rückgängig'],
+    ] as const) {
+      for (const kind of [FOLDER_KIND, 'MEMORY']) {
+        const q = await asked(kind, locale)
+        expect(q.copy, `${locale} ${kind}`).toContain(trash)
+        expect(q.copy).toContain(quoted)
+        expect(q.copy).not.toContain(never)
+      }
+    }
+    i18n.global.locale.value = 'en'
+  })
+
+  it('deletes it through core\'s door, closes, and offers ONE Undo that restores it', async () => {
+    const w = mountDialog([{ node: one('MEMORY') }])
+    await flushPromises()
+    await click(t('node.delete'))
+    expect(calls.deleteNode).toHaveBeenCalledWith(SCOPE, 'n1')
+    expect(w.emitted('done')).toHaveLength(1)
+    expect(w.emitted('close')).toHaveLength(1)
+    expect(toast.showUndo).toHaveBeenCalledOnce()
+    toast.showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+    expect(calls.restoreNode.mock.calls.map((c) => (c[3] as TreeNode).id)).toEqual(['n1'])
+  })
+})

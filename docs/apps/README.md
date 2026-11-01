@@ -201,9 +201,15 @@ point 8).
   move (`core/node/MoveNodeDialog.vue`, mirroring the server's `NodeKindRules` through each kind's `placement`) and a
   `FOLDER`'s share dialog are core's; an application's create and share dialogs ride on its kinds. The top-bar upload
   status is core's and lists every application's uploads.
+- **Core's own actions come centrally.** The heart, the cover, "Copy to…", the ZIP download and Report are core's for
+  every node (`core/node/coreNodeActions.ts`), each gated by its core rights function: the level adds them to every row
+  and to the folder's header, and core's node page (`core/node/components/NodePage.vue`, which both hosts mount around a
+  kind's `detail`) supplies them to the header of the node on screen. A kind's page only names the node its `NodeHeader`
+  heads; it builds and forwards none of them, so Report - a legal duty on everything a person sees - is on every page
+  ([ADR 0110](../decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md) decision 9).
 - **Rename, move and delete are core's default functions.** Every node gets them from core - on its row
   (`core/node/standardRowActions.ts`) and in its header (`standardNodeActions`) - through core's dialogs (the name
-  dialog, the move dialog, the delete question with its Undo). The application decides only WHETHER: its rights
+  dialog, the move dialog, the delete question with its Undo, the same for a row's node and a page's own). The application decides only WHETHER: its rights
   function answers each for the node (a row's `standard`, the header's flags), and no answer is no action. An
   application that needs its own implementation supplies an action of the same id, which replaces core's: Depot's file
   does for all three (its delete asks, writes through its session's source and offers its own Undo). A share guest's

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The app's confirmation dialog for a destructive action (cr-web-own-confirm-dialog) — mounted **once** in
-// App.vue beside the toasts, and driven by `shared/state/useConfirm`. It is `DeleteNodeDialog.vue`'s footer
+// App.vue beside the toasts, and driven by `shared/state/useConfirm`. It is `DeleteNodesDialog.vue`'s footer
 // verbatim (styleguide § Buttons & dialog actions: one `.veyq-dialog-action-row`, cancel secondary-outlined on
 // the left, the destructive primary a filled `variant="danger"` with an explicit label on the right), which is
 // the whole reason this is an own component rather than a library's confirmation service: one would have to be

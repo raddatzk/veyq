@@ -10,8 +10,9 @@ vi.mock('../api', () => ({ mediaApi: vi.fn(), itemFavoritesApi: vi.fn(), ownItem
 vi.mock('../../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () => undefined) }))
 vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn(async () => {}) }))
 
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import MemoryDetailHost from './MemoryDetailHost.vue'
+import { mountNodePage } from '../../../test/nodePage'
 import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { blobApi } from '../../../api/client'
 import { mediaApi, itemFavoritesApi } from '../api'
@@ -43,7 +44,8 @@ afterEach(() => {
 
 async function mountHost(kind: string, access: NodeDetailProps['access']) {
   const node = treeNode({ id: ID, kind, name: 'Rom 2026', parentId: null })
-  const w = mount(MemoryDetailHost, {
+  // As the hosts mount it: core's frame (`NodePage`) supplies core's header actions and the dialog of its cover action.
+  const w = mountNodePage(MemoryDetailHost, {
     props: {
       node, scopeId: SCOPE, epochs: null, contentKey: new Uint8Array(32).fill(5), children: { folders: [], byKind: new Map() },
       access, tree: memberTreeOf(() => [node], { scopeId: SCOPE }),

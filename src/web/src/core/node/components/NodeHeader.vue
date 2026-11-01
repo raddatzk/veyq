@@ -8,6 +8,12 @@
 // `shown` is not rendered (fail closed is the caller's rights function), and a guest sees this very header with fewer
 // actions (inbox #401).
 //
+// **Core's actions come centrally** (owner 2026-11-01, ADR 0110): the page names the `node` the header heads, and the header
+// asks the view around it (`../coreNodeActions.ts`: core's node page `NodePage.vue`, the level `LevelView.vue`) for core's
+// own actions of that node - the heart, the cover, "Copy to…", the download, Report - each gated by its core rights
+// function, and merges them with the application's (`mergeHeaderActions`). No page builds or forwards one, so none can
+// leave Report out. A kind's `order` may still name a core id for its priority.
+//
 // **Two layouts, picked by the header's own width** (ADR 0110 decisions 1 and 8): `headerLayout` answers `wide` while the
 // leading visual's wide width, the name's minimum, the floor's buttons and the ⋯ fit in one row, else `compact`. Its inputs
 // are the header's width and sizes no layout changes — the leading visual's `--veyq-node-header-leading-wide` and the
@@ -42,27 +48,30 @@ import {
   mergeHeaderActions,
   orderHeaderActions,
   partitionHeaderActions,
-  type CoreHeaderAction,
   type NodeHeaderAction,
 } from '../nodeHeader'
+import { useCoreHeaderActions } from '../coreNodeActions'
+import type { TreeNode } from '../tree'
 
 const props = withDefaults(
   defineProps<{
     title: string
+    /** The node this header heads, whose core actions it shows - required, so a page says which (null only for the
+     *  space's top level, which is no node and has none). */
+    node: TreeNode | null
     /** The icon of the leading visual when no `leading` slot is given. */
     icon?: VeyqIconName
     subtitle?: string
     actions?: readonly NodeHeaderAction[]
-    /** Core's own actions next to the application's (the favorite heart, the cover…), each gated by a core rights function. */
-    coreActions?: readonly CoreHeaderAction[]
     /** The kind's priority: the ids of the actions that come first, in that order (core's included); an unlisted one follows. */
     order?: readonly string[]
   }>(),
-  { icon: undefined, subtitle: undefined, actions: () => [], coreActions: () => [], order: () => [] },
+  { icon: undefined, subtitle: undefined, actions: () => [], order: () => [] },
 )
 const slots = useSlots()
 const { t } = useI18n()
-const parts = computed(() => partitionHeaderActions(orderHeaderActions(mergeHeaderActions(props.coreActions, props.actions).filter((a) => a.shown !== false), props.order)))
+const coreActions = useCoreHeaderActions(() => props.node)
+const parts = computed(() => partitionHeaderActions(orderHeaderActions(mergeHeaderActions(coreActions.value, props.actions).filter((a) => a.shown), props.order)))
 const hasLeading = computed(() => !!slots.leading || !!props.icon)
 
 const floor = computed(() => headerFloor(parts.value.buttons.length))

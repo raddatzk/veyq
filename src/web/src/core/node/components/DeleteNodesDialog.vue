@@ -2,9 +2,9 @@
 // Core's delete question for a level's SELECTION (inbox #421, uc.memory.delete-node step 1): ONE question for the deletable
 // part of the selection, naming how many go and of which kinds (each kind's `nounWithArticle`, as core's other dialogs name
 // a node they cannot name by kind - core names no application kind), in place of the per-node questions. ONE node - a row's
-// default delete (`standardRowActions.ts`), or a selection of one - is asked one node's question instead (`deleteQuestion.ts`,
-// the one `DeleteNodeDialog` asks), with this dialog's Undo. One node's own delete (`DeleteNodeDialog`, a Depot row's
-// question) stays as it is.
+// default delete (`standardRowActions.ts`), a selection of one, or a page's own node from its header (the folder on screen,
+// an opened node: the member's host) - is asked that node's question instead (`deleteQuestion.ts`), with this dialog's Undo.
+// A kind's own delete flow (Depot's file row: its question and its Undo) is the application's.
 //
 // The write is `deleteSelection.ts`: each node through the door its single delete uses (core's `deleteNode`, or the kind's
 // own `remove`), one after the other, the tree re-read once. Then one toast with ONE Undo that restores exactly the nodes

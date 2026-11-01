@@ -10,7 +10,8 @@
 // a member browses with: the folder's header and ONE list of the folders and every application's rows through the
 // registry (Memories' rows with their covers and dates, Depot's files and drop boxes), an unsupported row for a kind nobody
 // lists (inbox #407). At any other node — the link's root included — it renders that kind's registered `detail`
-// (`NodeDetailProps`: Memories' `MemoryDetail`, Depot's `DropBoxDetail`), as the member's host does. Both are handed the
+// (`NodeDetailProps`: Memories' `MemoryDetail`, Depot's `DropBoxDetail`) inside core's frame `NodePage`, which supplies
+// core's own header actions of the node (a guest's: the download and Report), as the member's host does. Both are handed the
 // guest's `access` and `tree`, so every control is the rights functions' answer for a guest (`folderRights`,
 // `memoryRights`, `depotRights`) and every byte the applications' guest data sources'. What stays this
 // page's own is what only a guest's page has: the breadcrumb up to the share root, the share's note (once), the role
@@ -46,6 +47,7 @@ import type { GuestAccess } from '../access'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import { childrenOf, type Level } from '../node/browse'
 import LevelView from '../node/LevelView.vue'
+import NodePage from '../node/components/NodePage.vue'
 import { ShareRole } from '../../api/generated/sharing'
 import { pickLocaleText, type PublicShareHead } from './resolvePublicShare'
 import { guestTreeContext, createShareNodeAsGuest, guestTreeErrorMessageKey } from './guestTree'
@@ -239,10 +241,10 @@ function createError(e: unknown): string {
       @download-node="downloading = $event"
     />
     <!-- The member's detail of the node's kind, for a guest: what it offers is its rights and its data source. -->
-    <component
-      :is="detail"
+    <NodePage
       v-else-if="detail && current"
       :key="current.id"
+      :detail="detail"
       :node="current"
       :scope-id="head.scopeId"
       :epochs="null"

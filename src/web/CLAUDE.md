@@ -206,9 +206,20 @@ here; the server is blind.
   header is wide and each action that may be a button is one; an e2e spec reaches an action through `tests/e2e/src/header.ts`, never a button by name) and puts the rest, then the menu-only ones (a `danger` action is one, core's report sets `menuOnly`: report, then delete) behind
   a separator, into one `VeyqMenu` (`actionMenuItems`, `core/node/actionMenu.ts`, the entries the level rows share). Delete and report are never
   buttons. Core owns the look, the fit, the keyboard (real labelled buttons, the layer's menu) and the dark mode (tokens). Tests reach the two
-  halves through `src/test/nodeHeader.ts` (`headerButtonIds`, `headerMenuIds`, `chooseHeaderEntry`). Core's
-  own actions (the favorite heart of every node, `core/favorites`) plug in as `coreActions` (`CoreHeaderAction`, `placement` before|after,
-  merged by `mergeHeaderActions`), gated by a core rights function, with no change to any application.
+  halves through `src/test/nodeHeader.ts` (`headerButtonIds`, `headerMenuIds`, `chooseHeaderEntry`). **Core's own actions come
+  centrally** (owner 2026-11-01, ADR 0110 decision 9): the heart, the cover, "Copy to…", the ZIP download and Report of every
+  node are built in ONE place, `core/node/coreNodeActions.ts` (`useCoreNodeActions`: each gated by its core rights function,
+  fail closed; `copy` / `download` open the host's dialogs, an absent door is an action not offered), which a core view
+  provides (`provideCoreNodeActions`): the level (`LevelView`: every row and the folder header) and core's node page
+  `core/node/components/NodePage.vue` - both hosts (`views/MemoryHomeView.vue`, `core/sharing/ShareTreePage.vue`) mount
+  every kind's `detail` through it, never bare; it emits `copy` / `download` and mounts the dialog of core's cover action.
+  `NodeHeader` takes the REQUIRED `node` it heads (null only for the space's top level) and merges core's actions for it
+  (`CoreHeaderAction`, `placement` before|after|{after: id}, `mergeHeaderActions`) with the application's; a page builds,
+  lists and forwards none, so it cannot leave Report out (a legal duty) - `NodePage.report.test.ts` walks every
+  registered kind's page and the folder level. A test of what core adds to a page mounts it through `src/test/nodePage.ts`
+  (`mountNodePage`; `coreActionsStandIn` for a header test). A kind's `order` may still name a core id. Deleting from a
+  header is a row's delete: the host asks core's `DeleteNodesDialog` for the one node (its kind's question,
+  `core/node/deleteQuestion.ts`, and the one Undo) and leaves the page for its parent once the node went.
 
   **One list for the level (inbox #407).** The folder level (`core/node/LevelView.vue`) is ONE list - or one set of tiles - of
   everything at the level: the folders, the Memories, the files, the drop boxes, every kind, with no section headers. **Core
@@ -264,11 +275,12 @@ here; the server is blind.
   decrypted covers (a member's singleton cleared by `activeSpace`, a guest page's own through the link's gated presign, keyed on the sealed
   meta so a replaced or removed cover drops its object URL at once), `rights.ts` the fail-closed `coverRights` (a writer on a scope that is not pending deletion, keys loaded, an opted-in
   kind, not a guest's identity folder; no guest role), and `useNodeCover` the view's door: the covers it draws and ONE core action `cover`
-  (Set / Change, `image`) for `NodeHeader`'s `coreActions` and the level's `coreRowActions` (the row's menu) - there is no remove action;
+  (Set / Change, `image`) among core's actions of every header and row (`core/node/coreNodeActions.ts`) - there is no remove action;
   it opens THE dialog, `components/CoverDialog.vue` (choose an image, the shared 16:9 `ImageCropper`, re-crop of the current cover with its
   stored crop, Remove where a cover exists, Save/Cancel; a non-image, empty or over-40-MB file is refused inside it, `pickImage.ts`
-  `coverFileProblem`), which each view mounts once beside its content as `<CoverEditor :cover="cover" />` (`LevelView`, `DropBoxDetail`,
-  `MemoryDetailHost`). Save is `useNodeCover.save(node, intent)` for every kind: the intents are `upload` (a job of the core upload queue + the
+  `coverFileProblem`), which each view mounts once beside its content as `<CoverEditor :cover="cover" />` (`LevelView`, and `NodePage` for
+  a node's page, whose ONE cover a kind's page takes for its own cover control or image, `injectCoreNodeActions`: the drop
+  box's leading visual, the Memory's cover tile). Save is `useNodeCover.save(node, intent)` for every kind: the intents are `upload` (a job of the core upload queue + the
   one `setNodeCover` write), `keep` (the stored value with only its crop moved) and `remove`. A cover is set only by an upload in that
   dialog (the lightbox offers no "Set as cover"); a kind whose nodes already store pictures may add one seam to its descriptor,
   `cover.findStored` (`KindCover`; Memories: the PREVIEW of a gallery photo whose original equals the picked file), so the cover shares
@@ -284,9 +296,8 @@ here; the server is blind.
   unsupported kind; kept during a pending deletion), `favoriteActions.ts` (the heart as a `CoreHeaderAction` / `CoreRowAction`, `first`,
   placed before the application's own) and `PinnedNodes.vue` (the sidebar section: every kind's pinned node with its registry icon and
   name, opened by `hashForNode`; an id that does not resolve or a kind this client cannot draw is skipped). `LevelView` contributes the
-  heart to every row (not the unsupported ones) and to the folder header; each node page passes `favoriteHeaderActions(...)` as the
-  header's `core-actions` (`FileDetail`, `DropBoxDetail`, `MemoryDetailHost`), so an application that draws `NodeHeader` adds one line
-  and no heart of its own. `app/activeSpace` clears and loads the set with the scope and `rotateKeys` re-seals it - both directly, not
+  heart to every row (not the unsupported ones) and to the folder header, and core's node page to every node page's header
+  (`core/node/coreNodeActions.ts`), so an application that draws `NodeHeader` adds no heart of its own. `app/activeSpace` clears and loads the set with the scope and `rotateKeys` re-seals it - both directly, not
   through an application's lifecycle hook. A share guest's list is empty and the store is never read for it. The item MARKS inside a
   Memory stay Memories' (`features/memories/itemFavorites*`, `generated/item-favorites`).
 

@@ -140,7 +140,7 @@ export interface KindDescriptor {
   detail?: Component
   /** The icon core draws next to a node of this kind (e.g. the trash list). */
   icon: VeyqIconName
-  /** The i18n key of the title core's delete dialog (`core/node/components/DeleteNodeDialog.vue`) shows for a node of
+  /** The i18n key of the title core's delete question (`core/node/components/DeleteNodesDialog.vue`, one node's) shows for a node of
    *  this kind, e.g. Memories' "Delete Memory". Omitted: the neutral `node.delete`. Core serves every application's
    *  nodes and so names none in its own strings (inbox #375): a kind's noun comes from the kind. */
   deleteTitle?: string
@@ -333,7 +333,9 @@ export interface LevelTabSpec {
 
 export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: false; kind: NodeKind }
 
-/** The generic context the host hands the `detail` component of an opened node (event names below). The
+/** The generic context the host hands the `detail` component of an opened node (event names below), always through core's
+ *  frame `core/node/components/NodePage.vue`, which supplies core's own header actions of the node (the heart, the cover,
+ *  copy, download, Report - `core/node/coreNodeActions.ts`) to the `NodeHeader` the detail draws with this `node`. The
  *  application's own host component maps it to whatever its detail view takes. What the detail offers is its
  *  application's rights function over `access` and the node (`core/access.ts`), never a flag the host decides. */
 export interface NodeDetailProps {
@@ -352,7 +354,8 @@ export interface NodeDetailProps {
    *  nodes are `TreeNode`s in both modes (the member's tree, the guest's served rows as `TreeNode`s). */
   tree: TreeSource<TreeNode>
 }
-/** Events a `detail` component emits to the host: `rename` (core's `FolderNameDialog`, any kind), `delete`,
+/** Events a `detail` component emits to the host: `rename` (core's `FolderNameDialog`, any kind), `delete` (core's delete
+ *  question with its Undo),
  *  `createChild` (the KIND of the child to create: the host mounts that kind's `createDialog` under the opened node),
  *  `openNode` (a child), `share` and `shareUpload` (the opened kind's `shareDialog`, the second with `uploader`). `share`
  *  carries the {@link NodeShareOffer} of the rights function that showed the button, which the host hands on. */
@@ -362,10 +365,6 @@ export interface NodeDetailEmits {
   /** Move `node` (the opened node, or a child the detail lists — a drop box's guest folder): the host mounts core's
    *  `MoveNodeDialog` for it (inbox #358). */
   move: [node: TreeNode]
-  /** Download the opened node and its subtree as a ZIP (ADR 0082): the host mounts core's `ExportSubtreeDialog`. */
-  download: []
-  /** Copy the opened node and its subtree elsewhere (uc.platform.copy-node): the host mounts core's `CopyNodesDialog`. */
-  copy: []
   createChild: [kind: NodeKind]
   openNode: [node: TreeNode]
   share: [offer: NodeShareOffer]

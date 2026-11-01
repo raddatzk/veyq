@@ -211,7 +211,7 @@ or a one-off `1rem` label sitting in them.
 
   | Dialog | What it owns beyond asking |
   |---|---|
-  | `core/node/components/DeleteNodeDialog.vue` | busy (gates `closable`/`close-on-escape`) + inline error; folder-vs-Memory header variant |
+  | `core/node/components/DeleteNodesDialog.vue` | busy (gates `closable`/`close-on-escape`) + a summary of what was not deleted + one Undo; one node's header by its kind (folder, Memory, …) |
   | `account/trustDevice/DeviceTrustControl.vue` | busy + inline error |
   | `memories/components/MemoryDetail.vue` (trash purge) | a data payload (the ids) + busy + pluralised body; **no** inline error |
   | `account/rotation/KeyRotationPanel.vue` | busy + inline error, both shared with the form it gates |
@@ -235,7 +235,7 @@ Two title voices coexist, and that is the rule rather than an inconsistency to f
   "Secure your account?", "Delete bucket?". **4 of 4** question headers sit there, on a consequence-only body.
 
 So: match the voice to the mechanism you picked, and do not "fix" one to look like the other. The single
-counterexample is `DeleteNodeDialog` ("Delete folder", or the kind's own title such as "Delete Memory") — a dedicated dialog wearing the
+counterexample is `DeleteNodesDialog` asking for one node ("Delete folder", or the kind's own title such as "Delete Memory") — a dedicated dialog wearing the
 imperative voice. It is the mechanism axis it crosses, not the voice one: both its headers are imperative.
 
 **`window.confirm` is retired, and `no-alert` is what keeps it retired** — in `src/web/eslint.config.js` and in

@@ -108,9 +108,16 @@ vi.mock('../core/sharing/FolderShareDialog.vue', async () => {
     }),
   }
 })
-vi.mock('../core/node/components/DeleteNodeDialog.vue', async () => {
+// Core's delete question with its Undo, for a selection, a row's node and a page's own node alike (its write and its Undo are
+// `DeleteNodesDialog.test.ts`'s): the stub names what it was handed and hands the host's after-undo on.
+vi.mock('../core/node/components/DeleteNodesDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ name: 'DeleteNodeStub', props: ['node'], emits: ['done', 'close'], setup: (p) => () => h('div', { class: 'delete-stub' }, p.node.name) }) }
+  return {
+    default: defineComponent({
+      name: 'DeleteNodesStub', props: ['items', 'afterUndo'], emits: ['done', 'close'],
+      setup: (p) => () => h('div', { class: 'delete-stub' }, (p.items as { node: { name: string } }[]).map((i) => i.node.name).join(', ')),
+    }),
+  }
 })
 vi.mock('../core/node/components/SpaceTrashDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -118,10 +125,10 @@ vi.mock('../core/node/components/SpaceTrashDialog.vue', async () => {
 })
 
 import MemoryHomeView from './MemoryHomeView.vue'
-import { treeStore, loadTree } from '../core/node/treeStore'
+import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../core/favorites/favoritesStore'
-import { restoreNode, type TreeNode } from '../core/node/tree'
+import type { TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
 import { FILE_KIND } from '../features/depot/kinds'
@@ -352,7 +359,7 @@ describe('MemoryHomeView over the real registry', () => {
 
     detail.vm.$emit('delete')
     await flushPromises()
-    expect(w.find('.delete-stub').text()).toBe('Italy')
+    expect(w.find('.delete-stub').text(), "the page's own node: core's one question with its Undo").toBe('Italy')
   })
 
   it("wires the level events: a create by kind (MEMORY's dialog from the New menu, core's for a folder), trash, and opening a child navigates", async () => {
@@ -396,19 +403,25 @@ describe('MemoryHomeView over the real registry', () => {
     await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
     await flushPromises()
     expect(w.find('.name-stub').text()).toBe('rename|trips|Trips')
+    // The header's delete is the row's (inbox #385 (c)): core's one question with its Undo, `DeleteNodesDialog`, for the one
+    // folder - the kind's own question and the Undo are that dialog's (`DeleteNodesDialog.test.ts`).
     await chooseHeaderEntry(w, 'delete')
-    expect(w.find('.delete-stub').text()).toBe('Trips')
-    // the dialog deleted it (inbox #385 (c)): the host says so with an undo that restores the folder as the trash does
-    showUndo.mockClear()
-    w.findComponent({ name: 'DeleteNodeStub' }).vm.$emit('done')
+    const question = w.findComponent({ name: 'DeleteNodesStub' })
+    expect(question.find('.delete-stub').text()).toBe('Trips')
+    expect(question.props('items')).toEqual([{ node: expect.objectContaining({ id: 'trips' }) }])
+    expect(typeof question.props('afterUndo')).toBe('function')
+    const hash = () => (w.vm as unknown as { $router: { currentRoute: { value: { hash: string } } } }).$router.currentRoute.value.hash
+    // refused (the folder is still there): the page stays
+    question.vm.$emit('done')
     await flushPromises()
-    expect(showUndo).toHaveBeenCalledOnce()
-    expect(showUndo.mock.calls[0][0].summary).toBe(t('node.trash.moved', { name: 'Trips' }))
-    vi.mocked(loadTree).mockClear()
-    showUndo.mock.calls[0][0].onUndo()
+    expect(hash()).toBe('#~me/trips/') // the folder's own path, kept
+    // it went: the page is left for its parent
+    const before = treeStore.nodes
+    treeStore.nodes = before.filter((n) => n.id !== 'trips' && n.parentId !== 'trips')
+    question.vm.$emit('done')
     await flushPromises()
-    expect(vi.mocked(restoreNode).mock.calls.map((c) => [c[0], (c[3] as TreeNode).id])).toEqual([['scope-1', 'trips']])
-    expect(loadTree).toHaveBeenCalled()
+    expect(hash()).toBe('#~me')
+    treeStore.nodes = before
 
     const root = await mountAt('#~me')
     await rowOf(root, 'Trips').find('button.veyq-level-item-main').trigger('click')

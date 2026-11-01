@@ -92,8 +92,7 @@ import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './l
 import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
 import { useSelection, type SelectedForDelete } from './selection'
 import { standardRowActions, standardRowDoors, withStandardRowActions } from './standardRowActions'
-import { favoriteHeaderActions, favoriteRowActions } from '../favorites/favoriteActions'
-import { useNodeCover } from './cover/useNodeCover'
+import { provideCoreNodeActions, useCoreNodeActions } from './coreNodeActions'
 import NodeCoverImage from './cover/components/NodeCoverImage.vue'
 import CoverEditor from './cover/components/CoverEditor.vue'
 import ViewModeToggle from './ViewModeToggle.vue'
@@ -101,11 +100,9 @@ import NodeHeader from './components/NodeHeader.vue'
 import LevelRowItem from './components/LevelRowItem.vue'
 import LevelNotices from './components/LevelNotices.vue'
 import { standardNodeActions } from './nodeHeader'
-import { downloadHeaderActions, downloadRowActions } from '../export/downloadActions'
-import { canCopy, copyHeaderActions, copyRowActions } from '../export/copyActions'
-import { canReport, reportHeaderActions, reportNodes, reportRowActions } from '../report/reportActions'
+import { canCopy } from '../export/copyActions'
+import { canReport, reportNodes } from '../report/reportActions'
 import { useReportOffered } from '../report/report'
-import { useToast } from '../../shared/state/useToast'
 import { isDownloadArchive } from '../export/importSubtree'
 import {
   directoryHoldsManifest, holdsManifest, readDroppedDirectory, type DirectoryInput, type DroppedDirectory, type DroppedEntry, type ImportOffer,
@@ -159,7 +156,6 @@ const emit = defineEmits<{
 }>()
 
 const { t, locale } = useI18n()
-const toast = useToast()
 const { viewMode } = useViewMode()
 const { levelTab } = useLevelTab()
 
@@ -265,7 +261,14 @@ const levelNodes = computed<TreeNode[]>(() => [
   ...props.level.folders,
   ...[...props.level.byKind.values()].flat(),
 ])
-const cover = useNodeCover(() => props.access, () => props.tree, () => levelNodes.value)
+// Core's own actions of every node here (`coreNodeActions.ts`: the heart, the cover, "Copy to…", the download, Report), for
+// the rows and - provided to it - the folder header; the copy and the download open the host's dialogs.
+const coreActions = useCoreNodeActions(() => props.access, () => props.tree, () => levelNodes.value, {
+  copy: (nodes) => emit('copyNodes', nodes),
+  download: (node) => emit('downloadNode', node),
+})
+provideCoreNodeActions(coreActions)
+const cover = coreActions.cover
 
 // --- the applications' row sources -------------------------------------------------------------------------------------
 const disposers: (() => void)[] = []
@@ -468,35 +471,15 @@ watch(canSelect, (can) => {
 })
 watch(levelItems, (now) => selection.retain(now.keys()))
 
-// Core's own row actions: the favorite heart of inbox #409, gated by `favoriteRights` (member only, fail closed) and
-// merged around the application's, for EVERY kind and the folders, with no change to any application. An unsupported row
-// (a kind nobody draws) gets none.
-// The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" /
-// cover" / "Remove cover" in the row's menu, gated by `coverRights` (a writer, a kind that opted in; a guest none).
-// Core's "Copy to…" (uc.platform.copy-node) sits beside the application's "Move to…" in the row's menu, for a member only.
-// A node a moderator blocked gets none of them: its placeholder keeps its delete alone (`blockedItem`), core's default or
-// the application's own.
-const coreRowActions = (item: Item): CoreRowAction[] =>
-  item.unsupported || item.node.blockedByOperator
-    ? []
-    : [
-        ...favoriteRowActions(t, toast.error, props.access, item.node),
-        ...cover.rowActions(item.node),
-        ...copyRowActions(t, props.access, item.node, () => emit('copyNodes', [item.node])),
-        ...downloadRowActions(t, props.access, item.node, () => emit('downloadNode', item.node)),
-        ...reportRowActions(t, reportOn.value, props.access, item.node, () => reportNodes(props.access, props.tree, [item.node], null)),
-      ]
-// The folder on screen is a node too: its header carries the same heart and cover action (the scope root is no node and
-// has neither). Its priority (ADR 0110): what is first a button — favorite, then sharing, its content, its look, then editing
-// and moving it; delete and report are always the ⋯ menu's last entries.
+// Core's own row actions (`coreNodeActions.ts`), merged around the application's for EVERY kind and the folders, with no
+// change to any application: the heart (inbox #409), the cover (inbox #411), "Copy to…" beside the move, the download and
+// Report. An unsupported row (a kind nobody draws) gets none, and so does a node a moderator blocked: its placeholder keeps
+// its delete alone (`blockedItem`), core's default or the application's own.
+const coreRowActions = (item: Item): CoreRowAction[] => (item.unsupported || item.node.blockedByOperator ? [] : coreActions.row(item.node))
+// The folder on screen is a node too: its header carries the same core actions, which `NodeHeader` takes for its `node` from
+// this view (the scope root is no node and has none). Its priority (ADR 0110): what is first a button — favorite, then
+// sharing, its content, its look, then editing and moving it; delete and report are always the ⋯ menu's last entries.
 const FOLDER_HEADER_ORDER = ['favorite', 'share', 'download', 'cover', 'rename', 'move', 'copy'] as const
-const folderCoreActions = computed(() => [
-  ...favoriteHeaderActions(t, toast.error, props.access, props.folder),
-  ...cover.headerActions(props.folder),
-  ...copyHeaderActions(t, props.access, props.folder, () => props.folder && emit('copyNodes', [props.folder])),
-  ...downloadHeaderActions(t, props.access, props.folder, () => props.folder && emit('downloadNode', props.folder)),
-  ...reportHeaderActions(t, reportOn.value, props.access, props.folder, () => props.folder && reportNodes(props.access, props.tree, [props.folder], null)),
-])
 const folderCover = computed(() => (props.folder ? (cover.covers.value.get(props.folder.id) ?? null) : null))
 const itemMode = computed<'grid' | 'list'>(() => (mode.value === 'list' ? 'list' : 'grid'))
 
@@ -598,14 +581,14 @@ async function onDrop(e: DragEvent): Promise<void> {
          the reading order. -->
     <div v-if="folder || spaceName || hasToolbar" class="veyq-level-head" :class="{ 'has-header': !!(folder || spaceName) }">
       <!-- The folder's header, core's one (`NodeHeader`): a container kind's detail opens with it too. -->
-      <NodeHeader v-if="folder" icon="folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions" :order="FOLDER_HEADER_ORDER">
+      <NodeHeader v-if="folder" :node="folder" icon="folder" :title="folderName ?? folder.name" :actions="folderActions" :order="FOLDER_HEADER_ORDER">
         <!-- The folder's cover (inbox #411) in the header's leading slot; the folder icon stays the default without one. -->
         <template v-if="folderCover" #leading>
           <span class="veyq-node-header-cover"><NodeCoverImage :src="folderCover.url" :crop="folderCover.crop" /></span>
         </template>
       </NodeHeader>
       <!-- The space's top level: core's header with the space's name and nothing to act on (the space is no node). -->
-      <NodeHeader v-else-if="spaceName" :title="spaceName" />
+      <NodeHeader v-else-if="spaceName" :node="null" :title="spaceName" />
       <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own. Hidden
            where nothing is written (a pending deletion: a restore is a write; a guest's folder). The view switch governs the
            whole list, so it is the level's too - a guest's as well. -->

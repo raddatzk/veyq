@@ -6,7 +6,7 @@
 // is a real DOM click: the header card's share, rename, move and delete reach the host as events, the download starts
 // inside the click, the replace asks first and expects the blob the page read.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import type { FileListPage } from '../../../api/generated/depot'
 
@@ -58,6 +58,7 @@ import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
+import { mountNodePage } from '../../../test/nodePage'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
 const D = '5c09e000-0000-4000-8000-0000000000d0'
@@ -83,7 +84,8 @@ function mountDetail(o: { pending?: boolean; publicShares?: boolean; identityFol
   const epochs = epochsOf(v1.randomBytes(32))
   const file = o.file ?? REPORT
   const tree = memberTreeOf(() => [DOCS, file], { scopeId: SCOPE, epochs })
-  return mount(FileDetail, {
+  // As the hosts mount it: core's frame supplies core's header actions (the heart, "Copy to…", Report).
+  return mountNodePage(FileDetail, {
     props: {
       node: file, scopeId: SCOPE, epochs, contentKey: keyFor(file.id), children: { folders: [], byKind: new Map() },
       access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: o.pending ?? false, publicShares: o.publicShares ?? true }),
@@ -248,13 +250,13 @@ describe('an opened file: its page for a member', () => {
     await w.find(`.veyq-node-header-actions button[aria-label="${t('share.share')}"]`).trigger('click')
     await w.find(`.veyq-node-header-actions button[aria-label="${t('node.rename')}"]`).trigger('click')
     await chooseHeaderEntry(w, 'delete')
-    expect(w.emitted('share')).toHaveLength(1)
-    expect(w.emitted('rename')).toHaveLength(1)
-    expect(w.emitted('delete')).toHaveLength(1)
+    expect(w.findComponent(FileDetail).emitted('share')).toHaveLength(1)
+    expect(w.findComponent(FileDetail).emitted('rename')).toHaveLength(1)
+    expect(w.findComponent(FileDetail).emitted('delete')).toHaveLength(1)
     const move = w.find('.veyq-node-header-actions button[data-action="move"]')
     expect(move.findComponent(VeyqButton).props('icon')).toBe('file-export')
     await (move.element as HTMLButtonElement).click()
-    expect((w.emitted('move') as TreeNode[][]).map(([n]) => n.id)).toEqual([R])
+    expect((w.findComponent(FileDetail).emitted('move') as TreeNode[][]).map(([n]) => n.id)).toEqual([R])
   })
 
   it('no share without the instance\'s public links; during a pending deletion it downloads and lists links, writes nothing', async () => {

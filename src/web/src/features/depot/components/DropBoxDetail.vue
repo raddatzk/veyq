@@ -38,14 +38,9 @@ import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
-import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
-import { downloadHeaderActions } from '../../../core/export/downloadActions'
-import { copyHeaderActions } from '../../../core/export/copyActions'
-import { reportHeaderActions, reportNodes } from '../../../core/report/reportActions'
-import { useReportOffered } from '../../../core/report/report'
 import { useNodeCover } from '../../../core/node/cover/useNodeCover'
+import { injectCoreNodeActions } from '../../../core/node/coreNodeActions'
 import NodeCoverImage from '../../../core/node/cover/components/NodeCoverImage.vue'
-import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
 import { useTrashUndo } from '../../../core/node/trashUndo'
 import { depotRights } from '../rights'
 import { targetOf, type GuestAccess } from '../../../core/access'
@@ -54,20 +49,11 @@ import { guestDepotSource, memberDepotSource, sourceRights, type DepotSource } f
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 const { t } = useI18n()
-// Core's heart (inbox #409) and cover (inbox #411): the same for every kind that carries one; a guest gets neither action.
-// A drop box's cover is its own image (core's picker), shown in the header's leading slot; the inbox icon is the default.
-const cover = useNodeCover(() => props.access, () => props.tree, () => [props.node])
-// …and core's Download (ADR 0082 decision 4): the drop box as a ZIP of its guests' folders, for a member and a READ
-// or READ_WRITE guest of a folder link above it - never its own WRITE_ONLY guest, who holds no key (core's `canDownload`).
-// …and core's Report (uc.moderation.report), for whoever sees it.
-const reportOn = useReportOffered()
-const coreActions = computed(() => [
-  ...favoriteHeaderActions(t, toast.error, props.access, props.node),
-  ...cover.headerActions(props.node),
-  ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
-  ...downloadHeaderActions(t, props.access, props.node, () => emit('download')),
-  ...reportHeaderActions(t, reportOn.value, props.access, props.node, () => reportNodes(props.access, props.tree, [props.node], null)),
-])
+// Core's own actions (the heart, the cover, "Copy to…", the download as a ZIP of its guests' folders, Report) come with core's
+// header for this node (`NodeHeader`'s `node`). A drop box's cover is its own image (core's dialog, opened by core's cover
+// action), shown in the header's leading slot - the page's one cover (core's frame), its own only when mounted bare; the
+// inbox icon is the default.
+const cover = injectCoreNodeActions()?.cover ?? useNodeCover(() => props.access, () => props.tree, () => [props.node])
 const nodeCover = computed(() => cover.covers.value.get(props.node.id) ?? null)
 const { ask } = useConfirm()
 const toast = useToast()
@@ -138,7 +124,7 @@ async function removeFolder(folder: TreeNode, label: string) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the drop box's share and delete, then its folders. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="inbox" :title="node.name" :actions="headerActions" :core-actions="coreActions" :order="DROP_BOX_HEADER_ORDER">
+    <NodeHeader :node="node" icon="inbox" :title="node.name" :actions="headerActions" :order="DROP_BOX_HEADER_ORDER">
       <template v-if="nodeCover" #leading>
         <span class="veyq-node-header-cover"><NodeCoverImage :src="nodeCover.url" :crop="nodeCover.crop" /></span>
       </template>
@@ -186,7 +172,6 @@ async function removeFolder(folder: TreeNode, label: string) {
         </li>
       </ul>
     </section>
-    <CoverEditor :cover="cover" />
   </div>
 </template>
 

@@ -1,6 +1,6 @@
 // A node's cover as a CORE feature for a view (inbox #411): the resolved covers of the nodes it draws (every kind that
 // opts in; a share guest's through the link's own reads) AND the core action that sets, changes and removes one, plugged
-// into the two places a node shows its actions - `NodeHeader`'s `coreActions` and the level list's `coreRowActions` - the
+// into the two places a node shows its actions - a node's header and its row, through `core/node/coreNodeActions.ts` - the
 // way the favorite heart is (`core/favorites/favoriteActions.ts`), with no change to any application.
 //
 // Called in a view's SETUP (it uses the i18n, toast and watch contexts) with the view's access, tree source and the nodes it

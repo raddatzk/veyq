@@ -1653,13 +1653,12 @@ const en = {
     tabAll: 'All',
     illegalStructure: 'That isn’t allowed here.',
     saveFailed: 'That didn’t work. Please try again.',
-    // The delete dialog (core's `DeleteNodeDialog`): a folder's own title and copy; any other node's title is its kind's
+    // The delete question of one node (core's `DeleteNodesDialog`): a folder's own title and copy; any other node's title is its kind's
     // `deleteTitle` from the registry (Memories: `memory.deleteMemoryTitle`), else the neutral `node.delete`.
     deleteFolderTitle: 'Delete folder',
     // Every node delete is a move to the space's trash (`deleteNode`, ADR 0061): the copy says so (inbox #385).
     deleteFolderCopy: '“{name}” and everything inside it move to the trash. You can restore them from there until they are removed for good.',
     deleteCopy: '“{name}” moves to the trash. You can restore it from there until it is removed for good.',
-    deleteFailed: 'Could not delete it. Please try again.',
     // Deleting a level's selection (`core/node/components/DeleteNodesDialog.vue`, inbox #421): ONE question naming how many and
     // of which kinds (`{kinds}`: the kinds' `nounWithArticle`, joined), one summary naming each node that was not deleted.
     deleteMany: {
@@ -3647,7 +3646,6 @@ const de: typeof en = {
     deleteFolderTitle: 'Ordner löschen',
     deleteFolderCopy: '„{name}“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
     deleteCopy: '„{name}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.',
-    deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
     deleteMany: {
       title: '{count} Eintrag löschen | {count} Einträge löschen',
       copy: '{count} ausgewählter Eintrag kommt mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich der Eintrag wiederherstellen, bis er endgültig entfernt wird. | {count} ausgewählte Einträge kommen mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',

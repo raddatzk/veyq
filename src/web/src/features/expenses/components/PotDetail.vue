@@ -18,13 +18,9 @@ import VeyqTabPanel from '../../../shared/ui/VeyqTabPanel.vue'
 import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
-import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
-import { downloadHeaderActions } from '../../../core/export/downloadActions'
-import { copyHeaderActions } from '../../../core/export/copyActions'
-import { canReport, nodeTarget, reportHeaderActions, reportNodes } from '../../../core/report/reportActions'
+import { canReport, nodeTarget } from '../../../core/report/reportActions'
 import { useReportOffered } from '../../../core/report/report'
 import { loadScopePeople, loadTenantPeople, type Person } from '../../../core/people/directory'
-import { useToast } from '../../../shared/state/useToast'
 import { account } from '../../../app/account'
 import { targetOf } from '../../../core/access'
 import { expensesRights } from '../rights'
@@ -42,7 +38,6 @@ import SettingsPanel from './SettingsPanel.vue'
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 const { t } = useI18n()
-const toast = useToast()
 
 const rights = computed(() => expensesRights(props.access, targetOf(props.tree, props.node)))
 const session = usePotSession({
@@ -73,13 +68,9 @@ onMounted(() => {
   }
 })
 
+// Core's own actions of the Pot (the heart, "Copy to…", the download, Report) come with core's header for this node
+// (`NodeHeader`'s `node`); this page offers Report for an entry and a receipt on its own, by the same rule.
 const reportOn = useReportOffered()
-const coreActions = computed(() => [
-  ...favoriteHeaderActions(t, toast.error, props.access, props.node),
-  ...copyHeaderActions(t, props.access, props.node, () => emit('copy')),
-  ...downloadHeaderActions(t, props.access, props.node, () => emit('download')),
-  ...reportHeaderActions(t, reportOn.value, props.access, props.node, () => reportNodes(props.access, props.tree, [props.node], null)),
-])
 /** The Pot header's priority (ADR 0110): favorite, sharing (a Pot is kept together), its download, then rename, move, copy;
  *  delete and report are the ⋯ menu's last entries. */
 const POT_HEADER_ORDER = ['favorite', 'share', 'download', 'rename', 'move', 'copy'] as const
@@ -125,7 +116,7 @@ function receiptSource(receipt: HeldReceipt) {
 
 <template>
   <div class="veyq-level-view expenses-pot">
-    <NodeHeader icon="wallet" :title="node.name" :subtitle="subtitle" :actions="headerActions" :core-actions="coreActions" :order="POT_HEADER_ORDER" />
+    <NodeHeader :node="node" icon="wallet" :title="node.name" :subtitle="subtitle" :actions="headerActions" :order="POT_HEADER_ORDER" />
 
     <VeyqMessage v-if="loaded && !check.complete" tone="warn" class="expenses-ledger-notice">
       {{ t('expenses.ledger.missing') }}
