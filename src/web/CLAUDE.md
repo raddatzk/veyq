@@ -197,7 +197,9 @@ here; the server is blind.
   so it cannot flip. The application only feeds data: its action list
   (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown`,
   `disabled`, `pressed`, `menuOnly`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions
-  (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four; and its kind's priority, `order` (the
+  (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four - core's defaults, which
+  every kind's page takes from it with its rights answer as the flags (a kind with its own implementation passes its own
+  action of that id instead, as the row's rule below); and its kind's priority, `order` (the
   ids first as buttons, core's included; an unlisted one follows, never vanishes). **As many as fit are buttons, the rest one ⋯ menu:** core
   measures the row (on mount, on each resize of the header or the name, `fitHeaderActions` the pure count; unmeasured, as in every unit test, the
   header is wide and each action that may be a button is one; an e2e spec reaches an action through `tests/e2e/src/header.ts`, never a button by name) and puts the rest, then the menu-only ones (a `danger` action is one, core's report sets `menuOnly`: report, then delete) behind
@@ -222,8 +224,19 @@ here; the server is blind.
   severity, shown, disabled, pressed) plus `first` and `loading`: AT MOST TWO actions marked `first` are real buttons on the
   row (Depot: download, every kind: core's heart), every other shown action sits in ONE "more" menu (the layer's `VeyqMenu`, entries
   `veyq-row-action-<id>`), `shown` by the application's fail-closed rights function - a share guest gets this very row with
-  fewer actions, never a guest-only one. Core's own actions (the favorite heart of inbox #409) plug in as the
+  fewer actions, never a guest-only one. **The menu's order** (`splitRowActions`): rename and move first, the other actions in
+  their merge order, then after a separator the menu-only group - report, then delete (`danger`); delete and report are never
+  row buttons. Core's own actions (the favorite heart of inbox #409) plug in as the
   level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
+  **Rename, move and delete are core's DEFAULTS** (owner 2026-11-01, `core/node/standardRowActions.ts`, the row's mirror of
+  `standardNodeActions`): an application builds none of them; its row answers `standard: { rename, move, delete }` from its
+  rights function for THAT node (a folder's is core's `folderRights`), and the level adds the granted ones through its own
+  doors - `renameNode` (core's name dialog), `moveNode` (core's move dialog) and `deleteNodes` with the one node (core's
+  `DeleteNodesDialog`: one node's own question, `deleteQuestion.ts`, with the selection's Undo). Omitted, or a flag left out:
+  no default (fail closed). A share guest's level has the move door alone - no guest renames or deletes a node core's way,
+  whatever an answer says. **An application that implements one itself supplies an action of that id** (`rename`, `move`,
+  `delete`) in `actions`, which REPLACES core's default whatever `standard` says - its own `shown` decides (`withStandardRowActions`;
+  Depot's file: its rename and move through its session's source, its delete with its own question and Undo, inbox #385 (c)).
   A row's `selection` (`LevelRowSelection` `{ move, delete, remove? }`, inbox #421) is the application's rights answer
   for the level's Select mode (core's `selection.ts`, the bar in `LevelView`): omitted, the node allows nothing; `remove` is
   the kind's own delete door without its tree re-read (Depot's file), else core's `deleteNode`. Several nodes move through
@@ -297,7 +310,8 @@ here; the server is blind.
   inbox #358) - and its `list` of the level list - `{ rows, tabLabel?, views?, emptyText? }`. `rows` is a FACTORY
   (`LevelRowsFactory`): the level calls it ONCE per view, in its setup, with the level's reactive context (`LevelRowsContext`:
   `folder`, `nodes` of every kind that names the factory, `epochs`, `access`, `tree`, the clamped `viewMode`, `liveTick`) and a
-  host (`LevelRowsHost`: `open`, `rename`, `move`, `registerAction`), and it returns a `LevelRowSource`: `row(node)` (a row,
+  host (`LevelRowsHost`: `open`, `rename`, `move` - the doors of an application's OWN rename or move; core's defaults need
+  none -, `registerAction`), and it returns a `LevelRowSource`: `row(node)` (a row,
   or `null` for a node it cannot draw - core then shows the explicit unsupported row), `notices` (what only the application
   can explain, drawn above the list by `LevelNotices`; Depot: why an upload failed) and `presentation(mode)` (the
   application's own presentation of a mode core does not draw, in place of the list: Memories' map - `views` names it, so the

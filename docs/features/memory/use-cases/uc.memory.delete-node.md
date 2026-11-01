@@ -40,7 +40,10 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
    one summary names any that failed with its reason, and one toast with **Undo** restores exactly those that went.
    A `READ_WRITE` guest is offered no delete. Seen in a real browser on 2026-10-14 (the dev instance): a folder, a file
    and a Memory - asked once, "Die Auswahl umfasst einen Ordner, eine Datei und eine Erinnerung." - went with three
-   deletes and came back with the toast's Undo, three restores, every node at its place again.
+   deletes and came back with the toast's Undo, three restores, every node at its place again. **From a row** (owner
+   2026-11-01): every node's row offers **Delete** in its "More actions" menu where its application's rights grant it
+   - core's default, the same question as the node's own page asks and the same one-toast Undo (a file's delete is
+   Depot's own, with its own question and Undo).
 2. The client calls **delete** → the server marks the node **and its whole subtree** soft-deleted (`deleted_at =
    now`) in one transaction. Nothing else is touched: media, derivatives, buckets and every blob stay exactly as
    they were, which is what makes the restore cheap and complete.

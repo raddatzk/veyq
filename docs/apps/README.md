@@ -196,6 +196,13 @@ point 8).
   move (`core/node/MoveNodeDialog.vue`, mirroring the server's `NodeKindRules` through each kind's `placement`) and a
   `FOLDER`'s share dialog are core's; an application's create and share dialogs ride on its kinds. The top-bar upload
   status is core's and lists every application's uploads.
+- **Rename, move and delete are core's default functions.** Every node gets them from core - on its row
+  (`core/node/standardRowActions.ts`) and in its header (`standardNodeActions`) - through core's dialogs (the name
+  dialog, the move dialog, the delete question with its Undo). The application decides only WHETHER: its rights
+  function answers each for the node (a row's `standard`, the header's flags), and no answer is no action. An
+  application that needs its own implementation supplies an action of the same id, which replaces core's: Depot's file
+  does for all three (its delete asks, writes through its session's source and offers its own Undo). A share guest's
+  level has core's move alone; no guest renames or deletes a node core's way.
 - **One view per kind, for a member and a share guest alike.** A kind's `detail` and its row factory receive `access`
   (a member of the unlocked scope, or a guest of a link) and `tree` (the member's decrypted scope tree or the guest's
   opened subtree, every navigation through its `linkTo`, so a guest keeps its `#k=` fragment); core mounts them in both
