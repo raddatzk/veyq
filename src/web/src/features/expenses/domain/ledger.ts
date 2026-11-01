@@ -93,6 +93,9 @@ export function joinOrder(participants: readonly Pick<Participant, 'id' | 'joine
   return [...participants].sort((a, b) => a.joined - b.joined || asc(a.id, b.id)).map((p) => p.id)
 }
 
+/** Each participant's index in [order] (join order): the `rank` {@link entryEffect} breaks every tie by. */
+export const rankOf = (order: readonly string[]): Map<string, number> => new Map(order.map((id, i) => [id, i] as const))
+
 /** Every person a money entry names: payers or receivers, beneficiaries, a transfer's two ends. */
 export function namedParticipants(c: MoneyContent): string[] {
   if (c.kind === 'transfer') return [c.from, c.to]
@@ -290,7 +293,7 @@ export function buildLedger(held: readonly HeldRevision[], base: BaseCurrency): 
     else money.push({ id, revisions })
   }
   const order = joinOrder(participants)
-  const rank = new Map(order.map((id, i) => [id, i] as const))
+  const rank = rankOf(order)
   const isParticipant = (id: string) => rank.has(id)
 
   const entries: LedgerEntry[] = money.map(({ id, revisions }) => {

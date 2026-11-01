@@ -18,6 +18,10 @@
 // device's table of the day, and says it is computed from the ECB's reference rates of the rows' date (the ECB's terms
 // ask its rates be cited as the source). The field stays typeable; a fill that arrives after the person typed a rate,
 // picked another currency or left is dropped. The save never waits for it: it seals what the field holds.
+//
+// Under an expense or a refund that adds up, **Shares** shows each person's share in the base currency (in a foreign
+// currency also what each payer gave, and the converted total): `sharesPreview` runs the ledger's `entryEffect` over the
+// content the save would seal, so the editor shows what is saved and holds no arithmetic of its own.
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -34,7 +38,7 @@ import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import { namedParticipants, type PotLedger } from '../domain/ledger'
 import { PotWriteRefused, StaleRevisionError } from '../domain/potApi'
 import type { PotSession } from '../potSession'
-import { contentOf, emptyForm, emptyItem, formOf, payersTotal, problemKey, restLeft, today, withCurrency, withKind, type EntryForm, type EntryKind, type FormProblem } from '../entryForm'
+import { contentOf, emptyForm, emptyItem, formOf, payersTotal, problemKey, restLeft, sharesPreview, today, withCurrency, withKind, type EntryForm, type EntryKind, type FormProblem } from '../entryForm'
 import { crossRate, dayTable } from '../exchangeRates'
 import { formatMoney, knownCurrencies } from '../amounts'
 import { offeredPeople, personLabel, type MemberDirectory } from '../people'
@@ -246,6 +250,20 @@ async function run(write: () => Promise<void>) {
 
 const isParticipant = (id: string) => props.ledger.participants.some((p) => p.id === id && !p.erased)
 
+/** The entry in the base currency as it will be saved (main flow 4): `sharesPreview` runs the ledger's own `entryEffect`
+ *  over what the save would seal — no arithmetic here. One row per person the entry names, in join order; none while the
+ *  form forms no valid entry, and none for a transfer. */
+const preview = computed(() => sharesPreview(form.value, base.value, props.ledger.participants.map((p) => p.id), isParticipant))
+const previewRows = computed(() => {
+  const effect = preview.value
+  if (!effect) return []
+  const given = form.value.kind === 'refund' ? effect.received : effect.paid
+  return props.ledger.participants
+    .filter((p) => given.has(p.id) || effect.shares.has(p.id))
+    .map((p) => ({ id: p.id, given: given.get(p.id) ?? 0n, share: effect.shares.get(p.id) ?? 0n }))
+})
+const baseMoney = (amount: bigint) => formatMoney(amount, base.value.currency, base.value.minorUnits, locale.value)
+
 /** A picked file's upload failed in a way the save cannot go past (`budget_exceeded`: over 10 MiB; anything else but no
  *  room). What was uploaded before it stays uploaded. */
 class ReceiptUploadFailed extends Error {
@@ -446,6 +464,31 @@ function restore() {
         </fieldset>
       </div>
 
+      <table v-if="preview && previewRows.length" class="expenses-table expenses-entry-shares">
+        <caption>{{ t('expenses.entry.sharesCaption', { currency: base.currency }) }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ t('expenses.entry.personLabel') }}</th>
+            <th v-if="foreign" scope="col" class="expenses-amount">{{ form.kind === 'refund' ? t('expenses.entry.receivedColumn') : t('expenses.entry.paidColumn') }}</th>
+            <th scope="col" class="expenses-amount">{{ t('expenses.entry.shareColumn') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in previewRows" :key="row.id" :data-person="row.id">
+            <th scope="row">{{ label(row.id) }}</th>
+            <td v-if="foreign" class="expenses-amount">{{ baseMoney(row.given) }}</td>
+            <td class="expenses-amount">{{ baseMoney(row.share) }}</td>
+          </tr>
+        </tbody>
+        <tfoot v-if="foreign">
+          <tr>
+            <th scope="row">{{ t('expenses.entry.amountLabel') }}</th>
+            <td class="expenses-amount">{{ baseMoney(preview.base) }}</td>
+            <td class="expenses-amount">{{ baseMoney(preview.base) }}</td>
+          </tr>
+        </tfoot>
+      </table>
+
       <EntryReceipts
         :ids="form.receipts"
         :listing="session.receipts.value"
@@ -527,5 +570,12 @@ function restore() {
 .expenses-rest {
   border-bottom: 0;
   padding-bottom: 0;
+}
+/* The entry in the base currency as it will be saved: the Pot's `.expenses-table` (amounts right-aligned in even digits),
+   its caption the heading. */
+.expenses-entry-shares caption {
+  padding-bottom: 0.25rem;
+  font-weight: 700;
+  text-align: left;
 }
 </style>

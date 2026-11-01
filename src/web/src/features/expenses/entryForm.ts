@@ -10,7 +10,7 @@
 // offered (the Pot's active people), and those people are sealed by name in the rest's split.
 import { amountText, minorUnitsOf, parseAmount, parseRate } from './amounts'
 import { PERCENT_WHOLE, type Allocation, type Contribution, type Item, type MoneyContent, type Split } from './domain/format'
-import { entryProblem, type BaseCurrency, type EntryProblem } from './domain/ledger'
+import { entryEffect, entryProblem, rankOf, type BaseCurrency, type EntryEffect, type EntryProblem } from './domain/ledger'
 
 export type EntryKind = MoneyContent['kind']
 export type SplitMode = Split['mode']
@@ -251,6 +251,24 @@ export function contentOf(
   }
   const problem = entryProblem(content, isParticipant)
   return problem ? { problem } : { content }
+}
+
+/**
+ * What the editor shows under an expense or a refund (uc.expenses.record-entries main flow 4): the entry's effect in the
+ * [base] currency — its total converted with the form's rate, what each payer (receiver) gave and each person's share — by
+ * the very `entryEffect` every balance is computed with, over the content the save would seal, so what is shown is what is
+ * saved. [order] is the Pot's join order (`PotLedger.participants`, erased ones included, as `buildLedger` ranks them). Null
+ * for a transfer, and while the form forms no valid entry — except for a missing title, which moves no money.
+ */
+export function sharesPreview(
+  form: EntryForm,
+  base: BaseCurrency,
+  order: readonly string[],
+  isParticipant?: (id: string) => boolean,
+): EntryEffect | null {
+  if (form.kind === 'transfer') return null
+  const result = contentOf(form.title.trim() ? form : { ...form, title: '-' }, isParticipant)
+  return 'content' in result ? entryEffect(result.content, base, rankOf(order)) : null
 }
 
 /** The items and, while the rest is above zero, the rest's split. Items above [amount] are left for `entryProblem` to name. */
