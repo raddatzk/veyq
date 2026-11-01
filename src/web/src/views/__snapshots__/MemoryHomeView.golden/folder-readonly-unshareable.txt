@@ -5,47 +5,48 @@ div.veyq-node-host
         div.veyq-message__text
           "Scheduled for deletion on 11/15/2026. Members can still view it; nothing new can be added."
   div.veyq-level-view
-    div.veyq-level-toolbar
-      div.view-mode-toggle [role="group"] [aria-label="View"]
-        button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
-          span.veyq-icon
-            svg.lucide.lucide-layout-grid.veyq-icon__svg
-              rect
-              rect
-              rect
-              rect
-        button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
-          span.veyq-icon
-            svg.lucide.lucide-menu.veyq-icon__svg
+    div.has-header.veyq-level-head
+      header.has-leading.veyq-node-header
+        div.veyq-node-header-leading
+          span.veyq-icon.veyq-node-header-icon
+            svg.lucide.lucide-folder.veyq-icon__svg
               path
-              path
-              path
-        button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
-          span.veyq-icon
-            svg.lucide.lucide-map.veyq-icon__svg
-              path
-              path
-              path
-    header.has-leading.veyq-node-header
-      div.veyq-node-header-leading
-        span.veyq-icon.veyq-node-header-icon
-          svg.lucide.lucide-folder.veyq-icon__svg
-            path
-      div.veyq-node-header-body
-        div.veyq-node-header-titlerow
-          h1.veyq-node-header-title
-            "Trips"
-          div.veyq-node-header-actions
-            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
-              span.veyq-button__icon.veyq-icon
-                svg.lucide.lucide-heart.veyq-icon__svg
-                  path
-            button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
-              span.veyq-button__icon.veyq-icon
-                svg.lucide.lucide-download.veyq-icon__svg
-                  path
-                  path
-                  path
+        div.veyq-node-header-body
+          div.veyq-node-header-titlerow
+            h1.veyq-node-header-title
+              "Trips"
+            div.veyq-node-header-actions
+              button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-heart.veyq-icon__svg
+                    path
+              button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Download"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-download.veyq-icon__svg
+                    path
+                    path
+                    path
+      div.veyq-level-toolbar
+        div.view-mode-toggle [role="group"] [aria-label="View"]
+          button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
+            span.veyq-icon
+              svg.lucide.lucide-layout-grid.veyq-icon__svg
+                rect
+                rect
+                rect
+                rect
+          button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
+            span.veyq-icon
+              svg.lucide.lucide-menu.veyq-icon__svg
+                path
+                path
+                path
+          button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
+            span.veyq-icon
+              svg.lucide.lucide-map.veyq-icon__svg
+                path
+                path
+                path
     ul.veyq-level-list
       li.is-folder.is-grid.veyq-level-item
         button.veyq-level-item-main [aria-label="Rome"]

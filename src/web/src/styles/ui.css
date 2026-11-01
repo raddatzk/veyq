@@ -447,15 +447,36 @@
   gap: 1.45rem;
 }
 
-/* The level view's own toolbar (the space's trash and the view switch, inbox #370/#385): one right-aligned row, pulled
-   closer to the first section than the view's section gap. No colour of its own, so no dark twin. */
+/* The level's head (owner 2026-11-01): the header and the toolbar in one row, the name at the start, the toolbar at the
+   end. The header's basis is its own content, so where the name and the toolbar do not both fit, the toolbar wraps onto a
+   row of its own below the name rather than shortening it; the header then measures its own wider box (`NodeHeader`). The
+   rule under the name is the head's, so it spans the toolbar too. Colours only from `--app-*` tokens, so no dark twin. */
+.veyq-level-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  min-width: 0;
+}
+.veyq-level-head.has-header {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--app-line);
+}
+.veyq-level-head > .veyq-node-header {
+  flex: 1 1 auto;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+/* The level view's own toolbar ("New", the space's trash, Select and the view switch, inbox #370/#385): one row at the
+   head's end. No colour of its own, so no dark twin. */
 .veyq-level-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
-  margin-bottom: -0.75rem;
+  margin-inline-start: auto;
 }
 
 /* The level view's application tabs (inbox #348): the Memory detail's tab look (`.memory-tabs`) in core's own classes,

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // The folder level view (cr-files-application P4b, ADR 0079; the UNIFIED LIST since inbox #407): what a member sees at the
-// scope root or inside a folder. Core's, and it names no application. In this order it renders its TOOLBAR (the "New" menu,
-// the space's node trash, which holds every application's nodes, and the view-mode switch), the folder's HEADER (core's
-// `NodeHeader`: name, share, rename, move, delete - a folder is core's kind; the move is core's `MoveNodeDialog`, which the
-// host mounts on `moveNode`, inbox #358), the application TABS, the applications' NOTICES, and then ONE LIST - or one set of
+// scope root or inside a folder. Core's, and it names no application. In this order it renders its HEAD - one row of the
+// folder's HEADER (core's `NodeHeader`: name, share, rename, move, delete - a folder is core's kind; the move is core's
+// `MoveNodeDialog`, which the host mounts on `moveNode`, inbox #358), or the space's name at the top level, and then its
+// TOOLBAR (the "New" menu, the space's node trash, which holds every application's nodes, Select and the view-mode switch),
+// which wraps below the name where both do not fit -, the application TABS, the applications' NOTICES, and then ONE LIST - or one set of
 // tiles - of everything at this level: the folders, the Memories, the files, the drop boxes, every kind, with no section
 // headers.
 //
@@ -383,6 +384,8 @@ const anyReport = computed(() => reportOn.value && canReport(props.access) && [.
 const canSelect = computed(
   () => (mode.value === 'grid' || mode.value === 'list') && (anyMove.value || anyDelete.value || anyCopy.value || anyReport.value),
 )
+/** Whether the level offers anything in its toolbar: "New", the trash, Select or the view switch. */
+const hasToolbar = computed(() => menuEntries.value.length > 0 || rights.value.nodeTrash || showViews.value || canSelect.value)
 const selectedIds = computed(() => [...selection.ids.value].filter((id) => levelItems.value.has(id)))
 const movable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.move === true))
 const deletable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.delete === true))
@@ -572,52 +575,57 @@ async function onDrop(e: DragEvent): Promise<void> {
 
 <template>
   <div class="veyq-level-view" @dragover.prevent @drop.prevent="onDrop">
-    <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own. Hidden
-         where nothing is written (a pending deletion: a restore is a write; a guest's folder). The view switch governs the
-         whole list, so it is the level's too - a guest's as well. -->
-    <div v-if="menuEntries.length || rights.nodeTrash || showViews || canSelect" class="veyq-level-toolbar">
-      <template v-if="menuEntries.length">
+    <!-- The level's head (owner 2026-11-01): the header and the toolbar in ONE row, the name first; where both do not fit,
+         the toolbar wraps below the name, which the toolbar never shortens. Name first in the DOM too, so the Tab order is
+         the reading order. -->
+    <div v-if="folder || spaceName || hasToolbar" class="veyq-level-head" :class="{ 'has-header': !!(folder || spaceName) }">
+      <!-- The folder's header, core's one (`NodeHeader`): a container kind's detail opens with it too. -->
+      <NodeHeader v-if="folder" icon="folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions" :order="FOLDER_HEADER_ORDER">
+        <!-- The folder's cover (inbox #411) in the header's leading slot; the folder icon stays the default without one. -->
+        <template v-if="folderCover" #leading>
+          <span class="veyq-node-header-cover"><NodeCoverImage :src="folderCover.url" :crop="folderCover.crop" /></span>
+        </template>
+      </NodeHeader>
+      <!-- The space's top level: core's header with the space's name and nothing to act on (the space is no node). -->
+      <NodeHeader v-else-if="spaceName" :title="spaceName" />
+      <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own. Hidden
+           where nothing is written (a pending deletion: a restore is a write; a guest's folder). The view switch governs the
+           whole list, so it is the level's too - a guest's as well. -->
+      <div v-if="hasToolbar" class="veyq-level-toolbar">
+        <template v-if="menuEntries.length">
+          <VeyqButton
+            class="veyq-new-menu-button"
+            :label="t('node.new')"
+            icon="plus"
+            size="small"
+            aria-haspopup="menu"
+            @click="newMenu?.toggle($event)"
+          />
+          <VeyqMenu ref="newMenu" :items="menuItems" />
+        </template>
         <VeyqButton
-          class="veyq-new-menu-button"
-          :label="t('node.new')"
-          icon="plus"
+          v-if="rights.nodeTrash"
+          :label="t('node.trash.open')"
+          icon="trash"
+          variant="secondary"
+          appearance="outlined"
           size="small"
-          aria-haspopup="menu"
-          @click="newMenu?.toggle($event)"
+          @click="emit('openTrash')"
         />
-        <VeyqMenu ref="newMenu" :items="menuItems" />
-      </template>
-      <VeyqButton
-        v-if="rights.nodeTrash"
-        :label="t('node.trash.open')"
-        icon="trash"
-        variant="secondary"
-        appearance="outlined"
-        size="small"
-        @click="emit('openTrash')"
-      />
-      <VeyqButton
-        v-if="canSelect"
-        class="veyq-select-button"
-        :label="t('node.select.action')"
-        icon="check-square"
-        variant="secondary"
-        :appearance="!selecting ? 'outlined' : 'filled'"
-        size="small"
-        :aria-pressed="selecting"
-        @click="toggleSelecting"
-      />
-      <ViewModeToggle v-if="showViews" :views="views" />
+        <VeyqButton
+          v-if="canSelect"
+          class="veyq-select-button"
+          :label="t('node.select.action')"
+          icon="check-square"
+          variant="secondary"
+          :appearance="!selecting ? 'outlined' : 'filled'"
+          size="small"
+          :aria-pressed="selecting"
+          @click="toggleSelecting"
+        />
+        <ViewModeToggle v-if="showViews" :views="views" />
+      </div>
     </div>
-    <!-- The folder's header, core's one (`NodeHeader`): a container kind's detail opens with it too. -->
-    <NodeHeader v-if="folder" icon="folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions" :order="FOLDER_HEADER_ORDER">
-      <!-- The folder's cover (inbox #411) in the header's leading slot; the folder icon stays the default without one. -->
-      <template v-if="folderCover" #leading>
-        <span class="veyq-node-header-cover"><NodeCoverImage :src="folderCover.url" :crop="folderCover.crop" /></span>
-      </template>
-    </NodeHeader>
-    <!-- The space's top level: core's header with the space's name and nothing to act on (the space is no node). -->
-    <NodeHeader v-else-if="spaceName" :title="spaceName" />
 
     <!-- The application tabs (inbox #348): a filter over this folder's children, the folders in every tab; real buttons
          (`VeyqTab`), arrow keys move between them. -->

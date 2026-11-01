@@ -508,20 +508,21 @@ test(
 // --- 2. focus, keyboard and tab order --------------------------------------------------------------------------------
 
 test(
-  "Tab walks the level's toolbar, header, tabs and rows in order, Shift+Tab walks back, and the keys work each part",
+  "Tab walks the level's header, toolbar, tabs and rows in order, Shift+Tab walks back, and the keys work each part",
   { tag: ['@uc.memory.browse:application-tabs', '@uc.memory.browse:view-modes'] },
   async () => {
     const { page } = member
     await openFolder(page)
     const newButton = page.getByRole('button', { name: 'New', exact: true })
-    await newButton.focus()
+    // The head is one row, the name first (owner 2026-11-01): its first stop is the folder header's first action.
+    await page.locator('.veyq-level-head .veyq-node-header button').first().focus()
     const stops = await tabStops(page)
 
     // Every stop belongs to a part of the level, and the parts come in the component's order.
-    const rank: Record<string, number> = { toolbar: 0, header: 1, tabs: 2, list: 3 }
+    const rank: Record<string, number> = { header: 0, toolbar: 1, tabs: 2, list: 3 }
     expect(stops.filter((s) => !(s.zone in rank)), 'no stop outside the four parts').toEqual([])
     const ranks = stops.map((s) => rank[s.zone])
-    expect(ranks, 'toolbar, then header, then tabs, then rows').toEqual([...ranks].sort((a, b) => a - b))
+    expect(ranks, 'header, then toolbar, then tabs, then rows').toEqual([...ranks].sort((a, b) => a - b))
 
     const toolbar = stops.filter((s) => s.zone === 'toolbar').map((s) => s.label)
     expect(toolbar.slice(0, 3)).toEqual(['New', 'Trash', 'Select'])
@@ -547,12 +548,12 @@ test(
     expect(rows.indexOf(blockingFolder), 'a folder comes before the files').toBeLessThan(rows.indexOf(trayFiles[0].name))
     expect(rows.indexOf(blockingFolder)).toBeGreaterThanOrEqual(0)
 
-    // Shift+Tab walks back one stop: out of the first row into the tab bar, out of the tab bar into the header.
+    // Shift+Tab walks back one stop: out of the first row into the tab bar, out of the tab bar into the toolbar.
     const firstTab = stops.findIndex((s) => s.zone === 'tabs')
     const firstRow = listStops[0].i
     expect(await shiftTabFrom(page, firstRow)).toBe(firstTab)
     expect(await shiftTabFrom(page, firstTab)).toBe(firstTab - 1)
-    expect(stops[firstTab - 1].zone).toBe('header')
+    expect(stops[firstTab - 1].zone).toBe('toolbar')
 
     // The arrow keys move between the tabs, and a focused tab is the shown one; back to All.
     await page.locator(`[data-e2e-stop="${firstTab}"]`).focus()

@@ -77,13 +77,18 @@ const mountGuest = (role: ShareRole, tree: TreeNode[] = [TRIPS], folder: TreeNod
 
 /** The level's top-level blocks in DOM order - but the toolbar, which has its own tests. */
 function blocks(w: Level): string[] {
-  return [...w.element.children].filter((el) => !el.classList.contains('veyq-level-toolbar')).map((el) => {
+  return [...w.element.children].flatMap((el): string[] => [blockOf(el)].filter((b): b is string => b !== null))
+}
+function blockOf(el: Element): string | null {
+  {
+    // The head holds the header and the toolbar in one row; the toolbar has its own tests.
+    if (el.classList.contains('veyq-level-head')) return el.querySelector(':scope > .veyq-node-header') ? 'overview' : null
     if (el.classList.contains('veyq-empty')) return `empty:${el.textContent?.trim()}`
     if (el.classList.contains('veyq-level-list')) return 'list'
     if (el.classList.contains('stub-presentation')) return `presentation:${el.getAttribute('data-name')}`
     if (el.classList.contains('veyq-node-header')) return 'overview'
     return `?${el.className}`
-  })
+  }
 }
 
 beforeEach(() => {
@@ -390,10 +395,15 @@ describe('LevelView: the folder header', () => {
 describe('LevelView: the toolbar', () => {
   const trash = (w: Level) => w.findAll('.veyq-level-toolbar button').find((b) => b.text() === t('node.trash.open'))
 
-  it('offers the space\'s trash first, at the root and in a folder, and emits openTrash', async () => {
+  it('offers the space\'s trash in the head, after the name, at the root and in a folder, and emits openTrash', async () => {
     twoKinds()
     for (const w of [mountLevel([]), mountLevel([TRIPS], { folder: TRIPS })]) {
-      expect(w.element.firstElementChild?.classList.contains('veyq-level-toolbar')).toBe(true)
+      // In the head's one row, after the name: the reading order is the Tab order (owner 2026-11-01).
+      const head = w.element.firstElementChild!
+      expect(head.classList.contains('veyq-level-head')).toBe(true)
+      const parts = [...head.children].map((el) => el.className.split(' ')[0])
+      expect(parts.at(-1)).toBe('veyq-level-toolbar')
+      expect(parts.slice(0, -1)).toEqual(w.find('.veyq-node-header').exists() ? ['veyq-node-header'] : [])
       await trash(w)!.trigger('click')
       expect(w.emitted('openTrash')).toHaveLength(1)
     }

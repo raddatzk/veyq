@@ -1,48 +1,49 @@
 div.veyq-node-host
   div.veyq-level-view
-    div.veyq-level-toolbar
-      button.veyq-button.veyq-button--filled.veyq-button--primary.veyq-button--small.veyq-new-menu-button
-        span.veyq-button__icon.veyq-icon
-          svg.lucide.lucide-plus.veyq-icon__svg
-            path
-            path
-        span.veyq-button__label
-          "New"
-      button.veyq-button.veyq-button--outlined.veyq-button--secondary.veyq-button--small
-        span.veyq-button__icon.veyq-icon
-          svg.lucide.lucide-trash.lucide-trash-2.veyq-icon__svg
-            path
-            path
-            path
-            path
-            path
-        span.veyq-button__label
-          "Trash"
-      div.view-mode-toggle [role="group"] [aria-label="View"]
-        button.view-mode-button [aria-label="Grid view"] [aria-pressed="false"]
-          span.veyq-icon
-            svg.lucide.lucide-layout-grid.veyq-icon__svg
-              rect
-              rect
-              rect
-              rect
-        button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
-          span.veyq-icon
-            svg.lucide.lucide-menu.veyq-icon__svg
+    div.has-header.veyq-level-head
+      header.veyq-node-header
+        div.veyq-node-header-body
+          div.veyq-node-header-titlerow
+            h1.veyq-node-header-title
+              "Personal"
+      div.veyq-level-toolbar
+        button.veyq-button.veyq-button--filled.veyq-button--primary.veyq-button--small.veyq-new-menu-button
+          span.veyq-button__icon.veyq-icon
+            svg.lucide.lucide-plus.veyq-icon__svg
+              path
+              path
+          span.veyq-button__label
+            "New"
+        button.veyq-button.veyq-button--outlined.veyq-button--secondary.veyq-button--small
+          span.veyq-button__icon.veyq-icon
+            svg.lucide.lucide-trash.lucide-trash-2.veyq-icon__svg
               path
               path
               path
-        button.is-active.view-mode-button [aria-label="Map view"] [aria-pressed="true"]
-          span.veyq-icon
-            svg.lucide.lucide-map.veyq-icon__svg
               path
               path
-              path
-    header.veyq-node-header
-      div.veyq-node-header-body
-        div.veyq-node-header-titlerow
-          h1.veyq-node-header-title
-            "Personal"
+          span.veyq-button__label
+            "Trash"
+        div.view-mode-toggle [role="group"] [aria-label="View"]
+          button.view-mode-button [aria-label="Grid view"] [aria-pressed="false"]
+            span.veyq-icon
+              svg.lucide.lucide-layout-grid.veyq-icon__svg
+                rect
+                rect
+                rect
+                rect
+          button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
+            span.veyq-icon
+              svg.lucide.lucide-menu.veyq-icon__svg
+                path
+                path
+                path
+          button.is-active.view-mode-button [aria-label="Map view"] [aria-pressed="true"]
+            span.veyq-icon
+              svg.lucide.lucide-map.veyq-icon__svg
+                path
+                path
+                path
     div.veyq-level-tabs.veyq-tabs
       div.veyq-tabs__bar
         div.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
