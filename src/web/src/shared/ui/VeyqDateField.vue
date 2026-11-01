@@ -165,6 +165,7 @@ onMounted(() => {
     :min-value="minValue"
     :max-value="maxValue"
     :week-starts-on="weekStartsOn"
+    fixed-weeks
     :disabled="disabled"
     :required="required"
     granularity="day"

@@ -77,6 +77,23 @@ describe('VeyqDateField', () => {
     wrapper.unmount()
   })
 
+  // Owner 2026-11-01: a month of five or four weeks shortened the panel, so "next month" moved under the pointer. Every
+  // month shows six week rows: February 2027 begins on a Monday and fills four weeks, its neighbours five.
+  it('shows six week rows in every month, so the month buttons stay where they are', async () => {
+    const { wrapper } = host('2027-02-10')
+    await flushPromises()
+    const trigger = document.querySelector<HTMLElement>('.veyq-date-field__trigger')!
+    trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    trigger.click()
+    await flushPromises()
+    const weeks = () => document.querySelectorAll('.veyq-date-panel__grid tbody .veyq-date-panel__row').length
+    expect(weeks()).toBe(6)
+    document.querySelectorAll<HTMLElement>('.veyq-date-panel__nav')[1]!.click() // March
+    await flushPromises()
+    expect(weeks()).toBe(6)
+    wrapper.unmount()
+  })
+
   it('reads a click its label forwards to the calendar button as the first segment, and a click inside as its own', async () => {
     const { wrapper } = host('2026-05-12')
     await flushPromises()
