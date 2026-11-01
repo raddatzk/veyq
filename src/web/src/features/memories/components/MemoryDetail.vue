@@ -1052,11 +1052,11 @@ watch(
 /* The Memory cover (cr-0072): a 16:9 tile showing the chosen, cropped cover (or the placeholder). It IS the
    "set/edit cover" button — clicking it opens the crop dialog. A hint label sits over it (always when empty,
    on hover once a cover is set). Its wide width is the node header's `--veyq-node-header-leading-wide`, which core reads
-   to pick the header's layout (ADR 0110 decision 8): one number, no import of this application into core. 236 px wide makes
+   to pick the header's layout (ADR 0110 decision 8): one number, no import of this application into core. 244 px wide makes
    it as tall as the header's four rows — the name, the count, date and place, the people (owner 2026-11-01); a fixed
    number, since the width the header's layout reads cannot follow the rows' height. */
 .memory-cover-preview {
-  --veyq-node-header-leading-wide: 236px;
+  --veyq-node-header-leading-wide: 244px;
   position: relative;
   flex: 0 0 auto;
   width: var(--veyq-node-header-leading-wide);
