@@ -9,7 +9,7 @@
   frame in the dialog: no focal point, no fit / fill, no re-frame. Its browser pass is lane L1's
   `tests/e2e/tests/features/memories/memory-banner.spec.ts`.
 - **Primary actor:** A member with an **unlocked vault** who may write the Memory's scope (the cover's right,
-  `memoryRights.setBanner` = `setCover`) and has a Memory or a Chapter open. **Secondary:** anyone who opens it — a member,
+  `memoryRights.setBanner`, granted to who may choose the cover - core's `coverRights`) and has a Memory or a Chapter open. **Secondary:** anyone who opens it — a member,
   or a guest of a `READ` or `READ_WRITE` link, who sees the banner exactly as a member does.
 - **Goal:** Put **one image or one video** above the Memory's menu bar — a **banner**, independent of the cover —
   uploaded in its own dialog, shown whole on a wide screen and on a phone, with the server never learning a pixel of

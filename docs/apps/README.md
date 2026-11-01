@@ -209,7 +209,14 @@ point 8).
   modes (`core/access.ts`, `core/sharing/guestAccess.ts`, `core/sharing/ShareTreePage.vue`). What a view offers is its
   application's **rights function**: pure and fail-closed — every right false unless granted, an unknown mode, role or
   kind grants nothing — the role matrix of ADR 0080 decision 6 in code, written down in `docs/apps/<application>.md`;
-  core has its own for `FOLDER`. A right holds only where the matrix allows it **and** the session's data source
+  core has its own for `FOLDER`. **Core owns what every node may do** — share it, rename, move and delete it: core's
+  `nodeRights` answers it once from who looks, a pending deletion, the application's switch, the instance's share
+  leaves, the kind's share dialog, a guest's identity folder and the scope root, and every rights function (core's
+  `FOLDER` one too) starts from that answer and may only narrow it, never grant what it denies — each one's
+  `rights.test.ts` walks every access shape to prove it. The row's `standard` and `selection` and the header's flags
+  read that one answer under one name per right. A pending deletion keeps every kind's share dialog to see its links,
+  and the host tells the dialog to mint and change none (`NodeShareDialogProps.readonly`). A right holds only where the
+  matrix allows it **and** the session's data source
   (`features/<owner>/source.ts`, the member's or the guest's, fixed at mount) implements the operation. Member-only
   state — pins under the Master Key, item marks, a node's sealed meta, the scope's member list — is granted to no
   guest role. The one guest-only page is a `WRITE_ONLY` link's drop (`claimShareBody`), whose guest holds no key; the

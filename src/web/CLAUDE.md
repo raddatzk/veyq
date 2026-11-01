@@ -348,7 +348,7 @@ here; the server is blind.
   unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's
   header (core's `NodeHeader`, which every node page opens with too - see above). Its `createDialog` - props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the shell when the "New" menu or a detail `createChild` emits that KIND; and its
-  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?}` (`contribute`: offer READ_WRITE for a new link — the rights function's `shareContribute`, carried by the detail's `share` emit as a `NodeShareOffer`, never read by the dialog); a
+  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?, readonly?}` (`contribute`: offer READ_WRITE for a new link — the rights function's `shareContribute`, carried by the detail's `share` emit as a `NodeShareOffer`, never read by the dialog; `readonly`: the scope is pending deletion, set by the host for every kind - the dialog lists and copies the links and mints and changes none, as the server refuses every share write in the grace window); a
   kind without one offers no share. There is no guest-only list or detail: core's page of a `READ`/`READ_WRITE` public
   share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node -
   the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
@@ -377,7 +377,7 @@ here; the server is blind.
   Master Key (Memories' item marks; the node pins are core's, re-sealed by `rotateKeys` itself) is otherwise unverifiable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
   `detail` (`NodeDetailProps`) and a row factory (`LevelRowsContext`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
-  (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's three share leaves `publicShares`/`publicSharesContribute`/`publicSharesDropBox`, one boolean per register id the host fills from ONE `hasCapability` each — the server ANDs the path, a rights function never does, ADR 0088 — and `applicationsOff`, the ids of `registry.applications()` the read set lacks (`isSwitchedOff`, never an unread set): an application's rights function then drops every write but the delete, and core asks `applicationWritable(access, kind)` for its own actions on the kind, uc.platform.switch-application-off) or a share guest
+  (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's three share leaves `publicShares`/`publicSharesContribute`/`publicSharesDropBox`, one boolean per register id the host fills from ONE `hasCapability` each — the server ANDs the path, a rights function never does, ADR 0088 — and `applicationsOff`, the ids of `registry.applications()` the read set lacks (`isSwitchedOff`, never an unread set): every rights function then drops every write but the delete - core's `nodeRights` and each application's ask `applicationWritable(access, kind)`, never `applicationsOff` itself, as core does for its own actions on the kind -, uc.platform.switch-application-off) or a share guest
   (`shareId`, `role`, `head`, `pwToken`, `fragmentKey`, `requestGuest`, `reload` — `guestAccess`, built by
   `views/ShareView.vue`, which owns the re-resolve after a guest's write and the page's one naming flow, core's `core/sharing/GuestNaming.vue` with its "Not you?"; every naming place uses that one
   component) — and `tree`, a `TreeSource` (`node`,
@@ -395,10 +395,20 @@ here; the server is blind.
   its own). A drop page (`ShareBodyProps`) is handed the
   guest's `access` too and names its uploader on the page (the identity key is its application's). What a view offers is its
   application's pure, fail-closed rights function over `access` and `targetOf(tree, node)` — `memoryRights`
-  (`features/memories/rights.ts`), `depotRights` (`features/depot/rights.ts`), core's
-  `folderRights` for the level view; each matrix is its `docs/apps/<application>.md` table — never a `readonly`,
-  `shareable` or `hasCapability` read inline; `targetOf` carries the kind's descriptor (`shareable` AND a `shareDialog`),
-  so no share button appears whose dialog the host cannot mount.
+  (`features/memories/rights.ts`), `depotRights` (`features/depot/rights.ts`), `expensesRights`
+  (`features/expenses/rights.ts`), core's `folderRights` for the level view; each matrix is its
+  `docs/apps/<application>.md` table — never a `readonly`, `shareable` or `hasCapability` read inline; `targetOf`
+  carries the kind's descriptor (`shareable` AND a `shareDialog`), so no share button appears whose dialog the host
+  cannot mount. **Core's base, the application narrows** (owner 2026-11-01): what every node may do — `share`,
+  `shareContribute`, `shareUpload`, `rename`, `move`, `delete`, one name per right everywhere (`NodeRights`) — is core's
+  `nodeRights(access, target)` in `core/access.ts`: the member/guest role, a pending deletion (no write; the share
+  dialog stays, the host's `readonly` makes it mint and change nothing), the application switch, the instance's share
+  leaves, the kind's share dialog, a guest's identity folder, the scope root. Every rights function takes that answer
+  and only ANDs its own conditions onto it (Depot's drop box is never renamed, a guest moves no Pot); its
+  `rights.test.ts` asserts it is never wider over every access shape (`src/test/nodeRightsShapes.ts`). A row's
+  `standard` and `selection` come from one answer (`rowRightsOf`), and a header passes the same object to
+  `standardNodeActions`; the cover is core's `coverRights`, which a kind's own cover control reads too
+  (`useNodeCover().canSet`).
   **A share view is the member view with a source and rights — never add a guest-only UI** (owner principle
   2026-10-09, inbox #401). A guest's function goes into the member's component as a door of the application's data
   source and a right of its rights function; a member-only function must not leak into share mode (no door on the

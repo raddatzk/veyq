@@ -333,7 +333,9 @@ root). The role matrix (ADR 0080 decision 6):
 
 **What the web offers.** One view per kind serves a member and a guest (ADR 0079 Consequences, inbox #401): what it
 shows is `depotRights(access, target)` (`src/web/src/features/depot/rights.ts`, pinned row by row in
-`rights.test.ts`) — pure, every right false unless a row grants it, an unknown role or kind grants nothing:
+`rights.test.ts`) — pure, every right false unless a row grants it, an unknown role or kind grants nothing. A file's or a
+drop box's share, rename, move and delete are core's `nodeRights` for that node, which Depot only narrows (a drop box is
+never renamed, a contributor moves no drop box); a file's row asks about its file, as its page does:
 
 | Right | member | member, pending deletion | member, guest's identity folder | `READ` | `READ_WRITE` | `WRITE_ONLY` |
 |---|---|---|---|---|---|---|
@@ -345,9 +347,9 @@ shows is `depotRights(access, target)` (`src/web/src/features/depot/rights.ts`, 
 | delete a file, a guest's folder | ✓ | ✗ | ✓ (inbox #391) | ✗ | ✗ | ✗ |
 | copy a file, a drop box, a guest's folder elsewhere in the space (core's "Copy to…", `canCopy`, [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md); a drop box's copy is a plain folder) | ✓ | ✗ | ✓ out of it | ✗ | ✗ | ✗ |
 | the **opened file** (`FileDetail`): replace, a header action | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder) | ✗ |
-| the opened file: rename, share, delete, move | all ✓ (share with the instance's `core.public-shares`, its READ_WRITE role with `.contribute`; not in an identity folder) | share only (links are a read) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
+| the opened file: rename, share, delete, move | all ✓ (share with the instance's `core.public-shares`, its READ_WRITE role with `.contribute`; not in an identity folder) | share only (links are a read: the dialog lists and copies them, mints and changes none) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
 | create a drop box (needs the instance's `core.public-shares.drop-box`) | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| a drop box's links, delete it | links with the instance's `core.public-shares.drop-box` (not the READ leaf); delete ✓ | links only | — | ✗ | ✗ | ✗ |
+| a drop box's links, delete it | links with the instance's `core.public-shares.drop-box` (not the READ leaf); delete ✓ | links only (listed and copied, none minted or changed) | — | ✗ | ✗ | ✗ |
 
 These are the matrix half; a right shows only where the session's data source also implements it
 (`src/web/src/features/depot/source.ts`, `sourceRights`: the guest's source has no delete and no rename, and no upload
@@ -356,9 +358,9 @@ core's (`core/node/MoveNodeDialog.vue`, the host's): the row's "Move to…" asks
 (or the detail's) `move` event, and the dialog's folder browser (`MoveBrowser.vue`, one place at a time with "Move
 here") lists only places that take what `DepotNodeKindRules` takes — a file or a drop box at the root or in a folder
 (the kinds' `placement`), never into a drop box or a guest's folder. A level's selection (core's Select mode, inbox #421)
-reads the same answers per node (`LevelRow.selection`): a file moves with it where `moveFile` says yes and is deleted with
-it where `deleteFile` does - through the source's own delete (`deleteFile(id, { reload: false })`: the selection re-reads
-the tree once, after the last) -, a drop box where `moveNode` / `deleteNode` do (core's delete); a guest's selection
+reads the same answers per node (`LevelRow.selection`): a file moves with it where its `move` says yes and is deleted with
+it where its `delete` does - through the source's own delete (`deleteFile(id, { reload: false })`: the selection re-reads
+the tree once, after the last) -, a drop box where its `move` / `delete` do (core's delete); a guest's selection
 deletes nothing. A copy is core's too (`core/export/CopyNodesDialog.vue`, a member's only): core's own row and header
 action beside "Move to…" and the selection's "Copy to…" - not a right of this matrix - over the same browser, "Copy here"
 allowed where the nodes are; a file copies through `exportFile` / `importFile`, its original read by frame
