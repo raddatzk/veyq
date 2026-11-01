@@ -31,7 +31,9 @@ sealed interface Access {
  *     alone could not see which tenant a request is *about*.
  *  3. WRITE only: no accepted membership on the tenant's **root** → [Access.NotMember] — a member removed from the
  *     tenant keeps their own spaces readable for the grace window and changes nothing in them, restore included.
- *  4. WRITE only: the scope is being deleted (`deletedAt` set) → [Access.Deleting].
+ *  4. WRITE only: the scope is being deleted (`deletedAt` set) → [Access.Deleting]. Two writes waive exactly this
+ *     answer and nothing before it (uc.spaces.scope-access A1): restoring the group, the only way out of the grace,
+ *     and revoking a link, which only ever closes exposure.
  *
  * The status is read on every call, never cached: the gate reads the row a suspension or a deletion just wrote.
  * Operator-blind by construction — membership rows, a scope's `deletedAt` and a tenant's `status`, all operational

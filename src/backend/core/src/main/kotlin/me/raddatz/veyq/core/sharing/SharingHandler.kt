@@ -159,10 +159,10 @@ sealed interface ShareBlobOutcome {
     object Blocked : ShareBlobOutcome, HttpFailure by Failures.blockedByOperator
 }
 
+/** No `Deleting`: a revoke passes a space in its deletion grace ([SharingHandler.revoke]). */
 sealed interface RevokeShareOutcome {
     object Done : RevokeShareOutcome
     object Suspended : RevokeShareOutcome, HttpFailure by Failures.tenantSuspended
-    object Deleting : RevokeShareOutcome, HttpFailure by Failures.scopeDeleting
     object NotFound : RevokeShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
 }
 
@@ -432,11 +432,20 @@ class SharingHandler(
         }
     }
 
-    /** Revoke a share — only its creator, and only while they are still a member of its space (share-shared-scope A3). */
+    /**
+     * Revoke a share — only its creator, and only while they are still a member of its space (share-shared-scope A3).
+     * The one link write a space in its deletion grace allows (uc.spaces.scope-access A1): switching a link off only
+     * ever closes exposure, and it matters once the deletion is stopped — the link then stays off. So `Deleting` is
+     * waived, and only that: the gate's WRITE answer is `Deleting` only past its membership, suspension and
+     * tenant-membership steps, so a stranger, a member of a suspended tenant and a former tenant member stop as on
+     * every write. Every other link write — create, edit, re-activate, re-issue, delete — stays refused there.
+     */
     fun revoke(userId: String, shareId: String): RevokeShareOutcome {
         val share = store.find(shareId) ?: return RevokeShareOutcome.NotFound
-        access.check(userId, share.scopeId, WRITE)
-            .refusal(RevokeShareOutcome.NotFound, RevokeShareOutcome.Suspended, RevokeShareOutcome.Deleting)?.let { return it }
+        val state = access.check(userId, share.scopeId, WRITE)
+        if (state != Access.Deleting) {
+            state.refusal(RevokeShareOutcome.NotFound, RevokeShareOutcome.Suspended)?.let { return it }
+        }
         return if (store.revoke(userId, shareId)) RevokeShareOutcome.Done else RevokeShareOutcome.NotFound
     }
 

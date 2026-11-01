@@ -41,7 +41,7 @@ import me.raddatz.veyq.memories.testing.MemoriesWorldContent
  *  2. **Unaccepted proposal** — answered exactly as the stranger (a proposal is not a membership).
  *  3. **Accepted member of a SUSPENDED tenant** — `403 tenant_suspended`, sent on a `Host` **no tenant claims**,
  *     so the answer cannot come from `TenantSuspensionFilter`.
- *  4. **Accepted member of a deleting GROUP** — a write is `409 scope_deleting`; a read is not refused.
+ *  4. **Accepted member of a deleting GROUP** — a write is `409 scope_deleting` (but the two it lets through, [deletingLetsThrough]); a read is not refused.
  *  5. **Control** — the same call by the owner of an identical live group is refused by none of the above. Every negative owes a
  *     positive control on the same predicate: without it a probe that 404s wholesale (a broken path, a missing
  *     fixture) would satisfy the stranger and proposal checks perfectly.
@@ -483,7 +483,12 @@ class OperatorBlindProbeTest {
      * viewer included, and a group waiting for its deletion still shows what it holds.
      */
     private val readsByException = setOf("resolveGroupMember", "presignBlobDownloads", "putFavorites", "reportInScope")
-    private val deletingIsThePrecondition = setOf("restoreGroup")
+    /**
+     * The writes a deleting group lets through (uc.spaces.scope-access A1): a restore, whose precondition the deletion
+     * is, and a revoke, which only switches a link off — it closes exposure, and the link stays off once the deletion
+     * is stopped. Every other link write (create, edit, re-activate, re-issue, delete) stays `409 scope_deleting`.
+     */
+    private val deletingLetsThrough = setOf("restoreGroup", "revokeShare")
 
     // --- the classification guard --------------------------------------------------------------------------
 
@@ -558,10 +563,10 @@ class OperatorBlindProbeTest {
         val refusals = setOf(notMember, 403 to "tenant_suspended", 409 to "scope_deleting")
         if (probe.address != Address.HOST && probe.address != Address.TENANT) {
             val asDeleting = fire(w, w.deleting.ownerId, probe.call(w.deleting)).answer()
-            if (write && id !in deletingIsThePrecondition) {
+            if (write && id !in deletingLetsThrough) {
                 checks += Executable { assertEquals(409 to "scope_deleting", asDeleting, "[deleting] $id writes into a group that is being deleted") }
             } else {
-                checks += Executable { assertTrue(asDeleting !in refusals && asDeleting.first != 400, "[deleting] $id refuses a ${if (write) "restore" else "read"} of a deleting group: $asDeleting") }
+                checks += Executable { assertTrue(asDeleting !in refusals && asDeleting.first != 400, "[deleting] $id refuses a ${if (write) "write it lets through" else "read"} of a deleting group: $asDeleting") }
             }
         }
 

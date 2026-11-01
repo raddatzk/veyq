@@ -90,6 +90,47 @@ class ScopeAccessSliceTest {
     }
 
     @Test
+    fun aDeletingGroupLetsItsLinkBeRevokedAndNothingElseAndTheLinkStaysOffAfterARestore() {
+        val w = world()
+        val creator = bearer(w.deleting.ownerId)
+        fun asCreator() = given().header("Authorization", creator)
+        // another member of the group is not the link's creator: revoking stays the creator's (share-shared-scope A3)
+        given().header("Authorization", bearer(keyHolderIn(w.deleting))).`when`().post("/api/shares/${w.deleting.shareId}/revoke")
+            .then().statusCode(404).body("code", equalTo("share_not_found"))
+        // the creator revokes it during the grace window: the one link write a deleting group allows (scope-access A1)
+        asCreator().`when`().post("/api/shares/${w.deleting.shareId}/revoke").then().statusCode(204)
+        asCreator().`when`().post("/api/shares/${w.deleting.shareId}/revoke").then().statusCode(204) // idempotent
+        // every other link write is still refused there: turning it back on, editing it, renaming it, deleting it
+        asCreator().`when`().post("/api/shares/${w.deleting.shareId}/reactivate")
+            .then().statusCode(409).body("code", equalTo("scope_deleting"))
+        asCreator().contentType(ContentType.JSON).body("{}").`when`().patch("/api/shares/${w.deleting.shareId}")
+            .then().statusCode(409).body("code", equalTo("scope_deleting"))
+        asCreator().contentType(ContentType.JSON).body("""{"sealedName":"$B64"}""").`when`().put("/api/shares/${w.deleting.shareId}/sealed-name")
+            .then().statusCode(409).body("code", equalTo("scope_deleting"))
+        asCreator().`when`().delete("/api/shares/${w.deleting.shareId}").then().statusCode(409).body("code", equalTo("scope_deleting"))
+        // a stranger is told nothing (the gate's 404), a member of a suspended tenant is refused as on every write
+        given().header("Authorization", bearer(w.stranger)).`when`().post("/api/shares/${w.deleting.shareId}/revoke")
+            .then().statusCode(404).body("code", equalTo("share_not_found"))
+        given().header("Authorization", bearer(w.suspended.ownerId)).`when`().post("/api/shares/${w.suspended.shareId}/revoke")
+            .then().statusCode(403).body("code", equalTo("tenant_suspended"))
+        // stopping the deletion does not bring the link back: what was revoked stays revoked …
+        asCreator().`when`().post("/api/scopes/${w.deleting.scopeId}/restore").then().statusCode(204)
+        given().`when`().get("/api/shares/${w.deleting.shareId}").then().statusCode(404).body("code", equalTo("share_not_found"))
+        // … until a member turns it on again in the live group (control: the 404 above is the revoke, not a broken link)
+        asCreator().`when`().post("/api/shares/${w.deleting.shareId}/reactivate").then().statusCode(204)
+        given().`when`().get("/api/shares/${w.deleting.shareId}").then().statusCode(200)
+    }
+
+    @Test
+    fun aFormerTenantMemberCannotRevokeALinkInTheirGraceSpace() {
+        val w = world()
+        given().header("Authorization", bearer(w.live.ownerId))
+            .`when`().delete("/api/tenants/${w.live.tenantId}/members/${w.deleting.ownerId}").then().statusCode(204)
+        given().header("Authorization", bearer(w.deleting.ownerId)).`when`().post("/api/shares/${w.deleting.shareId}/revoke")
+            .then().statusCode(404).body("code", equalTo("share_not_found"))
+    }
+
+    @Test
     fun anInviteToASuspendedTenantAnswersAsADeadInvite() {
         val w = world()
         val paused = memberInvite(w.suspended.tenantId)
