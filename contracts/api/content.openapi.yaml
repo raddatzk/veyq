@@ -282,8 +282,9 @@ paths:
         rather than partial. The deleted node's `slugToken`
         is replaced by its own id, so the **name is immediately reusable**; restore carries a freshly
         client-computed token. A scheduled job hard-erases the subtree once its `deleted_at` is older than the
-        retention window. Idempotent — re-deleting an already-trashed subtree is still `204`. **Any member** may
-        delete (reversible, recovery-not-destruction — the irreversible purge is the system job).
+        retention window, or a member brings that purge forward with `purgeNode`. Idempotent — re-deleting an
+        already-trashed subtree is still `204`. **Any member** may delete (reversible, recovery-not-destruction); the
+        irreversible purge only ever reaches what is already in the trash, never a live node.
       security:
         - bearerAuth: []
       parameters:
@@ -452,8 +453,8 @@ paths:
         **must** supply the token: the delete freed the name by overwriting `slug_token` with the node's own id,
         and the server cannot recompute a blinded MAC under the parent's key (ADR 0012, ADR 0080 Decision 2). A node created in the meantime
         that already holds the name is a `409 slug_taken` — the same disambiguation a create takes, never a
-        silent rename. **Any member** of the scope may restore. A subtree the scheduled job already purged is
-        gone (`404`).
+        silent rename. **Any member** of the scope may restore. A subtree already purged — by the scheduled job or a
+        member's `purgeNode` — is gone (`404`).
       security:
         - bearerAuth: []
       parameters:
@@ -496,6 +497,42 @@ paths:
             uc.moderation.take-a-measure): a blocked item can be deleted, never restored, while the block stands.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
+
+  /api/scopes/{scopeId}/nodes/{nodeId}/purge:
+    post:
+      tags: [content]
+      operationId: purgeNode
+      summary: Permanently delete a trashed subtree now — expedite the scheduled purge (uc.memory.delete-node).
+      description: >
+        **Hard-erase** a subtree that is currently **in the space's trash**, now instead of when the retention window
+        ends — through the scheduled purge's own erase, so everything goes exactly as it would then: every node row of
+        the subtree, every row an application attached to it (media, derivatives, buckets, files, a Pot's records…), its
+        blob rows with their store objects put on the reclaim list (drained by the scheduled sweep, ADR 0062), every
+        link on it tombstoned (ADR 0029 §7) and every measure on it ended. This is **irreversible**. **Any member** of
+        the scope may purge what is already trashed — the security model's reversible/irreversible split lets a member
+        expedite the purge of what was already reversibly removed, never destroy a live node in one step. Only a trash
+        **root** is purged, the one `listTrashedNodes` lists: a live node, a node inside a trashed subtree (it goes
+        with its root), an unknown or already purged one answers `404`, nothing erased. A content block does not stop
+        it, and a report's hold keeps its snapshot and its pinned objects (ADR 0093 § 4). Operator-blind — opaque rows
+        and blob objects removed, never content.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      responses:
+        "204":
+          description: The trashed subtree was erased (its rows gone; their blob objects queued for reclaim).
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: No such trash root (unknown, already purged, still live, or inside a trashed subtree), or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/trash/nodes:
     get:

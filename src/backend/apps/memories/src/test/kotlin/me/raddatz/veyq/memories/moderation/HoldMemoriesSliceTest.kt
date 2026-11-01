@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.moderation.hold.HoldEntity
 import me.raddatz.veyq.core.moderation.hold.HoldPinEntity
 import me.raddatz.veyq.core.moderation.hold.HoldRowEntity
 import me.raddatz.veyq.core.moderation.report.ModerationCaseEntity
+import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.moderation.report.ModerationReportEntity
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.asMember
 import me.raddatz.veyq.core.moderation.report.ReportTestKit.body
@@ -173,6 +174,36 @@ class HoldMemoriesSliceTest {
         recorder.reset()
         sweep.run()
         assertTrue(w.medium.chunkKeys().none { it in recorder.deletedKeys }, "the erased space's held objects stay")
+    }
+
+    /**
+     * A member purges a reported Memory out of the space's trash (`purgeNode`, ADR 0093 § 4: a hold blocks nothing): the
+     * purge lands and the rows are gone for every read, while the report's snapshot and pins stand and the sweep leaves
+     * the held objects in the store. The positive control is this world's own: the snapshot holds the node and its media
+     * before the purge, and the purge itself is a `204`.
+     */
+    @Test
+    fun aReportedMemoryAMemberPurgesFromTheTrashKeepsItsSnapshotAndItsObjects() {
+        val w = guestUpload()
+        asMember(w.owner, w.scopeId, body(listOf(item("NODE", w.memory)))).then().statusCode(201)
+        val hold = holdOf(openCase("NODE", w.memory)!!.id)
+        val copied = QuarkusTransaction.requiringNew().call { HoldRowEntity.list("holdId", hold.id).map { it.sourceTable to it.sourceId } }
+        assertTrue(copied.contains("veyq_node" to w.memory) && copied.contains("veyq_media" to w.medium.mediaId), "the snapshot: $copied")
+
+        given().header("Authorization", bearer(w.owner)).`when`().delete("/api/scopes/${w.scopeId}/nodes/${w.memory}").then().statusCode(204)
+        given().header("Authorization", bearer(w.owner)).`when`().post("/api/scopes/${w.scopeId}/nodes/${w.memory}/purge").then().statusCode(204)
+
+        QuarkusTransaction.requiringNew().run {
+            assertNull(NodeEntity.findById(w.memory), "the node is erased")
+            assertNull(MediaEntity.findById(w.medium.mediaId), "and its medium")
+            assertEquals(copied.size.toLong(), HoldRowEntity.count("holdId", hold.id), "the snapshot stands")
+        }
+        assertEquals(setOf(w.medium.storageKey, w.medium.derivativeStorageKey), pinnedKeys(hold.id), "and so do the pins")
+        makeDue(w.medium.keys())
+        recorder.reset()
+        sweep.run()
+        assertTrue(w.medium.chunkKeys().none { it in recorder.deletedKeys }, "a held object was handed to the store: ${recorder.deletedKeys}")
+        assertEquals(2, reclaimRows(w.medium.keys()).size, "its reclaim rows wait for the hold's end")
     }
 
     // --- the world ---------------------------------------------------------------------------------------------

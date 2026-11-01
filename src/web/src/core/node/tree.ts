@@ -546,6 +546,14 @@ export async function deleteNode(scopeId: string, nodeId: string): Promise<void>
   await withRefresh(() => contentApi().deleteNode({ scopeId, nodeId }))
 }
 
+/** Permanently delete a trashed subtree now — the scheduled purge brought forward (uc.memory.delete-node, `purgeNode`):
+ *  irreversible, and only for a trash ROOT, the row {@link listTrash} lists. The server erases it with everything an
+ *  application attached to it; a live node, one inside a trashed subtree, or one already restored or purged answers
+ *  `404`. No key is needed: nothing is sealed, the request names the node. */
+export async function purgeNode(scopeId: string, nodeId: string): Promise<void> {
+  await withRefresh(() => contentApi().purgeNode({ scopeId, nodeId }))
+}
+
 /** One soft-deleted subtree ROOT in the space's trash (a deleted node's own root, or a descendant a restore left
  *  behind because its name was freed, see {@link listTrash}), its name decrypted client-side. */
 export type TrashedNode = {

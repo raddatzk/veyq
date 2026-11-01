@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
 import me.raddatz.veyq.core.content.CreateNodeOutcome
 import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.content.NodeSubtreePurge
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
@@ -59,6 +60,9 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     @Inject
     lateinit var gate: NodeEpochGate
 
+    @Inject
+    lateinit var purge: NodeSubtreePurge
+
     /** A rule for [kind] that allows it anywhere and records each placement it is asked about. */
     private class Forged(private val kind: String) : NodeKindRules {
         val asked = mutableListOf<String>()
@@ -83,7 +87,7 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     @Test
     fun withCoreAloneOnlyAFolderIsPlaced() {
         val (userId, scopeId) = seedMemberScope()
-        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()), capabilities, ApplicationSwitch(capabilities, mutableListOf()), blocks, gate)
+        val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()), capabilities, ApplicationSwitch(capabilities, mutableListOf()), blocks, gate, purge)
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val memory = seedNode(scopeId, "MEMORY", wrappedContentKey = "aw==")
 

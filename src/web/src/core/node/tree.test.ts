@@ -10,7 +10,7 @@ vi.mock('../../api/client', () => ({
 }))
 
 import {
-  listTree, listTrash, restoreNode, renameNode, moveNode, createFolder, nodeContentKey, contentKeyChain, openName, slugTokenFor,
+  listTree, listTrash, purgeNode, restoreNode, renameNode, moveNode, createFolder, nodeContentKey, contentKeyChain, openName, slugTokenFor,
   PlacementConflictError, PLACEMENT_RETRIES, sameKeyOr, treeFingerprint, type TreeNode,
 } from './tree'
 import { httpError } from '../../test/httpError'
@@ -26,7 +26,7 @@ import { treeNode } from '../../test/models'
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const scopeKey = v1.randomBytes(32)
 
-type NodeMethod = 'createNode' | 'listNodes' | 'updateNode' | 'deleteNode' | 'listTrashedNodes' | 'restoreNode'
+type NodeMethod = 'createNode' | 'listNodes' | 'updateNode' | 'deleteNode' | 'listTrashedNodes' | 'restoreNode' | 'purgeNode'
 
 function mockContent(over: { [K in NodeMethod]?: Mock<ContentApi[K]> }) {
   fakeApi(contentApi, {
@@ -36,6 +36,7 @@ function mockContent(over: { [K in NodeMethod]?: Mock<ContentApi[K]> }) {
     deleteNode: vi.fn<ContentApi['deleteNode']>(),
     listTrashedNodes: vi.fn<ContentApi['listTrashedNodes']>().mockResolvedValue([]),
     restoreNode: vi.fn<ContentApi['restoreNode']>(),
+    purgeNode: vi.fn<ContentApi['purgeNode']>(),
     ...over,
   })
 }
@@ -271,6 +272,20 @@ describe('listTrash', () => {
     expect(rows[0].parentId).toBeNull()
     expect(rows[1].parentId).toBe(F1)
     expect(rows[0].purgeAfter).toEqual(purgeAfter)
+  })
+})
+
+describe('purgeNode', () => {
+  // uc.memory.delete-node:a-member-purges-a-trash-root: one call of the generated client naming the scope and the node,
+  // nothing sealed; its refusal reaches the caller unchanged (the dialog tells a 404 apart from any other).
+  it('asks the server to purge the node, and lets its refusal through', async () => {
+    const purge = vi.fn<ContentApi['purgeNode']>()
+    mockContent({ purgeNode: purge })
+    await purgeNode(SCOPE_ID, 'n1')
+    expect(purge).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: 'n1' })
+
+    purge.mockRejectedValueOnce(httpError(404, 'node_not_found'))
+    await expect(purgeNode(SCOPE_ID, 'n2')).rejects.toMatchObject({ response: { status: 404 } })
   })
 })
 

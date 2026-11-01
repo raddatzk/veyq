@@ -4,8 +4,12 @@ import me.raddatz.veyq.core.blobstore.RecordingBlobStore
 import me.raddatz.veyq.core.blobstore.StoreReclaimSweep
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.sharing.GuestTreeShare
+import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -15,8 +19,10 @@ import jakarta.inject.Inject
 import java.util.Base64
 import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
@@ -123,7 +129,100 @@ class NodeTrashCoreSliceTest {
 
     // --- 6. the purge reclaims all three arms ---
 
+    // --- 7. a member purges a trash root now (`purgeNode`) ---
+
+    /**
+     * A member's purge erases a trash root with its whole subtree at once (the scheduled purge's erase, the window not
+     * over), and nothing else: a trashed sibling still inside its window and a live node stay. After it the subtree is
+     * gone from the trash, a restore is the post-purge 404 (A2) and a second purge is a 404 too — nothing left to erase.
+     */
+    @Test
+    fun aMemberPurgeErasesTheTrashRootAndItsSubtreeNowAndNothingElse() {
+        val (userId, scopeId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val inner = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        val sibling = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val live = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        for (n in listOf(folder, sibling)) trash(userId, scopeId, n)
+
+        purgeOf(userId, scopeId, folder).statusCode(204)
+
+        assertEquals(listOf(null, null), tx { listOf(folder, inner).map { NodeEntity.findById(it) } }, "the root and its subtree are erased")
+        tx {
+            assertNotNull(NodeEntity.findById(sibling)?.deletedAt, "a trashed sibling in its window stays in the trash")
+            assertNull(NodeEntity.findById(live)!!.deletedAt, "a live node stays live")
+        }
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/trash/nodes")
+            .then().statusCode(200).body("id", not(hasItem(folder))).body("id", hasItem(sibling))
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"slugToken":"${slug()}","parentEpoch":0}""")
+            .`when`().post("/api/scopes/$scopeId/nodes/$folder/restore")
+            .then().statusCode(404).body("code", equalTo("node_not_found"))
+        purgeOf(userId, scopeId, folder).statusCode(404).body("code", equalTo("node_not_found"))
+    }
+
+    /** Destruction goes trash → purge, never in one step: a live node is a 404 and stays; the same node once trashed is
+     *  purged (the control on the same predicate). */
+    @Test
+    fun aLiveNodeIsNotPurged() {
+        val (userId, scopeId) = seedMemberScope()
+        val node = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+
+        purgeOf(userId, scopeId, node).statusCode(404).body("code", equalTo("node_not_found"))
+        assertNull(tx { NodeEntity.findById(node)!!.deletedAt }, "the live node is untouched")
+
+        trash(userId, scopeId, node)
+        purgeOf(userId, scopeId, node).statusCode(204)
+        assertNull(tx { NodeEntity.findById(node) }, "control: trashed, it is purged")
+    }
+
+    /** Only a trash root is purged — the row the trash lists. A node inside a trashed subtree goes with its root: on its
+     *  own it is a 404 and nothing is erased; the root's purge then takes both. */
+    @Test
+    fun aNodeInsideATrashedSubtreeIsNoTrashRoot() {
+        val (userId, scopeId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val inner = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        trash(userId, scopeId, folder)
+
+        purgeOf(userId, scopeId, inner).statusCode(404).body("code", equalTo("node_not_found"))
+        tx { listOf(folder, inner).forEach { assertNotNull(NodeEntity.findById(it)?.deletedAt, "nothing of the subtree went") } }
+
+        purgeOf(userId, scopeId, folder).statusCode(204)
+        assertEquals(listOf(null, null), tx { listOf(folder, inner).map { NodeEntity.findById(it) } }, "control: its root's purge takes both")
+    }
+
+    /**
+     * Who may not: a member of ANOTHER scope — on this scope's path (the gate's 404) and on its own scope's path naming
+     * this node (the node is bound to the scope it lives in: the same 404) — and a share guest, who holds no bearer (the
+     * route is a member's, `401`) whatever link credentials it sends. Nothing is erased; the owner's purge (control) is.
+     */
+    @Test
+    fun anotherScopesMemberAndAShareGuestPurgeNothing() {
+        val (owner, scopeId) = seedMemberScope()
+        val node = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val link = GuestTreeShare.seed(owner, scopeId, node)
+        trash(owner, scopeId, node)
+        val (stranger, ownScope) = seedMemberScope()
+
+        purgeOf(stranger, scopeId, node).statusCode(404).body("code", equalTo("node_not_found"))
+        purgeOf(stranger, ownScope, node).statusCode(404).body("code", equalTo("node_not_found"))
+        given().header("X-Contributor-Token", link.token).header(ShareWriteProof.HEADER, ShareWriteProof.token(link.shareId))
+            .`when`().post("/api/scopes/$scopeId/nodes/$node/purge").then().statusCode(401)
+        assertNotNull(tx { NodeEntity.findById(node)?.deletedAt }, "the trashed node is still in the trash")
+
+        purgeOf(owner, scopeId, node).statusCode(204)
+        assertNull(tx { NodeEntity.findById(node) }, "control: a member of its scope purges it")
+    }
+
     // --- helpers ---
+
+    private fun trash(userId: String, scopeId: String, nodeId: String) {
+        given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$nodeId").then().statusCode(204)
+    }
+
+    private fun purgeOf(userId: String, scopeId: String, nodeId: String): ValidatableResponse =
+        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/nodes/$nodeId/purge").then()
 
     private fun create(userId: String, scopeId: String, nodeId: String, parent: String?, token: String = slug()): ValidatableResponse {
         val parentField = parent?.let { "\"parentId\":\"$it\",\"parentEpoch\":0," } ?: ""

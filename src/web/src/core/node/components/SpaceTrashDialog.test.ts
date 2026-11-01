@@ -6,10 +6,12 @@ import { mount } from '@vue/test-utils'
 vi.mock('../tree', () => ({
   listTrash: vi.fn(),
   restoreNode: vi.fn(),
+  purgeNode: vi.fn(),
 }))
 
 import SpaceTrashDialog from './SpaceTrashDialog.vue'
-import { listTrash, restoreNode, type TrashedNode, type TreeNode } from '../tree'
+import { listTrash, purgeNode, restoreNode, type TrashedNode, type TreeNode } from '../tree'
+import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { epochsOf } from '../../../features/spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode } from '../../../test/models'
@@ -63,10 +65,16 @@ function restoreButton(wrapper: ReturnType<typeof mountDialog>) {
   return wrapper.findAll('button').find((b) => b.text() === t('node.trash.restore'))!
 }
 
+function purgeButton(wrapper: ReturnType<typeof mountDialog>) {
+  return wrapper.findAll('button').find((b) => b.text() === t('node.trash.purge'))!
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  settleConfirm(false) // no question left open by an earlier case
   vi.mocked(listTrash).mockResolvedValue([])
   vi.mocked(restoreNode).mockResolvedValue(undefined)
+  vi.mocked(purgeNode).mockResolvedValue(undefined)
 })
 
 describe('SpaceTrashDialog', () => {
@@ -205,6 +213,67 @@ describe('SpaceTrashDialog', () => {
 
     expect(wrapper.text()).toContain(t('node.trash.restoreFailed'))
     expect(wrapper.find('input.retry-name').exists()).toBe(false)
+  })
+
+  // uc.memory.delete-node:a-member-purges-a-trash-root — "Delete forever" asks first, naming the item, and a declined
+  // question deletes nothing; accepted, the row's node is purged and the row leaves. Restore sits beside it on the row.
+  it('deletes a row forever only after the question that names it', async () => {
+    vi.mocked(listTrash).mockResolvedValue([ROW])
+    const wrapper = mountDialog()
+    await settle(wrapper)
+    expect(restoreButton(wrapper)).toBeDefined()
+
+    await purgeButton(wrapper).trigger('click')
+    await settle(wrapper)
+    expect(confirmRequest.value?.header).toBe(t('node.trash.purgeConfirmTitle'))
+    expect(confirmRequest.value?.message).toBe(t('node.trash.purgeConfirm', { name: 'Rom 2026' }))
+    expect(confirmRequest.value?.acceptLabel).toBe(t('node.trash.purge'))
+    settleConfirm(false)
+    await settle(wrapper)
+    expect(purgeNode).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Rom 2026')
+
+    await purgeButton(wrapper).trigger('click')
+    await settle(wrapper)
+    settleConfirm(true)
+    await settle(wrapper)
+    expect(purgeNode).toHaveBeenCalledWith(SCOPE, 'n1')
+    expect(wrapper.text()).not.toContain('Rom 2026')
+    expect(wrapper.emitted('restored')).toBeUndefined() // nothing came back into the tree
+  })
+
+  /** A row someone else restored or purged meanwhile is no trash root any more (404): the list is read again, and
+   *  nothing claims a failure for what is simply gone from here. */
+  it('re-reads the list when the row is no longer in the trash', async () => {
+    vi.mocked(listTrash).mockResolvedValueOnce([ROW]).mockResolvedValueOnce([])
+    vi.mocked(purgeNode).mockRejectedValueOnce(httpError(404, 'node_not_found'))
+    const wrapper = mountDialog()
+    await settle(wrapper)
+
+    await purgeButton(wrapper).trigger('click')
+    await settle(wrapper)
+    settleConfirm(true)
+    await settle(wrapper)
+
+    expect(listTrash).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).not.toContain('Rom 2026')
+    expect(wrapper.text()).not.toContain(t('node.trash.purgeFailed'))
+  })
+
+  it('names any other failed purge on its row and keeps the row', async () => {
+    vi.mocked(listTrash).mockResolvedValue([ROW])
+    vi.mocked(purgeNode).mockRejectedValueOnce(httpError(409, 'scope_deleting'))
+    const wrapper = mountDialog()
+    await settle(wrapper)
+
+    await purgeButton(wrapper).trigger('click')
+    await settle(wrapper)
+    settleConfirm(true)
+    await settle(wrapper)
+
+    expect(wrapper.find('.trash-row').text()).toContain(t('node.trash.purgeFailed'))
+    expect(wrapper.text()).toContain('Rom 2026')
+    expect(listTrash).toHaveBeenCalledTimes(1)
   })
 
   it('surfaces a failed listing instead of an empty trash', async () => {

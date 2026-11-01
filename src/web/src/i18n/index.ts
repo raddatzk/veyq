@@ -1823,6 +1823,11 @@ const en = {
       deletedOn: 'Deleted {day}',
       purgeOn: 'removed for good on {day}',
       retryName: 'New name',
+      // A member's purge of one row now (`purgeNode`), in the words the photo trash of a Memory uses for its own.
+      purge: 'Delete forever',
+      purgeConfirmTitle: 'Delete forever?',
+      purgeConfirm: '“{name}” and everything inside it will be permanently deleted now. This cannot be undone.',
+      purgeFailed: 'Could not delete this for good. Please try again.',
     },
   },
   // The platform's upload status menu in the top bar (core/blob/UploadStatusMenu.vue, cr-files-application B3): every
@@ -3786,6 +3791,10 @@ const de: typeof en = {
       deletedOn: 'Gelöscht am {day}',
       purgeOn: 'endgültig entfernt am {day}',
       retryName: 'Neuer Name',
+      purge: 'Endgültig löschen',
+      purgeConfirmTitle: 'Endgültig löschen?',
+      purgeConfirm: '„{name}“ wird mit allem, was darin ist, jetzt endgültig gelöscht. Das lässt sich nicht rückgängig machen.',
+      purgeFailed: 'Konnte nicht endgültig gelöscht werden. Bitte erneut versuchen.',
     },
   },
   upload: {

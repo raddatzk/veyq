@@ -92,6 +92,9 @@ class OperatorBlindProbeTest {
         "restoreNode" to Probe(Address.SCOPE, prepare = { w -> listOf(w.live, w.control).forEach { trashNode(w, it) } }) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/restore", """{"slugToken":"$slug","parentEpoch":0}""")
         },
+        "purgeNode" to Probe(Address.SCOPE, prepare = { w -> listOf(w.live, w.control).forEach { trashNode(w, it) } }) { s ->
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/purge")
+        },
         "listTrashedNodes" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/trash/nodes") },
         // --- re-key (ADR 0109): the world's nodes are at the current epoch, so the control's stage and commit answer
         // `409 stale_epoch` (nothing to re-key) — past the gate ---

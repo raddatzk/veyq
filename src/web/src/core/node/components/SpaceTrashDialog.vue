@@ -11,6 +11,11 @@
 // Restore can legitimately fail: a node created while this one sat in the trash may already hold the name. That
 // is the ordinary disambiguation a create takes (A1), so the row turns into a name field and retries — it does
 // NOT silently rename, and it does not refuse forever.
+//
+// "Delete forever" brings the scheduled purge forward for one row (`purgeNode`): irreversible, so it asks first through
+// the app's confirm dialog, naming the item. It is offered on every row Restore is - the dialog opens only where the
+// level grants its trash (`rights.nodeTrash`: a member, the space not being deleted), so a guest never reaches it. A
+// row someone else restored or purged meanwhile answers 404: the list is read again, and the row leaves with it.
 import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -20,17 +25,19 @@ import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import VeyqSpinner from '../../../shared/ui/VeyqSpinner.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import type { VeyqIconName } from '../../../shared/ui/icons'
-import { listTrash, restoreNode, type TrashedNode, type TreeNode } from '../tree'
+import { listTrash, purgeNode, restoreNode, type TrashedNode, type TreeNode } from '../tree'
 import type { NodeKind } from '../kind'
 import { registry } from '../../applications/registry'
 import type { EpochKeys } from '../../../features/spaces/epochs'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
+import { useConfirm } from '../../../shared/state/useConfirm'
 
 // `tree` is the live tree: a trashed root's name and its restore's slug token live under its live parent's key (ADR 0080).
 const props = defineProps<{ scopeId: string; epochs: EpochKeys; tree: TreeNode[] }>()
 const emit = defineEmits<{ restored: []; close: [] }>()
 const { t, locale } = useI18n()
+const { ask } = useConfirm()
 
 const rows = ref<TrashedNode[]>([])
 const loadFailed = ref(false)
@@ -39,6 +46,8 @@ const renaming = ref<string | null>(null)
 const retryName = ref('')
 const rowError = ref<{ id: string; message: string } | null>(null)
 const busy = ref<string | null>(null)
+/** Whether the busy row's request is its purge (else its restore): which of its two buttons spins. */
+const purging = ref(false)
 
 const { run: load, pending: loading } = useAsyncAction(
   async () => {
@@ -108,6 +117,32 @@ async function restore(row: TrashedNode, newName?: string) {
   }
 }
 
+/** Erase [row] for good, after the question that names it. Gone from the list on success; a row the server no longer
+ *  holds as a trash root (restored or purged by someone else meanwhile) leaves through a re-read; any other failure
+ *  stays on the row, named. */
+async function purge(row: TrashedNode) {
+  rowError.value = null
+  const accepted = await ask({
+    header: t('node.trash.purgeConfirmTitle'),
+    message: t('node.trash.purgeConfirm', { name: row.name }),
+    acceptLabel: t('node.trash.purge'),
+    acceptIcon: 'trash',
+  })
+  if (!accepted) return
+  busy.value = row.id
+  purging.value = true
+  try {
+    await purgeNode(props.scopeId, row.id)
+    rows.value = rows.value.filter((r) => r.id !== row.id)
+  } catch (e) {
+    if (await isCodedError(e, HttpStatus.notFound, 'node_not_found')) void reload()
+    else rowError.value = { id: row.id, message: t('node.trash.purgeFailed') }
+  } finally {
+    busy.value = null
+    purging.value = false
+  }
+}
+
 onMounted(() => void load())
 </script>
 
@@ -169,8 +204,19 @@ onMounted(() => void load())
             :label="t('node.trash.restore')"
             icon="undo"
             size="small"
-            :loading="busy === row.id"
+            :loading="busy === row.id && !purging"
+            :disabled="busy === row.id"
             @click="restore(row)"
+          />
+          <VeyqButton
+            :label="t('node.trash.purge')"
+            icon="trash"
+            variant="danger"
+            appearance="outlined"
+            size="small"
+            :loading="busy === row.id && purging"
+            :disabled="busy === row.id"
+            @click="purge(row)"
           />
         </div>
       </div>
