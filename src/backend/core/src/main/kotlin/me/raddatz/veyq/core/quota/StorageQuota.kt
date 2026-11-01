@@ -82,7 +82,7 @@ class StorageQuota(
      * Gated by the start's target kind, not the root's: a folder link's root kind has no measure (no application takes
      * uploads into a folder) while its guests upload into Memories below. But the measure is **every** application's
      * term summed, not the target's alone: a folder link's guests upload into two applications' kinds — a Memory's media
-     * and a Pot's receipts (cr-expenses-receipts, the second application with blob rows of its own) — and measured by
+     * and a Pot's receipts (core's blob service's term since ADR 0112, its rows by identity) — and measured by
      * the target's application only, a start into a Pot would not count the link's media, nor one into a Memory its
      * receipts, so the link could hold its limit once per application. Each term counts its own rows by identity, so no
      * blob is counted twice (`UploadAdmissionPartitionSliceTest`).

@@ -387,12 +387,14 @@ class ApplicationErasureSweepTest {
     private fun closure(nodeIds: List<String>): Set<String> {
         val cols = columns()
         val tables = cols.map { it.table }.toSet()
-        // Derived from the applications' migrations: every table they create is among the ones this reads.
-        val appTables = File("apps").listFiles()!!.flatMap { app ->
+        // Derived from the applications' migrations: every table they create, and no later one drops, is among the ones
+        // this reads (Expenses' receipts moved to core's blob service, ADR 0112, and their table was dropped).
+        fun named(statement: String) = File("apps").listFiles()!!.flatMap { app ->
             File(app, "src/main/resources/db/migration").listFiles().orEmpty().flatMap { f ->
-                Regex("""CREATE TABLE (\w+)""", RegexOption.IGNORE_CASE).findAll(f.readText()).map { it.groupValues[1].lowercase() }
+                Regex("""$statement (\w+)""", RegexOption.IGNORE_CASE).findAll(f.readText()).map { it.groupValues[1].lowercase() }
             }
         }.toSet()
+        val appTables = named("CREATE TABLE") - named("DROP TABLE")
         assertTrue(appTables.size >= 5, "read the applications' migrations ($appTables)")
         assertEquals(emptySet<String>(), appTables - tables, "an application table the sweep does not read")
         val ids = nodeIds.toMutableSet()

@@ -3,7 +3,7 @@ package me.raddatz.veyq.core.node.rekey
 /**
  * An application's part of a node's re-key (ADR 0109 point 2): the fields it stores sealed under a node's
  * key — Memories' media meta, EXIF, original and derivative `K_blob` wraps and bucket names; an Expenses Pot's
- * revision-key and receipt `K_blob` wraps. Core owns the commit's
+ * revision-key wraps; core's blob service's `K_blob` wraps (`ApplicationBlobRekeyParticipant`, whose part is core's own). Core owns the commit's
  * transaction and its order and calls every participant inside it; core names no application's table (ADR 0079).
  *
  * **Fail closed.** [commit] runs after core has locked the scope and the node and checked its own parts. It first

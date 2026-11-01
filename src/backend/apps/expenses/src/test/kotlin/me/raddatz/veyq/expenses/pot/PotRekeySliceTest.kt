@@ -1,5 +1,6 @@
 package me.raddatz.veyq.expenses.pot
 
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobEntity
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.node.NodeEntity
@@ -16,7 +17,8 @@ import me.raddatz.veyq.expenses.ExpensesNodeKinds
 import me.raddatz.veyq.expenses.pot.PotWire.Rev
 import me.raddatz.veyq.expenses.pot.PotWire.append
 import me.raddatz.veyq.expenses.pot.PotWire.body
-import me.raddatz.veyq.expenses.receipt.PotReceiptEntity
+import me.raddatz.veyq.expenses.receipt.ExpensesBlobRoles
+import me.raddatz.veyq.expenses.receipt.ReceiptKit
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -24,9 +26,9 @@ import io.restassured.http.ContentType
 import io.restassured.response.ValidatableResponse
 import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.Matchers.containsInAnyOrder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.Base64
 import java.util.UUID
 
@@ -108,27 +110,29 @@ class PotRekeySliceTest {
     }
 
     /**
-     * A receipt's `K_blob` is re-wrapped in the same participant (ADR 0109 decision 3, ADR 0108 decision 7):
-     * the listing serves every receipt's wrap after the revisions', a stage that misses one is `rekey_parts_missing`, one
-     * naming a receipt the Pot does not hold is `rekey_parts_stale`, and the control re-wraps every receipt's blob row —
-     * its stored object, size and meta untouched.
+     * A receipt's `K_blob` is re-wrapped by core's blob service (ADR 0109 decision 3, ADR 0112 decision 1): core's parts
+     * read lists every receipt's blob in its role beside the node's own blobs, and its stage takes the wrap as a core blob
+     * wrap; a stage that misses one is `rekey_parts_missing`, one naming a blob the Pot does not hold is
+     * `rekey_parts_stale`, and the control re-wraps every receipt's blob row — its stored object, size and meta untouched.
+     * Expenses' own listing serves the revisions only.
      */
     @Test
     fun aRekeyRewrapsEveryReceiptsKeyAfterTheRevisions_andMissesNone() {
         val w = world()
         val receipts = List(2) { seedReceipt(w) }.sorted()
-        val page = list(w, "?limit=4").statusCode(200)
-            .body("revisions.size()", equalTo(3)).body("receipts.size()", equalTo(1)).body("more", equalTo(true))
-            .body("receipts[0].receiptId", equalTo(receipts[0])).body("receipts[0].wrappedBlobKey", equalTo(OLD_BLOB_WRAP)).extract()
-        list(w, "?limit=4&since=${page.path<String>("cursor")}").statusCode(200)
-            .body("revisions.size()", equalTo(0)).body("receipts.receiptId", equalTo(listOf(receipts[1]))).body("more", equalTo(false))
+        list(w, "?limit=4").statusCode(200).body("revisions.size()", equalTo(3)).body("containsKey('receipts')", equalTo(false))
+        val blobIds = receipts.map { ReceiptKit.blobOf(it) }
+        given().header("Authorization", bearer(w.owner)).`when`().get("/api/scopes/${w.scopeId}/rekey/nodes/${w.pot}").then().statusCode(200)
+            .body("blobs.blobId", containsInAnyOrder(*blobIds.toTypedArray()))
+            .body("blobs.role", equalTo(listOf(ExpensesBlobRoles.RECEIPT, ExpensesBlobRoles.RECEIPT)))
+            .body("blobs[0].wrappedBlobKey", equalTo(OLD_BLOB_WRAP))
         val before = blobRows(receipts)
 
         val missing = UUID.randomUUID()
         stageWraps(w, missing, receipts = receipts.take(1)).statusCode(204)
         commit(w, missing).statusCode(409).body("code", equalTo("rekey_parts_missing"))
         val stale = UUID.randomUUID()
-        stageWraps(w, stale, receipts = receipts + UUID.randomUUID().toString()).statusCode(204)
+        stageWraps(w, stale, receipts = receipts, extraBlob = UUID.randomUUID().toString()).statusCode(204)
         commit(w, stale).statusCode(409).body("code", equalTo("rekey_parts_stale"))
         assertEquals(before, blobRows(receipts), "nothing landed")
         // a stage of nothing is no stage
@@ -179,31 +183,30 @@ class PotRekeySliceTest {
             .sortedWith(compareBy({ it.entryId }, { it.revision }))
     }
 
-    private fun stageWraps(w: World, rekeyId: UUID, skip: Int? = null, receipts: List<String> = emptyList(), caller: String = w.owner): ValidatableResponse {
+    /** Expenses' stage of every revision's wrap but [skip]'s, then — for [receipts], and a blob the Pot holds none of as
+     *  [extraBlob] — core's stage of their blob wraps, under the same re-key id. */
+    private fun stageWraps(
+        w: World, rekeyId: UUID, skip: Int? = null, receipts: List<String> = emptyList(), extraBlob: String? = null, caller: String = w.owner,
+    ): ValidatableResponse {
         val wraps = rows(w).filterIndexed { i, _ -> i != skip }
             .joinToString(",") { """{"entryId":"${it.entryId}","revision":${it.revision},"wrappedRevisionKey":"${newWrap(it.entryId, it.revision)}"}""" }
-        val receiptWraps = receipts.joinToString(",") { """{"receiptId":"$it","wrappedBlobKey":"${newBlobWrap(it)}"}""" }
-        return post(w, "/pots/${w.pot}/rekey/$rekeyId", """{"fromEpoch":0,"revisions":[$wraps],"receipts":[$receiptWraps]}""", caller)
+        val staged = post(w, "/pots/${w.pot}/rekey/$rekeyId", """{"fromEpoch":0,"revisions":[$wraps]}""", caller)
+        if (receipts.isEmpty() && extraBlob == null) return staged
+        staged.statusCode(204)
+        val blobWraps = (receipts.map { ReceiptKit.blobOf(it) to newBlobWrap(it) } + listOfNotNull(extraBlob?.let { it to newBlobWrap(it) }))
+            .joinToString(",") { (blobId, wrap) -> """{"blobId":"$blobId","wrappedBlobKey":"$wrap"}""" }
+        return post(w, "/rekey/nodes/${w.pot}/$rekeyId/parts", """{"fromEpoch":0,"blobs":[$blobWraps]}""", caller)
     }
 
     private data class BlobRow(val receiptId: String, val storageKey: String, val byteSize: Long, val meta: String?, val wrap: String)
 
-    /** A receipt of the world's Pot, seeded as its completion leaves it: a blob row and the receipt row naming it. */
-    private fun seedReceipt(w: World): String = QuarkusTransaction.requiringNew().call {
-        val blobId = UUID.randomUUID().toString()
-        BlobEntity().apply {
-            id = blobId; scopeId = w.scopeId; storageKey = UUID.randomUUID().toString(); chunkCount = 1; byteSize = 44
-            wrappedBlobKey = OLD_BLOB_WRAP; wrappedBlobMeta = "bWV0YQ=="
-        }.persist()
-        PotReceiptEntity().apply {
-            id = UUID.randomUUID().toString(); scopeId = w.scopeId; nodeId = w.pot; entryId = UUID.randomUUID().toString()
-            this.blobId = blobId; writerUserId = w.owner; createdAt = Instant.now()
-        }.also { it.persist() }.id
-    }
+    /** A receipt of the world's Pot, seeded as its completion leaves it: a blob row and the service's row naming it. */
+    private fun seedReceipt(w: World): String =
+        ReceiptKit.seed(w.scopeId, w.pot, UUID.randomUUID().toString(), w.owner, blobWrap = OLD_BLOB_WRAP, meta = "bWV0YQ==").first
 
     private fun blobRows(receipts: List<String>): List<BlobRow> = QuarkusTransaction.requiringNew().call {
         receipts.map { id ->
-            val b = BlobEntity.findById(PotReceiptEntity.findById(id)!!.blobId)!!
+            val b = BlobEntity.findById(ApplicationBlobEntity.findById(id)!!.blobId)!!
             BlobRow(id, b.storageKey, b.byteSize, b.wrappedBlobMeta, b.wrappedBlobKey)
         }
     }

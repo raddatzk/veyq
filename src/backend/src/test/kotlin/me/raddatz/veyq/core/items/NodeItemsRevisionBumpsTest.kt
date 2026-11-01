@@ -14,7 +14,8 @@ import org.junit.jupiter.api.Test
  * Every write of an application's item rows moves the node's item-list revision (ADR 0033, inbox #410), and a write
  * that forgets is a change the live list never learns of: no request fails and no page shows it, until a user wonders
  * why a peer's upload needs a reload. The per-path slice tests (`MediaSliceTest`, `MediaTrashSliceTest`) pin the
- * sites that exist; this pins the **set** for Memories' media and Expenses' Pot revisions, reading the sources, on the
+ * sites that exist; this pins the **set** for Memories' media, Expenses' Pot revisions and core's blob service's rows
+ * (ADR 0112: an application's blobs are rows of its node's list), reading the sources, on the
  * day someone adds a writer of those rows that is not classified here, or deletes a bump from one that is. An
  * application that adopts the primitive adds its entity to [writes], its module to [listModules] and its writers to
  * [bumping].
@@ -33,19 +34,20 @@ class NodeItemsRevisionBumpsTest {
 
     private val root: Path = Paths.get("").toAbsolutePath().normalize() // src/backend/, the Gradle root every backend test runs in
 
-    /** Rows of a list: a Memory's gallery, a Pot's revisions (cr-expenses-ledger) and its receipts (cr-expenses-receipts). */
+    /** Rows of a list: a Memory's gallery, a Pot's revisions (cr-expenses-ledger) and an application's blobs in core's
+     *  service (a Pot's receipts, ADR 0112). */
     private val writes = Regex(
         """MediaEntity\(\)|MediaEntity\.(update|delete|deleteById)\(|\.deletedAt = |\.bucketId = |""" +
             """PotRevisionEntity\(\)|PotRevisionEntity\.(update|delete|deleteById)\(|""" +
-            """PotReceiptEntity\(\)|PotReceiptEntity\.(update|delete|deleteById)\(|\.droppedAt = """,
+            """ApplicationBlobEntity\(\)|ApplicationBlobEntity\.(update|delete|deleteById)\(|\.keptAt = |\.releasedAt = """,
     )
 
     private val store = "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaStore.kt"
     private val potStore = "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotRevisionStore.kt"
-    private val receiptStore = "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/receipt/PotReceiptStore.kt"
+    private val blobService = "core/src/main/kotlin/me/raddatz/veyq/core/applicationblob/ApplicationBlobs.kt"
 
-    /** The application modules whose item rows the scan reads. */
-    private val listModules = listOf("apps/memories/", "apps/expenses/")
+    /** The modules (and core's package) whose item rows the scan reads. */
+    private val listModules = listOf("apps/memories/", "apps/expenses/", "core/src/main/kotlin/me/raddatz/veyq/core/applicationblob/")
 
     /** file (relative to `src/backend/`) -> the functions that write, each of which must bump. */
     private val bumping = mapOf(
@@ -53,8 +55,8 @@ class NodeItemsRevisionBumpsTest {
         "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaShareGuestWrites.kt" to setOf("deleteOwn"),
         potStore to setOf("append", "erase"),
         "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/ExpensesErasures.kt" to setOf("reapplyRecord"),
-        receiptStore to setOf("attach"),
-        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/receipt/PotReceiptPurge.kt" to setOf("purgeIn"),
+        blobService to setOf("attach"),
+        "core/src/main/kotlin/me/raddatz/veyq/core/applicationblob/ApplicationBlobPurge.kt" to setOf("purgeIn"),
     )
 
     /** Public functions of a bumping file that write media rows and bump nothing, and why. */
@@ -62,13 +64,17 @@ class NodeItemsRevisionBumpsTest {
         "purgeMediaRows" to "the FK-ordered body of the purges below and of a guest's delete (which bumps); a purge removes trashed or unlisted rows",
         "purgeMedia" to "erases an already-trashed medium: the trash itself moved the revision, and no listing shows it",
         "purgeTrashedBefore" to "the retention purge of trashed media, which no live listing shows (the trash moved the revision)",
+        "keep" to "the blob service's keep, called inside an application's write, whose own items.bump moves the node's list (PotRevisionStore.append)",
+        "releaseOwners" to "the blob service's release with an owner's end, called inside an application's write, which bumps",
+        "release" to "the blob service's release by name, called inside an application's write, which bumps",
     )
 
     /** Writers that move no revision on their own, and why. */
     private val exempt = mapOf(
         "apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaScopeEraser.kt" to "erases the scope's media with the scope (and its counters, in core's node eraser)",
-        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotScopeEraser.kt" to "erases the scope's Pot revisions and receipts with the scope (and its counters, in core's node eraser)",
-        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotNodeSubtreeEraser.kt" to "erases a purged Pot's revisions and receipts: the Pot is in the trash, so no open list watches it, and its counters go with it (core's phase 300)",
+        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotScopeEraser.kt" to "erases the scope's Pot revisions with the scope (and its counters, in core's node eraser)",
+        "apps/expenses/src/main/kotlin/me/raddatz/veyq/expenses/pot/PotNodeSubtreeEraser.kt" to "erases a purged Pot's revisions: the Pot is in the trash, so no open list watches it, and its counters go with it (core's phase 300)",
+        "core/src/main/kotlin/me/raddatz/veyq/core/applicationblob/ApplicationBlobSeams.kt" to "the service's scope and subtree erasers: a purged node is in the trash and a purged scope gone, so no open list watches either, and their counters go with them (core's phase 300, its node eraser)",
     )
 
     /** The only files that may name the counters' entity: core's items package, and the scope eraser that deletes by node. */
@@ -121,7 +127,7 @@ class NodeItemsRevisionBumpsTest {
     fun theScanSeesWhatItClaimsToGuard() {
         val sources = mainSources()
         for (file in bumping.keys + exempt.keys + counterWriters) assertTrue(file in sources, "$file is not a main source any more - update this test")
-        for (file in listOf(store, potStore, receiptStore)) {
+        for (file in listOf(store, potStore, blobService)) {
             assertTrue(writes.containsMatchIn(root.resolve(file).readText()), "$file matches no write marker - has the marker list gone stale?")
         }
     }

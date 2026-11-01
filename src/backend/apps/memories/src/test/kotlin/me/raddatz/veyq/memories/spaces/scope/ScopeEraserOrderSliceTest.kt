@@ -1,6 +1,7 @@
 package me.raddatz.veyq.memories.spaces.scope
 
 import me.raddatz.veyq.core.node.rekey.NodeRekeyStageScopeEraser
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobScopeEraser
 import me.raddatz.veyq.core.blob.AttachmentScopeEraser
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.node.NodeScopeEraser
@@ -52,6 +53,7 @@ class ScopeEraserOrderSliceTest {
         assertEquals(
             mapOf(
                 MediaScopeEraser::class.java.simpleName to 100,
+                ApplicationBlobScopeEraser::class.java.simpleName to 160,
                 AttachmentScopeEraser::class.java.simpleName to 200,
                 "FavoritesScopeEraser" to 600, // core's pin eraser (ADR 0068)
                 ItemFavoritesScopeEraser::class.java.simpleName to 610,

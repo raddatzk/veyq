@@ -14,12 +14,6 @@ import me.raddatz.veyq.expenses.generated.model.SharePotRevision
 import me.raddatz.veyq.expenses.generated.model.SharePotRevisionPage
 import jakarta.annotation.security.PermitAll
 import me.raddatz.veyq.core.config.VeyqConfig
-import me.raddatz.veyq.expenses.generated.model.SharePotReceiptCompleteRequest
-import me.raddatz.veyq.expenses.generated.model.SharePotReceiptPage
-import me.raddatz.veyq.expenses.receipt.CompleteReceiptOutcome
-import me.raddatz.veyq.expenses.receipt.ListReceiptsOutcome
-import me.raddatz.veyq.expenses.receipt.ReceiptWire
-import me.raddatz.veyq.expenses.receipt.ReceiptsHandler
 import java.time.Duration
 import jakarta.ws.rs.core.Response
 import java.security.MessageDigest
@@ -35,7 +29,6 @@ import java.util.UUID
  */
 class SharePotsResource(
     private val handler: SharePotsHandler,
-    private val receipts: ReceiptsHandler,
     private val tags: SharePotTags,
     /** The client a guest's write records (the guest-write record, ADR 0093 § 10): resolved once, handed down. */
     private val client: RequestClient,
@@ -90,39 +83,6 @@ class SharePotsResource(
             )
         ) {
             is SharePotAppendOutcome.Written -> PotsResource.respond(o.outcome)
-            is HttpFailure -> httpError(o)
-        }
-    }
-
-    @PermitAll
-    @RateLimitExempt(
-        reason = "Guest read of a Pot's receipt references under a share — the Expenses half of resolveShare's read, as " +
-            "listShareFiles is Depot's. Volume is unbounded BY DECISION, not by omission, recorded in cc.security.rate-limit " +
-            "(§ Unbounded by decision) beside listSharePotRevisions.",
-    )
-    override fun listSharePotReceipts(
-        shareId: String, nodeId: UUID, xSharePassword: String?, after: UUID?, limit: Int?, ifNoneMatch: String?,
-    ): Response = when (val o = receipts.listShared(shareId, xSharePassword, nodeId.toString())) {
-        is ListReceiptsOutcome.Listed -> ReceiptWire.respond(o.receipts.map(ReceiptWire::guest), { it.receiptId }, after, limit, ifNoneMatch) { page, more, cursor ->
-            SharePotReceiptPage(receipts = page, more = more, cursor = cursor)
-        }
-        is HttpFailure -> httpError(o)
-    }
-
-    @PermitAll
-    // A guest's receipt creates a receipt and a blob row, so it rides the per-share upload budget, as completeShareFile does.
-    @RateLimit(key = RateLimitKey.SHARE)
-    override fun completeSharePotReceipt(
-        shareId: String, nodeId: UUID, sharePotReceiptCompleteRequest: SharePotReceiptCompleteRequest, xSharePassword: String?,
-    ): Response {
-        val r = sharePotReceiptCompleteRequest
-        return when (
-            val o = receipts.completeShared(
-                shareId, xSharePassword, r.contributorToken, nodeId.toString(), r.entryId.toString(), r.receiptId.toString(),
-                r.uploadId.toString(), r.nodeEpoch.validated(), client.seen(),
-            )
-        ) {
-            is CompleteReceiptOutcome.Ok -> Response.ok(ReceiptWire.guest(o.receipt)).build()
             is HttpFailure -> httpError(o)
         }
     }

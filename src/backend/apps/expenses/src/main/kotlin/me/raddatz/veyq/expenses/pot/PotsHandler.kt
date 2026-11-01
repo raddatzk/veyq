@@ -68,16 +68,13 @@ sealed interface PotWriteOutcome {
  * #542) — ADR 0093 § 6's rule for blocked content, "deleted but not replaced or restored", in a Pot's terms: a block of
  * the Pot (or a node above it) refuses every revision but a tombstone, and a block of one entry refuses every revision
  * of that entry but a tombstone. A tombstone is the record's deletion, which a block never refuses; a member's erasure
- * of a participant is a removal too and is not asked. A receipt is new content, so it is refused on a blocked Pot or a
- * blocked entry. Asked before the write and outside its lock, as Depot's replace asks it: a block landing while a write
- * runs is the next write's to meet.
+ * of a participant is a removal too and is not asked. A receipt is new content, so core's blob service refuses it on a
+ * blocked Pot or a blocked entry, its owner (ADR 0112). Asked before the write and outside its lock, as Depot's replace
+ * asks it: a block landing while a write runs is the next write's to meet.
  */
 internal object PotBlocks {
     fun refusesWrites(view: ContentView, nodeId: String, writes: List<RevisionWrite>): Boolean =
         !view.isEmpty && writes.any { !it.tombstone && view.itemBlocked(it.entryId, nodeId) }
-
-    fun refusesReceipt(view: ContentView, nodeId: String, entryId: String): Boolean =
-        !view.isEmpty && view.itemBlocked(entryId, nodeId)
 }
 
 /** The request checks the contract cannot write: one size class per body, one revision per record in a batch, each

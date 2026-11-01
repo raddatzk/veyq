@@ -141,6 +141,19 @@ class ShareMediaRouteSliceTest {
                 .body("""{"category":"TERMS_BREACH","epoch":999999,"sealedReport":"cmVwb3J0","items":[{"kind":"NODE","id":"${w.memory}","sealedShare":"c2hhcmU="}]}""")
                 .`when`().post("/api/shares/${w.shareId}/reports").then().statusCode(409).body("code", equalTo("moderation_epoch_changed"))
         },
+        // --- core `share-application-blobs` (root /api/shares/{shareId}/nodes/{nodeId}/application-blobs, ADR 0112): a
+        // Memory stores no blob through the service, so the real link's list is its own non-enumerable 404 with a code,
+        // and its complete — past the writer's gate — the target's `node_not_found`; a missed route is RESTEasy's bare 404 ---
+        "listShareApplicationBlobs" to Probe("GET", "/api/shares/{shareId}/nodes/{nodeId}/application-blobs") { w ->
+            given().`when`().get("/api/shares/${w.shareId}/nodes/${w.memory}/application-blobs").then().statusCode(404)
+                .body("code", equalTo("share_not_found"))
+        },
+        "completeShareApplicationBlob" to Probe("POST", "/api/shares/{shareId}/nodes/{nodeId}/application-blobs") { w ->
+            given().contentType(ContentType.JSON)
+                .body("""{"nodeEpoch":0,"contributorToken":"${w.token}","id":"${TestIds.uuid()}","ownerId":"${TestIds.uuid()}","role":"ORIGINAL","uploadId":"${TestIds.uuid()}"}""")
+                .`when`().post("/api/shares/${w.shareId}/nodes/${w.memory}/application-blobs").then().statusCode(404)
+                .body("code", equalTo("node_not_found"))
+        },
         // --- Memories `share-media` (root /api/shares/{shareId}/media) ---
         "listShareMedia" to Probe("GET", "/api/shares/{shareId}/media") { w ->
             given().`when`().get("/api/shares/${w.shareId}/media").then().statusCode(200)
@@ -160,7 +173,7 @@ class ShareMediaRouteSliceTest {
     @Test
     fun theTableIsEveryShareRouteOfBothGeneratedApis() {
         val generated = shareOperations()
-        assertEquals(22, generated.size, "the /api/shares operations of both specs: $generated")
+        assertEquals(24, generated.size, "the /api/shares operations of both specs: $generated")
         assertEquals(generated, probes.mapValues { (_, p) -> "${p.method} ${p.path}" }, "a route without a row, or a row without a route")
     }
 

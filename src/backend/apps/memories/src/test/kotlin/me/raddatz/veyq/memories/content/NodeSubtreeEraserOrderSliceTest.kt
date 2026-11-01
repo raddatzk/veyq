@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.content.NodeSubtreePurge
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobNodeSubtreeEraser
 
 /**
  * The node subtree erasure's order is an explicit phase table, not bean order, and `dropDeadIdentities` runs only
@@ -55,6 +56,7 @@ class NodeSubtreeEraserOrderSliceTest {
         assertEquals(
             mapOf(
                 MediaNodeSubtreeEraser::class.java.simpleName to 100,
+                ApplicationBlobNodeSubtreeEraser::class.java.simpleName to 160,
                 AttachmentNodeSubtreeEraser::class.java.simpleName to 200,
                 NodeItemsRevisionNodeSubtreeEraser::class.java.simpleName to 300,
                 NodeRekeyStageNodeSubtreeEraser::class.java.simpleName to 350,

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.expenses.moderation
 
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobs
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit
 import me.raddatz.veyq.core.moderation.cases.CaseTestKit.call
 import me.raddatz.veyq.core.blob.BlobEntity
@@ -20,7 +21,7 @@ import me.raddatz.veyq.expenses.pot.PotWire.Rev
 import me.raddatz.veyq.expenses.pot.PotWire.append
 import me.raddatz.veyq.expenses.pot.PotWire.body
 import me.raddatz.veyq.expenses.pot.PotWire.erase
-import me.raddatz.veyq.expenses.receipt.PotReceiptEntity
+import me.raddatz.veyq.expenses.receipt.ReceiptKit
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -28,7 +29,6 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.Matchers.containsInAnyOrder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -68,9 +68,10 @@ class PotModerationSliceTest {
     }
 
     /**
-     * ADR 0108 decisions 6 and 7: a report of an entry reaches its receipts too — the hold copies
-     * every receipt of it and pins each one's blob — and a receipt is an `ITEM` on its own, held with its blob and nothing
-     * else; the moderator reads both from the snapshot after the Pot is gone.
+     * ADR 0108 decisions 6 and 7, ADR 0112: a report of an entry reaches its receipts too — core's blob service's hold
+     * copies every receipt the entry holds and pins each one's blob — and a receipt is an `ITEM` on its own, held with its
+     * blob and nothing else; the moderator reads both from the snapshot after the Pot is gone (the revisions through
+     * Expenses' case read, the receipts through core's).
      */
     @Test
     fun aReportedEntryHoldsItsReceipts_aReportedReceiptHoldsItselfAlone() {
@@ -80,28 +81,30 @@ class PotModerationSliceTest {
         val entry = UUID.randomUUID().toString()
         val other = UUID.randomUUID().toString()
         append(m.userId, m.scopeId, pot, listOf(Rev(entry), Rev(other))).statusCode(204)
-        val (r1, b1) = seedReceipt(m.scopeId, pot, entry, m.userId)
-        val (r2, b2) = seedReceipt(m.scopeId, pot, entry, m.userId)
-        val (alone, aloneBlob) = seedReceipt(m.scopeId, pot, other, m.userId)
+        val (r1, b1) = ReceiptKit.seed(m.scopeId, pot, entry, m.userId, blobWrap = BLOB_WRAP)
+        val (r2, b2) = ReceiptKit.seed(m.scopeId, pot, entry, m.userId, blobWrap = BLOB_WRAP)
+        val (alone, aloneBlob) = ReceiptKit.seed(m.scopeId, pot, other, m.userId, blobWrap = BLOB_WRAP)
 
         asMember(m.userId, m.scopeId, body(listOf(item("ITEM", entry)))).then().statusCode(201)
         val entryCase = openCase("ITEM", entry)!!.id
-        assertEquals(setOf(r1, r2), held(HeldRevisions.RECEIPTS), "every receipt of the entry, and none of another")
+        assertEquals(setOf(r1, r2), held(ApplicationBlobs.TABLE), "every receipt of the entry, and none of another")
         assertEquals(setOf(b1, b2), held("veyq_blob"), "each receipt's blob row is copied")
         assertEquals(2L, QuarkusTransaction.requiringNew().call { HoldPinEntity.count("storageKey in ?1", keysOf(listOf(b1, b2))) }, "and pinned")
 
         asMember(m.userId, m.scopeId, body(listOf(item("ITEM", alone)))).then().statusCode(201) // a receipt on its own
         val receiptCase = openCase("ITEM", alone)!!.id
-        assertEquals(setOf(r1, r2, alone), held(HeldRevisions.RECEIPTS))
+        assertEquals(setOf(r1, r2, alone), held(ApplicationBlobs.TABLE))
         assertEquals(setOf(b1, b2, aloneBlob), held("veyq_blob"))
 
         given().header("Authorization", bearer(m.userId)).`when`().delete("/api/scopes/${m.scopeId}/nodes/$pot").then().statusCode(204)
-        mod.call("listCasePotRevisions", entryCase, "GET", "/api/moderation/cases/$entryCase/pots").then().statusCode(200)
-            .body("receipts.receiptId", containsInAnyOrder(r1, r2)).body("receipts[0].entryId", equalTo(entry))
-            .body("receipts[0].nodeId", equalTo(pot)).body("receipts[0].wrappedBlobKey", equalTo(BLOB_WRAP))
-            .body("receipts[0].containsKey('writer')", equalTo(false))
+        mod.call("listCaseApplicationBlobs", entryCase, "GET", "/api/moderation/cases/$entryCase/application-blobs").then().statusCode(200)
+            .body("blobs.id", containsInAnyOrder(r1, r2)).body("blobs[0].ownerId", equalTo(entry))
+            .body("blobs[0].nodeId", equalTo(pot)).body("blobs[0].wrappedBlobKey", equalTo(BLOB_WRAP))
+            .body("blobs[0].containsKey('writer')", equalTo(false))
+        mod.call("listCaseApplicationBlobs", receiptCase, "GET", "/api/moderation/cases/$receiptCase/application-blobs").then().statusCode(200)
+            .body("blobs.id", equalTo(listOf(alone)))
         mod.call("listCasePotRevisions", receiptCase, "GET", "/api/moderation/cases/$receiptCase/pots").then().statusCode(200)
-            .body("receipts.receiptId", equalTo(listOf(alone))).body("revisions.size()", equalTo(0))
+            .body("revisions.size()", equalTo(0))
     }
 
     @Test
@@ -117,22 +120,6 @@ class PotModerationSliceTest {
 
     private fun keysOf(blobIds: List<String>): List<String> =
         QuarkusTransaction.requiringNew().call { BlobEntity.list("id in ?1", blobIds).map { it.storageKey } }
-
-    /** A receipt of [entryId], seeded as its completion leaves it: (receipt id, blob id). */
-    private fun seedReceipt(scopeId: String, pot: String, entryId: String, writer: String): Pair<String, String> =
-        QuarkusTransaction.requiringNew().call {
-            val blobId = UUID.randomUUID().toString()
-            BlobEntity().apply {
-                id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString(); chunkCount = 1; byteSize = 44
-                wrappedBlobKey = BLOB_WRAP
-            }.persist()
-            val receipt = PotReceiptEntity().apply {
-                id = UUID.randomUUID().toString(); this.scopeId = scopeId; nodeId = pot; this.entryId = entryId
-                this.blobId = blobId; writerUserId = writer; createdAt = Instant.now()
-            }
-            receipt.persist()
-            receipt.id to blobId
-        }
 
     private companion object {
         const val BLOB_WRAP = "d3JhcC1rLWJsb2I="

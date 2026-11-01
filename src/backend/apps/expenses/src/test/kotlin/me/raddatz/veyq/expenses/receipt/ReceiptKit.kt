@@ -1,5 +1,6 @@
 package me.raddatz.veyq.expenses.receipt
 
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobEntity
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
@@ -16,7 +17,8 @@ import org.hamcrest.CoreMatchers.nullValue
 import java.time.Instant
 import java.util.UUID
 
-/** The receipts' wire as a client speaks it — core's transport, then Expenses' completion and reads — for this module's tests. */
+/** The receipts' wire as a client speaks it — core's transport, then core's blob service's completion and reads, a receipt
+ *  being an application blob of the Pot held by its entry (ADR 0112) — for this module's tests. */
 object ReceiptKit {
     const val WRAP = "d3JhcC1rLWJsb2I="
     const val META = "c2VhbGVkLWJsb2ItbWV0YQ=="
@@ -45,8 +47,8 @@ object ReceiptKit {
         userId: String, scopeId: String, pot: String, entryId: String, receiptId: String, uploadId: String, nodeEpoch: Int = 0,
     ): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeEpoch":$nodeEpoch,"entryId":"$entryId","receiptId":"$receiptId","uploadId":"$uploadId"}""")
-            .`when`().post("/api/scopes/$scopeId/pots/$pot/receipts").then()
+            .body("""{"nodeEpoch":$nodeEpoch,"ownerId":"$entryId","id":"$receiptId","role":"${ExpensesBlobRoles.RECEIPT}","uploadId":"$uploadId"}""")
+            .`when`().post("/api/scopes/$scopeId/nodes/$pot/application-blobs").then()
 
     /** A member's receipt of [entryId], uploaded and completed: its receipt id. */
     fun upload(
@@ -73,19 +75,19 @@ object ReceiptKit {
         link: GuestTreeShare.Link, pot: String, entryId: String, receiptId: String, uploadId: String, xff: String = "203.0.113.80:40000",
     ): ValidatableResponse =
         given().contentType(ContentType.JSON).header("X-Forwarded-For", xff)
-            .body("""{"nodeEpoch":0,"contributorToken":"${link.token}","entryId":"$entryId","receiptId":"$receiptId","uploadId":"$uploadId"}""")
-            .`when`().post("/api/shares/${link.shareId}/pots/$pot/receipts").then()
+            .body("""{"nodeEpoch":0,"contributorToken":"${link.token}","ownerId":"$entryId","id":"$receiptId","role":"${ExpensesBlobRoles.RECEIPT}","uploadId":"$uploadId"}""")
+            .`when`().post("/api/shares/${link.shareId}/nodes/$pot/application-blobs").then()
 
     fun list(userId: String, scopeId: String, pot: String, query: String = "", ifNoneMatch: String? = null): ValidatableResponse {
         var spec = given().header("Authorization", bearer(userId))
         if (ifNoneMatch != null) spec = spec.header("If-None-Match", ifNoneMatch)
-        return spec.`when`().get("/api/scopes/$scopeId/pots/$pot/receipts$query").then()
+        return spec.`when`().get("/api/scopes/$scopeId/nodes/$pot/application-blobs$query").then()
     }
 
     fun guestList(shareId: String, pot: String, query: String = "", ifNoneMatch: String? = null): ValidatableResponse {
         var spec = given()
         if (ifNoneMatch != null) spec = spec.header("If-None-Match", ifNoneMatch)
-        return spec.`when`().get("/api/shares/$shareId/pots/$pot/receipts$query").then()
+        return spec.`when`().get("/api/shares/$shareId/nodes/$pot/application-blobs$query").then()
     }
 
     /** A member's download of [blobId]: core's presigned GETs, or the item's error. */
@@ -109,7 +111,25 @@ object ReceiptKit {
 
     fun sessionKey(uploadId: String): String = QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(uploadId)!!.storageKey }
 
-    fun receipt(id: String): PotReceiptEntity? = QuarkusTransaction.requiringNew().call { PotReceiptEntity.findById(id) }
+    fun receipt(id: String): ApplicationBlobEntity? = QuarkusTransaction.requiringNew().call { ApplicationBlobEntity.findById(id) }
+
+    /** A receipt of [entryId] in the Pot [pot], seeded as its completion leaves it (born kept, as for a live entry):
+     *  a blob row and the service's row naming it — its id. */
+    fun seed(scopeId: String, pot: String, entryId: String, writer: String, blobWrap: String = WRAP, meta: String? = null): Pair<String, String> =
+        QuarkusTransaction.requiringNew().call {
+            val blobId = UUID.randomUUID().toString()
+            BlobEntity().apply {
+                id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString(); chunkCount = 1; byteSize = 44
+                wrappedBlobKey = blobWrap; wrappedBlobMeta = meta
+            }.persist()
+            val now = Instant.now()
+            val row = ApplicationBlobEntity().apply {
+                id = UUID.randomUUID().toString(); this.scopeId = scopeId; nodeId = pot; ownerId = entryId; role = ExpensesBlobRoles.RECEIPT
+                this.blobId = blobId; writerUserId = writer; createdAt = now; keptAt = now
+            }
+            row.persist()
+            row.id to blobId
+        }
 
     fun blobOf(receiptId: String): String = checkNotNull(receipt(receiptId)) { "no receipt $receiptId" }.blobId
 

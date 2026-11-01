@@ -1,6 +1,7 @@
 package me.raddatz.veyq.expenses.receipt
 
-import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobEntity
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobPurge
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
@@ -25,19 +26,19 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * The receipts' purge against the writes it races ([PotReceiptPurge]'s lock order: the scope row, the records' revision
- * rows, the receipts, the Pots' node rows — the order every Pot writer takes). A restore of a deleted entry held
- * uncommitted ([whileUncommitted]) while the purge runs: the purge waits on the record's rows, then judges what is
- * committed — the entry is live again, its receipts stay (docs/apps/expenses.md § Receipts: a restore is a later live
- * revision, so no write to the receipts undoes the deletion). Beside its control: without the restore, the same purge
- * takes them. Run on MariaDB by
- * `scripts/run_backend_races_on_mariadb.py` (the V1 heavy stage), where READ COMMITTED shows what H2 hides.
+ * Core's blob service's purge against the writes it races ([ApplicationBlobPurge]'s lock order: the scope row, the
+ * service's rows, the nodes' rows — the order every writer of a node's blobs takes, ADR 0112). A restore of a deleted
+ * entry held uncommitted ([whileUncommitted]) while the purge runs: the restore keeps its entry's receipts under the
+ * service's row locks, the purge waits on them, then judges what is committed — the receipts are kept again, they stay
+ * (docs/apps/expenses.md § Receipts: a restore keeps what the tombstone released). Beside its control: without the
+ * restore, the same purge takes them. Run on MariaDB by `scripts/run_backend_races_on_mariadb.py` (the V1 heavy stage),
+ * where READ COMMITTED shows what H2 hides.
  */
 @QuarkusTest
 class PotReceiptRaceSliceTest {
 
     @Inject lateinit var revisions: PotRevisionStore
-    @Inject lateinit var purge: PotReceiptPurge
+    @Inject lateinit var purge: ApplicationBlobPurge
 
     @Test
     fun aRestoreThePurgeWaitsForKeepsTheEntrysReceipts() {
@@ -66,28 +67,18 @@ class PotReceiptRaceSliceTest {
         return f
     }
 
-    /** A Pot whose live entry holds one receipt (seeded as its completion leaves it). */
+    /** A Pot whose live entry holds one receipt (seeded as its completion leaves it: born kept). */
     private fun heldReceipt(): Fixture {
         val (userId, scopeId) = seedMemberScope()
         val pot = seedNode(scopeId, ExpensesNodeKinds.POT, wrappedContentKey = CONTENT_KEY)
         val entry = UUID.randomUUID().toString()
         append(userId, scopeId, pot, listOf(Rev(entry))).statusCode(204)
-        val receipt = QuarkusTransaction.requiringNew().call {
-            val blobId = UUID.randomUUID().toString()
-            BlobEntity().apply {
-                id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString(); chunkCount = 1; byteSize = 44
-                wrappedBlobKey = ReceiptKit.WRAP
-            }.persist()
-            PotReceiptEntity().apply {
-                id = UUID.randomUUID().toString(); this.scopeId = scopeId; nodeId = pot; entryId = entry
-                this.blobId = blobId; writerUserId = userId; createdAt = Instant.now()
-            }.also { it.persist() }.id
-        }
+        val (receipt, _) = ReceiptKit.seed(scopeId, pot, entry, userId)
         return Fixture(scopeId, pot, entry, receipt, userId)
     }
 
     private fun write(entryId: String, revision: Long, drops: List<String> = emptyList()) =
         RevisionWrite(entryId, revision, tombstone = false, sealedBody = PotWire.body(), wrappedRevisionKey = PotWire.WRAP, droppedReceipts = drops)
 
-    private fun receipt(id: String): PotReceiptEntity? = QuarkusTransaction.requiringNew().call { PotReceiptEntity.findById(id) }
+    private fun receipt(id: String): ApplicationBlobEntity? = QuarkusTransaction.requiringNew().call { ApplicationBlobEntity.findById(id) }
 }

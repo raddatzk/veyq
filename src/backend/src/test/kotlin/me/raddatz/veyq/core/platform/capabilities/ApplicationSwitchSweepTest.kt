@@ -124,19 +124,6 @@ class ApplicationSwitchSweepTest {
                 """{"fromEpoch":0,"revisions":[{"entryId":"${UUID.randomUUID()}","revision":1,"wrappedRevisionKey":"$B64"}]}""",
             )
         },
-        "completePotReceipt" to { c ->
-            Call(
-                "POST", "/api/scopes/${c.s.scopeId}/pots/${c.s.nodeId}/receipts",
-                """{"nodeEpoch":0,"entryId":"${UUID.randomUUID()}","receiptId":"${UUID.randomUUID()}","uploadId":"${c.s.uploadId}"}""",
-            )
-        },
-        "completeSharePotReceipt" to { c ->
-            Call(
-                "POST", "/api/shares/${c.readWrite.shareId}/pots/${c.s.nodeId}/receipts",
-                """{"nodeEpoch":0,"contributorToken":"${c.readWrite.token}","entryId":"${UUID.randomUUID()}","receiptId":"${UUID.randomUUID()}","uploadId":"${UUID.randomUUID()}"}""",
-                guest = true,
-            )
-        },
         "appendSharePotRevisions" to { c ->
             Call(
                 "POST", "/api/shares/${c.readWrite.shareId}/pots/${c.s.nodeId}/revisions",

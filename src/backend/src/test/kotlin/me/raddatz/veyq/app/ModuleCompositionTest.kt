@@ -1,6 +1,7 @@
 package me.raddatz.veyq.app
 
 import me.raddatz.veyq.core.backup.ApplicationErasures
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobOwners
 import me.raddatz.veyq.core.blob.MemberBlobRoles
 import me.raddatz.veyq.core.blob.UploadCompletion
 import me.raddatz.veyq.core.node.NodeEntity
@@ -96,6 +97,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var guestCreatableKinds: MutableList<GuestCreatableKinds>
     @Inject @All lateinit var guestPlaceholders: MutableList<GuestPlaceholders>
     @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
+    @Inject @All lateinit var blobOwners: MutableList<ApplicationBlobOwners>
     @Inject @All lateinit var reportableItems: MutableList<ReportableItems>
     @Inject @All lateinit var holdContributors: MutableList<HoldSnapshotContributor>
     @Inject @All lateinit var rekeyParticipants: MutableList<NodeRekeyParticipant>
@@ -123,6 +125,7 @@ class ModuleCompositionTest {
         GuestCreatableKinds::class.java to guestCreatableKinds,
         GuestPlaceholders::class.java to guestPlaceholders,
         MemberBlobRoles::class.java to memberRoles,
+        ApplicationBlobOwners::class.java to blobOwners,
         ReportableItems::class.java to reportableItems,
         HoldSnapshotContributor::class.java to holdContributors,
         NodeRekeyParticipant::class.java to rekeyParticipants,
@@ -253,8 +256,9 @@ class ModuleCompositionTest {
 
     /**
      * The upload partition across core and every application (cr-files-application F1a, F2): each kind that takes
-     * uploads has exactly one completion, one link admission and one guest writer, the right application's; a `FOLDER`
-     * has none of them. Two acceptors
+     * uploads has exactly one completion, one link admission and one guest writer, the right application's — or core's
+     * blob service's for a kind whose application stores its blobs through it (ADR 0112: a Pot's receipts), with exactly
+     * one application answering for the kind's blobs; a `FOLDER` has none of them. Two acceptors
      * of a kind make core's dispatcher refuse it (`illegal_target`) and two admissions refuse its links — only here,
      * where both applications run, would an application claiming another's kind show.
      */
@@ -262,8 +266,19 @@ class ModuleCompositionTest {
     fun theUploadSeamsOfEveryApplicationPartitionTheKinds() {
         val owners = mapOf(
             "MEMORY" to "me.raddatz.veyq.memories.", "CHAPTER" to "me.raddatz.veyq.memories.", "FILE" to "me.raddatz.veyq.depot.",
-            "EXPENSES_POT" to "me.raddatz.veyq.expenses.", // its receipts (cr-expenses-receipts)
+            "EXPENSES_POT" to "me.raddatz.veyq.core.applicationblob.", // its receipts, core's blob service (ADR 0112)
         )
+        val stored = mapOf("EXPENSES_POT" to "me.raddatz.veyq.expenses.")
+        for (kind in owners.keys + NodeEntity.FOLDER) {
+            val answering = blobOwners.filter { it.accepts(kind) }.map(::beanClass)
+            val expected = stored[kind]
+            if (expected == null) {
+                assertTrue(answering.isEmpty(), "a $kind stores no blob through core's service: $answering")
+            } else {
+                assertEquals(1, answering.size, "a $kind's stored blobs have exactly one application: $answering")
+                assertTrue(answering.single().startsWith(expected), "$kind's stored blobs are $expected's: $answering")
+            }
+        }
         for ((kind, owner) in owners) {
             val accepting = completions.filter { it.accepts(kind) }.map(::beanClass)
             assertEquals(1, accepting.size, "an upload into a $kind must have exactly one completion: $accepting")

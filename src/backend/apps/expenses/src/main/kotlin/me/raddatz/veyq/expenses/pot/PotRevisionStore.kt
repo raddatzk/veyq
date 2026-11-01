@@ -1,5 +1,7 @@
 package me.raddatz.veyq.expenses.pot
 
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobRef
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobs
 import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.items.ItemsCursor
@@ -9,7 +11,6 @@ import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.rekey.NodeEpochGate
 import me.raddatz.veyq.expenses.ExpensesNodeKinds
-import me.raddatz.veyq.expenses.receipt.PotReceiptEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -26,7 +27,7 @@ object PotBodies {
 }
 
 /** One revision as its writer sent it — the member's and the guest's batch alike; [droppedReceipts] are the receipts of
- *  its record it no longer holds (ADR 0108 decision 7). */
+ *  its record it no longer holds (ADR 0108 decision 7), which core's blob service releases (ADR 0112 decision 2). */
 data class RevisionWrite(
     val entryId: String, val revision: Long, val tombstone: Boolean, val sealedBody: String, val wrappedRevisionKey: String,
     val droppedReceipts: List<String> = emptyList(),
@@ -57,7 +58,7 @@ sealed interface PotWriteResult {
     data class Stored(val rowIds: List<String>) : PotWriteResult
     /** These records' latest revisions are not the ones the write was built on (0: the record does not exist). */
     data class Stale(val stale: List<RevisionRef>) : PotWriteResult
-    /** A new record's id belongs to another Pot, or is a receipt's. */
+    /** A new record's id belongs to another Pot, or is an application blob's (a receipt's). */
     object IdTaken : PotWriteResult
     /** A dropped receipt is no receipt of its record in this Pot (`400 invalid_request`). */
     object ReceiptNotHeld : PotWriteResult
@@ -76,11 +77,16 @@ sealed interface PotWriteResult {
  * their position.
  *
  * **Lock order, every writer:** (1) a guest's re-check under the scope and share locks ([append]'s `admitted`); (2) the
- * named records' existing rows, `FOR UPDATE`; (2b) the receipt rows a revision drops ([PotReceiptEntity]); (3) the Pot's
- * node row ([NodeEpochGate.check]), which serializes every write of the Pot; (4) the inserted rows; (5) the
- * item-revision row ([NodeItemsRevisions.bump]). The re-key's commit takes (2) and (2b) for every row of the Pot before
- * (3) ([PotNodeRekeyParticipant.lockRows]), and a receipt's completion and the receipts' purge the same order
- * ([me.raddatz.veyq.expenses.receipt.PotReceiptStore]).
+ * named records' existing rows, `FOR UPDATE`; (2b) the rows of core's blob service the records hold and the revisions
+ * drop ([ApplicationBlobs.lock]); (3) the Pot's node row ([NodeEpochGate.check]), which serializes every write of the Pot;
+ * (4) the inserted rows, and the keep and release of the receipts ([ApplicationBlobs.keep]); (5) the item-revision row
+ * ([NodeItemsRevisions.bump]). The re-key's commit takes (2) for every row of the Pot, then the service's rows, before (3)
+ * ([PotNodeRekeyParticipant.lockRows]), and a receipt's completion and the service's purge the same order
+ * ([ApplicationBlobs]).
+ *
+ * **What a write tells the blob service** (ADR 0112 decision 2), in its own transaction: a revision that is no tombstone
+ * keeps its record's receipts (a restore keeps again what the tombstone released), a tombstone releases them with the
+ * record, and `droppedReceipts` are released for good — each at the revision's own time.
  *
  * **The compare-and-set reads the records again after (3)** ([recordsNow]). What (2) returned is what was committed when
  * it ran: a writer of the same records that held them, and committed while (2) waited, inserted rows that a locking read
@@ -95,6 +101,7 @@ class PotRevisionStore(
     private val items: NodeItemsRevisions,
     private val guestWriteRecords: GuestWriteRecords,
     private val ledger: ErasureLedger,
+    private val receipts: ApplicationBlobs,
 ) {
 
     /**
@@ -109,24 +116,24 @@ class PotRevisionStore(
     ): PotWriteResult {
         if (admitted != null && !admitted()) return PotWriteResult.NotFound
         lockRecords(writes.map { it.entryId })
-        val dropped = lockReceipts(writes.flatMap { it.droppedReceipts })
+        val held = receipts.lock(writes.map { it.entryId }, writes.flatMap { it.droppedReceipts })
         lockLivePot(scopeId, nodeId, nodeEpoch)?.let { return it }
-        val held = recordsNow(writes.map { it.entryId })
-        if (held.any { it.nodeId != nodeId }) return PotWriteResult.IdTaken
-        val latest = held.groupBy { it.entryId }.mapValues { (_, rows) -> rows.maxOf { it.revision } }
+        val records = recordsNow(writes.map { it.entryId })
+        if (records.any { it.nodeId != nodeId }) return PotWriteResult.IdTaken
+        val latest = records.groupBy { it.entryId }.mapValues { (_, rows) -> rows.maxOf { it.revision } }
         // A new record's id may not be a receipt's: both are a reportable item's id (`PotReportableItems.locate`).
         val created = writes.map { it.entryId }.filter { it !in latest }
-        if (created.isNotEmpty() && created.chunked(CHUNK).any { PotReceiptEntity.count("id in ?1", it) > 0 }) return PotWriteResult.IdTaken
+        if (created.isNotEmpty() && receipts.anyTaken(created)) return PotWriteResult.IdTaken
         val stale = writes.filter { (latest[it.entryId] ?: 0L) != it.revision - 1 }
             .map { RevisionRef(it.entryId, latest[it.entryId] ?: 0L) }
         if (stale.isNotEmpty()) return PotWriteResult.Stale(stale)
         // Each dropped receipt is one of its record's in this Pot (read under the locks above: a receipt is never moved).
-        val byId = dropped.associateBy { it.id }
-        val notHeld = writes.any { w -> w.droppedReceipts.any { id -> byId[id]?.let { it.nodeId != nodeId || it.entryId != w.entryId } ?: true } }
-        if (notHeld) return PotWriteResult.ReceiptNotHeld
+        if (!droppedHeld(writes, held, nodeId)) return PotWriteResult.ReceiptNotHeld
 
         val now = Instant.now()
-        dropped.filter { it.droppedAt == null }.forEach { it.droppedAt = now } // a drop stays at its first time
+        receipts.keep(nodeId, writes.filter { !it.tombstone }.map { it.entryId }, now)
+        receipts.releaseOwners(nodeId, writes.filter { it.tombstone }.map { it.entryId }, now)
+        receipts.release(writes.flatMap { it.droppedReceipts }, now) // a drop stays at its first time
         val rows = writes.map { w -> newRow(scopeId, nodeId, w.entryId, w.revision, w.tombstone, false, w.sealedBody, w.wrappedRevisionKey, writer, now) }
         rows.forEach { it.persist() }
         val position = items.bump(scopeId, nodeId) // after the record rows: record rows -> node row -> revision row
@@ -145,6 +152,7 @@ class PotRevisionStore(
     @Transactional
     fun erase(scopeId: String, nodeId: String, nodeEpoch: Int, write: RevisionWrite, member: PrincipalKey.User): PotWriteResult {
         lockRecords(listOf(write.entryId))
+        receipts.lock(listOf(write.entryId))
         lockLivePot(scopeId, nodeId, nodeEpoch)?.let { return it }
         val held = recordsNow(listOf(write.entryId))
         if (held.isEmpty() || held.any { it.nodeId != nodeId }) return PotWriteResult.NotFound
@@ -154,7 +162,9 @@ class PotRevisionStore(
         val earlier = held.map { it.id }
         guestWriteRecords.forget(earlier) // a guest's write record names the revision: it goes with it
         earlier.chunked(CHUNK).forEach { PotRevisionEntity.delete("id in ?1", it) }
-        val row = newRow(scopeId, nodeId, write.entryId, write.revision, false, true, write.sealedBody, write.wrappedRevisionKey, member, Instant.now())
+        val now = Instant.now()
+        receipts.keep(nodeId, listOf(write.entryId), now) // the erasure revision is the record's latest, and no tombstone
+        val row = newRow(scopeId, nodeId, write.entryId, write.revision, false, true, write.sealedBody, write.wrappedRevisionKey, member, now)
         row.persist()
         row.position = items.bump(scopeId, nodeId, deleted = true) // a removal: both counters move, open lists drop the rows
         ledger.erasedByApplication(ExpensesErasures.Kind.EXPENSES_RECORD.name, RevisionRef(write.entryId, write.revision).key(), scopeId)
@@ -168,11 +178,11 @@ class PotRevisionStore(
         }
     }
 
-    /** Every receipt row of [receiptIds], `FOR UPDATE`, in one order — after the records' rows, before the node's. */
-    private fun lockReceipts(receiptIds: List<String>): List<PotReceiptEntity> =
-        receiptIds.distinct().sorted().chunked(CHUNK).flatMap {
-            PotReceiptEntity.find("id in ?1 order by id", it).withLock(LockModeType.PESSIMISTIC_WRITE).list()
-        }
+    /** Whether every receipt a write drops is a receipt of its own record in this Pot, as [held] locked them. */
+    private fun droppedHeld(writes: List<RevisionWrite>, held: List<ApplicationBlobRef>, nodeId: String): Boolean {
+        val byId = held.associateBy { it.id }
+        return writes.all { w -> w.droppedReceipts.all { id -> byId[id]?.let { it.nodeId == nodeId && it.ownerId == w.entryId } ?: false } }
+    }
 
     /** Every row of [entryIds] as committed now — read under the node row's lock, which every inserter holds. */
     private fun recordsNow(entryIds: List<String>): List<PotRevisionEntity> =

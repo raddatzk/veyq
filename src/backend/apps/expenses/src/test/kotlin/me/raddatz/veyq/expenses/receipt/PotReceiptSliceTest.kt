@@ -1,5 +1,7 @@
 package me.raddatz.veyq.expenses.receipt
 
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobEntity
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobPurge
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
 import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
@@ -58,16 +60,19 @@ import java.util.UUID
 /**
  * A Pot's receipts (ADR 0108 decision 7, docs/apps/expenses.md § Receipts) end to end through the wire the web will
  * use: core's `startBlobUploads` / `startShareBlobUploads` (role `EXPENSES_RECEIPT`, owner the Pot), the chunks staged as
- * an honest client leaves them, Expenses' completion, its reads, a revision's drop, the purge after the trash retention,
- * core's presigned downloads and a content block. [FakePresignProfile] makes declare-then-verify run, so a completion
- * passes the same budget check a real store does. Each refusal sits beside its positive control through the same route.
+ * an honest client leaves them, core's blob service's completion and reads (ADR 0112: a receipt is an application blob
+ * held by its entry), a revision's keep and drop, the service's purge after the trash retention, core's presigned
+ * downloads and a content block. Core's service with its first application: it needs Expenses at runtime, so it lives
+ * here (src/backend/CLAUDE.md § a test lives where what it exercises runs). [FakePresignProfile] makes
+ * declare-then-verify run, so a completion passes the same budget check a real store does. Each refusal sits beside its
+ * positive control through the same route.
  */
 @QuarkusTest
 @TestProfile(FakePresignProfile::class)
 class PotReceiptSliceTest {
 
     @Inject lateinit var fakeStore: FakePresigningBlobStore
-    @Inject lateinit var purge: PotReceiptPurge
+    @Inject lateinit var purge: ApplicationBlobPurge
     @Inject lateinit var subtreePurge: NodeSubtreePurge
     @Inject lateinit var quota: StorageQuota
 
@@ -91,10 +96,10 @@ class PotReceiptSliceTest {
         val receiptId = UUID.randomUUID().toString()
         val upload = startStaged(fakeStore, userId, scopeId, pot, TestBlob.ofPlaintext(tenMib))
         complete(userId, scopeId, pot, entry, receiptId, upload).statusCode(200)
-            .body("receiptId", equalTo(receiptId)).body("entryId", equalTo(entry))
+            .body("id", equalTo(receiptId)).body("ownerId", equalTo(entry))
             .body("byteSize", equalTo(10_486_880)).body("chunkCount", equalTo(40))
             .body("wrappedBlobKey", equalTo(ReceiptKit.WRAP)).body("wrappedBlobMeta", equalTo(ReceiptKit.META))
-            .body("writer", equalTo("user:$userId")).body("blockedByOperator", equalTo(false)).body("droppedAt", nullValue())
+            .body("writer", equalTo("user:$userId")).body("blockedByOperator", equalTo(false)).body("releasedAt", nullValue())
         // A role without a cap of its own keeps core's per-blob cap only: an 11 MiB cover of a folder starts.
         val folder = seedNode(scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY)
         start(userId, scopeId, folder, TestBlob.ofPlaintext(11 * 1024 * 1024L), role = "COVER").statusCode(200).body("results[0].error", nullValue())
@@ -112,7 +117,7 @@ class PotReceiptSliceTest {
         val asCover = startStaged(fakeStore, userId, scopeId, pot, role = "COVER")
         complete(userId, scopeId, pot, entry, UUID.randomUUID().toString(), asCover).statusCode(422).body("code", equalTo("upload_mismatch"))
         assertEquals(2L, QuarkusTransaction.requiringNew().call { UploadSessionEntity.count("id in ?1", listOf(forOther, asCover)) }, "both stay open")
-        assertEquals(0L, QuarkusTransaction.requiringNew().call { PotReceiptEntity.count("nodeId", pot) })
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { ApplicationBlobEntity.count("nodeId", pot) })
         // The other Pot's session lands in the other Pot — its wrap is bound to it.
         complete(userId, scopeId, other, UUID.randomUUID().toString(), UUID.randomUUID().toString(), forOther).statusCode(200)
 
@@ -161,18 +166,18 @@ class PotReceiptSliceTest {
         append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(UUID.randomUUID().toString())))).statusCode(400)
         append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(ra, ra)))).statusCode(400)
         assertEquals(1L, QuarkusTransaction.requiringNew().call { PotRevisionEntity.count("entryId", a) }, "nothing of a refused batch is stored")
-        assertNull(receipt(ra)!!.droppedAt)
+        assertNull(receipt(ra)!!.releasedAt)
 
         append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(ra)))).statusCode(204) // control
-        val first = receipt(ra)!!.droppedAt
+        val first = receipt(ra)!!.releasedAt
         assertNotNull(first)
-        assertNull(receipt(rb)!!.droppedAt, "the other record's receipt is held")
+        assertNull(receipt(rb)!!.releasedAt, "the other record's receipt is held")
         append(userId, scopeId, pot, listOf(Rev(a, 3, drops = listOf(ra)))).statusCode(204)
-        assertEquals(first, receipt(ra)!!.droppedAt, "dropped again, it stays at its first time")
+        assertEquals(first, receipt(ra)!!.releasedAt, "dropped again, it stays at its first time")
         list(userId, scopeId, pot).statusCode(200)
-            .body("receipts.find { it.receiptId == '$ra' }.droppedAt", notNullValue())
-            .body("receipts.find { it.receiptId == '$ra' }.purgeAfter", notNullValue())
-            .body("receipts.find { it.receiptId == '$rb' }.purgeAfter", nullValue())
+            .body("blobs.find { it.id == '$ra' }.releasedAt", notNullValue())
+            .body("blobs.find { it.id == '$ra' }.purgeAfter", notNullValue())
+            .body("blobs.find { it.id == '$rb' }.purgeAfter", nullValue())
     }
 
     /**
@@ -199,9 +204,9 @@ class PotReceiptSliceTest {
 
         val retention = Duration.ofDays(30) // the test profile's veyq.node.trash.retention, core's default
         list(userId, scopeId, pot).statusCode(200)
-            .body("receipts.find { it.receiptId == '$ofDeleted' }.purgeAfter", notNullValue())
-            .body("receipts.find { it.receiptId == '$orphan' }.purgeAfter", notNullValue())
-            .body("receipts.find { it.receiptId == '$ofRestored' }.purgeAfter", nullValue())
+            .body("blobs.find { it.id == '$ofDeleted' }.purgeAfter", notNullValue())
+            .body("blobs.find { it.id == '$orphan' }.purgeAfter", notNullValue())
+            .body("blobs.find { it.id == '$ofRestored' }.purgeAfter", nullValue())
         PotWire.list(userId, scopeId, pot).statusCode(200)
             .body("revisions.find { it.entryId == '$deleted' && it.revision == 2 }.purgeAfter", notNullValue())
             .body("revisions.find { it.entryId == '$kept' && it.revision == 2 }.purgeAfter", nullValue())
@@ -222,7 +227,7 @@ class PotReceiptSliceTest {
             assertNotNull(blob(blobOf(id)))
             assertEquals(0L, reclaims(storageKeyOf(blobOf(id))))
         }
-        list(userId, scopeId, pot).statusCode(200).body("receipts.size()", equalTo(2))
+        list(userId, scopeId, pot).statusCode(200).body("blobs.size()", equalTo(2))
     }
 
     /** A Pot purged out of the trash takes its receipts, their blob rows and their guest-write records (control: another Pot's stay). */
@@ -256,7 +261,7 @@ class PotReceiptSliceTest {
         val heldBlob = TestBlob.ofChunks(1)
         val receiptId = UUID.randomUUID().toString()
         guestComplete(link, pot, UUID.randomUUID().toString(), receiptId, guestStartStaged(fakeStore, link, pot, heldBlob), xff = "203.0.113.81:41000")
-            .statusCode(200).body("receiptId", equalTo(receiptId)).body("containsKey('writer')", equalTo(false))
+            .statusCode(200).body("id", equalTo(receiptId)).body("containsKey('writer')", equalTo(false))
         val records = QuarkusTransaction.requiringNew().call { GuestWriteRecordEntity.list("clientIp", "203.0.113.81") }
         assertEquals(listOf(Triple("ITEM", receiptId, identity)), records.map { Triple(it.objectKind, it.objectId, it.shareIdentityId) })
         assertEquals(heldBlob.byteSize, QuarkusTransaction.requiringNew().call { quota.linkUsage(link.shareId, ExpensesNodeKinds.POT) })
@@ -269,8 +274,8 @@ class PotReceiptSliceTest {
         guestStart(link, pot, next).statusCode(200).body("results[0].error", nullValue())
 
         // The guest's read names no writer; the member's names the link identity.
-        guestList(link.shareId, pot).statusCode(200).body("receipts.size()", equalTo(2)).body("receipts[0].containsKey('writer')", equalTo(false))
-        list(userId, scopeId, pot).statusCode(200).body("receipts.find { it.receiptId == '$receiptId' }.writer", equalTo("share:$identity"))
+        guestList(link.shareId, pot).statusCode(200).body("blobs.size()", equalTo(2)).body("blobs[0].containsKey('writer')", equalTo(false))
+        list(userId, scopeId, pot).statusCode(200).body("blobs.find { it.id == '$receiptId' }.writer", equalTo("share:$identity"))
         // A READ link completes nothing.
         val read = GuestTreeShare.seed(userId, scopeId, pot, ShareEntity.READ)
         guestComplete(read, pot, UUID.randomUUID().toString(), UUID.randomUUID().toString(), UUID.randomUUID().toString())
@@ -309,10 +314,10 @@ class PotReceiptSliceTest {
         download(userId, scopeId, blobOf(free)).statusCode(200).body("results[0].presignedGets", notNullValue()) // control
         guestDownload(link.shareId, blobOf(free)).statusCode(200)
         list(userId, scopeId, pot, ifNoneMatch = tag).statusCode(200)
-            .body("receipts.find { it.receiptId == '$byItself' }.blockedByOperator", equalTo(true))
-            .body("receipts.find { it.receiptId == '$byEntry' }.blockedByOperator", equalTo(true))
-            .body("receipts.find { it.receiptId == '$free' }.blockedByOperator", equalTo(false))
-        guestList(link.shareId, pot).statusCode(200).body("receipts.find { it.receiptId == '$byEntry' }.blockedByOperator", equalTo(true))
+            .body("blobs.find { it.id == '$byItself' }.blockedByOperator", equalTo(true))
+            .body("blobs.find { it.id == '$byEntry' }.blockedByOperator", equalTo(true))
+            .body("blobs.find { it.id == '$free' }.blockedByOperator", equalTo(false))
+        guestList(link.shareId, pot).statusCode(200).body("blobs.find { it.id == '$byEntry' }.blockedByOperator", equalTo(true))
         // A receipt outside the link's subtree is no blob of the link.
         val elsewhere = seedNode(scopeId, ExpensesNodeKinds.POT, wrappedContentKey = CONTENT_KEY)
         val outside = ReceiptKit.upload(fakeStore, userId, scopeId, elsewhere, UUID.randomUUID().toString())
@@ -326,16 +331,16 @@ class PotReceiptSliceTest {
         val link = GuestTreeShare.seed(userId, scopeId, pot, ShareEntity.READ)
         val ids = List(3) { ReceiptKit.upload(fakeStore, userId, scopeId, pot, UUID.randomUUID().toString()) }.sorted()
         val first = list(userId, scopeId, pot, "?limit=2").statusCode(200)
-            .body("receipts.receiptId", equalTo(ids.take(2))).body("more", equalTo(true)).body("cursor", equalTo(ids[1])).extract()
+            .body("blobs.id", equalTo(ids.take(2))).body("more", equalTo(true)).body("cursor", equalTo(ids[1])).extract()
         list(userId, scopeId, pot, "?limit=2&after=${ids[1]}").statusCode(200)
-            .body("receipts.receiptId", equalTo(listOf(ids[2]))).body("more", equalTo(false)).header("ETag", nullValue())
+            .body("blobs.id", equalTo(listOf(ids[2]))).body("more", equalTo(false)).header("ETag", nullValue())
         val tag = first.header("ETag")
         list(userId, scopeId, pot, ifNoneMatch = tag).statusCode(304)
         val guestTag = guestList(link.shareId, pot).statusCode(200).extract().header("ETag")
         assertNotEquals(tag, guestTag, "the guest's digest is over its own shape")
         guestList(link.shareId, pot, ifNoneMatch = guestTag).statusCode(304)
         // A drop changes what is served: a new tag.
-        val entry = QuarkusTransaction.requiringNew().call { PotReceiptEntity.findById(ids[0])!!.entryId }
+        val entry = QuarkusTransaction.requiringNew().call { ApplicationBlobEntity.findById(ids[0])!!.ownerId }
         append(userId, scopeId, pot, listOf(Rev(entry), )).statusCode(204)
         append(userId, scopeId, pot, listOf(Rev(entry, 2, drops = listOf(ids[0])))).statusCode(204)
         list(userId, scopeId, pot, ifNoneMatch = tag).statusCode(200)
@@ -345,6 +350,27 @@ class PotReceiptSliceTest {
         list(userId, scopeId, seedNode(scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY)).statusCode(404).body("code", equalTo("node_not_found"))
         val (stranger, _) = seedMemberScope()
         list(stranger, scopeId, pot).statusCode(404).body("code", equalTo("scope_not_found"))
+    }
+
+    /**
+     * ADR 0112 decision 2: an entry holds at most 100 receipts not released (Expenses' count per owner, its sealed list's
+     * bound) — the 101st is `409 too_many_blobs` and its upload stays open; a released one no longer counts, so after a
+     * drop the same upload lands. Another entry is not held to the first one's count.
+     */
+    @Test
+    fun anEntryHoldsAHundredReceipts_aDropMakesRoomForTheNext() {
+        val (userId, scopeId) = seedMemberScope()
+        val pot = seedNode(scopeId, ExpensesNodeKinds.POT, wrappedContentKey = CONTENT_KEY)
+        val entry = UUID.randomUUID().toString()
+        append(userId, scopeId, pot, listOf(Rev(entry))).statusCode(204)
+        val held = List(ExpensesBlobRoles.RECEIPTS_PER_ENTRY) { ReceiptKit.seed(scopeId, pot, entry, userId).first }
+        val upload = startStaged(fakeStore, userId, scopeId, pot)
+        complete(userId, scopeId, pot, entry, UUID.randomUUID().toString(), upload).statusCode(409).body("code", equalTo("too_many_blobs"))
+        assertEquals(1L, QuarkusTransaction.requiringNew().call { UploadSessionEntity.count("id", upload) }, "the upload stays open")
+        // Control: another entry's receipt lands beside the full one.
+        ReceiptKit.upload(fakeStore, userId, scopeId, pot, UUID.randomUUID().toString())
+        append(userId, scopeId, pot, listOf(Rev(entry, 2, drops = listOf(held.first())))).statusCode(204)
+        complete(userId, scopeId, pot, entry, UUID.randomUUID().toString(), upload).statusCode(200)
     }
 
     @Test
@@ -362,7 +388,7 @@ class PotReceiptSliceTest {
             start(userId, scopeId, pot).statusCode(422).body("code", equalTo("capability_disabled"))
             list(userId, scopeId, pot).statusCode(200)
         }
-        assertFalse(QuarkusTransaction.requiringNew().call { PotReceiptEntity.count("nodeId", pot) > 0 })
+        assertFalse(QuarkusTransaction.requiringNew().call { ApplicationBlobEntity.count("nodeId", pot) > 0 })
         complete(userId, scopeId, pot, UUID.randomUUID().toString(), UUID.randomUUID().toString(), upload).statusCode(200) // control
     }
 

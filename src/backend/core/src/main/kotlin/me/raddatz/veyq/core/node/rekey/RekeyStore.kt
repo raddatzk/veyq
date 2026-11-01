@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.node.rekey
 
+import me.raddatz.veyq.core.applicationblob.applicationBlobRekeyParts
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.content.NodesStore
@@ -59,8 +60,15 @@ class RekeyStore(
     private val stage: NodeRekeyStage,
     private val ownerOnly: OwnerOnlyRekey,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
-    @param:All private val participants: MutableList<NodeRekeyParticipant>,
+    @All participants: MutableList<NodeRekeyParticipant>,
 ) {
+    /**
+     * Every participant in the order its rows are locked and committed: the applications' by part, then core's own (the
+     * application blob service, ADR 0112) — an application's writer takes its own rows before the service's, so the
+     * service's rows are locked after every application's and before the node's.
+     */
+    private val participants: List<NodeRekeyParticipant> =
+        participants.sortedWith(compareBy({ it.part == NodeRekeyStage.CORE }, { it.part }))
 
     /** Every node of the scope, live and trashed (ADR 0109 point 1: a trashed node is re-keyed too). A node is trashed
      *  when it or an ancestor was soft-deleted: every node of a trashed subtree carries the stamp ([NodesStore.deleteSubtree]). */
@@ -74,11 +82,13 @@ class RekeyStore(
     /** The node in [scopeId], live or trashed; null for none. */
     fun node(scopeId: String, nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId }
 
-    /** The core fields sealed under [nodeId]'s key or as a wrap of it that are not on its row ([RekeyParts]). */
+    /** The core fields sealed under [nodeId]'s key or as a wrap of it that are not on its row ([RekeyParts]): the
+     *  blobs are the node's attachments' and the blobs its application stores through core's service (ADR 0112), each in
+     *  its slot or role — the binding its wrap is sealed to. */
     fun parts(scopeId: String, nodeId: String): RekeyParts {
-        val attachments = NodeAttachmentEntity.find("scopeId = ?1 and nodeId = ?2", scopeId, nodeId).list()
-        val blobs = attachments.mapNotNull { a ->
-            BlobEntity.findById(a.blobId)?.let { RekeyParts.Blob(it.id, a.slot, it.wrappedBlobKey) }
+        val attachments = NodeAttachmentEntity.find("scopeId = ?1 and nodeId = ?2", scopeId, nodeId).list().map { it.blobId to it.slot }
+        val blobs = (attachments + applicationBlobRekeyParts(scopeId, nodeId)).mapNotNull { (blobId, role) ->
+            BlobEntity.findById(blobId)?.let { RekeyParts.Blob(it.id, role, it.wrappedBlobKey) }
         }
         val shares = rekeyedShares(nodeId)
         val identities = identitiesOf(shares.map { it.id })
@@ -118,7 +128,8 @@ class RekeyStore(
      * identity's key and name, and every participant's rows. The node's epoch becomes the scope's current one.
      *
      * **Lock order: the scope row, the links rooted on the node, each participant's own rows
-     * ([NodeRekeyParticipant.lockRows]), the node row, then the rows it rewrites** (children, blobs, identities) — every
+     * ([NodeRekeyParticipant.lockRows], the applications' before the blob service's), the node row, then the rows it
+     * rewrites** (children, blobs, identities) — every
      * writer's order ([NodeEpochGate]: a guest's write takes its share row, an application's writer its own rows, before
      * the node's). Everything is decided before anything is written;
      * a participant's refusal rolls the transaction back.
@@ -134,7 +145,7 @@ class RekeyStore(
         // (`SharingHandler.createIdentity`, a re-issue), so locking the node first and then the shares it re-wraps would
         // invert that order.
         lockShares(nodeId)
-        for (p in participants.sortedBy { it.part }) p.lockRows(scopeId, nodeId)
+        for (p in participants) p.lockRows(scopeId, nodeId)
         val node = NodeEpochGate.lockNode(nodeId)?.takeIf { it.scopeId == scopeId } ?: return RekeyOutcome.NotFound
         val current = scope.currentEpoch
         if (c.epoch != current || c.nodeEpoch != node.epoch || node.epoch >= current) return RekeyOutcome.Stale
@@ -166,7 +177,7 @@ class RekeyStore(
         // Core's parts first: a participant may copy what they re-sealed (a contributor's name, `MediaNodeRekeyParticipant`).
         // A participant's refusal rolls the whole transaction back, core's writes included.
         plan.apply()
-        for (p in participants.sortedBy { it.part }) {
+        for (p in participants) {
             when (p.commit(scopeId, nodeId, stage.read(rekeyId, nodeId, p.part))) {
                 NodeRekeyParticipant.Verdict.APPLIED -> Unit
                 NodeRekeyParticipant.Verdict.MISSING -> { QuarkusTransaction.setRollbackOnly(); return RekeyOutcome.PartsMissing }

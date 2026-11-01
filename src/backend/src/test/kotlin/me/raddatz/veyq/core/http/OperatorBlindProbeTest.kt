@@ -197,11 +197,13 @@ class OperatorBlindProbeTest {
             )
         },
         "listPotRekey" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/rekey") },
-        "listPotReceipts" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/receipts") },
-        "completePotReceipt" to Probe(Address.SCOPE) { s ->
+        // --- core's blob service (the world's node is a Memory, whose application stores no blob through it: the
+        // control's call answers `404 node_not_found`, past the gate) ---
+        "listApplicationBlobs" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/application-blobs") },
+        "completeApplicationBlob" to Probe(Address.SCOPE) { s ->
             Call(
-                "POST", "/api/scopes/${s.scopeId}/pots/${s.nodeId}/receipts",
-                """{"nodeEpoch":0,"entryId":"${UUID.randomUUID()}","receiptId":"${UUID.randomUUID()}","uploadId":"${s.uploadId}"}""",
+                "POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/application-blobs",
+                """{"nodeEpoch":0,"ownerId":"${UUID.randomUUID()}","id":"${UUID.randomUUID()}","role":"ORIGINAL","uploadId":"${s.uploadId}"}""",
             )
         },
         "stagePotRekey" to Probe(Address.SCOPE) { s ->
@@ -329,7 +331,7 @@ class OperatorBlindProbeTest {
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",
-            "listSharePotRevisions", "appendSharePotRevisions", "listSharePotReceipts", "completeSharePotReceipt",
+            "listSharePotRevisions", "appendSharePotRevisions", "listShareApplicationBlobs", "completeShareApplicationBlob",
             "reportInShare", "getShareGuestNotice",
             "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite", "acceptTenantOwnership",
         )
@@ -438,7 +440,7 @@ class OperatorBlindProbeTest {
             "getModerationCaseExport",
             // the review reads (ADR 0093 § 3): a case's held snapshot, read from the hold —
             // the case outlives its space, and a suspended tenant's case is reviewed all the same (ADR 0093 § 1)
-            "getCaseReview", "presignCaseBlobs", "listCaseMedia", "listCaseFiles", "listCasePotRevisions",
+            "getCaseReview", "presignCaseBlobs", "listCaseMedia", "listCaseFiles", "listCasePotRevisions", "listCaseApplicationBlobs",
         )
         reason(
             "moderator route before the key: the caller's own appointment, its address confirmation, its own grants and " +

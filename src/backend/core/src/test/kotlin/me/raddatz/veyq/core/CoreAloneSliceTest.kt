@@ -1,5 +1,16 @@
 package me.raddatz.veyq.core
 
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobGuestIdentityUsage
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobHeldUploaders
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobNodeSubtreeEraser
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobRekeyParticipant
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobScopeEraser
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobShareGuestWrites
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobSharedSubtreeContributor
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobUploadAdmission
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobUploadCompletion
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobUploaderContent
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobOwners
 import me.raddatz.veyq.core.backup.ApplicationErasures
 import me.raddatz.veyq.core.moderation.block.UploaderContent
 import me.raddatz.veyq.core.moderation.hold.AttachmentHeldUploaders
@@ -149,6 +160,7 @@ class CoreAloneSliceTest {
     @Inject @All lateinit var uploaderContent: MutableList<UploaderContent>
     @Inject @All lateinit var heldUploaders: MutableList<HeldUploaders>
     @Inject @All lateinit var applicationErasures: MutableList<ApplicationErasures>
+    @Inject @All lateinit var blobOwners: MutableList<ApplicationBlobOwners>
 
     @Inject lateinit var nodes: NodesStore
     @Inject lateinit var dispatcher: UploadCompletions
@@ -174,35 +186,52 @@ class CoreAloneSliceTest {
         assertEquals(
             setOf(
                 AttachmentScopeEraser::class.java, FavoritesScopeEraser::class.java, NodeScopeEraser::class.java, ShareScopeEraser::class.java,
-                NodeRekeyStageScopeEraser::class.java,
+                NodeRekeyStageScopeEraser::class.java, ApplicationBlobScopeEraser::class.java,
             ),
-            classes(scopeErasers), "ScopeEraser: core's own five, and no application's",
+            classes(scopeErasers), "ScopeEraser: core's own six (its blob service's among them, ADR 0112), and no application's",
         )
         assertEquals(
             setOf(
                 AttachmentNodeSubtreeEraser::class.java, NodeItemsRevisionNodeSubtreeEraser::class.java, GuestWriteRecordNodeSubtreeEraser::class.java,
-                NodeRekeyStageNodeSubtreeEraser::class.java,
+                NodeRekeyStageNodeSubtreeEraser::class.java, ApplicationBlobNodeSubtreeEraser::class.java,
             ),
             classes(subtreeErasers),
-            "NodeSubtreeEraser: core's attachments, item-list counters, guest-write records and re-key stages only",
+            "NodeSubtreeEraser: core's attachments, item-list counters, guest-write records, re-key stages and blob service only",
         )
-        assertEquals(setOf(AttachmentGuestIdentityUsage::class.java, NodeGuestIdentityUsage::class.java), classes(identityUsages),
-            "GuestIdentityUsage: core's attachments and identity folders only")
-        assertEquals(setOf(AttachmentSharedSubtreeContributor::class.java), classes(contributors),
-            "SharedSubtreeContributor: core's attachments only")
+        assertEquals(
+            setOf(AttachmentGuestIdentityUsage::class.java, NodeGuestIdentityUsage::class.java, ApplicationBlobGuestIdentityUsage::class.java),
+            classes(identityUsages), "GuestIdentityUsage: core's attachments, identity folders and blob service only",
+        )
+        assertEquals(setOf(AttachmentSharedSubtreeContributor::class.java, ApplicationBlobSharedSubtreeContributor::class.java), classes(contributors),
+            "SharedSubtreeContributor: core's attachments and blob service only")
         assertEquals(setOf(FolderNodeRules::class.java), classes(kindRules), "NodeKindRules: core's FOLDER rule only")
         assertEquals(setOf(FolderShareRoots::class.java), classes(shareRoots), "ShareRoots: core's FOLDER answer only")
         assertEquals(setOf(FolderGuestPlaceholders::class.java), classes(guestPlaceholders), "GuestPlaceholders: core's FOLDER answer only")
         assertEquals(setOf(VerificationMembershipEraser::class.java), classes(membershipErasers),
             "MembershipEraser: core's tenant verifications only (ADR 0111 decision 12)")
-        assertEquals(setOf(AttachmentHeldUploaders::class.java), classes(heldUploaders), "HeldUploaders: core's attachments only")
+        assertEquals(setOf(AttachmentHeldUploaders::class.java, ApplicationBlobHeldUploaders::class.java), classes(heldUploaders),
+            "HeldUploaders: core's attachments and blob service only")
         for ((seam, beans) in mapOf(
-            "NodeRekeyParticipant" to rekeyParticipants,
-            "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
             "WriteOnlyGuestKinds" to writeOnlyGuestKinds, "GuestCreatableKinds" to guestCreatableKinds,
-            "UploaderContent" to uploaderContent, "ApplicationErasures" to applicationErasures,
+            "ApplicationErasures" to applicationErasures, "ApplicationBlobOwners" to blobOwners,
         )) {
             assertEquals(emptySet<Class<*>>(), classes(beans), "$seam: core implements none, and no application is here")
+        }
+        // Core's blob service implements the upload seams (ADR 0112) — and with no application it stores no kind's blobs,
+        // so none of them takes a node of any kind (fail closed).
+        for ((seam, beans, expected) in listOf(
+            Triple("NodeRekeyParticipant", rekeyParticipants, ApplicationBlobRekeyParticipant::class.java),
+            Triple("ShareGuestWrites", guestWrites, ApplicationBlobShareGuestWrites::class.java),
+            Triple("UploadCompletion", completions, ApplicationBlobUploadCompletion::class.java),
+            Triple("UploadAdmission", admissions, ApplicationBlobUploadAdmission::class.java),
+            Triple("UploaderContent", uploaderContent, ApplicationBlobUploaderContent::class.java),
+        )) {
+            assertEquals(setOf(expected), classes(beans), "$seam: core's blob service only, and no application is here")
+        }
+        for (kind in kinds + listOf("FILE", "EXPENSES_POT")) {
+            assertTrue(completions.none { it.accepts(kind) }, "core alone completes no upload into a $kind")
+            assertTrue(admissions.none { it.supports(kind) }, "core alone measures no $kind link")
+            assertTrue(guestWrites.none { it.supports(kind) }, "core alone takes no guest upload into a $kind")
         }
         // core's one role is its own cover (inbox #411), declared by core and by no application
         assertEquals(setOf(CoreMemberBlobRoles::class.java), classes(memberRoles), "MemberBlobRoles: core's COVER only")
