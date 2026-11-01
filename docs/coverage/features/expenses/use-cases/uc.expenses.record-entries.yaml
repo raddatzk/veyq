@@ -23,17 +23,17 @@ acceptanceCriteria:
       - surface: backend
         reason: "The race refs are green on H2 and in a local run of scripts/run_backend_races_on_mariadb.py on MariaDB (2026-10-25, inbox #544); CI's backend-races job, which would make that a standing claim, has not run yet (no remote, #317)."
   - id: allocation-and-rounding-are-exact-and-equal-everywhere
-    text: "Splits (equal, shares, exact) and line items with the rest spread in proportion or equally are computed in minor units with exact arithmetic, converted once and allocated by largest remainder with ties by join order, so every device computes the same shares; a conformance table of entries and expected shares pins it."
+    text: "An entry's amount is its payers' (receivers') sum; its items, each an exact amount with its own split (equal, shares, percent), and the rest with a split of its own are computed in minor units with exact arithmetic: the total converted once, allocated to the parts by their amounts and each part among its people by largest remainder with ties by join order, so every device computes the same shares; a conformance table of entries and expected shares pins it, and the editor seals what it shows."
     coverage:
       web:
-        unit: [src/features/expenses/domain/money.test.ts, src/features/expenses/domain/ledger.test.ts, src/features/expenses/entryForm.test.ts]
+        unit: [src/features/expenses/domain/money.test.ts, src/features/expenses/domain/ledger.test.ts, src/features/expenses/entryForm.test.ts, src/features/expenses/components/EntryEditor.split.test.ts]
   - id: an-entry-that-does-not-add-up-is-not-saved
-    text: "Payers' amounts that differ from the total, exact amounts that do not sum to it, line items above it, or a revision above 16 KiB are refused by the editor before anything is sent."
+    text: "Payers' amounts that differ from the total, items above it (the editor says by how much), a rest no one shares, percents that do not make 100 %, or a revision above 16 KiB are refused by the editor before anything is sent."
     coverage:
       backend:
         integration: [PotSliceTest.aBatchOutsideItsContractIsRefusedWhole_andARecordBelongsToOnePot]
       web:
-        unit: [src/features/expenses/entryForm.test.ts, src/features/expenses/domain/potApi.wire.test.ts, src/features/expenses/domain/ledger.test.ts, src/features/expenses/domain/codec.test.ts]
+        unit: [src/features/expenses/entryForm.test.ts, src/features/expenses/components/EntryEditor.split.test.ts, src/features/expenses/domain/potApi.wire.test.ts, src/features/expenses/domain/ledger.test.ts, src/features/expenses/domain/codec.test.ts]
   - id: delete-is-a-tombstone-revision
     text: "A delete is a tombstone revision the server sees as such; the entry leaves the list and the balances and moves to the Pot's deleted entries."
     coverage:
@@ -55,7 +55,8 @@ gaps:
     exact-and-equal-everywhere`, `revision-n-plus-one-or-stale` and `delete-is-a-tombstone-revision` in Chromium,
     in English, the first two again in the German pass (ADR 0090 decision 9), against the release candidate's two images installed through `veyqctl` (ADR
     0090), each test tagged with its criterion: the nine entries of the vectors' "trip" Pot typed into the editor
-    (equal, two payers, a typed rate, line items with either rest, shares, exact amounts, a refund, a transfer); a
+    (all rest, items with a rest by shares, a typed rate, a refund with two receivers and an item, exact amounts as one
+    item each, items with a tip, two payers with items by percent and by shares, a transfer); a
     second member's save while the first's editor is open, the first's save then answered 409 and shown the other
     version, saved again on top; an entry deleted and restored. Green only in local runs of the lane (the V1 heavy
     stage), and ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed.

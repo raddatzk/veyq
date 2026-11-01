@@ -17,21 +17,23 @@ Open the Pot and choose **Add entry**. An entry is one of three kinds:
 
 ## An expense or a refund
 
-1. Type a title, the date, the amount and its currency, and choose a category.
-2. Say who paid, with how much each. One bill can have several payers. For a refund, say who received the money.
-3. Say how it is split:
-   - **Equally** among the people you choose.
-   - **By shares**, such as two shares for a couple and one for a single person.
-   - **By exact amounts** per person.
-   - **As line items**: each item with its amount and the people it belongs to, such as one bottle of wine for three.
-     What the bill has beyond the items, like a tip, is spread in proportion to each person's items, or equally among
-     the people on the bill.
+1. Type a title, the date and the currency, and choose a category.
+2. Say who paid, with how much each. One bill can have several payers; the entry's amount is what they paid together.
+   For a refund, say who received the money, and how much each.
+3. Say how it is split. With nothing more, the whole amount is split equally among everyone in the Pot, the usual
+   case. To split part of the bill another way, add items:
+   - Each **item** has a name, an amount and a split of its own: **Equally** among the people you tick, **By shares**,
+     such as two shares for a couple and one for a single person, or **By percent**, with up to two decimals and
+     100 % together.
+   - What the bill has beyond the items, such as a tip or what everyone shared, is **the rest**. It shows under the
+     items with a split of its own.
+   - To give each person an exact amount, add one item per person.
 4. Save.
 
-<Screenshot id="expenses-entry-editor" shows="The entry editor for an expense split as line items: title, date, amount, currency and category at the top, the payer with their amount, three items each with its people, and the tip spread in proportion" />
+<Screenshot id="expenses-entry-editor" shows="The entry editor for an expense: title, date, currency and category at the top; on the left the payer with their amount and the total below; on the right two items, each with its split, and the rest shared equally" />
 
-An entry that does not add up cannot be saved, for example when the payers' amounts are not the total or the items
-come to more than it. The editor says what is off.
+An entry that does not add up cannot be saved, for example when the items come to more than the amount (the editor
+says by how much) or the percents of a split do not make 100 %. The editor says what is off.
 
 ## Receipts
 

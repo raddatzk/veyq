@@ -86,7 +86,7 @@ const en = {
         tag: 'Shared costs',
         text: 'For the costs you share: a trip, a shared flat, a club evening.',
         points: [
-          'Split equally, by shares, by exact amounts or by the items on the bill',
+          'Split equally, by shares or by percent, or item by item on the bill',
           'Who owes whom, and a short list of transfers to settle up',
           'Every change kept in the history, a deleted entry restorable',
           'Friends follow and add entries through a link, without an account',
@@ -239,7 +239,7 @@ const de: Strings = {
         tag: 'Gemeinsame Kosten',
         text: 'Für die Kosten, die ihr euch teilt: eine Reise, eine WG, ein Vereinsabend.',
         points: [
-          'Gleich, nach Anteilen, nach genauen Beträgen oder nach den Posten der Rechnung aufteilen',
+          'Gleich, nach Anteilen oder nach Prozent aufteilen, oder Posten für Posten der Rechnung',
           'Wer wem etwas schuldet, und eine kurze Liste von Überweisungen zum Ausgleichen',
           'Jede Änderung bleibt im Verlauf, ein gelöschter Eintrag lässt sich wiederherstellen',
           'Freundinnen und Freunde sehen und ergänzen Einträge über einen Link, ohne Konto',

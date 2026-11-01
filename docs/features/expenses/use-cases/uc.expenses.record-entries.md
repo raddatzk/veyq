@@ -14,9 +14,10 @@
 
 1. The actor chooses **Add** and one of **Expense**, **Refund** or **Transfer**.
 2. **Expense / refund:** title, date, category, currency; one or more payers (receivers for a refund), each with an
-   amount; and the allocation — a **split** among beneficiaries (equally, by shares, by exact amounts) or **line items**
-   (label, amount, the people it belongs to) with the rest spread in proportion or equally. A refund may name the
-   expense it refunds.
+   amount — the entry's amount is their sum, shown, never typed; and the allocation: any number of **items** (label,
+   exact amount, and its own split: equally, by shares or by percent), and the **rest** — the amount less the items —
+   with a split of its own. A new entry has one payer and no items, so its whole amount is the rest, split equally among
+   the Pot's active participants. A refund may name the expense it refunds.
 3. **Transfer:** from one participant to another, one amount, no category.
 4. In a foreign currency the rate fills in from the day's table, or is typed
    ([uc.expenses.exchange-rates](uc.expenses.exchange-rates.md)); the editor shows each person's share in the base
@@ -34,9 +35,9 @@
 
 - **E1 — someone else saved the entry first:** `409 stale_revision`; the editor reads the current revision, shows what
   changed, and the actor saves again on top of it. Nothing is overwritten.
-- **E2 — the entry does not add up:** payers' amounts that differ from the total, exact amounts that do not sum to it,
-  or line items above it — the editor says which, and does not save.
-- **E3 — the revision would exceed 16 KiB:** the editor says the entry is too large (too many line items) before
+- **E2 — the entry does not add up:** items above the amount (the editor says by how much), a rest no one shares,
+  percents that do not make 100 %, a payer without an amount — the editor says which, and does not save.
+- **E3 — the revision would exceed 16 KiB:** the editor says the entry is too large (too many items) before
   anything is sent; the server refuses a larger one.
 - **E4 — the entry was deleted meanwhile:** the save is refused as stale; the editor offers to restore it first.
 - **E5 — no active participant:** **Add** is not offered; the Pot points to its People.
@@ -50,7 +51,7 @@
 
 ## User impact
 
-You can put in every kind of shared cost — split evenly, by share or line by line — and fix it later without losing
+You can put in every kind of shared cost — split evenly, by shares, by percent or item by item — and fix it later without losing
 the earlier version.
 
 ## Related

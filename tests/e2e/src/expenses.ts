@@ -40,14 +40,14 @@ export const LABELS = {
       addAsName: (n: string) => `Add “${n}” as a name`,
       tabs: { entries: 'Entries', balances: 'Balances', overview: 'Overview', people: 'People', settings: 'Settings' },
       kind: { expense: 'Expense', refund: 'Refund', transfer: 'Transfer' },
-      split: { equal: 'Equally', shares: 'By shares', exact: 'By exact amounts', items: 'As line items' },
-      rest: { proportional: 'Rest by each person’s items', equal: 'Rest equally' },
+      split: { equal: 'Equally', shares: 'By shares', percent: 'By percent' },
+      sharesOf: (n: string) => `Shares of ${n}`, percentOf: (n: string) => `Percent of ${n}`,
       category: { food: 'Food & drink', groceries: 'Groceries', leisure: 'Leisure', transport: 'Transport', other: 'Other' } as Record<string, string>,
       addEntry: 'Add entry', editEntry: 'Edit entry', viewEntry: 'Entry',
       title: 'Title', note: 'Note (optional)', amount: 'Amount', currency: /^Currency/, category_: /^Category/,
       rate: (from: string, to: string) => `Rate: 1 ${from} in ${to}`, from: /^From\b/, to: /^To\b/, person: 'Person',
       rateFilled: (day: string) => `Computed from the ECB’s euro reference rates of ${day}.`,
-      payerAmount: (n: string) => `Amount paid by ${n}`, addPayer: 'Add a payer', item: 'Item', itemAmount: 'Item amount', addItem: 'Add item',
+      payerAmount: (n: string) => `Amount paid by ${n}`, receiverAmount: (n: string) => `Amount received by ${n}`, addPayer: 'Add a payer', item: 'Item', itemAmount: 'Item amount', addItem: 'Add item',
       delete: 'Delete', restore: 'Restore', history: 'History', deletedEntries: 'Deleted entries', deletedBadge: 'deleted',
       invalid: 'does not add up',
       stale: 'Someone else changed this entry. Here is their version; save again to put yours on top.',
@@ -98,14 +98,14 @@ export const LABELS = {
       addAsName: (n: string) => `„${n}“ als Namen hinzufügen`,
       tabs: { entries: 'Einträge', balances: 'Salden', overview: 'Überblick', people: 'Personen', settings: 'Einstellungen' },
       kind: { expense: 'Ausgabe', refund: 'Erstattung', transfer: 'Überweisung' },
-      split: { equal: 'Zu gleichen Teilen', shares: 'Nach Anteilen', exact: 'Nach genauen Beträgen', items: 'Nach Posten' },
-      rest: { proportional: 'Rest nach den Posten jeder Person', equal: 'Rest zu gleichen Teilen' },
+      split: { equal: 'Zu gleichen Teilen', shares: 'Nach Anteilen', percent: 'Nach Prozent' },
+      sharesOf: (n: string) => `Anteile von ${n}`, percentOf: (n: string) => `Prozent von ${n}`,
       category: { food: 'Essen & Trinken', groceries: 'Einkäufe', leisure: 'Freizeit', transport: 'Transport', other: 'Sonstiges' } as Record<string, string>,
       addEntry: 'Eintrag hinzufügen', editEntry: 'Eintrag bearbeiten', viewEntry: 'Eintrag',
       title: 'Titel', note: 'Notiz (optional)', amount: 'Betrag', currency: /^Währung/, category_: /^Kategorie/,
       rate: (from: string, to: string) => `Kurs: 1 ${from} in ${to}`, from: /^Von\b/, to: /^An\b/, person: 'Person',
       rateFilled: (day: string) => `Berechnet aus den Euro-Referenzkursen der EZB vom ${day}.`,
-      payerAmount: (n: string) => `Betrag, den ${n} bezahlt hat`, addPayer: 'Weitere Person hat bezahlt', item: 'Posten', itemAmount: 'Betrag des Postens', addItem: 'Posten hinzufügen',
+      payerAmount: (n: string) => `Betrag, den ${n} bezahlt hat`, receiverAmount: (n: string) => `Betrag, den ${n} erhalten hat`, addPayer: 'Weitere Person hat bezahlt', item: 'Posten', itemAmount: 'Betrag des Postens', addItem: 'Posten hinzufügen',
       delete: 'Löschen', restore: 'Wiederherstellen', history: 'Verlauf', deletedEntries: 'Gelöschte Einträge', deletedBadge: 'gelöscht',
       invalid: 'geht nicht auf',
       stale: 'Jemand anderes hat diesen Eintrag geändert. Hier ist die neue Fassung; speichere erneut, um deine darüberzulegen.',
@@ -135,6 +135,10 @@ export type Labels = (typeof LABELS)[Lang]
 // --- the vector -----------------------------------------------------------------------------------------------------------
 
 type Money = { participant: string; amount: number }
+type VectorSplit =
+  | { mode: 'equal'; participants: string[] }
+  | { mode: 'shares'; shares: { participant: string; shares: number }[] }
+  | { mode: 'percent'; percents: { participant: string; percent: number }[] }
 export interface VectorEntry {
   id: string
   body: {
@@ -149,11 +153,7 @@ export interface VectorEntry {
     receivers?: Money[]
     from?: string
     to?: string
-    allocation?:
-      | { mode: 'equal'; participants: string[] }
-      | { mode: 'shares'; shares: { participant: string; shares: number }[] }
-      | { mode: 'exact'; amounts: Money[] }
-      | { mode: 'items'; rest: 'proportional' | 'equal'; items: { label: string; amount: number; participants: string[] }[] }
+    allocation?: { items: { label: string; amount: number; split: VectorSplit }[]; rest?: VectorSplit }
   }
 }
 export interface TripPot {
@@ -270,8 +270,9 @@ export async function addPotNames(page: Page, L: Labels, dialog: Locator, names:
 export const entryDialog = (page: Page, header: string) => page.getByRole('dialog', { name: header, exact: true })
 
 /**
- * Type [entry] of the vector into a new entry and save it: its kind, title, currency and typed rate, amount, category,
- * payers (or receivers, or a transfer's two ends) and split — every field as a person sets it in the editor. [names]
+ * Type [entry] of the vector into a new entry and save it: its kind, title, currency and typed rate, category, payers (or
+ * receivers) each with their amount — the entry's amount is their sum, never typed — and its items and rest, each with its
+ * split; a transfer's amount and two ends — every field as a person sets it in the editor. [names]
  * maps the vector's participant ids to the Pot's people. The date is left at the editor's default (today): no balance
  * reads it.
  */
@@ -289,8 +290,8 @@ export async function typeEntry(page: Page, L: Labels, lang: Lang, entry: Vector
     // The label holds the field and its hint ("The entry keeps this rate…"): matched by its start.
     await dialog.getByLabel(new RegExp(`^${escapeRegExp(L.pot.rate(b.currency, 'EUR'))}`)).fill(typedRate(b.rate, lang))
   }
-  await dialog.getByLabel(L.pot.amount, { exact: true }).fill(typed(b.amount, b.minorUnits, lang))
   if (b.kind === 'transfer') {
+    await dialog.getByLabel(L.pot.amount, { exact: true }).fill(typed(b.amount, b.minorUnits, lang))
     await pick(page, dialog.getByRole('combobox', { name: L.pot.from }), name(b.from!))
     await pick(page, dialog.getByRole('combobox', { name: L.pot.to }), name(b.to!))
   } else {
@@ -300,44 +301,46 @@ export async function typeEntry(page: Page, L: Labels, lang: Lang, entry: Vector
     const rows = dialog.getByRole('combobox', { name: L.pot.person, exact: true })
     await expect(rows).toHaveCount(payers.length)
     for (const [i, p] of payers.entries()) await pick(page, rows.nth(i), name(p.participant))
-    if (payers.length > 1) {
-      for (const p of payers) await dialog.getByRole('textbox', { name: L.pot.payerAmount(name(p.participant)), exact: true }).fill(typed(p.amount, b.minorUnits, lang))
-    }
-    await split(dialog, L, lang, b, names)
+    const amountOf = b.kind === 'expense' ? L.pot.payerAmount : L.pot.receiverAmount
+    for (const p of payers) await dialog.getByRole('textbox', { name: amountOf(name(p.participant)), exact: true }).fill(typed(p.amount, b.minorUnits, lang))
+    await allocate(dialog, L, lang, b, names)
   }
   await dialog.getByRole('button', { name: L.save, exact: true }).click()
   await expect(dialog).toBeHidden({ timeout: 30_000 })
   await expect(entryRow(page, title)).toHaveCount(1)
 }
 
-async function split(dialog: Locator, L: Labels, lang: Lang, b: VectorEntry['body'], names: Map<string, string>): Promise<void> {
+/** The entry's items, each with its label, amount and split, then the rest's split — or, with no rest, no rest item. */
+async function allocate(dialog: Locator, L: Labels, lang: Lang, b: VectorEntry['body'], names: Map<string, string>): Promise<void> {
   const a = b.allocation!
-  const everyone = [...names.values()]
-  const on = (who: string[]) => new Set(who.map((id) => names.get(id)!))
-  if (a.mode !== 'equal') await dialog.getByRole('button', { name: L.pot.split[a.mode], exact: true }).click()
-  await expect(dialog.getByRole('button', { name: L.pot.split[a.mode], exact: true })).toHaveAttribute('aria-pressed', 'true')
-  if (a.mode === 'equal') {
-    const sharing = on(a.participants)
-    for (const n of everyone) await dialog.getByRole('checkbox', { name: n, exact: true }).setChecked(sharing.has(n))
-  } else if (a.mode === 'shares') {
-    for (const s of a.shares) await dialog.getByRole('textbox', { name: names.get(s.participant)!, exact: true }).fill(String(s.shares))
-  } else if (a.mode === 'exact') {
-    for (const s of a.amounts) await dialog.getByRole('textbox', { name: names.get(s.participant)!, exact: true }).fill(typed(s.amount, b.minorUnits, lang))
+  for (const [i, item] of a.items.entries()) {
+    await dialog.getByRole('button', { name: L.pot.addItem, exact: true }).click()
+    const row = dialog.locator('.expenses-item:not(.expenses-rest)').nth(i)
+    await row.getByRole('textbox', { name: L.pot.item, exact: true }).fill(recordTyped(itemLabel(item.label)))
+    await row.getByRole('textbox', { name: L.pot.itemAmount, exact: true }).fill(typed(item.amount, b.minorUnits, lang))
+    await split(row, L, lang, item.split, names)
+  }
+  const rest = dialog.locator('.expenses-rest')
+  if (a.rest) await split(rest, L, lang, a.rest, names)
+  else await expect(rest, 'the items fill the amount: no rest').toHaveCount(0)
+}
+
+/** One split in [scope] (an item or the rest): its mode, then who is on it — a checkbox each, or a field each. */
+async function split(scope: Locator, L: Labels, lang: Lang, s: VectorSplit, names: Map<string, string>): Promise<void> {
+  if (s.mode !== 'equal') await scope.getByRole('button', { name: L.pot.split[s.mode], exact: true }).click()
+  await expect(scope.getByRole('button', { name: L.pot.split[s.mode], exact: true })).toHaveAttribute('aria-pressed', 'true')
+  const person = (id: string) => names.get(id)!
+  if (s.mode === 'equal') {
+    const sharing = new Set(s.participants.map(person))
+    for (const n of names.values()) await scope.getByRole('checkbox', { name: n, exact: true }).setChecked(sharing.has(n))
+  } else if (s.mode === 'shares') {
+    for (const x of s.shares) await scope.getByRole('textbox', { name: L.pot.sharesOf(person(x.participant)), exact: true }).fill(String(x.shares))
   } else {
-    for (const [i, item] of a.items.entries()) {
-      await dialog.getByRole('button', { name: L.pot.addItem, exact: true }).click()
-      const row = dialog.locator('.expenses-item').nth(i)
-      await row.getByRole('textbox', { name: L.pot.item, exact: true }).fill(recordTyped(itemLabel(item.label)))
-      await row.getByRole('textbox', { name: L.pot.itemAmount, exact: true }).fill(typed(item.amount, b.minorUnits, lang))
-      const sharing = on(item.participants)
-      for (const n of everyone) await row.getByRole('checkbox', { name: n, exact: true }).setChecked(sharing.has(n))
-    }
-    await dialog.getByRole('button', { name: L.pot.rest[a.rest], exact: true }).click()
-    await expect(dialog.getByRole('button', { name: L.pot.rest[a.rest], exact: true })).toHaveAttribute('aria-pressed', 'true')
+    for (const x of s.percents) await scope.getByRole('textbox', { name: L.pot.percentOf(person(x.participant)), exact: true }).fill(typed(x.percent, 2, lang))
   }
 }
 
-/** A line item's label as typed: the vector's word and a spelling the sweep cannot find in ciphertext by chance. */
+/** An item's label as typed: the vector's word and a spelling the sweep cannot find in ciphertext by chance. */
 export const itemLabel = (label: string) => `${label} am Tisch`
 
 // --- receipts -------------------------------------------------------------------------------------------------------------

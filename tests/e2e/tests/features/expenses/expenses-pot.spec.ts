@@ -3,9 +3,10 @@
 // one group per pass. Then, all in English:
 //
 //   1. A creates a Pot in a folder — base currency EUR, three people in order — and the folder's row names its currency;
-//   2. A types in the "trip" Pot of contracts/expenses/v1-vectors.json, its nine entries as the vector holds them (equal,
-//      two payers, a foreign currency at a typed rate, line items with the rest in proportion and equally, shares, exact
-//      amounts, a refund, a transfer): Balances, the settle-up and the Overview show what the vector computes;
+//   2. A types in the "trip" Pot of contracts/expenses/v1-vectors.json, its nine entries as the vector holds them (all
+//      rest, items with a rest by shares, foreign currencies at a typed rate, items by percent and by shares, two payers,
+//      exact amounts as one item each, a refund with two receivers and an item, a transfer): Balances, the settle-up and
+//      the Overview show what the vector computes;
 //   2a. A's device fetched the day's ECB table once (answered by the lane's fixture, `src/egress.ts`), with the date and
 //      nothing else; a new entry in USD gets its rate filled from it, typeable, citing the ECB and the rows' date — no
 //      second request;
@@ -27,7 +28,7 @@
 //      and reads the entry's three versions in plaintext, then dismisses it (the shared queue is left as found);
 //   9. A removes B from the group, which rotates the group's key and re-keys the Pot: no re-key left running, every
 //      figure unchanged, no ledger notice, and the Pot still opens for A and through the guest's link;
-//  10. the Pot at 375 px: Entries, Balances, the editor with line items, People — no horizontal scroll, every action in reach.
+//  10. the Pot at 375 px: Entries, Balances, the editor with items, People — no horizontal scroll, every action in reach.
 //
 // Receipts (uc.expenses.attach-receipts), in the same pass:
 //   2b. A keeps a JPEG, a PDF and a text that claims to be a PDF with "Museum" (a `.txt` is refused at the picker): the
@@ -721,8 +722,8 @@ test.describe('in English', () => {
       await g.locator('.expenses-entries').getByRole('button', { name: L.pot.addEntry, exact: true }).click()
       const editor = entryDialog(g, L.pot.addEntry)
       await editor.getByLabel(L.pot.title, { exact: true }).fill(recordTyped(snacks))
-      await editor.getByLabel(L.pot.amount, { exact: true }).fill(typed(1234, 2, lang))
       await pick(g, editor.getByRole('combobox', { name: L.pot.person, exact: true }), nameOf(ANNA!))
+      await editor.getByRole('textbox', { name: L.pot.payerAmount(nameOf(ANNA!)), exact: true }).fill(typed(1234, 2, lang))
       for (const n of [...PEOPLE, dora]) await editor.getByRole('checkbox', { name: n, exact: true }).setChecked(n === nameOf(ANNA!))
       await editor.getByRole('button', { name: L.save, exact: true }).click()
       await expect(editor).toBeHidden({ timeout: 30_000 })
@@ -1223,7 +1224,7 @@ test.describe('in English', () => {
   )
 
   test(
-    'step 10: the Pot at 375 px — Entries, Balances, the editor with line items, People — scrolls only down',
+    'step 10: the Pot at 375 px — Entries, Balances, the editor with items, People — scrolls only down',
     {
       tag: [
         '@uc.expenses.balances:balances-from-the-live-entries',
@@ -1255,11 +1256,12 @@ test.describe('in English', () => {
       }
       await inReach(page.locator('.expenses-people form').getByRole('button', { name: L.pot.addPerson, exact: true }), L.pot.addPerson)
 
-      // The editor with line items: the trattoria.
+      // The editor with items and a rest: the trattoria.
       await openTab(page, L.pot.tabs.entries)
       await entryRow(page, titleOf('Trattoria')).click()
       const editor = entryDialog(page, L.pot.editEntry)
-      await expect(editor.locator('.expenses-item')).toHaveCount(3)
+      await expect(editor.locator('.expenses-item:not(.expenses-rest)')).toHaveCount(3)
+      await expect(editor.locator('.expenses-rest')).toHaveCount(1)
       await noHorizontalScroll(page, L.pot.editEntry)
       const dialogFits = await editor.evaluate((el) => el.scrollWidth <= el.clientWidth)
       expect(dialogFits, 'the editor scrolls only down').toBe(true)
@@ -1429,7 +1431,7 @@ test.describe('auf Deutsch', () => {
       await openPot(page, L, copyName)
       expect(await figures(page, L), 'the copied Pot').toEqual(original)
 
-      // 375 px: the German tab names, the balances' long lines and the editor with line items scroll only down.
+      // 375 px: the German tab names, the balances' long lines and the editor with items scroll only down.
       await page.setViewportSize({ width: 375, height: 812 })
       await page.reload()
       await expect(page.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
@@ -1446,7 +1448,8 @@ test.describe('auf Deutsch', () => {
       await openTab(page, L.pot.tabs.entries)
       await entryRow(page, titleOf('Trattoria')).click()
       const editor = entryDialog(page, L.pot.editEntry)
-      await expect(editor.locator('.expenses-item')).toHaveCount(3)
+      await expect(editor.locator('.expenses-item:not(.expenses-rest)')).toHaveCount(3)
+      await expect(editor.locator('.expenses-rest')).toHaveCount(1)
       await noHorizontalScroll(page, L.pot.editEntry)
       expect(await editor.evaluate((el) => el.scrollWidth <= el.clientWidth), 'the editor scrolls only down').toBe(true)
       for (const name of [L.pot.addItem, L.pot.history, L.save, L.cancel]) {

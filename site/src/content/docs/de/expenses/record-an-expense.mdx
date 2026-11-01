@@ -17,22 +17,23 @@ import Screenshot from '../../../../components/Screenshot.astro';
 
 ## Eine Ausgabe oder eine Erstattung
 
-1. Gib einen Titel, das Datum, den Betrag und seine Währung ein und wähle eine Kategorie.
-2. Gib an, wer bezahlt hat, mit wie viel. Eine Rechnung kann mehrere Zahlende haben. Bei einer Erstattung gib an, wer
-   das Geld bekommen hat.
-3. Gib an, wie aufgeteilt wird:
-   - **Zu gleichen Teilen** unter den Personen, die du wählst.
-   - **Nach Anteilen**, etwa zwei Anteile für ein Paar und einer für eine einzelne Person.
-   - **Nach genauen Beträgen** je Person.
-   - **Nach Posten**: jeder Posten mit seinem Betrag und den Personen, zu denen er gehört, etwa eine Flasche Wein für
-     drei. Was die Rechnung über die Posten hinaus enthält, etwa ein Trinkgeld, wird im Verhältnis zu den Posten jeder
-     Person verteilt oder zu gleichen Teilen unter den Personen auf der Rechnung.
+1. Gib einen Titel, das Datum und die Währung ein und wähle eine Kategorie.
+2. Gib an, wer bezahlt hat, mit wie viel. Eine Rechnung kann mehrere Zahlende haben; der Betrag des Eintrags ist, was
+   sie zusammen bezahlt haben. Bei einer Erstattung gib an, wer das Geld bekommen hat, mit wie viel.
+3. Gib an, wie aufgeteilt wird. Ohne weitere Angaben wird der ganze Betrag zu gleichen Teilen auf alle in der Kasse
+   verteilt, der übliche Fall. Um einen Teil der Rechnung anders aufzuteilen, füge Posten hinzu:
+   - Jeder **Posten** hat einen Namen, einen Betrag und eine eigene Aufteilung: **Zu gleichen Teilen** unter den
+     Personen, die du ankreuzt, **Nach Anteilen**, etwa zwei Anteile für ein Paar und einer für eine einzelne Person,
+     oder **Nach Prozent**, mit bis zu zwei Nachkommastellen und zusammen 100 %.
+   - Was die Rechnung über die Posten hinaus enthält, etwa ein Trinkgeld oder was alle geteilt haben, ist **der Rest**.
+     Er steht unter den Posten und hat eine eigene Aufteilung.
+   - Um jeder Person einen genauen Betrag zuzuordnen, füge je Person einen Posten hinzu.
 4. Speichere.
 
-<Screenshot id="expenses-entry-editor" shows="Der Eintragseditor für eine nach Posten aufgeteilte Ausgabe: Titel, Datum, Betrag, Währung und Kategorie oben, die zahlende Person mit ihrem Betrag, drei Posten mit ihren Personen und das Trinkgeld im Verhältnis verteilt" />
+<Screenshot id="expenses-entry-editor" shows="Der Eintragseditor für eine Ausgabe: Titel, Datum, Währung und Kategorie oben; links die zahlende Person mit ihrem Betrag und darunter die Summe; rechts zwei Posten mit ihrer Aufteilung und der Rest zu gleichen Teilen" />
 
-Ein Eintrag, der nicht aufgeht, lässt sich nicht speichern, etwa wenn die Beträge der Zahlenden nicht die Summe
-ergeben oder die Posten mehr ausmachen als sie. Der Editor sagt, was nicht stimmt.
+Ein Eintrag, der nicht aufgeht, lässt sich nicht speichern, etwa wenn die Posten mehr ausmachen als der Betrag (der
+Editor sagt, um wie viel) oder die Prozente einer Aufteilung nicht 100 % ergeben. Der Editor sagt, was nicht stimmt.
 
 ## Belege
 

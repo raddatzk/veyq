@@ -164,7 +164,16 @@ neither fetches where that tenant's privacy notice names no fetch. The endpoint 
 
 **9. Everything that reads amounts runs in the client**: balances, the settle-up suggestion, the overviews. The entry
 format is versioned from its first revision (ADR 0079 decision 7), and its rounding rule is part of the version, so
-every device computes the same balance from the same entries.
+every device computes the same balance from the same entries. An expense's (a refund's) amount is the sum of its payers'
+(receivers') amounts, sealed beside them and never typed. Its allocation is **one shape**: items, each an exact amount
+with **its own split**, and the **rest** — the amount less the items — with a split of its own, sealed while the rest is
+above zero (a new entry has no items: its whole amount is the rest, split equally among the Pot's active participants,
+each named in the split). A split is equal, by whole shares, or by percent in basis points that add up to exactly 10000
+(100.00 %): integers, so no percent is ever a rounded decimal. **The rounding rule:** the total is converted once into
+the base currency, then allocated to the parts — each item in its order, then the rest — by their amounts, and each
+part's base amount among its split's people by their weights (1, the shares, the basis points); every step is the
+largest remainder in minor units, ties by join order. In the base currency each part gets exactly its own amount, so an
+item's shares always add up to the item. The schema states the rule and `contracts/expenses/v1-vectors.json` pins it.
 
 ## Consequences
 
@@ -193,3 +202,9 @@ every device computes the same balance from the same entries.
   for the Pot's life; now it costs about fifty bytes per revision.
 - **A numbered sequence instead of a graph.** Two people adding at once both write number 17.
 - **Rates proxied through the backend** (fewer CSP origins): hands the operator when people spend abroad.
+- **A split mode per entry** (equally, by shares, by exact amounts, or line items whose tip followed each person's items
+  or was shared equally), rounded once over each person's summed weights. Four shapes answered one question, the typed
+  total had to match its payers by hand, and one bill could not split the wine by shares and the rest equally; each mode
+  is one case of items plus a rest (exact amounts are one item per person). Rounding once kept a person within a cent
+  of their exact share over the whole entry, but an item's shares no longer added up to the item a person can read on
+  the bill; per part, a person on several parts can be a cent off per part instead.

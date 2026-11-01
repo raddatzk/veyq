@@ -67,17 +67,25 @@ PDFs, § Receipts). Three kinds:
 
 | Kind | Who | Amounts | Category |
 |---|---|---|---|
-| **Expense** | one or more **payers**, each with the amount they paid | allocated to **beneficiaries** (below) | one per expense |
-| **Refund** (an income: a credit for a delayed flight) | one or more **receivers**, each with the amount received | allocated to beneficiaries like an expense; may name the expense it refunds | one, counted negatively |
+| **Expense** | one or more **payers**, each with the amount they paid; the amount is their sum | allocated to **beneficiaries** (below) | one per expense |
+| **Refund** (an income: a credit for a delayed flight) | one or more **receivers**, each with the amount received; the amount is their sum | allocated to beneficiaries like an expense; may name the expense it refunds | one, counted negatively |
 | **Transfer** (settling up) | from one participant to another | one amount | none |
 
-**Allocation** of an expense or a refund is one of:
+The amount of an expense or a refund is never typed: the editor shows the payers' (receivers') sum, and the body seals it.
 
-- **A split** among beneficiaries: equally, by shares, or by exact amounts.
-- **Line items**: each with a label, an amount and the participants it belongs to (a bottle of wine for three is one
-  item with three people). The difference between the total and the sum of the items — tip, service — is spread
-  **in proportion to each person's items** (the default) or **equally among the people on the bill**, chosen per entry
-  and sealed with it.
+**Allocation** of an expense or a refund is one shape, never a mode per entry:
+
+- **Items**, each with a label, an exact amount and **its own split** (a bottle of wine for three is one item split
+  equally among three).
+- **The rest** — the amount less the items — with a split of its own. A new entry has no items, so its whole amount is
+  the rest, split equally among the Pot's active participants, who are sealed by name in that split (a later participant
+  is on no earlier entry). Items above the amount do not save; the editor says by how much. At a rest of zero no rest
+  split is sealed.
+- **A split** is **equal** (each person once), **by shares** (whole numbers) or **by percent** (basis points, at most two
+  decimals, adding up to exactly 100 %).
+
+So the whole amount equally or by shares is the rest's split alone; exact amounts per person are one item each, filling
+the amount; a bill with a tip is its items plus a rest.
 
 **Rounding** is part of the entry format, so every device computes the same balance. The format is
 `contracts/expenses/entry.v1.schema.json`, and `contracts/expenses/v1-vectors.json` holds the cases every client must
@@ -89,11 +97,14 @@ compute alike:
   unit; it is allocated after that, in the base currency.
 - An allocation gives each person their exact share rounded down, then hands the cents left over one each to the
   people with the largest cut-off remainders, ties broken by the order the people joined the Pot (largest remainder):
-  nobody is ever more than one cent off their share.
-- An entry with line items is rounded **once**: each person's exact shares of the items and of the tip are summed
-  first and allocated as one, so rounding never accumulates across items.
-- An entry that does not add up (payers' amounts beside the total, exact amounts beside it, line items above it) is
-  not saved; one that arrives anyway counts nowhere and is shown as invalid. So does an entry that
+  within one allocation nobody is more than one cent off their share.
+- An entry is rounded **part by part**: its base total is first allocated to its parts — each item in its order, then
+  the rest — by their amounts (in the base currency every part gets exactly its own amount), then each part among its
+  split's people by their weights (1 each, the shares, the basis points). A person's share is the sum of their parts,
+  so each item's shares add up to that item exactly; a person on several parts can end up to one cent per part off
+  their exact share, never more.
+- An entry that does not add up (payers' amounts beside the total, items above it, a rest with no split, percents beside
+  100 %, a person named twice) is not saved; one that arrives anyway counts nowhere and is shown as invalid. So does an entry that
   names someone who is no participant of the Pot: it has no place in the join order the rounding breaks ties by.
 
 **Reading a Pot.** Where the schema leaves a reader a choice, every client chooses alike:
@@ -230,7 +241,7 @@ file: it reads each receipt by frame and seals it again under a fresh key bound 
 
 ## Out of the first cut
 
-Previews of receipts, offline use, push notices, a category per line item, and rates by entry date (an entry entered
+Previews of receipts, offline use, push notices, a category per item, and rates by entry date (an entry entered
 late takes the day's rate unless typed).
 
 ## Related
