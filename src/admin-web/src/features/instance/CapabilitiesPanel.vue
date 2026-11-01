@@ -156,6 +156,7 @@ async function toggle(entry: InstanceCapability) {
             class="capability"
             :data-id="node.entry.id"
             :style="{ '--capability-depth': node.depth }"
+            :class="{ 'capability--child': node.depth > 0 }"
           >
             <div class="capability__text">
               <strong class="capability__title">{{ words(node.entry.title) }}</strong>
@@ -243,7 +244,12 @@ async function toggle(entry: InstanceCapability) {
   align-items: flex-start;
   justify-content: space-between;
   /* The tree is the id path: each entry that is itself an ancestor indents its children one step. */
-  padding-inline-start: calc(var(--capability-depth, 0) * 1.5rem);
+  margin-inline-start: calc(var(--capability-depth, 0) * 1.5rem);
+}
+/* A function of an application (or of another entry) hangs on a line from its parent, so the tree reads as one. */
+.capability--child {
+  border-inline-start: 2px solid var(--app-line);
+  padding-inline-start: 0.75rem;
 }
 .capability__text {
   display: flex;

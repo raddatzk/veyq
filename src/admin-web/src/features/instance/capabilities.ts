@@ -74,12 +74,14 @@ export type CapabilityState =
 /** An entry placed in the tree: how many of its ancestors are entries themselves, and its state. */
 export type CapabilityNode = { entry: InstanceCapability; depth: number; state: CapabilityState }
 
-/** The ancestors of an entry that are entries themselves, nearest first. The id is the path: an entry's parent is
- *  its id without the last segment, and an id of two segments hangs from the root alone. */
+/** The ancestors of an entry that are entries themselves, nearest first. The id is the path: each dotted prefix
+ *  that is an entry is an ancestor, a one-segment one included — an application (`memories`) is the parent of its
+ *  functions (`memories.places`), while `core` is no entry and so no parent. The backend's `selfAndAncestors` reads
+ *  the same prefixes; stopping at two segments hung every application's functions flat beside it. */
 function ancestorsOf(id: string, byId: Map<string, InstanceCapability>): InstanceCapability[] {
   const segments = id.split('.')
   const found: InstanceCapability[] = []
-  for (let n = segments.length - 1; n >= 2; n -= 1) {
+  for (let n = segments.length - 1; n >= 1; n -= 1) {
     const ancestor = byId.get(segments.slice(0, n).join('.'))
     if (ancestor) found.push(ancestor)
   }

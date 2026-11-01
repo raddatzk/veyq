@@ -149,6 +149,20 @@ describe('CapabilitiesPanel (ADR 0088, admin-web)', () => {
     expect(row(w, 'core.a').find('.capability__toggle').text()).toBe(t('capabilities.switchOn'))
   })
 
+  it('hangs an application\'s functions under the application, an entry of one segment', async () => {
+    const w = await mountPanel([
+      entry('memories', 'Memories', true, false),
+      entry('memories.places', 'Places', false, false),
+      entry('expenses', 'Expenses', false, true),
+      entry('expenses.exchange-rates', 'Rates', false, true),
+    ])
+    expect(w.findAll('.capability').map((li) => li.attributes('style'))).toEqual(
+      [0, 1, 0, 1].map((d) => `--capability-depth: ${d};`),
+    )
+    expect(stateOf(w, 'memories.places')).toBe(t('capabilities.offThrough', { parent: 'Memories EN' }))
+    expect(stateOf(w, 'expenses.exchange-rates')).toBe(t('capabilities.on'))
+  })
+
   it('names the NEAREST ancestor that is itself off, not the root of the branch', async () => {
     const w = await mountPanel()
     expect(stateOf(w, 'core.a.b.c')).toBe(t('capabilities.offThrough', { parent: 'Bravo EN' }))

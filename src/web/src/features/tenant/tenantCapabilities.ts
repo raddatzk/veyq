@@ -71,7 +71,9 @@ export function tenantCapabilityTree(entries: TenantCapabilitySwitch[]): TenantC
   return entries.map((entry) => {
     const segments = entry.id.split('.')
     const ancestors: TenantCapabilitySwitch[] = []
-    for (let n = segments.length - 1; n >= 2; n -= 1) {
+    // Every dotted prefix that is an entry, a one-segment one included: an application (`memories`) is the parent of
+    // its functions (`memories.places`), as in the backend's `selfAndAncestors`; `core` is no entry, so no parent.
+    for (let n = segments.length - 1; n >= 1; n -= 1) {
       const ancestor = byId.get(segments.slice(0, n).join('.'))
       if (ancestor) ancestors.push(ancestor)
     }

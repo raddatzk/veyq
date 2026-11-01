@@ -24,6 +24,23 @@ describe('tenantCapabilityTree', () => {
     expect(through.kind === 'offThrough' && through.through.id).toBe('core.public-shares')
   })
 
+  it('hangs an application\'s functions under the application, which is an entry of one segment', () => {
+    const tree = tenantCapabilityTree([
+      entry('memories', { off: true, effective: false }),
+      entry('memories.places', { effective: false }),
+      entry('expenses'),
+      entry('expenses.exchange-rates'),
+    ])
+    expect(tree.map((n) => [n.entry.id, n.depth, n.state.kind])).toEqual([
+      ['memories', 0, 'off'],
+      ['memories.places', 1, 'offThrough'],
+      ['expenses', 0, 'on'],
+      ['expenses.exchange-rates', 1, 'on'],
+    ])
+    const through = tree[1]!.state
+    expect(through.kind === 'offThrough' && through.through.id).toBe('memories')
+  })
+
   it('says the server has it off when no tenant switch explains it, and the tenant\'s own off first', () => {
     const tree = tenantCapabilityTree([
       entry('core.group-space', { serverOff: true, effective: false }),
