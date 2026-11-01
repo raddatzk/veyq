@@ -26,25 +26,33 @@ acceptanceCriteria:
           - ScopeAccessSliceTest.myTenantsListsASuspendedTenantWithNeitherGrantNorIcon
           - ScopeAccessSliceTest.myShareListDropsSharesInSpacesTheCallerMayNoLongerRead
   - id: deleting-scope-is-read-only
-    text: While a scope is being deleted, every write on it answers 409 scope_deleting — content, media, buckets, favorites, shares, roster, icon, key rotation and job work alike — reads stay open, and the owner's restore of a GROUP is the one write that passes.
+    text: While a scope is being deleted, every write on it answers 409 scope_deleting — content, media, buckets, favorites, shares, roster, icon, key rotation and job work alike — reads stay open, and two writes pass, each past the gate's every other step - the owner's restore of a GROUP, and a link's creator revoking it (it only closes exposure, and the link stays off once the deletion is stopped), while a new link, an edit, a re-activation, a renew and a delete of a link stay refused; each share dialog then offers revoking the caller's own live link and no other change.
     coverage:
       backend:
         integration:
           - OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate
           - ScopeAccessSliceTest.claimHandsOutNoJobInASuspendedTenantOrADeletingGroup
+          - ScopeAccessSliceTest.aDeletingGroupLetsItsLinkBeRevokedAndNothingElseAndTheLinkStaysOffAfterARestore
+      web:
+        unit:
+          - src/core/sharing/FolderShareDialog.test.ts
+          - src/features/memories/components/ShareDialog.test.ts
+          - src/features/depot/components/DropBoxShareDialog.test.ts
   - id: former-member-reads-only-their-own
     text: A member removed from the tenant keeps read access to their own personal space and solo groups for the grace window and nothing else — no write, no restore, and every tenant-addressed operation answers them 404.
     coverage:
       backend:
         integration:
           - ScopeAccessSliceTest.aFormerTenantMemberReadsTheirGraceSpaceButCannotRestoreIt
+          - ScopeAccessSliceTest.aFormerTenantMemberCannotRevokeALinkInTheirGraceSpace
           - ScopeAccessSliceTest.myShareListDropsSharesInSpacesTheCallerMayNoLongerRead
   - id: shares-serve-only-a-live-scope
-    text: A share guest gets the same 404 as for a revoked link while the share's scope is being deleted or its tenant is suspended, and the link serves again unchanged after a restore or reactivation; an invite link to a suspended tenant answers like one that is no longer valid.
+    text: A share guest gets the same 404 as for a revoked link while the share's scope is being deleted or its tenant is suspended, and the link serves again unchanged after a restore or reactivation (but one its creator revoked in the deletion window, which stays off); an invite link to a suspended tenant answers like one that is no longer valid.
     coverage:
       backend:
         integration:
           - ScopeAccessSliceTest.aShareInASuspendedTenantOrADeletingGroupAnswersAsARevokedLink
+          - ScopeAccessSliceTest.aDeletingGroupLetsItsLinkBeRevokedAndNothingElseAndTheLinkStaysOffAfterARestore
           - ScopeAccessSliceTest.anInviteToASuspendedTenantAnswersAsADeadInvite
   - id: share-curation-needs-a-current-member
     text: Editing, revoking and re-activating a share need a current member of the share's scope (a removed creator gets 404), and re-activating additionally needs the sharing capability for the share's role (422 capability_disabled), exactly as creating one does.

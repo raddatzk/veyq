@@ -215,7 +215,9 @@ point 8).
   `FOLDER` one too) starts from that answer and may only narrow it, never grant what it denies — each one's
   `rights.test.ts` walks every access shape to prove it. The row's `standard` and `selection` and the header's flags
   read that one answer under one name per right. A pending deletion keeps every kind's share dialog to see its links,
-  and the host tells the dialog to mint and change none (`NodeShareDialogProps.readonly`). A right holds only where the
+  and the host tells the dialog to mint and change none but revoke the caller's own live link
+  (`NodeShareDialogProps.readonly`) — the one link write the server takes then, since it only closes exposure
+  (uc.spaces.scope-access [A1](../features/spaces/use-cases/uc.spaces.scope-access.md)). A right holds only where the
   matrix allows it **and** the session's data source
   (`features/<owner>/source.ts`, the member's or the guest's, fixed at mount) implements the operation. Member-only
   state — pins under the Master Key, item marks, a node's sealed meta, the scope's member list — is granted to no

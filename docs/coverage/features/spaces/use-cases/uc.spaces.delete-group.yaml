@@ -11,7 +11,7 @@ acceptanceCriteria:
       backend: { integration: [ScopesSliceTest.deleteGroupSoftThenRestoreWithReadOnlyGrace, ScopesSliceTest.deleteRestoreGuards] }
       web: { unit: [src/features/spaces/scopes.test.ts] }
   - id: grace-read-only-viewable
-    text: During the grace window the group stays listed + readable but read-only — every write, not only node writes, is rejected 409 scope_deleting (the whole list is uc.spaces.scope-access deleting-scope-is-read-only) — and carries deletedAt/purgeAfter so the client marks it.
+    text: During the grace window the group stays listed + readable but read-only — every write, not only node writes, is rejected 409 scope_deleting but a restore and a link's revoke (the whole list is uc.spaces.scope-access deleting-scope-is-read-only) — and carries deletedAt/purgeAfter so the client marks it.
     coverage:
       backend: { integration: [ScopesSliceTest.deleteGroupSoftThenRestoreWithReadOnlyGrace] }
   - id: restore

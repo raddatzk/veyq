@@ -113,7 +113,8 @@ and which is confidential even from the tenant owner.**
      hard-purged by a scheduled job once a grace period (the scope trash's retention) has passed. **During
      grace the group stays
      viewable + downloadable but read-only, clearly marked as deleting** (members can see their pictures one last
-     time); grants/memberships are untouched, so **any owner can restore** in-window (trivial: clear the marker).
+     time; a member may still switch off a link of theirs, which only closes exposure); grants/memberships are
+     untouched, so **any owner can restore** in-window (trivial: clear the marker).
      The **hard-purge erases content + blob objects** from the store, not just DB rows — the erasure the
      [security-model](../crosscutting/security-model.md) mandates. Purge is a **server job** (operator-blind-safe: it deletes only ciphertext + opaque rows + blobs, never a key/name),
      unlike removal's key rotation.

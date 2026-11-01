@@ -347,9 +347,9 @@ never renamed, a contributor moves no drop box); a file's row asks about its fil
 | delete a file, a guest's folder | ✓ | ✗ | ✓ (inbox #391) | ✗ | ✗ | ✗ |
 | copy a file, a drop box, a guest's folder elsewhere in the space (core's "Copy to…", `canCopy`, [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md); a drop box's copy is a plain folder) | ✓ | ✗ | ✓ out of it | ✗ | ✗ | ✗ |
 | the **opened file** (`FileDetail`): replace, a header action | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder) | ✗ |
-| the opened file: rename, share, delete, move | all ✓ (share with the instance's `core.public-shares`, its READ_WRITE role with `.contribute`; not in an identity folder) | share only (links are a read: the dialog lists and copies them, mints and changes none) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
+| the opened file: rename, share, delete, move | all ✓ (share with the instance's `core.public-shares`, its READ_WRITE role with `.contribute`; not in an identity folder) | share only (links are a read: the dialog lists and copies them and revokes ✓ the caller's own live one, mints and changes nothing else) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
 | create a drop box (needs the instance's `core.public-shares.drop-box`) | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| a drop box's links, delete it | links with the instance's `core.public-shares.drop-box` (not the READ leaf); delete ✓ | links only (listed and copied, none minted or changed) | — | ✗ | ✗ | ✗ |
+| a drop box's links, delete it | links with the instance's `core.public-shares.drop-box` (not the READ leaf); delete ✓ | links only (listed and copied, the caller's own live one switched off ✓, none minted or otherwise changed) | — | ✗ | ✗ | ✗ |
 
 These are the matrix half; a right shows only where the session's data source also implements it
 (`src/web/src/features/depot/source.ts`, `sourceRights`: the guest's source has no delete and no rename, and no upload

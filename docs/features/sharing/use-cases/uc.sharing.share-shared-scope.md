@@ -62,7 +62,10 @@ scope adds is governance: removal, re-activation, renew and delete below. The re
   off ([ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md)).
 - **A3 — a creator who has left the scope** keeps nothing: editing or revoking their former share answers them
   as a non-member (404). Ownership is a claim of a *current* member; the share's `owner_account` alone never
-  authorizes.
+  authorizes. A current one still revokes their link while the group waits for its deletion — the one link write
+  the grace window allows, since it only closes exposure, and the link stays off if the deletion is stopped
+  ([uc.spaces.scope-access](../../spaces/use-cases/uc.spaces.scope-access.md) A1); a new link, an edit, a
+  re-activation, a renew and a delete wait for a restore.
 - **A4 — renew (re-issue) a link.** One request makes a **new** share — a new id, a fresh `K_share` — carrying the
   old one's note, private label, expiry and password (re-sealed under the new key, the password with a fresh salt),
   and **deletes** the old one (A7) in the **same transaction**; any refusal writes nothing. The role and the Memory come

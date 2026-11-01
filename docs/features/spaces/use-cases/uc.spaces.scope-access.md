@@ -34,7 +34,8 @@
    2. **Tenant suspended** → **`403 tenant_suspended`**, for reads and writes alike, whatever `Host` the request
       arrived on ([ADR 0066](../../../decisions/0066-tenant-suspension.md)).
    3. For a **write** only: the caller **no longer belongs to the tenant** (no accepted membership on its root
-      scope) → the same 404 as step 1; the scope is **being deleted** → **`409 scope_deleting`**.
+      scope) → the same 404 as step 1; the scope is **being deleted** → **`409 scope_deleting`** (but for the two
+      writes of A1).
    4. Otherwise **ok** — and only now does the operation run its own checks (owner, key-holder, capability,
       state) and its work.
 4. Operations addressed by a **tenant** use the same gate on the tenant's **root scope** (`scopeId ==
@@ -42,9 +43,13 @@
 
 ## Alternate / exception flows
 
-- **A1 — restore is the one write a deleting group allows.** [delete-group](uc.spaces.delete-group.md)'s
-  restore is the only way out of the grace window, so it skips the deleting check — and only that: it still
-  needs an owner who still belongs to the tenant, on a GROUP.
+- **A1 — a deleting group allows two writes: restoring it, and revoking a link.** [delete-group](uc.spaces.delete-group.md)'s
+  restore is the only way out of the grace window; switching a public link off
+  ([share-shared-scope](../../sharing/use-cases/uc.sharing.share-shared-scope.md) A3) only ever closes exposure,
+  and it matters once the deletion is stopped — the link then stays off. Both skip the deleting check — and only
+  that: a restore still needs an owner who still belongs to the tenant, on a GROUP; a revoke still needs the
+  link's creator, a current member of the space and of the tenant. Every other link write — a new link, an edit,
+  a re-activation, a renew, a delete — stays `409 scope_deleting`.
 - **A2 — a former tenant member reads their own spaces, and does nothing else.**
   [remove-tenant-member](uc.spaces.remove-tenant-member.md) keeps their membership on their own personal space
   and solo groups for the grace window. Reads pass step 1; every write — restore included — stops at step 3,
@@ -55,7 +60,8 @@
 - **A4 — a share serves only while its space is live.** A guest holding a link is not a member, so they learn
   neither deletion nor suspension: while the space is being deleted or its tenant is suspended, every guest
   route answers the **same 404 as a revoked link**, and the link works again unchanged after a restore or a
-  reactivation — nothing is written onto the share. An invite link to a suspended tenant answers like an
+  reactivation — nothing is written onto the share, unless a member revoked it in the window (A1): then it stays
+  off. An invite link to a suspended tenant answers like an
   invite that is no longer valid, for the same reason.
 - **A5 — a background job is worked on only by the member holding its lease, in a live space.** Claiming,
   heartbeating, completing, failing and declining a job are writes on its space, so none of them happen in a

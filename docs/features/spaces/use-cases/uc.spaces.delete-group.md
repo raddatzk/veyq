@@ -25,10 +25,12 @@
    downloadable**, but **clearly marked** "*wird am &lt;date&gt; gelöscht*" and **read-only** — no write of any
    kind: no new Memories, uploads, renames, favorites, share or roster changes, key rotations or background-job
    work (it is on its way out, [scope-access](uc.spaces.scope-access.md)). Its public links pause for the
-   window. Any **owner** additionally sees a **Restore** action.
+   window; a member may still **switch off** a link of theirs, which only closes exposure (scope-access A1). Any
+   **owner** additionally sees a **Restore** action.
 4. **Restore** (any owner who still belongs to the tenant, while `deletedAt` is set and before `purgeAfter`):
    clears `deletedAt`/`purgeAfter`; the group is **fully active** again for everyone, exactly as before (nothing
-   was moved) — its links answer again and its waiting jobs resume.
+   was moved) — its links answer again (but one switched off in the window, which stays off) and its waiting
+   jobs resume.
 5. **At `purgeAfter`**, a scheduled server job **hard-purges** the scope: it puts the store objects of every blob
    **and of every upload still open in the group** on the reclaim list, which `StoreReclaimSweep` drains
    ([ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)), then erases the
@@ -63,12 +65,14 @@
 - **A4 — any write while pending-deletion:** rejected (`409 scope_deleting`, the one code for this state) — the
   group is **read-only** while deleting, for every write: content, media, buckets, favorites, shares, roster, icon,
   key rotation and background-job work alike ([scope-access](uc.spaces.scope-access.md)). View + download stay open
-  so members can still see their pictures. Restore is the one write that passes — it is the only way out.
+  so members can still see their pictures. Two writes pass (scope-access A1): restore — it is the only way out —
+  and switching off a link of one's own, which only closes exposure; every other share write is refused.
 - **A5 — delete an already-deleting group / restore an active one:** rejected (`409 scope_deleting` — the
   deleting group refuses the delete like any other write / `409 not_deleted`, nothing to restore).
 - **A6 — a public link during the grace window:** answers the guest exactly as a revoked link does, and serves
   again unchanged after a restore — a guest is not a member and learns nothing of the deletion
-  ([scope-access](uc.spaces.scope-access.md) A4).
+  ([scope-access](uc.spaces.scope-access.md) A4). Its creator may still switch it off in the window (A4); then it
+  stays off after a restore.
 - **E1 — locally-saved copies.** A member who **downloads** content during the grace window keeps those local files
   — **not retractable** by any design (the stated limit). Purge erases the **shared** group from the server, not
   what already left it.

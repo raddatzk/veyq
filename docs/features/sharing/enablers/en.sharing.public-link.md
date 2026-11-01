@@ -277,7 +277,7 @@ stateDiagram-v2
 | Member removed (group removal-rotation, tenant removal, account erasure) | the removed member's links in each scope it is cut from switch off; the removal counter goes up; opted in, the bulk switch-off |
 | Root trashed / restored | not served / served again; rows untouched |
 | Root purged | tombstoned |
-| Group soft-deleted / restored | not served (`SPACE_UNAVAILABLE`) / served again |
+| Group soft-deleted / restored | not served (`SPACE_UNAVAILABLE`) / served again, but a link its creator switched off in the window, the one link write it allows (`uc.spaces.scope-access` A1) |
 | Tenant suspended or being deleted | not served |
 | Scope purged (group after grace, deleted tenant) | erased, ids retired |
 
