@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { Agent } from 'node:http'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -304,8 +305,10 @@ export default defineConfig(({ command }) => {
             ? (proxy: any) => proxy.on('proxyReq', (req: any) => req.setHeader('host', smokeHost))
             : undefined,
         },
-        // Presigned media → object store, Host left untouched (SigV4 signs the Host).
-        '/blobs/': { target: storeTarget, changeOrigin: false },
+        // Presigned media → object store, Host left untouched (SigV4 signs the Host). A fresh connection per request:
+        // Node's global agent keeps sockets alive, and a PUT sent on one the store is just closing never reaches it — the
+        // proxy answers 502 and the upload stops (2 of 600 frame PUTs, measured 2026-11-01; a 700 MB video lost two).
+        '/blobs/': { target: storeTarget, changeOrigin: false, agent: new Agent({ keepAlive: false }) },
       },
     },
   }
