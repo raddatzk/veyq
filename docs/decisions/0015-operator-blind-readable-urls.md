@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Built: yes
-- Date: 2026-06-28; amended 2026-11-01 (a name is unique within its route group)
+- Date: 2026-06-28
 - Model: [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md)
 - Replaced in part: a foreign `~username` as the profile view by ADR 0083 (built)
 
@@ -56,8 +56,8 @@ routes stay history-mode.**
   uniqueness on (`UNIQUE(parentId, slug_token)`, [ADR 0012](0012-content-key-hierarchy.md)) — so the **same**
   function resolves URL→node. Sibling slugs are not unique by construction: a name folds by its node's kind
   ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 16 — a file `a.b` and a
-  folder `a-b` share one URL segment), a name is unique **within its route group** only (amended 2026-11-01, owner:
-  the token of an application's node HMACs `<routeSlug>/<slug>`, so a Memory and an Expenses Pot `Rom` coexist — the
+  folder `a-b` share one URL segment), a name is unique **within its route group** only (the
+  token of an application's node HMACs `<routeSlug>/<slug>`, so a Memory and an Expenses Pot `Rom` coexist — the
   route slug below already gives them two addresses), and two drop-box guests' identity folders sit under different
   guest keys, so two guests named "Anna" both slugify to `anna`. So the client disambiguates, by one rule for building and resolving
   a path: among siblings of one plain segment **and one class** (the numbering spaces below) the first in **creation
@@ -94,7 +94,7 @@ routes stay history-mode.**
   - **Numbering spaces are separate.** Equal names are numbered (`anna`, `anna-2`, in creation order) within a
     **class** only — the folders; one application's nodes; the nodes with no segment (Depot and any kind nobody
     claimed). File `a.b` and folder `a-b` are both `a-b` and need no `-2` between them; the trailing slash tells
-    them apart. A name's uniqueness follows the application split (amended 2026-11-01, owner): each application
+    them apart. A name's uniqueness follows the application split: each application
     with a route slug is its own group, while the folders and the nodes with no segment stay one group between
     them (a folder `Rom` and a file `rom` still meet by name, though their URLs are told apart by the slash).
   - **The trailing slash is part of the address, and fragile by design.** A path without it means the **file** if

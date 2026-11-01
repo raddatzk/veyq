@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// A Memory's banner on screen (uc.memory.banner, ADR 0102 decisions 6-7, amended 2026-11-01): one image or one video above
+// A Memory's banner on screen (uc.memory.banner, ADR 0102 decisions 6-7): one image or one video above
 // the Memory's header row. The frame is the screen's, not the medium's: 16:9 where the Memory's column is wide, 1:1 where it
 // is narrow, never taller than 60 % of the viewport - a container query on `.memory-detail` (already an `inline-size`
 // container). Its space is reserved as soon as the sealed meta names a banner, so nothing below it jumps when the bytes

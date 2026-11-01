@@ -61,7 +61,7 @@ describe('planFolderUpload', () => {
     expect(plan.nextRootName()).toBe('Trip (4)')
   })
 
-  // ADR 0080 decision 16, amended 2026-11-01: a name is unique within its route group, so a sibling of an application with
+  // ADR 0080 decision 16: a name is unique within its route group, so a sibling of an application with
   // a route slug (a Memory, a Pot) does not number the top folder.
   it('leaves the top folder\'s name free beside a sibling of another route group of that name', () => {
     const plan = planFolderUpload(dir('Trip', file('a.txt')), [{ kind: 'T_ROUTED', name: 'Trip' }], slugFor)

@@ -165,7 +165,7 @@ takes `claimNoRouteSegment`; `RESERVED_ROUTE_SEGMENTS` cannot be claimed —
 A node's name folds to its slug by its kind ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 16): a container through `slugify`, a
 file through `fileNameSlug` (both `src/web/src/shared/naming.ts`). A kind's descriptor may register `slug`;
 `registry.slugFor(kind, name)` answers it, else `slugify`. A name is unique **within its route group** (ADR 0080
-decision 16, amended 2026-11-01): `registry.tokenInputFor(kind, name)` is what the slug token HMACs —
+decision 16): `registry.tokenInputFor(kind, name)` is what the slug token HMACs —
 `<routeSlug>/<slug>` for a kind whose application claimed a route slug (`memories/rom`, `expenses/rom`), the bare slug
 for a folder, Depot's kinds and a kind nobody claimed — so a Memory and an Expenses Pot of one name coexist, a folder and
 a Depot file of one name still meet. `slugTokenFor` (`core/node/tree.ts`) derives every token through it and takes the

@@ -131,7 +131,7 @@ export function guestTreeErrorMessageKey(err: unknown): { key: string; params?: 
  *  input — naming that sibling. `self` is the node being placed (its own entry never collides with itself). It compares
  *  what the server compares: siblings' tokens share the parent's key and slot, so equal tokens are equal token inputs
  *  (`registry.tokenInputFor`: each name folded by ITS OWN kind's function, inbox #350, behind its application's route
- *  slug where it claimed one) — so only siblings of one route group meet (ADR 0080 decision 16, amended 2026-11-01). */
+ *  slug where it claimed one) — so only siblings of one route group meet (ADR 0080 decision 16). */
 function assertNameFree(parts: SharedSubtree, parentId: string, kind: NodeKind, name: string, self?: string): void {
   const slug = registry.tokenInputFor(kind, name)
   for (const sibling of parts.nodes.values()) {

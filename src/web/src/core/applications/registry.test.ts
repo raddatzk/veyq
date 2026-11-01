@@ -94,7 +94,7 @@ describe('registry: slugFor', () => {
   })
 })
 
-// ADR 0080 decision 16, amended 2026-11-01: the slug token's input carries the route group, so a name is unique among the
+// ADR 0080 decision 16: the slug token's input carries the route group, so a name is unique among the
 // siblings of its group only — each application with a route slug is one, the plain names (folders, the application with
 // no segment, a kind nobody claimed) another.
 describe('registry: tokenInputFor', () => {

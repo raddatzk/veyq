@@ -38,7 +38,7 @@ describe('collidingSibling', () => {
     expect(collidingSibling([node('m', 'FOLDER', 'Müller')], 'p', 'FOLDER', 'Müller')?.id).toBe('m')
   })
 
-  // ADR 0080 decision 16, amended 2026-11-01: a name is unique within its route group only.
+  // ADR 0080 decision 16: a name is unique within its route group only.
   describe('per route group', () => {
     const MEMORY = 'MEMORY'
     const POT = 'EXPENSES_POT'

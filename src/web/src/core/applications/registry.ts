@@ -548,7 +548,7 @@ export interface Registry {
    *  derived from this (through {@link Registry.tokenInputFor}), so a node's token always uses ITS kind's folding. */
   slugFor(kind: NodeKind, name: string): string
   /** The string a node's blinded slug token HMACs (`core/node/tree.ts` `slugTokenFor`), and so what its name is unique by
-   *  among its siblings (ADR 0080 decision 16, amended 2026-11-01): {@link Registry.slugFor}'s slug behind `<routeSlug>/` for
+   *  among its siblings (ADR 0080 decision 16): {@link Registry.slugFor}'s slug behind `<routeSlug>/` for
    *  a kind whose application claimed a route slug (`memories/korfubanien`, `expenses/korfubanien`), the bare slug for a
    *  folder, Depot's kinds and a kind nobody claimed. A name is unique within its route group only, as the URL already
    *  separates them (`#foo/memories/korfubanien`, `#foo/expenses/korfubanien`): a Memory and a Pot of one name are

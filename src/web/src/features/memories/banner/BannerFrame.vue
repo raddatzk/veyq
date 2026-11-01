@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// One picture framed as the banner frames it (ADR 0102 decisions 2 and 6, amended 2026-11-01): the WHOLE picture, never
+// One picture framed as the banner frames it (ADR 0102 decisions 2 and 6): the WHOLE picture, never
 // cropped, contained in the box; where it does not fill the box, above and below or left and right, the same picture
 // enlarged and blurred (`aria-hidden`; nothing is made or stored for it). Shared by the banner on the page and the
 // dialog's two previews, so what the editor sees is what every viewer sees. The box (its aspect, its size) is the caller's.

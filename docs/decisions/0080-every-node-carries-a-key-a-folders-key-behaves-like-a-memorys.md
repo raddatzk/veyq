@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Built: yes
-- Date: 2026-10-06; amended 2026-11-01 (decision 16: a name is unique within its route group)
+- Date: 2026-10-06
 - Model: [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md)
 - Replaced in part: Decision 2, Decision 4, Decision 5 by ADR 0109 (built); Decision 11 by ADR 0111 (built)
 
@@ -191,19 +191,19 @@ Memory, an expense and a file side by side).
    displayed name keeps its case. Starting case-insensitive is the safe direction: loosening later would meet existing
    pairs, and a ZIP download needs no case rule, only a sanitiser for the target system. The kind's descriptor carries
    the choice, and every write that computes a token (create, rename and move, restore, a guest's create and
-   placement) folds by the node's kind, so core names no application kind. **A name is unique within its route group**
-   (amended 2026-11-01, owner): the server's uniqueness stays per token among siblings, and the token's input carries
+   placement) folds by the node's kind, so core names no application kind. **A name is unique within its route group**:
+   the server's uniqueness stays per token among siblings, and the token's input carries
    the group — for a kind whose application claimed a route slug ([ADR 0015](0015-operator-blind-readable-urls.md)),
    `<routeSlug>/<slug>` (`memories/rom`, `expenses/rom`); for a folder, Depot's kinds and a kind nobody claimed, the bare
    slug. So a Memory and an Expenses Pot `Rom` are siblings, and a Memory and a folder `Rom`; among the plain names a
-   folder `a.b` (`a-b`) and a file `a.b` (`a.b`) coexist, a folder `a.b` and a file `a-b` collide. Why: the rule dates
-   from before a node's URL carried its application's slug; now `#foo/memories/rom` and `#foo/expenses/rom` are two
-   addresses, so refusing the second name protected nothing (an Expenses Pot named like a Memory beside it was refused).
-   Until then uniqueness was per token among all siblings, whatever their kinds. A route slug is `[a-z0-9-]` and the
+   folder `a.b` (`a-b`) and a file `a.b` (`a.b`) coexist, a folder `a.b` and a file `a-b` collide. Why: a node's URL carries
+   its application's slug, so `#foo/memories/rom` and `#foo/expenses/rom` are two addresses, and refusing the second
+   name would protect nothing (owner, 2026-11-01). Rejected: uniqueness per token among all siblings whatever their
+   kinds, which refused an Expenses Pot named like a Memory beside it. A route slug is `[a-z0-9-]` and the
    `/` ends it, so two applications' inputs never meet and a container's `slugify` (never a `/`) never meets a routed
    one; a file's folding keeps a `/`, so a file literally named `memories/rom` still meets a Memory `Rom` — accepted,
-   like the folder `a.b` and the file `a-b`. Only the input changed: no crypto function, vector or server rule did, and
-   tokens stored before the change kept their bare input (no instance was live, so nothing was migrated). A client names
+   like the folder `a.b` and the file `a-b`. The group is only in the input: no crypto function, vector or server rule
+   depends on it. A client names
    the colliding sibling of its group before it sends, and the server's `slug_taken` is the race backstop.
    Non-Latin container names keep the hash fallback until someone needs a frozen, versioned transliteration table.
    **Rejected: a slug library** — a dependency's table change would silently break uniqueness. Both foldings are

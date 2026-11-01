@@ -20,7 +20,7 @@ import { sealedBanner, WHOLE_PICTURE } from './bannerModel'
 import { bannerVideoType, prepareImage, preparePoster, type PreparedBanner } from './bannerWrite'
 
 /** What the dialog asks for. A picked video comes with the poster the dialog already decoded for its preview. There is
- *  nothing to re-frame: every banner shows its whole medium (ADR 0102, amended 2026-11-01). */
+ *  nothing to re-frame: every banner shows its whole medium (ADR 0102). */
 export type BannerSaveIntent =
   | { kind: 'file'; file: File; type: string; poster: Uint8Array | null }
   | { kind: 'remove' }

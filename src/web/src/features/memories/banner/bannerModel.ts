@@ -6,7 +6,7 @@
 //   banner = { medium: 'image' | 'video', blob: Ref, poster?: Ref, type?: string, sha256?: string,
 //              frame: 'fill' | 'fit', focal: { x, y } }   Ref = { blobId, chunkCount, byteSize, wrappedBlobKey }
 //
-// `frame` and `focal` are an earlier editor's (ADR 0102 decision 2, amended 2026-11-01): the banner now always shows the
+// `frame` and `focal` are an earlier editor's (ADR 0102 decision 2): the banner now always shows the
 // whole medium, so no reader draws them and this editor writes `fit` around the centre ([WHOLE_PICTURE]) - which an older
 // client draws as the whole medium too. They stay in the shape, read and kept, so the meta, the export and an older client
 // need no change.
@@ -140,7 +140,7 @@ export function refShape(ref: BannerRefShape): BannerRefShape {
 /** The frame fields a written banner carries. */
 export type BannerFraming = { frame: BannerFrame; focal: FocalPoint }
 
-/** What this editor writes: the whole medium (ADR 0102, amended 2026-11-01). */
+/** What this editor writes: the whole medium (ADR 0102). */
 export const WHOLE_PICTURE: BannerFraming = { frame: 'fit', focal: CENTRE }
 
 /** The `banner` value to seal, in a fixed key order. */

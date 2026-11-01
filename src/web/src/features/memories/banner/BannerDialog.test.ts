@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // uc.memory.banner - the banner dialog: what it takes and refuses before anything is read further, the two previews (the
-// whole medium, nothing to frame: ADR 0102, amended 2026-11-01), and the intent it saves - awaited, with its progress, its
+// whole medium, nothing to frame: ADR 0102), and the intent it saves - awaited, with its progress, its
 // cancel and its failure said in words.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DOMWrapper, mount, flushPromises, type VueWrapper } from '@vue/test-utils'

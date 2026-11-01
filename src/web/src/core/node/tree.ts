@@ -119,7 +119,7 @@ export function openName(entryKey: Uint8Array, node: NodeAddress, encryptedName:
  *  root), keyed by the key the entry lives under (ADR 0080 Decision 2): unique per parent, stable per parent key. Its
  *  input is `registry.tokenInputFor(kind, name)` — the name folded by ITS kind's function (inbox #350: a container's
  *  `slugify`, a file's stricter `fileNameSlug`), behind its application's route slug where it claimed one
- *  (`memories/rom`, ADR 0080 decision 16 as amended 2026-11-01) — so every write of one node — create, rename or move,
+ *  (`memories/rom`, ADR 0080 decision 16) — so every write of one node — create, rename or move,
  *  restore, a re-key, a guest's — must pass that node's kind, or its token stops matching the one it was stored with.
  *  The server's uniqueness is per token among siblings, so a name is unique within its route group: a Memory and a Pot
  *  `Rom` coexist, and so do a folder `a.b` (slug `a-b`) and a file `a.b` (slug `a.b`); a folder `a.b` and a file `a-b`

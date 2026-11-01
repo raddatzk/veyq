@@ -85,7 +85,7 @@ describe('focal point and frame', () => {
     expect(normalizeFocal(undefined)).toEqual(CENTRE)
   })
 
-  // ADR 0102, amended 2026-11-01: the banner never crops, so this editor writes the whole picture - `fit` around the
+  // ADR 0102: the banner never crops, so this editor writes the whole picture - `fit` around the
   // centre, which an older client draws as the whole medium too.
   it('this editor writes the whole picture', () => {
     expect(WHOLE_PICTURE).toEqual({ frame: 'fit', focal: CENTRE })

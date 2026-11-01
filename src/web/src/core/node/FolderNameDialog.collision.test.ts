@@ -72,7 +72,7 @@ describe('FolderNameDialog names the sibling a name collides with (inbox #389)',
     expect(w.emitted('done')).toBeFalsy()
   })
 
-  // ADR 0080 decision 16, amended 2026-11-01: a Memory's token input is `memories/rom`, a folder's `rom` — another route
+  // ADR 0080 decision 16: a Memory's token input is `memories/rom`, a folder's `rom` — another route
   // group, so the two coexist (a sibling's own noun is still named: the file case below).
   it('a folder create at the scope root beside a Memory of its name is sent: the Memory is another route group', async () => {
     const w = mountDialog({ mode: 'create', parentId: null })

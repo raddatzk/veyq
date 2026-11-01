@@ -123,7 +123,7 @@ describe('a guest creates a node', () => {
     expect(openName(kRoot, { scopeId: SCOPE_ID, nodeId, epoch: 5, placementRevision: 0 }, sent[0].json.encryptedName as string)).toBe('Neu')
   })
 
-  // ADR 0080 decision 16, amended 2026-11-01: the guest's pre-check and token agree with the member's — a node of a kind
+  // ADR 0080 decision 16: the guest's pre-check and token agree with the member's — a node of a kind
   // whose application claimed a route slug is another group than the folder `Fotos` beside it.
   it('a routed kind of a sibling folder\'s name is sent, its token input behind its route slug', async () => {
     if (!registry.routeSlugs().includes('t-routed')) registry.claimRouteSlug('t-routed', ['T_ROUTED'])

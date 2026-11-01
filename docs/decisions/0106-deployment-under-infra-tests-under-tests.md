@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Built: yes
-- Date: 2026-10-20; amended 2026-11-01 (decision 9: the Dockerfiles moved out of `infra/` to the code they ship)
+- Date: 2026-10-20
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
 ## Context

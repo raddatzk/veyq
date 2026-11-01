@@ -338,7 +338,7 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
 
   // token inputs taken per parent: the target's siblings from the tree, a fresh folder's from what this run puts into it.
   // A token input carries its route group (`registry.tokenInputFor`), so a name is numbered only against its own group's
-  // siblings: an imported Pot `Rom` beside a Memory `Rom` keeps its name (ADR 0080 decision 16, amended 2026-11-01).
+  // siblings: an imported Pot `Rom` beside a Memory `Rom` keeps its name (ADR 0080 decision 16).
   const taken = new Map<string | null, Set<string>>()
   const takenIn = (parentId: string | null): Set<string> => {
     let set = taken.get(parentId)

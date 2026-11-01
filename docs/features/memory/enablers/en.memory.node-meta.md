@@ -98,7 +98,7 @@ Ref = { blobId, chunkCount, byteSize, wrappedBlobKey }
 - **`sha256`** is the digest of the file the banner was made from. A video banner's `BANNER` blob is that file as it is
   (its blob meta carries the same digest), so a gallery upload of the file shares its stored object; a gallery medium
   whose original has that digest is the banner's picture, which its delete confirmation asks about.
-- **`frame` and `focal` are kept, never drawn** (ADR 0102, amended 2026-11-01): every banner shows its whole medium,
+- **`frame` and `focal` are kept, never drawn** (ADR 0102): every banner shows its whole medium,
   blurred where it leaves the frame, so no reader draws either. The first build decided `frame` once in the editor
   (`fill` around the focal point for a landscape or square medium, `fit` for a portrait one) and stored it; this editor
   writes `fit` around the centre, which that build draws as the whole medium too. Both stay in the shape, so the meta,

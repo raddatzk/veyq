@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// uc.memory.banner - the banner on the page: the whole medium, never cropped, with blur where it leaves the frame (ADR 0102,
-// amended 2026-11-01), nothing drawn for a banner that failed, and a video that NEVER plays on its own: no <video> and no service-worker registration
+// uc.memory.banner - the banner on the page: the whole medium, never cropped, with blur where it leaves the frame (ADR 0102),
+// nothing drawn for a banner that failed, and a video that NEVER plays on its own: no <video> and no service-worker registration
 // before the click (bite 7), then the BANNER blob's chunks through the worker, or the whole copy without one.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 

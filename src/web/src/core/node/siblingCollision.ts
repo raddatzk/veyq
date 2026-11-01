@@ -2,7 +2,7 @@
 // a rename is sent, the dialog looks for a sibling in the loaded, decrypted tree that the new name collides with, and
 // names it. It compares what the server compares — siblings' slug tokens share the parent's key, so equal tokens are
 // equal token inputs (`registry.tokenInputFor`): each name folded by ITS OWN kind's function, behind its application's
-// route slug where it claimed one. So only siblings of one route group meet (ADR 0080 decision 16, amended 2026-11-01): a
+// route slug where it claimed one. So only siblings of one route group meet (ADR 0080 decision 16): a
 // Memory and a Pot `Rom` coexist; among the plain names a folder `a.b` (`a-b`) and a file `a.b` (`a.b`) coexist, a
 // folder `a.b` and a file `a-b` collide. The guest's twin is
 // `core/sharing/guestTree.ts`. The server's `409 slug_taken` stays the race backstop (a sibling created since the tree

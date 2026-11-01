@@ -72,7 +72,7 @@ describe('useBannerEditor', () => {
     expect(preparedOf(banner)).toMatchObject({ medium: 'image', image: { share: { key: KEY, ref: { blobId: 'prev' } } } })
     expect(banner.write).toHaveBeenCalledWith(expect.objectContaining({
       nodeId: 'n1', nodeKey: KEY, current: { wrappedMeta: 'w', metaRevision: 4 },
-      // every banner shows its whole medium: this editor writes `fit` around the centre (ADR 0102, amended 2026-11-01)
+      // every banner shows its whole medium: this editor writes `fit` around the centre (ADR 0102)
       banner: expect.objectContaining({ medium: 'image', sha256: digest, frame: 'fit', focal: CENTRE }),
     }))
     expect(onMetaUpdated).toHaveBeenCalledWith({ nodeId: 'n1', wrappedMeta: 'w2', metaRevision: 5 })
