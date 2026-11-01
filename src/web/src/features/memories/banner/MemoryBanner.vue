@@ -8,7 +8,9 @@
 // The WHOLE medium, never cropped: it is contained in the frame, and where it does not fill it - left and right for a
 // narrower one, above and below for a wider one - a blurred, enlarged copy of the same decrypted picture fills the rest
 // (`aria-hidden`; nothing is made or stored for it). A stored `frame` and focal point (an earlier editor's) are read and
-// kept, never drawn. A video shows its poster and a play button and NOTHING plays before the click (no `<video>` exists until
+// kept, never drawn. While a video plays, that blur follows it (owner 2026-11-01): each frame the browser shows is drawn
+// onto a canvas of 32 px across - one tiny draw, no second decode, no second read of the video - which the display enlarges
+// and blurs; paused, it holds the last frame, and under `prefers-reduced-motion` it stays the poster. A video shows its poster and a play button and NOTHING plays before the click (no `<video>` exists until
 // then); the click registers the `BANNER` blob with the media service worker (ADR 0047) and plays it with its controls -
 // or, without a service worker, decrypts it whole first, as the lightbox's fallback does. The same component for a member
 // and a guest: it offers no action of its own.
@@ -47,7 +49,65 @@ const failed = ref(false)
 const videoSrc = computed(() => swUrl.value ?? wholeVideo.url.value)
 let run = 0
 
+// --- the backdrop that follows the playing video -------------------------------------------------------------------
+/** The canvas's width; its height follows the video's aspect. So few pixels are a blur by themselves when enlarged. */
+const BACKDROP_WIDTH = 32
+type FrameVideo = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: () => void) => number
+  cancelVideoFrameCallback?: (handle: number) => void
+}
+const videoEl = ref<FrameVideo | null>(null)
+const backdropCanvas = ref<HTMLCanvasElement | null>(null)
+/** The canvas holds a frame: it replaces the poster behind the video. */
+const live = ref(false)
+let frameHandle: { kind: 'video' | 'animation'; id: number } | null = null
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
+function drawFrame() {
+  const v = videoEl.value
+  const canvas = backdropCanvas.value
+  if (!v || !canvas || !v.videoWidth || !v.videoHeight || reducedMotion()) return
+  const height = Math.max(1, Math.round((BACKDROP_WIDTH * v.videoHeight) / v.videoWidth))
+  if (canvas.width !== BACKDROP_WIDTH || canvas.height !== height) {
+    canvas.width = BACKDROP_WIDTH
+    canvas.height = height
+  }
+  const context = canvas.getContext('2d')
+  if (!context) return
+  context.drawImage(v, 0, 0, BACKDROP_WIDTH, height)
+  live.value = true
+}
+
+/** One draw per frame the browser presents (`requestVideoFrameCallback`), else per animation frame; none once paused. */
+function nextFrame() {
+  const v = videoEl.value
+  frameHandle = null
+  if (!v || v.paused || v.ended || reducedMotion()) return
+  if (typeof v.requestVideoFrameCallback === 'function') {
+    frameHandle = { kind: 'video', id: v.requestVideoFrameCallback(onFrame) }
+  } else if (typeof requestAnimationFrame === 'function') {
+    frameHandle = { kind: 'animation', id: requestAnimationFrame(onFrame) }
+  }
+}
+function onFrame() {
+  drawFrame()
+  nextFrame()
+}
+function stopFrames() {
+  const h = frameHandle
+  frameHandle = null
+  if (!h) return
+  if (h.kind === 'video') videoEl.value?.cancelVideoFrameCallback?.(h.id)
+  else if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(h.id)
+}
+function onPlaying() {
+  stopFrames()
+  nextFrame()
+}
+
 function stop() {
+  stopFrames()
+  live.value = false
   run++
   if (handle) revokePlayback(handle)
   handle = null
@@ -102,14 +162,21 @@ onBeforeUnmount(stop)
     data-testid="memory-banner"
   >
     <template v-if="videoSrc">
-      <img v-if="pictureUrl" class="memory-banner-backdrop" :src="pictureUrl" alt="" aria-hidden="true" />
+      <img v-if="pictureUrl && !live" class="memory-banner-backdrop" :src="pictureUrl" alt="" aria-hidden="true" />
+      <canvas v-show="live" ref="backdropCanvas" class="memory-banner-backdrop" aria-hidden="true" />
       <video
+        ref="videoEl"
         class="memory-banner-media"
         :src="videoSrc"
         :aria-label="t('memory.banner.video')"
         controls
         autoplay
         playsinline
+        @play="onPlaying"
+        @seeked="drawFrame"
+        @loadeddata="drawFrame"
+        @pause="stopFrames"
+        @ended="stopFrames"
         @error="failed = true"
       />
     </template>

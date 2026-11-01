@@ -171,8 +171,10 @@ remove the action. **The frame is the screen's, not the medium's** (amended 2026
 column is wide, 1:1 where it is narrow (720 px and below - a phone), never taller than 60 % of the viewport. The medium
 is contained in it, **always whole, never cropped**; where it leaves the frame - at the sides of a narrower medium, above
 and below a wider one - the same decrypted picture (a video: its poster) is drawn a second time behind it, enlarged and
-blurred by the display (`aria-hidden`). No blurred copy is made or stored, so nothing beyond the slots exists to erase,
-hold or count. The editor's dialog shows the picked file as both frames show it (wide 16:9, phone 1:1) and has nothing
+blurred by the display (`aria-hidden`). While a video plays, the blur follows it (owner 2026-11-01): each frame the
+browser presents is drawn onto a canvas 32 px across, which the display enlarges and blurs - no second decode, no second
+read of the video; paused it holds the last frame, and under `prefers-reduced-motion` it stays the poster. No blurred copy
+is made or stored, so nothing beyond the slots exists to erase, hold or count. The editor's dialog shows the picked file as both frames show it (wide 16:9, phone 1:1) and has nothing
 to set: no point, no fit / fill. The banner has no description: it is decorative, since the Memory's title follows it.
 
 ### 7. What the interface says when the banner's picture is deleted

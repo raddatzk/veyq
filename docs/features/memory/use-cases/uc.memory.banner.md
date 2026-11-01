@@ -36,7 +36,8 @@ A banner is **one medium in the node's own attachments**, shown whole:
   only with the last row naming it.
 - **Always whole, never cropped** — the medium is contained in the frame; where it does not fill it — left and right
   for a medium narrower than the frame, above and below for a wider one — the same decrypted picture (a video: its
-  poster), enlarged and blurred, fills the rest. Nothing is made or stored for the blur. A stored banner's `frame` and
+  poster - and while it plays, its current frame), enlarged and blurred, fills the rest. Nothing is made or stored for the
+  blur. A stored banner's `frame` and
   focal point (the first build's fill around a point, or fit) are read and kept, never drawn: every banner shows whole.
 - **No description** — the banner is decorative; the Memory's title follows it.
 
@@ -117,8 +118,9 @@ on a phone, the top of the page on a share).
   § What the server sees.
 - **No half state.** Both slots and the meta that names them are one transaction; a stale slot or a refused meta write
   writes nothing.
-- **No autoplay, no motion of its own.** Nothing moves until the viewer clicks; the blur is a static picture, so
-  reduced-motion and data-saver settings need nothing from the banner.
+- **No autoplay, no motion of its own.** Nothing moves until the viewer clicks. A playing video's blur follows it from a
+  canvas 32 px across (one tiny draw per frame, no second decode or read); paused it holds still, and under
+  `prefers-reduced-motion` it stays the poster. Data-saver settings need nothing from the banner.
 - **Whole, every screen.** The medium is contained in the 16:9 and in the 1:1 frame alike, so nothing of it is ever
   cut away and nothing per screen is stored; the dialog's two previews are the same component the page draws.
 - **Removal is real, with the cover's honest limits:** a replaced or removed banner's blobs go in the same transaction with a

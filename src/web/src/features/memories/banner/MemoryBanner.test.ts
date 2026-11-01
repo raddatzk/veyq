@@ -81,6 +81,64 @@ describe('MemoryBanner', () => {
     expect(revokePlayback).toHaveBeenCalledWith('h1')
   })
 
+  // Owner 2026-11-01: while a video plays, its blur follows it - each presented frame drawn onto a 32 px canvas, no second
+  // decode; paused, nothing is drawn; under reduced motion the blur stays the poster.
+  describe('the backdrop of a playing video', () => {
+    let frameCallbacks: Array<() => void>
+    let drawImage: ReturnType<typeof vi.fn>
+    let reduce: boolean
+    beforeEach(() => {
+      frameCallbacks = []
+      drawImage = vi.fn()
+      reduce = false
+      Object.assign(HTMLVideoElement.prototype, {
+        requestVideoFrameCallback: vi.fn((cb: () => void) => frameCallbacks.push(cb)),
+        cancelVideoFrameCallback: vi.fn(),
+      })
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D)
+      vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: reduce })))
+    })
+
+    async function playing() {
+      vi.mocked(registerPlayback).mockResolvedValueOnce('/__media/h1')
+      const { wrapper } = mountBanner(video)
+      await wrapper.get('.memory-banner-play').trigger('click')
+      await flushPromises()
+      const v = wrapper.get('video')
+      for (const [k, value] of Object.entries({ videoWidth: 1920, videoHeight: 1080, paused: false, ended: false })) {
+        Object.defineProperty(v.element, k, { value, configurable: true })
+      }
+      await v.trigger('play')
+      return { wrapper, v }
+    }
+
+    it('draws each presented frame onto a 32 px canvas, which replaces the poster behind the video; a pause stops it', async () => {
+      const { wrapper, v } = await playing()
+      expect(frameCallbacks).toHaveLength(1)
+      frameCallbacks.shift()!()
+      await flushPromises()
+      const canvas = wrapper.get('canvas.memory-banner-backdrop')
+      expect(drawImage).toHaveBeenCalledWith(v.element, 0, 0, 32, 18)
+      expect([(canvas.element as HTMLCanvasElement).width, (canvas.element as HTMLCanvasElement).height]).toEqual([32, 18])
+      expect(canvas.attributes('aria-hidden')).toBe('true')
+      expect(wrapper.find('img.memory-banner-backdrop').exists(), 'the poster gives way').toBe(false)
+      expect(frameCallbacks, 'the next frame is asked for').toHaveLength(1)
+
+      Object.defineProperty(v.element, 'paused', { value: true, configurable: true })
+      await v.trigger('pause')
+      frameCallbacks.shift()!() // a frame already asked for draws, and asks for no more
+      expect(frameCallbacks).toHaveLength(0)
+    })
+
+    it('under reduced motion draws nothing: the blur stays the poster', async () => {
+      reduce = true
+      const { wrapper } = await playing()
+      expect(frameCallbacks).toHaveLength(0)
+      expect(drawImage).not.toHaveBeenCalled()
+      expect(wrapper.get('img.memory-banner-backdrop').attributes('src')).toBe('blob:picture')
+    })
+  })
+
   it('without a service worker the click decrypts the copy whole and plays it typed', async () => {
     const { wrapper, videoBytes } = mountBanner(video)
     await wrapper.get('.memory-banner-play').trigger('click')
