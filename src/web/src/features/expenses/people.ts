@@ -49,6 +49,16 @@ export function addableMembers(pot: { readonly participants: readonly Pick<Parti
   return members.filter((m) => !taken.has(m.userId))
 }
 
+/** Case and accents aside: "Zoë" and "zoe" are the same letters. */
+const folded = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase()
+
+/** The members of [members] whose display name holds [query], case and accents aside — the create dialog's suggestions
+ *  while a name is typed; every one of them for a blank query. In the order given. */
+export function membersMatching(members: readonly Person[], query: string): Person[] {
+  const q = folded(query.trim())
+  return q ? members.filter((m) => folded(m.displayName).includes(q)) : [...members]
+}
+
 /** A participant a writer adds: a name typed, or a member of the space chosen ({@link addableMembers}). */
 export type NewParticipant = { readonly name: string } | { readonly member: Person }
 

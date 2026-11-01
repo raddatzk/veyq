@@ -64,6 +64,7 @@ const en = {
     nextMonth: 'Next month',
     firstDayOfWeek: '0',
     dateSegment: { day: 'Day', month: 'Month', year: 'Year', empty: 'Empty' },
+    removeTag: 'Remove {label}',
   },
   // The PDF renderer's own texts (`shared/pdf/PdfPages.vue`): its toolbar and its pages, read wherever an application draws a PDF.
   pdf: {
@@ -2116,6 +2117,7 @@ const de: typeof en = {
     nextMonth: 'Nächster Monat',
     firstDayOfWeek: '1',
     dateSegment: { day: 'Tag', month: 'Monat', year: 'Jahr', empty: 'Leer' },
+    removeTag: '{label} entfernen',
   },
   pdf: {
     toolbar: 'PDF-Steuerung',
