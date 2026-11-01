@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-// uc.memory.banner - the banner dialog: what it takes and refuses before anything is read further, the frame a medium
-// starts in (a portrait one fits, and only it may switch), the focal point the previews follow, and the intent it saves -
-// awaited, with its progress, its cancel and its failure said in words.
+// uc.memory.banner - the banner dialog: what it takes and refuses before anything is read further, the two previews (the
+// whole medium, nothing to frame: ADR 0102, amended 2026-11-01), and the intent it saves - awaited, with its progress, its
+// cancel and its failure said in words.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DOMWrapper, mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { realI18n, t } from '../../../test/i18n'
@@ -42,13 +42,8 @@ async function pick(wrapper: Page, file: File) {
   await flushPromises()
 }
 
-/** The picture's natural size, as the browser reports it once it has loaded. */
-async function loaded(wrapper: Page, w: number, h: number) {
-  const img = wrapper.get('img.banner-dialog-image')
-  Object.defineProperty(img.element, 'naturalWidth', { value: w, configurable: true })
-  Object.defineProperty(img.element, 'naturalHeight', { value: h, configurable: true })
-  await img.trigger('load')
-}
+const previewSrc = (wrapper: Page, which: 'wide' | 'phone') =>
+  wrapper.find(`[data-testid="banner-preview-${which}"] img.banner-frame-media`)
 
 const button = (wrapper: Page, label: string) =>
   wrapper.findAll('button').find((b) => b.text().includes(label) || b.attributes('aria-label') === label)!
@@ -62,22 +57,20 @@ beforeEach(async () => {
 })
 
 describe('BannerDialog', () => {
-  it('a picked landscape image fills; a portrait one fits, may switch to fill, and saves the frame chosen', async () => {
+  it('a picked image shows whole in both previews, offers nothing to frame, and saves as it is', async () => {
     const { wrapper, save, emitted } = await mountDialog()
     await pick(wrapper, new File([new Uint8Array(10)], 'wide.jpg', { type: 'image/jpeg' }))
-    await loaded(wrapper, 4000, 2000)
-    expect(wrapper.find('[role="group"]').exists(), 'a landscape medium does not switch').toBe(false)
-    expect(wrapper.get('[data-testid="banner-preview-wide"] img.banner-frame-media').classes()).not.toContain('is-fit')
-
-    await pick(wrapper, new File([new Uint8Array(10)], 'tall.jpg', { type: 'image/jpeg' }))
-    await loaded(wrapper, 1080, 1920)
-    expect(wrapper.get('[data-testid="banner-preview-phone"] img.banner-frame-media').classes()).toContain('is-fit')
-    await button(wrapper, t('memory.banner.fill')).trigger('click')
+    for (const which of ['wide', 'phone'] as const) {
+      expect(previewSrc(wrapper, which).attributes('src')).toBe('blob:picked')
+      expect(wrapper.find(`[data-testid="banner-preview-${which}"] .banner-frame-backdrop`).exists()).toBe(true)
+    }
+    expect(wrapper.find('[role="group"]').exists(), 'no fit / fill switch').toBe(false)
+    expect(wrapper.find('.banner-focal-handle').exists(), 'no focal point').toBe(false)
     expect(wrapper.find('input:not([type="file"])').exists(), 'no description field: the banner has none').toBe(false)
     await button(wrapper, t('memory.banner.save')).trigger('click')
     await flushPromises()
     expect(save).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'file', type: 'image/jpeg', poster: null, framing: { frame: 'fill', focal: { x: 0.5, y: 0.5 } } }),
+      { kind: 'file', file: expect.any(File), type: 'image/jpeg', poster: null },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(emitted('close')).toHaveLength(1)
@@ -95,27 +88,28 @@ describe('BannerDialog', () => {
     expect(button(wrapper, t('memory.banner.save')).attributes('disabled')).toBeDefined()
   })
 
-  it('a video is framed on its first frame; one whose frame this browser cannot decode is refused (Q5)', async () => {
+  it('a video is previewed on its first frame; one whose frame this browser cannot decode is refused (Q5)', async () => {
     const { wrapper, deriver, save } = await mountDialog()
     vi.mocked(deriver.deriveVideoPoster).mockRejectedValueOnce(new Error('no decoder'))
     await pick(wrapper, new File([new Uint8Array(10)], 'clip.mov', { type: 'video/quicktime' }))
     expect(wrapper.get('[role="alert"]').text()).toBe(t('memory.banner.videoUnreadable'))
-    expect(wrapper.find('img.banner-dialog-image').exists()).toBe(false)
+    expect(previewSrc(wrapper, 'wide').exists()).toBe(false)
 
     await pick(wrapper, new File([new Uint8Array(10)], 'clip.mov', { type: 'video/quicktime' }))
-    await loaded(wrapper, 1080, 1920)
+    expect(previewSrc(wrapper, 'wide').attributes('src')).toBe('blob:picked')
     await button(wrapper, t('memory.banner.save')).trigger('click')
     await flushPromises()
-    expect(save.mock.calls[0][0]).toMatchObject({ kind: 'file', type: 'video/quicktime', poster: new Uint8Array([0xff, 0xd8]), framing: { frame: 'fit' } })
+    expect(save.mock.calls[0][0]).toEqual({ kind: 'file', file: expect.any(File), type: 'video/quicktime', poster: new Uint8Array([0xff, 0xd8]) })
   })
 
-  it('re-opens the stored banner as it was framed; Remove removes; a failure is said and the dialog stays', async () => {
+  it('re-opens the stored banner in the previews, saves only a new file; Remove removes; a failure is said and the dialog stays', async () => {
     const { wrapper, save, emitted } = await mountDialog({ current: stored, currentSrc: 'blob:current' })
-    expect(wrapper.get('img.banner-dialog-image').attributes('src')).toBe('blob:current')
+    expect(previewSrc(wrapper, 'wide').attributes('src')).toBe('blob:current')
+    expect(button(wrapper, t('memory.banner.save')).attributes('disabled'), 'nothing to save until a new file is picked').toBeDefined()
     save.mockRejectedValueOnce(new BannerStaleError())
-    await button(wrapper, t('memory.banner.save')).trigger('click')
+    await button(wrapper, t('memory.banner.remove')).trigger('click')
     await flushPromises()
-    expect(save.mock.calls[0][0]).toEqual({ kind: 'keep', framing: { frame: 'fill', focal: { x: 0.3, y: 0.4 } } })
+    expect(save.mock.calls[0][0]).toEqual({ kind: 'remove' })
     expect(wrapper.get('[role="alert"]').text()).toBe(t('memory.banner.stale'))
     expect(emitted('close')).toBeUndefined()
 
@@ -125,21 +119,16 @@ describe('BannerDialog', () => {
     expect(emitted('close')).toHaveLength(1)
   })
 
-  it('a picked file is the only source; the arrow keys move the point', async () => {
-    const { wrapper, save } = await mountDialog()
+  it('a picked file is the only source', async () => {
+    const { wrapper } = await mountDialog()
     expect(wrapper.text(), 'no gallery source is offered').not.toContain('gallery')
-    await pick(wrapper, new File([new Uint8Array(10)], 'wide.jpg', { type: 'image/jpeg' }))
-    await loaded(wrapper, 3000, 2000)
-    await wrapper.get('.banner-focal-handle').trigger('keydown', { key: 'ArrowRight' })
-    await wrapper.get('.banner-focal-handle').trigger('keydown', { key: 'ArrowDown', shiftKey: true })
-    await button(wrapper, t('memory.banner.save')).trigger('click')
-    await flushPromises()
-    expect(save.mock.calls[0][0]).toMatchObject({ kind: 'file', framing: { frame: 'fill', focal: { x: 0.52, y: 0.6 } } })
+    expect(button(wrapper, t('memory.banner.choose'))).toBeTruthy()
   })
 
   it('a save in flight shows its progress and Cancel aborts it, saying nothing', async () => {
     let signal!: AbortSignal
     const { wrapper, save, emitted } = await mountDialog({ current: stored, currentSrc: 'blob:current' })
+    await pick(wrapper, new File([new Uint8Array(10)], 'wide.jpg', { type: 'image/jpeg' }))
     save.mockImplementationOnce(async (_i, opts) => {
       signal = opts.signal!
       opts.onProgress?.(0.42)

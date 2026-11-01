@@ -32,7 +32,6 @@ const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const OLD_KEY = v1.randomBytes(32)
 const NEW_KEY = v1.randomBytes(32)
 const NODE_ID = 'f0000000-0000-4000-8000-000000000002'
-const framing = { frame: 'fill' as const, focal: { x: 0.25, y: 0.5 } }
 const bannerWith = (wrap: string) => ({ medium: 'image', blob: { blobId: 'b-1', chunkCount: 1, byteSize: 9, wrappedBlobKey: wrap } })
 // The Memory as the device read it (under the old key), and as the re-read tree holds it after the re-key: its meta re-sealed
 // under the new key, the banner's wrap moved to it.
@@ -55,7 +54,7 @@ const deriver = {
 function editor() {
   return useBannerEditor({
     scopeId: () => SCOPE, node: () => before, memoryKey: () => OLD_KEY, source: memberMemorySource({ scopeId: () => SCOPE }),
-    items: () => [], raw: () => bannerWith('old-wrap'), onMetaUpdated: vi.fn(), deriver,
+    items: () => [], onMetaUpdated: vi.fn(), deriver,
   })
 }
 const writes = () => vi.mocked(writeMemoryBanner).mock.calls.map((c) => c[0])
@@ -73,28 +72,17 @@ beforeEach(() => {
 
 describe('a member\'s banner on a Memory not re-keyed yet (ADR 0111 decision 11)', () => {
   it('a picked image: the Memory\'s path is pulled, and the banner uploaded and written again under the new key', async () => {
-    await editor().save({ kind: 'file', file: new File([new Uint8Array([1, 2])], 'a.jpg'), type: 'image/jpeg', poster: null, framing })
+    await editor().save({ kind: 'file', file: new File([new Uint8Array([1, 2])], 'a.jpg'), type: 'image/jpeg', poster: null })
     expect(pullRekeyPath).toHaveBeenCalledWith(SCOPE, [NODE_ID])
     expect(pull).toHaveBeenCalledOnce()
     expect(vi.mocked(uploadBanner).mock.calls.map((c) => c[2])).toEqual([OLD_KEY, NEW_KEY])
     expect(writes()[1]).toMatchObject({ scopeId: SCOPE, nodeKey: NEW_KEY, current: { nodeEpoch: 1, metaRevision: 4 }, upload: { uploadId: 'up-2' } })
   })
 
-  it('a re-frame keeps the banner the re-key re-wrapped: its wrap read from the re-read meta, the base the re-read one', async () => {
-    await editor().save({ kind: 'keep', framing })
-    expect(pull).toHaveBeenCalledOnce()
-    expect(writes()[0]).toMatchObject({ nodeKey: OLD_KEY, banner: { blob: { wrappedBlobKey: 'old-wrap' } } })
-    expect(writes()[1]).toMatchObject({
-      nodeKey: NEW_KEY, current: { wrappedMeta: after.wrappedMeta, metaRevision: 4, nodeEpoch: 1 },
-      banner: { blob: { wrappedBlobKey: 'new-wrap' }, frame: 'fill', focal: { x: 0.25, y: 0.5 } },
-    })
-    expect(uploadBanner).not.toHaveBeenCalled()
-  })
-
   it('the device floor already shows the Memory lags: the pull runs before anything is sealed, and the banner is uploaded once', async () => {
     held.epochs = { current: 1, keys: new Map() }
     vi.mocked(writeMemoryBanner).mockReset().mockResolvedValue({ wrappedMeta: 'bmV3', metaRevision: 5 })
-    await editor().save({ kind: 'file', file: new File([new Uint8Array([1, 2])], 'a.jpg'), type: 'image/jpeg', poster: null, framing })
+    await editor().save({ kind: 'file', file: new File([new Uint8Array([1, 2])], 'a.jpg'), type: 'image/jpeg', poster: null })
     expect(pull).toHaveBeenCalledOnce()
     expect(vi.mocked(uploadBanner).mock.calls.map((c) => c[2])).toEqual([NEW_KEY])
     expect(writes()).toHaveLength(1)

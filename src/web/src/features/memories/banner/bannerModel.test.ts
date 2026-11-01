@@ -10,13 +10,10 @@ import {
   BANNER_ROLE,
   CENTRE,
   DEFAULT_VIDEO_TYPE,
+  WHOLE_PICTURE,
   bannerBlobIds,
-  bannerStyle,
-  defaultFrame,
-  isPortrait,
   normalizeBanner,
   normalizeFocal,
-  reframedBanner,
   sealedBanner,
 } from './bannerModel'
 
@@ -88,21 +85,14 @@ describe('focal point and frame', () => {
     expect(normalizeFocal(undefined)).toEqual(CENTRE)
   })
 
-  // Bite 6: swap x and y in `bannerStyle` and the asymmetric point's object-position goes red.
-  it('bannerStyle puts the focal point first across, then down', () => {
-    expect(bannerStyle({ x: 0.2, y: 0.85 })).toEqual({ objectPosition: '20% 85%' })
-    expect(bannerStyle({ x: 1 / 3, y: 0 })).toEqual({ objectPosition: '33.33% 0%' })
-  })
-
-  it('a portrait medium fits by default, a landscape or square one fills', () => {
-    expect(defaultFrame(1080, 1920)).toBe('fit')
-    expect(defaultFrame(1920, 1080)).toBe('fill')
-    expect(defaultFrame(1000, 1000)).toBe('fill')
-    expect(isPortrait(1000, 1000)).toBe(false)
+  // ADR 0102, amended 2026-11-01: the banner never crops, so this editor writes the whole picture - `fit` around the
+  // centre, which an older client draws as the whole medium too.
+  it('this editor writes the whole picture', () => {
+    expect(WHOLE_PICTURE).toEqual({ frame: 'fit', focal: CENTRE })
   })
 })
 
-describe('sealedBanner / reframedBanner / bannerBlobIds', () => {
+describe('sealedBanner / bannerBlobIds', () => {
   it('seals only the four fields of a ref, a poster and type only for a video, the digest only when well-formed', () => {
     const plan = { ...ref('b'), ownerId: NODE, role: BANNER_ROLE, wrappedBlobMeta: 'bWV0YQ==' }
     expect(sealedBanner({ medium: 'image', blob: plan, poster: ref('p'), framing: { frame: 'fill', focal: { x: 0.123456, y: 1 } } })).toEqual({
@@ -115,14 +105,6 @@ describe('sealedBanner / reframedBanner / bannerBlobIds', () => {
       sealedBanner({ medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/webm', sha256: DIGEST, framing: { frame: 'fit', focal: CENTRE } }),
     ).toEqual({ medium: 'video', blob: ref('v'), poster: ref('p'), type: 'video/webm', sha256: DIGEST, frame: 'fit', focal: CENTRE })
     expect(sealedBanner({ medium: 'image', blob: ref('b'), sha256: 'not-a-digest', framing: { frame: 'fill', focal: CENTRE } })).not.toHaveProperty('sha256')
-  })
-
-  it('a re-frame keeps the bytes and every other field as stored (an older description and origin included)', () => {
-    const stored = { medium: 'image', blob: ref('b'), sha256: DIGEST, frame: 'fill', focal: CENTRE, alt: 'old', origin: { mediaId: 'm' }, future: 1 }
-    expect(reframedBanner(stored, { frame: 'fit', focal: { x: 0.1, y: 0.2 } })).toEqual({
-      medium: 'image', blob: ref('b'), sha256: DIGEST, frame: 'fit', focal: { x: 0.1, y: 0.2 }, alt: 'old', origin: { mediaId: 'm' }, future: 1,
-    })
-    expect(reframedBanner(null, { frame: 'fill', focal: CENTRE })).toBeNull()
   })
 
   it('bannerBlobIds reads the compare values from the raw value', () => {

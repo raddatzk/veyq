@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Built: partly (not built: decision 4's small playback copy, in decision 2's later slot)
-- Date: 2026-10-18
+- Date: 2026-10-18; amended 2026-11-01 (the frame)
 - Model: [Application: Memories](../apps/memories.md)
 
 ## Context
@@ -10,14 +10,19 @@
 The product asks for a medium shown **above the menu bar** of a Memory, **independent of its cover**. Its
 product shape is the owner's:
 
-- a fixed frame — about 3:1 on a wide screen, 16:9 on a phone, at most about 35 % of the viewport's height — that
+- a fixed frame — **16:9** on a wide screen, **1:1** on a phone, at most **60 %** of the viewport's height — that
   scrolls away while the menu bar sticks;
-- a landscape medium **fills** the frame around a **focal point** the editor sets; a portrait one (image or video) is
-  **fit** by default — the whole medium centred, the sides filled by a blurred, enlarged copy of it — and can be switched
-  to fill;
+- the medium is **always shown whole**, never cropped: where it does not fill the frame — left and right for a narrower
+  one, above and below for a wider one — a blurred, enlarged copy of it fills the rest;
 - a video shows a poster with a play button and **never autoplays**;
 - the source is **a file uploaded only for it** in its own dialog, which never appears in the gallery;
 - whoever may edit the Memory sets it; a link's guest sees it as a member does (share view = member view).
+
+**Amended 2026-11-01 (owner):** the frame and the medium in it, the first two points above - fixed 16:9 on a wide
+screen and 1:1 on a phone, the blur left and right or above and below. The first shape was a frame of about 3:1 on a
+wide screen and 16:9 on a phone, at most about 35 % of the viewport; a landscape medium **filled** it around a **focal
+point** the editor set, and a portrait one was **fit** by default (whole, its sides blurred) and could be switched to
+fill. Decisions 2, 5 and 6 say what that changed.
 
 Five things make this a decision rather than a field:
 
@@ -25,7 +30,8 @@ Five things make this a decision rather than a field:
    [uc.memory.cover](../features/memory/use-cases/uc.memory.cover.md)
    says the cover shows in the Memory's "detail header". [ADR 0086](0086-one-word-per-meaning.md) gives a meaning one word.
 2. **The cover's crop does not carry over.** A cover is one image and a 16:9 **crop**. This frame changes its aspect with the
-   viewport, so a stored rectangle is wrong in one of them; what survives an aspect change is a **point** kept in view.
+   viewport, so a stored rectangle is wrong in one of them; what survives an aspect change is a **point** kept in view -
+   or, as amended 2026-11-01, no cut at all: the whole medium in either aspect.
 3. **There is no small video.** A gallery video has one derivative, a JPEG first-frame poster serving as thumbnail and
    preview, and playback streams the **original** ([en.memory.derivatives](../features/memory/enablers/en.memory.derivatives.md)
    § The three tiers; [ADR 0047](0047-inline-video-playback-range-streaming.md)). The server may not make one: it never
@@ -59,10 +65,15 @@ is [en.memory.node-meta](../features/memory/enablers/en.memory.node-meta.md) § 
 attachments (each a blob reference without owner or role, which are the node's and the slot's, ADR 0072), the frame,
 the focal point and the digest of the file the banner was made from — so a gallery upload of a video banner's file
 shares its stored object (decision 3), and a gallery medium with that digest is the banner's picture (decision 7). The
-worst-case meta, a video banner beside everything else the meta holds, stays under the meta's one cap. A **focal
-point**, not a crop: the display covers the frame and positions the medium by it, so one point frames the medium in 3:1
-and 16:9 alike. `frame` (fill or fit) is decided once in the editor and stored, so a reader never re-derives it, and a
-reader is best-effort, so an older or newer client's banner never breaks a Memory.
+worst-case meta, a video banner beside everything else the meta holds, stays under the meta's one cap. The first
+build framed it by a **focal point**, not a crop: the display covered the frame and positioned the medium by it, so one
+point framed the medium in 3:1 and 16:9 alike, and `frame` (fill or fit) was decided once in the editor and stored.
+
+**Amended 2026-11-01 (owner): `frame` and `focal` are kept, never drawn.** The banner always shows the whole medium
+(decision 6), so no reader draws either. Both stay in the sealed shape - read, kept by every writer, carried by the
+export - so neither the meta's shape, the contract, the export nor an older client changes; this editor writes
+`frame: 'fit'` and `focal` the centre, which an older client draws as the whole medium too. A reader is best-effort, so
+an older or newer client's banner never breaks a Memory.
 
 **The later slot.** The small playback copy (decision 4) will fill a third slot, `BANNER_PLAYBACK`, and add a `playback`
 ref beside `blob`, which keeps meaning the uploaded original: a reader that knows `playback` plays it, one that does not
@@ -134,7 +145,8 @@ re-sealed `wrappedMeta`, and the server, **in one transaction**, attaches `BANNE
 poster an image replaces) through `AttachmentStore` and compare-and-sets the meta — so the meta never names bytes that are
 gone, and no bytes outlive the meta that names them. A shared row's source must be a blob a live row of the same node
 holds, not blocked. `removeMemoryBanner` detaches both and writes the meta without
-`banner`. A re-frame (focal point, fit or fill) is a plain meta write.
+`banner`. There is no re-frame (amended 2026-11-01): with nothing to frame, a new banner takes a new file. The first
+build's re-frame (focal point, fit or fill) was a plain meta write.
 
 **Unlike the cover, a stale slot writes nothing.** Both slots are compared first, under the scope row's lock every writer
 of the attachment table takes; a miss is a `409` with what both slots hold, before anything is written, and the
@@ -155,9 +167,13 @@ render the same view.
 ### 6. The client draws it, and nothing else processes it
 
 The banner is drawn by the Memory's own view above core's node header, the same for a member and a guest; rights only
-remove the action. `fit`'s side fill is the same decrypted picture (a video: its poster) drawn a second time, enlarged
-and blurred by the display; no blurred copy is made or stored, so nothing beyond the slots exists to erase, hold or
-count. The banner has no description: it is decorative, since the Memory's title follows it.
+remove the action. **The frame is the screen's, not the medium's** (amended 2026-11-01, owner): 16:9 where the Memory's
+column is wide, 1:1 where it is narrow (720 px and below - a phone), never taller than 60 % of the viewport. The medium
+is contained in it, **always whole, never cropped**; where it leaves the frame - at the sides of a narrower medium, above
+and below a wider one - the same decrypted picture (a video: its poster) is drawn a second time behind it, enlarged and
+blurred by the display (`aria-hidden`). No blurred copy is made or stored, so nothing beyond the slots exists to erase,
+hold or count. The editor's dialog shows the picked file as both frames show it (wide 16:9, phone 1:1) and has nothing
+to set: no point, no fit / fill. The banner has no description: it is decorative, since the Memory's title follows it.
 
 ### 7. What the interface says when the banner's picture is deleted
 
@@ -222,6 +238,9 @@ Published for readers outside the project in [What the server sees](../../site/s
   the client worker queue (decision 4), which serves the gallery too.
 - **A transcode on the server.** Breaks operator-blindness.
 - **The cover's crop rectangle.** Wrong in one of the two aspects (Context 2).
+- **A focal point with a fit / fill switch** (the first build, decision 2). Replaced by the owner on 2026-11-01 by the whole
+  medium with a blurred surround (Context, decision 6). A fill cuts part of the medium away in at least one of the two
+  aspects; the whole medium leaves nothing to set.
 - **A slot parameter on core's `setNodeCover`.** Puts a Memories feature into core's contract before a second application
   needs it.
 - **The word "header".** Collides with the title row and the cover's "detail header" (Context 1).

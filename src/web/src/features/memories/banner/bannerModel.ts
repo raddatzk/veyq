@@ -1,10 +1,15 @@
 // A Memory's BANNER as the web models it (uc.memory.banner, ADR 0102): one image or one video above the menu bar,
 // independent of the cover. Its bytes are the node's own attachments - the `BANNER` slot (the image, or the video) and,
 // for a video, the `BANNER_POSTER` slot (its first frame) - and the `banner` field of the node's sealed `wrappedMeta`
-// (core's `nodeMeta.ts`, purpose `node-meta`, bound to scope and node, ADR 0072) names them with how to frame them:
+// (core's `nodeMeta.ts`, purpose `node-meta`, bound to scope and node, ADR 0072) names them:
 //
 //   banner = { medium: 'image' | 'video', blob: Ref, poster?: Ref, type?: string, sha256?: string,
 //              frame: 'fill' | 'fit', focal: { x, y } }   Ref = { blobId, chunkCount, byteSize, wrappedBlobKey }
+//
+// `frame` and `focal` are an earlier editor's (ADR 0102 decision 2, amended 2026-11-01): the banner now always shows the
+// whole medium, so no reader draws them and this editor writes `fit` around the centre ([WHOLE_PICTURE]) - which an older
+// client draws as the whole medium too. They stay in the shape, read and kept, so the meta, the export and an older client
+// need no change.
 //
 // `sha256` is the SHA-256 of the file the banner was made from (base64url, as `blob-meta` carries it): a video banner's
 // `BANNER` blob is that file as it is, so a gallery upload of the same file shares its stored object, and a gallery medium
@@ -41,9 +46,10 @@ const SHA256 = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/
 const digestOf = (v: unknown): string | undefined => (typeof v === 'string' && SHA256.test(v) ? v : undefined)
 
 export type BannerMedium = 'image' | 'video'
-/** `fill`: the medium covers the frame around the focal point; `fit`: the whole medium, its sides a blurred enlargement. */
+/** An earlier editor's choice, kept and never drawn: `fill` covered the frame around the focal point, `fit` showed the whole
+ *  medium - what every banner now shows. */
 export type BannerFrame = 'fill' | 'fit'
-/** The point of the medium (`0..1` of its width and height) that `fill` keeps in view, in every aspect. */
+/** An earlier editor's point of the medium (`0..1` of its width and height) that `fill` kept in view; kept, never drawn. */
 export type FocalPoint = { x: number; y: number }
 
 /** A stored blob ref: what the meta names an attachment by. Owner and role come from the node and the slot. */
@@ -131,8 +137,11 @@ export function refShape(ref: BannerRefShape): BannerRefShape {
   return { blobId, chunkCount, byteSize, wrappedBlobKey }
 }
 
-/** What the editor decided: everything but the bytes' refs. */
+/** The frame fields a written banner carries. */
 export type BannerFraming = { frame: BannerFrame; focal: FocalPoint }
+
+/** What this editor writes: the whole medium (ADR 0102, amended 2026-11-01). */
+export const WHOLE_PICTURE: BannerFraming = { frame: 'fit', focal: CENTRE }
 
 /** The `banner` value to seal, in a fixed key order. */
 export function sealedBanner(a: {
@@ -157,24 +166,5 @@ export function sealedBanner(a: {
   }
 }
 
-/** A re-frame of a stored banner: the same bytes, a new frame or focal point. Every other field kept as stored. */
-export function reframedBanner(raw: unknown, framing: BannerFraming): Record<string, unknown> | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  return { ...(raw as Record<string, unknown>), frame: framing.frame, focal: { x: round(framing.focal.x), y: round(framing.focal.y) } }
-}
-
 /** Four decimals: a focal point needs no more (1/10,000 of the medium), and the meta's size is bounded. */
 const round = (v: number): number => Math.round(Math.min(1, Math.max(0, v)) * 10_000) / 10_000
-
-/** Whether a medium of these dimensions is portrait - the only kind that may switch between fit and fill. */
-export const isPortrait = (width: number, height: number): boolean => height > width
-
-/** The frame a medium starts in: a portrait one fits, a landscape or square one fills (ADR 0102 decision 2). */
-export const defaultFrame = (width: number, height: number): BannerFrame => (isPortrait(width, height) ? 'fit' : 'fill')
-
-/** The pure display formula: the `object-position` that keeps the focal point in view under `object-fit: cover`. */
-export function bannerStyle(focal: FocalPoint): { objectPosition: string } {
-  return { objectPosition: `${pct(focal.x)} ${pct(focal.y)}` }
-}
-
-const pct = (v: number): string => `${Math.round(v * 10_000) / 100}%`

@@ -1,14 +1,16 @@
 // A Memory's banner in a real browser (uc.memory.banner, ADR 0102): the banner is set only by a file picked in its dialog, has no
-// description, and a file equal to a gallery medium shares that medium's stored object (ADR 0013 § 5).
+// description, is always shown whole (amended 2026-11-01: no focal point, no fit / fill, no re-frame), and a file equal to
+// a gallery medium shares that medium's stored object (ADR 0013 § 5).
 //
 // The owner creates a Memory and adds a landscape image, a portrait image and a video to it, then:
 //  - uploads the gallery's portrait photo again as the Memory's COVER: nothing is uploaded, and the cover write names the
 //    photo's PREVIEW as the stored object it shares (uc.memory.cover `equal-upload-shares-a-photos-preview`);
-//  - sets a landscape image as the banner from a file, moves the point that stays in view, and reads the frame at a wide
-//    and at a phone width (3:1 and 16:9, never taller than 35 % of the viewport); scrolls, and the tab row sticks under the
-//    top bar while the banner scrolls away;
+//  - sets a landscape image as the banner from a file - the dialog previews it wide (16:9) and on a phone (1:1) and offers
+//    nothing to frame - and reads the frame at a wide and at a phone width (16:9 and 1:1, never taller than 60 % of the
+//    viewport), the medium contained whole and its blurred copy behind it; scrolls, and the tab row sticks under the top
+//    bar while the banner scrolls away;
 //  - uploads the gallery's portrait photo again as the banner: nothing is uploaded (it shares the photo's PREVIEW), it
-//    fits, its sides blurred, and switches to fill;
+//    shows whole with its sides blurred, and the dialog re-opened offers no re-frame (Save waits for a new file);
 //  - uploads the gallery's video again as the banner: nothing is uploaded (it shares the video's ORIGINAL and PREVIEW),
 //    its poster and a play button, no <video> and no read of the banner's video before the click; after it, the video
 //    plays from the media Service Worker and the presigns it asks for name the banner's own blob row, never the gallery's;
@@ -61,6 +63,28 @@ async function drawnImage(page: Page, w: number, h: number): Promise<Buffer> {
 const banner = (page: Page) => page.getByTestId('memory-banner')
 const tabRow = (page: Page) => page.locator('.memory-tabs .veyq-tabs__bar')
 const bannerDialog = (page: Page) => page.getByRole('dialog', { name: /banner/i })
+
+/**
+ * The frame's height as the product's rules make it (`MemoryBanner.vue`): `aspect-ratio` over the column's width - 16:9
+ * wide, 1:1 at 720 px and below - capped at 60 % of the viewport's height (`max-height: 60vh`; the width stays the
+ * column's). Asserting against both terms keeps the read true on a column wide enough to meet the cap.
+ */
+function expectFrame(box: { width: number; height: number }, aspect: number, viewportHeight: number, what: string) {
+  const expected = Math.min(box.width / aspect, viewportHeight * 0.6)
+  expect(Math.abs(box.height - expected), `${what}: ${box.width}×${box.height}`).toBeLessThan(2)
+}
+
+/** The whole medium, never cropped: the picture is contained in the frame, its blurred copy behind it is decorative. */
+async function expectWholeMedium(page: Page) {
+  const media = banner(page).locator('img.banner-frame-media')
+  await expect(media).toBeVisible({ timeout: 60_000 })
+  expect(await media.evaluate((e: HTMLElement) => getComputedStyle(e).objectFit), 'the medium is contained, never cropped').toBe('contain')
+  await expect(banner(page).locator('img.banner-frame-backdrop'), 'the blurred copy fills the rest').toHaveAttribute('aria-hidden', 'true')
+  expect(
+    await banner(page).locator('img.banner-frame-backdrop').evaluate((e: HTMLElement) => getComputedStyle(e).filter),
+    'the copy behind it is blurred',
+  ).toContain('blur(')
+}
 
 /**
  * Scroll the page 1,200 px down with the tab row's block tall enough to stick in. Three items fill one gallery row, so
@@ -181,7 +205,7 @@ test(
 )
 
 test(
-  'an uploaded landscape image fills the frame around its point at a wide and a phone width, and the tab row sticks',
+  'an uploaded landscape image shows whole in a 16:9 frame on a wide and a 1:1 frame on a phone width, and the tab row sticks',
   { tag: ['@uc.memory.banner:frame-and-focal-point', '@uc.memory.banner:sealed-banner-in-node-meta'] },
   async () => {
     const { page } = member
@@ -191,27 +215,36 @@ test(
     const chooser = page.waitForEvent('filechooser')
     await dialog.getByRole('button', { name: 'Choose an image or a video' }).click()
     await (await chooser).setFiles({ name: recordTyped(`Steg ${stamp}.png`), mimeType: 'image/png', buffer: await drawnImage(page, 3000, 1000) })
-    const stage = dialog.locator('.banner-dialog-stage')
-    await expect(stage).toBeVisible()
-    const box = (await stage.boundingBox())!
-    await stage.click({ position: { x: box.width * 0.8, y: box.height * 0.2 } }) // the marker: the point that stays in view
+    // the two previews - the page's two frames - and nothing to frame: no point, no fit / fill
+    const previewWide = dialog.getByTestId('banner-preview-wide')
+    const previewPhone = dialog.getByTestId('banner-preview-phone')
+    await expect(previewWide.locator('img.banner-frame-media')).toBeVisible()
+    await expect(previewPhone.locator('img.banner-frame-media')).toBeVisible()
+    const pw = (await previewWide.boundingBox())!
+    const pp = (await previewPhone.boundingBox())!
+    expect(pw.width / pw.height, 'the wide preview is 16:9').toBeCloseTo(16 / 9, 1)
+    expect(pp.width / pp.height, 'the phone preview is 1:1').toBeCloseTo(1, 1)
+    await expect(dialog.getByLabel('Point that stays in view'), 'no focal point to set').toHaveCount(0)
+    await expect(dialog.locator('.banner-dialog-stage'), 'no stage to frame on').toHaveCount(0)
+    for (const name of ['Fit', 'Fill']) await expect(dialog.getByRole('button', { name, exact: true }), `no "${name}"`).toHaveCount(0)
     await expect(dialog.getByLabel('Description'), 'the banner has no description').toHaveCount(0)
     await dialog.getByRole('button', { name: 'Save banner' }).click()
     await expect(dialog).toBeHidden({ timeout: 60_000 })
 
-    await expect(banner(page).locator('img.banner-frame-media')).toBeVisible({ timeout: 60_000 })
+    await expectWholeMedium(page)
     await expect(banner(page).locator('img.banner-frame-media'), 'decorative: the title follows it').toHaveAttribute('alt', '')
-    const style = await banner(page).locator('img.banner-frame-media').getAttribute('style')
-    expect(style).toMatch(/object-position: 8\d(\.\d+)?% 2\d(\.\d+)?%/)
     const wide = (await banner(page).boundingBox())!
-    expect(wide.width / wide.height, 'about 3:1 on a wide column').toBeCloseTo(3, 0)
-    expect(wide.height).toBeLessThanOrEqual(900 * 0.35 + 1)
+    expectFrame(wide, 16 / 9, 900, '16:9 on a wide column, at most 60 % of the viewport')
 
-    // the frame on a phone: 16:9, the same stored point
+    // the frame on a phone: 1:1, the same whole medium
     await page.setViewportSize({ width: 390, height: 844 })
+    await expect.poll(async () => {
+      const b = (await banner(page).boundingBox())!
+      return Math.abs(b.width - b.height) < 2
+    }, { message: 'the frame turned square' }).toBe(true)
     const phone = (await banner(page).boundingBox())!
-    expect(phone.width / phone.height, '16:9 on a narrow column').toBeCloseTo(16 / 9, 1)
-    expect(await banner(page).locator('img.banner-frame-media').getAttribute('style')).toBe(style)
+    expectFrame(phone, 1, 844, '1:1 on a narrow column')
+    await expectWholeMedium(page)
 
     // the tab row sticks below the compact header while the banner scrolls away
     const back = await scrollPastTheBanner(page)
@@ -242,7 +275,7 @@ function watchSave(page: Page) {
   return { uploads, writes, stop: () => page.off('request', on) }
 }
 
-test('the gallery\'s portrait photo, uploaded again, shares its preview, fits with blurred sides, and switches to fill', { tag: ['@uc.memory.banner:frame-and-focal-point', '@uc.memory.banner:upload-shares-an-equal-gallery-file'] }, async () => {
+test('the gallery\'s portrait photo, uploaded again, shares its preview and shows whole with blurred sides; nothing to re-frame', { tag: ['@uc.memory.banner:frame-and-focal-point', '@uc.memory.banner:upload-shares-an-equal-gallery-file'] }, async () => {
   const { page } = member
   await expect(page.getByRole('button', { name: 'Use as banner' }), 'the gallery offers no way in').toHaveCount(0)
   await headerAction(page, 'Change banner')
@@ -250,20 +283,24 @@ test('the gallery\'s portrait photo, uploaded again, shares its preview, fits wi
   const chooser = page.waitForEvent('filechooser')
   await dialog.getByRole('button', { name: 'Choose an image or a video' }).click()
   await (await chooser).setFiles(portrait)
-  await expect(dialog.getByRole('button', { name: 'Fit' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(dialog.getByTestId('banner-preview-wide').locator('img.banner-frame-media')).toBeVisible()
+  for (const name of ['Fit', 'Fill']) await expect(dialog.getByRole('button', { name, exact: true }), `no "${name}" for a portrait`).toHaveCount(0)
   const save = watchSave(page)
   await dialog.getByRole('button', { name: 'Save banner' }).click()
   await expect(dialog).toBeHidden({ timeout: 60_000 })
   save.stop()
   expect(save.uploads, 'nothing uploaded: the photo is already stored').toEqual([])
   expect(save.writes.join(' '), 'the banner is a row on the stored object').toContain('"shared"')
-  await expect(banner(page).locator('.banner-frame-backdrop')).toHaveAttribute('aria-hidden', 'true')
+  await expectWholeMedium(page)
+  expectFrame((await banner(page).boundingBox())!, 16 / 9, 900, 'the frame is the screen\'s, not the portrait\'s')
 
+  // a stored banner is never re-framed: the dialog shows it, and Save waits for a new file
   await headerAction(page, 'Change banner')
-  await bannerDialog(page).getByRole('button', { name: 'Fill' }).click()
-  await bannerDialog(page).getByRole('button', { name: 'Save banner' }).click()
-  await expect(bannerDialog(page)).toBeHidden({ timeout: 60_000 })
-  await expect(banner(page).locator('.banner-frame-backdrop')).toHaveCount(0)
+  await expect(bannerDialog(page).getByTestId('banner-preview-wide').locator('img.banner-frame-media')).toBeVisible({ timeout: 60_000 })
+  await expect(bannerDialog(page).getByRole('button', { name: 'Save banner' }), 'nothing to save without a new file').toBeDisabled()
+  await bannerDialog(page).getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(bannerDialog(page)).toBeHidden()
+  await expectWholeMedium(page)
 })
 
 test(

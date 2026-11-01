@@ -85,8 +85,8 @@ The tree these build on — encrypted names, blinded slugs, a key on every node,
 - [uc.memory.banner](use-cases/uc.memory.banner.md) — **built**
   ([ADR 0102](../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)): one image
   or video above the Memory's menu bar, independent of the cover — uploaded in its own dialog (a file equal to a gallery
-  medium shares that medium's stored object), the Memory's own attachment (`BANNER`, `BANNER_POSTER`), framed by a
-  sealed focal point (fill) or fit with blurred sides, the tab row sticking below it; a video is a poster, never
+  medium shares that medium's stored object), the Memory's own attachment (`BANNER`, `BANNER_POSTER`), always shown
+  whole in a 16:9 (wide) or 1:1 (phone) frame with a blurred surround, the tab row sticking below it; a video is a poster, never
   autoplays, and plays through the media service worker
 - [uc.memory.concurrent-curation](use-cases/uc.memory.concurrent-curation.md) — **built**
   ([ADR 0077](../../decisions/0077-a-write-carries-the-version-it-read.md)): two members curate one Memory at once —

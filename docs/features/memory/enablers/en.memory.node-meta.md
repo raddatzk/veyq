@@ -80,7 +80,7 @@
 
 A Memory's or a chapter's `banner` sub-object ([uc.memory.banner](../use-cases/uc.memory.banner.md), why:
 [ADR 0102](../../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md) decision 2) names
-its bytes in core's attachment slots and frames them:
+its bytes in core's attachment slots:
 
 ```
 banner?: { medium: 'image' | 'video',
@@ -88,8 +88,8 @@ banner?: { medium: 'image' | 'video',
            poster?: Ref,                 // the BANNER_POSTER attachment: a video's first frame (JPEG); video only
            type?:  string,               // a video's media type (the uploaded file's container); video only
            sha256?: string,              // SHA-256 of the file it was made from (base64url, 43 characters)
-           frame:  'fill' | 'fit',       // 'fit': the whole medium, the sides a blurred enlargement of it
-           focal:  { x, y } }            // 0..1 of the medium; what 'fill' keeps in view
+           frame:  'fill' | 'fit',       // kept, never drawn; written 'fit' (the first build's choice)
+           focal:  { x, y } }            // kept, never drawn; written the centre (0..1 of the medium)
 Ref = { blobId, chunkCount, byteSize, wrappedBlobKey }
 ```
 
@@ -98,8 +98,11 @@ Ref = { blobId, chunkCount, byteSize, wrappedBlobKey }
 - **`sha256`** is the digest of the file the banner was made from. A video banner's `BANNER` blob is that file as it is
   (its blob meta carries the same digest), so a gallery upload of the file shares its stored object; a gallery medium
   whose original has that digest is the banner's picture, which its delete confirmation asks about.
-- **`frame`** is decided once in the editor — `fill` for a landscape or square medium, `fit` for a portrait one
-  (height > width), switchable for a portrait one only — and stored, so a reader never re-derives it.
+- **`frame` and `focal` are kept, never drawn** (ADR 0102, amended 2026-11-01): every banner shows its whole medium,
+  blurred where it leaves the frame, so no reader draws either. The first build decided `frame` once in the editor
+  (`fill` around the focal point for a landscape or square medium, `fit` for a portrait one) and stored it; this editor
+  writes `fit` around the centre, which that build draws as the whole medium too. Both stay in the shape, so the meta,
+  the export and an older client need no change.
 - **A reader is best-effort:** a malformed focal point is the centre, an unknown frame fills, an unknown shape is no
   banner and is preserved by every other meta writer. A stored banner's `origin` and `alt` (an older client's) are
   read by nobody and kept by every other writer.

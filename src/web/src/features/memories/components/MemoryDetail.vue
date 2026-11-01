@@ -388,7 +388,6 @@ const bannerEditor = useBannerEditor({
   memoryKey: () => props.memoryKey,
   source: props.source,
   items: () => items.value,
-  raw: () => memoryBanner.raw.value,
   onMetaUpdated: (update) => emit('metaUpdated', update),
 })
 
@@ -1034,7 +1033,7 @@ watch(
   font-size: 0.9rem;
 }
 /* Query container on the detail surface so the header responds to its OWN width (not the viewport — the sidebar
-   eats ~230px, so a viewport media query stacks too late). The banner's frame reads it too (3:1 wide, 16:9 narrow). */
+   eats ~230px, so a viewport media query stacks too late). The banner's frame reads it too (16:9 wide, 1:1 narrow). */
 .memory-detail {
   container: memory-detail-surface / inline-size;
 }

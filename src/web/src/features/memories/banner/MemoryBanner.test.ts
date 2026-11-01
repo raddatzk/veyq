@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// uc.memory.banner - the banner on the page: framed as stored (fill around the focal point, fit with blurred sides), nothing
-// drawn for a banner that failed, and a video that NEVER plays on its own: no <video> and no service-worker registration
+// uc.memory.banner - the banner on the page: the whole medium, never cropped, with blur where it leaves the frame (ADR 0102,
+// amended 2026-11-01), nothing drawn for a banner that failed, and a video that NEVER plays on its own: no <video> and no service-worker registration
 // before the click (bite 7), then the BANNER blob's chunks through the worker, or the whole copy without one.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -40,18 +40,13 @@ beforeEach(() => {
 })
 
 describe('MemoryBanner', () => {
-  it('fills the frame around the focal point, as a decorative picture (the title follows it)', () => {
+  it('shows the whole medium as a decorative picture, the same picture blurred behind it - a stored fill and point ignored', () => {
+    // `image` was framed by an earlier editor: `fill` around (0.2, 0.85). It is drawn whole all the same.
     const { wrapper } = mountBanner(image)
     const img = wrapper.get('img.banner-frame-media')
-    expect(img.attributes('style')).toContain('object-position: 20% 85%')
+    expect(img.attributes('style') ?? '').not.toContain('object-position')
     expect(img.attributes('alt')).toBe('')
-    expect(wrapper.find('.banner-frame-backdrop').exists()).toBe(false)
-  })
-
-  it('fits a portrait medium whole, its sides the same picture blurred and hidden from assistive technology', () => {
-    const { wrapper } = mountBanner({ ...image, frame: 'fit' })
     expect(wrapper.get('.banner-frame-backdrop').attributes('aria-hidden')).toBe('true')
-    expect(wrapper.get('img.banner-frame-media').classes()).toContain('is-fit')
   })
 
   it('draws nothing for no banner, or for one whose picture failed (the header row moves up)', () => {

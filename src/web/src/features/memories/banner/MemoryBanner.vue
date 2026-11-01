@@ -1,13 +1,14 @@
 <script setup lang="ts">
-// A Memory's banner on screen (uc.memory.banner, ADR 0102 decisions 6-7): one image or one video above the Memory's header
-// row, framed once for every screen. The frame is the screen's, not the medium's: about 3:1 where the Memory's column is
-// wide, 16:9 where it is narrow, never taller than about 35 % of the viewport - a container query on `.memory-detail`
-// (already an `inline-size` container). Its space is reserved as soon as the sealed meta names a banner, so nothing below
-// it jumps when the bytes arrive; a banner whose picture fails draws nothing at all (E5: the header row moves up).
+// A Memory's banner on screen (uc.memory.banner, ADR 0102 decisions 6-7, amended 2026-11-01): one image or one video above
+// the Memory's header row. The frame is the screen's, not the medium's: 16:9 where the Memory's column is wide, 1:1 where it
+// is narrow, never taller than 60 % of the viewport - a container query on `.memory-detail` (already an `inline-size`
+// container). Its space is reserved as soon as the sealed meta names a banner, so nothing below it jumps when the bytes
+// arrive; a banner whose picture fails draws nothing at all (E5: the header row moves up).
 //
-// `fill` covers the frame and keeps the focal point in view (`object-position`, one formula for every aspect); `fit` shows
-// the whole medium, its sides a blurred, enlarged copy of the same decrypted picture (`aria-hidden`; nothing is made or
-// stored for it). A video shows its poster and a play button and NOTHING plays before the click (no `<video>` exists until
+// The WHOLE medium, never cropped: it is contained in the frame, and where it does not fill it - left and right for a
+// narrower one, above and below for a wider one - a blurred, enlarged copy of the same decrypted picture fills the rest
+// (`aria-hidden`; nothing is made or stored for it). A stored `frame` and focal point (an earlier editor's) are read and
+// kept, never drawn. A video shows its poster and a play button and NOTHING plays before the click (no `<video>` exists until
 // then); the click registers the `BANNER` blob with the media service worker (ADR 0047) and plays it with its controls -
 // or, without a service worker, decrypts it whole first, as the lightbox's fallback does. The same component for a member
 // and a guest: it offers no action of its own.
@@ -16,7 +17,7 @@ import { useI18n } from 'vue-i18n'
 import { handleFromUrl, registerPlayback, revokePlayback } from '../../../sw/register'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import type { ChunkProvider } from '../../../sw/protocol'
-import { bannerStyle, type Banner } from './bannerModel'
+import type { Banner } from './bannerModel'
 import BannerFrame from './BannerFrame.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import type { BannerStatus } from './useMemoryBanner'
@@ -36,8 +37,6 @@ const { t } = useI18n()
 
 const shown = computed(() => !!props.banner && props.status !== 'failed' && props.status !== 'none')
 const isVideo = computed(() => props.banner?.medium === 'video')
-const fit = computed(() => props.banner?.frame === 'fit')
-const mediaStyle = computed(() => (props.banner && !fit.value ? bannerStyle(props.banner.focal) : undefined))
 
 // --- playback, only after the click --------------------------------------------------------------------------------
 const swUrl = ref<string | null>(null)
@@ -99,15 +98,14 @@ onBeforeUnmount(stop)
   <section
     v-if="shown"
     class="memory-banner"
-    :class="{ 'is-fit': fit, 'is-video': isVideo, 'is-loading': !pictureUrl && !videoSrc }"
+    :class="{ 'is-video': isVideo, 'is-loading': !pictureUrl && !videoSrc }"
     data-testid="memory-banner"
   >
     <template v-if="videoSrc">
-      <img v-if="fit && pictureUrl" class="memory-banner-backdrop" :src="pictureUrl" alt="" aria-hidden="true" />
+      <img v-if="pictureUrl" class="memory-banner-backdrop" :src="pictureUrl" alt="" aria-hidden="true" />
       <video
         class="memory-banner-media"
         :src="videoSrc"
-        :style="mediaStyle"
         :aria-label="t('memory.banner.video')"
         controls
         autoplay
@@ -117,7 +115,7 @@ onBeforeUnmount(stop)
     </template>
     <template v-else>
       <!-- Decorative: the banner has no description, and the Memory's title follows it. -->
-      <BannerFrame v-if="pictureUrl && banner" :src="pictureUrl" :frame="banner.frame" :focal="banner.focal" />
+      <BannerFrame v-if="pictureUrl && banner" :src="pictureUrl" />
       <button
         v-if="isVideo"
         type="button"
@@ -135,20 +133,21 @@ onBeforeUnmount(stop)
 </template>
 
 <style scoped>
-/* The frame: 3:1 on a wide column, 16:9 on a narrow one, at most ~35 % of the viewport's height. The space is held
-   while the bytes load (`is-loading`), so the header row below never jumps. */
+/* The frame (owner 2026-11-01): 16:9 on a wide column, 1:1 on a narrow one, at most 60 % of the viewport's height - there
+   it is lower, and the whole medium in it narrower, the blur at its sides wider. The space is held while the bytes load
+   (`is-loading`), so the header row below never jumps. */
 .memory-banner {
   position: relative;
   width: 100%;
-  aspect-ratio: 3 / 1;
-  max-height: 35vh;
+  aspect-ratio: 16 / 9;
+  max-height: 60vh;
   overflow: hidden;
   border-radius: var(--app-radius);
   background: var(--app-control-bg);
 }
 @container memory-detail-surface (max-width: 720px) {
   .memory-banner {
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 1 / 1;
   }
 }
 .memory-banner-media {
@@ -156,12 +155,9 @@ onBeforeUnmount(stop)
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover; /* fill: the focal point's object-position keeps it in view */
-}
-.memory-banner.is-fit .memory-banner-media {
   object-fit: contain;
 }
-/* fit's sides: the same picture, enlarged and blurred, behind the whole medium. A static picture: nothing moves. */
+/* Where the whole medium leaves the frame: the same picture, enlarged and blurred, behind it. A static picture. */
 .memory-banner-backdrop {
   position: absolute;
   inset: -8%;

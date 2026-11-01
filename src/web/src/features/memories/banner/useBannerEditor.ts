@@ -8,7 +8,7 @@
 // banner the medium's ORIGINAL and its PREVIEW as the poster. The file's SHA-256 is read once here - it is the match key, a
 // video's `blob-meta` and the banner meta's `sha256`.
 import { contentDigest } from '../../../core/blob/sharedBlob'
-import { nodeMetaState, unsealNodeMeta } from '../../../core/node/nodeMeta'
+import { nodeMetaState } from '../../../core/node/nodeMeta'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import type { TreeNode } from '../../../core/node/tree'
 import { createBrowserDeriver, type MediaDeriver } from '../../../shared/image/mediaDeriver'
@@ -16,13 +16,13 @@ import type { MediaItem } from '../media'
 import type { MemorySource } from '../source'
 import { findEqualMedium, storedTier } from '../storedMatch'
 import type { NodeMetaUpdate } from '../useMetaWriteFeedback'
-import { reframedBanner, sealedBanner, type BannerFraming } from './bannerModel'
-import { BANNER_UNREADABLE, bannerVideoType, prepareImage, preparePoster, type PreparedBanner } from './bannerWrite'
+import { sealedBanner, WHOLE_PICTURE } from './bannerModel'
+import { bannerVideoType, prepareImage, preparePoster, type PreparedBanner } from './bannerWrite'
 
-/** What the dialog asks for. A picked video comes with the poster the dialog already decoded for its preview. */
+/** What the dialog asks for. A picked video comes with the poster the dialog already decoded for its preview. There is
+ *  nothing to re-frame: every banner shows its whole medium (ADR 0102, amended 2026-11-01). */
 export type BannerSaveIntent =
-  | { kind: 'file'; file: File; type: string; poster: Uint8Array | null; framing: BannerFraming }
-  | { kind: 'keep'; framing: BannerFraming }
+  | { kind: 'file'; file: File; type: string; poster: Uint8Array | null }
   | { kind: 'remove' }
 
 export type BannerSaveOpts = { onProgress?: (fraction: number) => void; signal?: AbortSignal }
@@ -34,8 +34,6 @@ export interface BannerEditorContext {
   source: MemorySource
   /** The gallery's media: a medium whose original is the picked file is shared, not stored again. */
   items: () => readonly MediaItem[]
-  /** The stored `banner` value (what a re-frame keeps the bytes of). */
-  raw: () => unknown
   onMetaUpdated: (update: NodeMetaUpdate) => void
   deriver?: MediaDeriver
 }
@@ -89,22 +87,16 @@ export function useBannerEditor(ctx: BannerEditorContext) {
     // The file's digest is read once: it is the match key, a video's `blob-meta` and the banner meta's `sha256`, whatever key.
     const sha256 = intent.kind === 'file' ? await contentDigest(intent.file, opts.signal) : ''
     // One save at the Memory's key; on an epoch refusal the door pulls the Memory's path forward and runs it again under the
-    // key it re-read, from scratch - the base meta and a kept banner's wraps from the re-read node (the re-key re-sealed
-    // them), the bytes uploaded again (ADR 0111 decision 11).
+    // key it re-read, from scratch - the base meta from the re-read node (the re-key re-sealed it), the bytes uploaded again
+    // (ADR 0111 decision 11).
     const state = await door.under(nodeId, { key, epoch: node.epoch }, async (at, reread) => {
       const current = { ...nodeMetaState(reread ?? node), nodeEpoch: at.epoch }
       if (intent.kind === 'remove') return door.write({ nodeId, nodeKey: at.key, current, banner: null })
-      if (intent.kind === 'keep') {
-        const raw = reread ? unsealNodeMeta(at.key, { scopeId: ctx.scopeId(), nodeId }, reread.wrappedMeta).banner ?? null : ctx.raw()
-        const banner = reframedBanner(raw, intent.framing)
-        if (!banner) throw new Error(BANNER_UNREADABLE)
-        return door.write({ nodeId, nodeKey: at.key, current, banner })
-      }
       const prepared = await fromFile(intent.file, intent.type, intent.poster, at.key, sha256, opts.signal)
       const uploaded = await door.upload(nodeId, at.key, prepared, opts)
       const banner = sealedBanner({
         medium: uploaded.medium, blob: uploaded.blob, poster: uploaded.poster, type: uploaded.type, sha256: prepared.sha256,
-        framing: intent.framing,
+        framing: WHOLE_PICTURE,
       })
       return door.write({
         nodeId, nodeKey: at.key, current, banner,

@@ -97,7 +97,7 @@ never sees the picture or its crop; a picture already in the gallery is not stor
 - Feature: [Memory](../_index.md)
 - Enabler: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta` envelope this fills)
 - Sibling: [uc.memory.banner](uc.memory.banner.md) — the picture or video above the Memory, independent of the cover: its
-  own attachment framed by a focal point, not a crop, set the same way (an upload in its dialog, an equal gallery file shared)
+  own attachment, shown whole rather than cropped, set the same way (an upload in its dialog, an equal gallery file shared)
 - Use-cases: [uc.memory.date](uc.memory.date.md) + [uc.memory.place](uc.memory.place.md) (the sibling curated
   sub-objects on the same `wrappedMeta`), [uc.memory.upload](uc.memory.upload.md) (the original's digest a match reads),
   [uc.memory.browse](uc.memory.browse.md) (the card + `updateNode` this folds into)
