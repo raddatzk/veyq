@@ -7,6 +7,9 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
+    // vite.config.ts imports a module of the app by its `.ts` name: Vite's native config loader (planned as its
+    // default) runs the config on Node, which resolves no extensionless import.
+    "allowImportingTsExtensions": true,
     "jsx": "preserve",
     "isolatedModules": true,
     "esModuleInterop": true,

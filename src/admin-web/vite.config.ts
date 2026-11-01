@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
-import { adminCsp } from './src/shared/security/csp'
+import { adminCsp } from './src/shared/security/csp.ts'
 
 // The Server-Owner admin surface (ADR 0065). Deliberately much smaller than `src/web/`'s config: no map providers,
 // no media Service Worker, no dev seed-credential endpoint — this app talks to exactly one origin (its own,

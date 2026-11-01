@@ -8,8 +8,8 @@ import type { Plugin } from 'vite'
 // Vite config for `npm run dev`/`build`.
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
-import { buildCsp, CSP_POLICY_FILE } from './src/shared/security/csp'
-import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIGIN } from './src/shared/state/mapDefaults'
+import { buildCsp, CSP_POLICY_FILE } from './src/shared/security/csp.ts'
+import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIGIN } from './src/shared/state/mapDefaults.ts'
 
 // Vite dev-server config. `npm run dev` works with the defaults below; the env vars only matter for special
 // setups (the IntelliJ run configs, the media live-smoke). In production the backend's app shell serves the built
