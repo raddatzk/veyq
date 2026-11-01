@@ -11,7 +11,14 @@ info:
     ([ADR 0013](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)) — bytes never flow through
     the backend. Start reserves an upload session and presigns the first window of PUTs, `blob-upload-windows` signs
     each next one, and `blob-downloads-batch` presigns GETs; **completing** an upload — attaching the verified blob
-    to what owns it — is the owning application's own operation, not this spec's.
+    to what owns it — is the owning application's own operation, except for the blobs an application stores through
+    **core's blob service** ([ADR 0112](../../docs/decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md),
+    tags `application-blobs`, `share-application-blobs`, `case-application-blobs`): any number per node, each in a role
+    its application declares and held by an **owner** — the application's record, an id the server stores and compares
+    and never resolves (Expenses: an entry's receipts). The service carries every platform duty over them — the
+    completion, a guest's, the link's usage, the share's blob predicate, a report and a block, a hold, the re-key of
+    their wraps (core's `getNodeRekeyParts` lists them), the erasure and the retention purge; the application only tells
+    it, in its own write, which blobs an owner keeps and which it released.
 
     **Operator-blind:** the server + object store hold only ciphertext chunks + opaque metadata (`chunkCount`,
     `byteSize`, the per-chunk size `manifest`) and the `K_blob` wrap; never a plaintext byte, a content key, or a
@@ -23,6 +30,21 @@ tags:
       Generic blob transfer under a scope: start uploads (presign the first window of PUTs), presign each next
       window, presign GETs for download. One tag = one resource interface rooted at `/api/scopes/{scopeId}` (the
       three paths differ at the segment after it), distinct from the applications' resources under the same root.
+  - name: application-blobs
+    description: >
+      A member's application blobs of a node (ADR 0112): read them, complete one. One tag = one resource interface rooted
+      at `/api/scopes/{scopeId}/nodes/{nodeId}/application-blobs` — longer than `blob`'s and `content`'s roots, so these
+      routes reach it and every other route stays theirs.
+  - name: share-application-blobs
+    description: >
+      A guest's application blobs of a node on a public share link — read them, complete one (unauthenticated). One tag =
+      one resource interface rooted at `/api/shares/{shareId}/nodes/{nodeId}/application-blobs`: longer than core's
+      `sharing` root `/api/shares`, so these routes reach it and every other `/api/shares` route stays `sharing`'s.
+  - name: case-application-blobs
+    description: >
+      A moderator's review of a case's held application blobs (uc.moderation.review-a-case), behind core's moderation
+      gate. Its own tag so its resource owns `/api/moderation/cases/{caseId}/application-blobs`: longer than the
+      moderation root `/api/moderation`, so this route reaches it and every other moderation route stays `moderation`'s.
 
 paths:
   /api/scopes/{scopeId}/blob-uploads-batch:
@@ -186,6 +208,317 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
 
+  /api/scopes/{scopeId}/nodes/{nodeId}/application-blobs:
+    get:
+      tags: [application-blobs]
+      operationId: listApplicationBlobs
+      summary: A node's application blobs — every blob its application stores through core's service, with its blob reference (ADR 0112).
+      description: >
+        Every blob the node's application stores through core's blob service ([ADR 0112](../../docs/decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md))
+        — kept, released or never kept yet, until the purge erases it — with what the client needs to open it: the blob
+        reference (`presignBlobDownloads` by `blobId`), its `K_blob` wrap under the node's key and its sealed `blob-meta`.
+        Each carries its `ownerId` (the application's record that holds it, an id opaque to the server), its `role`, who
+        completed it (`writer`), when its owner last kept it (`keptAt`), when it was released (`releasedAt`), when the
+        purge erases it (`purgeAfter`) and whether a moderator blocked its bytes (`blockedByOperator`: the blob itself,
+        its owner or its node — its download then answers `blocked_by_operator`). Which blobs a record holds is the
+        application's own sealed data; this read is where their bytes are. Ordered by id; **pages** of at most `limit`,
+        `more: true` while blobs remain past them — ask again with the page's `cursor` as `after`. **Live refresh:** every
+        change of a node's blobs moves the node's item revision (an application's revisioned list, docs/apps/README.md),
+        so a client re-reads this when that moves; a read without `after` carries an `ETag` that is a digest of
+        everything this read serves across its pages — echoed as `If-None-Match`, an unchanged listing is `304`. A
+        trashed node is read the same way.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/ApplicationBlobsAfter"
+        - $ref: "_common.openapi.yaml#/components/parameters/ItemsLimit"
+        - $ref: "#/components/parameters/ApplicationBlobsIfNoneMatch"
+      responses:
+        "200":
+          description: One page of the node's application blobs.
+          headers:
+            ETag: { $ref: "#/components/headers/ApplicationBlobsETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApplicationBlobPage" }
+        "304":
+          description: Not Modified — `If-None-Match` equals the digest of what this read would serve; no body.
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: "`scope_not_found` — no such scope, or the caller holds no grant for it (indistinguishable, uc.spaces.scope-access); `node_not_found` — no node of that id in it whose application stores blobs through the service."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+    post:
+      tags: [application-blobs]
+      operationId: completeApplicationBlob
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
+      summary: Complete an upload as one of a node's application blobs, held by an owner (ADR 0112).
+      description: >
+        Promote one `startBlobUploads` session — started with this `role` and `ownerId` = this node, since its `K_blob`
+        wrap is sealed bound to the blob, the node and the role (ADR 0072): no new blob purpose — into the application
+        blob `id` held by the owner `ownerId`, a record of the node's application (Expenses: an entry), opaque to the
+        server. The server verifies the upload (declare-then-verify: every chunk stored at exactly its derived length,
+        else the objects are purged and the call fails `budget_exceeded`) and records the blob in one transaction under
+        the node's lock. The role is one the node's application stores through the service (else `upload_mismatch`), and
+        its size cap is held at the start (`budget_exceeded`). The application answers whether the owner may hold a blob
+        in this node (`409 id_taken`: Expenses' entry of another Pot, or an id that names a record); an owner holds at
+        most the application's count per owner of unreleased blobs (`409 too_many_blobs`; Expenses: 100). The owner may
+        not have written anything yet — a blob completed before its record is erased after the trash retention unless
+        the record keeps it. The node must be live, of a kind whose application stores blobs through the service; every
+        write states `nodeEpoch` (ADR 0109 point 6).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApplicationBlobCompleteRequest" }
+            example:
+              nodeEpoch: 0
+              id: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+              ownerId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+              role: EXPENSES_RECEIPT
+              uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+      responses:
+        "200":
+          description: The blob is stored; the node's item revision moved once for it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApplicationBlob" }
+        "400":
+          description: Malformed request (`invalid_request`), or the upload failed declare-then-verify (`budget_exceeded`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: budget_exceeded } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: >
+            `scope_not_found` — no such scope, or the caller holds no grant for it (indistinguishable,
+            uc.spaces.scope-access); `node_not_found` — no live node of that id in it whose application stores blobs
+            through the service (a trashed one included); `upload_not_found` — no open upload of this caller under
+            `uploadId` (never started, already completed, or expired).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: upload_not_found } }
+        "409":
+          description: >
+            `id_taken` — `id` is taken, or the application refuses the owner in this node. `too_many_blobs` — the owner
+            holds the application's count of unreleased blobs already. `stale_epoch` — `nodeEpoch` is below the node's
+            stored epoch (re-read); `node_rekey_pending` — the node is not re-keyed since the last rotation (retry; ADR
+            0109 point 6) — the upload stays open for all four. `scope_deleting` — the space is being deleted and
+            read-only.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            The upload was not started for this node in this role, or the role is none the node's application stores
+            through the service (`upload_mismatch`: its wrap would not open here), or the node's application is switched
+            off for the instance or the tenant (`capability_disabled`, uc.platform.switch-application-off).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: upload_mismatch } }
+        "451":
+          description: >
+            A moderator blocked this node, a node above it, or the owner the blob is for (`blocked_by_operator`,
+            uc.moderation.take-a-measure): no blob is stored while the block stands. The upload stays open.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
+
+  /api/shares/{shareId}/nodes/{nodeId}/application-blobs:
+    get:
+      tags: [share-application-blobs]
+      operationId: listShareApplicationBlobs
+      summary: A node's application blobs under a share (unauthenticated) — sealed, and without who completed them.
+      description: >
+        **No auth.** A guest's `listApplicationBlobs`: every application blob of one live node of the live shared subtree,
+        with its blob reference, its `K_blob` wrap and its sealed `blob-meta`, its owner and role, its kept and released
+        times, when the purge erases it and whether a moderator blocked its bytes — and **no writer** (inbox #190): the
+        guest's schema has no such field. Its bytes are core's `resolveShareBlob` by `blobId` (a blocked one answers
+        `451 blocked_by_operator`). Core's guest gate runs first (`ShareGuestGate`): an active share → the password → the
+        access mode. A `WRITE_ONLY` link reads none. A node outside the live subtree — trashed, moved out, none —
+        answers the same `404` as an unknown share. **Password-protected shares (ADR 0037):** the valid
+        `X-Share-Password` token is required — a missing token is `404`, a wrong one `403 share_password_incorrect`.
+        Pages and the `ETag` digest as `listApplicationBlobs`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/SharePassword"
+        - $ref: "#/components/parameters/ApplicationBlobsAfter"
+        - $ref: "_common.openapi.yaml#/components/parameters/ItemsLimit"
+        - $ref: "#/components/parameters/ApplicationBlobsIfNoneMatch"
+      responses:
+        "200":
+          description: One page of the node's application blobs.
+          headers:
+            ETag: { $ref: "#/components/headers/ApplicationBlobsETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareApplicationBlobPage" }
+        "304":
+          description: Not Modified — `If-None-Match` equals the digest of what this read would serve; no body.
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: The share is password-protected and the presented `X-Share-Password` token is wrong.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
+        "404":
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), a required password token absent, or no live node of that id inside the live shared subtree whose application stores blobs through the service — non-enumerable, identical in every case.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "429":
+          description: Too many wrong password attempts on this share (the password gate's own limiter).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+    post:
+      tags: [share-application-blobs]
+      operationId: completeShareApplicationBlob
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
+      summary: Complete a guest's upload as one of a shared node's application blobs (unauthenticated) — a `READ_WRITE` guest's write.
+      description: >
+        **No auth.** A `READ_WRITE` guest's `completeApplicationBlob`: promote one session it opened with
+        `startShareBlobUploads` (`ownerId` = `nodeId` = this node, in a role the node's application lets a guest add)
+        into an application blob, with the same rules. Core's guest gate runs first (`ShareGuestGate`): an active share
+        → the password → a mode that writes → a valid `contributorToken`; it spends the per-share upload budget. The node
+        must be a live node inside the share's subtree, checked again in the write, under the scope lock, with the link: a
+        node trashed or moved out of the subtree since, or a link revoked or deleted since, refuses it
+        (`upload_not_found`). The blob is stamped with the guest's identity — the per-link storage limit counts its bytes
+        (ADR 0073 §4) — and recorded as one guest write (ADR 0093 § 10). A guest takes no blob back at once: its owner
+        releases it, and the purge erases it after the trash retention. **Password-protected shares (ADR 0037):** no
+        `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/SharePassword"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShareApplicationBlobCompleteRequest" }
+            example:
+              nodeEpoch: 0
+              contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+              id: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+              ownerId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+              role: EXPENSES_RECEIPT
+              uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+      responses:
+        "200":
+          description: The blob is stored; the node's item revision moved once for it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareApplicationBlob" }
+        "400":
+          description: Malformed request (`invalid_request`), or the upload failed declare-then-verify (`budget_exceeded`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: budget_exceeded } }
+        "403":
+          description: >
+            The share does not write (`READ`), the contributor token is invalid, or the root is in the trash
+            (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong
+            (`share_password_incorrect`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: >
+            No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended
+            (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given —
+            non-enumerable (`share_not_found`); no live node of that id inside the share's live subtree whose application
+            stores blobs through the service (`node_not_found`); or no open upload of this guest under `uploadId` — never
+            started, already completed, expired, or refused by the write's re-check (`upload_not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: >
+            `id_taken` — `id` is taken, or the application refuses the owner in this node. `too_many_blobs` — the owner
+            holds the application's count of unreleased blobs already. `stale_epoch` / `node_rekey_pending` — the node's
+            key epoch (ADR 0109 point 6); the upload stays open.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            The upload was not started for this node in this role, or the role is none the node's application lets a guest
+            add (`upload_mismatch`), or the node's application is switched off for the instance or the tenant
+            (`capability_disabled`, uc.platform.switch-application-off).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: upload_mismatch } }
+        "429":
+          description: Too many wrong password attempts on this share, or its upload budget is spent for the current window (per-share rate limit).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+        "451":
+          description: >
+            A moderator blocked this node, a node above it, or the owner the blob is for (`blocked_by_operator`,
+            uc.moderation.take-a-measure): no blob is stored while the block stands. The upload stays open.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
+
+  /api/moderation/cases/{caseId}/application-blobs:
+    get:
+      tags: [case-application-blobs]
+      operationId: listCaseApplicationBlobs
+      summary: A moderator's review of a case's application blobs — the held blobs in the guest's shape, with their node.
+      description: >
+        An application's moderation view reads this beside its own case read (uc.moderation.review-a-case): every
+        application blob the case's hold copied — every blob of a reported owner (Expenses: an entry's receipts), a
+        reported blob on its own, or every blob of every node under a reported node — with its held blob row, from the
+        snapshot only, so it answers after the blobs, their node or the space were deleted. The moderator opens each with
+        the `K_blob` the report share hands over, or with the node's key a node's report hands over; its bytes are core's
+        `presignCaseBlobs`. No writer, as for a guest. `404 nothing_held` once the hold ended. Behind the `MODERATOR` role
+        and a key proof over this case — core's moderation gate, never a guest's.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CaseId"
+        - $ref: "#/components/parameters/ModerationChallenge"
+        - $ref: "#/components/parameters/ModerationSignature"
+      responses:
+        "200":
+          description: The held application blobs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CaseApplicationBlobListing" }
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The key proof failed, or the caller is no moderator (`moderation_proof_invalid`, `not_moderator`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: moderation_proof_invalid } }
+        "404":
+          description: "`case_not_found`, or `nothing_held` = the case's hold has ended."
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: nothing_held } }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -200,6 +533,75 @@ components:
       required: true
       description: Opaque id of the scope the blob lives in.
       schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: Opaque id of the node whose application stores the blobs (Expenses' `EXPENSES_POT`).
+      schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+    ShareId:
+      name: shareId
+      in: path
+      required: true
+      description: The opaque 256-bit share id (base64url, unguessable) — half the capability; the other half is the fragment key.
+      schema: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$", example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i }
+    SharePassword:
+      name: X-Share-Password
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The password token `base64(Argon2id(password, pwSalt))` for a password-protected share (cr-0118, ADR 0037).
+        Omit for a share with no password; a locked resolve then returns only `passwordRequired` + `pwSalt` so the
+        client can prompt and retry with this header.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      description: The case's id — bound into every key proof made for it.
+      schema: { type: string, format: uuid, example: 1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b }
+    ModerationChallenge:
+      name: X-Veyq-Moderation-Challenge
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The challenge `createModerationChallenge` issued, as it returned it. Declared optional so a call without the
+        proof reaches the gate and gets its `403 moderation_proof_invalid`; the gate is what requires it.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    ModerationSignature:
+      name: X-Veyq-Moderation-Signature
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        Ed25519 signature with the current epoch's moderation signing key over `moderation-proof` (the challenge, this
+        operation's `operationId`, the case id in the path or none), standard base64.
+      schema: { type: string, maxLength: 128, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    ApplicationBlobsAfter:
+      name: after
+      x-veyq-visibility: structure
+      in: query
+      required: false
+      description: The `cursor` of the page before — its last blob's id; the answer continues with the blobs past it. Omitted => from the beginning.
+      schema: { type: string, format: uuid, example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f }
+    ApplicationBlobsIfNoneMatch:
+      name: If-None-Match
+      x-veyq-visibility: structure
+      in: header
+      required: false
+      description: >
+        The `ETag` of the last first page of this read. When it equals the digest of what the read would serve now,
+        `304`. Ignored on a later page (`after` given).
+      schema: { type: string, maxLength: 80, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
+  headers:
+    ApplicationBlobsETag:
+      x-veyq-visibility: structure
+      description: >
+        On a read without `after`: a digest of everything the read serves, every page of it — echo it as `If-None-Match`
+        on the next poll. Absent on a later page.
+      schema: { type: string, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
 
   schemas:
     # --- start uploads -------------------------------------------------------
@@ -425,6 +827,338 @@ components:
           description: Per-item error code (`upload_not_found` = unknown blob, `store_unavailable`, `blocked_by_operator` = a moderator blocked its content — the per-item form of a byte read's `451`, uc.moderation.take-a-measure); null on success.
           maxLength: 64
           example: null
+
+    # --- an application's stored blobs (ADR 0112) --------------------------------
+    ApplicationBlobCompleteRequest:
+      type: object
+      required: [nodeEpoch, id, ownerId, role, uploadId]
+      properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The node's epoch as the client read it: the blob's `K_blob` is wrapped under the node's key. Below the stored
+            epoch is `409 stale_epoch`; a node not re-keyed since the last rotation is `409 node_rekey_pending` — ADR 0109
+            point 6. The upload stays open for both.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        id:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The application blob's id, minted by the client (ADR 0072 decision 3) — the id the application's own sealed records name it by (Expenses' receipt id).
+          example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        ownerId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The application's record that holds the blob — opaque to the server, which stores and compares it and never resolves it (Expenses' entry, existing or about to be written).
+          example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+        role:
+          $ref: "#/components/schemas/BlobRole"
+          # The scalar `BlobRole` generates a String with none of its bounds: the token's shape holds here, 400 before
+          # the handler; a role the node's application does not store through the service is `upload_mismatch`.
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The upload session opened by `startBlobUploads` for this node in this role.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+    ShareApplicationBlobCompleteRequest:
+      type: object
+      required: [nodeEpoch, contributorToken, id, ownerId, role, uploadId]
+      properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: The node's epoch as the guest read it (ADR 0109 point 6), as for a member's completion.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        contributorToken:
+          x-veyq-visibility: token
+          type: string
+          description: The capability token from `createShareIdentity`.
+          maxLength: 512
+          example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        id:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The application blob's id, minted by the client (ADR 0072 decision 3).
+          example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        ownerId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The application's record that holds the blob, as for a member's completion.
+          example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
+        role:
+          $ref: "#/components/schemas/BlobRole"
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The upload session this guest opened with `startShareBlobUploads` for this node in this role.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+
+    ApplicationBlob:
+      type: object
+      description: >
+        One application blob of a MEMBER's read. The guest's has its own schema (`ShareApplicationBlob`): a field added
+        here never reaches a link (inbox #190). What the client needs to open it: the blob (`presignBlobDownloads` by
+        `blobId`), its `K_blob` under the node's key (bound to the blob, the node and its `role`) and its sealed
+        `blob-meta` — the file's type and name, which the server never sees.
+      required: [id, ownerId, role, blobId, chunkCount, byteSize, wrappedBlobKey, writer, createdAt, blockedByOperator]
+      properties:
+        id: { type: string, format: uuid, example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f, x-veyq-visibility: id }
+        ownerId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
+        role: { $ref: "#/components/schemas/BlobRole" }
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 1
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: The sealed (ciphertext) size; the plaintext size is this less the frames' overhead (28 bytes per chunk).
+          example: 65536
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          description: Per-chunk ciphertext byte sizes in chunk order (server-recorded at completion; ciphertext sizes only).
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          description: The blob's `K_blob` wrapped under the node's key (opaque base64) — re-wrapped by a re-key (core's `getNodeRekeyParts`).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+        wrappedBlobMeta:
+          type: [string, "null"]
+          description: The blob's sealed metadata as its upload declared it (the `blob-meta` seal under `K_blob`; opaque base64). Null when the upload declared none.
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWJsb2ItbWV0YQ==
+        writer:
+          x-veyq-visibility: structure
+          type: string
+          description: >
+            Who completed it: `user:{userId}` (a member) or `share:{identityId}` (a link guest). Members only: the guest's
+            read carries no such field.
+          maxLength: 64
+          example: "user:2a9b1d4a-6e8b-4c1f-8d3e-4a5b6c7c3f0e"
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the server stored it, to the millisecond.
+          example: 2026-07-09T12:34:56.789Z
+        keptAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: >
+            When its owner last kept it (ADR 0112 decision 2: the application says so in its own write); null while no
+            write kept it, and again once it was released by name — a blob released by name is never kept again.
+          example: null
+        releasedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: >
+            When it was released: by name (Expenses: a revision's `droppedReceipts`; `keptAt` is then null, for good), or
+            with its owner's end (Expenses: a tombstone; `keptAt` stays, and the owner's next keep — a restore — clears
+            this). Null while it is not released.
+          example: null
+        purgeAfter:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: >
+            When the purge erases it, **derived** at the resource boundary from the operator's trash retention
+            (`veyq.node.trash.retention`) and never stored: its release plus the retention; else, while no write ever
+            kept it, its own time plus the retention. Null while it is kept and not released.
+          example: null
+        blockedByOperator:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            A moderator blocked this blob, its owner or its node (uc.moderation.take-a-measure): its bytes answer
+            `blocked_by_operator` and the client shows *Blocked by the operator* with no reason. Kept in the listing, not
+            left out.
+          example: false
+    ApplicationBlobPage:
+      type: object
+      description: One page of a member's read of a node's application blobs, ordered by id.
+      required: [blobs, more]
+      properties:
+        blobs:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ApplicationBlob" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Blobs remain past this page — ask again with this page's `cursor` as `after`.
+          example: false
+        cursor:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          maxLength: 36
+          description: The id of this page's last blob; null when the page carries none.
+          example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+
+    ShareApplicationBlob:
+      type: object
+      description: >
+        One application blob of a GUEST's read: the member's without its writer (inbox #190) — a schema of its own so the
+        member's can grow without reaching a guest.
+      required: [id, ownerId, role, blobId, chunkCount, byteSize, wrappedBlobKey, createdAt, blockedByOperator]
+      properties:
+        id: { type: string, format: uuid, example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f, x-veyq-visibility: id }
+        ownerId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
+        role: { $ref: "#/components/schemas/BlobRole" }
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 1
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 65536
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          description: The blob's `K_blob` wrapped under the node's key (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+        wrappedBlobMeta:
+          type: [string, "null"]
+          description: The blob's sealed metadata (opaque base64); null when the upload declared none.
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWJsb2ItbWV0YQ==
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          example: 2026-07-09T12:34:56.789Z
+        keptAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: As the member's `ApplicationBlob.keptAt`.
+          example: null
+        releasedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: As the member's `ApplicationBlob.releasedAt`.
+          example: null
+        purgeAfter:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the purge erases it, derived as the member's `ApplicationBlob.purgeAfter`; null while it is kept.
+          example: null
+        blockedByOperator:
+          x-veyq-visibility: flag
+          type: boolean
+          description: A moderator blocked this blob, its owner or its node — its bytes answer `451 blocked_by_operator`.
+          example: false
+    ShareApplicationBlobPage:
+      type: object
+      description: One page of a guest's read of a node's application blobs, ordered by id.
+      required: [blobs, more]
+      properties:
+        blobs:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ShareApplicationBlob" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Blobs remain past this page — ask again with this page's `cursor` as `after`.
+          example: false
+        cursor:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          maxLength: 36
+          description: The id of this page's last blob; null when the page carries none.
+          example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+
+    CaseApplicationBlob:
+      type: object
+      description: >
+        One held application blob of a case, with the node it belongs to — the guest's shape (no writer), read from the
+        hold's copy of its row and of its blob row. Its bytes are core's `presignCaseBlobs` by `blobId`.
+      required: [nodeId, id, ownerId, role, blobId, chunkCount, byteSize, wrappedBlobKey, createdAt]
+      properties:
+        nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        id: { type: string, format: uuid, example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f, x-veyq-visibility: id }
+        ownerId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
+        role: { $ref: "#/components/schemas/BlobRole" }
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 1
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 65536
+        wrappedBlobKey:
+          type: string
+          description: The held `K_blob` wrap (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+        wrappedBlobMeta:
+          type: [string, "null"]
+          description: The held blob's sealed metadata (opaque base64), or null.
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWJsb2ItbWV0YQ==
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          example: 2026-07-09T12:34:56.789Z
+        keptAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          example: null
+        releasedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          example: null
+    CaseApplicationBlobListing:
+      type: object
+      required: [blobs]
+      properties:
+        blobs:
+          type: array
+          description: Every application blob the hold copied, ordered by node and id.
+          items: { $ref: "#/components/schemas/CaseApplicationBlob" }
 
     # --- shared --------------------------------------------------------------
     PresignedUrl:

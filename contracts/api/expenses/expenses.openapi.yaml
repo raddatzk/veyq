@@ -20,12 +20,16 @@ info:
     revision marked as a tombstone; the one write that removes anything is a member's **erasure** of a participant's
     record, after which the server holds none of that record's earlier revisions.
 
-    **A receipt** (ADR 0108 decision 7) is an image or a PDF of at most 10 MiB kept with an entry, any number per entry,
-    in Expenses' own table: an upload through core's transport in the role `EXPENSES_RECEIPT`, its `K_blob` wrapped
-    under the Pot's key and bound to the blob, the Pot and the role — no new blob purpose — completed against the entry
-    (`completePotReceipt`). Which receipts an entry holds is its revision's sealed list; a revision that drops one names
-    it to the server, and a dropped receipt, a deleted entry's receipts and a receipt whose entry never got a revision are
-    erased after the trash retention (`veyq.node.trash.retention`). No guest action erases one at once.
+    **A receipt** (ADR 0108 decision 7) is an image or a PDF of at most 10 MiB kept with an entry, any number per entry
+    (at most 100 unreleased): a blob stored through **core's blob service**
+    ([ADR 0112](../../../docs/decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md); its
+    operations are core's, tags `application-blobs` and `share-application-blobs` in `blob.openapi.yaml`) in the role
+    `EXPENSES_RECEIPT`, held by the entry as its owner, its `K_blob` wrapped under the Pot's key and bound to the blob,
+    the Pot and the role — no new blob purpose. Which receipts an entry holds is its revision's sealed list; every
+    revision of an entry tells the service, in its own transaction, that the entry keeps its receipts, a revision that
+    drops one names it to the server (`droppedReceipts`: released for good), and a tombstone releases them all until a
+    restore keeps them again. A released receipt and a receipt whose entry never got a revision are erased after the
+    trash retention (`veyq.node.trash.retention`). No guest action erases one at once.
 
     **The list** is core's revisioned-list primitive over the revisions (docs/apps/README.md § How an application
     publishes a revisioned list): a member's read is a conditional-GET keyset delta; a guest's is paged by id and tagged
@@ -34,11 +38,12 @@ info:
 
     **Operator-blind:** per Pot the server sees the number of records and of revisions per record, every revision's
     time, size class and writer (a member or a link identity), which revisions are tombstones and which records were
-    erased, and per receipt its size, its entry, its writer, its time and its drop (ADR 0108 § Consequences) — never an
+    erased, and per receipt what core's blob service shows of every blob (ADR 0112 decision 6: its size, its entry as
+    its owner, its writer, its times, kept and released) — never an
     amount, a participant, a category, a currency, a receipt's type or content, or a key.
 
     **Guest operations** (tag `share-expenses`): a guest of a `READ` or `READ_WRITE` link on the Pot, or on a folder above
-    it, reads its revisions and receipts; a `READ_WRITE` guest appends revisions and completes receipts. A Pot is a share root with `READ` and `READ_WRITE`,
+    it, reads its revisions; a `READ_WRITE` guest appends revisions (its receipts are core's blob service's). A Pot is a share root with `READ` and `READ_WRITE`,
     never `WRITE_ONLY` (`createShare` answers that `422 illegal_scope`). The link is core's; these operations sit under
     its `/api/shares/{shareId}` path and pass core's guest gate first (`ShareGuestGate`: an active share — its role's
     instance capability on too, ADR 0088 decision 5 → the password → the mode → the guest's token), then do Expenses'
@@ -50,11 +55,11 @@ info:
 tags:
   - name: expenses
     description: >
-      A member's Pots under a scope: read a Pot's revisions and receipts, append revisions, complete a receipt, erase a
+      A member's Pots under a scope: read a Pot's revisions, append revisions, erase a
       participant's record, and the Pot's part of a re-key. One tag = one resource interface rooted at `/api/scopes/{scopeId}/pots`.
   - name: share-expenses
     description: >
-      A guest's Pots on a public share link — read a Pot's revisions and receipts, append revisions, complete a receipt
+      A guest's Pots on a public share link — read a Pot's revisions, append revisions
       (unauthenticated). One tag = one
       resource interface owning the `/api/shares/{shareId}/pots` subtree: longer than core's `sharing` root `/api/shares`,
       so these routes reach this resource and every other `/api/shares` route stays core's.
@@ -137,8 +142,9 @@ paths:
         content. The sealed body is one of the four size classes exactly, and its key wrap is bound to the revision it
         opens (both are checked by the client that reads them; the server checks only the body's length). A revision that
         no longer holds a receipt its record held names it in `droppedReceipts` (a receipt of another record, or none
-        of this Pot, is `400 invalid_request`): the drop is stamped and the purge erases the receipt after the trash
-        retention (ADR 0108 decision 7). Every Pot write states `nodeEpoch`, the Pot's key epoch as read (ADR 0109 point
+        of this Pot, is `400 invalid_request`): core's blob service releases it, and its purge erases the receipt after
+        the trash retention (ADR 0112 decision 2). Every revision keeps its record's other receipts, a tombstone releases
+        them, and a later revision of a deleted record keeps them again. Every Pot write states `nodeEpoch`, the Pot's key epoch as read (ADR 0109 point
         6). The Pot must be a live `EXPENSES_POT` of the scope.
       security:
         - bearerAuth: []
@@ -273,13 +279,12 @@ paths:
     get:
       tags: [expenses]
       operationId: listPotRekey
-      summary: The Expenses fields a Pot's re-key re-seals — every revision's `K_rev` wrap and every receipt's `K_blob` wrap (ADR 0109 point 2).
+      summary: The Expenses fields a Pot's re-key re-seals — every revision's `K_rev` wrap (ADR 0109 point 2).
       description: >
         Every revision of the Pot — of a trashed Pot too — with what is sealed under the Pot's key: its `K_rev` wrap, and
-        nothing else (the body is sealed under `K_rev`, so a re-key leaves it as it is, ADR 0108 decision 4); then every
-        receipt the Pot holds — dropped ones and a deleted entry's too, until the purge — with its `K_blob` wrap (ADR 0109
-        decision 3: a re-key re-wraps, never re-encrypts). Paged by `since` / `limit` / `more` as `listPotRevisions`, the
-        revisions first. Only a caller who may commit the node's re-key (core's `listRekeyNodes`) reads it, else `403`.
+        nothing else (the body is sealed under `K_rev`, so a re-key leaves it as it is, ADR 0108 decision 4). A receipt's
+        `K_blob` wrap is core's: core's `getNodeRekeyParts` lists it with the node's blobs and `stageNodeRekey` stages it
+        (ADR 0112 decision 1). Paged by `since` / `limit` / `more` as `listPotRevisions`. Only a caller who may commit the node's re-key (core's `listRekeyNodes`) reads it, else `403`.
         Nothing here is new to the server.
       security:
         - bearerAuth: []
@@ -290,7 +295,7 @@ paths:
         - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
       responses:
         "200":
-          description: One page of the Pot's revision and receipt key wraps.
+          description: One page of the Pot's revision key wraps.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PotRekeyPage" }
@@ -314,12 +319,11 @@ paths:
     post:
       tags: [expenses]
       operationId: stagePotRekey
-      summary: Stage one batch of a Pot's re-wrapped revision and receipt keys under a core re-key id.
+      summary: Stage one batch of a Pot's re-wrapped revision keys under a core re-key id.
       description: >
-        Up to 256 revisions and 256 receipts per call, each `K_rev` and each receipt's `K_blob` re-wrapped under the Pot's
-        NEW key (`expense-entry-key` and the `blob-key` seal, each bound as before) — the only fields a re-key writes. A
-        receipt staged that the Pot no longer holds (purged since) is the commit's `rekey_parts_stale`, one the stage
-        misses its `rekey_parts_missing`. A staged part carries no body, so none can be re-sealed and every body
+        Up to 256 revisions per call, each `K_rev` re-wrapped under the Pot's NEW key (`expense-entry-key`, bound as
+        before) — the only field of Expenses' own a re-key writes; a receipt's `K_blob` is staged as core's blob wrap
+        (`stageNodeRekey`). A staged part carries no body, so none can be re-sealed and every body
         and its digest stay byte-identical. Nothing staged is served before core's `commitNodeRekey` under the same
         `rekeyId`, whose transaction swaps it in through Expenses' participant; a staged revision that no longer exists
         (erased since) is the commit's `rekey_parts_stale`, a revision the stage misses its `rekey_parts_missing`. A value
@@ -340,7 +344,7 @@ paths:
         "204":
           description: The batch is staged.
         "400":
-          description: Malformed request (a list over 256 entries, a malformed value, no value at all, or one revision or receipt twice).
+          description: Malformed request (a list over 256 entries, a malformed value, no value at all, or one revision twice).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -360,136 +364,6 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
-
-  /api/scopes/{scopeId}/pots/{nodeId}/receipts:
-    get:
-      tags: [expenses]
-      operationId: listPotReceipts
-      summary: A Pot's receipts — every receipt it holds, with its blob reference (ADR 0108 decision 7).
-      description: >
-        Every receipt the Pot holds — of a live entry, a deleted one or one a revision dropped, until the purge erases it —
-        with what the client needs to open it: the blob reference (`presignBlobDownloads` by `blobId`), its `K_blob` wrap
-        under the Pot's key and its sealed `blob-meta` (the file's type and name, sealed: the server never sees what a
-        receipt is). Which receipts an entry holds is its revision's sealed list; this read is where their blobs are. Each
-        carries who completed it (`writer`), when a revision dropped it (`droppedAt`), when the purge erases it
-        (`purgeAfter`) and whether a moderator blocked its bytes (`blockedByOperator`: the receipt, or the entry that
-        holds it — its download then answers `blocked_by_operator`). Ordered by receipt id; **pages** of at most `limit`,
-        `more: true` while receipts remain past them — ask again with the page's `cursor` as `after`. **Live refresh:**
-        every change of a receipt moves the Pot's `ledgerRevision` (`listPotRevisions`), so a client re-reads this when
-        that moves; a read without `after` carries an `ETag` that is a digest of everything this read serves across its
-        pages — echoed as `If-None-Match`, an unchanged listing is `304`. A trashed Pot is read the same way.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ScopeId"
-        - $ref: "#/components/parameters/NodeId"
-        - $ref: "#/components/parameters/ReceiptsAfter"
-        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
-        - $ref: "#/components/parameters/ReceiptsIfNoneMatch"
-      responses:
-        "200":
-          description: One page of the Pot's receipts.
-          headers:
-            ETag: { $ref: "#/components/headers/ReceiptsETag" }
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/PotReceiptPage" }
-        "304":
-          description: Not Modified — `If-None-Match` equals the digest of what this read would serve; no body.
-        "400":
-          description: Malformed request — a parameter outside its contract.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
-        "401":
-          description: Generic authentication failure.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
-        "404":
-          description: "`scope_not_found` — no such scope, or the caller holds no grant for it (indistinguishable, uc.spaces.scope-access); `node_not_found` — no `EXPENSES_POT` of that id in it."
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-    post:
-      tags: [expenses]
-      operationId: completePotReceipt
-      x-veyq-concurrency:
-        mode: node-epoch
-        epochs:
-          - field: nodeEpoch
-      summary: Complete an upload as a receipt of an entry of a Pot (ADR 0108 decision 7).
-      description: >
-        Promote one `startBlobUploads` session — started with `role: EXPENSES_RECEIPT` and `ownerId` = this Pot, since its
-        `K_blob` wrap is sealed bound to the blob, the Pot and the role (ADR 0072): no new blob purpose — into the receipt
-        `receiptId` of the record `entryId`. The server verifies the upload (declare-then-verify: every chunk stored at
-        exactly its derived length, else the objects are purged and the call fails `budget_exceeded`) and records the blob
-        and the receipt in one transaction under the Pot's lock. A receipt is at most **10 MiB** of plaintext: its start
-        is refused by its size, which the server sees (`budget_exceeded`, 10 486 880 sealed bytes and up); its type is
-        sealed, so only the client keeps it to an image or a PDF. Any number of receipts per entry; the entry's next
-        revision lists the ones it holds (sealed), and a revision that drops one names it in `droppedReceipts`. The entry
-        may not exist yet — a new entry's receipts are completed before its first revision — but it may not be another
-        Pot's (`409 id_taken`); a receipt whose entry never gets a revision is erased after the trash retention, as a
-        dropped one is. The Pot must be a live `EXPENSES_POT` of the scope; every Pot write states `nodeEpoch` (ADR 0109
-        point 6).
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ScopeId"
-        - $ref: "#/components/parameters/NodeId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/PotReceiptCompleteRequest" }
-            example:
-              nodeEpoch: 0
-              entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
-              receiptId: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
-              uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-      responses:
-        "200":
-          description: The receipt is stored; the Pot's list moved once for it.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/PotReceipt" }
-        "400":
-          description: Malformed request (`invalid_request`), or the upload failed declare-then-verify (`budget_exceeded`).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: budget_exceeded } }
-        "401":
-          description: Generic authentication failure.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
-        "404":
-          description: >
-            `scope_not_found` — no such scope, or the caller holds no grant for it (indistinguishable,
-            uc.spaces.scope-access); `node_not_found` — no live `EXPENSES_POT` of that id in it (a trashed one included);
-            `upload_not_found` — no open upload of this caller under `uploadId` (never started, already completed, or
-            expired).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: upload_not_found } }
-        "409":
-          description: >
-            `id_taken` — `receiptId` is taken, or `entryId` is a record of another Pot. `stale_epoch` — `nodeEpoch` is below
-            the Pot's stored epoch (re-read); `node_rekey_pending` — the Pot is not re-keyed since the last rotation (retry;
-            ADR 0109 point 6) — the upload stays open for both. `scope_deleting` — the space is being deleted and read-only.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
-        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
-        "422":
-          description: >
-            The upload was not started for this Pot in the role `EXPENSES_RECEIPT` (`upload_mismatch`: its wrap would not
-            open here), or Expenses is switched off for the instance or the tenant (`capability_disabled`,
-            uc.platform.switch-application-off).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: upload_mismatch } }
-        "451":
-          description: >
-            A moderator blocked this Pot, a node above it, or the entry the receipt is for (`blocked_by_operator`,
-            uc.moderation.take-a-measure; ADR 0108 decision 6): no receipt is attached while the block stands. The upload
-            stays open.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
 
   /api/shares/{shareId}/pots/{nodeId}/revisions:
     get:
@@ -652,137 +526,6 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
 
-  /api/shares/{shareId}/pots/{nodeId}/receipts:
-    get:
-      tags: [share-expenses]
-      operationId: listSharePotReceipts
-      summary: A Pot's receipts under a share (unauthenticated) — sealed, and without who completed them.
-      description: >
-        **No auth.** A guest's `listPotReceipts`: every receipt of one live `EXPENSES_POT` of the live shared subtree, with
-        its blob reference, its `K_blob` wrap and its sealed `blob-meta`, when a revision dropped it, when the purge erases
-        it and whether a moderator blocked its bytes — and **no writer** (ADR 0108 decision 6, inbox #190): the guest's
-        schema has no such field. Its bytes are core's `resolveShareBlob` by `blobId` (a blocked one answers `451
-        blocked_by_operator`). Core's guest gate runs first (`ShareGuestGate`): an active share → the password → the
-        access mode. A `WRITE_ONLY` link reaches no Pot. A Pot outside the live subtree — trashed, moved out, none —
-        answers the same `404` as an unknown share. **Password-protected shares (ADR 0037):** the valid
-        `X-Share-Password` token is required — a missing token is `404`, a wrong one `403 share_password_incorrect`.
-        Pages and the `ETag` digest as `listPotReceipts`.
-      parameters:
-        - $ref: "#/components/parameters/ShareId"
-        - $ref: "#/components/parameters/NodeId"
-        - $ref: "#/components/parameters/SharePassword"
-        - $ref: "#/components/parameters/ReceiptsAfter"
-        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
-        - $ref: "#/components/parameters/ReceiptsIfNoneMatch"
-      responses:
-        "200":
-          description: One page of the Pot's receipts.
-          headers:
-            ETag: { $ref: "#/components/headers/ReceiptsETag" }
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SharePotReceiptPage" }
-        "304":
-          description: Not Modified — `If-None-Match` equals the digest of what this read would serve; no body.
-        "400":
-          description: Malformed request — a parameter outside its contract.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
-        "403":
-          description: The share is password-protected and the presented `X-Share-Password` token is wrong.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
-        "404":
-          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), a required password token absent, or no live `EXPENSES_POT` of that id inside the live shared subtree — non-enumerable, identical in every case.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
-        "429":
-          description: Too many wrong password attempts on this share (the password gate's own limiter).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
-    post:
-      tags: [share-expenses]
-      operationId: completeSharePotReceipt
-      x-veyq-concurrency:
-        mode: node-epoch
-        epochs:
-          - field: nodeEpoch
-      summary: Complete a guest's upload as a receipt of an entry of a shared Pot (unauthenticated) — a `READ_WRITE` guest's write.
-      description: >
-        **No auth.** A `READ_WRITE` guest's `completePotReceipt`: promote one session it opened with
-        `startShareBlobUploads` (`role: EXPENSES_RECEIPT`, `ownerId` = `nodeId` = this Pot) into a receipt, with the same
-        rules. Core's guest gate runs first (`ShareGuestGate`): an active share → the password → a mode that writes → a
-        valid `contributorToken`; it spends the per-share upload budget. The Pot must be a live `EXPENSES_POT` inside the
-        share's subtree, checked again in the write, under the scope lock, with the link: a Pot trashed or moved out of
-        the subtree since, or a link revoked or deleted since, refuses it (`upload_not_found`). The receipt is stamped with
-        the guest's identity — the per-link storage limit counts its bytes (ADR 0073 §4) — and recorded as one guest write
-        (ADR 0093 § 10). A guest takes no receipt back at once: a revision drops it, and the purge erases it after the
-        trash retention. **Password-protected shares (ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
-        token → `403 share_password_incorrect`.
-      parameters:
-        - $ref: "#/components/parameters/ShareId"
-        - $ref: "#/components/parameters/NodeId"
-        - $ref: "#/components/parameters/SharePassword"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/SharePotReceiptCompleteRequest" }
-            example:
-              nodeEpoch: 0
-              contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
-              entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
-              receiptId: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
-              uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-      responses:
-        "200":
-          description: The receipt is stored; the Pot's list moved once for it.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/SharePotReceipt" }
-        "400":
-          description: Malformed request (`invalid_request`), or the upload failed declare-then-verify (`budget_exceeded`).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: budget_exceeded } }
-        "403":
-          description: >
-            The share does not write (`READ`), the contributor token is invalid, or the root is in the trash
-            (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong
-            (`share_password_incorrect`).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
-        "404":
-          description: >
-            No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended
-            (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given —
-            non-enumerable (`share_not_found`); no live `EXPENSES_POT` of that id inside the share's live subtree
-            (`node_not_found`); or no open upload of this guest under `uploadId` — never started, already completed,
-            expired, or refused by the write's re-check (`upload_not_found`).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-        "409":
-          description: >
-            `id_taken` — `receiptId` is taken, or `entryId` is a record of another Pot. `stale_epoch` /
-            `node_rekey_pending` — the Pot's key epoch (ADR 0109 point 6); the upload stays open.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
-        "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
-        "422":
-          description: The upload was not started for this Pot in the role `EXPENSES_RECEIPT` (`upload_mismatch`), or Expenses is switched off for the instance or the tenant (`capability_disabled`, uc.platform.switch-application-off).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: upload_mismatch } }
-        "429":
-          description: Too many wrong password attempts on this share, or its upload budget is spent for the current window (per-share rate limit).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
-        "451":
-          description: >
-            A moderator blocked this Pot, a node above it, or the entry the receipt is for (`blocked_by_operator`,
-            uc.moderation.take-a-measure; ADR 0108 decision 6): no receipt is attached while the block stands. The upload
-            stays open.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
-
   /api/moderation/cases/{caseId}/pots:
     get:
       tags: [case-expenses]
@@ -791,11 +534,10 @@ paths:
       description: >
         The moderation mode of the Pot view reads this instead of `listSharePotRevisions` (uc.moderation.review-a-case):
         every revision the case's hold copied — every revision of a reported entry (ADR 0108 decision 6), or every
-        revision of every Pot under a reported node — and every receipt it copied (a reported entry's, a reported receipt,
-        a reported node's Pots'), from the snapshot only, so it answers after the revisions, the receipts, the Pot or the
-        space were deleted. The moderator opens each revision with the `K_rev` and each receipt with the `K_blob` the
-        report share hands over, or both with the Pot's key a node's report hands over; a receipt's bytes are core's
-        `presignCaseBlobs`. No writer, as for a guest. `404 nothing_held` once the hold ended. Behind the
+        revision of every Pot under a reported node — from the snapshot only, so it answers after the revisions, the Pot
+        or the space were deleted. The moderator opens each revision with the `K_rev` the report share hands over, or
+        with the Pot's key a node's report hands over. The receipts the hold copied are core's case read of the
+        application blobs (`listCaseApplicationBlobs`, ADR 0112). No writer, as for a guest. `404 nothing_held` once the hold ended. Behind the
         `MODERATOR` role and a key proof over this case — core's moderation gate, never a guest's.
       security:
         - bearerAuth: []
@@ -893,29 +635,6 @@ components:
         operation's `operationId`, the case id in the path or none), standard base64.
       schema: { type: string, maxLength: 128, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
 
-    ReceiptsAfter:
-      name: after
-      x-veyq-visibility: structure
-      in: query
-      required: false
-      description: The `cursor` of the page before — its last receipt's id; the answer continues with the receipts past it. Omitted => from the beginning.
-      schema: { type: string, format: uuid, example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f }
-    ReceiptsIfNoneMatch:
-      name: If-None-Match
-      x-veyq-visibility: structure
-      in: header
-      required: false
-      description: >
-        The `ETag` of the last first page of this read. When it equals the digest of what the read would serve now,
-        `304`. Ignored on a later page (`after` given).
-      schema: { type: string, maxLength: 80, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
-  headers:
-    ReceiptsETag:
-      x-veyq-visibility: structure
-      description: >
-        On a read without `after`: a digest of everything the read serves, every page of it — echo it as `If-None-Match`
-        on the next poll. Absent on a later page.
-      schema: { type: string, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
   schemas:
     # --- writes ---------------------------------------------------------------
     PotAppendRequest:
@@ -1021,7 +740,8 @@ components:
           type: [array, "null"]
           description: >
             The receipts of this record that this revision no longer holds and the one before it did (ADR 0108 decision 7):
-            the server stamps each one's drop, and the purge erases it once the trash retention has passed since. Each must
+            core's blob service releases each one for good, and its purge erases it once the trash retention has passed
+            since (ADR 0112 decision 2). Each must
             be a receipt of this record in this Pot, else the batch is `400 invalid_request` and nothing is stored; one
             dropped before stays dropped at its first time. A dropped receipt is never held again. A tombstone needs to name
             none: a deleted entry's receipts go after the retention on their own, and come back with a restore within it.
@@ -1369,335 +1089,33 @@ components:
 
     CasePotRevisionListing:
       type: object
-      required: [revisions, receipts]
+      required: [revisions]
       properties:
         revisions:
           type: array
           items: { $ref: "#/components/schemas/CasePotRevision" }
-        receipts:
-          type: array
-          description: Every receipt the hold copied — every receipt of a reported entry, a reported receipt, or every receipt of every Pot under a reported node.
-          items: { $ref: "#/components/schemas/CasePotReceipt" }
-
-    # --- receipts (ADR 0108 decision 7) ------------------------------------------
-    PotReceiptCompleteRequest:
-      type: object
-      required: [nodeEpoch, entryId, receiptId, uploadId]
-      properties:
-        nodeEpoch:
-          x-veyq-visibility: structure
-          type: [integer, "null"]
-          description: >
-            The Pot's epoch as the client read it: the receipt's `K_blob` is wrapped under the Pot's key. Below the stored
-            epoch is `409 stale_epoch`; a Pot not re-keyed since the last rotation is `409 node_rekey_pending` — ADR 0109
-            point 6. The upload stays open for both.
-          minimum: 0
-          example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
-        entryId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The record the receipt is kept with — an expense, a refund or a transfer, existing or about to be written.
-          example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
-        receiptId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The receipt's id, minted by the client (ADR 0072 decision 3) — the id the entry's revisions list it by.
-          example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
-        uploadId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The upload session opened by `startBlobUploads` for this Pot in the role `EXPENSES_RECEIPT`.
-          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-    SharePotReceiptCompleteRequest:
-      type: object
-      required: [nodeEpoch, contributorToken, entryId, receiptId, uploadId]
-      properties:
-        nodeEpoch:
-          x-veyq-visibility: structure
-          type: [integer, "null"]
-          description: The Pot's epoch as the guest read it (ADR 0109 point 6), as for a member's completion.
-          minimum: 0
-          example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
-        contributorToken:
-          x-veyq-visibility: token
-          type: string
-          description: The capability token from `createShareIdentity`.
-          maxLength: 512
-          example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
-        entryId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The record the receipt is kept with, as for a member's completion.
-          example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
-        receiptId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The receipt's id, minted by the client (ADR 0072 decision 3).
-          example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
-        uploadId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The upload session this guest opened with `startShareBlobUploads` for this Pot in the role `EXPENSES_RECEIPT`.
-          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-
-    PotReceipt:
-      type: object
-      description: >
-        One receipt of a MEMBER's read. The guest's has its own schema (`SharePotReceipt`): a field added here never
-        reaches a link (inbox #190). What the client needs to open it: the blob (`presignBlobDownloads` by `blobId`), its
-        `K_blob` under the Pot's key (bound to the blob, the Pot and the role `EXPENSES_RECEIPT`) and its sealed
-        `blob-meta` — the file's type and name, which the server never sees.
-      required: [receiptId, entryId, blobId, chunkCount, byteSize, wrappedBlobKey, writer, createdAt, blockedByOperator]
-      properties:
-        receiptId: { type: string, format: uuid, example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f, x-veyq-visibility: id }
-        entryId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
-        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
-        chunkCount:
-          x-veyq-visibility: measure
-          type: integer
-          format: int32
-          example: 1
-        byteSize:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: The sealed (ciphertext) size; the plaintext size is this less the frames' overhead (28 bytes per chunk).
-          example: 65536
-        manifest:
-          x-veyq-visibility: measure
-          type: [array, "null"]
-          description: Per-chunk ciphertext byte sizes in chunk order (server-recorded at completion; ciphertext sizes only).
-          items: { type: integer, format: int64, example: 65536 }
-        wrappedBlobKey:
-          type: string
-          description: The receipt's `K_blob` wrapped under the Pot's key (opaque base64) — re-wrapped by a re-key.
-          contentEncoding: base64
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
-        wrappedBlobMeta:
-          type: [string, "null"]
-          description: The blob's sealed metadata as its upload declared it (the `blob-meta` seal under `K_blob`; opaque base64). Null when the upload declared none.
-          contentEncoding: base64
-          maxLength: 2048
-          example: c2VhbGVkLWJsb2ItbWV0YQ==
-        writer:
-          x-veyq-visibility: structure
-          type: string
-          description: >
-            Who completed it: `user:{userId}` (a member) or `share:{identityId}` (a link guest), as a revision's `writer`.
-            Members only: the guest's read carries no such field.
-          maxLength: 64
-          example: "user:2a9b1d4a-6e8b-4c1f-8d3e-4a5b6c7c3f0e"
-        createdAt:
-          x-veyq-visibility: time
-          type: string
-          format: date-time
-          description: When the server stored it, to the millisecond.
-          example: 2026-07-09T12:34:56.789Z
-        droppedAt:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: When a revision of its entry dropped it (`droppedReceipts`); null while no revision did. A dropped receipt is never held again.
-          example: null
-        purgeAfter:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: >
-            When the purge erases it, **derived** at the resource boundary from the operator's trash retention
-            (`veyq.node.trash.retention`) and never stored: its drop plus the retention; else, while its entry's latest
-            revision is a tombstone, that tombstone's time plus the retention; else, while its entry has no revision at
-            all, its own time plus the retention. Null while it is held by a live entry. A restore of the entry within the
-            retention makes it null again.
-          example: null
-        blockedByOperator:
-          x-veyq-visibility: flag
-          type: boolean
-          description: >
-            A moderator blocked this receipt, or the entry that holds it (uc.moderation.take-a-measure): its blob answers
-            `blocked_by_operator` and the client shows *Blocked by the operator* with no reason. Kept in the listing, not
-            left out.
-          example: false
-    PotReceiptPage:
-      type: object
-      description: One page of a member's read of a Pot's receipts, ordered by receipt id.
-      required: [receipts, more]
-      properties:
-        receipts:
-          type: array
-          maxItems: 1000
-          items: { $ref: "#/components/schemas/PotReceipt" }
-        more:
-          x-veyq-visibility: flag
-          type: boolean
-          description: Receipts remain past this page — ask again with this page's `cursor` as `after`.
-          example: false
-        cursor:
-          x-veyq-visibility: structure
-          type: [string, "null"]
-          maxLength: 36
-          description: The id of this page's last receipt; null when the page carries none.
-          example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
-
-    SharePotReceipt:
-      type: object
-      description: >
-        One receipt of a GUEST's read: the member's without its writer (inbox #190) — a schema of its own so the member's
-        can grow without reaching a guest.
-      required: [receiptId, entryId, blobId, chunkCount, byteSize, wrappedBlobKey, createdAt, blockedByOperator]
-      properties:
-        receiptId: { type: string, format: uuid, example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f, x-veyq-visibility: id }
-        entryId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
-        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
-        chunkCount:
-          x-veyq-visibility: measure
-          type: integer
-          format: int32
-          example: 1
-        byteSize:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          example: 65536
-        manifest:
-          x-veyq-visibility: measure
-          type: [array, "null"]
-          items: { type: integer, format: int64, example: 65536 }
-        wrappedBlobKey:
-          type: string
-          description: The receipt's `K_blob` wrapped under the Pot's key (opaque base64).
-          contentEncoding: base64
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
-        wrappedBlobMeta:
-          type: [string, "null"]
-          description: The blob's sealed metadata (opaque base64); null when the upload declared none.
-          contentEncoding: base64
-          maxLength: 2048
-          example: c2VhbGVkLWJsb2ItbWV0YQ==
-        createdAt:
-          x-veyq-visibility: time
-          type: string
-          format: date-time
-          example: 2026-07-09T12:34:56.789Z
-        droppedAt:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: When a revision of its entry dropped it; null while no revision did.
-          example: null
-        purgeAfter:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          description: When the purge erases it, derived as the member's `PotReceipt.purgeAfter`; null while a live entry holds it.
-          example: null
-        blockedByOperator:
-          x-veyq-visibility: flag
-          type: boolean
-          description: A moderator blocked this receipt, or the entry that holds it — its blob answers `451 blocked_by_operator`.
-          example: false
-    SharePotReceiptPage:
-      type: object
-      description: One page of a guest's read of a Pot's receipts, ordered by receipt id.
-      required: [receipts, more]
-      properties:
-        receipts:
-          type: array
-          maxItems: 1000
-          items: { $ref: "#/components/schemas/SharePotReceipt" }
-        more:
-          x-veyq-visibility: flag
-          type: boolean
-          description: Receipts remain past this page — ask again with this page's `cursor` as `after`.
-          example: false
-        cursor:
-          x-veyq-visibility: structure
-          type: [string, "null"]
-          maxLength: 36
-          description: The id of this page's last receipt; null when the page carries none.
-          example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
-
-    CasePotReceipt:
-      type: object
-      description: >
-        One held receipt of a case, with the Pot it belongs to — the guest's shape (no writer), read from the hold's copy
-        of its row and of its blob row. Its bytes are core's `presignCaseBlobs` by `blobId`.
-      required: [nodeId, receiptId, entryId, blobId, chunkCount, byteSize, wrappedBlobKey, createdAt]
-      properties:
-        nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
-        receiptId: { type: string, format: uuid, example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f, x-veyq-visibility: id }
-        entryId: { type: string, format: uuid, example: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c, x-veyq-visibility: id }
-        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
-        chunkCount:
-          x-veyq-visibility: measure
-          type: integer
-          format: int32
-          example: 1
-        byteSize:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          example: 65536
-        wrappedBlobKey:
-          type: string
-          description: The held `K_blob` wrap (opaque base64).
-          contentEncoding: base64
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
-        wrappedBlobMeta:
-          type: [string, "null"]
-          description: The held blob's sealed metadata (opaque base64), or null.
-          contentEncoding: base64
-          maxLength: 2048
-          example: c2VhbGVkLWJsb2ItbWV0YQ==
-        createdAt:
-          x-veyq-visibility: time
-          type: string
-          format: date-time
-          example: 2026-07-09T12:34:56.789Z
-        droppedAt:
-          x-veyq-visibility: time
-          type: [string, "null"]
-          format: date-time
-          example: null
 
     # --- the re-key -------------------------------------------------------------
     PotRekeyPage:
       type: object
       description: >
-        One page of what a Pot's re-key re-wraps: every revision's `K_rev` wrap, then every receipt's `K_blob` wrap — at
-        most `limit` of both together, the revisions' pages first.
-      required: [revisions, receipts, more]
+        One page of what a Pot's re-key re-wraps of Expenses' own: every revision's `K_rev` wrap, at most `limit`.
+      required: [revisions, more]
       properties:
         revisions:
           type: array
           maxItems: 1000
           items: { $ref: "#/components/schemas/PotRekeyWrap" }
-        receipts:
-          type: array
-          maxItems: 1000
-          items: { $ref: "#/components/schemas/PotRekeyReceiptWrap" }
         more:
           x-veyq-visibility: flag
           type: boolean
-          description: Revisions or receipts remain past this page; ask again with this page's `cursor` as `since`.
+          description: Revisions remain past this page; ask again with this page's `cursor` as `since`.
           example: false
         cursor:
           x-veyq-visibility: structure
           type: [string, "null"]
           maxLength: 80
-          description: The keyset position of this page's last revision or receipt, opaque to the client; null when the page carries none.
+          description: The keyset position of this page's last revision, opaque to the client; null when the page carries none.
           example: null
 
     PotRekeyWrap:
@@ -1721,25 +1139,9 @@ components:
           example: d3JhcHBlZC1rLXJldg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
-    PotRekeyReceiptWrap:
-      type: object
-      description: >
-        One receipt's `K_blob` wrap — under the Pot's current key when listed, under its new key when staged (still bound
-        to the blob, the Pot and the role `EXPENSES_RECEIPT`). The blob is never re-encrypted.
-      required: [receiptId, wrappedBlobKey]
-      properties:
-        receiptId: { type: string, format: uuid, example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f, x-veyq-visibility: id }
-        wrappedBlobKey:
-          type: string
-          contentEncoding: base64
-          minLength: 1
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-
     PotRekeyStage:
       type: object
-      description: One batch of re-wrapped keys — revisions' `K_rev`s, receipts' `K_blob`s or both; at least one value (else `400 invalid_request`).
+      description: One batch of re-wrapped revision keys; at least one value (else `400 invalid_request`).
       required: [fromEpoch, revisions]
       properties:
         fromEpoch:
@@ -1755,12 +1157,6 @@ components:
           maxItems: 256
           items: { $ref: "#/components/schemas/PotRekeyWrap" }
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 0, max = 256) @field:jakarta.validation.Valid'
-        receipts:
-          type: [array, "null"]
-          description: Receipts' `K_blob`s re-wrapped under the Pot's new key. Omitted = none.
-          maxItems: 256
-          items: { $ref: "#/components/schemas/PotRekeyReceiptWrap" }
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.Valid'
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'
