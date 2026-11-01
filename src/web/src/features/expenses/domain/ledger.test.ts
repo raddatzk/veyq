@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { buildLedger, entryProblem, joinOrder, settleUp, type BaseCurrency, type PotLedger } from './ledger'
-import { readRevisionBody, type MoneyContent, type RevisionContent } from './format'
+import { readRevisionBody, type MoneyContent, type RevisionContent, type Split } from './format'
 import type { HeldRevision } from './revisions'
 
 type VectorPot = {
@@ -102,9 +102,16 @@ const STRANGER = '0e000000-0000-4000-8000-0000000000ff'
 const ODD = '0e000000-0000-4000-9000-0000000000ee'
 const base = trip.base
 
+const all: Split = { mode: 'equal', participants: [ANNA, BEN, CLEO] }
+const item = (label: string, amount: number, split: Split) => ({ label, amount, split })
+const equal = (...participants: string[]): Split => ({ mode: 'equal', participants })
+const percent = (...p: [string, number][]): Split => ({ mode: 'percent', percents: p.map(([participant, n]) => ({ participant, percent: n })) })
 const expense = (over: Partial<Extract<MoneyContent, { kind: 'expense' }>>): MoneyContent => ({
   kind: 'expense', title: 'Odd', date: '2026-07-09', category: 'other', currency: 'EUR', minorUnits: 2, rate: '1', amount: 900,
-  payers: [{ participant: ANNA, amount: 900 }], allocation: { mode: 'equal', participants: [ANNA, BEN, CLEO] }, receipts: [], ...over,
+  payers: [{ participant: ANNA, amount: 900 }], allocation: { items: [], rest: all }, receipts: [], ...over,
+})
+const refund = (receivers: { participant: string; amount: number }[]): MoneyContent => ({
+  kind: 'refund', title: 'Odd', date: '2026-07-09', category: 'other', currency: 'EUR', minorUnits: 2, rate: '1', amount: 900, receivers, allocation: { items: [], rest: all }, receipts: [],
 })
 
 /** Each case: an entry that breaks the rule, and its control — the same entry with the sums made to add up. */
@@ -117,21 +124,33 @@ const CASES: { name: string; bad: MoneyContent; good: MoneyContent; problem: str
   },
   {
     name: "receivers' amounts beside the total",
-    bad: { kind: 'refund', title: 'Odd', date: '2026-07-09', category: 'other', currency: 'EUR', minorUnits: 2, rate: '1', amount: 900, receivers: [{ participant: ANNA, amount: 901 }], allocation: { mode: 'equal', participants: [ANNA, BEN, CLEO] }, receipts: [] },
-    good: { kind: 'refund', title: 'Odd', date: '2026-07-09', category: 'other', currency: 'EUR', minorUnits: 2, rate: '1', amount: 900, receivers: [{ participant: ANNA, amount: 900 }], allocation: { mode: 'equal', participants: [ANNA, BEN, CLEO] }, receipts: [] },
+    bad: refund([{ participant: ANNA, amount: 901 }]),
+    good: refund([{ participant: ANNA, amount: 900 }]),
     problem: 'receivers-unbalanced',
   },
   {
-    name: 'exact amounts beside the total',
-    bad: expense({ allocation: { mode: 'exact', amounts: [{ participant: BEN, amount: 400 }, { participant: CLEO, amount: 400 }] } }),
-    good: expense({ allocation: { mode: 'exact', amounts: [{ participant: BEN, amount: 500 }, { participant: CLEO, amount: 400 }] } }),
-    problem: 'exact-unbalanced',
+    name: 'items above the total',
+    bad: expense({ allocation: { items: [item('A', 500, equal(BEN)), item('B', 401, equal(CLEO))], rest: all } }),
+    good: expense({ allocation: { items: [item('A', 500, equal(BEN)), item('B', 400, equal(CLEO))], rest: all } }),
+    problem: 'items-above-total',
   },
   {
-    name: 'line items above the total',
-    bad: expense({ allocation: { mode: 'items', rest: 'equal', items: [{ label: 'A', amount: 500, participants: [BEN] }, { label: 'B', amount: 401, participants: [CLEO] }] } }),
-    good: expense({ allocation: { mode: 'items', rest: 'equal', items: [{ label: 'A', amount: 500, participants: [BEN] }, { label: 'B', amount: 400, participants: [CLEO] }] } }),
-    problem: 'items-above-total',
+    name: 'a rest above zero with no split for it',
+    bad: expense({ allocation: { items: [item('A', 500, equal(BEN))] } }),
+    good: expense({ allocation: { items: [item('A', 500, equal(BEN))], rest: equal(CLEO) } }),
+    problem: 'rest-unallocated',
+  },
+  {
+    name: "an item's percents beside 100.00 %",
+    bad: expense({ allocation: { items: [item('A', 900, percent([BEN, 5000], [CLEO, 4999]))] } }),
+    good: expense({ allocation: { items: [item('A', 900, percent([BEN, 5001], [CLEO, 4999]))] } }),
+    problem: 'percent-unbalanced',
+  },
+  {
+    name: "the rest's percents beside 100.00 %",
+    bad: expense({ allocation: { items: [], rest: percent([BEN, 10000], [CLEO, 1]) } }),
+    good: expense({ allocation: { items: [], rest: percent([BEN, 9999], [CLEO, 1]) } }),
+    problem: 'percent-unbalanced',
   },
   {
     name: 'a payer named twice',
@@ -140,15 +159,15 @@ const CASES: { name: string; bad: MoneyContent; good: MoneyContent; problem: str
     problem: 'named-twice',
   },
   {
-    name: 'a beneficiary named twice',
-    bad: expense({ allocation: { mode: 'shares', shares: [{ participant: BEN, shares: 1 }, { participant: BEN, shares: 2 }] } }),
-    good: expense({ allocation: { mode: 'shares', shares: [{ participant: BEN, shares: 1 }, { participant: CLEO, shares: 2 }] } }),
+    name: 'a beneficiary named twice in one split',
+    bad: expense({ allocation: { items: [item('A', 900, { mode: 'shares', shares: [{ participant: BEN, shares: 1 }, { participant: BEN, shares: 2 }] })] } }),
+    good: expense({ allocation: { items: [item('A', 900, { mode: 'shares', shares: [{ participant: BEN, shares: 1 }, { participant: CLEO, shares: 2 }] })] } }),
     problem: 'named-twice',
   },
   {
     name: 'a person who is no participant',
-    bad: expense({ allocation: { mode: 'equal', participants: [ANNA, STRANGER] } }),
-    good: expense({ allocation: { mode: 'equal', participants: [ANNA, BEN] } }),
+    bad: expense({ allocation: { items: [], rest: equal(ANNA, STRANGER) } }),
+    good: expense({ allocation: { items: [], rest: equal(ANNA, BEN) } }),
     problem: 'unknown-participant',
   },
   {
@@ -198,8 +217,23 @@ describe('an entry whose sums do not add up counts nowhere and is shown as inval
     }
   })
 
-  it('line items exactly at the total add up (a bill with no tip)', () => {
-    expect(entryProblem(expense({ allocation: { mode: 'items', rest: 'proportional', items: [{ label: 'A', amount: 900, participants: [BEN] }] } }))).toBeNull()
+  it('items exactly at the total add up with no rest split (a bill with no tip); a rest split sealed beside them moves nothing', () => {
+    expect(entryProblem(expense({ allocation: { items: [item('A', 900, equal(BEN))] } }))).toBeNull()
+    const sealed = withEntry(expense({ allocation: { items: [item('A', 900, equal(BEN))], rest: equal(CLEO) } }))
+    expect(asNumbers(sealed.entries.find((e) => e.id === ODD)!.effect!.shares)).toEqual({ [BEN]: 900 })
+  })
+
+  it('a rest split sealed at a zero rest is still held to the rules: a stranger in it makes the entry invalid', () => {
+    const c = expense({ allocation: { items: [item('A', 900, equal(BEN))], rest: equal(STRANGER) } })
+    expect(entryProblem(c)).toBeNull()
+    expect(entryProblem(c, (id) => [ANNA, BEN, CLEO].includes(id))).toBe('unknown-participant')
+  })
+
+  it('one person on several parts gets the sum of their parts, each part rounded on its own', () => {
+    // 1.00 by thirds is 0.34/0.33/0.33 (Anna's extra cent by join order); the rest 0.01 equal between Ben and Cleo goes to
+    // Ben. Rounded once over the whole entry instead (weights 33⅓, 33⅚, 33⅚), it would be 0.33/0.34/0.34.
+    const c = expense({ amount: 101, payers: [{ participant: ANNA, amount: 101 }], allocation: { items: [item('A', 100, all)], rest: equal(BEN, CLEO) } })
+    expect(asNumbers(withEntry(c).entries.find((e) => e.id === ODD)!.effect!.shares)).toEqual({ [ANNA]: 34, [BEN]: 34, [CLEO]: 33 })
   })
 })
 
@@ -242,14 +276,14 @@ describe('the overviews', () => {
   const ledger = buildLedger(potOf(trip), base)
 
   it('total each category, refunds against theirs, transfers nowhere', () => {
-    // food: Dinner 10000 + Trattoria 6000 + Bar 2500; transport: Taxi 1000 + Ferry 3908 − the train refund 1500.
-    expect(asNumbers(ledger.overview.byCategory)).toEqual({ food: 18500, leisure: 3062, transport: 3408, groceries: 4001 })
+    // food: Dinner 10000 + Trattoria 6001 + Bar 2500; transport: Taxi 1000 + Ferry 3908 − the train refund 1500.
+    expect(asNumbers(ledger.overview.byCategory)).toEqual({ food: 18501, leisure: 3062, transport: 3408, groceries: 4001 })
   })
 
   it('put what each person paid beside their share, and the shares sum to the costs', () => {
     const anna = ledger.overview.byPerson.get(ANNA)!
-    // paid: Dinner 10000 + Taxi 1000 + Groceries 2001 − the refund she received 1500.
-    expect(anna.paid).toBe(11501n)
+    // paid: Dinner 10000 + Taxi 1000 + Groceries 2001 − her part of the refund 1000.
+    expect(anna.paid).toBe(12001n)
     const shares = [...ledger.overview.byPerson.values()].reduce((a, p) => a + p.share, 0n)
     const costs = [...ledger.overview.byCategory.values()].reduce((a, b) => a + b, 0n)
     expect(shares).toBe(costs)
@@ -267,7 +301,7 @@ describe('the overviews', () => {
 
   it('split each category by person', () => {
     const transport = ledger.overview.byCategoryAndPerson.get('transport')!
-    // Taxi 0/700/300, Ferry 1303/1303/1302, the refund −500 each.
-    expect(asNumbers(transport)).toEqual({ [ANNA]: 803, [BEN]: 1503, [CLEO]: 1102 })
+    // Taxi 0/700/300, Ferry 1694/1693/521, the refund −400/−400/−700.
+    expect(asNumbers(transport)).toEqual({ [ANNA]: 1294, [BEN]: 1993, [CLEO]: 121 })
   })
 })

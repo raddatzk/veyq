@@ -4,8 +4,9 @@
 // JSON a writer seals. Readers ignore unknown fields — a field added under `v: 1` is additive — and a body of any other
 // `v` is one this client cannot read.
 //
-// What the schema cannot say, and `ledger.ts` decides: whether the amounts add up (the unbalanced-entry rule) and whether
-// the participants an entry names exist. A body valid here may still count in no balance.
+// What the schema cannot say, and `ledger.ts` decides: whether the amounts add up (the unbalanced-entry rule: payers to the
+// amount, items within it, a split for a rest above zero, percents to 100.00 %) and whether the participants an entry names
+// exist. A body valid here may still count in no balance.
 import { RATE } from './money'
 
 export const FORMAT_VERSION = 1
@@ -19,11 +20,18 @@ export type Head = { entryId: string; revision: number; digest: string }
 
 export type Contribution = { participant: string; amount: number }
 
-export type Allocation =
+/** Who one part of an entry is for: each person 1, their shares, or their percent in basis points (10000 = 100.00 %). */
+export type Split =
   | { mode: 'equal'; participants: string[] }
   | { mode: 'shares'; shares: { participant: string; shares: number }[] }
-  | { mode: 'exact'; amounts: Contribution[] }
-  | { mode: 'items'; items: { label: string; amount: number; participants: string[] }[]; rest: 'proportional' | 'equal' }
+  | { mode: 'percent'; percents: { participant: string; percent: number }[] }
+
+/** An item of an entry: an exact amount in the entry's currency, with its own split. */
+export type Item = { label: string; amount: number; split: Split }
+
+/** Who the amount is for: its items, and the rest (`amount - sum(items)`) by a split of its own — present while the rest is
+ *  above zero, ignored at zero. No items: the whole amount is rest. */
+export type Allocation = { items: Item[]; rest?: Split }
 
 type Money = { date: string; currency: string; minorUnits: number; rate: string; amount: number; receipts: string[] }
 
@@ -67,6 +75,8 @@ const MAX_LIST = 200
 /** The most receipts one revision lists (the schema's `maxItems`). */
 export const MAX_RECEIPTS = 100
 const MAX_SHARES = 1_000_000
+/** 100.00 %: a `percent` split's basis points sum to exactly this (a rule of `ledger.ts`'s, not the schema's). */
+export const PERCENT_WHOLE = 10_000
 
 /** Why a body is not a v1 revision: the first rule it breaks, by the schema's path. */
 export class RevisionFormatInvalid extends Error {
@@ -106,7 +116,7 @@ function category(v: unknown, path: string): string {
   return fail(path)
 }
 
-function allocation(v: unknown, path: string): Allocation {
+function split(v: unknown, path: string): Split {
   const o = obj(v, path)
   switch (o.mode) {
     case 'equal':
@@ -119,23 +129,30 @@ function allocation(v: unknown, path: string): Allocation {
           return { participant: uuid(s.participant, `${path}/shares/${i}/participant`), shares: int(s.shares, `${path}/shares/${i}/shares`, 1, MAX_SHARES) }
         }),
       }
-    case 'exact':
-      return { mode: 'exact', amounts: contributions(o.amounts, `${path}/amounts`) }
-    case 'items': {
-      const rest = o.rest === 'proportional' || o.rest === 'equal' ? o.rest : fail(`${path}/rest`)
-      const items = arr(o.items, `${path}/items`, 1, MAX_LIST).map((x, i) => {
-        const it = obj(x, `${path}/items/${i}`)
-        return {
-          label: str(it.label, `${path}/items/${i}/label`, undefined, 1, 200),
-          amount: minor(it.amount, `${path}/items/${i}/amount`),
-          participants: uuids(it.participants, `${path}/items/${i}/participants`),
-        }
-      })
-      return { mode: 'items', items, rest }
-    }
+    case 'percent':
+      return {
+        mode: 'percent',
+        percents: arr(o.percents, `${path}/percents`, 1, MAX_LIST).map((x, i) => {
+          const s = obj(x, `${path}/percents/${i}`)
+          return { participant: uuid(s.participant, `${path}/percents/${i}/participant`), percent: int(s.percent, `${path}/percents/${i}/percent`, 1, PERCENT_WHOLE) }
+        }),
+      }
     default:
       return fail(`${path}/mode`)
   }
+}
+
+function allocation(v: unknown, path: string): Allocation {
+  const o = obj(v, path)
+  const items = arr(o.items, `${path}/items`, 0, MAX_LIST).map((x, i) => {
+    const it = obj(x, `${path}/items/${i}`)
+    return {
+      label: str(it.label, `${path}/items/${i}/label`, undefined, 1, 200),
+      amount: minor(it.amount, `${path}/items/${i}/amount`),
+      split: split(it.split, `${path}/items/${i}/split`),
+    }
+  })
+  return o.rest === undefined ? { items } : { items, rest: split(o.rest, `${path}/rest`) }
 }
 
 function money(o: Obj): Money {

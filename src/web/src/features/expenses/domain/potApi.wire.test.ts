@@ -40,7 +40,7 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
 const person = (name: string, joined: number): PotWrite['content'] => ({ kind: 'participant', name, active: true, joined })
 const dinner = (amount: number, paid = amount): PotWrite['content'] => ({
   kind: 'expense', title: 'Dinner', date: '2026-07-01', category: 'food', currency: 'EUR', minorUnits: 2, rate: '1', amount,
-  payers: [{ participant: ANNA, amount: paid }], allocation: { mode: 'equal', participants: [ANNA, BEN] }, receipts: [],
+  payers: [{ participant: ANNA, amount: paid }], allocation: { items: [], rest: { mode: 'equal', participants: [ANNA, BEN] } }, receipts: [],
 })
 
 /** A held Pot written through the real write path: Anna and Ben, and Anna's dinner. */
@@ -221,14 +221,14 @@ describe('a write', () => {
       }
     }
     expect(refuse([{ entryId: DINNER, content: dinner(1) }, { entryId: DINNER, content: dinner(2) }])).toBe('record-twice')
-    expect(refuse([{ entryId: DINNER, content: { ...dinner(10), allocation: { mode: 'equal', participants: ['0e000000-0000-4000-8000-0000000000ff'] } } as PotWrite['content'] }])).toBe('unknown-participant')
+    expect(refuse([{ entryId: DINNER, content: { ...dinner(10), allocation: { items: [], rest: { mode: 'equal', participants: ['0e000000-0000-4000-8000-0000000000ff'] } } } as PotWrite['content'] }])).toBe('unknown-participant')
     expect(refuse([{ entryId: BEN, content: person('Ben', 99) }])).toBe('joined-moved')
     expect(refuse([{ entryId: BEN, content: { kind: 'participant', name: 'Ben', active: false, joined: 2 } }])).toBe('not-settled') // Ben owes 5.00
     expect(refuse([])).toBe('empty')
     // Controls: a rename, a new person and an entry for them in one batch, a settled deactivation.
     expect(refuse([{ entryId: BEN, content: person('Benjamin', 2) }])).toBe('sent')
     const CY = '0e000000-0000-4000-8000-000000000003'
-    expect(refuse([{ entryId: CY, content: person('Cy', 3) }, { entryId: '0e000000-0000-4000-9000-000000000002', content: { ...dinner(10), allocation: { mode: 'equal', participants: [CY] } } as PotWrite['content'] }])).toBe('sent')
+    expect(refuse([{ entryId: CY, content: person('Cy', 3) }, { entryId: '0e000000-0000-4000-9000-000000000002', content: { ...dinner(10), allocation: { items: [], rest: { mode: 'equal', participants: [CY] } } } as PotWrite['content'] }])).toBe('sent')
     const noMoney = heldPot(false)
     expect(sealPotWrites(MEMBER, potKey, noMoney, [{ entryId: BEN, content: { kind: 'participant', name: 'Ben', active: false, joined: 2 } }], BASE)).toHaveLength(1)
   })

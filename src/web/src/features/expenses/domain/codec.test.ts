@@ -22,7 +22,7 @@ const transfer: RevisionBody = { v: 1, heads: [], kind: 'transfer', date: '2026-
 const head = { entryId: B, revision: 3, digest: revisionDigest(new Uint8Array(744)) }
 const expense: RevisionBody = {
   v: 1, heads: [head], kind: 'expense', title: 'Dinner', date: '2026-07-01', category: 'food', currency: 'EUR', minorUnits: 2, rate: '1', amount: 10000,
-  payers: [{ participant: P, amount: 10000 }], allocation: { mode: 'equal', participants: [P, Q, R] }, receipts: [],
+  payers: [{ participant: P, amount: 10000 }], allocation: { items: [], rest: { mode: 'equal', participants: [P, Q, R] } }, receipts: [],
 }
 
 /** The sealed body lengths the contract takes, in base64 characters — one per size class. */
@@ -36,10 +36,10 @@ describe('sealing a revision', () => {
 
   it('pads to a size class whose sealed length is one the contract takes: a transfer to 512 B, an expense with one head to 2 KiB', () => {
     expect(b64std(sealRevision(at(A), potKey, transfer).sealedBody).length).toBe(744)
-    // The vectors' Dinner (three people, one payer) with one head: 525 bytes of JSON, past the 508 the 512 B class carries.
-    expect(encodeRevisionBody(expense).length).toBe(525)
+    // The vectors' Dinner (three people, one payer) with one head: 545 bytes of JSON, past the 508 the 512 B class carries.
+    expect(encodeRevisionBody(expense).length).toBe(545)
     expect(b64std(sealRevision(at(A), potKey, expense).sealedBody).length).toBe(2792)
-    const big: RevisionBody = { ...expense, allocation: { mode: 'items', rest: 'equal', items: Array.from({ length: 40 }, (_, i) => ({ label: `Item ${i} `.padEnd(120, '·'), amount: 1, participants: [P] })) } }
+    const big: RevisionBody = { ...expense, allocation: { items: Array.from({ length: 40 }, (_, i) => ({ label: `Item ${i} `.padEnd(120, '·'), amount: 1, split: { mode: 'equal', participants: [P] } })), rest: { mode: 'equal', participants: [P, Q, R] } } }
     const bigLength = b64std(sealRevision(at(A), potKey, big).sealedBody).length
     expect(WIRE_LENGTHS).toContain(bigLength)
     expect(bigLength).toBeGreaterThan(2792)
@@ -47,7 +47,7 @@ describe('sealing a revision', () => {
   })
 
   it('refuses a body past the 16 KiB cap', () => {
-    const huge: RevisionBody = { ...expense, allocation: { mode: 'items', rest: 'equal', items: Array.from({ length: 200 }, (_, i) => ({ label: `${i}`.padEnd(200, 'x'), amount: 1, participants: [P] })) } }
+    const huge: RevisionBody = { ...expense, allocation: { items: Array.from({ length: 200 }, (_, i) => ({ label: `${i}`.padEnd(200, 'x'), amount: 1, split: { mode: 'equal', participants: [P] } })), rest: { mode: 'equal', participants: [P, Q, R] } } }
     expect(() => sealRevision(at(A), potKey, huge)).toThrow('pad_too_large')
   })
 

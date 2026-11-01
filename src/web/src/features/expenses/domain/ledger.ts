@@ -4,12 +4,13 @@
 // arithmetic; `ledger.test.ts` runs every case of it through this file.
 //
 // **The unbalanced-entry rule** (owner 2026-10-24): an entry whose sums do not add up — payers' or receivers' amounts
-// beside the total, exact amounts beside it, line items above it, a person named twice — is never saved by this client
+// beside the total, items above it, a rest above zero with no split, percents beside 100.00 %, a person named twice — is
+// never saved by this client
 // ({@link entryProblem}, which the write path asks first), and one that arrives anyway counts in NO balance, NO overview
 // and NO settle-up, and is shown as invalid. So is one naming a person who is not a participant of the Pot: it has no
 // place in the join order the rounding breaks ties by. The server cannot check any of it; it sees only ciphertext.
-import { allocate, convertToBase, fraction, add, ZERO, type Fraction } from './money'
-import { isMoney, type Allocation, type MoneyContent, type RevisionContent } from './format'
+import { allocate, convertToBase, fraction } from './money'
+import { isMoney, PERCENT_WHOLE, type Allocation, type MoneyContent, type RevisionContent, type Split } from './format'
 import { byRecord, type HeldRevision } from './revisions'
 
 /** The Pot's base currency, from its sealed meta: what every balance is in. */
@@ -35,8 +36,9 @@ export function participantMemberOf(revisions: readonly HeldRevision[]): string 
 export type EntryProblem =
   | 'payers-unbalanced'
   | 'receivers-unbalanced'
-  | 'exact-unbalanced'
   | 'items-above-total'
+  | 'rest-unallocated'
+  | 'percent-unbalanced'
   | 'named-twice'
   | 'unknown-participant'
 
@@ -98,21 +100,32 @@ export function namedParticipants(c: MoneyContent): string[] {
   return [...who, ...allocationPeople(c.allocation)]
 }
 
-function allocationPeople(a: Allocation): string[] {
-  switch (a.mode) {
+/** The splits an allocation holds: each item's, then the rest's where one is sealed (checked even at a zero rest). */
+const splitsOf = (a: Allocation): Split[] => [...a.items.map((i) => i.split), ...(a.rest ? [a.rest] : [])]
+
+/** The people a split names, beside their weights (1 each, their shares, their basis points), in the split's order. */
+function splitWeights(s: Split): { id: string; weight: bigint }[] {
+  switch (s.mode) {
     case 'equal':
-      return a.participants
+      return s.participants.map((id) => ({ id, weight: 1n }))
     case 'shares':
-      return a.shares.map((s) => s.participant)
-    case 'exact':
-      return a.amounts.map((s) => s.participant)
-    case 'items':
-      return [...new Set(a.items.flatMap((i) => i.participants))]
+      return s.shares.map((x) => ({ id: x.participant, weight: BigInt(x.shares) }))
+    case 'percent':
+      return s.percents.map((x) => ({ id: x.participant, weight: BigInt(x.percent) }))
   }
+}
+
+const splitPeople = (s: Split): string[] => splitWeights(s).map((w) => w.id)
+
+function allocationPeople(a: Allocation): string[] {
+  return [...new Set(splitsOf(a).flatMap(splitPeople))]
 }
 
 const total = (xs: readonly { amount: number }[]): bigint => xs.reduce((acc, x) => acc + BigInt(x.amount), 0n)
 const twice = (ids: readonly string[]): boolean => new Set(ids).size !== ids.length
+
+/** `amount - sum(items)`: what the rest split gets (negative: items above the total). */
+export const restOf = (c: { amount: number; allocation: Allocation }): bigint => BigInt(c.amount) - total(c.allocation.items)
 
 /**
  * Why a money entry may not count — or be saved — or null when its sums add up. [isParticipant] tells whether an id is a
@@ -123,70 +136,55 @@ export function entryProblem(c: MoneyContent, isParticipant?: (id: string) => bo
     const contributors = c.kind === 'expense' ? c.payers : c.receivers
     if (twice(contributors.map((p) => p.participant))) return 'named-twice'
     if (total(contributors) !== BigInt(c.amount)) return c.kind === 'expense' ? 'payers-unbalanced' : 'receivers-unbalanced'
-    const a = c.allocation
-    if (a.mode === 'shares' && twice(a.shares.map((s) => s.participant))) return 'named-twice'
-    if (a.mode === 'exact') {
-      if (twice(a.amounts.map((s) => s.participant))) return 'named-twice'
-      if (total(a.amounts) !== BigInt(c.amount)) return 'exact-unbalanced'
-    }
-    if (a.mode === 'items' && total(a.items) > BigInt(c.amount)) return 'items-above-total'
+    const splits = splitsOf(c.allocation)
+    if (splits.some((s) => twice(splitPeople(s)))) return 'named-twice'
+    const percentOff = (s: Split) => s.mode === 'percent' && s.percents.reduce((acc, x) => acc + x.percent, 0) !== PERCENT_WHOLE
+    if (splits.some(percentOff)) return 'percent-unbalanced'
+    const rest = restOf(c)
+    if (rest < 0n) return 'items-above-total'
+    if (rest > 0n && !c.allocation.rest) return 'rest-unallocated'
   }
   if (isParticipant && namedParticipants(c).some((id) => !isParticipant(id))) return 'unknown-participant'
   return null
 }
 
-/** The weight each beneficiary's share is allocated by (the schema's description), keyed by participant. */
-function allocationWeights(c: Exclude<MoneyContent, { kind: 'transfer' }>): Map<string, Fraction> {
-  const a = c.allocation
-  const weights = new Map<string, Fraction>()
-  const put = (id: string, w: Fraction) => weights.set(id, add(weights.get(id) ?? ZERO, w))
-  switch (a.mode) {
-    case 'equal':
-      for (const id of a.participants) put(id, fraction(1n))
-      break
-    case 'shares':
-      for (const s of a.shares) put(s.participant, fraction(BigInt(s.shares)))
-      break
-    case 'exact':
-      for (const s of a.amounts) put(s.participant, fraction(BigInt(s.amount)))
-      break
-    case 'items': {
-      // Each item divided equally among its people; one person's exact sum over every item, rounded only once, below.
-      for (const item of a.items) {
-        const each = fraction(BigInt(item.amount), BigInt(item.participants.length))
-        for (const id of item.participants) put(id, each)
-      }
-      if (a.rest === 'equal') {
-        // The tip spread equally among the people on the bill; `proportional` needs nothing — the rest follows the items.
-        const people = [...weights.keys()]
-        const rest = fraction(BigInt(c.amount) - total(a.items), BigInt(people.length))
-        for (const id of people) put(id, rest)
-      }
-      break
-    }
-  }
-  return weights
+/** `amount` allocated among [people] by their weights (largest remainder), the people taken in join order ([rank]); each
+ *  person's share is added to what [into] holds for them. */
+function allocateInto(into: Map<string, bigint>, amount: bigint, people: readonly { id: string; weight: bigint }[], rank: Map<string, number>) {
+  const ordered = [...people].sort((a, b) => rank.get(a.id)! - rank.get(b.id)!)
+  const shares = allocate(amount, ordered.map((p) => fraction(p.weight)))
+  ordered.forEach((p, i) => into.set(p.id, (into.get(p.id) ?? 0n) + shares[i]!))
 }
 
-/** `amount` allocated by `weights`, the people in join order ([rank]), as a map in that order. */
-function allocateBy(amount: bigint, weights: Map<string, Fraction>, rank: Map<string, number>): Map<string, bigint> {
-  const people = [...weights.keys()].sort((a, b) => rank.get(a)! - rank.get(b)!)
-  const shares = allocate(amount, people.map((id) => weights.get(id)!))
-  return new Map(people.map((id, i) => [id, shares[i]!] as const))
+/**
+ * Each beneficiary's share of a valid entry's base total (the schema's description): the total allocated to the entry's
+ * parts — each item in its order, then the rest when it is above zero — by their amounts in the entry's currency, then
+ * each part's base amount among its split's people by their weights, in join order, a person's parts summed. Where the
+ * currency is the base, a part's weight IS its base amount, so the first step hands every part exactly its own amount.
+ */
+function beneficiaryShares(c: Exclude<MoneyContent, { kind: 'transfer' }>, baseTotal: bigint, rank: Map<string, number>): Map<string, bigint> {
+  const parts = c.allocation.items.map((i) => ({ amount: BigInt(i.amount), split: i.split }))
+  const rest = restOf(c)
+  if (rest > 0n) parts.push({ amount: rest, split: c.allocation.rest! })
+  const partBase = allocate(baseTotal, parts.map((p) => fraction(p.amount)))
+  const shares = new Map<string, bigint>()
+  parts.forEach((p, i) => allocateInto(shares, partBase[i]!, splitWeights(p.split), rank))
+  return new Map([...shares].sort((x, y) => rank.get(x[0])! - rank.get(y[0])!)) // in join order, as every list of the Pot
 }
 
 /**
  * A valid money entry's effect in the base currency: its total converted once, then allocated — payers (or receivers) by
- * the amounts they gave, beneficiaries by their weights — each by the largest-remainder rule in join order ([rank]: a
- * participant's index in it). The caller checked [entryProblem] with the Pot's participants first.
+ * the amounts they gave, beneficiaries part by part ({@link beneficiaryShares}) — each by the largest-remainder rule in
+ * join order ([rank]: a participant's index in it). The caller checked [entryProblem] with the Pot's participants first.
  */
 export function entryEffect(c: MoneyContent, base: BaseCurrency, rank: Map<string, number>): EntryEffect {
   const baseTotal = convertToBase(BigInt(c.amount), c.minorUnits, c.rate, base.minorUnits)
   const none = new Map<string, bigint>()
   if (c.kind === 'transfer') return { base: baseTotal, paid: none, received: none, shares: none }
   const contributors = c.kind === 'expense' ? c.payers : c.receivers
-  const given = allocateBy(baseTotal, new Map(contributors.map((p) => [p.participant, fraction(BigInt(p.amount))] as const)), rank)
-  const shares = allocateBy(baseTotal, allocationWeights(c), rank)
+  const given = new Map<string, bigint>()
+  allocateInto(given, baseTotal, contributors.map((p) => ({ id: p.participant, weight: BigInt(p.amount) })), rank)
+  const shares = beneficiaryShares(c, baseTotal, rank)
   return c.kind === 'expense'
     ? { base: baseTotal, paid: given, received: none, shares }
     : { base: baseTotal, paid: none, received: given, shares }

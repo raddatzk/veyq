@@ -49,7 +49,7 @@ beforeEach(() => {
   s.append([{ entryId: ANNA, content: person('Anna', 1) }, { entryId: BEN, content: person('Ben', 2) }, { entryId: CLEO, content: person('Cleo', 3) }])
   s.append([
     { entryId: '0e000000-0000-4000-9000-000000000001', content: { ...expense('Ski pass', 9001, ANNA, [ANNA, BEN, CLEO]), category: OWN } },
-    { entryId: '0e000000-0000-4000-9000-000000000002', content: { kind: 'expense', title: 'Bar', date: '2026-07-02', category: 'food', currency: 'CHF', minorUnits: 2, rate: '1.0412', amount: 5000, receipts: [], payers: [{ participant: BEN, amount: 5000 }], allocation: { mode: 'items', rest: 'equal', items: [{ label: 'Wine', amount: 3000, participants: [ANNA, CLEO] }, { label: 'Beer', amount: 1500, participants: [BEN] }] } } },
+    { entryId: '0e000000-0000-4000-9000-000000000002', content: { kind: 'expense', title: 'Bar', date: '2026-07-02', category: 'food', currency: 'CHF', minorUnits: 2, rate: '1.0412', amount: 5000, receipts: [], payers: [{ participant: BEN, amount: 5000 }], allocation: { items: [{ label: 'Wine', amount: 3000, split: { mode: 'equal', participants: [ANNA, CLEO] } }, { label: 'Beer', amount: 1500, split: { mode: 'shares', shares: [{ participant: BEN, shares: 1 }] } }], rest: { mode: 'percent', percents: [{ participant: ANNA, percent: 2500 }, { participant: BEN, percent: 7500 }] } } } },
     { entryId: '0e000000-0000-4000-9000-000000000003', content: expense('Deleted later', 100, CLEO, [CLEO, ANNA]) },
   ])
   s.append([{ entryId: '0e000000-0000-4000-9000-000000000003', content: { kind: 'deleted' } }])

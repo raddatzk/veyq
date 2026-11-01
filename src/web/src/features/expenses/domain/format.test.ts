@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { CURRENCY, DATE, DEFAULT_CATEGORIES, DIGEST, MAX_HEADS, RATE, UUID, decodeRevisionBody, encodeRevisionBody, readRevisionBody, RevisionFormatInvalid, type RevisionBody } from './format'
+import { CURRENCY, DATE, DEFAULT_CATEGORIES, DIGEST, MAX_HEADS, PERCENT_WHOLE, RATE, UUID, decodeRevisionBody, encodeRevisionBody, readRevisionBody, RevisionFormatInvalid, type RevisionBody } from './format'
 import { expensesMessages } from '../i18n'
 
 const contracts = resolve(__dirname, '../../../../../../contracts/expenses')
@@ -27,6 +27,14 @@ describe('the reader is the schema', () => {
     expect([...DEFAULT_CATEGORIES]).toEqual(defs.category.anyOf[0].enum)
     for (const locale of ['en', 'de'] as const) expect(Object.keys(expensesMessages[locale].expenses.category)).toEqual([...DEFAULT_CATEGORIES])
   })
+
+  it('knows the schema\'s allocation: items with a split each, an optional rest split, and the three split modes', () => {
+    expect(defs.allocation.required).toEqual(['items'])
+    expect(defs.allocation.properties.rest.$ref).toBe('#/$defs/split')
+    expect(defs.allocation.properties.items.items.required).toEqual(['label', 'amount', 'split'])
+    expect(defs.split.oneOf.map((s: { properties: { mode: { const: string } } }) => s.properties.mode.const)).toEqual(['equal', 'shares', 'percent'])
+    expect(defs.split.oneOf[2].properties.percents.items.properties.percent.maximum).toBe(PERCENT_WHOLE)
+  })
 })
 
 const P = '0e000000-0000-4000-8000-000000000001'
@@ -34,8 +42,9 @@ const Q = '0e000000-0000-4000-8000-000000000002'
 const head = { entryId: P, revision: 1, digest: 'A'.repeat(43) }
 const expense = {
   v: 1, heads: [head], kind: 'expense', title: 'Taxi', date: '2026-07-04', category: 'transport', currency: 'EUR', minorUnits: 2, rate: '1', amount: 1000,
-  payers: [{ participant: P, amount: 1000 }], allocation: { mode: 'equal', participants: [P, Q] }, receipts: [],
+  payers: [{ participant: P, amount: 1000 }], allocation: { items: [{ label: 'Fare', amount: 600, split: { mode: 'percent', percents: [{ participant: P, percent: 2550 }, { participant: Q, percent: 7450 }] } }], rest: { mode: 'equal', participants: [P, Q] } }, receipts: [],
 }
+const withItem = (split: unknown) => ({ ...expense, allocation: { items: [{ label: 'x', amount: 1, split }] } })
 
 describe('reading a body', () => {
   it('reads every body of the vectors, and every participant as a record', () => {
@@ -48,9 +57,11 @@ describe('reading a body', () => {
   })
 
   it('drops a field it does not know (additive under v: 1) and round-trips through the bytes', () => {
-    const body = readRevisionBody({ ...expense, later: 'field', allocation: { ...expense.allocation, extra: 1 } })
+    const body = readRevisionBody({ ...expense, later: 'field', allocation: { ...expense.allocation, extra: 1, rest: { ...expense.allocation.rest, extra: 2 } } })
     expect(body).not.toHaveProperty('later')
     expect(body.kind === 'expense' && body.allocation).not.toHaveProperty('extra')
+    expect(body.kind === 'expense' && body.allocation.rest).not.toHaveProperty('extra')
+    expect(body.kind === 'expense' && body.allocation.items[0]!.split).toEqual(expense.allocation.items[0]!.split)
     expect(decodeRevisionBody(encodeRevisionBody(body))).toEqual(body)
   })
 
@@ -72,10 +83,19 @@ describe('reading a body', () => {
     ['an unknown category', { ...expense, category: 'fun' }, '/category'],
     ['an uppercase uuid', { ...expense, payers: [{ participant: P.toUpperCase(), amount: 1000 }] }, '/payers/0/participant'],
     ['no payers', { ...expense, payers: [] }, '/payers'],
-    ['a beneficiary twice in an equal split', { ...expense, allocation: { mode: 'equal', participants: [P, P] } }, '/allocation/participants'],
-    ['an unknown allocation mode', { ...expense, allocation: { mode: 'random' } }, '/allocation/mode'],
-    ['line items without their rest', { ...expense, allocation: { mode: 'items', items: [{ label: 'x', amount: 1, participants: [P] }] } }, '/allocation/rest'],
-    ['zero shares', { ...expense, allocation: { mode: 'shares', shares: [{ participant: P, shares: 0 }] } }, '/allocation/shares/0/shares'],
+    ['an allocation without its items', { ...expense, allocation: { rest: expense.allocation.rest } }, '/allocation/items'],
+    ['an allocation in the per-entry modes it replaced', { ...expense, allocation: { mode: 'equal', participants: [P, Q] } }, '/allocation/items'],
+    ['an item without a split', { ...expense, allocation: { items: [{ label: 'x', amount: 1 }] } }, '/allocation/items/0/split'],
+    ['an item without a label', { ...expense, allocation: { items: [{ label: '', amount: 1, split: { mode: 'equal', participants: [P] } }] } }, '/allocation/items/0/label'],
+    ['an item of zero', { ...expense, allocation: { items: [{ label: 'x', amount: 0, split: { mode: 'equal', participants: [P] } }] } }, '/allocation/items/0/amount'],
+    ['a beneficiary twice in an equal split', withItem({ mode: 'equal', participants: [P, P] }), '/allocation/items/0/split/participants'],
+    ['an unknown split mode', withItem({ mode: 'random' }), '/allocation/items/0/split/mode'],
+    ['the replaced exact mode', withItem({ mode: 'exact', amounts: [{ participant: P, amount: 1 }] }), '/allocation/items/0/split/mode'],
+    ['zero shares', withItem({ mode: 'shares', shares: [{ participant: P, shares: 0 }] }), '/allocation/items/0/split/shares/0/shares'],
+    ['a percent of zero', withItem({ mode: 'percent', percents: [{ participant: P, percent: 0 }] }), '/allocation/items/0/split/percents/0/percent'],
+    ['a percent above 100.00 %', withItem({ mode: 'percent', percents: [{ participant: P, percent: 10001 }] }), '/allocation/items/0/split/percents/0/percent'],
+    ['a fractional percent', withItem({ mode: 'percent', percents: [{ participant: P, percent: 33.5 }] }), '/allocation/items/0/split/percents/0/percent'],
+    ['a rest split of an unknown mode', { ...expense, allocation: { items: [], rest: { mode: 'proportional' } } }, '/allocation/rest/mode'],
     ['a receipt twice', { ...expense, receipts: [P, P] }, '/receipts'],
     ['a participant without a join time', { v: 1, heads: [], kind: 'participant', name: 'Ada', active: true }, '/joined'],
     ['a participant with a 101-character name', { v: 1, heads: [], kind: 'participant', name: 'x'.repeat(101), active: true, joined: 1 }, '/name'],

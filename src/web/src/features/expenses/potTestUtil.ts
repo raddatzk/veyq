@@ -27,7 +27,7 @@ export const CLEO = '0e000000-0000-4000-8000-000000000003'
 export const person = (name: string, joined: number, active = true): PotWrite['content'] => ({ kind: 'participant', name, active, joined })
 export const expense = (title: string, amount: number, payer: string, among: string[]): ExpenseBody => ({
   kind: 'expense', title, date: '2026-07-01', category: 'food', currency: 'EUR', minorUnits: 2, rate: '1', amount,
-  payers: [{ participant: payer, amount }], allocation: { mode: 'equal', participants: among }, receipts: [],
+  payers: [{ participant: payer, amount }], allocation: { items: [], rest: { mode: 'equal', participants: among } }, receipts: [],
 })
 
 /** What was appended, in order, as the rows a server serves — with each row's writer (a member's read carries it). */

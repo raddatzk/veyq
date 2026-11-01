@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://veyq.dev/contracts/expenses/entry.v1.schema.json",
   "title": "Expenses revision, format v1",
-  "description": "The plaintext of one revision of an Expenses record (ADR 0108 decisions 3-5, docs/apps/expenses.md): an expense, a refund, a transfer or a participant, a deletion of one of them, or a participant's erasure. Compact UTF-8 JSON, padded to the smallest size class that carries it (`u32be(len) || bytes || zeros` to 512, 2048, 8192 or 16384 bytes, `@veyq/crypto`'s `padToClass`) and sealed under the revision's own K_rev with the `expense-entry` field seal, bound to (scope, Pot node, entry id, revision); K_rev is wrapped under the Pot's key by `expense-entry-key` (contracts/crypto/vectors/v1.json). The server sees none of it. Readers ignore unknown fields: a field added later under `v: 1` is additive, and a change an older reader would misread is `v: 2`. Arithmetic (part of the version, ADR 0108 decision 9): amounts are integers in the minor unit of their currency (`minorUnits` digits, ISO 4217); a `rate` is a decimal string and every computation is exact. An entry's total converts once into the Pot's base currency, `round_half_away_from_zero(amount * rate * 10^(baseMinorUnits - minorUnits))`, and is then allocated in base minor units by weights: every person's exact share `T * w / sum(w)` rounded down, the units left over handed one each to the people with the largest cut-off remainders, ties by join order (largest remainder). The weights: payers' and receivers' amounts; for a split, 1 each (`equal`), the shares (`shares`) or the exact amounts (`exact`); for line items, each person's exact sum of the items they are on (an item's amount divided equally among its people) plus, for `rest: equal`, an equal part of `amount - sum(items)` among the people on the bill (for `rest: proportional` the sum alone: the rest follows the items). Join order is the participants' `joined`, then their id. A revision whose amounts do not add up (payers' or receivers' amounts not summing to `amount`, exact amounts not summing to it, line items above it, a beneficiary or payer named twice) is invalid: a reader counts it nowhere and shows it as invalid. contracts/expenses/v1-vectors.json pins every rule with worked cases.",
+  "description": "The plaintext of one revision of an Expenses record (ADR 0108 decisions 3-5, docs/apps/expenses.md): an expense, a refund, a transfer or a participant, a deletion of one of them, or a participant's erasure. Compact UTF-8 JSON, padded to the smallest size class that carries it (`u32be(len) || bytes || zeros` to 512, 2048, 8192 or 16384 bytes, `@veyq/crypto`'s `padToClass`) and sealed under the revision's own K_rev with the `expense-entry` field seal, bound to (scope, Pot node, entry id, revision); K_rev is wrapped under the Pot's key by `expense-entry-key` (contracts/crypto/vectors/v1.json). The server sees none of it. Readers ignore unknown fields: a field added later under `v: 1` is additive, and a change an older reader would misread is `v: 2`. Arithmetic (part of the version, ADR 0108 decision 9): amounts are integers in the minor unit of their currency (`minorUnits` digits, ISO 4217); a `rate` is a decimal string and every computation is exact. Every allocation below is the largest-remainder rule: an integer total T by weights w, each person's exact `T * w / sum(w)` rounded down, the units left over handed one each to the largest cut-off remainders, ties by the order given. An entry's `amount` is the sum of its payers' (a refund: receivers') amounts. Its total converts once into the Pot's base currency, `round_half_away_from_zero(amount * rate * 10^(baseMinorUnits - minorUnits))`. That base total is allocated to the payers (receivers) by their amounts, in join order; and to the entry's parts — each item in its order, then the rest `amount - sum(items)` when it is above zero — by their amounts in the entry's currency, in that order (where the currency is the base, every part gets exactly its own amount). Each part's base amount is then allocated among the people of its split, in join order, by 1 each (`equal`), their shares (`shares`) or their basis points (`percent`); a person's share of the entry is the sum of their parts. Join order is the participants' `joined`, then their id. A revision whose amounts do not add up (payers' or receivers' amounts not summing to `amount`, items above it, a rest above zero with no split, percents not summing to 10000, a person named twice among the payers or receivers or within one split) is invalid: a reader counts it nowhere and shows it as invalid. contracts/expenses/v1-vectors.json pins every rule with worked cases.",
   "type": "object",
   "required": ["v", "kind", "heads"],
   "properties": {
@@ -98,15 +98,22 @@
       "maxItems": 200,
       "items": { "$ref": "#/$defs/contribution" }
     },
-    "allocation": {
-      "description": "Who the amount is for (docs/apps/expenses.md § Entries).",
+    "participants": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/uuid" }
+    },
+    "split": {
+      "description": "Who one part of an entry (an item, or the rest) is for, and by which weights: each person 1 (`equal`), their shares (`shares`), or their percent in basis points, 1 to 10000 summing to exactly 10000 = 100.00 % (`percent`; a sum other than 10000 makes the entry invalid, a rule the schema cannot state).",
       "oneOf": [
         {
           "type": "object",
           "required": ["mode", "participants"],
           "properties": {
             "mode": { "const": "equal" },
-            "participants": { "type": "array", "minItems": 1, "maxItems": 200, "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } }
+            "participants": { "$ref": "#/$defs/participants" }
           }
         },
         {
@@ -131,38 +138,46 @@
         },
         {
           "type": "object",
-          "required": ["mode", "amounts"],
+          "required": ["mode", "percents"],
           "properties": {
-            "mode": { "const": "exact" },
-            "amounts": { "$ref": "#/$defs/contributions", "description": "In the entry's currency; they sum to its `amount`." }
-          }
-        },
-        {
-          "type": "object",
-          "required": ["mode", "items", "rest"],
-          "properties": {
-            "mode": { "const": "items" },
-            "items": {
+            "mode": { "const": "percent" },
+            "percents": {
               "type": "array",
               "minItems": 1,
               "maxItems": 200,
               "items": {
                 "type": "object",
-                "required": ["label", "amount", "participants"],
+                "required": ["participant", "percent"],
                 "properties": {
-                  "label": { "type": "string", "minLength": 1, "maxLength": 200 },
-                  "amount": { "$ref": "#/$defs/minor" },
-                  "participants": { "type": "array", "minItems": 1, "maxItems": 200, "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } }
+                  "participant": { "$ref": "#/$defs/uuid" },
+                  "percent": { "type": "integer", "minimum": 1, "maximum": 10000, "description": "Basis points: 2550 is 25.50 %." }
                 }
               }
-            },
-            "rest": {
-              "enum": ["proportional", "equal"],
-              "description": "How `amount - sum(items)` (tip, service) is spread: in proportion to each person's items, or equally among the people on the bill."
             }
           }
         }
       ]
+    },
+    "allocation": {
+      "description": "Who the amount is for (docs/apps/expenses.md § Entries): a list of items, each an exact amount with its own split, and the rest — `amount - sum(items)` — with a split of its own. An entry with no items is all rest (the everyday case: one total, split among everyone). `rest` is required while the rest is above zero and ignored when it is zero (a writer leaves it out then); items above `amount` make the entry invalid.",
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": ["label", "amount", "split"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+              "amount": { "$ref": "#/$defs/minor", "description": "In the entry's currency." },
+              "split": { "$ref": "#/$defs/split" }
+            }
+          }
+        },
+        "rest": { "$ref": "#/$defs/split" }
+      }
     },
     "expense": {
       "description": "Money one or more payers paid for the beneficiaries.",
@@ -177,7 +192,7 @@
         "minorUnits": { "$ref": "#/$defs/minorUnits" },
         "rate": { "$ref": "#/$defs/rate" },
         "amount": { "$ref": "#/$defs/minor" },
-        "payers": { "$ref": "#/$defs/contributions", "description": "Who paid how much, in the entry's currency; they sum to `amount`." },
+        "payers": { "$ref": "#/$defs/contributions", "description": "Who paid how much, in the entry's currency; `amount` is their sum (the editor derives it)." },
         "allocation": { "$ref": "#/$defs/allocation" },
         "receipts": { "$ref": "#/$defs/receipts" }
       }
@@ -195,7 +210,7 @@
         "minorUnits": { "$ref": "#/$defs/minorUnits" },
         "rate": { "$ref": "#/$defs/rate" },
         "amount": { "$ref": "#/$defs/minor" },
-        "receivers": { "$ref": "#/$defs/contributions", "description": "Who received how much, in the entry's currency; they sum to `amount`." },
+        "receivers": { "$ref": "#/$defs/contributions", "description": "Who received how much, in the entry's currency; `amount` is their sum (the editor derives it)." },
         "allocation": { "$ref": "#/$defs/allocation" },
         "refunds": { "$ref": "#/$defs/uuid", "description": "The expense this refunds, when the writer named one. Informational: it moves no amount." },
         "receipts": { "$ref": "#/$defs/receipts" }
