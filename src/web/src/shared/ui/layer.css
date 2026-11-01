@@ -1125,6 +1125,167 @@
   opacity: 0.6;
 }
 
+/* ── Tags input ───────────────────────────────────────────────────────────────────────────────────────────────── */
+/* The field looks like a text field (`.veyq-input`) that wraps: the chips first, the text after them. */
+.veyq-tags-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--app-control-line);
+  border-radius: 6px;
+  background: var(--app-field);
+  color: var(--app-control-text);
+  box-shadow: var(--app-shadow-sm);
+  cursor: text;
+  transition: border-color 0.2s;
+}
+
+.veyq-tags-input:not([data-disabled]):hover {
+  border-color: var(--app-muted);
+}
+
+.veyq-tags-input[data-focused] {
+  border-color: var(--app-focus);
+}
+
+.veyq-tags-input[data-disabled] {
+  background: var(--app-surface-muted);
+  color: var(--app-muted);
+  cursor: default;
+}
+
+.veyq-tags-input__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.125rem 0.125rem 0.125rem 0.625rem;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  background: var(--app-surface-muted);
+  color: var(--app-control-text);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+/* a chip with a leading avatar sits the avatar on its rounded end */
+.veyq-tags-input__tag:has(> .veyq-avatar) {
+  padding-inline-start: 0.125rem;
+}
+
+.veyq-tags-input__tag > .veyq-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.75rem;
+}
+
+/* the highlighted chip: the caret walked onto it (← / →), the next Backspace or Delete removes it */
+.veyq-tags-input__tag[data-state='active'] {
+  border-color: var(--app-focus);
+  background: var(--app-hover);
+  color: var(--app-text);
+  box-shadow: 0 0 0 1px var(--app-focus);
+}
+
+.veyq-tags-input__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.veyq-tags-input__remove {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.veyq-tags-input__remove:enabled:hover {
+  background: var(--app-hover);
+  color: var(--app-text);
+}
+
+.veyq-tags-input__remove:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.veyq-tags-input__input {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  padding: 0.25rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-feature-settings: inherit;
+  font-size: 1rem;
+  outline: 0;
+}
+
+.veyq-tags-input__input::placeholder {
+  color: var(--app-muted);
+}
+
+/* the suggestions: the select's list (`.veyq-select__list`), as wide as the field */
+.veyq-tags-input__list {
+  z-index: 1200;
+  min-width: var(--reka-combobox-trigger-width);
+  max-height: min(14rem, var(--reka-combobox-content-available-height));
+  overflow: hidden;
+  border: 1px solid var(--app-line);
+  border-radius: 6px;
+  background: var(--app-surface);
+  color: var(--app-control-text);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.veyq-tags-input__viewport {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.25rem;
+}
+
+.veyq-tags-input__option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  color: var(--app-control-text);
+  cursor: pointer;
+  outline: 0;
+  user-select: none;
+}
+
+.veyq-tags-input__option > .veyq-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.75rem;
+}
+
+.veyq-tags-input__option[data-highlighted] {
+  background: var(--app-surface-muted);
+  color: var(--app-text);
+}
+
 /* ── Tabs ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
 .veyq-tabs {
   display: flex;

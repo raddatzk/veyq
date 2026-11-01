@@ -58,7 +58,7 @@ import { recordTyped } from '../../../src/canaries'
 import { birthTenant, type Account } from '../../../src/console'
 import { instance, newDevice, tenantOrigin, watchConsole, watchFailedRequests, type ConsoleErrors, type Device } from '../../../src/devices'
 import {
-  LABELS, addReceipts, entryDialog, entryRow, expectReceiptOpens, ledgerNotice, minorOf, money, openTab, pick, potTab, readBalances,
+  LABELS, addPotNames, addReceipts, entryDialog, entryRow, expectReceiptOpens, ledgerNotice, minorOf, money, openTab, pick, potTab, readBalances,
   readOverview, receiptRow, squash, tripPot, typeEntry, typed, typedRate, type Labels, type Lang, type PickedFile,
 } from '../../../src/expenses'
 import { onePagePdf } from '../../../src/pdf'
@@ -484,13 +484,10 @@ test.describe('in English', () => {
       await page.getByRole('button', { name: L.new, exact: true }).click()
       await page.getByRole('menuitem', { name: L.pot.newPot, exact: true }).click()
       const dialog = page.getByRole('dialog', { name: L.pot.newPot, exact: true })
-      // The Pot's own name is the dialog's first field; its people are the fieldset's.
-      await dialog.getByRole('textbox', { name: L.name, exact: true }).first().fill(recordTyped(pot))
+      // The Pot's own name is the dialog's first field; its people are chips in the people field.
+      await dialog.getByRole('textbox', { name: L.name, exact: true }).fill(recordTyped(pot))
       await pick(page, dialog.getByRole('combobox', { name: L.pot.baseCurrency }), 'EUR')
-      await dialog.getByRole('button', { name: L.pot.addPerson, exact: true }).click()
-      const people = dialog.locator('.expenses-create-people').getByRole('textbox')
-      await expect(people).toHaveCount(3)
-      for (const [i, name] of PEOPLE.entries()) await people.nth(i).fill(recordTyped(name))
+      await addPotNames(page, L, dialog, PEOPLE)
       await dialog.getByRole('button', { name: L.create, exact: true }).click()
       await expect(dialog).toBeHidden({ timeout: 30_000 })
 
@@ -1345,12 +1342,9 @@ test.describe('auf Deutsch', () => {
       await page.getByRole('button', { name: L.new, exact: true }).click()
       await page.getByRole('menuitem', { name: L.pot.newPot, exact: true }).click()
       const dialog = page.getByRole('dialog', { name: L.pot.newPot, exact: true })
-      await dialog.getByRole('textbox', { name: L.name, exact: true }).first().fill(recordTyped(pot))
+      await dialog.getByRole('textbox', { name: L.name, exact: true }).fill(recordTyped(pot))
       await pick(page, dialog.getByRole('combobox', { name: L.pot.baseCurrency }), 'EUR')
-      await dialog.getByRole('button', { name: L.pot.addPerson, exact: true }).click()
-      const people = dialog.locator('.expenses-create-people').getByRole('textbox')
-      await expect(people).toHaveCount(3)
-      for (const [i, name] of PEOPLE.entries()) await people.nth(i).fill(recordTyped(name))
+      await addPotNames(page, L, dialog, PEOPLE)
       await dialog.getByRole('button', { name: L.create, exact: true }).click()
       await expect(dialog).toBeHidden({ timeout: 30_000 })
       const row = page.locator('li.veyq-level-item[data-kind="EXPENSES_POT"]').filter({ hasText: pot })

@@ -15,11 +15,12 @@
 ## Main flow
 
 1. The member chooses **New → Pot** in a folder (core's create menu, which lists every application's create entry).
-2. The dialog asks for a **name**, the **base currency** (preset from the reader's locale) and the **participants**:
-   names typed, and members of the space chosen from its member list — the picker and the rules of
-   [uc.expenses.manage-participants](uc.expenses.manage-participants.md): a member at most once, its record holding the
-   member's id and their display name sealed at adding. Where the member list cannot be read, the dialog takes names
-   only.
+2. The dialog asks for a **name**, the **base currency** (preset from the reader's locale) and the **participants**,
+   in one field: typing suggests the space's members whose display name holds the text (case and accents aside), and
+   last the text itself as a name; each one added is a chip that can be taken out again before creating. The rules
+   are those of [uc.expenses.manage-participants](uc.expenses.manage-participants.md): a member at most once, its
+   record holding the member's id and their display name sealed at adding; a name at most once (case aside), never a
+   blank one. Where the member list cannot be read, the dialog takes names only.
 3. The client creates the node through core's create with its sealed name and meta, then appends one participant
    record per person, in the order added, in one write.
 4. The Pot opens: its participants, no entries, a zero balance each, and an empty overview.

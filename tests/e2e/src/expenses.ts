@@ -37,6 +37,7 @@ export const LABELS = {
     switchOffTitle: (title: string) => `Switch off “${title}”?`,
     pot: {
       newPot: 'New Pot', baseCurrency: /^Base currency/, addPerson: 'Add person', open: (n: string) => `Open ${n}`, kindPot: 'Pot',
+      addAsName: (n: string) => `Add “${n}” as a name`,
       tabs: { entries: 'Entries', balances: 'Balances', overview: 'Overview', people: 'People', settings: 'Settings' },
       kind: { expense: 'Expense', refund: 'Refund', transfer: 'Transfer' },
       split: { equal: 'Equally', shares: 'By shares', exact: 'By exact amounts', items: 'As line items' },
@@ -94,6 +95,7 @@ export const LABELS = {
     switchOffTitle: (title: string) => `„${title}“ ausschalten?`,
     pot: {
       newPot: 'Neue Kasse', baseCurrency: /^Basiswährung/, addPerson: 'Person hinzufügen', open: (n: string) => `${n} öffnen`, kindPot: 'Kasse',
+      addAsName: (n: string) => `„${n}“ als Namen hinzufügen`,
       tabs: { entries: 'Einträge', balances: 'Salden', overview: 'Überblick', people: 'Personen', settings: 'Einstellungen' },
       kind: { expense: 'Ausgabe', refund: 'Erstattung', transfer: 'Überweisung' },
       split: { equal: 'Zu gleichen Teilen', shares: 'Nach Anteilen', exact: 'Nach genauen Beträgen', items: 'Nach Posten' },
@@ -250,6 +252,18 @@ export async function pick(page: Page, trigger: Locator, option: string): Promis
   await trigger.click()
   await page.getByRole('option', { name: option, exact: true }).click()
   await expect(page.getByRole('listbox')).toHaveCount(0)
+}
+
+/** The Pot create dialog's people, each typed into its one people field (the layer's tags input) and added by its
+ *  "as a name" suggestion, in order; the field then holds exactly [names] as chips. */
+export async function addPotNames(page: Page, L: Labels, dialog: Locator, names: readonly string[]): Promise<void> {
+  const field = dialog.getByRole('combobox', { name: L.pot.tabs.people, exact: true })
+  for (const name of names) {
+    await field.fill(recordTyped(name))
+    await page.getByRole('option', { name: L.pot.addAsName(name), exact: true }).click()
+    await expect(field).toHaveValue('')
+  }
+  await expect(dialog.locator('.veyq-tags-input__tag')).toHaveText([...names])
 }
 
 /** The open entry dialog: the editor of a new entry, or of the one opened. */

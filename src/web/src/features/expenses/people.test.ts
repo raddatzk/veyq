@@ -3,7 +3,7 @@
 // a new entry is offered only active people beside whoever the edited entry already names.
 import { describe, it, expect } from 'vitest'
 import { buildLedger } from './domain/ledger'
-import { addableMembers, offeredPeople, participantRecord, personLabel, shownBalances, standingOf, type MemberDirectory } from './people'
+import { addableMembers, membersMatching, offeredPeople, participantRecord, personLabel, shownBalances, standingOf, type MemberDirectory } from './people'
 import type { Person } from '../../core/people/directory'
 import { ANNA, BEN, CLEO, EUR, PotServer, expense, person } from './potTestUtil'
 
@@ -95,6 +95,17 @@ describe('a member participant on screen', () => {
   it('the create dialog\'s people so far take a member off the offer as a record does (control: the ledger above)', () => {
     const members = [who(U_DANA, 'Dana'), who(U_ERIK, 'Erik')]
     expect(addableMembers({ participants: [{ erased: false, member: U_ERIK }, { erased: false, member: null }] }, members).map((m) => m.userId)).toEqual([U_DANA])
+  })
+
+  it('the create dialog suggests the members whose display name holds what is typed, case and accents aside; all of them for a blank query', () => {
+    const members = [who(U_DANA, 'Dana Zoë'), who(U_ERIK, 'Erik'), who(U_GUS, 'Gustav ZOE')]
+    const ids = (q: string) => membersMatching(members, q).map((m) => m.userId)
+    expect(ids('zoe')).toEqual([U_DANA, U_GUS])
+    expect(ids('  RIK ')).toEqual([U_ERIK])
+    expect(ids('Zoë D')).toEqual([])
+    expect(ids('ana z')).toEqual([U_DANA])
+    expect(ids('   ')).toEqual([U_DANA, U_ERIK, U_GUS])
+    expect(ids('Finn')).toEqual([])
   })
 
   it('a new participant\'s first record: a name as typed; a member by id with the display name sealed, cut to 100 characters', () => {
