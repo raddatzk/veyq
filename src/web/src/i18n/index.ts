@@ -1321,7 +1321,10 @@ const en = {
   // driven by both the share note and the tenant terms, so its chrome may name neither.
   localeEditor: {
     empty: 'No language added yet.',
-    addLanguage: 'Add {lang}',
+    addLanguage: 'Add language',
+    addTitle: 'Add a language',
+    languageLabel: 'Language',
+    languagePlaceholder: 'Choose a language',
     edit: 'Edit',
     removeLang: 'Remove {lang}',
     editTitle: 'Edit {lang}',
@@ -3328,7 +3331,10 @@ const de: typeof en = {
   // driven by both the share note and the tenant terms, so its chrome may name neither.
   localeEditor: {
     empty: 'Noch keine Sprache hinzugefügt.',
-    addLanguage: '{lang} hinzufügen',
+    addLanguage: 'Sprache hinzufügen',
+    addTitle: 'Sprache hinzufügen',
+    languageLabel: 'Sprache',
+    languagePlaceholder: 'Sprache wählen',
     edit: 'Bearbeiten',
     removeLang: '{lang} entfernen',
     editTitle: '{lang} bearbeiten',

@@ -27,6 +27,14 @@ const stubs = {
     emits: ['click'],
     template: '<button v-bind="$attrs" :class="variant" @click="$emit(\'click\')">{{ label }}</button>',
   },
+  // A native select in the layer's place: Reka's list only renders while open, in a portal.
+  VeyqSelect: {
+    props: ['modelValue', 'options'],
+    emits: ['update:modelValue'],
+    template:
+      '<select class="sel" :value="modelValue ?? \'\'" @change="$emit(\'update:modelValue\', $event.target.value)">' +
+      '<option value="" /><option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option></select>',
+  },
 }
 
 type Props = InstanceType<typeof LocaleMarkdownEditor>['$props']
@@ -38,6 +46,19 @@ const langs = (w: VueWrapper) => rows(w).map((r) => r.find('.locale-md-lang').te
 const button = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 const emitted = (w: VueWrapper) => w.emitted('update:modelValue') as LocaleMap[][] | undefined
 const lastMap = (w: VueWrapper) => emitted(w)!.at(-1)![0]
+const addButton = (w: VueWrapper) => button(w, t('localeEditor.addLanguage'))
+/** Open "Add language" and read the languages its picker offers. */
+async function offered(w: VueWrapper): Promise<string[]> {
+  await addButton(w)!.trigger('click')
+  return w.findAll('.sel option').map((o) => o.text()).filter(Boolean)
+}
+/** Add a language through the editor: open it, pick the language, write the text, save. */
+async function add(w: VueWrapper, locale: string, text: string) {
+  await addButton(w)!.trigger('click')
+  await w.find('.sel').setValue(locale)
+  await w.find('textarea').setValue(text)
+  await button(w, t('common.save'))!.trigger('click')
+}
 
 describe('LocaleMarkdownEditor — the map is the language list', () => {
   it('renders one row per language the map carries, and none for the rest', () => {
@@ -63,31 +84,38 @@ describe('LocaleMarkdownEditor — the map is the language list', () => {
     expect(absent.find('.locale-md-empty').text()).toBe(t('localeEditor.empty'))
   })
 
-  it('names each addable language on its own button, and offers none once all exist', () => {
-    // The shape the CR insisted on: with a two-element locale set the "picker" holds two options, one, or
-    // zero — so it is a button naming the language it adds, never a Select plus an Add.
+  it('has ONE add button, whose editor offers only the languages not added yet, and none once all exist', async () => {
+    // Owner 2026-11-01: a button per language grows into a row nobody reads as languages come; the language is
+    // picked in the editor instead, and a language already there is never offered again.
     const none = mountEditor({ modelValue: {} })
-    expect(button(none, t('localeEditor.addLanguage', { lang: 'Deutsch' }))).toBeTruthy()
-    expect(button(none, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+    expect(none.findAll('.locale-md-add button')).toHaveLength(1)
+    expect(await offered(none)).toEqual(['English', 'Deutsch'])
 
-    const one = mountEditor({ modelValue: { de: 'x' } })
-    expect(button(one, t('localeEditor.addLanguage', { lang: 'Deutsch' }))).toBeUndefined()
-    expect(button(one, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+    expect(await offered(mountEditor({ modelValue: { de: 'x' } }))).toEqual(['English'])
 
     const both = mountEditor({ modelValue: { de: 'x', en: 'y' } })
     expect(both.find('.locale-md-add').exists()).toBe(false)
   })
 
-  it('adding a language adds the KEY, with empty text', async () => {
+  it('adds the picked language with the text written, and only on Save', async () => {
     const w = mountEditor({ modelValue: { de: 'x' } })
-    await button(w, t('localeEditor.addLanguage', { lang: 'English' }))!.trigger('click')
-    expect(lastMap(w)).toEqual({ de: 'x', en: '' })
+    await add(w, 'en', 'Hello')
+    expect(lastMap(w)).toEqual({ de: 'x', en: 'Hello' })
+    expect(w.find('.dlg').exists()).toBe(false)
   })
 
-  it('narrows to the languages the caller allows', () => {
-    const w = mountEditor({ modelValue: {}, locales: ['de'] })
-    expect(button(w, t('localeEditor.addLanguage', { lang: 'Deutsch' }))).toBeTruthy()
-    expect(button(w, t('localeEditor.addLanguage', { lang: 'English' }))).toBeUndefined()
+  it('a cancelled add adds nothing, and Save waits for a language', async () => {
+    const w = mountEditor({ modelValue: {} })
+    await addButton(w)!.trigger('click')
+    expect(w.find('.dlg h2').text()).toBe(t('localeEditor.addTitle'))
+    expect(button(w, t('common.save'))!.attributes('disabled')).toBeDefined()
+    await w.find('textarea').setValue('weg')
+    await button(w, t('common.cancel'))!.trigger('click')
+    expect(emitted(w)).toBeUndefined()
+  })
+
+  it('narrows to the languages the caller allows', async () => {
+    expect(await offered(mountEditor({ modelValue: {}, locales: ['de'] }))).toEqual(['Deutsch'])
   })
 })
 
@@ -167,10 +195,10 @@ describe('the share note still behaves as it did (cr-0116 control)', () => {
   const asShareDialogDrivesIt = (note: LocaleMap) =>
     mountEditor({ modelValue: note, placeholder: t('share.notePlaceholder') })
 
-  it('offers both languages, adds one empty, and writes the text under its key', async () => {
+  it('offers both languages, adds one, and writes the text under its key', async () => {
     const empty = asShareDialogDrivesIt({})
     expect(empty.find('.locale-md-empty').exists()).toBe(true)
-    await button(empty, t('localeEditor.addLanguage', { lang: 'Deutsch' }))!.trigger('click')
+    await add(empty, 'de', '')
     expect(lastMap(empty)).toEqual({ de: '' })
 
     const started = asShareDialogDrivesIt({ de: '' })

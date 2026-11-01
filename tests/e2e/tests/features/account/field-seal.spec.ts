@@ -16,6 +16,7 @@ import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { recordTyped } from '../../../src/canaries'
+import { addLanguage } from '../../../src/localeEditor'
 import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../../src/devices'
 import { toast } from '../../../src/toast'
 import { headerAction } from '../../../src/header'
@@ -216,12 +217,7 @@ test(
     await create.getByRole('button', { name: 'View + add photos' }).click()
     await expect(create.getByRole('button', { name: 'View + add photos' })).toHaveAttribute('aria-pressed', 'true')
     await create.getByRole('switch', { name: 'Note' }).click()
-    await create.getByRole('button', { name: 'Add English' }).click()
-    await create.getByRole('button', { name: 'Edit', exact: true }).click()
-    const note = page.getByRole('dialog', { name: 'Edit English' })
-    await note.getByRole('textbox', { name: 'Markdown' }).fill(recordTyped(shareNote))
-    await note.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect(note).toBeHidden()
+    await addLanguage(page, create, 'English', recordTyped(shareNote))
     await create.getByRole('button', { name: 'Create link' }).click()
     shareLink = await create.getByRole('textbox', { name: 'Public link' }).inputValue()
     expect(new URL(shareLink).hash, 'the link key travels in the fragment').toMatch(/^#k=/)

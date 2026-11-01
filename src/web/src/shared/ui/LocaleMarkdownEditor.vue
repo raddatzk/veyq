@@ -18,6 +18,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from './VeyqButton.vue'
 import VeyqDialog from './VeyqDialog.vue'
+import VeyqSelect from './VeyqSelect.vue'
 import { SUPPORTED_LOCALES } from '../../i18n'
 import { localeLabel, type LocaleMap } from './localeMap'
 
@@ -51,15 +52,11 @@ const { t } = useI18n()
 
 /** The languages that exist — the map's own keys, never the supported set. */
 const present = computed(() => Object.keys(props.modelValue))
-/** The languages that could still be added. With two supported locales this is 2, 1 or 0 entries — which is
- *  why each one is its own button naming the language it adds, rather than a dropdown plus an "Add" button:
- *  a picker for a set that is never larger than two is a control for a choice that barely exists. */
+/** The languages that could still be added. ONE "Add language" button opens the editor, and the language is picked
+ *  there from these alone (owner 2026-11-01): a button per language, which this editor had while the app spoke two,
+ *  grows into a row nobody reads as more languages come. */
 const addable = computed(() => props.locales.filter((l) => !present.value.includes(l)))
-
-function addLocale(locale: string) {
-  if (props.modelValue[locale] !== undefined) return
-  emit('update:modelValue', { ...props.modelValue, [locale]: '' })
-}
+const addableOptions = computed(() => addable.value.map((l) => ({ value: l, label: localeLabel(l) })))
 
 async function removeLocale(locale: string) {
   if (props.beforeRemove && !(await props.beforeRemove(locale))) return
@@ -68,20 +65,33 @@ async function removeLocale(locale: string) {
   emit('update:modelValue', next)
 }
 
-// --- the per-locale edit modal (large markdown textarea, commit on Save, discard on Cancel) ---
+// --- the edit modal (large markdown textarea, commit on Save, discard on Cancel). It edits one language that exists,
+// or — opened by "Add language" — a new one, whose language is picked in it from those not added yet. Nothing is added
+// until Save: a cancelled add leaves the map as it was.
+const open = ref(false)
+const adding = ref(false)
 const editing = ref<string | null>(null)
 const draft = ref('')
 function openEdit(locale: string) {
+  adding.value = false
   editing.value = locale
   draft.value = props.modelValue[locale] ?? ''
+  open.value = true
+}
+function openAdd() {
+  adding.value = true
+  editing.value = addable.value.length === 1 ? addable.value[0]! : null
+  draft.value = ''
+  open.value = true
 }
 function saveEdit() {
   const loc = editing.value
-  if (loc) emit('update:modelValue', { ...props.modelValue, [loc]: draft.value })
-  editing.value = null
+  if (!loc || (adding.value && props.modelValue[loc] !== undefined)) return
+  emit('update:modelValue', { ...props.modelValue, [loc]: draft.value })
+  open.value = false
 }
 function cancelEdit() {
-  editing.value = null
+  open.value = false
 }
 </script>
 
@@ -114,28 +124,37 @@ function cancelEdit() {
       </div>
     </div>
 
-    <!-- Adding a language: one button per language that could be added, each naming it. Gone once none are. -->
+    <!-- Adding a language: one button; the language is picked in the editor. Gone once every language exists. -->
     <div v-if="addable.length" class="locale-md-add">
       <VeyqButton
-        v-for="loc in addable"
-        :key="loc"
-        :label="t('localeEditor.addLanguage', { lang: localeLabel(loc) })"
+        class="locale-md-add-button"
+        :label="t('localeEditor.addLanguage')"
         icon="plus"
         variant="secondary"
         appearance="outlined"
         size="small"
-        @click="addLocale(loc)"
+        @click="openAdd"
       />
     </div>
 
-    <!-- The per-locale edit modal: a large markdown textarea, committed on Save. -->
+    <!-- The edit modal: a large markdown textarea, committed on Save; adding, it asks for the language first. -->
     <VeyqDialog
-      v-if="editing"
+      v-if="open"
       :visible="true"
-      :header="t('localeEditor.editTitle', { lang: localeLabel(editing) })"
+      :header="adding ? t('localeEditor.addTitle') : t('localeEditor.editTitle', { lang: localeLabel(editing ?? '') })"
       class="locale-md-dialog"
       @update:visible="cancelEdit"
     >
+      <template v-if="adding">
+        <label class="locale-md-dialog-label" for="locale-md-language">{{ t('localeEditor.languageLabel') }}</label>
+        <VeyqSelect
+          v-model="editing"
+          input-id="locale-md-language"
+          class="locale-md-language"
+          :options="addableOptions"
+          :placeholder="t('localeEditor.languagePlaceholder')"
+        />
+      </template>
       <label class="locale-md-dialog-label" for="locale-md-textarea">{{ t('localeEditor.bodyLabel') }}</label>
       <textarea
         id="locale-md-textarea"
@@ -146,7 +165,7 @@ function cancelEdit() {
       ></textarea>
       <div class="veyq-dialog-action-row">
         <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="cancelEdit" />
-        <VeyqButton :label="t('common.save')" icon="save" @click="saveEdit" />
+        <VeyqButton :label="t('common.save')" icon="save" :disabled="!editing" @click="saveEdit" />
       </div>
     </VeyqDialog>
   </div>
@@ -187,6 +206,12 @@ function cancelEdit() {
   align-items: center;
   gap: 0.15rem;
   flex: 0 0 auto;
+}
+.locale-md-language {
+  display: flex;
+  width: min(72vw, 620px);
+  max-width: 100%;
+  margin-bottom: 0.8rem;
 }
 .locale-md-dialog-label {
   display: block;

@@ -38,6 +38,8 @@ const stubs = {
   },
   VeyqMessage: { props: ['tone'], template: '<div class="msg"><slot /></div>' },
   VeyqDialog: { props: ['visible', 'header'], emits: ['update:visible'], template: '<div class="dlg"><h2>{{ header }}</h2><slot /></div>' },
+  // A native select in the layer's place: Reka's list only renders while open, in a portal.
+  VeyqSelect: { props: ['modelValue', 'options'], template: '<select class="sel"><option v-for="o in options" :key="o.value">{{ o.label }}</option></select>' },
 }
 
 async function mountPanel() {
@@ -53,6 +55,11 @@ async function mountPanel() {
 const rows = (w: VueWrapper) => w.findAll('.locale-md-row')
 const langs = (w: VueWrapper) => rows(w).map((r) => r.find('.locale-md-lang').text())
 const button = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
+/** Open the editor's "Add language" and read the languages it offers. */
+async function offered(w: VueWrapper): Promise<string[]> {
+  await button(w, t('localeEditor.addLanguage'))!.trigger('click')
+  return w.findAll('.sel option').map((o) => o.text())
+}
 /** The "Insert template" action inside a given language's row — the slot the panel hangs there. */
 const templateButton = (w: VueWrapper, index: number) =>
   rows(w)[index].findAll('button').find((b) => b.text() === t('terms.insertTemplate'))
@@ -91,7 +98,7 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
     expect(langs(w)).toEqual(['Deutsch'])
     expect(w.find('textarea').exists()).toBe(false) // no editor is open, so no box for anything
     // …and the one that is absent is offered as something to ADD, by name.
-    expect(button(w, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+    expect(await offered(w)).toEqual(['English'])
   })
 
   it('treats a server null the same as an absent locale, and an empty string as a language that exists', async () => {
@@ -101,7 +108,7 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
     const w = await mountPanel()
 
     expect(langs(w)).toEqual(['Deutsch'])
-    expect(button(w, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+    expect(await offered(w)).toEqual(['English'])
   })
 
   it('sends an absent language as absent, not as an empty string', async () => {
@@ -121,8 +128,7 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
 
     expect(rows(w)).toHaveLength(0)
     expect(w.text()).toContain(t('localeEditor.empty'))
-    expect(button(w, t('localeEditor.addLanguage', { lang: 'Deutsch' }))).toBeTruthy()
-    expect(button(w, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+    expect(await offered(w)).toEqual(['English', 'Deutsch'])
   })
 
   it('says out loud that a language with no text will not survive the save', async () => {

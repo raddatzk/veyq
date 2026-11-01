@@ -18,6 +18,7 @@
 import { test, expect } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
+import { addLanguage } from '../../../src/localeEditor'
 import { birthTenant } from '../../../src/console'
 import { confineToInstance } from '../../../src/egress'
 import { newDevice, openSettings, type Device } from '../../../src/devices'
@@ -111,11 +112,7 @@ test(
     await expect(panel.getByTestId('operator-section')).toContainText('On this instance: reports, measures and what is kept')
     await expect(panel.getByRole('button')).toHaveCount(0) // nothing edits or removes it
 
-    await page.getByRole('button', { name: 'Add English' }).click()
-    await page.getByRole('button', { name: 'Edit', exact: true }).click()
-    const edit = page.getByRole('dialog', { name: 'Edit English' })
-    await edit.getByLabel('Markdown').fill(`## Our rules\n${spaceRule}`)
-    await edit.getByRole('button', { name: 'Save', exact: true }).click()
+    await addLanguage(page, page, 'English', `## Our rules\n${spaceRule}`)
     await page.getByRole('button', { name: 'Save terms' }).click()
     await expect(page.getByText('Revision 1', { exact: true })).toBeVisible()
 
