@@ -71,7 +71,7 @@ The server records the **last editor** of a sealed field and the **uploader** of
 `user:{id}` or `share:{identityId}` ([en.platform.field-editor](../features/platform/enablers/en.platform.field-editor.md),
 [ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 8):
 basis (f), so a report can name who wrote what. These live as long as the object they describe; the object's own
-erasure (trash after 30 days, `NodeSubtreePurge`, Memories' `MediaTrashPurge`, Expenses' `PotReceiptPurge`,
+erasure (trash after 30 days, `NodeSubtreePurge`, Memories' `MediaTrashPurge`, core's blob service's `ApplicationBlobPurge` (Expenses' receipts),
 `ScopePurge`) takes them. **An account's erasure keeps them** as a former member's opaque id — the shared object is
 not the erased person's alone. The same holds for a link's creator (`veyq_share.owner_account`), kept on the link's
 tombstone until its scope is erased, and a guest's share identity (`veyq_share_identity`), dropped when its link is a

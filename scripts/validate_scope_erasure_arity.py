@@ -14,7 +14,7 @@ The closure is read from three keys that are all cheap and all textual:
 
   - *edges* — every `REFERENCES <table>` in every migration root (`backend_tree.migrations()`), read in **numeric**
     migration (version) order, each attributed to the table of the `CREATE TABLE` / `ALTER TABLE` statement it
-    sits in.
+    sits in; a later `DROP TABLE <table>` replayed — every edge from or to the dropped table goes with it.
   - *closure* — a walk from `veyq_scope` down those edges. Transitive, not one-hop: a child of a child blocks the
     scope row just as hard as a direct child does.
   - *erased* — the entities deleted by `ScopePurge.eraseScope` and by every file declaring a class that
@@ -35,10 +35,12 @@ both are silently wrong, so they are recorded here rather than re-derived:
   (a) *One-hop* — "every table that `REFERENCES veyq_scope`". It reports **2** where the truth is 4, because
       `veyq_job_decline` and `veyq_share_identity` reference `veyq_job`/`veyq_share` and never the scope. A fix
       sized by that shape still throws, one table further down. The question has to be transitive.
-  (b) *The table name as written at `CREATE TABLE`* is taken as the live name: a later `DROP TABLE` or
-      `ALTER TABLE … RENAME TO` is not replayed. The baselines create every table under its live name, so none
-      exists today; one added later leaves the old name in the closure, reported uncovered — red, never a false
-      green — and that migration is the moment to teach this guard the replay again.
+  (b) *The table name as written at `CREATE TABLE`* is taken as the live name: a later `DROP TABLE` is replayed
+      (ADR 0112 decision 5 dropped `veyq_expenses_receipt`, the first table any migration dropped), but an
+      `ALTER TABLE … RENAME TO` / `RENAME TABLE` is not. None exists today; one added later leaves the old name in the
+      closure, reported uncovered — red, never a false green — and that migration is the moment to teach this guard
+      the rename. A `DROP TABLE` is read on its own line, as every statement here is (one `DROP TABLE` spelled across two
+      lines, or naming two tables, is not replayed: the dropped table stays in the closure, red).
   (c) It reads **declarations, not a database**. A constraint added outside `db/migration`, or an `ON DELETE`
       clause wrapped onto a line of its own, is invisible — every such clause in this tree sits on its
       `REFERENCES` line today (`grep -rn 'ON DELETE' backend --include='*.sql'` → 4 hits, all
@@ -78,6 +80,7 @@ SQL_COMMENT = re.compile(r"\s*--")
 CREATE_TABLE = re.compile(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)", re.IGNORECASE)
 ALTER_TABLE = re.compile(r"ALTER TABLE\s+(\w+)", re.IGNORECASE)
 REFERENCES = re.compile(r"REFERENCES\s+(\w+)\s*\(", re.IGNORECASE)
+DROP_TABLE = re.compile(r"\bDROP TABLE\s+(?:IF EXISTS\s+)?(\w+)\s*;", re.IGNORECASE)
 ON_DELETE_CASCADE = re.compile(r"ON DELETE CASCADE", re.IGNORECASE)
 
 # `XEntity.delete(…)` / `XEntity.deleteById(…)` — the Panache calls eraseScope erases rows with.
@@ -109,6 +112,10 @@ def fk_edges() -> list[dict]:
                 current = match.group(1)
             if match := ALTER_TABLE.search(line):
                 current = match.group(1)
+            if match := DROP_TABLE.search(line):
+                dropped = match.group(1).lower()
+                edges = [e for e in edges if dropped not in (e["child"].lower(), e["parent"].lower())]
+                continue
             if match := REFERENCES.search(line):
                 edges.append({
                     "child": current,

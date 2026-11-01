@@ -90,6 +90,14 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   none; `COVER` is a role core declares (`CoreMemberBlobRoles`), so core alone admits it. Two bumps of the tree revision per request is
   harmless. The zero-residue proof (set, replace, remove: no row, no blob, no session, quota back, a reclaim row per storage key, the sweep
   hands every chunk to the store) is `NodeCoverCoreSliceTest`.
+- **The blobs an application stores are core's blob service's** (ADR 0112, `core/applicationblob/`,
+  [docs/apps/README.md § Core's blob service](../../docs/apps/README.md#cores-blob-service)): `veyq_application_blob`, the
+  fourth `veyq_blob` arm, and core's implementation of every upload, link, moderation, re-key, erasure and purge seam over
+  it. An application implements `ApplicationBlobOwners` (its roles, a count per owner, whether a guest adds one, the owner
+  check at a completion) and, **in every write of its own that changes what a record keeps**, calls `ApplicationBlobs.lock`
+  before its node's lock and `keep` / `releaseOwners` / `release` after it — never a blob seam or a blob table of its own
+  (Expenses' receipts, `PotRevisionStore.append`). Its tests run where the application runs (`:apps:expenses`' receipt
+  tests exercise the service), since core alone stores no kind's blobs (`CoreAloneSliceTest`).
 - **A change to a lock, a gate or a transaction boundary also runs `python3 scripts/run_backend_races_on_mariadb.py`**
   (Docker; CI's `backend-races` job runs it too): every race class on a throwaway MariaDB of the pinned image. H2 cannot show what the production engine
   does under overlap — on 2026-10-03 three races green on H2 were red there ([ADR 0078](../../docs/decisions/0078-production-reads-committed-like-its-tests.md)).

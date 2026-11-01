@@ -267,6 +267,26 @@ chart published and signed, no git tag); a release dispatch (`v0.<n>` exists), t
 on the same commit, which must be red at the refusal; then the `1.x` commit above and its release dispatch. Until
 that refused repeat has run, ADR 0064 says the chart's release is built, its publish unobserved.
 
+## Expenses' receipts moved to core (once per dev instance)
+
+Expenses' receipts are blobs of core's blob service since ADR 0112, and their old table was **discarded, not migrated**
+(decision 5: no instance is live). The migration that drops it, `V202611012216__expenses_receipts_move_to_core.sql`,
+**deletes no row and refuses to run while `veyq_expenses_receipt` holds one**: a dev instance with a receipt from before
+the move does not start, and its log names `ck_expenses_receipt_reset_first`. Reset it first, one of two ways, on the
+code from before the move (the commit before the move is the last that runs on such a database):
+
+- **Every Pot gone**: delete each Pot (`deleteNode`) and purge it from its space's trash (`purgeNode`) — today's erasure
+  of its revisions, its receipts, their blob rows (their store objects on the reclaim list), its links and guest
+  identities and the measures on them. Then check `SELECT COUNT(*) FROM veyq_expenses_receipt` is `0`.
+- **The whole dev instance**: `./gradlew infra:wipe infra:up` (or `docker compose -f infra/docker/docker-compose.yml down -v`
+  and `up -d` with the store's profile), which drops the database and the store volume, then seed again
+  (§ Seeding the local dev principal).
+
+Then start the new code. A start that already refused left a failed run in Flyway's history: a dev start clears it
+(`application-dev.properties`: `quarkus.flyway.repair-at-start=true`) and runs the migration again, which now drops the
+empty table. Never delete the rows in SQL instead — that would leave their blob rows with no arm and their objects in
+the store, found only by the bucket reconcile (ADR 0112 decision 5). `ReceiptsResetMigrationSliceTest` holds the refusal.
+
 ## Running in production
 
 The operator's procedures — verifying a release, setting up a new instance on Docker Compose or Kubernetes,

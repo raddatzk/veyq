@@ -160,35 +160,47 @@ was saved with; a later rate never changes it.
 A receipt is an image or a PDF of at most 10 MiB kept with an entry, up to 100 per entry (the format's `receipts`)
 ([uc.expenses.attach-receipts](../features/expenses/use-cases/uc.expenses.attach-receipts.md), ADR 0108 decision 7).
 
-- **A row of Expenses' own** (`PotReceiptEntity`): receipt id (minted by the client), entry id, blob id, writer, node,
-  scope, completion time and drop time. A receipt id and a record id share the reportable-item id space, so neither is
-  taken by the other (`id_taken`). The blob is the fourth `veyq_blob` arm (`validate_blob_reference_arity.py`).
+- **A blob of core's blob service** ([ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md),
+  [Applications § Core's blob service](README.md#cores-blob-service)): a row of `veyq_application_blob` in the role
+  `EXPENSES_RECEIPT` whose owner is the entry — receipt id (minted by the client), entry id as the owner, blob id, writer,
+  node, scope, completion, kept and released times. Every platform duty over it is the service's (its completion and
+  reads, the guest's, the link's usage, the share's blob predicate, report, block, hold, re-key, erasure, purge);
+  Expenses implements the service's small contract (`ExpensesBlobOwners`, `receipt/ExpensesReceipts.kt`): the role with
+  its count — 100 not released per entry — and a guest may add one, and at a completion whether the entry may hold it
+  here (no other Pot's record) and where it stands (no revision yet, live, deleted). A receipt id and a record id share
+  the reportable-item id space, so neither is taken by the other (`id_taken`). Expenses' dev data from before the move was
+  discarded, not migrated (ADR 0112 decision 5; the reset: [infra/README.md](../../infra/README.md#expenses-receipts-moved-to-core-once-per-dev-instance)).
 - **Upload** through core's transport in the role `EXPENSES_RECEIPT`, the owner the Pot's node: the `K_blob` is wrapped
-  under the Pot's key bound to (blob, Pot, role), the file's type, name and time are sealed in the blob meta. Expenses'
-  completion checks the session's binding (`UploadSessionEntity.boundTo`) itself, since it does not use core's
-  attachments (one blob per named slot). The cap is the role's: `MemberBlobRoles.maxBytes`, asked by core's start for a
-  member and a guest alike, 10 MiB of plaintext as its sealed size. A guest's receipt goes through the link's gate, is
-  recorded as a guest write, and counts against the link's limit — a link's usage is every application's term summed
-  (`StorageQuota.linkUsage`, ADR 0073 § 4).
+  under the Pot's key bound to (blob, Pot, role), the file's type, name and time are sealed in the blob meta. The
+  service's completion (`completeApplicationBlob`, member and guest alike) checks the session's binding
+  (`UploadSessionEntity.boundTo`), since a blob of the service is no attachment (one blob per named slot). The cap is the
+  role's: `MemberBlobRoles.maxBytes` (`ExpensesMemberBlobRoles`), asked by core's start for a member and a guest alike,
+  10 MiB of plaintext as its sealed size. A guest's receipt goes through the link's gate, is recorded as a guest write,
+  and counts against the link's limit — a link's usage is every application's term summed (`StorageQuota.linkUsage`,
+  ADR 0073 § 4). The web's transport is core's (`core/blob/applicationBlobs.ts`); `receipts.ts` is Expenses' view of it.
 - **Shown by its bytes, never by its claimed type** (`domain/receiptRules.ts`): a raster image as an image, a PDF through
   core's page renderer `src/web/src/shared/pdf/` (lifted out of Depot, which mounts the same one), anything else only
   offered for download. The picker takes only what claims to be an image or a PDF — only the client can keep the type.
+- **Keep and release** are the entry's revisions (`PotRevisionStore`, in its own transaction): a revision that is no
+  tombstone keeps the entry's receipts, a tombstone releases them with the entry, a later revision of a deleted entry (a
+  restore) keeps them again.
 - **Remove** is the entry's next revision: it lists what it keeps and names the dropped ones (`droppedReceipts`), which
-  stamps their drop time; a dropped receipt is never held again (a client uploads it anew). A revision names every
+  releases them by name, for good; a dropped receipt is never held again (a client uploads it anew). A revision names every
   receipt of its entry it does not keep that the edited revision held, that this writer uploaded, or that was completed
   before the edited revision (an orphan of a save that failed after its upload); another writer's newer upload is left
   alone.
 - **Retention** is core's node trash retention, no key of Expenses' own. A receipt goes once it has passed since its
-  drop, since its entry's latest revision if that is a tombstone, or since its completion if its entry never got a
-  revision; a restore is a later live revision, so it needs no write to the receipts. The purge
-  (`PotReceiptPurge`) judges under the locks every Pot writer takes, and reclaims the blobs through
-  `veyq_store_reclaim`. A deleted entry's read carries its `purgeAfter`: until then it says until when it is
-  restorable, after it no restore is offered.
-- **Re-key**: each receipt's `K_blob` is re-wrapped in Expenses' participant beside the revisions' `K_rev`
-  (ADR 0109 decision 3); a receipt left out is `rekey_parts_missing`.
+  release (a drop, or its entry's tombstone) or since its completion if its entry never kept it; a restore keeps the
+  tombstone's releases again. The service's purge (`ApplicationBlobPurge`) reads only its own rows, judges under the
+  locks every writer of a node's blobs takes, and reclaims the blobs through `veyq_store_reclaim`. A deleted entry's read
+  carries its `purgeAfter`: until then it says until when it is restorable, after it no restore is offered.
+- **Re-key**: each receipt's `K_blob` is re-wrapped as one of the Pot's core blobs — core's parts read lists it in its
+  role, its stage takes it, the service's participant checks and writes it (ADR 0109 decision 3, ADR 0112); a receipt
+  left out is `rekey_parts_missing`. Expenses' own re-key moves the revisions' `K_rev` only.
 - **Report**: an entry's report carries its receipts' `K_blob`s beside its revisions' keys (all of them, up to the codec's 256 per share; an entry with more is reported through its Pot, ADR 0108 decision 6); a
-  receipt is also an `ITEM` on its own, by its receipt id; the hold pins each receipt's blob, and the case view opens
-  each with the key the report handed.
+  receipt is also an `ITEM` on its own, by its receipt id (the service's item); the service's hold copies the receipts
+  an entry holds and pins each blob, and the case view opens each with the key the report handed, reading them through
+  core's case read (`listCaseApplicationBlobs`).
 - **Block**: a moderator's content block of a receipt, or of the entry that holds it, answers `451 blocked_by_operator`
   for its bytes, member and guest alike, and the listing marks it; the client lists it as blocked, with nothing to open.
   A block of the Pot or of an entry also refuses every new revision of it but a tombstone, and every new receipt for it,

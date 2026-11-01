@@ -5,10 +5,11 @@
   who reads it to open one.
 - **Goal:** Keep the photo of the bill or the PDF of the booking beside the entry it belongs to.
 - **Preconditions:** The entry exists or is being saved ([uc.expenses.record-entries](uc.expenses.record-entries.md)).
-- **Postconditions (success):** Each receipt is a blob in Expenses' own table — receipt, entry, blob, writer — its
+- **Postconditions (success):** Each receipt is a blob of core's blob service, held by its entry — receipt, entry as
+  its owner, blob, writer, kept and released ([ADR 0112](../../../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)) — its
   `K_blob` wrapped under the Pot's key and bound to the blob, the node and the role `EXPENSES_RECEIPT`, so it needs no
   new blob purpose ([ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
-  decision 7). The server saw its size and which entry holds it.
+  decision 7). The server saw its size and which entry holds it; an entry holds at most 100 not released.
 
 ## Main flow
 

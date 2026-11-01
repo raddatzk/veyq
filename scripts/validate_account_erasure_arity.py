@@ -6,7 +6,8 @@
 **What it asserts.** Three things, all read from the tree on every run:
 
   1. *The account closure.* Every table reachable by foreign key from `veyq_user` (transitive, from the migrations,
-     with a later `DROP FOREIGN KEY <name>` / `DROP CONSTRAINT <name>` replayed) is deleted by `AccountPurge.eraseAccount`
+     with a later `DROP FOREIGN KEY <name>` / `DROP CONSTRAINT <name>` replayed, and a later `DROP TABLE` taking the table's
+     keys and columns with it) is deleted by `AccountPurge.eraseAccount`
      or by the `eraseAccount` of a class implementing `AccountEraser` (an application's own tables), or carries
      `ON DELETE CASCADE`. A table that is neither refuses the final `VeyqUser` delete: the purge rolls back and the
      account is never erased — a legal duty (GDPR Art. 17) silently unmet.
@@ -44,7 +45,8 @@ so the twin was written before the eraser, and run red on the tree without it.
       `XEntity.delete(` after its first `fun eraseAccount`. A delete through a store method or an `update` is not seen
       as one — so a table cleared that way is reported uncovered (red, never a false green).
   (e) It reads declarations, not a database (the scope guard's (c)): a constraint added outside `db/migration` is
-      invisible, and a `DROP` is replayed only by the constraint name the `CONSTRAINT <name> FOREIGN KEY` clause gave.
+      invisible, a `DROP` of a key is replayed only by the constraint name the `CONSTRAINT <name> FOREIGN KEY` clause
+      gave, and a `DROP TABLE` only as the scope guard's limit (b) reads it (on its own line, one table).
 """
 from __future__ import annotations
 
@@ -107,6 +109,12 @@ def schema() -> tuple[list[dict], dict[tuple[str, str], str]]:
                 current = match.group(1)
             if match := scope_guard.ALTER_TABLE.search(line):
                 current = match.group(1)
+            if match := scope_guard.DROP_TABLE.search(line):
+                # A dropped table's columns and keys go with it (the scope guard's limit (b): replayed, ADR 0112).
+                dropped = match.group(1).lower()
+                edges = [e for e in edges if dropped not in (e["child"].lower(), e["parent"].lower())]
+                columns = {k: v for k, v in columns.items() if k[0].lower() != dropped}
+                continue
             if match := ADD_COLUMN.search(line):
                 columns[(match.group(1), match.group(2))] = loc
             elif current and (match := COLUMN.match(line)) and match.group(1).upper() not in NOT_A_COLUMN:

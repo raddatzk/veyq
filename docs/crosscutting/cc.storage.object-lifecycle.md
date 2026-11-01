@@ -95,7 +95,8 @@ name a storage key, and only they keep an object alive:
 | `veyq_hold_pin` | a moderation hold pins it ([en.moderation.hold](../features/moderation/enablers/en.moderation.hold.md)) |
 
 A blob row is referenced by **exactly one** record, from one of four arms — `veyq_media`, `veyq_media_derivative`,
-`veyq_node_attachment`, `veyq_expenses_receipt` — each with a foreign key (`scripts/validate_blob_reference_arity.py`);
+`veyq_node_attachment`, `veyq_application_blob` (core's blob service for the blobs an application stores — Expenses'
+receipts, [ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)) — each with a foreign key (`scripts/validate_blob_reference_arity.py`);
 its `K_blob` wrap is sealed to its owner and role ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)). What may be
 shared is the **object**: inside one node a cover, a banner or a gallery original equal to a file the node already
 stores is a second blob row on the same storage key ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md) § 5).

@@ -84,7 +84,7 @@ structure, attachments and guests, and the user interface. What a verified uploa
 |---|---|
 | [Memories](memories.md) | Built. Backend `:apps:memories` (`me.raddatz.veyq.memories`), contract `contracts/api/memories/`, web `src/web/src/features/memories`. |
 | [Depot](depot.md) | Built. Backend `:apps:depot` (`me.raddatz.veyq.depot`), contract `contracts/api/depot/`, web `src/web/src/features/depot`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/depot](../features/depot/_index.md). |
-| [Expenses](expenses.md) | Built ([ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)). Backend `:apps:expenses` (`me.raddatz.veyq.expenses`), contract `contracts/api/expenses/` and the entry format `contracts/expenses/`, web `src/web/src/features/expenses`: a Pot is a node kind, its people and entries sealed revisions in its own table, appended and never overwritten; balances, settle-up and overviews in the client; a `READ` or `READ_WRITE` link; receipts (images and PDFs, Expenses' own blob arm); the day's exchange rates (the ECB's euro reference rates, fetched by the device once a day with the date alone, the tenant's switch reaching a link guest through its Pot read). |
+| [Expenses](expenses.md) | Built ([ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)). Backend `:apps:expenses` (`me.raddatz.veyq.expenses`), contract `contracts/api/expenses/` and the entry format `contracts/expenses/`, web `src/web/src/features/expenses`: a Pot is a node kind, its people and entries sealed revisions in its own table, appended and never overwritten; balances, settle-up and overviews in the client; a `READ` or `READ_WRITE` link; receipts (images and PDFs, blobs of core's blob service held by their entries, [ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)); the day's exchange rates (the ECB's euro reference rates, fetched by the device once a day with the date alone, the tenant's switch reaching a link guest through its Pot read). |
 | [Inventory](inventory.md) | Concept only. |
 
 ## How core and an application meet
@@ -137,6 +137,8 @@ Core reaches application code only through interfaces each application implement
   the one implementation that accepts the kind), `UploadAdmission` (what a link's guests contributed to the
   application's own rows, for the per-link limit; core sums open sessions and attachments itself), `MemberBlobRoles`
   (which blob roles a member's upload start may carry: a union, since a member's start names no node),
+  `ApplicationBlobOwners` (the application's half of core's blob service, [below](#cores-blob-service): its roles with
+  their count per owner and whether a guest adds one, and whether an owner may hold a blob of a node),
   `NodeRekeyParticipant` (the application's rows sealed under a node's key, when that key is replaced).
 - **Links and guests** — `ShareRoots` (which roles a node of the kind may be the root of a link with),
   `GuestNodeRules` (which tree operations a `READ_WRITE` guest may do inside a container of the kind; core allows them
@@ -199,6 +201,33 @@ kind `FOLDER` only.
   drop box and Memories' uploader links both seal to it.
 - **A record list inside a node is core's primitive**:
   [How an application publishes a revisioned list](#how-an-application-publishes-a-revisioned-list).
+
+### Core's blob service
+
+The blobs an application stores — any number per node, unlike an attachment's one per slot — are managed by core
+([ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md), ADR 0079 decision 3's one
+exception: data management is core's). Built, with Expenses' receipts its first application.
+
+- **The table is core's**: `veyq_application_blob` (`core/applicationblob/`), the fourth `veyq_blob` arm — one row per
+  blob: its client-minted id, scope, node, **owner** (the application's record, an id core stores and compares and
+  never resolves), role, blob, writer, created, kept and released. Every platform duty is core's implementation of the
+  seams above: the completion (`UploadCompletion`), a guest's upload (`ShareGuestWrites`), the link's usage
+  (`UploadAdmission`), the share's blob predicate (`SharedSubtreeContributor`), a blob as an `ITEM` of a report and a
+  block (`ReportableItems`), the hold (`HoldSnapshotContributor`), "everything from this uploader" (`UploaderContent`,
+  `HeldUploaders`), the re-key of every wrap (`NodeRekeyParticipant`: the wraps are core blob wraps, listed by
+  `getNodeRekeyParts` in their role and staged by `stageNodeRekey`), the erasers (subtree, scope, account, guest
+  identity), the retention purge (`ApplicationBlobPurge`) and the reclaim of the objects. Its wire is core's
+  (`blob.openapi.yaml`, tags `application-blobs`, `share-application-blobs`, `case-application-blobs`), and so is the
+  web's transport (`core/blob/applicationBlobs.ts`).
+- **What an application implements** is `ApplicationBlobOwners`: which kinds' blobs are its own, its roles (with
+  `MemberBlobRoles` for their size caps) each with a count per owner and whether a link guest may add one, and at a
+  completion whether the owner may hold a blob in that node and where it stands (`NEW`, `KEEPING`, `ENDED`). In every
+  write of its own that changes what a record keeps, in that write's transaction, it calls `ApplicationBlobs.keep` (the
+  owners keep their blobs; a blob released with its owner's end is kept again), `releaseOwners` (the owners ended) or
+  `release` (blobs released by name, for good), after locking the service's rows with `ApplicationBlobs.lock` before its
+  node's lock. A report of its own record asks `blobIdsOfOwner` / `heldObjectsOfOwner`.
+- **The purge reads the service's rows only**: a blob goes once the node trash retention has passed since its release,
+  or since its completion while nothing ever kept it — so it takes no application lock.
 
 ### Links and guest operations
 
@@ -367,7 +396,9 @@ map the same way the level does, the same component over the person's Memories t
 
 ## Decided, not built
 
-- **An application's stored blobs managed by a core service** (proposed, [ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)): Expenses' receipt arm, generalised, becomes core's `veyq_application_blob` (still the fourth `veyq_blob` arm), and core implements every blob seam over it — completion, guest upload, link usage, share predicate, report and hold, uploader content, re-key, erasers, purge, reclaim, export of the bytes. An application declares its roles and tells the service which of its rows (an owner id opaque to core) keeps or released a blob. Expenses moves its receipts first, its dev data reset rather than migrated; its records stay its own.
+- **Memories' media and derivatives onto core's blob service** ([ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)
+  § Consequences): they keep their two arms for now, their duties carried by Memories' own implementations of the same
+  seams; moving them is the boundary's next step and its own record, since a derivative's rows are not a receipt's.
 
 - **An application's own entry in core's navigation** (for [Inventory](inventory.md)'s one pool per space, created on
   first open and no row of a level). Built: the kind half, `listed: false` (above). Next, with Inventory: an

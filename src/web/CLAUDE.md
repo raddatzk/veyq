@@ -149,13 +149,13 @@ here; the server is blind.
   core building block an application uses or explicitly replaces, never one it rebuilds; what is behind its node (its
   data model, formats, records, operations, screens, validation, arithmetic) is the application's and shared with no other,
   not even as a core template. Data management is the exception: an application's stored blobs go through core's blob
-  service (ADR 0112, proposed). A shared helper that owns nothing is allowed, never required.
+  service (ADR 0112: `core/blob/applicationBlobs.ts` is its transport — the upload and completion, the paged and tagged read, the bytes, a moderator's case read; Expenses' receipts its first application). A shared helper that owns nothing is allowed, never required.
   The applications are `src/features/memories/` (Memories) and `src/features/depot/` (Depot: the `FILE` and `DEPOT_DROPBOX` kinds, their rows in
   the level list, upload, download, the drop box — [docs/apps/depot.md](../../docs/apps/depot.md)) and `src/features/expenses/` (Expenses: the
   `EXPENSES_POT` kind — `domain/`: the entry codec, the ledger's arithmetic and check, the reads and writes; around it the
   Pot page (`components/PotDetail.vue`, a member's and a link guest's alike, rights in `rights.ts`), its session
   (`potSession.ts`: the live read, the writes, the stale re-read), the Pot's settings in its sealed meta (`domain/potMeta.ts`,
-  `contracts/expenses/pot-meta.v1.schema.json`), an entry's receipts (`receipts.ts` the wire through core's blob transport, `domain/receiptRules.ts` the rules, `components/EntryReceipts.vue` and `ReceiptView.vue`, which draws a PDF through core's `shared/pdf/` and decides by the bytes), the re-key, download and report of an entry) — the guard's `APPLICATIONS`, keyed by owner;
+  `contracts/expenses/pot-meta.v1.schema.json`), an entry's receipts (`receipts.ts` Expenses' view of core's blob service, `core/blob/applicationBlobs.ts` — a listed blob as a receipt of its entry, the role and its cap —, `domain/receiptRules.ts` the rules, `components/EntryReceipts.vue` and `ReceiptView.vue`, which draws a PDF through core's `shared/pdf/` and decides by the bytes), the re-key, download and report of an entry) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop

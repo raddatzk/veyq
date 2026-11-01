@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-10-23
 - Model: [Application: Expenses](../apps/expenses.md)
+- Replaced in part: decision 7 (the receipts' table `veyq_expenses_receipt` and their seams) by ADR 0112 (built)
 
 ## Context
 

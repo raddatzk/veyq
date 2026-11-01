@@ -1,7 +1,7 @@
 # ADR 0112 — An application's stored blobs are managed by a core service
 
-- Status: Proposed
-- Built: no
+- Status: Accepted
+- Built: yes
 - Date: 2026-11-01
 - Model: [Applications](../apps/README.md)
 
@@ -47,24 +47,38 @@ the guest upload (`ShareGuestWrites`), the link's usage (`UploadAdmission`), the
 (subtree, scope, account, guest identity), the retention purge, the reclaim of their objects
 ([ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md)) and the reading of their bytes an application's export
 names ([ADR 0082](0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)).
-`veyq_application_blob.blob_id` is the fourth arm, so the arm count stays four for every application to come.
+`veyq_application_blob.blob_id` is the fourth arm, so the arm count stays four for every application to come. **The
+re-key needs no wire of its own**: a blob's wrap is a core blob wrap of its node — core's parts read lists it in its role
+beside the node's attachments, core's stage takes it, and the service's participant reads core's staged part, checks
+every blob of the node has its wrap (else `rekey_parts_missing`) and that no staged wrap names a blob the node lost
+(`rekey_parts_stale`), and writes them. Core's commit runs its own participant after every application's, so the
+service's rows are locked after an application's own and before the node's — the order every writer takes.
 
 **2. What an application implements: its roles, and which of its rows keeps a blob.** It declares its roles with their
-caps (the `MemberBlobRoles` seam, plus a count per owner — Expenses' 100 receipts — and whether a link guest may add one)
-and answers, at a completion, whether the owner it names may hold a blob in that node (Expenses: the entry is no other
-Pot's, else `id_taken`). In its own write's transaction it tells the service which blobs an owner now **keeps** and
-which it **released** — Expenses keeps what a revision lists, releases what `droppedReceipts` names and everything of an
-entry its tombstone ends, and keeps them again on a restore. The service's purge erases a blob once the node trash
-retention has passed since its release, or since its completion where nothing ever kept it: `PotReceiptPurge`'s rule,
-which reads the application's revisions today and reads only the service's own rows then, so the purge takes no
-application lock and judges each row again under its own. A report of the application's own record asks the service for
-its owner's blob wraps, and blocks them with it.
+caps (the `MemberBlobRoles` seam, plus a count per owner — Expenses' 100 receipts, counted over the blobs not released,
+a completion past it `409 too_many_blobs` — and whether a link guest may add one) and answers, at a completion, whether
+the owner it names may hold a blob in that node (Expenses: the entry is no other Pot's, and the blob's id names no
+record, else `id_taken`) and where the owner stands: nothing written yet, keeping, or ended — the blob is born never
+kept, kept, or released with its owner (`ApplicationBlobOwners`). In its own write's transaction — the service's rows
+locked after its own and before its node's — it tells the service which blobs an owner now **keeps** and which it
+**released**. A release comes in two kinds, which the rows tell apart by their `kept` time: a release **with its
+owner's end** keeps it (Expenses: a tombstone), so the owner's next keep keeps the blob again (a restore); a release **by
+name** clears it (Expenses: `droppedReceipts`), so no keep reaches the blob again and a second release by name leaves it
+at its first time. Expenses keeps its entry's receipts with every revision that is no tombstone — the server cannot read
+the list a sealed revision names, so the owner keeps all its blobs not released by name, which is what a revision's
+receipts were before the move. The service's purge erases a blob once the node trash retention has passed since its
+release, or since its completion where nothing ever kept it: `PotReceiptPurge`'s rule, read from the service's own rows
+only, so the purge takes no application lock and judges each row again under its own. A report of the application's
+own record asks the service for its owner's blob wraps, and blocks them with it.
 
 **3. The wire and the web transport are core's.** Core's spec gets the service's operations — a member's completion
 (role, owner), a node's list (id, owner, role, size, writer, times, its purge time), their link counterparts under
 `/api/shares/{shareId}/…`, and the moderator's case read of a blob; the download is core's already. `receipts.ts`'s
 transport moves into core's blob transport on the web. The owner in a request is an opaque id, as the entry id in
 today's receipt routes is, so the access log learns nothing new ([ADR 0092](0092-logs-are-operational-and-name-no-person.md)).
+They live in `blob.openapi.yaml` (tags `application-blobs`, `share-application-blobs`, `case-application-blobs`, under
+`…/nodes/{nodeId}/application-blobs` and `/api/moderation/cases/{caseId}/application-blobs`); the web's transport is
+`core/blob/applicationBlobs.ts`.
 
 **4. Everything behind the Pot stays Expenses'.** Its revision table and store, the compare-and-set, the heads graph and
 its check, the codec, the entry format and its envelope, the purposes `expense-entry-key` and `expense-entry` with their
@@ -75,7 +89,9 @@ same client-minted ids, which are now the service's.
 **5. Expenses moves its receipts onto the service, and its data is discarded, not migrated.** No instance is live, and
 the owner chose a reset of Expenses' data on the dev instances over a migration. Core's migration creates
 `veyq_application_blob`; Expenses' drops `veyq_expenses_receipt`. **That migration deletes no row: it refuses to run while
-the table holds one.** The reset before it is a manual step the move's CR documents for each dev instance — every Pot
+the table holds one** (a CHECK no row can meet, added to the table, refused on a table that holds a row — on H2 and on
+MariaDB alike). The reset before it is a manual step, documented for each dev instance in
+[infra/README.md § Expenses' receipts moved to core](../../infra/README.md#expenses-receipts-moved-to-core-once-per-dev-instance) — every Pot
 deleted and purged from its space's trash (`purgeNode`, [ADR 0061](0061-node-deletion-reversible-node-trash.md) decision 6),
 or the dev instance reset whole with its store volume. The purge is today's erasure, one erase with two triggers: the
 revisions, the receipts, their blob rows with the store objects on the reclaim list, the Pots' links and guest
@@ -98,13 +114,17 @@ receipt row shows today, its entry id now named the owner.
   implementations of the same seams; moving them onto the service is the boundary's next step and its own record, since
   a derivative's rows are not a receipt's.
 - **Guards follow the move**: `validate_blob_reference_arity` re-points its fourth arm to
-  `ApplicationBlobEntity.blob_id` / `veyq_application_blob.blob_id`; `validate_node_rekey_arity`,
-  `validate_scope_erasure_arity`, `validate_account_erasure_arity` and `validate_measure_target_erasure` name the
-  service's table where they named the receipts'; `ModuleCompositionTest` counts the seams Expenses no longer implements.
+  `ApplicationBlobEntity.blob_id` / `veyq_application_blob.blob_id`, and it, `validate_scope_erasure_arity` and
+  `validate_account_erasure_arity` replay a migration's `DROP TABLE` (the first table any migration dropped is the
+  receipts'); `validate_node_rekey_arity` and `validate_measure_target_erasure` read entities and erasers, so they
+  follow the move unchanged; `ModuleCompositionTest` counts the seams Expenses no longer implements and the new one,
+  `ApplicationBlobOwners`.
+- **A completion into an ended owner** (a receipt added to a deleted entry) is born released at its completion, so it
+  goes after the retention from then — later than the tombstone's own receipts, never sooner.
 - **Costs accepted**: an owner id core stores without understanding, a keep/release call the application must make in
   every write that changes what a record keeps, and every Pot on the dev instances gone at the move.
-- **On acceptance**, ADR 0108 gets `- Replaced in part:` for decision 7's receipt table, and
-  [Applications](../apps/README.md) takes the service's current picture.
+- ADR 0108 carries `- Replaced in part:` for decision 7's receipt table, and [Applications](../apps/README.md) holds the
+  service's current picture.
 
 ## What the server sees
 

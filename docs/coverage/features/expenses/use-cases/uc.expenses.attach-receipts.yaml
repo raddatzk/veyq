@@ -1,13 +1,15 @@
 useCase: uc.expenses.attach-receipts
 feature: expenses
 title: Keep the receipts with an entry
-# Built by cr-expenses-receipts (inbox #325, ADR 0108 decision 7, docs/apps/expenses.md § Receipts): :apps:expenses on the
-# backend (PotReceiptStore, its completion and drop, the fourth blob arm, the purge through the reclaim queue, the re-key
-# part, the report's hold), features/expenses on the web (receipts.ts, domain/receiptRules.ts, EntryReceipts, ReceiptView,
-# core's shared/pdf; the receipts in the download, the import and the copy).
+# Built by cr-expenses-receipts (inbox #325, ADR 0108 decision 7, docs/apps/expenses.md § Receipts) and moved onto core's
+# blob service (ADR 0112: its completion and reads, the fourth blob arm, the purge through the reclaim queue, the re-key,
+# the report's hold — core/applicationblob — with Expenses' owner check and its keep and release in PotRevisionStore; the
+# receipt tests stay in :apps:expenses, where the service runs with its first application), features/expenses on the web
+# (receipts.ts over core/blob/applicationBlobs.ts, domain/receiptRules.ts, EntryReceipts, ReceiptView, core's shared/pdf;
+# the receipts in the download, the import and the copy).
 acceptanceCriteria:
   - id: receipts-are-blobs-of-the-entry
-    text: "A receipt is an image or PDF of at most 10 MB, any number per entry, in Expenses' own table, uploaded through core's transport with its K_blob wrapped under the Pot's key and bound to blob, node and the role EXPENSES_RECEIPT; the server refuses one above 10 MB or bound to another node or role."
+    text: "A receipt is an image or PDF of at most 10 MB, any number per entry, a blob of core's blob service held by its entry (at most 100 not released), uploaded through core's transport with its K_blob wrapped under the Pot's key and bound to blob, node and the role EXPENSES_RECEIPT; the server refuses one above 10 MB or bound to another node or role."
     coverage:
       backend:
         integration:
@@ -17,6 +19,7 @@ acceptanceCriteria:
           - PotReceiptSliceTest.theReadsPageByIdAndTagWhatTheyServe
           - PotReceiptSliceTest.aBlockedReceiptOrEntryIs451ForAMemberAndAGuest_unblockedItPresigns
           - PotReceiptSliceTest.offExpensesTakesNoReceipt_theReadsStillServe
+          - PotReceiptSliceTest.anEntryHoldsAHundredReceipts_aDropMakesRoomForTheNext
           - PotRekeySliceTest.aRekeyRewrapsEveryReceiptsKeyAfterTheRevisions_andMissesNone
           - PotModerationSliceTest.aReportedEntryHoldsItsReceipts_aReportedReceiptHoldsItselfAlone
           - ModuleCompositionTest.aMemberStartTakesTheRolesTheApplicationsDeclare
