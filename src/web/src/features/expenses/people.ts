@@ -52,6 +52,9 @@ export function addableMembers(pot: { readonly participants: readonly Pick<Parti
 /** Case and accents aside: "Zoë" and "zoe" are the same letters. */
 const folded = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase()
 
+/** Whether [a] and [b] are the same name, case and accents aside. */
+export const sameName = (a: string, b: string): boolean => folded(a.trim()) === folded(b.trim())
+
 /** The members of [members] whose display name holds [query], case and accents aside — the create dialog's suggestions
  *  while a name is typed; every one of them for a blank query. In the order given. */
 export function membersMatching(members: readonly Person[], query: string): Person[] {

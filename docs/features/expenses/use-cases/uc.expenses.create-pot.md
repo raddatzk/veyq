@@ -17,7 +17,8 @@
 1. The member chooses **New → Pot** in a folder (core's create menu, which lists every application's create entry).
 2. The dialog asks for a **name**, the **base currency** (preset from the reader's locale) and the **participants**,
    in one field: typing suggests the space's members whose display name holds the text (case and accents aside), and
-   last the text itself as a name; each one added is a chip that can be taken out again before creating. The rules
+   last the text itself as a name; each one added is a chip that can be taken out again before creating. Text still in the field when the Pot is
+   created is taken too: the member whose whole name it is (case and accents aside, and only one), else a name. The rules
    are those of [uc.expenses.manage-participants](uc.expenses.manage-participants.md): a member at most once, its
    record holding the member's id and their display name sealed at adding; a name at most once (case aside), never a
    blank one. Where the member list cannot be read, the dialog takes names only.

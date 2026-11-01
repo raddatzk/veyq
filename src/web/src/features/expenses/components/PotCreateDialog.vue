@@ -23,7 +23,7 @@ import { collidingSibling, nameTakenMessage } from '../../../core/node/siblingCo
 import { httpStatus, HttpStatus } from '../../../shared/httpError'
 import { knownCurrencies, minorUnitsOf } from '../amounts'
 import { createPot, PotPeopleNotAdded } from '../createPot'
-import { addableMembers, membersMatching, type NewParticipant } from '../people'
+import { addableMembers, membersMatching, sameName, type NewParticipant } from '../people'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import { loadScopePeople, type Person } from '../../../core/people/directory'
 import { POT_KIND } from '../kinds'
@@ -71,11 +71,23 @@ const suggestions = computed<Choice[]>(() => {
 function add(choice: Choice) {
   if (!people.value.some((p) => keyOf(p) === choice.key)) people.value.push(choice.person)
 }
+/** Create takes the text still in the field too (owner 2026-11-01): a member whose whole name it is - case and accents
+ *  aside, and only one - else the text as a name. Nothing for blank text or a name already in. */
+function takeTyped() {
+  const typed = query.value.trim()
+  if (!typed) return
+  const whole = membersMatching(addable.value, typed).filter((m) => sameName(m.displayName, typed))
+  const person: NewParticipant = whole.length === 1 ? { member: whole[0]! } : { name: typed }
+  if (!people.value.some((p) => keyOf(p) === keyOf(person))) people.value.push(person)
+  query.value = ''
+}
 function remove(tag: { key: string }) {
   people.value = people.value.filter((p) => keyOf(p) !== tag.key)
 }
 
 async function submit() {
+  if (loading.value) return
+  takeTyped()
   if (!canSubmit.value) return
   error.value = null
   const sibling = collidingSibling(treeStore.nodes, props.parentId ?? null, POT_KIND, name.value.trim())

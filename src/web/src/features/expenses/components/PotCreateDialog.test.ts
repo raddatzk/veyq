@@ -145,6 +145,30 @@ describe('PotCreateDialog', () => {
     expect(chips()).toEqual(['Anna', 'Finn'])
   })
 
+  // Owner 2026-11-01: text still in the field when Create is pressed is not lost - a member whose whole name it is, else
+  // a name; never twice, never blank.
+  it('takes the text still in the field on Create: a name, or the member whose whole name it is', async () => {
+    vi.mocked(loadScopePeople).mockResolvedValueOnce([who(U_DANA, 'Dana Member'), who(U_ERIK, 'Erik Member')])
+    await open()
+    setName('Trip')
+    await pick('Anna')
+    await type(' Finn ')
+    await submit()
+    expect(buildLedger(state.server.held(), { currency: 'USD', minorUnits: 2 }).participants.map((p) => p.name)).toEqual(['Anna', 'Finn'])
+  })
+
+  it('a member\'s whole name left in the field is the member, a part of it a name, a name already in nothing new', async () => {
+    vi.mocked(loadScopePeople).mockResolvedValueOnce([who(U_DANA, 'Dana Member'), who(U_ERIK, 'Erik Member')])
+    await open()
+    setName('Trip')
+    await pick('Anna')
+    await type('dána member')
+    await submit()
+    const ledger = buildLedger(state.server.held(), { currency: 'USD', minorUnits: 2 })
+    expect(ledger.participants.map((p) => p.name)).toEqual(['Anna', 'Dana Member'])
+    expect(ledger.participants[1]!.member).toBe(U_DANA)
+  })
+
   // ADR 0108 decision 2, inbox #783: the dialog offers the space's members beside typed names, with People's picker rules.
   it('adds a member of the space and a name: the member\'s record holds the id and the display name sealed, as People writes it', async () => {
     const dana = who(U_DANA, 'Dana Member')
