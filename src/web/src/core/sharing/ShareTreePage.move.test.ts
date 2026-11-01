@@ -84,8 +84,8 @@ const moveRows: LevelRowsFactory = (ctx, host) => {
   const contributes = () => ctx.value.access.mode === 'guest' && ctx.value.access.role === ShareRole.ReadWrite
   return {
     row: (node) => ({
-      icon: 'file', title: node.name, meta: 'note', primary: { label: node.name, onClick: () => host.open(node) },
-      actions: [{ id: 'move', label: 'Move', icon: 'arrows-h', shown: contributes(), onClick: () => host.move(node) }],
+      icon: 'file', title: node.name, meta: 'note', primary: { label: node.name, onClick: () => host.open?.(node) },
+      actions: [{ id: 'move', label: 'Move', icon: 'arrows-h', shown: contributes(), onClick: () => host.move?.(node) }],
       selection: { move: contributes(), delete: false },
     }),
   }

@@ -151,8 +151,8 @@ acceptanceCriteria:
           - OpenMemoryTreePollSliceTest.anIdleTreePollIsAFewStatementsWhateverTheTreeHoldsAndNoMoreThanTheGallerys
       web:
         unit:
-          - src/views/MemoryHomeView.memoryBlock.test.ts
-          - src/views/MemoryHomeView.live.test.ts
+          - src/views/SpaceView.memoryBlock.test.ts
+          - src/views/SpaceView.live.test.ts
           - src/views/ShareView.live.test.ts
 gaps:
   stack: >-

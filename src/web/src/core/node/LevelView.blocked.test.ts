@@ -26,6 +26,7 @@ import type { TreeNode } from './tree'
 import { setViewMode } from '../../shared/state/useViewMode'
 import { realI18n, t } from '../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
+import { hostFor } from '../../test/nodeHost'
 import { ShareRole } from '../../api/generated/sharing'
 import { stubRows } from '../../test/stubRows'
 import { actionIdsOf, rowOf } from '../../test/levelRows'
@@ -50,11 +51,15 @@ beforeEach(() => {
   })
 })
 
-const mountAs = (access: ReturnType<typeof memberAccessOf> | ReturnType<typeof guestAccessOf>) =>
-  mount(LevelView, {
+const mountAs = (access: ReturnType<typeof memberAccessOf> | ReturnType<typeof guestAccessOf>) => {
+  const rec = hostFor(access)
+  const w = mount(LevelView, {
     props: { folder: TRIPS, level: childrenOf(tree, TRIPS.id), access, tree: memberTreeOf(() => tree) },
-    global: { plugins: [realI18n()] },
+    global: { plugins: [realI18n()], provide: rec.provide },
   })
+  return Object.assign(w, { calls: rec.calls })
+}
+
 
 describe('a blocked node in the level', () => {
   for (const [who, access] of [['member', () => memberAccessOf()], ['guest', () => guestAccessOf(ShareRole.ReadWrite)]] as const) {
@@ -65,13 +70,13 @@ describe('a blocked node in the level', () => {
         expect(row.text()).toContain(t('node.blockedByOperator'))
         await row.find('button.veyq-level-item-main').trigger('click')
       }
-      expect(w.emitted('openNode'), 'a blocked node never opens').toBeUndefined()
+      expect(w.calls.open, 'a blocked node never opens').toBeUndefined()
       expect(rowOf(w, 'open').text()).not.toContain(t('node.blockedByOperator'))
       const held = await actionIdsOf(w, 'held')
       expect(held.filter((id) => id !== 'delete'), 'nothing but delete reaches a blocked node').toEqual([])
 
       await rowOf(w, 'open').find('button.veyq-level-item-main').trigger('click')
-      expect(w.emitted('openNode')).toHaveLength(1)
+      expect(w.calls.open).toHaveLength(1)
     })
   }
 })

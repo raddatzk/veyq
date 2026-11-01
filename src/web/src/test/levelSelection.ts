@@ -1,5 +1,5 @@
 // The level's Select mode (inbox #421, `core/node/LevelView.vue`) driven through the DOM for a suite that mounts a host
-// (the member's `MemoryHomeView`, a guest's `ShareTreePage`): every step a real click on the rendered element - the
+// (the member's `SpaceView`, a guest's `ShareTreePage`): every step a real click on the rendered element - the
 // toolbar's Select, a row's checkbox, the bar's Move to… and Delete - never a call into the component.
 import { flushPromises } from '@vue/test-utils'
 

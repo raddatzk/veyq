@@ -127,7 +127,7 @@ together with whom.
 - Profile: `core/people/PersonProfile.vue` (core's frame, sections claimed through `registry.claimPersonSection`), Memories'
   section `components/PersonMemories.vue` over `participantIndex.ts` (its presentations `memoryViews.ts`, the level's list; its map
   `components/SpaceMap.vue` with the pins of `spaceMap.ts` `locatedPin`, the level's rule); the route in `core/node/location.ts` and
-  `views/MemoryHomeView.vue`.
+  `views/SpaceView.vue`.
 - Uploader in the photo detail: `useUploaderNames.ts` and `MediaLightbox.vue`.
 
 ## Related

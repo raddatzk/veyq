@@ -46,6 +46,7 @@ import { realI18n } from '../../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 import { chooseHeaderEntry, headerMenuIds } from '../../../test/nodeHeader'
 import { mountNodePage } from '../../../test/nodePage'
+import { hostFor } from '../../../test/nodeHost'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const EPOCHS = epochsOf(new Uint8Array(32).fill(4))
@@ -121,7 +122,8 @@ describe('Report on every node\'s page (a legal duty, DSA Art. 16)', () => {
     const tree = memberTreeOf(() => [FOLDER], { scopeId: SCOPE, epochs: EPOCHS })
     const w = mount(LevelView, {
       props: { folder: FOLDER, level: childrenOf([FOLDER], FOLDER.id), access: member(), tree },
-      global: { plugins: [realI18n()] },
+      global: { plugins: [realI18n()], provide: hostFor(member()).provide },
+
       attachTo: document.body,
     })
     await flushPromises()

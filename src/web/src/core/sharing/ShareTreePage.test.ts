@@ -42,6 +42,8 @@ import { chooseNew, hasNewMenu, newMenuLabels } from '../../test/newMenu'
 import { guestAccessFor } from '../../test/models'
 import { authenticatedCalls } from '../../test/guestMode'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
+import { injectNodeHost, type NodeHost } from '../node/nodeHost'
+import type { TreeNode } from '../node/tree'
 
 const SCOPE_ID = '55555555-5555-4555-8555-555555555555'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_2'
@@ -87,7 +89,7 @@ const seenCtx = vi.hoisted(() => ({ ctx: null as null | LevelRowsContext }))
 const stubRows: LevelRowsFactory = (ctx, host) => ({
   row: (node) => {
     seenCtx.ctx = ctx.value
-    return { icon: 'file', title: node.name, meta: 'stub', primary: { label: node.name, onClick: () => host.open(node) }, actions: [] }
+    return { icon: 'file', title: node.name, meta: 'stub', primary: { label: node.name, onClick: () => host.open?.(node) }, actions: [] }
   },
 })
 /** A WRITE_ONLY drop page an application claimed: never this page's to mount. */
@@ -97,20 +99,26 @@ const StubBody = defineComponent({
   emits: ['unavailable'],
   setup: () => () => h('div', { class: 'drop-stub' }),
 })
-/** A kind's detail, as an application's: what it was handed, and an open button per child. */
+/** The page's doors the last detail injected. */
+const seen: { host: NodeHost | null } = { host: null }
+/** A kind's detail, as an application's: what it was handed, and an open button per child through the page's door. */
 const StubDetail = defineComponent({
   name: 'StubDetail',
   props: ['node', 'scopeId', 'epochs', 'contentKey', 'children', 'access', 'tree'],
-  emits: ['openNode', 'rename', 'delete', 'createChild', 'share', 'shareUpload'],
-  setup: (p, { emit }) => () =>
-    h('div', { class: 'detail-stub' }, [
-      h('span', { class: 'detail-of' }, `${p.node.id}|${p.tree.nameOf(p.node.id)}|${p.scopeId}`),
-      ...(() => {
-        const c = p.children as { folders: { id: string; name: string }[]; byKind: Map<string, { id: string; name: string }[]> }
-        return [...c.folders, ...[...c.byKind.values()].flat()]
-      })().map((n) => h('button', { class: 'detail-open', 'data-node-id': n.id, onClick: () => emit('openNode', n) }, n.name)),
-    ]),
+  setup: (p) => {
+    const host = injectNodeHost()
+    seen.host = host
+    return () =>
+      h('div', { class: 'detail-stub' }, [
+        h('span', { class: 'detail-of' }, `${p.node.id}|${p.tree.nameOf(p.node.id)}|${p.scopeId}`),
+        ...(() => {
+          const c = p.children as { folders: TreeNode[]; byKind: Map<string, TreeNode[]> }
+          return [...c.folders, ...[...c.byKind.values()].flat()]
+        })().map((n) => h('button', { class: 'detail-open', 'data-node-id': n.id, onClick: () => host.open?.(n) }, n.name)),
+      ])
+  },
 })
+
 
 // The name dialog is the layer's `VeyqDialog` (teleported); stubbed to render in place.
 const stubs = {
@@ -250,8 +258,8 @@ describe("ShareTreePage renders a node's detail for the guest", () => {
   const BOX = '6e5a0000-0000-4000-8000-0000000000d6'
   const INNER = '6e5a0000-0000-4000-8000-0000000000d7'
   const box = { key: v1.randomBytes(32), inner: v1.randomBytes(32) }
-  function boxHead() {
-    const h0 = head()
+  function boxHead(role: ShareRole = ShareRole.Read) {
+    const h0 = head(role)
     h0.share.nodes.push(child(BOX, ROOT, keys.root, box.key, 'Postfach', BOX_KIND), child(INNER, BOX, box.key, box.inner, 'Anna', FOLDER_KIND))
     return h0
   }
@@ -273,9 +281,25 @@ describe("ShareTreePage renders a node's detail for the guest", () => {
     expect(authenticatedCalls).toEqual([])
   })
 
+  // The ONE host contract (`core/node/nodeHost.ts`): the guest's page hands on its own doors only - open, the download, the
+  // create and, for a link that moves anything, the move - so no view it renders can offer a member's rename, delete, share,
+  // copy, import or trash, whatever a rights function says (an absent door is an action not offered).
+  for (const [role, doors] of [
+    [ShareRole.Read, ['createChild', 'download', 'open']],
+    [ShareRole.ReadWrite, ['createChild', 'download', 'move', 'moveMany', 'open']],
+  ] as const) {
+    it(`${role}: the guest page's doors are its own - never a rename, delete, share, copy, import or trash`, async () => {
+      seen.host = null
+      await at(BOX)
+      await mountBody(boxHead(role))
+      expect(Object.keys(seen.host ?? {}).sort()).toEqual(doors)
+    })
+  }
+
   it("a detail's open is a real navigation through the tree's link: ?node= with the #k= fragment kept", async () => {
     await at(BOX)
     const w = await mountBody(boxHead())
+
     await click(w.find(`.detail-open[data-node-id="${INNER}"]`).element)
     expect(router.currentRoute.value.query.node).toBe(INNER)
     expect(router.currentRoute.value.hash).toBe(HASH)

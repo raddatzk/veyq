@@ -117,7 +117,7 @@ acceptanceCriteria:
       backend:
         integration: [ChapterShareSliceTest.aChapterGuestReadsTheChapterAndNothingOfItsMemory, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole]
       web:
-        unit: [src/views/MemoryHomeView.test.ts, src/features/memories/share.test.ts, src/views/ShareView.test.ts, src/views/ShareView.memory.test.ts, src/features/memories/components/ShareDialog.test.ts]
+        unit: [src/views/SpaceView.test.ts, src/features/memories/share.test.ts, src/views/ShareView.test.ts, src/views/ShareView.memory.test.ts, src/features/memories/components/ShareDialog.test.ts]
         e2e: [src/features/memories/chapterShare.e2e.test.ts]
   - id: root-rename-reseals-share-names
     text: >-

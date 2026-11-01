@@ -13,7 +13,7 @@ import TenantJoinView from './views/TenantJoinView.vue'
 import TermsAcceptView from './views/TermsAcceptView.vue'
 import OperatorTermsView from './views/OperatorTermsView.vue'
 import PrivacyNoticeView from './views/PrivacyNoticeView.vue'
-import MemoryHomeView from './views/MemoryHomeView.vue'
+import SpaceView from './views/SpaceView.vue'
 import GroupInvitationsView from './views/GroupInvitationsView.vue'
 import ShareView from './views/ShareView.vue'
 import RecoverView from './views/RecoverView.vue'
@@ -34,7 +34,7 @@ import { PRIVACY_PATH } from './core/privacy/privacyNotice'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'home', component: MemoryHomeView, meta: { layout: 'app', requiresUnlock: true } },
+    { path: '/', name: 'home', component: SpaceView, meta: { layout: 'app', requiresUnlock: true } },
     { path: '/not-set-up', name: 'not-set-up', component: NotSetUpView },
     // The suspended tenant's own domain (uc.spaces.scope-access A7): every API call here is refused, so every route
     // lands on this full-page notice — reached from boot, or mid-session once a call learns it.
@@ -119,7 +119,7 @@ router.beforeEach((to) => {
 })
 
 // Cold-boot / late-resolution trigger for the terms gate (cr-0114): the tenant is entered AFTER `beforeEach`
-// already allowed `/` through (from `MemoryHomeView`'s mount), so `enterScope` flips `termsStale()` to true only
+// already allowed `/` through (from `SpaceView`'s mount), so `enterScope` flips `termsStale()` to true only
 // afterward. This watcher catches that transition and bounces the (already-mounted) shell to /terms, remembering
 // the current route so acceptance returns the member where they were.
 watch(termsStale, (stale) => {

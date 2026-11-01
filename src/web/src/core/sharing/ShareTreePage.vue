@@ -36,7 +36,12 @@
 // selection of several (inbox #421) moves through core's `MoveNodesDialog` by the same door, and a guest is offered no
 // delete of a selection (it deletes no node). A `READ` link has no door, so nothing it renders can move anything. A DOWNLOAD (ADR 0082 decision 5) is core's `ExportSubtreeDialog` over the
 // guest's tree and the applications' guest reads, for a folder, a Memory or a chapter of a `READ` / `READ_WRITE` link.
-import { computed, ref, shallowRef, watch } from 'vue'
+//
+// **The page's doors** (`core/node/nodeHost.ts`): this page provides the guest's host - open a node, the move (where the link
+// moves anything), the download and the create - and mounts core's one set of dialogs behind them
+// (`core/node/components/NodeDialogs.vue`), the member's page's too. Every other door is absent, so no view it renders
+// offers a rename, a delete, a share, a copy, an import or the trash, whatever a rights function says.
+import { computed, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import VeyqBreadcrumb from '../../shared/ui/VeyqBreadcrumb.vue'
@@ -44,7 +49,7 @@ import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import type { VeyqMenuItem } from '../../shared/ui/menu'
 import { registry } from '../applications/registry'
 import type { GuestAccess } from '../access'
-import { FOLDER_KIND, type NodeKind } from '../node/kind'
+import { FOLDER_KIND } from '../node/kind'
 import { childrenOf, type Level } from '../node/browse'
 import LevelView from '../node/LevelView.vue'
 import NodePage from '../node/components/NodePage.vue'
@@ -54,13 +59,11 @@ import { guestTreeContext, createShareNodeAsGuest, guestTreeErrorMessageKey } fr
 import { guestTreeSource, type GuestTreeSource } from './guestAccess'
 import { useGuestSession } from './guestIdentity'
 import { renderMarkdown } from '../../shared/markdown'
-import ShareNameDialog from './ShareNameDialog.vue'
-import MoveNodeDialog from '../node/MoveNodeDialog.vue'
-import MoveNodesDialog from '../node/MoveNodesDialog.vue'
-import ExportSubtreeDialog from '../export/ExportSubtreeDialog.vue'
-import { nodeMover } from '../node/move'
+import NodeDialogs from '../node/components/NodeDialogs.vue'
+import { useNodeDialogs } from '../node/nodeDialogs'
+import { provideNodeHost, type NodeHost } from '../node/nodeHost'
 import { useLevelLive } from '../node/useLevelLive'
-import { sameKeyOr, type TreeNode } from '../node/tree'
+import { sameKeyOr } from '../node/tree'
 import StatementNotice from '../../features/moderation/statement/StatementNotice.vue'
 import OrderNotice from './OrderNotice.vue'
 
@@ -164,28 +167,36 @@ const badge = computed(() => {
   return atFolder.value ? t('share.folder.contributorBadge') : t('share.contributorBadge')
 })
 
-// --- writes (READ_WRITE): a node created under the current folder --------------------------------------------------
+// --- the page's doors: core's dialogs over the guest's tree ---------------------------------------------------------------
+// A node created (READ_WRITE) under the current folder as the guest (`createShareNodeAsGuest`) after the shell named it
+// (`access.requestGuest`); a move through the guest's door (`nodeMover`, READ_WRITE only); a download as a ZIP (READ /
+// READ_WRITE, ADR 0082 decision 5) over the guest's own tree and reads. The page follows nothing after a write: the shell
+// re-reads the share, and the node on screen is `?node=`.
 const session = useGuestSession(props.shareId)
-/** The kind the open name dialog creates; null: none open. */
-const creating = ref<NodeKind | null>(null)
-async function startCreate(kind: NodeKind) {
-  if (await props.access.requestGuest()) creating.value = kind // named (now or before): name the new node
+const dialogs = useNodeDialogs({
+  access: () => props.access,
+  tree: () => tree.value,
+  onScreen: () => currentId.value,
+  guestCreate: {
+    async create(kind, parentId, name) {
+      const s = session.value
+      if (!s) throw new Error('no_guest_session')
+      const ctx = guestTreeContext(props.head, { contributorToken: s.contributorToken, fragmentKey: props.fragmentKey, pwToken: props.pwToken })
+      await createShareNodeAsGuest(ctx, { parentId, kind, name })
+      await props.reload() // the new node lists with its name and key
+    },
+    errorText: createError,
+  },
+})
+const { doors } = dialogs
+const host: NodeHost = {
+  open: (node) => go(node.id),
+  download: doors.download,
+  // Named (now or before) first: then name the new node.
+  createChild: (kind, parent) => void props.access.requestGuest().then((named) => named && doors.createChild(kind, parent)),
+  ...(dialogs.mover ? { move: doors.move, moveMany: doors.moveMany } : {}),
 }
-async function createNode(name: string) {
-  const s = session.value
-  const parentId = currentId.value
-  const kind = creating.value
-  if (!s || !parentId || !kind) throw new Error('no_guest_session')
-  const ctx = guestTreeContext(props.head, { contributorToken: s.contributorToken, fragmentKey: props.fragmentKey, pwToken: props.pwToken })
-  await createShareNodeAsGuest(ctx, { parentId, kind, name })
-  await props.reload() // the new node lists with its name and key
-}
-// --- a move (READ_WRITE): core's dialog, the guest's door ----------------------------------------------------------
-const mover = nodeMover(() => props.access)
-const moving = ref<TreeNode | null>(null)
-const movingMany = ref<TreeNode[] | null>(null)
-// --- a download as a ZIP (READ / READ_WRITE, ADR 0082 decision 5): core's dialog over the guest's own tree and reads ------
-const downloading = ref<TreeNode | null>(null)
+provideNodeHost(host)
 
 // --- the live refresh (inbox #408): a page of the link's tree on screen picks up what others changed, without a reload ---
 // A folder level and an opened node's page of any kind, as the member's host does (inbox #503): a moderator's block of the
@@ -194,7 +205,7 @@ const downloading = ref<TreeNode | null>(null)
 // `poll` swaps `head` (and with it the tree) only on a change.
 const { ticks: liveTick } = useLevelLive({
   active: () => !!current.value && !!props.access.poll,
-  paused: () => !!creating.value || !!moving.value || !!movingMany.value || !!downloading.value,
+  paused: () => dialogs.open.value,
   read: (signal) => props.access.poll?.(signal) ?? Promise.resolve(false),
 })
 
@@ -234,11 +245,6 @@ function createError(e: unknown): string {
       :tree="tree"
       :folder-name="tree.nameOf(current.id)"
       :live-tick="liveTick"
-      @open-node="go($event.id)"
-      @create="startCreate"
-      @move-node="moving = $event"
-      @move-nodes="movingMany = $event"
-      @download-node="downloading = $event"
     />
     <!-- The member's detail of the node's kind, for a guest: what it offers is its rights and its data source. -->
     <NodePage
@@ -252,41 +258,13 @@ function createError(e: unknown): string {
       :children="level"
       :access="access"
       :tree="tree"
-      @open-node="go($event.id)"
-      @move="moving = $event"
-      @download="downloading = current"
     />
     <p v-else class="veyq-empty">{{ t('share.folder.unsupportedKind') }}</p>
   </section>
 
-  <MoveNodeDialog
-    v-if="moving && mover && tree"
-    :node="moving"
-    :access="access"
-    :tree="tree"
-    :mover="mover"
-    :node-name="tree.nameOf(moving.id)"
-    @close="moving = null"
-  />
-  <MoveNodesDialog v-if="movingMany && mover && tree" :nodes="movingMany" :access="access" :tree="tree" :mover="mover" @close="movingMany = null" />
-  <ExportSubtreeDialog
-    v-if="downloading && tree"
-    :node="downloading"
-    :access="access"
-    :tree="tree"
-    :display-name="tree.nameOf(downloading.id)"
-    @close="downloading = null"
-  />
-  <ShareNameDialog
-    v-if="creating"
-    :title="creating === FOLDER_KIND ? t('share.folder.newFolderTitle') : t('common.create')"
-    :label="t('share.folder.nameLabel')"
-    :submit-label="t('common.create')"
-    :action="createNode"
-    :error-text="createError"
-    @close="creating = null"
-  />
+  <NodeDialogs :dialogs="dialogs" />
 </template>
+
 
 <style scoped>
 /* The guest's position and role, one row: the breadcrumb up to the share root, the badge beside it (wrapping under it

@@ -347,12 +347,12 @@ acceptanceCriteria:
       backend:
         integration: [ModerationMemoriesSliceTest.blockedContentAnswersEveryByteRead451IsMarkedInEveryListingAndItsSiblingStillServes, ModerationMemoriesSliceTest.aBlockedMediumIsDeletedButNeverRestored, ModerationMemoriesSliceTest.aBlockedMemoryIsMarkedForMembersAndGuestsAndBlocksEveryMediumBelowIt]
       web:
-        unit: [src/features/memories/components/MediaLightbox.test.ts, src/features/memories/components/MediaTile.test.ts, src/core/node/LevelView.blocked.test.ts, src/features/memories/useMediaTrash.test.ts, src/views/MemoryHomeView.registry.test.ts]
+        unit: [src/features/memories/components/MediaLightbox.test.ts, src/features/memories/components/MediaTile.test.ts, src/core/node/LevelView.blocked.test.ts, src/features/memories/useMediaTrash.test.ts, src/views/SpaceView.registry.test.ts]
     gaps:
       - surface: web
         reason: >-
           A blocked node's level row is held with a stub kind (LevelView.blocked.test.ts), and its page opened by its
-          address with a stub detail (MemoryHomeView.registry.test.ts), not with the Memory kind itself.
+          address with a stub detail (SpaceView.registry.test.ts), not with the Memory kind itself.
   - id: thousands-of-photos-load-bounded
     # Exception flow E7 (inbox #488).
     text: >-

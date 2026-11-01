@@ -62,7 +62,7 @@ acceptanceCriteria:
         unit:
           - src/core/node/location.test.ts
           - src/core/applications/registry.test.ts
-          - src/views/MemoryHomeView.people.test.ts
+          - src/views/SpaceView.people.test.ts
   - id: profile-lists-accessible-memories
     text: The profile shows the person's display name, a letter avatar (a former member greyed) and, in Memories' section, the Memories where they are a participant and the viewer has access - from a client-side index over the tenant and group scopes (never the personal scope), revalidated by ETag, bounded at 500 Memories per scope with a partial note, and with loading, empty and error states.
     coverage:

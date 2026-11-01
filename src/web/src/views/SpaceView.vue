@@ -1,20 +1,19 @@
 <script setup lang="ts">
-// The personal-space content host (cr-0030/0031, uc.memory.browse). Mounted at `/`; the current tree position
-// lives in the URL **#fragment** (`#~me/reisen-2026/memories/rom`), resolved against the locally-decrypted tree — the
-// operator-blind server computes no navigation and never sees the path. Renders a folder/root level (browse)
-// or an opened node (detail) by the resolved node's kind, and owns the create / rename / delete dialogs. It names
-// no application kind (ADR 0079): the detail component, the create dialog and the share dialog come from the kind's
-// registry descriptor (cr-files-application P4c) — the application that registered the kind fills them. A folder's
-// create and every node's rename are core's own `core/node/FolderNameDialog.vue`; FOLDER's share dialog is core's
-// `core/sharing/FolderShareDialog.vue`, which the registry pre-registers. The folder level is core's
-// (`core/node/LevelView.vue`), which asks the registry for each application's rows. A move of any node — the folder
-// on screen, an application's row, an opened node, a drop box's guest folder — is core's `core/node/MoveNodeDialog.vue`
-// through the member's door (`nodeMover`, inbox #358); a level's selection of several moves through core's
-// `core/node/MoveNodesDialog.vue` by the same door, and is deleted after one question (`DeleteNodesDialog`, inbox #421) -
-// as is one node, from its row or from its own page's header (the folder on screen, an opened node): one question, the
-// kind's own (`core/node/deleteQuestion.ts`), and one Undo. An opened node's page is core's frame
-// (`core/node/components/NodePage.vue`) around the kind's `detail`, which supplies core's own header actions.
-// A copy of one node or of a selection is core's `core/export/CopyNodesDialog.vue` (uc.platform.copy-node), a member's only.
+// A space's page (cr-0030/0031, uc.memory.browse): core's member host, whatever applications the build has. Mounted at
+// `/`; the current tree position lives in the URL **#fragment** (`#~me/reisen-2026/memories/rom`), resolved against the
+// locally-decrypted tree — the operator-blind server computes no navigation and never sees the path. Renders a
+// folder/root level (core's `core/node/LevelView.vue`, which asks the registry for each application's rows) or an opened
+// node (the kind's registered `detail` inside core's frame `core/node/components/NodePage.vue`, which supplies core's own
+// header actions) by the resolved node's kind. It names no application kind (ADR 0079).
+//
+// **The page's doors** (`core/node/nodeHost.ts`): everything the level, a row factory or a detail asks of the page goes
+// through ONE host this page provides - the member's full set: open a node, and every dialog of core's one set
+// (`core/node/nodeDialogs.ts` + `components/NodeDialogs.vue`, which a share guest's page mounts too): a create (core's
+// `FolderNameDialog` for a folder, the kind's `createDialog` otherwise), every node's rename (`FolderNameDialog`), a move
+// of one node or of a selection (core's move dialogs through the member's `nodeMover`, inbox #358/#421), the delete of
+// one node or of a selection after one question with one Undo (`DeleteNodesDialog`: the node a page is about is left for
+// its parent once it went), the kind's share dialog, the ZIP download, the copy (uc.platform.copy-node), the import of a
+// download, and the space's node trash.
 // The fragment is a slug path derived from the names (ADR 0015), so
 // after every write that re-reads the tree the node on screen is followed to its path in the new tree (`stayOn`): a
 // move or a rename of it or of a folder above it, and an older equal-segment sibling restored or moved in, change it.
@@ -23,7 +22,7 @@
 // pending deletion, the instance's sharing capabilities) and its `TreeSource` (the decrypted tree, fragment links) and
 // hands both to the level view and to an opened node's detail. What a view offers is its application's rights
 // function over them; the host decides no control itself.
-import { computed, ref, shallowRef, watch, onMounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { activeSpace, activeEpochKeys, enterScope } from '../app/activeSpace'
@@ -35,28 +34,20 @@ import { childrenOf, breadcrumbOf, displayNameOf, nodeById } from '../core/node/
 import { nodeContentKey, sameKeyOr } from '../core/node/tree'
 import { parseHash, resolveSlugPath, hashForNode, personHash, TENANT_SCOPE } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
-import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
+import { FOLDER_KIND } from '../core/node/kind'
 import { ScopeKind, type MyTenant } from '../api/generated/scopes'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from '../features/platform/capabilities'
 import type { TreeNode } from '../core/node/tree'
 import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import NodePage from '../core/node/components/NodePage.vue'
-import DeleteNodesDialog from '../core/node/components/DeleteNodesDialog.vue'
-import type { SelectedForDelete } from '../core/node/selection'
-import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
-import FolderNameDialog from '../core/node/FolderNameDialog.vue'
+import NodeDialogs from '../core/node/components/NodeDialogs.vue'
+import { useNodeDialogs } from '../core/node/nodeDialogs'
+import { provideNodeHost, type NodeHost } from '../core/node/nodeHost'
 import LevelView from '../core/node/LevelView.vue'
 import PersonProfile from '../core/people/PersonProfile.vue'
 import { loadTenantPeople, personNow } from '../core/people/directory'
-import ExportSubtreeDialog from '../core/export/ExportSubtreeDialog.vue'
-import ImportSubtreeDialog from '../core/export/ImportSubtreeDialog.vue'
-import CopyNodesDialog from '../core/export/CopyNodesDialog.vue'
-import type { ImportOffer } from '../core/export/importSource'
-import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
-import MoveNodesDialog from '../core/node/MoveNodesDialog.vue'
-import { nodeMover } from '../core/node/move'
-import { registry, type NodeShareOffer } from '../core/applications/registry'
+import { registry } from '../core/applications/registry'
 import { favoritesStore, loadFavoritesFor } from '../core/favorites/favoritesStore'
 import { memberAccess, memberTreeSource } from '../core/access'
 import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
@@ -132,25 +123,7 @@ const currentNodeKey = computed<Uint8Array | null>((previous) =>
   ),
 )
 // The open node's K_node: the same key, for a kind that opens (a folder browses and is never opened).
-const memoryKey = computed(() => (isOpenable.value ? currentNodeKey.value : null))
-
-// The current node's share dialog: its kind's (`KindDescriptor.shareDialog`; FOLDER's is core's own, pre-registered).
-// A share of the node wraps the node's own key (`currentNodeKey`, never K_SC), so a guest opens that node's subtree and
-// nothing beside it (ADR 0080 decisions 1 and 12).
-const shareDialog = computed(() => {
-  if (!currentNode.value) return null
-  const info = registry.kind(currentNode.value.kind)
-  return info.supported ? (info.shareDialog ?? null) : null
-})
-// A share dialog opens only for a node whose kind brings one (`KindDescriptor.shareDialog`, its whole answer; cr-0104; the
-// backend refuses a share root of a kind no application declares). Whether the share BUTTON shows is the rights
-// function's (the `core.public-shares` register leaves, ADR 0032/0088: an operator can turn public sharing off instance-wide,
-// and the server then rejects createShare with 422); this is the host's second gate on what it mounts.
-const kindShareable = computed(() => {
-  if (!currentNode.value) return false
-  const info = registry.kind(currentNode.value.kind)
-  return info.supported && !!shareDialog.value
-})
+const nodeKey = computed(() => (isOpenable.value ? currentNodeKey.value : null))
 
 // Who looks: the member (see the header). A pending deletion (cr-0090) takes every write away — the server refuses them
 // during the grace window (uc.spaces.scope-access); a guest's identity folder in a drop box (ADR 0080 decision 11,
@@ -190,46 +163,22 @@ const tree = memberTreeSource({
   epochs: () => epochs.value,
   scope: () => currentScope.value,
 })
-const shareVisible = ref(false)
-// What the rights function that showed the share button grants the dialog beyond sharing at all (`NodeShareOffer`):
-// handed to the dialog as props, so no dialog reads a right itself. Fail closed until a `share` emit sets it.
-const shareOffer = ref<NodeShareOffer>({ contribute: false })
-function openShare(offer: NodeShareOffer) {
-  shareOffer.value = offer
-  shareVisible.value = true
-}
-const uploaderVisible = ref(false) // the uploader (drop-box) variant of the same dialog — a separate detail action
-
-// At most one name dialog is open: core's folder-create/rename one, or the create dialog of the kind being created.
-// A rename remembers what was on screen (`shown`), as a move does: renaming it (or a folder above it) changes its path.
-const nameDialog = ref<{ mode: 'create' } | { mode: 'rename'; node: TreeNode; shown: string | null } | null>(null)
-const createKind = ref<NodeKind | null>(null)
-// A kind with no `createDialog` (or one nobody registered) opens nothing: the create action is the application's own
-// (its rows or detail), so offering one without registering the dialog is that application's bug, not a state the
-// host can explain.
-const createDialog = computed(() => {
-  if (!createKind.value) return null
-  const info = registry.kind(createKind.value)
-  return info.supported ? (info.createDialog ?? null) : null
+// Core's dialogs behind the member's doors (see the header), and the page's host: every door. A rename, move, copy or
+// delete remembers what was on screen, which the write may give a new path (`stayOn`); the node a page is about, deleted
+// from its header, leaves the page for its parent once it went.
+const dialogs = useNodeDialogs({
+  access: () => access.value,
+  tree: () => tree,
+  onScreen: () => currentNodeId.value,
+  rootLabel: () => rootLabel.value,
+  importTarget: () => currentFolderName.value ?? rootLabel.value,
+  trashTree: () => treeStore.nodes,
+  stayOn,
+  leave: (node) => void router.push({ hash: hashForNode(treeStore.nodes, node.parentId, currentScope.value) }),
+  reload: () => loadTree(),
 })
-// The node being moved (core's `MoveNodeDialog`); the member's door, read against the current access on every call.
-const moving = ref<{ node: TreeNode; shown: string | null } | null>(null)
-// A level's selection being moved (inbox #421), and what was on screen.
-const movingMany = ref<{ nodes: TreeNode[]; shown: string | null } | null>(null)
-// What is being deleted, after one question (core's `DeleteNodesDialog`, with its Undo): a level's selection (inbox #421), a
-// row's node - or the node a page is about (`leaving`: the folder on screen or an opened node, from its header), whose page
-// is left for its parent once it went.
-const deletingMany = ref<{ items: SelectedForDelete[]; shown: string | null; leaving?: TreeNode } | null>(null)
-const mover = nodeMover(() => access.value)
-// ADR 0082: the node being downloaded as a ZIP (core's `ExportSubtreeDialog`), and the download being imported under the folder on screen.
-const exporting = ref<TreeNode | null>(null)
-const importing = shallowRef<ImportOffer | null>(null)
-// uc.platform.copy-node: the nodes being copied (core's `CopyNodesDialog`), one or a level's selection, and what was on screen.
-const copying = shallowRef<{ nodes: TreeNode[]; shown: string | null } | null>(null)
-function startCopy(nodes: TreeNode[]) {
-  copying.value = { nodes, shown: currentNodeId.value }
-}
-const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
+const host: NodeHost = { open: openNode, ...dialogs.doors }
+provideNodeHost(host)
 
 // The tree's live refresh (inbox #408): while a page of the space's tree is on screen — a folder level, and an opened
 // node's page of any kind (inbox #503) — pick up what others changed (a share guest's upload, a peer's new Memory, a
@@ -243,8 +192,7 @@ const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node
 // `OpenMemoryTreePollSliceTest`: no more statements than the gallery's own idle poll, whatever the tree holds).
 const { ticks: liveTick } = useLevelLive({
   active: () => activeSpace.status === 'ready' && !treeStore.error && !treeStore.gone && !place.value.person,
-  paused: () =>
-    !!nameDialog.value || !!createKind.value || !!moving.value || !!movingMany.value || !!deletingMany.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
+  paused: () => dialogs.open.value,
   read: (signal) => pollTree(signal),
 })
 
@@ -320,48 +268,6 @@ watch(
 function openNode(node: TreeNode) {
   void router.push({ hash: hashForNode(treeStore.nodes, node.id, currentScope.value) })
 }
-/** A create of `kind` under the current position: a FOLDER is core's (`FolderNameDialog`), any other kind opens its own
- *  `createDialog`. */
-function startCreate(kind: NodeKind) {
-  nameDialog.value = kind === FOLDER_KIND ? { mode: 'create' } : null
-  createKind.value = kind === FOLDER_KIND ? null : kind
-}
-function startRename(node: TreeNode) {
-  createKind.value = null
-  nameDialog.value = { mode: 'rename', node, shown: currentNodeId.value }
-}
-/** The node a page is about, deleted from its header: the row's question and Undo; the Undo keeps the parent - where the
- *  member lands - on screen, as a row's keeps the level. */
-function startDelete(node: TreeNode) {
-  deletingMany.value = { items: [{ node }], shown: node.parentId, leaving: node }
-}
-/** Remember what is on screen: a move of it (or of a folder above it) changes its path. */
-function startMove(node: TreeNode) {
-  moving.value = { node, shown: currentNodeId.value }
-}
-/** The move re-read the tree: the node on screen keeps its place on screen, under its new path if the move changed it. */
-function onMoved() {
-  stayOn(moving.value?.shown ?? null)
-}
-function startMoveMany(nodes: TreeNode[]) {
-  movingMany.value = { nodes, shown: currentNodeId.value }
-}
-function startDeleteMany(items: SelectedForDelete[]) {
-  deletingMany.value = { items, shown: currentNodeId.value }
-}
-/** The delete re-read the tree: a page whose node went is left for its parent, one whose node was refused stays; else what
- *  was on screen stays on screen. */
-function onDeletedMany() {
-  const d = deletingMany.value
-  if (!d) return
-  if (!d.leaving) stayOn(d.shown)
-  else if (nodeById(treeStore.nodes, d.leaving.id)) stayOn(d.leaving.id)
-  else void router.push({ hash: hashForNode(treeStore.nodes, d.leaving.parentId, currentScope.value) })
-}
-/** The undo moved it back (after the dialog closed): follow it back the same way. */
-function afterUndo(shown: string | null) {
-  return () => stayOn(shown)
-}
 /**
  * After a write re-read the tree, keep `shown` — the node that was on screen before it — on screen: rebuild its fragment
  * from the new tree and replace the URL with it when it differs. A slug segment is derived from a name and numbered among
@@ -376,24 +282,12 @@ function stayOn(shown: string | null) {
   const hash = hashForNode(treeStore.nodes, shown, currentScope.value)
   if (hash !== route.hash) void router.replace({ hash })
 }
-async function onMutationDone() {
-  await loadTree()
-}
-/** Core's name dialog wrote and re-read the tree (it closes only then): a create lands below the position (it cannot
- *  change its path), a rename may change it — followed here, before the dialog is gone (inbox #475). */
-function onNameDone() {
-  stayOn(nameDialog.value?.mode === 'rename' ? nameDialog.value.shown : null)
-}
-/** A restore puts a whole subtree back, so the tree is refetched exactly as a delete refetches it — no local
- *  splice. The position stays where it is: the restored node reappears wherever it belonged — and when it is an older
- *  sibling of one plain segment with the node on screen or a folder above it, it takes its birth place and that path
- *  renumbers, which `stayOn` follows. The open trash dialog re-reads its list when the new tree reaches its `tree` prop
- *  (a descendant left behind is a root then, inbox #357). */
-async function onTrashRestored() {
-  const shown = currentNodeId.value
-  await loadTree()
-  stayOn(shown)
-}
+// Core's name dialog wrote and re-read the tree (it closes only then): a create lands below the position (it cannot change
+// its path), a rename may change it — followed before the dialog is gone (inbox #475). A restore from the trash puts a whole
+// subtree back, so the tree is refetched exactly as a delete refetches it — no local splice; the restored node reappears
+// wherever it belonged — and when it is an older sibling of one plain segment with the node on screen or a folder above
+// it, it takes its birth place and that path renumbers, which `stayOn` follows. The open trash dialog re-reads its list
+// when the new tree reaches its `tree` prop (a descendant left behind is a root then, inbox #357).
 </script>
 
 <template>
@@ -436,19 +330,10 @@ async function onTrashRestored() {
         :node="currentNode"
         :scope-id="activeSpace.scopeId"
         :epochs="epochs"
-        :content-key="memoryKey"
+        :content-key="nodeKey"
         :children="level"
         :access="access"
         :tree="tree"
-        @rename="startRename(currentNode)"
-        @delete="startDelete(currentNode)"
-        @move="startMove"
-        @download="exporting = currentNode"
-        @copy="startCopy([currentNode])"
-        @create-child="startCreate"
-        @open-node="openNode"
-        @share="openShare"
-        @share-upload="uploaderVisible = true"
       />
       <p v-else-if="isOpenable" class="home-state-unsupported">{{ t('home.unsupportedKind') }}</p>
       <LevelView
@@ -460,144 +345,9 @@ async function onTrashRestored() {
         :folder-name="currentFolderName"
         :space-name="rootLabel"
         :live-tick="liveTick"
-        @open-node="openNode"
-        @create="startCreate"
-        @rename-folder="currentFolder && startRename(currentFolder)"
-        @rename-node="startRename"
-        @delete-folder="currentFolder && startDelete(currentFolder)"
-        @move-node="startMove"
-        @move-nodes="startMoveMany"
-        @delete-nodes="startDeleteMany"
-        @download-node="exporting = $event"
-        @copy-nodes="startCopy"
-        @import-archive="importing = $event"
-        @open-trash="trashVisible = true"
-        @share="openShare"
       />
     </template>
-
-    <FolderNameDialog
-      v-if="nameDialog && epochs && activeSpace.scopeId"
-      :mode="nameDialog.mode"
-      :scope-id="activeSpace.scopeId"
-      :epochs="epochs"
-      :parent-id="currentNodeId"
-      :parent-key="currentNodeKey"
-      :parent-epoch="currentNode?.epoch ?? null"
-      :node="nameDialog.mode === 'rename' ? nameDialog.node : null"
-      @done="onNameDone"
-      @close="nameDialog = null"
-    />
-    <component
-      :is="createDialog"
-      v-if="createDialog && createKind && epochs && activeSpace.scopeId"
-      :kind="createKind"
-      :scope-id="activeSpace.scopeId"
-      :epochs="epochs"
-      :parent-id="currentNodeId"
-      :parent-key="currentNodeKey"
-      :parent-epoch="currentNode?.epoch ?? null"
-      @done="onMutationDone"
-      @close="createKind = null"
-    />
-    <DeleteNodesDialog
-      v-if="deletingMany && epochs && activeSpace.scopeId"
-      :scope-id="activeSpace.scopeId"
-      :epochs="epochs"
-      :items="deletingMany.items"
-      :name-of="(n: TreeNode) => displayNameOf(treeStore.nodes, n)"
-      :after-undo="afterUndo(deletingMany.shown)"
-      @done="onDeletedMany"
-      @close="deletingMany = null"
-    />
-    <ExportSubtreeDialog
-      v-if="exporting"
-      :node="exporting"
-      :access="access"
-      :tree="tree"
-      :display-name="displayNameOf(treeStore.nodes, exporting)"
-      @close="exporting = null"
-    />
-    <ImportSubtreeDialog
-      v-if="importing"
-      :input="importing.input"
-      :upload-as-file="importing.uploadAsFile"
-      :access="access"
-      :parent="currentNodeKey && currentNode ? { id: currentNode.id, key: currentNodeKey, epoch: currentNode.epoch } : null"
-      :target-name="currentFolderName ?? rootLabel"
-      @done="onMutationDone"
-      @close="importing = null"
-    />
-    <CopyNodesDialog
-      v-if="copying && access.mode === 'member'"
-      :nodes="copying.nodes"
-      :access="access"
-      :tree="tree"
-      :root-label="rootLabel"
-      @copied="stayOn(copying?.shown ?? null)"
-      @close="copying = null"
-    />
-    <MoveNodeDialog
-      v-if="moving && mover"
-      :node="moving.node"
-      :access="access"
-      :tree="tree"
-      :mover="mover"
-      :root-label="rootLabel"
-      :node-name="displayNameOf(treeStore.nodes, moving.node)"
-      :after-undo="afterUndo(moving.shown)"
-      @moved="onMoved"
-      @close="moving = null"
-    />
-    <MoveNodesDialog
-      v-if="movingMany && mover"
-      :nodes="movingMany.nodes"
-      :access="access"
-      :tree="tree"
-      :mover="mover"
-      :root-label="rootLabel"
-      :after-undo="afterUndo(movingMany.shown)"
-      @moved="stayOn(movingMany?.shown ?? null)"
-      @close="movingMany = null"
-    />
-    <SpaceTrashDialog
-      v-if="trashVisible && epochs && activeSpace.scopeId"
-      :scope-id="activeSpace.scopeId"
-      :epochs="epochs"
-      :tree="treeStore.nodes"
-      @restored="onTrashRestored"
-      @close="trashVisible = false"
-    />
-    <component
-      :is="shareDialog"
-      v-if="shareDialog && kindShareable && shareVisible && currentNode && currentNodeKey && epochs && activeSpace.scopeId"
-      :scope-id="activeSpace.scopeId"
-      :node-id="currentNode.id"
-      :node-key="currentNodeKey"
-      :node-epoch="currentNode.epoch"
-      :epochs="epochs"
-      :node-name="currentNode.name"
-      :node-kind="currentNode.kind"
-      :contribute="shareOffer.contribute"
-      :readonly="isPendingDeletion"
-      @close="shareVisible = false"
-    />
-    <!-- The SAME dialog component, uploader variant (no role switcher, uploader shares only) — a separate detail action;
-         a folder's level view never asks for it (no WRITE_ONLY link on a folder). -->
-    <component
-      :is="shareDialog"
-      v-if="shareDialog && kindShareable && uploaderVisible && currentNode && currentNodeKey && epochs && activeSpace.scopeId"
-      uploader
-      :scope-id="activeSpace.scopeId"
-      :node-id="currentNode.id"
-      :node-key="currentNodeKey"
-      :node-epoch="currentNode.epoch"
-      :epochs="epochs"
-      :node-name="currentNode.name"
-      :node-kind="currentNode.kind"
-      :readonly="isPendingDeletion"
-      @close="uploaderVisible = false"
-    />
+    <NodeDialogs :dialogs="dialogs" />
   </div>
 </template>
 

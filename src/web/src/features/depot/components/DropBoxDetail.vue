@@ -29,7 +29,8 @@ import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
-import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
+import type { NodeDetailProps } from '../../../core/applications/registry'
+import { hostRights, injectNodeHost } from '../../../core/node/nodeHost'
 import type { TreeNode } from '../../../core/node/tree'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { compareByCreation, displayNamesOf } from '../../../core/node/location'
@@ -47,7 +48,8 @@ import { targetOf, type GuestAccess } from '../../../core/access'
 import { guestDepotSource, memberDepotSource, sourceRights, type DepotSource } from '../source'
 
 const props = defineProps<NodeDetailProps>()
-const emit = defineEmits<NodeDetailEmits>()
+// The page's doors (`core/node/nodeHost.ts`): a guest's folder opened, the move dialog, the share, the delete question.
+const host = injectNodeHost()
 const { t } = useI18n()
 // Core's own actions (the heart, the cover, "Copy to…", the download as a ZIP of its guests' folders, Report) come with core's
 // header for this node (`NodeHeader`'s `node`). A drop box's cover is its own image (core's dialog, opened by core's cover
@@ -71,9 +73,9 @@ const source: DepotSource = guest
       scopeId: () => props.scopeId,
       epochs: () => props.epochs,
       keyOf: (id) => props.tree.keyOf(id),
-      move: (node) => emit('move', node),
+      ...(host.move ? { move: (node: TreeNode) => host.move!(node) } : {}),
     })
-const rights = computed(() => sourceRights(depotRights(props.access, targetOf(props.tree, props.node)), source))
+const rights = computed(() => hostRights(sourceRights(depotRights(props.access, targetOf(props.tree, props.node)), source), host))
 /** The drop box header's priority (ADR 0110): favorite, sharing (what a drop box is for), its content, its look, then
  *  moving it; delete and report are always the ⋯ menu's last entries. */
 const DROP_BOX_HEADER_ORDER = ['favorite', 'share', 'download', 'cover', 'move', 'copy'] as const
@@ -82,7 +84,11 @@ const headerActions = computed(() =>
   standardNodeActions(
     t,
     { share: rights.value.shareUpload, move: rights.value.move, delete: rights.value.delete, shareLabel: t('depot.dropBox.share'), deleteLabel: t('depot.dropBox.delete') },
-    { share: () => emit('share', { contribute: rights.value.shareContribute }), move: () => source.move?.(props.node), remove: () => emit('delete') },
+    {
+      share: () => host.share?.(props.node, { contribute: rights.value.shareContribute }),
+      move: () => source.move?.(props.node),
+      remove: () => host.delete?.(props.node),
+    },
   ),
 )
 
@@ -139,7 +145,8 @@ async function removeFolder(folder: TreeNode, label: string) {
       <p v-if="!folders.length" class="veyq-empty veyq-empty-inline">{{ guest ? t('depot.dropBox.sharedEmpty') : t('depot.dropBox.empty') }}</p>
       <ul v-else class="veyq-list">
         <li v-for="row in folders" :key="row.folder.id" class="veyq-list-row">
-          <button type="button" class="dropbox-row-open" :aria-label="t('depot.dropBox.open', { name: row.label })" @click="emit('openNode', row.folder)">
+          <button type="button" class="dropbox-row-open" :aria-label="t('depot.dropBox.open', { name: row.label })" @click="host.open?.(row.folder)">
+
             <VeyqIcon name="folder" />
             <span class="veyq-row-main">
               <span class="veyq-row-title">{{ row.label }}</span>

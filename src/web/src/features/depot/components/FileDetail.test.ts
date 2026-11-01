@@ -250,13 +250,14 @@ describe('an opened file: its page for a member', () => {
     await w.find(`.veyq-node-header-actions button[aria-label="${t('share.share')}"]`).trigger('click')
     await w.find(`.veyq-node-header-actions button[aria-label="${t('node.rename')}"]`).trigger('click')
     await chooseHeaderEntry(w, 'delete')
-    expect(w.findComponent(FileDetail).emitted('share')).toHaveLength(1)
-    expect(w.findComponent(FileDetail).emitted('rename')).toHaveLength(1)
-    expect(w.findComponent(FileDetail).emitted('delete')).toHaveLength(1)
+    expect(w.calls.share).toEqual([[REPORT, { contribute: true }]])
+    expect(w.calls.rename).toEqual([[REPORT]])
+    expect(w.calls.delete).toEqual([[REPORT]])
     const move = w.find('.veyq-node-header-actions button[data-action="move"]')
     expect(move.findComponent(VeyqButton).props('icon')).toBe('file-export')
     await (move.element as HTMLButtonElement).click()
-    expect((w.findComponent(FileDetail).emitted('move') as TreeNode[][]).map(([n]) => n.id)).toEqual([R])
+    expect((w.calls.move as TreeNode[][]).map(([n]) => n.id)).toEqual([R])
+
   })
 
   it('no share without the instance\'s public links; during a pending deletion it downloads and lists links, writes nothing', async () => {

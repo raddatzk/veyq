@@ -2,7 +2,7 @@
 // GOLDEN: the Memories folder level as a user meets it, pinned before the registry/level-view re-cut
 // (cr-files-application P4-0). The re-cut moves the overview card, the sections and the create cards from Memories into
 // a core level view, and promises that nobody using Memories sees a difference; every e2e suite is API-level, so this
-// file is the proof of that promise. It mounts the REAL host (`MemoryHomeView`), the REAL registry as `main.ts` fills
+// file is the proof of that promise. It mounts the REAL host (`SpaceView`), the REAL registry as `main.ts` fills
 // it (`src/test/setup.ts` runs `registerApplications()` into this file's fresh registry), core's REAL `LevelView` (since
 // P4b: the overview card and the Folders section), Memories' REAL rows (`memoryRows`) and `MemoryCard`, core's REAL `ViewModeToggle`, and
 // the layer's buttons, real crypto (every date and pin below is sealed
@@ -13,8 +13,8 @@
 // hiding of the folder card's actions was CSS-only and found in a real browser), the dialogs a click opens, and
 // covers (no cover is sealed here, so every card shows its placeholder).
 //
-// Updating it deliberately: `npx vitest run -u src/views/MemoryHomeView.golden.test.ts`, then READ the diff of
-// `__snapshots__/MemoryHomeView.golden/` — a re-cut that claims "no visible change" may only move class names (P4d).
+// Updating it deliberately: `npx vitest run -u src/views/SpaceView.golden.test.ts`, then READ the diff of
+// `__snapshots__/SpaceView.golden/` — a re-cut that claims "no visible change" may only move class names (P4d).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -51,7 +51,7 @@ vi.mock('../core/node/treeStore', async () => {
   }
 })
 
-import MemoryHomeView from './MemoryHomeView.vue'
+import SpaceView from './SpaceView.vue'
 import { memoryRows } from '../features/memories/levelRows'
 import { depotRows } from '../features/depot/levelRows'
 import { potRows } from '../features/expenses/levelRows'
@@ -127,7 +127,7 @@ async function mountHome(hash: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const w = mount(MemoryHomeView, {
+  const w = mount(SpaceView, {
     global: { plugins: [router, realI18n()], stubs: { SpaceMap: SpaceMapStub } },
   })
   await flushPromises()
@@ -139,14 +139,14 @@ async function golden(hash: string, mode: ViewMode = 'grid'): Promise<string> {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const w = mount(MemoryHomeView, {
+  const w = mount(SpaceView, {
     global: { plugins: [router, realI18n()], stubs: { SpaceMap: SpaceMapStub } },
   })
   await flushPromises()
   return serializeDom(w.element)
 }
 
-const file = (name: string) => `./__snapshots__/MemoryHomeView.golden/${name}.txt`
+const file = (name: string) => `./__snapshots__/SpaceView.golden/${name}.txt`
 
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])

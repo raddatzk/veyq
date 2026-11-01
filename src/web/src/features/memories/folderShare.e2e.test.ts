@@ -64,7 +64,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
     const scopeKey = (await openPersonalScope())!
     const epochs = epochsOf(scopeKey)
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
-    // The folder's key exactly as the member's shell finds it: the tree as listed, the chain walked (MemoryHomeView).
+    // The folder's key exactly as the member's shell finds it: the tree as listed, the chain walked (SpaceView).
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)
     expect(folderKey, "the folder's key opens through the chain").not.toBeNull()
     const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: folderId, key: folderKey!, epoch: 0 })

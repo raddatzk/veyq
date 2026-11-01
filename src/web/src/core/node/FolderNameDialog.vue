@@ -69,7 +69,7 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
     }
     // The tree is re-read BEFORE the dialog closes, as the move's is (`move.ts` `memberMover`): `done` means the write
     // stands AND the loaded tree carries it, so the host follows the node on screen to its new path in the same step
-    // (`MemoryHomeView` `stayOn`). Closed first, the dialog was gone for one tree read while the URL still held the old
+    // (`SpaceView` `stayOn`). Closed first, the dialog was gone for one tree read while the URL still held the old
     // path — a reload in that window resolved nothing and stood on the scope root (inbox #475). `loadTree` never throws.
     await loadTree()
     emit('done')

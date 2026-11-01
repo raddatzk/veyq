@@ -3,7 +3,9 @@
 // `NodeDetailProps`) and the props/events `MemoryDetail` takes (ADR 0079): everything Memories-shaped — the pin
 // state, the item-mark key, the personal-scope flag, the chapters bucket, the meta patch — is resolved here,
 // inside the application, and so are the RIGHTS (inbox #401): Memories' own fail-closed matrix over the host's
-// `access` and the opened node (`../rights.ts`), which `MemoryDetail` narrows to its data source's doors.
+// `access` and the opened node (`../rights.ts`), narrowed here to the page's doors (`core/node/nodeHost.ts`: what
+// `MemoryDetail` asks of the page - rename, move, delete, share, a chapter's create, a chapter opened - goes through them)
+// and by `MemoryDetail` to its data source's doors.
 //
 // **The data source is picked here, once** (inbox #401 S4, `../source.ts`): the member's over the unlocked scope, or a
 // share guest's over its link — by `access.mode`, which does not change while the detail is mounted (a page mounts it
@@ -12,7 +14,8 @@
 // carries no door to them. A guest gets it from core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and
 // chapter of a `READ` or `READ_WRITE` link, the link's root included (inbox #401 S5).
 import { computed } from 'vue'
-import type { NodeDetailProps, NodeDetailEmits } from '../../../core/applications/registry'
+import type { NodeDetailProps } from '../../../core/applications/registry'
+import { hostRights, injectNodeHost } from '../../../core/node/nodeHost'
 import { CHAPTER_KIND } from '../kinds'
 import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
 import { canReport, reportScope } from '../../../core/report/reportActions'
@@ -29,10 +32,14 @@ import { guestMemorySource, memberMemorySource } from '../source'
 import MemoryDetail from './MemoryDetail.vue'
 
 const props = defineProps<NodeDetailProps>()
-const emit = defineEmits<NodeDetailEmits>()
+const host = injectNodeHost()
 
 const chapters = computed(() => props.children.byKind.get(CHAPTER_KIND) ?? [])
-const rights = computed(() => memoryRights(props.access, targetOf(props.tree, props.node)))
+// An absent door is an action not offered: the chapter create needs the page's `createChild`, the rest `hostRights`.
+const rights = computed(() => {
+  const r = hostRights(memoryRights(props.access, targetOf(props.tree, props.node)), host)
+  return { ...r, createChapter: r.createChapter && !!host.createChild }
+})
 
 // Who looks is fixed for this mount (see the header).
 const guest = props.access.mode === 'guest' ? props.access : null
@@ -91,13 +98,14 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     :chapters="chapters"
     :rights="rights"
     :source="source"
-    @rename="emit('rename')"
-    @move="emit('move', node)"
-    @delete="emit('delete')"
-    @create-chapter="emit('createChild', CHAPTER_KIND)"
-    @open-chapter="emit('openNode', $event)"
-    @share="emit('share', $event)"
-    @share-upload="emit('shareUpload')"
+    @rename="host.rename?.(node)"
+    @move="host.move?.(node)"
+    @delete="host.delete?.(node)"
+    @create-chapter="host.createChild?.(CHAPTER_KIND, node)"
+    @open-chapter="host.open?.($event)"
+    @share="host.share?.(node, $event)"
+    @share-upload="host.share?.(node, { contribute: false, uploader: true })"
+
     @meta-updated="onMetaUpdated"
     @edit-cover="cover.open(node)"
     @report-medium="onReportMedium"

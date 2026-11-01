@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 // The host's fail-closed rules, proven against a STUBBED registry (a fresh `createRegistry()` per test behind a
 // delegating `registry` export), so each test chooses exactly what the application "registered". The real
-// registry + real adapters are covered in `MemoryHomeView.test.ts`. Every negative here has its live control: the
+// registry + real adapters are covered in `SpaceView.test.ts`. Every negative here has its live control: the
 // same node with the component registered renders it. Since inbox #407 the level is core's one list: an application
 // registers a ROW FACTORY (`list.rows`) instead of a section component, and a kind without one is an explicit unsupported row.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { defineComponent, h } from 'vue'
 
@@ -56,7 +56,7 @@ vi.mock('../core/node/tree', async (importOriginal) => ({
   nodeContentKey: () => new Uint8Array(32).fill(9),
 }))
 
-import MemoryHomeView from './MemoryHomeView.vue'
+import SpaceView from './SpaceView.vue'
 import { createRegistry, type Registry } from '../core/applications/registry'
 import { treeStore } from '../core/node/treeStore'
 import { activeSpace } from '../app/activeSpace'
@@ -74,14 +74,21 @@ import { titlesOf } from '../test/levelRows'
 import { loadStatements } from '../features/moderation/statement/statements'
 import VeyqIcon from '../shared/ui/VeyqIcon.vue'
 import { nothingOfItsOwnToRekey } from '../core/node/rekey/hooks'
+import { injectNodeHost } from '../core/node/nodeHost'
 
 // A detail renders whether a share is POSSIBLE for it, from what the host handed it: the instance's public links (the
 // access) AND its kind's descriptor (the rights target core builds from the registry) — every application's
 // rights function needs both for a share.
+/** The kind's page: whether it may share, and - as an application's page does - the share asked of the page's door. */
 const Detail = defineComponent({
   props: ['node', 'access', 'tree'],
-  setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${(p.access as Access).mode === 'member' && (p.access as Access & { mode: 'member' }).publicShares && targetOf(p.tree as TreeSource, p.node).shareable}`),
+  setup: (p, { expose }) => {
+    const host = injectNodeHost()
+    expose({ share: () => host.share?.(p.node, { contribute: false }) })
+    return () => h('div', { class: 'detail' }, `${p.node.name}|${(p.access as Access).mode === 'member' && (p.access as Access & { mode: 'member' }).publicShares && targetOf(p.tree as TreeSource, p.node).shareable}`)
+  },
 })
+const askShare = (w: VueWrapper) => (w.findComponent(Detail).vm as unknown as { share(): void }).share()
 // The smallest row factory: one plain row per node (core draws it as its `li.veyq-level-item`).
 const rows: LevelRowsFactory = () => ({
   row: (n) => ({ icon: 'images', title: n.name, meta: '', primary: { label: n.name, onClick: () => {} }, actions: [] }),
@@ -106,7 +113,7 @@ async function mountAt(hash: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
+  const wrapper = mount(SpaceView, { global: { plugins: [router, realI18n()] } })
   await flushPromises()
   return wrapper
 }
@@ -122,7 +129,7 @@ beforeEach(() => {
   ]
 })
 
-describe('MemoryHomeView fail-closed rules', () => {
+describe('SpaceView fail-closed rules', () => {
   it('control: with everything registered, a chapter opens its detail and the root lists the application\'s row', async () => {
     expect((await mountAt('#~me/mem/chap')).find('.detail').text()).toBe('Chap|true')
     expect(titlesOf(await mountAt('#~me'))).toEqual(['Mem'])
@@ -201,7 +208,7 @@ describe('MemoryHomeView fail-closed rules', () => {
     holder.reg = fullRegistry() // control: the same kind with its dialog is shared, and the dialog is the kind's own
     const w = await mountAt('#~me/mem')
     expect(w.find('.detail').text()).toBe('Mem|true')
-    w.findComponent(Detail).vm.$emit('share', { contribute: false })
+    askShare(w)
     await flushPromises()
     expect(w.find('.share').text()).toBe('mem')
   })
@@ -212,14 +219,15 @@ describe('MemoryHomeView fail-closed rules', () => {
     try {
       activeSpace.deletedAt = new Date('2026-11-01T00:00:00Z')
       const w = await mountAt('#~me/mem')
-      w.findComponent(Detail).vm.$emit('share', { contribute: false })
+      askShare(w)
       await flushPromises()
       expect(w.find('.share').attributes('data-readonly')).toBe('true')
     } finally {
       activeSpace.deletedAt = null
     }
     const live = await mountAt('#~me/mem')
-    live.findComponent(Detail).vm.$emit('share', { contribute: false })
+    askShare(live)
+
     await flushPromises()
     expect(live.find('.share').attributes('data-readonly')).toBe('false')
   })

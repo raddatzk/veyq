@@ -75,7 +75,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/shared/state/livePoller.test.ts
-          - src/views/MemoryHomeView.live.test.ts
+          - src/views/SpaceView.live.test.ts
           - src/views/ShareView.live.test.ts
           - src/features/depot/levelRows.test.ts
           - src/core/node/treeConditional.wire.test.ts

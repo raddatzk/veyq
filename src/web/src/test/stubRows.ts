@@ -58,10 +58,10 @@ export function stubRows(
         icon: STUB_ROW_ICON,
         title: node.name,
         meta: `${name} meta`,
-        primary: { label: `open ${node.name}`, onClick: () => host.open(node) },
+        primary: { label: `open ${node.name}`, onClick: () => host.open?.(node) },
         actions: opts.noOwnRename
           ? []
-          : [{ id: 'rename', label: `rename ${node.name}`, icon: 'pencil', shown: opts.shownActions ?? true, onClick: () => host.rename(node) }],
+          : [{ id: 'rename', label: `rename ${node.name}`, icon: 'pencil', shown: opts.shownActions ?? true, onClick: () => host.rename?.(node) }],
         ...(opts.selection ? { selection: opts.selection(node) } : {}),
         ...(opts.standard ? { standard: opts.standard(node) } : {}),
       }),

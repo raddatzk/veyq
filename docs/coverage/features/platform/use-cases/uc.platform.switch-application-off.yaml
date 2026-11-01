@@ -34,7 +34,7 @@ acceptanceCriteria:
     text: "With an application off, a member's client offers none of its kinds to create, removes every write function from its nodes but the delete, offers no cover or copy of them, and shows one banner at the top of veyq that it is switched off here and what is there can still be opened and downloaded; an upload the server refuses for it (a guest's included) fails at once, with no retry, saying so."
     coverage:
       web:
-        unit: [src/core/blob/applicationOff.test.ts, src/core/blob/queue.test.ts, src/features/memories/components/OptimisticTile.test.ts, src/features/memories/rights.test.ts, src/features/depot/rights.test.ts, src/views/LevelNewMenu.entries.test.ts, src/core/node/cover/rights.test.ts, src/core/export/copyActions.test.ts, src/core/applications/registry.test.ts, src/views/MemoryHomeView.golden.test.ts]
+        unit: [src/core/blob/applicationOff.test.ts, src/core/blob/queue.test.ts, src/features/memories/components/OptimisticTile.test.ts, src/features/memories/rights.test.ts, src/features/depot/rights.test.ts, src/views/LevelNewMenu.entries.test.ts, src/core/node/cover/rights.test.ts, src/core/export/copyActions.test.ts, src/core/applications/registry.test.ts, src/views/SpaceView.golden.test.ts]
   - id: expenses-off-is-read-only
     text: "With expenses off, a Pot's append is refused 422 capability_disabled for a member and a link guest alike, while its revisions list on both paths and a member deletes it to the trash; a member's erasure of a participant (a removal) and a rotation's re-key still land; the Pot page offers no new Pot, no entry, no person and no setting, and opens with what it holds."
     coverage:

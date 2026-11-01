@@ -29,6 +29,7 @@ import { setLevelTab } from '../../shared/state/useLevelTab'
 import { setAccountUserId } from '../../app/account'
 import { realI18n, t } from '../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
+import { hostFor } from '../../test/nodeHost'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { stubRows } from '../../test/stubRows'
 import { actionIdsOf, clickAction } from '../../test/levelRows'
@@ -57,12 +58,15 @@ beforeEach(() => {
 })
 
 function mountLevel(access: Access) {
-  return mount(LevelView, {
+  const rec = hostFor(access)
+  const w = mount(LevelView, {
     props: { folder: TRIPS, level: childrenOf(TREE, 'Trips'), access, tree: memberTreeOf(() => TREE) },
-    global: { plugins: [realI18n()] },
+    global: { plugins: [realI18n()], provide: rec.provide },
     attachTo: document.body,
   })
+  return Object.assign(w, { calls: rec.calls })
 }
+
 const headerLabels = (w: ReturnType<typeof mountLevel>) => w.findAll('.veyq-node-header-actions button').map((b) => b.attributes('aria-label'))
 
 describe('LevelView: Copy to…', () => {
@@ -73,7 +77,7 @@ describe('LevelView: Copy to…', () => {
     expect(await actionIdsOf(w, 'b1'), 'a kind this build cannot copy').not.toContain('copy')
     await clickAction(w, 'a1', 'copy')
     await clickAction(w, 'Sub', 'copy')
-    expect(w.emitted('copyNodes')).toEqual([[[expect.objectContaining({ id: 'a1' })]], [[expect.objectContaining({ id: 'Sub' })]]])
+    expect(w.calls.copy).toEqual([[[expect.objectContaining({ id: 'a1' })]], [[expect.objectContaining({ id: 'Sub' })]]])
   })
 
   it('the folder\'s header offers it right after "Move to…"', async () => {
@@ -81,7 +85,7 @@ describe('LevelView: Copy to…', () => {
     const labels = headerLabels(w)
     expect(labels.indexOf(t('node.copy.action'))).toBe(labels.indexOf(t('node.move.action')) + 1)
     await w.find(`.veyq-node-header-actions button[aria-label="${t('node.copy.action')}"]`).trigger('click')
-    expect(w.emitted('copyNodes')).toEqual([[[TRIPS]]])
+    expect(w.calls.copy).toEqual([[[TRIPS]]])
   })
 
   it('never for a share guest, whatever the role; not for a member whose keys are locked', async () => {
@@ -111,7 +115,7 @@ describe('LevelView: Copy to… for a selection (phase 2)', () => {
     expect(w.find('#veyq-select-cannot-copy').text()).toBe(t('node.select.cannotCopy', { n: 1, m: 3 }, 1))
     expect(copyButton(w).attributes('aria-describedby')).toBe('veyq-select-cannot-copy')
     await copyButton(w).trigger('click')
-    expect(w.emitted('copyNodes')).toEqual([[[expect.objectContaining({ id: 'a2' }), expect.objectContaining({ id: 'Sub' })]]])
+    expect(w.calls.copy).toEqual([[[expect.objectContaining({ id: 'a2' }), expect.objectContaining({ id: 'Sub' })]]])
   })
 
   it('a selection of nothing copyable keeps it disabled', async () => {

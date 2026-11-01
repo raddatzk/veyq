@@ -517,7 +517,7 @@ write and the display are core's, the image is the box's own blob in the `COVER`
   `MoveNodeDialog`, which asks first (the folder becomes an ordinary one, its guest can add nothing more, and nothing
   moves back into a drop box, so the toast offers no undo) and lists no place inside a drop box. The member's move
   re-wraps the folder's own key, opened through the drop key and the guest's `K_up`, under the destination's
-  (`core/node/move.wire.test.ts`: the folder and its file open afterwards; `views/MemoryHomeView.move.test.ts`: the
+  (`core/node/move.wire.test.ts`: the folder and its file open afterwards; `views/SpaceView.move.test.ts`: the
   question asked and answered in the real dialog). A file inside a guest's folder moves out the same way, without the
   question (the folder keeps its identity).
   **Only a member moves out** (owner decision 2026-10-08, inbox #377 (a)): a guest's `updateShareNode` of an identity

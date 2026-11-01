@@ -41,7 +41,7 @@ export function potRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsHos
       title: node.name,
       meta: t('expenses.kindPot'),
       details: currency ? [{ id: 'currency', text: currency }] : [],
-      primary: { label: t('expenses.open', { name: node.name }), onClick: () => host.open(node) },
+      primary: { label: t('expenses.open', { name: node.name }), onClick: () => host.open?.(node) },
       actions: [],
       ...rowRightsOf(c),
     }

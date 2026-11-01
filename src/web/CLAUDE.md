@@ -209,10 +209,10 @@ here; the server is blind.
   halves through `src/test/nodeHeader.ts` (`headerButtonIds`, `headerMenuIds`, `chooseHeaderEntry`). **Core's own actions come
   centrally** (owner 2026-11-01, ADR 0110 decision 9): the heart, the cover, "Copy to…", the ZIP download and Report of every
   node are built in ONE place, `core/node/coreNodeActions.ts` (`useCoreNodeActions`: each gated by its core rights function,
-  fail closed; `copy` / `download` open the host's dialogs, an absent door is an action not offered), which a core view
+  fail closed; `copy` / `download` are the page's doors, an absent door is an action not offered), which a core view
   provides (`provideCoreNodeActions`): the level (`LevelView`: every row and the folder header) and core's node page
-  `core/node/components/NodePage.vue` - both hosts (`views/MemoryHomeView.vue`, `core/sharing/ShareTreePage.vue`) mount
-  every kind's `detail` through it, never bare; it emits `copy` / `download` and mounts the dialog of core's cover action.
+  `core/node/components/NodePage.vue` - both hosts (`views/SpaceView.vue`, `core/sharing/ShareTreePage.vue`) mount
+  every kind's `detail` through it, never bare; it mounts the dialog of core's cover action.
   `NodeHeader` takes the REQUIRED `node` it heads (null only for the space's top level) and merges core's actions for it
   (`CoreHeaderAction`, `placement` before|after|{after: id}, `mergeHeaderActions`) with the application's; a page builds,
   lists and forwards none, so it cannot leave Report out (a legal duty) - `NodePage.report.test.ts` walks every
@@ -220,6 +220,23 @@ here; the server is blind.
   (`mountNodePage`; `coreActionsStandIn` for a header test). A kind's `order` may still name a core id. Deleting from a
   header is a row's delete: the host asks core's `DeleteNodesDialog` for the one node (its kind's question,
   `core/node/deleteQuestion.ts`, and the one Undo) and leaves the page for its parent once the node went.
+
+  **One host contract (owner 2026-11-01, `core/node/nodeHost.ts`).** Whatever draws a node asks the page around it through
+  ONE set of doors, `NodeHost`: `open`, `rename`, `move`, `moveMany`, `delete` (one node, with the kind's own write where it
+  has one), `deleteMany`, `share(node, offer)` (`NodeShareOffer`: `contribute`, or the `uploader` variant), `createChild(kind,
+  parent)`, `download`, `copy`, `importArchive`, `openTrash`. **Every door may be absent, and absence is the answer** - the
+  action is not offered (fail closed), whatever a rights function says: a view narrows its rights by the doors (`hostRights`)
+  and binds its standard actions through them (`hostHandlers`); core's row defaults and core's own actions take the same
+  doors. The host page provides it (`provideNodeHost`); `LevelView`, `NodePage` and so every kind's `detail` inject it
+  (`injectNodeHost`; mounted bare, as in a unit test of a detail, every door is absent), and a row factory gets the same doors
+  as its `LevelRowsHost` (which extends `NodeHost` with what only a level has: `registerAction`, the covers, the upload
+  screen). A detail emits nothing to the host. The dialogs behind the doors are core's ONE set, `core/node/nodeDialogs.ts`
+  (`useNodeDialogs(env)`: who looks, the tree, the node on screen, what the page does after a write) +
+  `core/node/components/NodeDialogs.vue`, which both pages mount, so each dialog exists once. The two pages differ only in
+  the doors they hand on: the member's space page (`views/SpaceView.vue`) every one; a guest's (`ShareTreePage`) `open`, the
+  download, the create (core's naming of the new node after the page's naming flow) and - for a `READ_WRITE` link -
+  the move. A test mounts a view as a page would with `src/test/nodeHost.ts` (`recordingHost`, `hostFor(access)`; a
+  detail through `mountNodePage`, which records the calls).
 
   **One list for the level (inbox #407).** The folder level (`core/node/LevelView.vue`) is ONE list - or one set of tiles - of
   everything at the level: the folders, the Memories, the files, the drop boxes, every kind, with no section headers. **Core
@@ -242,11 +259,11 @@ here; the server is blind.
   level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
   **Rename, move and delete are core's DEFAULTS** (owner 2026-11-01, `core/node/standardRowActions.ts`, the row's mirror of
   `standardNodeActions`): an application builds none of them; its row answers `standard: { rename, move, delete }` from its
-  rights function for THAT node (a folder's is core's `folderRights`), and the level adds the granted ones through its own
-  doors - `renameNode` (core's name dialog), `moveNode` (core's move dialog) and `deleteNodes` with the one node (core's
-  `DeleteNodesDialog`: one node's own question, `deleteQuestion.ts`, with the selection's Undo). Omitted, or a flag left out:
-  no default (fail closed). A share guest's level has the move door alone - no guest renames or deletes a node core's way,
-  whatever an answer says. **An application that implements one itself supplies an action of that id** (`rename`, `move`,
+  rights function for THAT node (a folder's is core's `folderRights`), and the level adds the granted ones through the
+  page's doors - `rename` (core's name dialog), `move` (core's move dialog) and `delete` with the one node (core's
+  `DeleteNodesDialog`: one node's own question, `deleteQuestion.ts`, with the selection's Undo). Omitted, or a flag left out,
+  or the door absent: no default (fail closed). A share guest's page hands on the move door alone (a `READ` link's not even
+  that) - no guest renames or deletes a node core's way, whatever an answer says. **An application that implements one itself supplies an action of that id** (`rename`, `move`,
   `delete`) in `actions`, which REPLACES core's default whatever `standard` says - its own `shown` decides (`withStandardRowActions`;
   Depot's file: its rename and move through its session's source, its delete with its own question and Undo, inbox #385 (c)).
   A row's `selection` (`LevelRowSelection` `{ move, delete, remove? }`, inbox #421) is the application's rights answer
@@ -322,8 +339,8 @@ here; the server is blind.
   inbox #358) - and its `list` of the level list - `{ rows, tabLabel?, views?, emptyText? }`. `rows` is a FACTORY
   (`LevelRowsFactory`): the level calls it ONCE per view, in its setup, with the level's reactive context (`LevelRowsContext`:
   `folder`, `nodes` of every kind that names the factory, `epochs`, `access`, `tree`, the clamped `viewMode`, `liveTick`) and a
-  host (`LevelRowsHost`: `open`, `rename`, `move` - the doors of an application's OWN rename or move; core's defaults need
-  none -, `registerAction`), and it returns a `LevelRowSource`: `row(node)` (a row,
+  host (`LevelRowsHost`: the page's doors - `open`, and `rename` / `move` as the doors of an application's OWN rename or move,
+  each possibly absent; core's defaults need none -, and `registerAction`), and it returns a `LevelRowSource`: `row(node)` (a row,
   or `null` for a node it cannot draw - core then shows the explicit unsupported row), `notices` (what only the application
   can explain, drawn above the list by `LevelNotices`; Depot: why an upload failed) and `presentation(mode)` (the
   application's own presentation of a mode core does not draw, in place of the list: Memories' map - `views` names it, so the
@@ -342,13 +359,13 @@ here; the server is blind.
   never more than the menu entry). There is no import entry: core recognises a download in what an upload picks or drops
   (`host.screenUpload`, `host.screenDirectory`) and offers the member its import. The level's toolbar is core's: the "New" menu
   (`registry.levelMenu()` plus core's own folder entry, one `VeyqButton` + popup `VeyqMenu`, each entry only where its own
-  rights function says yes, so a READ guest has none; a create entry emits `create(kind)` and the host mounts the
-  `createDialog`), the space's trash, and the view switch over the union of the presentations on screen - core's grid and
+  rights function says yes, so a READ guest has none; a create entry asks the page's `createChild(kind, folder)` door and
+  the page mounts the `createDialog`), the space's trash, and the view switch over the union of the presentations on screen - core's grid and
   list for every row, plus the shown kinds' `views` (`core/node/levelViews.ts`, inbox #370); the level shows the stored mode
   only where that union offers it, else the grid, without rewriting the stored preference, and hands that mode to every
   factory as `LevelRowsContext.viewMode` - a factory never reads `useViewMode` (inbox #404), `useViewMode` is keyed like the
   tab (`shared/state/scopedPreference.ts`; per browser, not synced). The LIVE REFRESH (inbox #408: `core/node/useLevelLive.ts` over `shared/state/livePoller.ts`, started by the two hosts
-  while a folder level is on screen - the member's `MemoryHomeView` through `treeStore.pollTree`, the guest's `ShareView`
+  while a folder level is on screen - the member's `SpaceView` through `treeStore.pollTree`, the guest's `ShareView`
   through `GuestAccess.poll` - about every 5 s, only while the tab is visible, paused while a dialog is open, one request
   per level, and a CONDITIONAL one, [ADR 0081](../../docs/decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md):
   the member's `fetchTree` (`listNodesRaw`, the scope's tree revision as `ETag`/`If-None-Match`) and the guest's
@@ -359,15 +376,16 @@ here; the server is blind.
   replaced only when the rows' fingerprint differs. A guest poll that meets the link gone (`404`) flips `ShareView` to its
   unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's
   header (core's `NodeHeader`, which every node page opens with too - see above). Its `createDialog` - props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
-  parentKey}`, mounted by the shell when the "New" menu or a detail `createChild` emits that KIND; and its
-  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?, readonly?}` (`contribute`: offer READ_WRITE for a new link — the rights function's `shareContribute`, carried by the detail's `share` emit as a `NodeShareOffer`, never read by the dialog; `readonly`: the scope is pending deletion, set by the host for every kind - the dialog lists and copies the links and offers revoking the caller's own live one, and mints and changes nothing else, as the server refuses every share write in the grace window but a revoke, uc.spaces.scope-access A1); a
+  parentKey}`, mounted by the page when the "New" menu or a detail asks its `createChild` door for that KIND; and its
+  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?, readonly?}` (`contribute`: offer READ_WRITE for a new link — the rights function's `shareContribute`, carried by the `share` door's `NodeShareOffer`, never read by the dialog; `readonly`: the scope is pending deletion, set by the host for every kind - the dialog lists and copies the links and offers revoking the caller's own live one, and mints and changes nothing else, as the server refuses every share write in the grace window but a revoke, uc.spaces.scope-access A1); a
   kind without one offers no share. There is no guest-only list or detail: core's page of a `READ`/`READ_WRITE` public
   share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node -
   the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
   `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind; every node's move is
   `core/node/MoveNodeDialog.vue` (inbox #358) around core's folder browser `core/node/MoveBrowser.vue` (one place at a time,
   drawn with `LevelRowItem`; it takes a node list, which a level's selection hands it through `MoveNodesDialog`), mounted by both hosts when a row factory or a
-  detail asks the host to move the node, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
+  detail asks the page's `move` door, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
+
   guest's `placeShareNodeAsGuest`, none otherwise) and explaining each server refusal by its code; and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); no shell slot - the top bar and the sidebar are core's alone
   (the upload status `core/blob/UploadStatusMenu.vue` lists every application's batches of the one core queue, the
@@ -444,7 +462,7 @@ here; the server is blind.
   evaluates the application before the test file's `vi.mock`s and disarms them — 119 files went red). A
   node-environment suite gets no registry, so one that exercises a hook registers the real `memoriesLifecycle`
   itself (`activeSpace`, `coverStore`, `rotateKeys` tests). A suite that stubs the registry delegates through a
-  `Proxy` onto a fresh `createRegistry()` (`ShareView.registry.test.ts`, `MemoryHomeView.registry.test.ts`): a
+  `Proxy` onto a fresh `createRegistry()` (`ShareView.registry.test.ts`, `SpaceView.registry.test.ts`): a
   hand-listed set of methods silently misses the next one the registry gains.
 - **Wire encoding:** opaque fields are **standard base64** (`b64std`), not base64url — the contract pins
   `[A-Za-z0-9+/]*={0,2}`, so base64url is rejected with 400 at the boundary.

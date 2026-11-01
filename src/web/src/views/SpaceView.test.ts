@@ -6,7 +6,7 @@
 // the member's access and tree, content key) arrives in the props the Memories components take. Since inbox #407 the
 // level is ONE list drawn by core, with the applications' REAL row factories (nothing of the level is stubbed): the
 // cases read the rows, the "New" menu and the row actions the way a person finds them. The registry-variant cases (an
-// unregistered detail, no row source at all) are in `MemoryHomeView.registry.test.ts`, which stubs the registry itself.
+// unregistered detail, no row source at all) are in `SpaceView.registry.test.ts`, which stubs the registry itself.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { breadcrumb } from '../app/breadcrumb'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -124,7 +124,7 @@ vi.mock('../core/node/components/SpaceTrashDialog.vue', async () => {
   return { default: defineComponent({ setup: () => () => h('div', { class: 'trash-stub' }) }) }
 })
 
-import MemoryHomeView from './MemoryHomeView.vue'
+import SpaceView from './SpaceView.vue'
 import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../core/favorites/favoritesStore'
@@ -162,7 +162,7 @@ async function mountAt(hash: string) {
   await router.replace({ name: 'home', hash })
   await router.isReady()
   const SpaceMapStub = { name: 'SpaceMap', props: ['pins', 'covers'], emits: ['open'], template: '<div class="space-map-stub" />' }
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()], stubs: { SpaceMap: SpaceMapStub } } })
+  const wrapper = mount(SpaceView, { global: { plugins: [router, realI18n()], stubs: { SpaceMap: SpaceMapStub } } })
   mounted.push(wrapper)
   await flushPromises()
   return wrapper
@@ -183,7 +183,7 @@ beforeEach(() => {
   capabilityState.ids = [MEMORIES, DEPOT, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
 })
 
-describe('MemoryHomeView over the real registry', () => {
+describe('SpaceView over the real registry', () => {
   // Since inbox #407 the level is one list: the folders first, then the Memory rows (no section of Memories' own).
   it("renders core's level view at the scope root: the folders, then the Memories as rows of the one list", async () => {
     const w = await mountAt('#~me')
@@ -295,7 +295,8 @@ describe('MemoryHomeView over the real registry', () => {
     const w = await mountAt('#~me/trips')
     expect(w.find('.name-stub').exists()).toBe(false)
     await clickAction(w, 'report.pdf', 'rename')
-    expect(w.find('.name-stub').text()).toBe('rename|trips|report.pdf')
+    // a rename names no parent: the node is renamed where it is
+    expect(w.find('.name-stub').text()).toBe('rename|-|report.pdf')
   })
 
   it('opens a Memory to the registered detail: content key, ordered chapters bucket, shareable', async () => {
@@ -316,17 +317,23 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.detail-stub').attributes('data-shareable')).toBe('true')
 
     const detail = w.findComponent({ name: 'MemoryDetailStub' })
-    detail.vm.$emit('share', { contribute: true })
-    detail.vm.$emit('shareUpload')
-    await flushPromises()
-    const dialogs = w.findAll('.share-stub')
-    expect(dialogs.map((s) => s.text())).toEqual(['day1|viewer', 'day1|uploader'])
-    expect(dialogs.map((s) => s.attributes('data-name'))).toEqual(['Day1', 'Day1'])
-    expect(dialogs.map((s) => s.attributes('data-key')), "the chapter's own key, not its Memory's (9)").toEqual(['7', '7'])
+    // One share dialog at a time: the viewer one, then the uploader variant of the same dialog.
+    const shared: { text: string; name?: string; key?: string; kind?: string; contribute?: string }[] = []
+    for (const ask of [() => detail.vm.$emit('share', { contribute: true }), () => detail.vm.$emit('shareUpload')]) {
+      ask()
+      await flushPromises()
+      const dialog = w.findAll('.share-stub')
+      expect(dialog).toHaveLength(1)
+      shared.push({ text: dialog[0].text(), name: dialog[0].attributes('data-name'), key: dialog[0].attributes('data-key'), kind: dialog[0].attributes('data-kind'), contribute: dialog[0].attributes('data-contribute') })
+    }
+    expect(shared.map((s) => s.text)).toEqual(['day1|viewer', 'day1|uploader'])
+    expect(shared.map((s) => s.name)).toEqual(['Day1', 'Day1'])
+    expect(shared.map((s) => s.key), "the chapter's own key, not its Memory's (9)").toEqual(['7', '7'])
     // the node's kind travels with it, so the application's dialog can say "chapter"
-    expect(dialogs.map((s) => s.attributes('data-kind'))).toEqual(['CHAPTER', 'CHAPTER'])
-    // the offer the detail's rights function made reaches the dialog as a prop (the host never reads it again)
-    expect(dialogs[0].attributes('data-contribute')).toBe('true')
+    expect(shared.map((s) => s.kind)).toEqual(['CHAPTER', 'CHAPTER'])
+    // the offer the detail's rights function made reaches the dialog as a prop (the host never reads it again); the uploader
+    // variant offers no role
+    expect(shared.map((s) => s.contribute)).toEqual(['true', 'false'])
   })
 
   it('hides the share affordance when the instance turns public links off, even for a shareable kind', async () => {
@@ -341,7 +348,7 @@ describe('MemoryHomeView over the real registry', () => {
 
     detail.vm.$emit('rename')
     await flushPromises()
-    expect(w.find('.name-stub').text(), "a Memory's rename is core's name dialog").toBe('rename|italy|Italy')
+    expect(w.find('.name-stub').text(), "a Memory's rename is core's name dialog").toBe('rename|-|Italy')
 
     detail.vm.$emit('createChapter')
     await flushPromises()
@@ -351,11 +358,13 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.name-stub').exists()).toBe(false)
 
     detail.vm.$emit('share', { contribute: false })
-    detail.vm.$emit('shareUpload')
     await flushPromises()
-    expect(w.findAll('.share-stub').map((s) => s.text())).toEqual(['italy|viewer', 'italy|uploader'])
+    expect(w.findAll('.share-stub').map((s) => s.text())).toEqual(['italy|viewer'])
     // control: an offer without contribute reaches the dialog as false (fail closed)
     expect(w.find('.share-stub').attributes('data-contribute')).toBe('false')
+    detail.vm.$emit('shareUpload')
+    await flushPromises()
+    expect(w.findAll('.share-stub').map((s) => s.text()), 'the uploader variant takes its place').toEqual(['italy|uploader'])
 
     detail.vm.$emit('delete')
     await flushPromises()
@@ -402,7 +411,8 @@ describe('MemoryHomeView over the real registry', () => {
     const w = await mountAt('#~me/trips')
     await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
     await flushPromises()
-    expect(w.find('.name-stub').text()).toBe('rename|trips|Trips')
+    expect(w.find('.name-stub').text()).toBe('rename|-|Trips')
+
     // The header's delete is the row's (inbox #385 (c)): core's one question with its Undo, `DeleteNodesDialog`, for the one
     // folder - the kind's own question and the Undo are that dialog's (`DeleteNodesDialog.test.ts`).
     await chooseHeaderEntry(w, 'delete')
@@ -434,7 +444,7 @@ describe('MemoryHomeView over the real registry', () => {
 // uc.sharing.share-public-viewer:folder-share-root: a FOLDER is shareable (core's descriptor), so its level view offers
 // the share button exactly as a Memory's detail does — descriptor AND right — and the share opens FOLDER's share dialog
 // (core's, pre-registered by the registry, P4c) with the folder's own key from the chain, never Memories' dialog.
-describe('MemoryHomeView sharing a folder', () => {
+describe('SpaceView sharing a folder', () => {
   const shareButton = (w: Mounted) => w.find(`.veyq-node-header button[aria-label="${t('share.share')}"]`)
 
   it("offers the share on the folder overview card, and it opens core's dialog for the folder itself", async () => {
@@ -468,7 +478,7 @@ describe('MemoryHomeView sharing a folder', () => {
   })
 })
 
-describe('MemoryHomeView entering a scope', () => {
+describe('SpaceView entering a scope', () => {
   it('asks the registry to let each application load its per-scope state, once the scope is ready', async () => {
     const entered = vi.spyOn(registry, 'scopeEntered').mockResolvedValue(undefined)
     try {
@@ -482,7 +492,7 @@ describe('MemoryHomeView entering a scope', () => {
 
 // Inbox #328 over real URLs (ADR 0015, amended 2026-10-11): the host resolves a fragment by `location.ts`'s grammar —
 // a folder ends in a slash, a Depot node is its plain name, a Memory sits behind Memories' segment.
-describe('MemoryHomeView resolving the fragment grammar', () => {
+describe('SpaceView resolving the fragment grammar', () => {
   const REPORT_TREE: TreeNode[] = [
     ...TREE.map((n) => ({ ...n })),
     node({ id: 'rfile', kind: FILE_KIND, name: 'Report', parentId: 'trips', createdAt: 5 }),

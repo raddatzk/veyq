@@ -96,7 +96,7 @@ describe('DropBoxDetail', () => {
     const action = w.find('.veyq-node-header-actions button[data-action="download"]')
     expect(action.attributes('aria-label')).toBe(t('export.action'))
     await action.trigger('click')
-    expect(w.emitted('download')).toEqual([[]])
+    expect(w.calls.download).toEqual([[BOX]])
   })
 
   it('lists the guests’ folders, a repeated name numbered in creation order, each with its file count', () => {
@@ -111,7 +111,7 @@ describe('DropBoxDetail', () => {
     const pairs: [string, string[]][] = []
     for (const row of w.findAll('.dropbox-row-open')) {
       await row.trigger('click')
-      const opened = (w.findComponent(DropBoxDetail).emitted('openNode') as TreeNode[][]).at(-1)![0]
+      const opened = (w.calls.open as TreeNode[][]).at(-1)![0]
       pairs.push([row.find('.veyq-row-title').text(), slugPathOf(treeStore.nodes, opened.id)])
     }
     expect(pairs).toEqual([
@@ -127,7 +127,7 @@ describe('DropBoxDetail', () => {
     const w = mountDetail()
     await w.find(`button[aria-label="${t('depot.dropBox.moveFolder', { name: 'Anna (2)' })}"]`).trigger('click')
     await w.find(`.veyq-node-header button[aria-label="${t('node.move.action')}"]`).trigger('click')
-    expect(w.findComponent(DropBoxDetail).emitted('move')).toEqual([[ANNA_2], [BOX]])
+    expect(w.calls.move).toEqual([[ANNA_2], [BOX]])
   })
 
   it('a drop box\'s header in its priority (ADR 0110): favorite, share, download, cover, move, copy; delete in the ⋯', async () => {
@@ -147,7 +147,7 @@ describe('DropBoxDetail', () => {
   it('opens a folder, and hands share and delete of the drop box to the host', async () => {
     const w = mountDetail()
     await w.find('button[aria-label="Open Anna (2)"]').trigger('click')
-    expect(w.findComponent(DropBoxDetail).emitted('openNode')).toEqual([[ANNA_2]])
+    expect(w.calls.open).toEqual([[ANNA_2]])
     // inbox #385 (b): both sit on core's header card, the one a folder opens with — the drop box's icon and name on it
     const card = w.find('.veyq-node-header')
     expect(card.find('.veyq-node-header-title').text()).toBe(BOX.name)
@@ -155,8 +155,9 @@ describe('DropBoxDetail', () => {
     await card.find('button[aria-label="Share link"]').trigger('click')
     expect(card.find('button[aria-label="Delete drop box"]').exists(), 'delete is never a button (ADR 0110)').toBe(false)
     expect((await chooseHeaderEntry(w, 'delete')).textContent?.trim()).toBe('Delete drop box')
-    expect(w.findComponent(DropBoxDetail).emitted('share')).toEqual([[{ contribute: false }]]) // a drop box's dialog has no role to offer
-    expect(w.findComponent(DropBoxDetail).emitted('delete')).toHaveLength(1)
+    expect(w.calls.share).toEqual([[BOX, { contribute: false }]]) // a drop box's dialog has no role to offer
+    expect(w.calls.delete).toEqual([[BOX]])
+
     // control: no share offered where the host says the kind cannot be shared
     expect(mountDetail(false).find('button[aria-label="Share link"]').exists()).toBe(false)
     // …and the READ leaf is not the drop box's: public shares off alone keeps the WRITE_ONLY links manageable

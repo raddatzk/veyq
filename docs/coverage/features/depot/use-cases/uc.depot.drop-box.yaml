@@ -38,7 +38,7 @@ acceptanceCriteria:
       backend:
         unit: [DepotNodeKindRulesTest.aDropBoxLivesWhereAFileDoesAndNothingIsPlacedInIt]
         integration: [DropBoxSliceTest.aMemberPlacesNothingInADropBoxAndOnlyDeletesOrMovesOut]
-      web: { unit: [src/features/depot/components/DropBoxDetail.test.ts, src/views/MemoryHomeView.test.ts] }
+      web: { unit: [src/features/depot/components/DropBoxDetail.test.ts, src/views/SpaceView.test.ts] }
   - id: members-open-every-guest-folder
     text: A member opens each guest's folder through the drop box's key, its drop key and the guest's identity key (no new seal purpose); a repeated guest name is numbered at display time; a guest-sealed entry that does not open leaves that folder out of the tree instead of failing it, while a member-sealed broken entry still fails it.
     coverage:

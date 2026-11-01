@@ -72,14 +72,15 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
           if (a.mode !== 'guest') throw new Error('a guest level was handed a member access')
           return a
         },
-        { move: (node) => host.move(node) },
+        host.move ? { move: (node) => host.move!(node) } : {},
       )
     : memberDepotSource({
         scopeId: () => activeSpace.scopeId,
         epochs: () => ctx.value.epochs,
         keyOf: (id) => ctx.value.tree.keyOf(id),
-        rename: (node) => host.rename(node),
-        move: (node) => host.move(node),
+        // The page's doors (an absent one: the source has none, and the matrix narrowed by it offers nothing).
+        ...(host.rename ? { rename: (node: TreeNode) => host.rename!(node) } : {}),
+        ...(host.move ? { move: (node: TreeNode) => host.move!(node) } : {}),
       })
 
   const { t, locale } = useI18n()
@@ -454,7 +455,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       title: name,
       meta: t('depot.kindFile'),
       details: fileDetails(key, node.id, blob),
-      primary: { label: t('depot.detail.open', { name }), onClick: () => host.open(node) },
+      primary: { label: t('depot.detail.open', { name }), onClick: () => host.open?.(node) },
       actions,
       // With a selection of the level (inbox #421): the same answers, and the same door as this row's delete (Depot's source),
       // without its re-read - the selection re-reads the tree once.
@@ -472,7 +473,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       title: name,
       meta: t('depot.dropBox.kind'),
       details: [{ id: 'people', text: t('depot.dropBox.people', guests) }],
-      primary: { label: t('depot.dropBox.open', { name }), onClick: () => host.open(node) },
+      primary: { label: t('depot.dropBox.open', { name }), onClick: () => host.open?.(node) },
       // Its own move and delete (core's defaults replaced, as a file's); a drop box is never renamed here.
       actions: [
         { id: 'move', label: t('depot.move', { name }), icon: 'file-export', shown: c.move, onClick: () => source.move?.(node) },

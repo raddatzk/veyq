@@ -36,7 +36,7 @@ vi.mock('../core/people/PersonProfile.vue', async () => {
   return { default: defineComponent({ name: 'PersonProfileStub', props: ['userId'], setup: (p) => () => h('div', { class: 'profile-stub' }, p.userId) }) }
 })
 
-import MemoryHomeView from './MemoryHomeView.vue'
+import SpaceView from './SpaceView.vue'
 import { personNow } from '../core/people/directory'
 import { treeStore } from '../core/node/treeStore'
 import { enterScope } from '../app/activeSpace'
@@ -54,7 +54,7 @@ async function mountAt(hash: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
+  const wrapper = mount(SpaceView, { global: { plugins: [router, realI18n()] } })
   mounted.push(wrapper)
   await flushPromises()
   return wrapper
@@ -69,7 +69,7 @@ beforeEach(() => {
   ]
 })
 
-describe('MemoryHomeView: #people/<userId>', () => {
+describe('SpaceView: #people/<userId>', () => {
   it('shows the profile page of the person instead of a level, in the tenant scope', async () => {
     const w = await mountAt(`#people/${UID}`)
     expect(w.get('.profile-stub').text()).toBe(UID)

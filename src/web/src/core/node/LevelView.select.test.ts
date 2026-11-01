@@ -31,6 +31,7 @@ import { setAccountUserId } from '../../app/account'
 import { GRID_VIEW, LIST_VIEW } from './levelViews'
 import { realI18n, t } from '../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
+import { hostFor } from '../../test/nodeHost'
 import { ShareRole } from '../../api/generated/sharing'
 import { stubRows } from '../../test/stubRows'
 import { titlesOf } from '../../test/levelRows'
@@ -70,11 +71,13 @@ const TREE = [
 ]
 const PLUGINS = { plugins: [realI18n()] }
 function mountLevel(tree: TreeNode[] = TREE, access: Access = memberAccessOf({}), folder: TreeNode | null = TRIPS) {
-  return mount(LevelView, {
+  const rec = hostFor(access)
+  const w = mount(LevelView, {
     props: { folder, level: childrenOf(tree, folder?.id ?? null), access, tree: memberTreeOf(() => tree) },
-    global: PLUGINS,
+    global: { ...PLUGINS, provide: rec.provide },
     attachTo: document.body,
   })
+  return Object.assign(w, { calls: rec.calls })
 }
 type Level = ReturnType<typeof mountLevel>
 
@@ -116,7 +119,7 @@ describe('LevelView: Select', () => {
     expect(checked(w)).toEqual(['a1'])
     expect(count(w)).toBe(t('node.select.count', { count: 1 }))
     await w.find('button[aria-label="open a2"]').trigger('click')
-    expect(w.emitted('openNode')).toEqual([[expect.objectContaining({ id: 'a2' })]])
+    expect(w.calls.open).toEqual([[expect.objectContaining({ id: 'a2' })]])
     expect(checked(w)).toEqual(['a1'])
     await choose(w, 'a1')
     expect(checked(w)).toEqual([])
@@ -233,9 +236,10 @@ describe('LevelView: what the selection may do', () => {
     expect(w.find('#veyq-select-cannot-move').text()).toBe(t('node.select.cannotMove', { n: 1, m: 4 }))
     expect(w.find('#veyq-select-cannot-delete').text()).toBe(t('node.select.cannotDelete', { n: 1, m: 4 }))
     await w.find('.veyq-select-move').trigger('click')
-    expect((w.emitted('moveNodes')![0][0] as TreeNode[]).map((n) => n.id).sort()).toEqual(['Sub', 'a1', 'b1'])
+    expect((w.calls.moveMany![0][0] as TreeNode[]).map((n) => n.id).sort()).toEqual(['Sub', 'a1', 'b1'])
     await w.find('.veyq-select-delete').trigger('click')
-    const handed = w.emitted('deleteNodes')![0][0] as { node: TreeNode; remove?: unknown }[]
+    const handed = w.calls.deleteMany![0][0] as { node: TreeNode; remove?: unknown }[]
+
     expect(handed.map((x) => x.node.id).sort()).toEqual(['Sub', 'a1', 'b-del'])
     expect(handed.find((x) => x.node.id === 'b-del')!.remove, 'its kind\'s own door travels with it').toBe(remove)
     expect(handed.find((x) => x.node.id === 'a1')!.remove, 'none: core\'s delete').toBeUndefined()
@@ -248,7 +252,7 @@ describe('LevelView: what the selection may do', () => {
     await tab(w, t(LABEL_A)).trigger('mousedown')
     await choose(w, 'a1')
     await w.find('.veyq-select-move').trigger('click')
-    expect((w.emitted('moveNodes')![0][0] as TreeNode[]).map((n) => n.id).sort()).toEqual(['a1', 'b1'])
+    expect((w.calls.moveMany![0][0] as TreeNode[]).map((n) => n.id).sort()).toEqual(['a1', 'b1'])
   })
 
   it('a READ_WRITE guest selects and moves, and is offered no Delete (a guest deletes no node)', async () => {
@@ -259,6 +263,6 @@ describe('LevelView: what the selection may do', () => {
     await w.find('.veyq-select-all').trigger('click')
     expect(w.find('#veyq-select-cannot-delete').exists()).toBe(false)
     await w.find('.veyq-select-move').trigger('click')
-    expect((w.emitted('moveNodes')![0][0] as TreeNode[]).map((n) => n.id)).toEqual(['Sub', 'Sub2'])
+    expect((w.calls.moveMany![0][0] as TreeNode[]).map((n) => n.id)).toEqual(['Sub', 'Sub2'])
   })
 })

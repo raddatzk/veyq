@@ -51,7 +51,7 @@ vi.mock('../features/memories/components/MemoryDetail.vue', async () => {
 })
 vi.mock('../features/depot/api', () => ({ filesApi: vi.fn() }))
 
-import MemoryHomeView from './MemoryHomeView.vue'
+import SpaceView from './SpaceView.vue'
 import { treeStore, loadTree } from '../core/node/treeStore'
 import { deleteNode, moveNode, restoreNode, type TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
@@ -84,7 +84,7 @@ async function mountAt(hash: string) {
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const w = mount(MemoryHomeView, { attachTo: document.body, global: { plugins: [router, realI18n()] } })
+  const w = mount(SpaceView, { attachTo: document.body, global: { plugins: [router, realI18n()] } })
   await flushPromises()
   return w
 }

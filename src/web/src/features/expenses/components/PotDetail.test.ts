@@ -59,6 +59,7 @@ import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
 import { setAccountUserId } from '../../../app/account'
 import { loadScopePeople, type Person } from '../../../core/people/directory'
 import { whoAmIBase } from '../whoAmI'
+import { hostFor } from '../../../test/nodeHost'
 
 const DINNER = '0e000000-0000-4000-9000-000000000001'
 let node: ReturnType<typeof potNode>
@@ -69,7 +70,9 @@ function mountPot(access = memberAccessOf({ scopeId: SCOPE, epochs: epochsOf(new
       node, scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), contentKey: server.current.potKey,
       children: { byKind: {}, folders: [] } as unknown as NodeDetailProps['children'], access, tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
     },
-    global: { plugins: [realI18n()] },
+    // Mounted as the member's page mounts it: with the page's doors.
+    global: { plugins: [realI18n()], provide: hostFor(access).provide },
+
     attachTo: document.body,
   })
 }

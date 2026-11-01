@@ -16,7 +16,7 @@ acceptanceCriteria:
       backend:
         integration: [ApplicationErasureSliceTest.everyAcceptedMemberGetsTheNoticeOnceAndTheReminderOnceSevenDaysBeforeTheDay, ApplicationErasureSliceTest.withoutInstanceMailNothingIsSentAndTheRowStands]
       web:
-        unit: [src/shared/state/useCapabilities.test.ts, src/views/MemoryHomeView.golden.test.ts, src/features/tenant/tenantCapabilities.test.ts, src/features/tenant/TenantCapabilitiesPanel.test.ts]
+        unit: [src/shared/state/useCapabilities.test.ts, src/views/SpaceView.golden.test.ts, src/features/tenant/tenantCapabilities.test.ts, src/features/tenant/TenantCapabilitiesPanel.test.ts]
   - id: the-day-is-served
     text: "getTenantCapabilities serves each off application's day to a member, and listTenantCapabilitySwitches serves it to the tenant owner beside the entry."
     coverage:

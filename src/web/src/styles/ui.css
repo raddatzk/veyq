@@ -6,7 +6,7 @@
   margin-inline: auto;
 }
 
-/* The shell's host of whatever node is open (views/MemoryHomeView.vue: a kind's detail or core's level view). It fills
+/* The shell's host of whatever node is open (views/SpaceView.vue: a kind's detail or core's level view). It fills
    the workspace width (the outer `.content` applies the page padding; the gallery and the card grids reflow to it), and
    `min-width: 0` keeps a child's min-content width from widening the page (inbox #382). */
 .veyq-node-host {

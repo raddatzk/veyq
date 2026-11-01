@@ -2,7 +2,7 @@
 // The folder level view (cr-files-application P4b, ADR 0079; the UNIFIED LIST since inbox #407): what a member sees at the
 // scope root or inside a folder. Core's, and it names no application. In this order it renders its HEAD - one row of the
 // folder's HEADER (core's `NodeHeader`: name, share, rename, move, delete - a folder is core's kind; the move is core's
-// `MoveNodeDialog`, which the host mounts on `moveNode`, inbox #358), or the space's name at the top level, and then its
+// `MoveNodeDialog`, behind the page's `move` door, inbox #358), or the space's name at the top level, and then its
 // TOOLBAR (the "New" menu, the space's node trash, which holds every application's nodes, Select and the view-mode switch),
 // which wraps below the name where both do not fit -, the application TABS, the applications' NOTICES, and then ONE LIST - or one set of
 // tiles - of everything at this level: the folders, the Memories, the files, the drop boxes, every kind, with no section
@@ -13,14 +13,18 @@
 // core's `LevelRowItem` draws it as a row (list mode) or a tile (grid mode). A node of a kind nobody registered, or whose
 // factory has no row for it, is an explicit unsupported row (its icon, its name, the unsupported state, not clickable) -
 // fail closed, never a node silently dropped. Each factory is called ONCE per level view, in this setup, with the level's
-// reactive context (folder, its nodes, access, tree, epochs, view mode, live tick) and the host (open / rename / move, and
-// `registerAction`); it keeps the data a row needs (Depot's blob listing: it re-reads on `liveTick`, inbox #408) and the flows
+// reactive context (folder, its nodes, access, tree, epochs, view mode, live tick) and the host (the page's doors,
+// `nodeHost.ts`, and `registerAction`); it keeps the data a row needs (Depot's blob listing: it re-reads on `liveTick`, inbox #408) and the flows
 // behind its actions (Depot's upload and replace) beside it, so none of that depends on which tab is shown.
 //
 // **Rename, move and delete are core's** (owner 2026-11-01, `standardRowActions.ts`): every row - a folder's too, by core's
 // `folderRights` - gets them from the level where its application's answer (`LevelRow.standard`) grants them, through the
-// level's doors: `renameNode`, `moveNode`, and `deleteNodes` with the one node (core's delete question with its Undo); a
-// guest's level has the move door alone. An application's own action of the same id replaces the default (Depot's file).
+// page's doors (`nodeHost.ts`, injected: `rename`, `move`, and `delete` - core's delete question with its Undo); a guest's
+// page hands on the move door alone. An application's own action of the same id replaces the default (Depot's file).
+//
+// **The page's doors** (`nodeHost.ts`): everything the level asks of the page around it - open a node, create one, the name,
+// move, delete, share, copy, download, import and trash dialogs - goes through the one host the page provides, the very
+// object a `detail` injects; an absent door is an action the level does not offer (fail closed).
 //
 // **The order** (`levelList.ts`): folders first, then every other node MIXED BY NAME - natural, locale-aware, case-insensitive,
 // equal names in creation order (the rule that numbers equal names everywhere else). The folder cards' labels are numbered
@@ -67,8 +71,8 @@
 // allows it, enabled where some SELECTED node does, and its hint says how many of the selected it cannot reach. Select is
 // offered only where some node here allows an action (a `READ` guest has none) and never in an application's own
 // presentation (Memories' map has no rows). The level writes nothing itself: it hands the movable part to the host
-// (`moveNodes`, core's move dialog), the copyable part (`copyNodes`, core's copy dialog) and the deletable part
-// (`deleteNodes`, core's delete question).
+// (`moveMany`, core's move dialog), the copyable part (`copy`, core's copy dialog) and the deletable part
+// (`deleteMany`, core's delete question).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
@@ -80,7 +84,7 @@ import VeyqTab from '../../shared/ui/VeyqTab.vue'
 import type { TreeNode } from './tree'
 import type { Level } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
-import { registry, type LevelActionContext, type LevelMenuItem, type NodeShareOffer } from '../applications/registry'
+import { registry, type LevelActionContext, type LevelMenuItem } from '../applications/registry'
 import { createLevelActions } from './levelActions'
 import { folderRights, rowRightsOf, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
@@ -90,8 +94,9 @@ import { orderLevel } from './levelList'
 import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './levelTabs'
 import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
-import { useSelection, type SelectedForDelete } from './selection'
-import { standardRowActions, standardRowDoors, withStandardRowActions } from './standardRowActions'
+import { useSelection } from './selection'
+import { standardRowActions, withStandardRowActions } from './standardRowActions'
+import { hostHandlers, hostRights, injectNodeHost } from './nodeHost'
 import { provideCoreNodeActions, useCoreNodeActions } from './coreNodeActions'
 import NodeCoverImage from './cover/components/NodeCoverImage.vue'
 import CoverEditor from './cover/components/CoverEditor.vue'
@@ -105,7 +110,7 @@ import { canReport, reportNodes } from '../report/reportActions'
 import { useReportOffered } from '../report/report'
 import { isDownloadArchive } from '../export/importSubtree'
 import {
-  directoryHoldsManifest, holdsManifest, readDroppedDirectory, type DirectoryInput, type DroppedDirectory, type DroppedEntry, type ImportOffer,
+  directoryHoldsManifest, holdsManifest, readDroppedDirectory, type DirectoryInput, type DroppedDirectory, type DroppedEntry,
 } from '../export/importSource'
 
 const props = defineProps<{
@@ -124,36 +129,11 @@ const props = defineProps<{
   /** The host's live-refresh count (`useLevelLive`, inbox #408), handed to every row source as `LevelRowsContext.liveTick`. */
   liveTick?: number
 }>()
-const emit = defineEmits<{
-  openNode: [node: TreeNode]
-  /** The KIND to create at this level: FOLDER from the "New" menu's folder entry (core's `FolderNameDialog`), an
-   *  application's own kind otherwise (that kind's `createDialog`, e.g. Memories' MEMORY). */
-  create: [kind: NodeKind]
-  renameFolder: []
-  /** A node to move (inbox #358): the folder on screen (its header) or a row's node (Depot's row). The host mounts core's
-   *  `MoveNodeDialog` for it. */
-  moveNode: [node: TreeNode]
-  /** The movable part of the level's selection (inbox #421): the host mounts core's move dialog for several nodes. */
-  moveNodes: [nodes: TreeNode[]]
-  /** The deletable part of the level's selection (inbox #421), each with its kind's own write where it has one - or the
-   *  one node of a row's default delete: the host asks once and deletes them (core's `DeleteNodesDialog`, with its Undo). */
-  deleteNodes: [nodes: SelectedForDelete[]]
-  /** A node to download as a ZIP (ADR 0082): a row's, or the folder on screen. The host mounts core's `ExportSubtreeDialog`. */
-  downloadNode: [node: TreeNode]
-  /** Nodes to copy elsewhere (uc.platform.copy-node): a row's, the folder on screen, or the copyable part of the level's
-   *  selection. The host mounts core's `CopyNodesDialog`. */
-  copyNodes: [nodes: TreeNode[]]
-  /** A veyq download the member picked or dropped for an upload - a ZIP, or the download unpacked into a directory,
-   *  recognised by its content (ADR 0082 decision 7): the host mounts core's `ImportSubtreeDialog` for it, under the folder
-   *  on screen. A ZIP carries `uploadAsFile`, the way back to the ordinary upload. */
-  importArchive: [offer: ImportOffer]
-  /** A row's node renamed in place (a kind that does not open, e.g. Depot's file): the host's `FolderNameDialog`. */
-  renameNode: [node: TreeNode]
-  deleteFolder: []
-  openTrash: []
-  /** Manage the folder's links: the host mounts its kind's share dialog with this offer (`NodeShareOffer`). */
-  share: [offer: NodeShareOffer]
-}>()
+// The page's doors (`nodeHost.ts`): open a node; create one - FOLDER from the "New" menu's folder entry (core's
+// `FolderNameDialog`), an application's own kind otherwise (its `createDialog`); rename, move and delete a node (the folder on
+// screen from its header, a row's); move, copy and delete the level's selection; download a node as a ZIP; share the folder;
+// import a veyq download picked or dropped for an upload (ADR 0082 decision 7, under the folder on screen); the trash.
+const host = injectNodeHost()
 
 const { t, locale } = useI18n()
 const { viewMode } = useViewMode()
@@ -177,7 +157,11 @@ const menuCtx = computed<LevelActionContext>(() => ({
   folder: props.folder,
   epochs: props.access.mode === 'member' ? props.access.epochs : null,
 }))
-const menuEntries = computed(() => [...(rights.value.createFolder ? [FOLDER_ENTRY] : []), ...registryMenu.filter((e) => e.allowed(menuCtx.value))])
+// A create entry needs the page's create door; an application action its own handler.
+const menuEntries = computed(() => [
+  ...(rights.value.createFolder && host.createChild ? [FOLDER_ENTRY] : []),
+  ...registryMenu.filter((e) => (e.create === undefined || !!host.createChild) && e.allowed(menuCtx.value)),
+])
 const menuItems = computed<VeyqMenuItem[]>(() =>
   menuEntries.value.map((e) => {
     const handler = e.create === undefined ? levelActions.get(e.id) : undefined
@@ -187,24 +171,22 @@ const menuItems = computed<VeyqMenuItem[]>(() =>
       icon: e.icon,
       disabled: !ready || (e.enabled ? !e.enabled(menuCtx.value) : false),
       class: `veyq-new-menu-item veyq-new-menu-${e.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`,
-      command: () => (e.create !== undefined ? emit('create', e.create) : handler?.run()),
+      command: () => (e.create !== undefined ? host.createChild?.(e.create, props.folder) : handler?.run()),
     }
   }),
 )
 const newMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
-// The folder header's actions: the rights answers for the folder on screen, in the header's fixed order.
+// The folder header's actions: the rights answers for the folder on screen, narrowed to the page's doors, in the header's
+// fixed order.
 const folderActions = computed(() =>
   standardNodeActions(
     t,
-    rights.value,
-    {
-      share: () => emit('share', { contribute: rights.value.shareContribute }),
-      rename: () => emit('renameFolder'),
-      move: () => props.folder && emit('moveNode', props.folder),
-      remove: () => emit('deleteFolder'),
-    },
+    hostRights(rights.value, host),
+    hostHandlers(host, () => props.folder!, () => ({ contribute: rights.value.shareContribute })),
   ),
 )
+// The space's node trash, where the rights grant it and the page has the door.
+const trashOffered = computed(() => rights.value.nodeTrash && !!host.openTrash)
 
 // --- what is here, and the tabs: a pure filter over the one list ------------------------------------------------------------
 // Read once per mount, like the host's slots: the registry is filled before the first route resolves and never changes.
@@ -264,8 +246,8 @@ const levelNodes = computed<TreeNode[]>(() => [
 // Core's own actions of every node here (`coreNodeActions.ts`: the heart, the cover, "Copy to…", the download, Report), for
 // the rows and - provided to it - the folder header; the copy and the download open the host's dialogs.
 const coreActions = useCoreNodeActions(() => props.access, () => props.tree, () => levelNodes.value, {
-  copy: (nodes) => emit('copyNodes', nodes),
-  download: (node) => emit('downloadNode', node),
+  ...(host.copy ? { copy: (nodes) => host.copy!(nodes) } : {}),
+  ...(host.download ? { download: (node) => host.download!(node) } : {}),
 })
 provideCoreNodeActions(coreActions)
 const cover = coreActions.cover
@@ -273,10 +255,9 @@ const cover = coreActions.cover
 // --- the applications' row sources -------------------------------------------------------------------------------------
 const disposers: (() => void)[] = []
 onBeforeUnmount(() => disposers.forEach((dispose) => dispose()))
-const host: LevelRowsHost = {
-  open: (node) => emit('openNode', node),
-  rename: (node) => emit('renameNode', node),
-  move: (node) => emit('moveNode', node),
+// The page's doors and the level's own: the one host a row factory is handed.
+const rowsHost: LevelRowsHost = {
+  ...host,
   registerAction: (id, handler) => disposers.push(levelActions.register(id, handler)),
   covers: cover.covers,
   ensureCovers: cover.ensure,
@@ -295,20 +276,13 @@ const sources = lists.map((list) => {
     viewMode: mode.value,
     liveTick: props.liveTick,
   }))
-  return list.rows(ctx, host)
+  return list.rows(ctx, rowsHost)
 })
 const sourceOfKind = new Map(lists.flatMap((list, i) => list.kinds.map((k) => [k, sources[i]] as const)))
-// The doors of core's default row actions (`standardRowActions.ts`): a member's all three, a guest's the move alone.
-const standardDoors = computed(() =>
-  standardRowDoors(props.access, {
-    rename: (node) => emit('renameNode', node),
-    move: (node) => emit('moveNode', node),
-    remove: (item) => emit('deleteNodes', [item]),
-  }),
-)
-/** The row with core's default rename, move and delete added where its application granted them and has none of its own. */
+/** The row with core's default rename, move and delete added where its application granted them, the page has the door
+ *  (`standardRowActions.ts`: a guest's page the move alone) and the application has none of its own. */
 function withStandard(node: TreeNode, row: LevelRow): LevelRow {
-  return { ...row, actions: withStandardRowActions(row.actions, standardRowActions(t, node, row, standardDoors.value)) }
+  return { ...row, actions: withStandardRowActions(row.actions, standardRowActions(t, node, row, host)) }
 }
 
 // --- the one list ------------------------------------------------------------------------------------------------------
@@ -355,7 +329,7 @@ function unblockedItem(node: TreeNode): Item {
     return {
       key: node.id, node, kind: node.kind, folder: true, unsupported: false,
       row: withStandard(node, {
-        icon: 'folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => emit('openNode', node) }, actions: [],
+        icon: 'folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => host.open?.(node) }, actions: [],
         ...folderParts(node),
       }),
     }
@@ -384,15 +358,16 @@ const levelItems = computed(() => new Map([...props.level.folders, ...[...props.
 const selection = useSelection()
 const selecting = ref(false)
 const allowsOf = (id: string): LevelRowSelection | undefined => levelItems.value.get(id)?.row.selection
-// Offered where something here allows an action, and only while core draws the rows (no application presentation).
-const anyMove = computed(() => [...levelItems.value.values()].some((i) => i.row.selection?.move === true))
-const anyDelete = computed(() => [...levelItems.value.values()].some((i) => i.row.selection?.delete === true))
+// Offered where something here allows an action and the page has its door, and only while core draws the rows (no
+// application presentation).
+const anyMove = computed(() => !!host.moveMany && [...levelItems.value.values()].some((i) => i.row.selection?.move === true))
+const anyDelete = computed(() => !!host.deleteMany && [...levelItems.value.values()].some((i) => i.row.selection?.delete === true))
 // "Copy to…" is core's (uc.platform.copy-node): a member's, for every node whose kind this build copies (`canCopy`).
 const copiesNode = (id: string): boolean => {
   const item = levelItems.value.get(id)
   return !!item && !item.unsupported && canCopy(props.access, item.node)
 }
-const anyCopy = computed(() => [...levelItems.value.keys()].some(copiesNode))
+const anyCopy = computed(() => !!host.copy && [...levelItems.value.keys()].some(copiesNode))
 // "Report" is core's (uc.moderation.report): anyone who sees a node reports it, a READ guest included — so it alone
 // makes a level selectable — while the instance publishes a moderation key.
 const reportOn = useReportOffered()
@@ -405,7 +380,7 @@ const canSelect = computed(
   () => (mode.value === 'grid' || mode.value === 'list') && (anyMove.value || anyDelete.value || anyCopy.value || anyReport.value),
 )
 /** Whether the level offers anything in its toolbar: "New", the trash, Select or the view switch. */
-const hasToolbar = computed(() => menuEntries.value.length > 0 || rights.value.nodeTrash || showViews.value || canSelect.value)
+const hasToolbar = computed(() => menuEntries.value.length > 0 || trashOffered.value || showViews.value || canSelect.value)
 const selectedIds = computed(() => [...selection.ids.value].filter((id) => levelItems.value.has(id)))
 const movable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.move === true))
 const deletable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.delete === true))
@@ -441,11 +416,11 @@ function toggleSelecting(): void {
 }
 function moveSelected(): void {
   const nodes = movable.value.map((id) => levelItems.value.get(id)!.node)
-  if (nodes.length) emit('moveNodes', nodes)
+  if (nodes.length) host.moveMany?.(nodes)
 }
 function copySelected(): void {
   const nodes = copyable.value.map((id) => levelItems.value.get(id)!.node)
-  if (nodes.length) emit('copyNodes', nodes)
+  if (nodes.length) host.copy?.(nodes)
 }
 function reportSelected(): void {
   const nodes = reportable.value.map((id) => levelItems.value.get(id)!.node)
@@ -456,7 +431,7 @@ function deleteSelected(): void {
     const item = levelItems.value.get(id)!
     return { node: item.node, ...(item.row.selection?.remove ? { remove: item.row.selection.remove } : {}) }
   })
-  if (chosen.length) emit('deleteNodes', chosen)
+  if (chosen.length) host.deleteMany?.(chosen)
 }
 // Leaving the mode, another folder, or a presentation without rows clears it; a node that left the level drops out.
 watch(selecting, (on) => {
@@ -514,14 +489,14 @@ const emptyText = computed<string | null>(() => {
 // directory cannot be "uploaded as a file"). One import per pick or drop: the first download found is offered, every other file
 // or directory (another download too) is the ordinary upload. A guest - whatever the role - never imports: for a guest a
 // download is an ordinary file, and an unpacked one an ordinary folder.
-const canImport = computed(() => props.access.mode === 'member' && rights.value.createFolder)
+const canImport = computed(() => props.access.mode === 'member' && rights.value.createFolder && !!host.importArchive)
 const importReady = computed(() => canImport.value && menuCtx.value.epochs !== null)
 
 async function screenUpload(files: File[], uploadAsFile: ((files: File[]) => void) | null): Promise<File[]> {
   if (!importReady.value) return files
   for (const [i, file] of files.entries()) {
     if (await isDownloadArchive(file)) {
-      emit('importArchive', { input: { kind: 'zip', file }, ...(uploadAsFile ? { uploadAsFile: () => uploadAsFile([file]) } : {}) })
+      host.importArchive?.({ input: { kind: 'zip', file }, ...(uploadAsFile ? { uploadAsFile: () => uploadAsFile([file]) } : {}) })
       return files.filter((_, k) => k !== i)
     }
   }
@@ -530,7 +505,7 @@ async function screenUpload(files: File[], uploadAsFile: ((files: File[]) => voi
 
 function screenDirectory(dir: DirectoryInput): boolean {
   if (!importReady.value || !directoryHoldsManifest(dir)) return false
-  emit('importArchive', { input: dir })
+  host.importArchive?.({ input: dir })
   return true
 }
 
@@ -561,7 +536,7 @@ async function onDrop(e: DragEvent): Promise<void> {
   for (const dir of directories) {
     if (!offered && importReady.value && (await holdsManifest(dir))) {
       offered = true
-      emit('importArchive', { input: await readDroppedDirectory(dir) })
+      host.importArchive?.({ input: await readDroppedDirectory(dir) })
     } else if (uploadFolder) {
       uploadFolder(await readDroppedDirectory(dir))
     }
@@ -605,13 +580,14 @@ async function onDrop(e: DragEvent): Promise<void> {
           <VeyqMenu ref="newMenu" :items="menuItems" />
         </template>
         <VeyqButton
-          v-if="rights.nodeTrash"
+          v-if="trashOffered"
           :label="t('node.trash.open')"
           icon="trash"
           variant="secondary"
           appearance="outlined"
           size="small"
-          @click="emit('openTrash')"
+          @click="host.openTrash?.()"
+
         />
         <VeyqButton
           v-if="canSelect"

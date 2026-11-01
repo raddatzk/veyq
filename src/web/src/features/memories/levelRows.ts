@@ -82,7 +82,7 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
   /** A pin click carries a node id - resolve it to the TreeNode and open it, exactly like a row click. */
   function onPinOpen(nodeId: string) {
     const node = guestAccess ? treeOf().node(nodeId) : nodeById(treeStore.nodes, nodeId)
-    if (node) host.open(node)
+    if (node) host.open?.(node)
   }
 
   // The covers are core's (inbox #411): the level resolves them for its own nodes (`host.covers`, a member's from the shared
@@ -106,7 +106,7 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
       title: node.name,
       meta: t(node.kind === CHAPTER_KIND ? 'memory.kindChapter' : 'memory.kindMemory'),
       details: memoryDetails(facts.value.get(node.id) ?? NO_FACTS, t, locale.value),
-      primary: { label: node.name, onClick: () => host.open(node) },
+      primary: { label: node.name, onClick: () => host.open?.(node) },
       actions: [],
       // Core's default actions and a selection of the level (inbox #421) read the same answer for THIS node; its delete is
       // core's `deleteNode`, as the Memory's own page asks the host for.

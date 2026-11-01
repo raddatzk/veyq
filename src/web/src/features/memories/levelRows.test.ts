@@ -4,7 +4,7 @@
 // real). It replaces `MemoriesSection.test.ts` (the former `MemoryBrowse.test.ts`); every case of it is ported, its selectors
 // renamed on purpose (a Memory's card is core's `veyq-level-item`, its heart a first-class action, the map the factory's
 // `presentation('map')`). The level as a whole, through core's view and the real registry, is pinned by the golden
-// (`views/MemoryHomeView.golden.test.ts`).
+// (`views/SpaceView.golden.test.ts`).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // SpaceMap wraps Leaflet, which we neither need nor can run here - stub the module out; the component is stubbed too.

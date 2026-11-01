@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // A member's profile page, `#people/<userId>` (ADR 0083 decision 6, uc.memory.participants). Members only: it is a route of
-// the unlocked shell (`MemoryHomeView`), the share page has no such route and links to none. Core draws the page - the
+// the unlocked shell (`SpaceView`), the share page has no such route and links to none. Core draws the page - the
 // name by the display rule (real name, else username), the avatar (the member's picture, else the letter; ADR 0084) -
 // and each application adds what it knows of the person as a SECTION (`registry.claimPersonSection`): Memories' "Memories
 // with this person". A user id the tenant directory does not list is a former member: greyed, no sections' data

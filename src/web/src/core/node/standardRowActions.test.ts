@@ -1,15 +1,14 @@
 // Core's default row actions rename, move and delete (owner 2026-11-01): shown exactly where the application's answer
-// grants them AND the level has a door (a guest's has the move alone), and replaced by an application's own action of
+// grants them AND the page has a door (a guest's host hands on the move alone), and replaced by an application's own action of
 // the same id.
 import { describe, it, expect, vi } from 'vitest'
-import { STANDARD_ROW_ACTION_IDS, standardRowActions, standardRowDoors, withStandardRowActions } from './standardRowActions'
+import { STANDARD_ROW_ACTION_IDS, standardRowActions, withStandardRowActions } from './standardRowActions'
 import type { LevelRowAction } from './levelRow'
-import { treeNode, memberAccessOf, guestAccessOf } from '../../test/models'
-import { ShareRole } from '../../api/generated/sharing'
+import { treeNode } from '../../test/models'
 
 const t = (key: string) => key
 const node = treeNode({ id: 'n1', kind: 'ALPHA', name: 'n1', parentId: null })
-const doors = () => ({ rename: vi.fn(), move: vi.fn(), remove: vi.fn() })
+const doors = () => ({ rename: vi.fn(), move: vi.fn(), delete: vi.fn() })
 const ids = (list: readonly LevelRowAction[]) => list.map((a) => a.id)
 const ALL = { rename: true, move: true, delete: true }
 
@@ -27,25 +26,21 @@ describe('standardRowActions', () => {
     expect(standardRowActions(t, node, { standard: ALL }, {})).toEqual([])
   })
 
-  it('runs each through the level\'s door; the delete carries the kind\'s own write where its selection names one', () => {
+  it('runs each through the page\'s door; the delete carries the kind\'s own write where its selection names one', () => {
     const d = doors()
     const remove = async () => {}
     const actions = standardRowActions(t, node, { standard: ALL, selection: { move: true, delete: true, remove } }, d)
     for (const a of actions) a.onClick()
     expect(d.rename).toHaveBeenCalledWith(node)
     expect(d.move).toHaveBeenCalledWith(node)
-    expect(d.remove).toHaveBeenCalledWith({ node, remove })
+    expect(d.delete).toHaveBeenCalledWith(node, remove)
     const del = actions.find((a) => a.id === 'delete')!
     expect(del).toMatchObject({ severity: 'danger', label: 'node.delete' })
   })
 
-  it('a member\'s level has all three doors, a guest\'s the move alone - whatever the guest\'s role or answer', () => {
-    const d = doors()
-    expect(Object.keys(standardRowDoors(memberAccessOf(), d)).sort()).toEqual(['move', 'remove', 'rename'])
-    for (const role of [ShareRole.Read, ShareRole.ReadWrite, ShareRole.WriteOnly]) {
-      const guest = standardRowDoors(guestAccessOf(role), d)
-      expect(ids(standardRowActions(t, node, { standard: ALL }, guest)), role).toEqual(['move'])
-    }
+  it('a guest host\'s doors - the move alone - offer the move alone, whatever the answer says', () => {
+    const { move } = doors()
+    expect(ids(standardRowActions(t, node, { standard: ALL }, { move, open: vi.fn(), download: vi.fn() }))).toEqual(['move'])
   })
 })
 

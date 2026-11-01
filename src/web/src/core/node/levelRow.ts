@@ -17,8 +17,8 @@
 //
 // **Rename, move and delete are core's defaults** (owner 2026-11-01, `standardRowActions.ts`): an application does not
 // build them; it answers its rights for THIS node in {@link LevelRow.standard} and core adds the granted ones through
-// the level's own doors (core's name dialog, move dialog and delete question with its Undo). No answer is none (fail
-// closed). **An application that implements one itself** supplies an action of that id (`rename`, `move`, `delete`) in
+// the page's doors (`nodeHost.ts`: core's name dialog, move dialog and delete question with its Undo). No answer is none
+// (fail closed), and so is an absent door. **An application that implements one itself** supplies an action of that id (`rename`, `move`, `delete`) in
 // its `actions`, which REPLACES core's default whatever `standard` says - its own `shown` decides then (Depot's file:
 // its delete asks and offers its own Undo, its rename and move go through its source).
 //
@@ -37,6 +37,7 @@ import type { LevelActionHandler } from './levelActions'
 import type { LoadedCover } from './cover/coverModel'
 import type { DirectoryInput } from '../export/importSource'
 import type { VeyqIconName } from '../../shared/ui/icons'
+import type { NodeHost } from './nodeHost'
 
 /** How many `first` actions a row shows as buttons; further ones fall into the overflow menu. */
 export const MAX_FIRST_ACTIONS = 2
@@ -132,15 +133,10 @@ export interface LevelRowsContext {
   liveTick: number | undefined
 }
 
-/** What the level lets a row source do. */
-export interface LevelRowsHost {
-  /** Open a node (its detail, or the folder). */
-  open(node: TreeNode): void
-  /** Rename a node in place (core's `FolderNameDialog`): the door of an application's OWN rename (Depot's file); core's
-   *  default rename (`LevelRow.standard`) needs none. */
-  rename(node: TreeNode): void
-  /** Move a node (core's `MoveNodeDialog`): the door of an application's own move, as {@link rename}. */
-  move(node: TreeNode): void
+/** What the level lets a row source do: the page's doors (`nodeHost.ts` - the very doors a `detail` injects, each of
+ *  which may be absent, and an absent door is an action not offered: `open`, and `rename` / `move` as the doors of an
+ *  application's OWN rename or move, Depot's file; core's defaults take them themselves), plus what only a level has. */
+export interface LevelRowsHost extends NodeHost {
   /** Register the handler of a level action (a "New" menu entry that is no create dialog) for the level's life. */
   registerAction(id: string, handler: LevelActionHandler): void
   /** The decrypted covers of the nodes at this level (inbox #411), whatever their kind: core resolves them for the level

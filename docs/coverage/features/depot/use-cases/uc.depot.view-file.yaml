@@ -109,12 +109,12 @@ acceptanceCriteria:
       backend:
         integration: [ModerationDepotSliceTest.aBlockedFileIsNeitherReadNorReplacedByAnyoneWhileTheReviewStillReadsIt]
       web:
-        unit: [src/core/node/LevelView.blocked.test.ts, src/features/memories/components/FolderShareGuest.test.ts, src/views/MemoryHomeView.registry.test.ts]
+        unit: [src/core/node/LevelView.blocked.test.ts, src/features/memories/components/FolderShareGuest.test.ts, src/views/SpaceView.registry.test.ts]
     gaps:
       - surface: web
         reason: >-
-          The member's page of a blocked node (MemoryHomeView's `node-blocked`, drawn before any kind's detail) is held
-          with a stub detail on a Memories kind (MemoryHomeView.registry.test.ts), not with Depot's file detail itself.
+          The member's page of a blocked node (SpaceView's `node-blocked`, drawn before any kind's detail) is held
+          with a stub detail on a Memories kind (SpaceView.registry.test.ts), not with Depot's file detail itself.
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/depot/depot-styles.spec.ts`) drives `the-text-of-a-pdf-can-be-selected-and-copied`

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The member's level view picks up what others changed WITHOUT a reload (inbox #408): the real host (`MemoryHomeView`),
+// The member's level view picks up what others changed WITHOUT a reload (inbox #408): the real host (`SpaceView`),
 // the real level view, the real tree store and the real tree decryption over sealed rows served by a faked content API
 // that keeps a tree revision like the server's (ADR 0081: the listing's `ETag`, a `304` for an echo of it);
 // Depot's blob listing (`listFiles`) is a counting stub, so the rows' "look again" cue (the level's live tick, which Depot's
@@ -39,7 +39,7 @@ vi.mock('../core/favorites/favoritesStore', () => ({
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
 vi.mock('../features/depot/api', () => ({ filesApi: vi.fn() }))
 
-import MemoryHomeView from './MemoryHomeView.vue'
+import SpaceView from './SpaceView.vue'
 import { loadTree, treeStore, resetTree } from '../core/node/treeStore'
 import { contentApi } from '../api/client'
 import { listMyTenants } from '../features/spaces/scopes'
@@ -103,7 +103,7 @@ async function mountLevel(hash = '#~me') {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const w = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
+  const w = mount(SpaceView, { global: { plugins: [router, realI18n()] } })
   await settle(0)
   return w
 }

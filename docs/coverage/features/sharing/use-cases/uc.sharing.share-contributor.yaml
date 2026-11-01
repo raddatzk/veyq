@@ -148,7 +148,7 @@ acceptanceCriteria:
       backend:
         integration: [ChapterShareSliceTest.aContributorOnAChapterUploadsIntoItAndDeletesOnlyItsOwn, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole, CoreAloneSliceTest.aFolderIsSharedToReadOrContributeAndNothingElseIs, ShareRootsSliceTest.aFolderIsNoDropBox]
       web:
-        unit: [src/views/MemoryHomeView.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/folderShare.wire.test.ts]
+        unit: [src/views/SpaceView.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/folderShare.wire.test.ts]
         e2e: [src/features/memories/chapterShare.e2e.test.ts]
   - id: rights-inherit-below-a-folder
     text: >-

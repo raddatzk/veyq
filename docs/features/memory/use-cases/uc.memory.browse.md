@@ -101,7 +101,7 @@
   is visible — a folder level, or an opened node's page of any kind (a Memory, a file, Depot's drop box with its guests'
   folders and their files; inbox #503) — core re-reads the level about every 5 s (jittered; doubling to 2 min after errors; at once when the tab
   becomes visible or focused; nothing while hidden or unmounted), so a share guest's upload or a peer's new Memory or
-  folder appears without a reload — for a member (`MemoryHomeView`, one `listNodes` per tick) and a share guest
+  folder appears without a reload — for a member (`SpaceView`, one `listNodes` per tick) and a share guest
   (`ShareView`, one `resolveShare` per tick) alike. Both reads are conditional ([ADR 0081](../../../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)):
   the scope carries a tree revision, bumped in the transaction of every node create, rename, move, trash (a deleted
   file included), restore and purge and every blob attached to or removed from a node (a file's upload or replace), and

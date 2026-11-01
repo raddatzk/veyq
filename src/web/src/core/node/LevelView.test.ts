@@ -3,7 +3,7 @@
 // `createRegistry()` per test behind a delegating `registry` export), so each test chooses which kinds bring which rows. Kinds
 // here are made-up tokens (`ALPHA`, `BETA`, …) and their row factory is `test/stubRows.ts`: core's view knows no application,
 // and neither does its test. Every control is clicked for real. The real registry with Memories and Depot registered is in
-// `views/MemoryHomeView.test.ts`; the Memories level as a member meets it, in the golden. The tabs are `LevelView.tabs.test.ts`.
+// `views/SpaceView.test.ts`; the Memories level as a member meets it, in the golden. The tabs are `LevelView.tabs.test.ts`.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
@@ -42,6 +42,7 @@ import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../../test/levelRows'
 import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../test/nodeHeader'
 import { nothingOfItsOwnToRekey } from './rekey/hooks'
+import { GUEST_DOORS, recordingHost } from '../../test/nodeHost'
 
 function node(id: string, kind: NodeKind, parentId: string | null = null, over: Partial<TreeNode> = {}): TreeNode {
   return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over })
@@ -56,7 +57,9 @@ function mountLevel(
 ) {
   const folder = over.folder ?? null
   const source = memberTreeOf(() => tree)
-  return mount(LevelView, {
+  // The member's page: every door, each recording what the level asked of it.
+  const rec = recordingHost()
+  const w = mount(LevelView, {
     props: {
       folder, level: childrenOf(tree, folder?.id ?? null),
       access: memberAccessOf({ readonly: over.pending ?? false, publicShares: over.publicShares ?? false, epochs: over.unlocked ? epochsOf(new Uint8Array(32)) : null }),
@@ -65,15 +68,20 @@ function mountLevel(
       spaceName: over.spaceName,
       liveTick: over.liveTick,
     },
-    global: { plugins: [realI18n()] },
+    global: { plugins: [realI18n()], provide: rec.provide },
   })
+  return Object.assign(w, { calls: rec.calls })
 }
 type Level = ReturnType<typeof mountLevel>
-const mountGuest = (role: ShareRole, tree: TreeNode[] = [TRIPS], folder: TreeNode | null = TRIPS) =>
-  mount(LevelView, {
+/** The level as a share guest sees it: the guest page's doors (the move only where the link moves anything). */
+const mountGuest = (role: ShareRole, tree: TreeNode[] = [TRIPS], folder: TreeNode | null = TRIPS) => {
+  const rec = recordingHost(role === ShareRole.ReadWrite ? GUEST_DOORS : GUEST_DOORS.filter((d) => d !== 'move' && d !== 'moveMany'))
+  const w = mount(LevelView, {
     props: { folder, level: childrenOf(tree, folder?.id ?? null), access: guestAccessOf(role), tree: memberTreeOf(() => tree) },
-    global: { plugins: [realI18n()] },
+    global: { plugins: [realI18n()], provide: rec.provide },
   })
+  return Object.assign(w, { calls: rec.calls })
+}
 
 /** The level's top-level blocks in DOM order - but the toolbar, which has its own tests. */
 function blocks(w: Level): string[] {
@@ -213,14 +221,13 @@ describe('LevelView: the one list', () => {
     const a1 = node('a1', 'ALPHA', 'Trips')
     const w = mountLevel([TRIPS, a1], { folder: TRIPS })
     await rowOf(w, 'a1').find('button.veyq-level-item-main').trigger('click')
-    expect(w.emitted('openNode')).toEqual([[a1]])
+    expect(w.calls.open).toEqual([[a1]])
     expect(await actionIdsOf(w, 'a1')).toEqual(['favorite', 'rename']) // core's heart first, then the application's
     await clickAction(w, 'a1', 'rename')
     // a row's node renamed in place reaches the host as `renameNode` with that node (never as the folder's rename)
-    expect(w.emitted('renameNode')).toEqual([[a1]])
-    expect(w.emitted('renameFolder')).toBeUndefined()
-    a.host().move(a1)
-    expect(w.emitted('moveNode')).toEqual([[a1]])
+    expect(w.calls.rename).toEqual([[a1]])
+    a.host().move?.(a1)
+    expect(w.calls.move).toEqual([[a1]])
   })
 
   it('a row the factory has none for is the explicit unsupported row, never dropped', () => {
@@ -278,10 +285,10 @@ describe('LevelView: core\'s default rename, move and delete', () => {
     await clickAction(w, 'a1', 'rename')
     await clickAction(w, 'a1', 'move')
     await clickAction(w, 'a1', 'delete')
-    expect(w.emitted('renameNode')).toEqual([[a1]])
-    expect(w.emitted('moveNode')).toEqual([[a1]])
+    expect(w.calls.rename).toEqual([[a1]])
+    expect(w.calls.move).toEqual([[a1]])
     // the delete is the host's one question with its Undo, for this one node, with core's own write (no `remove`)
-    expect(w.emitted('deleteNodes')).toEqual([[[{ node: a1 }]]])
+    expect(w.calls.delete).toEqual([[a1]])
   })
 
   it('offers only what the answer grants, and nothing without one (fail closed)', async () => {
@@ -312,9 +319,10 @@ describe('LevelView: core\'s default rename, move and delete', () => {
   it('a share guest gets no default rename or delete whatever the answer, a READ_WRITE guest\'s move through the level\'s door', async () => {
     reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: granted().factory } })
     const tree = [TRIPS, node('a1', 'ALPHA', 'Trips')]
-    for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
+    // A READ link's page has no move door either (it moves nothing): no default at all, whatever the answer says.
+    for (const [role, offered] of [[ShareRole.Read, []], [ShareRole.ReadWrite, ['move']]] as const) {
       const w = mountGuest(role, tree)
-      expect((await actionIdsOf(w, 'a1')).filter((id) => ['rename', 'move', 'delete'].includes(id)), role).toEqual(['move'])
+      expect((await actionIdsOf(w, 'a1')).filter((id) => ['rename', 'move', 'delete'].includes(id)), role).toEqual(offered)
       w.unmount()
     }
   })
@@ -325,7 +333,7 @@ describe('LevelView: core\'s default rename, move and delete', () => {
     const member = mountLevel([TRIPS, rome], { folder: TRIPS })
     expect(await defaultsOf(member)).toEqual(['rename', 'move', 'delete'])
     await clickAction(member, 'Rome', 'delete')
-    expect(member.emitted('deleteNodes')).toEqual([[[{ node: rome }]]])
+    expect(member.calls.delete).toEqual([[rome]])
     member.unmount()
     const readonly = mountLevel([TRIPS, rome], { folder: TRIPS, pending: true })
     expect(await defaultsOf(readonly)).toEqual([])
@@ -340,13 +348,13 @@ describe('LevelView: the folders', () => {
     const rome = node('Rome', FOLDER_KIND, 'Trips')
     const w = mountLevel([TRIPS, rome], { folder: TRIPS })
     await rowOf(w, 'Rome').find('button.veyq-level-item-main').trigger('click')
-    expect(w.emitted('openNode')).toEqual([[rome]])
+    expect(w.calls.open).toEqual([[rome]])
     expect(rowOf(w, 'Rome').find('button.veyq-level-item-main').attributes('aria-label')).toBe('Rome')
     expect(w.find('.veyq-create-card').exists(), 'the create tile is retired (inbox #406)').toBe(false)
     // a folder's row: core's heart, and core's default rename, move and delete by `folderRights` (owner 2026-11-01)
     expect(await actionIdsOf(w, 'Rome')).toEqual(['favorite', 'rename', 'move', 'delete'])
     await chooseNew(w, t('node.folderCreate'))
-    expect(w.emitted('create')).toEqual([[FOLDER_KIND]])
+    expect(w.calls.createChild).toEqual([[FOLDER_KIND, TRIPS]])
   })
 
   // Two folders of one name (a drop box's guests) are told apart as everywhere: the first created keeps it.
@@ -404,7 +412,7 @@ describe('LevelView: the folder header', () => {
     expect(shareButton(w).exists()).toBe(true)
     expect(w.findAllComponents(VeyqButton).find((b) => b.element === shareButton(w).element)!.props('icon')).toBe('share-alt')
     await shareButton(w).trigger('click')
-    expect(w.emitted('share')).toHaveLength(1)
+    expect(w.calls.share).toHaveLength(1)
   })
 
   it('shows none when the instance offers no public links', () => {
@@ -423,8 +431,8 @@ describe('LevelView: the folder header', () => {
     const w = mountLevel([TRIPS], { folder: TRIPS })
     await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
     await chooseHeaderEntry(w, 'delete')
-    expect(w.emitted('renameFolder')).toHaveLength(1)
-    expect(w.emitted('deleteFolder')).toHaveLength(1)
+    expect(w.calls.rename).toHaveLength(1)
+    expect(w.calls.delete).toHaveLength(1)
   })
 
   // Found in the browser, 2026-10-07: the three carried `memory-action-collapsible` / `memory-action-inline`, which
@@ -455,7 +463,7 @@ describe('LevelView: the folder header', () => {
     const actions = w.findAll('.veyq-node-header-actions button')
     expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('node.move.action')])
     await actions[1].trigger('click')
-    expect(w.emitted('moveNode')).toEqual([[TRIPS]])
+    expect(w.calls.move).toEqual([[TRIPS]])
   })
 
   it('offers no move during a pending deletion', () => {
@@ -478,7 +486,7 @@ describe('LevelView: the toolbar', () => {
       expect(parts.at(-1)).toBe('veyq-level-toolbar')
       expect(parts.slice(0, -1)).toEqual(w.find('.veyq-node-header').exists() ? ['veyq-node-header'] : [])
       await trash(w)!.trigger('click')
-      expect(w.emitted('openTrash')).toHaveLength(1)
+      expect(w.calls.openTrash).toHaveLength(1)
     }
   })
 
@@ -662,7 +670,8 @@ describe('LevelView: the "New" menu', () => {
     await chooseNew(w, t('node.anItem'))
     await chooseNew(w, t('node.rename'))
     await chooseNew(w, t('node.folderCreate'))
-    expect(w.emitted('create')).toEqual([['ALPHA'], [FOLDER_KIND]])
+    expect(w.calls.createChild).toEqual([['ALPHA', TRIPS], [FOLDER_KIND, TRIPS]])
+
     expect(ran).toEqual(['upload'])
   })
 
@@ -752,7 +761,7 @@ describe('LevelView: the "New" menu', () => {
       await flushPromises()
     }
     type Offer = { input: { kind: string; file?: File; name?: string; files?: { path: string; file: File }[] }; uploadAsFile?: () => void }
-    const offers = (w: Level) => (w.emitted('importArchive') ?? []).map(([o]) => o as Offer)
+    const offers = (w: Level) => (w.calls.importArchive ?? []).map(([o]) => o as Offer)
 
     it('a download dropped on a member level is offered as an import, whatever its name; "Upload as a file" uploads it', async () => {
       for (const version of [1, 2] as const) {
@@ -779,11 +788,11 @@ describe('LevelView: the "New" menu', () => {
     it('a zip that is no download stays an ordinary upload; a guest never gets the import offer and uploads it', async () => {
       const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
       await drop(w, 'photos.zip')
-      expect(w.emitted('importArchive')).toBeUndefined()
+      expect(w.calls.importArchive).toBeUndefined()
       expect(dropped).toEqual([['photos.zip']])
       const g = mountGuest(ShareRole.ReadWrite)
       await dropFiles(g, await downloadFile('trip.zip'))
-      expect(g.emitted('importArchive')).toBeUndefined()
+      expect(g.calls.importArchive).toBeUndefined()
       expect(dropped).toEqual([['photos.zip'], ['trip.zip']])
     })
 
@@ -801,7 +810,7 @@ describe('LevelView: the "New" menu', () => {
       // a guest's picks are never screened
       const g = mountGuest(ShareRole.ReadWrite)
       expect((await rows.host().screenUpload!([download], () => {})).map((f) => f.name)).toEqual(['trip.zip'])
-      expect(g.emitted('importArchive')).toBeUndefined()
+      expect(g.calls.importArchive).toBeUndefined()
     })
 
     // A dropped directory, as `DataTransferItem.webkitGetAsEntry` hands it out.
@@ -851,7 +860,7 @@ describe('LevelView: the "New" menu', () => {
     it('a directory without the manifest is the folder upload: handed to the action that takes directories, nothing imported', async () => {
       const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
       await dropEntries(w, dirEntry('Holiday', [fileEntry('a.jpg'), dirEntry('Day 1', [fileEntry('b.jpg')])]))
-      expect(w.emitted('importArchive')).toBeUndefined()
+      expect(w.calls.importArchive).toBeUndefined()
       expect(dropped).toEqual([])
       expect(droppedDirs).toEqual([{ name: 'Holiday', paths: ['Day 1/b.jpg', 'a.jpg'] }])
       expect(toastError).not.toHaveBeenCalled()
@@ -868,7 +877,7 @@ describe('LevelView: the "New" menu', () => {
     it('a guest\'s dropped directory is always the folder upload, its .veyq/ included - never the import', async () => {
       const g = mountGuest(ShareRole.ReadWrite)
       await dropEntries(g, dirEntry('Trip download', [dirEntry('.veyq', [fileEntry('manifest.json', '{}')])]))
-      expect(g.emitted('importArchive')).toBeUndefined()
+      expect(g.calls.importArchive).toBeUndefined()
       expect(droppedDirs).toEqual([{ name: 'Trip download', paths: ['.veyq/manifest.json'] }])
     })
 
@@ -886,7 +895,7 @@ describe('LevelView: the "New" menu', () => {
       // a manifest below the root (a download unpacked INTO a folder of it) does not make the directory one
       const plain = { kind: 'directory' as const, name: 'Holiday', files: [file('a.txt'), file('.veyq/other.json'), file('Old/.veyq/manifest.json')] }
       expect(host.screenDirectory!(plain)).toBe(false)
-      expect(w.emitted('importArchive')).toBeUndefined()
+      expect(w.calls.importArchive).toBeUndefined()
       expect(host.screenDirectory!(unpacked)).toBe(true)
       expect(offers(w)).toEqual([{ input: unpacked }])
       // a guest's pick is never screened into the import
@@ -900,7 +909,7 @@ describe('LevelView: the "New" menu', () => {
     it('while the keys are locked a download is dropped as a plain upload', async () => {
       const w = mountLevel([TRIPS], { folder: TRIPS })
       await dropFiles(w, await downloadFile('trip.zip'))
-      expect(w.emitted('importArchive')).toBeUndefined()
+      expect(w.calls.importArchive).toBeUndefined()
       expect(dropped).toEqual([['trip.zip']])
     })
 

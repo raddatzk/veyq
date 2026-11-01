@@ -15,7 +15,8 @@ import VeyqTabList from '../../../shared/ui/VeyqTabList.vue'
 import VeyqTab from '../../../shared/ui/VeyqTab.vue'
 import VeyqTabPanels from '../../../shared/ui/VeyqTabPanels.vue'
 import VeyqTabPanel from '../../../shared/ui/VeyqTabPanel.vue'
-import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
+import type { NodeDetailProps } from '../../../core/applications/registry'
+import { hostHandlers, hostRights, injectNodeHost } from '../../../core/node/nodeHost'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
 import { canReport, nodeTarget } from '../../../core/report/reportActions'
@@ -36,7 +37,8 @@ import PeoplePanel from './PeoplePanel.vue'
 import SettingsPanel from './SettingsPanel.vue'
 
 const props = defineProps<NodeDetailProps>()
-const emit = defineEmits<NodeDetailEmits>()
+// The page's doors (`core/node/nodeHost.ts`): the share, rename, move and delete of the Pot through core's dialogs.
+const host = injectNodeHost()
 const { t } = useI18n()
 
 const rights = computed(() => expensesRights(props.access, targetOf(props.tree, props.node)))
@@ -77,8 +79,9 @@ const POT_HEADER_ORDER = ['favorite', 'share', 'download', 'rename', 'move', 'co
 const headerActions = computed(() =>
   standardNodeActions(
     t,
-    { ...rights.value, deleteLabel: t('expenses.delete') },
-    { share: () => emit('share', { contribute: rights.value.shareContribute }), rename: () => emit('rename'), move: () => emit('move', props.node), remove: () => emit('delete') },
+    { ...hostRights(rights.value, host), deleteLabel: t('expenses.delete') },
+    hostHandlers(host, () => props.node, () => ({ contribute: rights.value.shareContribute })),
+
   ),
 )
 const subtitle = computed(() => (meta.value ? t('expenses.inCurrency', { currency: meta.value.base.currency }) : undefined))

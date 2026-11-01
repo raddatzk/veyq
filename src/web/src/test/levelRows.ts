@@ -12,7 +12,8 @@ import type { LevelActionHandler } from '../core/node/levelActions'
 import type { TreeNode } from '../core/node/tree'
 import type { LoadedCover } from '../core/node/cover/coverModel'
 import { realI18n } from './i18n'
-import { standardRowActions, standardRowDoors, withStandardRowActions } from '../core/node/standardRowActions'
+import { standardRowActions, withStandardRowActions } from '../core/node/standardRowActions'
+import type { NodeHost } from '../core/node/nodeHost'
 import type { SelectedForDelete } from '../core/node/selection'
 
 export interface RowsHarness {
@@ -46,12 +47,20 @@ export function mountRows(
   const Host = defineComponent({
     setup() {
       const t = (key: string) => i18n.global.t(key)
-      const doors = () => standardRowDoors(state.access, { rename: (n) => events.rename.push(n), move: (n) => events.move.push(n), remove: (x) => events.remove.push(x) })
+      // The page's doors as the two hosts hand them on: a member's every one, a guest's the move alone (beside `open`).
+      const open = (n: TreeNode) => void events.open.push(n)
+      const move = (n: TreeNode) => void events.move.push(n)
+      const memberDoors: NodeHost = {
+        open,
+        rename: (n) => void events.rename.push(n),
+        move,
+        delete: (node, remove) => void events.remove.push({ node, ...(remove ? { remove } : {}) }),
+      }
+      const doors = (): NodeHost => (state.access.mode === 'member' ? memberDoors : { open, move })
       source = factory(computed(() => ({ ...state })), {
-        open: (n) => events.open.push(n),
-        rename: (n) => events.rename.push(n),
-        move: (n) => events.move.push(n),
+        ...doors(),
         registerAction: (id, handler) => actions.set(id, handler),
+
         covers,
         ensureCovers: (nodes) => events.ensuredCovers.push(...nodes),
         ...(options.screenUpload ? { screenUpload: options.screenUpload } : {}),

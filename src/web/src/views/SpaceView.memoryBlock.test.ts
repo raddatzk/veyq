@@ -2,7 +2,7 @@
 // A member with a Memory open learns that the Memory, or a folder above it, was blocked (inbox #503). A node block moves
 // the scope's tree revision and no item revision (`CaseDecisions.announce`), so the gallery's own poll stays a `304`: the
 // host's tree poll, which runs on every opened node's page, is the read that carries it. The real host
-// (`MemoryHomeView`), the real Memory page and gallery, the real tree store and crypto; the content API fakes a tree
+// (`SpaceView`), the real Memory page and gallery, the real tree store and crypto; the content API fakes a tree
 // revision like the server's (ADR 0081), the media and blob reads are the gallery fake store's. What this pins, each with
 // its control: the open Memory's page turns to *Blocked by the operator* on the poll that brings the block, every object
 // URL its gallery had decrypted is revoked and its own poll ends; a lift brings the page back; and a tree change that is
@@ -45,7 +45,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import * as v1 from '@veyq/crypto/v1'
-import MemoryHomeView from './MemoryHomeView.vue'
+import SpaceView from './SpaceView.vue'
 import { loadTree, resetTree, treeStore } from '../core/node/treeStore'
 import { LIVE_POLL } from '../core/node/useLevelLive'
 import { ITEMS_POLL } from '../core/items/itemsLive'
@@ -152,7 +152,7 @@ async function openRome() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash: hashForNode(treeStore.nodes, ROME, '~me') })
   await router.isReady()
-  const w = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
+  const w = mount(SpaceView, { global: { plugins: [router, realI18n()] } })
   for (let i = 0; i < 5; i++) {
     await settle(100)
     await flushPromises()

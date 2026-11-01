@@ -41,7 +41,9 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
-import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
+import type { NodeDetailProps } from '../../../core/applications/registry'
+import { hostRights, injectNodeHost } from '../../../core/node/nodeHost'
+import type { TreeNode } from '../../../core/node/tree'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions, type NodeHeaderAction } from '../../../core/node/nodeHeader'
 import { enqueue, removeFile, useUploadQueue, APPLICATION_OFF, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
@@ -65,7 +67,8 @@ import { guestUploaderName, needsPeople, uploaderOf, type FileUploader } from '.
 import { guestDisplayName } from '../../../core/sharing/guestIdentity'
 
 const props = defineProps<NodeDetailProps>()
-const emit = defineEmits<NodeDetailEmits>()
+// The page's doors (`core/node/nodeHost.ts`): the rename and move through core's dialogs, the share, the delete question.
+const host = injectNodeHost()
 const { t, locale } = useI18n()
 // Core's own actions (the heart, "Copy to…", Report) come with core's header for this node (`NodeHeader`'s `node`); a file
 // downloads as itself (the header's own download below), so core offers no ZIP download for it (ADR 0082 decision 4).
@@ -82,16 +85,16 @@ const source: DepotSource = guest
         if (a.mode !== 'guest') throw new Error('a guest view was handed a member access')
         return a
       },
-      { move: (node) => emit('move', node) },
+      host.move ? { move: (node) => host.move!(node) } : {},
     )
   : memberDepotSource({
       scopeId: () => props.scopeId,
       epochs: () => props.epochs,
       keyOf: (id) => props.tree.keyOf(id),
-      rename: () => emit('rename'),
-      move: (node) => emit('move', node),
+      ...(host.rename ? { rename: (node: TreeNode) => host.rename!(node) } : {}),
+      ...(host.move ? { move: (node: TreeNode) => host.move!(node) } : {}),
     })
-const rights = computed(() => sourceRights(depotRights(props.access, targetOf(props.tree, props.node)), source))
+const rights = computed(() => hostRights(sourceRights(depotRights(props.access, targetOf(props.tree, props.node)), source), host))
 const key = computed(() => props.contentKey ?? props.tree.keyOf(props.node.id))
 const writeReady = computed(() => source.upload?.ready() ?? false)
 
@@ -182,7 +185,13 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   ...standardNodeActions(
     t,
     rights.value,
-    { share: () => emit('share', { contribute: rights.value.shareContribute }), rename: () => emit('rename'), move: () => source.move?.(props.node), remove: () => emit('delete') },
+    {
+      share: () => host.share?.(props.node, { contribute: rights.value.shareContribute }),
+      rename: () => source.rename?.(props.node),
+      move: () => source.move?.(props.node),
+      remove: () => host.delete?.(props.node),
+    },
+
   ),
 ])
 

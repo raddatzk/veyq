@@ -171,7 +171,7 @@ export interface KindDescriptor {
    *  `rows` function share ONE row source. */
   list?: KindList
   /** The dialog that creates a node of this kind (props `NodeCreateDialogProps`, emits `NodeCreateDialogEmits`),
-   *  mounted by the shell when the level's "New" menu or a detail emits `create` / `createChild` with this kind. Omitted: a
+   *  mounted by the page when the level's "New" menu or a detail asks its `createChild` door for this kind. Omitted: a
    *  create of the kind opens nothing. FOLDER has none: its create is core's `FolderNameDialog`. */
   createDialog?: Component
   /** The entry this kind adds to the level view's "New" menu (`core/node/LevelView.vue`, inbox #406): its label (an i18n
@@ -333,11 +333,14 @@ export interface LevelTabSpec {
 
 export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: false; kind: NodeKind }
 
-/** The generic context the host hands the `detail` component of an opened node (event names below), always through core's
- *  frame `core/node/components/NodePage.vue`, which supplies core's own header actions of the node (the heart, the cover,
- *  copy, download, Report - `core/node/coreNodeActions.ts`) to the `NodeHeader` the detail draws with this `node`. The
- *  application's own host component maps it to whatever its detail view takes. What the detail offers is its
- *  application's rights function over `access` and the node (`core/access.ts`), never a flag the host decides. */
+/** The generic context the host hands the `detail` component of an opened node, always through core's frame
+ *  `core/node/components/NodePage.vue`, which supplies core's own header actions of the node (the heart, the cover, copy,
+ *  download, Report - `core/node/coreNodeActions.ts`) to the `NodeHeader` the detail draws with this `node`. What the detail
+ *  asks of the page - rename, move, delete, share, a child's create, opening a node - goes through the page's doors, which
+ *  it injects (`core/node/nodeHost.ts` `injectNodeHost`: the very doors a row factory is handed; an absent one is an
+ *  action not offered). The application's own host component maps it to whatever its detail view takes. What the detail
+ *  offers is its application's rights function over `access` and the node (`core/access.ts`), narrowed to the page's doors
+ *  (`hostRights`), never a flag the host decides. */
 export interface NodeDetailProps {
   node: TreeNode
   scopeId: string
@@ -353,30 +356,6 @@ export interface NodeDetailProps {
   /** The tree as that session reads it: keys, names, the identity-folder test and the links every navigation takes. Its
    *  nodes are `TreeNode`s in both modes (the member's tree, the guest's served rows as `TreeNode`s). */
   tree: TreeSource<TreeNode>
-}
-/** Events a `detail` component emits to the host: `rename` (core's `FolderNameDialog`, any kind), `delete` (core's delete
- *  question with its Undo),
- *  `createChild` (the KIND of the child to create: the host mounts that kind's `createDialog` under the opened node),
- *  `openNode` (a child), `share` and `shareUpload` (the opened kind's `shareDialog`, the second with `uploader`). `share`
- *  carries the {@link NodeShareOffer} of the rights function that showed the button, which the host hands on. */
-export interface NodeDetailEmits {
-  rename: []
-  delete: []
-  /** Move `node` (the opened node, or a child the detail lists — a drop box's guest folder): the host mounts core's
-   *  `MoveNodeDialog` for it (inbox #358). */
-  move: [node: TreeNode]
-  createChild: [kind: NodeKind]
-  openNode: [node: TreeNode]
-  share: [offer: NodeShareOffer]
-  shareUpload: []
-}
-
-/** What a `share` emit hands the host for the dialog it mounts: the share rights beyond "may share at all" that the
- *  application's rights function answered for the node (`contribute`: offer the READ_WRITE role for a new link,
- *  `core.public-shares.contribute`). The host passes them on as `NodeShareDialogProps`, so a dialog never reads a
- *  capability itself (src/web/CLAUDE.md: never a `hasCapability` read inline). */
-export interface NodeShareOffer {
-  contribute: boolean
 }
 
 /** What the host hands a kind's `createDialog`: the kind to create (one component may serve several kinds), the scope,
@@ -401,8 +380,9 @@ export interface NodeCreateDialogEmits {
 /** What the host hands a kind's `shareDialog`: the node, its content key as the key chain opens it (what a link wraps;
  *  key material), the scope's epoch keys (each link's recovery copy opens under `K_SC`), the node's name as the tree
  *  opened it (re-sealed under `K_share`) and its kind. `uploader`: the uploader (WRITE_ONLY drop) variant, set only on
- *  the detail's `shareUpload` — a kind whose dialog has no such variant ignores it. `contribute`: offer the READ_WRITE role
- *  for a new link, from the `share` emit's {@link NodeShareOffer}; absent, it is not offered (fail closed) — a dialog
+ *  a `share` door's `uploader` offer — a kind whose dialog has no such variant ignores it. `contribute`: offer the READ_WRITE
+ *  role for a new link, from the `share` door's `NodeShareOffer` (`core/node/nodeHost.ts`); absent, it is not offered (fail closed) — a dialog
+
  *  with no role choice ignores it. Mounted while open; emits `close`. */
 export interface NodeShareDialogProps {
   scopeId: string
