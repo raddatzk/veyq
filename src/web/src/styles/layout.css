@@ -78,10 +78,13 @@
   gap: 0.45rem;
 }
 
+/* Every heading is as tall as the section action ("＋", 1.6rem), whether or not it has one: a heading with the action was
+   taller, so its label sat lower and "Groups" stood further from the row above it than "Favorites" did. */
 .sidebar-section-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 1.6rem;
 }
 
 .sidebar-section-action {
