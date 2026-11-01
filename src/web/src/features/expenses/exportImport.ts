@@ -1,6 +1,6 @@
 // Expenses' side of a download, its import and a copy (ADR 0082, docs/apps/expenses.md § Download and import): a Pot's
 // content is its settings, its people and the current revision of each live entry, in the plaintext of the entry format
-// (`expensesPot` in contracts/export/veyq-subtree.schema.json), each entry with the receipts that revision holds as
+// (`pot` in Expenses' own contracts/export/expenses/content.schema.json), each entry with the receipts that revision holds as
 // payloads, and a CSV of the entries beside it for a spreadsheet. History, deleted entries and dropped receipts are not
 // exported: an import starts each entry at its current revision, under ids it mints, mapping every reference — so the
 // imported Pot's balances equal the original's.
@@ -53,11 +53,11 @@ const SCHEMA = EXPENSES_CONTENT_VERSION
 
 const MAX_PARTICIPANTS = 1000
 const MAX_ENTRIES = 100_000
-/** The longest receipt name the content carries (the schema's `expensesReceipt.name` maxLength). */
+/** The longest receipt name the content carries (the content schema's `receipt.name` maxLength). */
 export const MAX_RECEIPT_NAME = 1024
 
 type ExportedParticipant = { id: string; joined: number; name?: string; active?: boolean; deleted?: true; memberId?: string }
-/** One receipt as the content carries it (`expensesReceipt`): the id its entry lists, its sealed name, its bytes. */
+/** One receipt as the content carries it (`receipt` in Expenses' content schema): the id its entry lists, its sealed name, its bytes. */
 type ExportedReceipt = { id: string; name?: string; file: ManifestPayload }
 type ExportedEntry = { id: string; entry: MoneyContent; receipts?: ExportedReceipt[] }
 

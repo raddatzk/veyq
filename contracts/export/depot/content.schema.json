@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veyq.dev/contracts/export/depot/content.schema.json",
+  "title": "Depot content in a veyq-subtree manifest",
+  "description": "The `content` of a Depot node in a download (ADR 0082, docs/apps/depot.md): what the envelope, core's ../veyq-subtree.schema.json, leaves opaque. A content of `type` `depot.file` or `depot.drop-box` is one of these; Depot's own `validateFileContent` / `validateDropBoxContent` (src/web/src/features/depot/exportImport.ts) check it before an import writes anything. Payloads are core's shape (`payload` in the envelope).",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/file"
+    },
+    {
+      "$ref": "#/$defs/dropBox"
+    }
+  ],
+  "$defs": {
+    "file": {
+      "description": "Depot: the one blob of a FILE node. The file's name is the node's name.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "depot.file"
+        },
+        "file": {
+          "$ref": "../veyq-subtree.schema.json#/$defs/payload"
+        }
+      },
+      "required": [
+        "type",
+        "file"
+      ]
+    },
+    "dropBox": {
+      "description": "Depot: a DEPOT_DROPBOX node. It carries nothing but what it was: its guests' folders are its FOLDER children (each under the name the drop box shows it by, a repeated name numbered), their files theirs. An importing build creates it as a plain FOLDER - a drop key, guests' identities and links cannot be rebuilt from a download.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "depot.drop-box"
+        },
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

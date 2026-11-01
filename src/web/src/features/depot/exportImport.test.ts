@@ -5,7 +5,9 @@ vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => 
 vi.mock('./download', () => ({ fileFacts: vi.fn(), fileChunkProvider: vi.fn() }))
 vi.mock('./uploadFile', () => ({ fileUploadJob: vi.fn() }))
 
-import { exportFile, importFile, DEPOT_FILE_CONTENT } from './exportImport'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { exportFile, importFile, validateDropBoxContent, validateFileContent, DEPOT_DROPBOX_CONTENT, DEPOT_FILE_CONTENT } from './exportImport'
 import { fileUploadJob } from './uploadFile'
 import { filesApi, publicShareFilesApi } from './api'
 import { guestAccessOf, memberAccessOf } from '../../test/models'
@@ -106,5 +108,26 @@ describe('importFile', () => {
 
   it('refuses a node whose content is not a Depot file', async () => {
     await expect(importFile(importCtx({ node: { id: 'n', kind: 'FILE', name: 'x', content: { type: 'other' } } as ManifestNode }))).rejects.toThrow('import_invalid_content')
+  })
+})
+
+// Depot's own content schema (ADR 0082): core's envelope leaves `content` opaque, and this file is what Depot's two
+// validators answer for.
+describe("Depot's content schema", () => {
+  const schema = JSON.parse(readFileSync(resolve(__dirname, '../../../../../contracts/export/depot/content.schema.json'), 'utf8'))
+  const d = schema.$defs
+
+  it('names the two content types this module writes, and only those', () => {
+    expect(schema.oneOf.map((r: { $ref: string }) => d[r.$ref.replace('#/$defs/', '')].properties.type.const)).toEqual([DEPOT_FILE_CONTENT, DEPOT_DROPBOX_CONTENT])
+  })
+
+  it('agrees with the validators: a file needs its payload, a drop box carries nothing but its type and schema', () => {
+    expect(d.file.required).toEqual(['type', 'file'])
+    expect(validateFileContent({ type: DEPOT_FILE_CONTENT, schema: 1 })).toMatchObject({ code: 'invalid_manifest' })
+    expect(validateFileContent({ type: DEPOT_FILE_CONTENT, file: { path: 'a', size: 1 } })).toBeNull()
+    expect(d.dropBox.additionalProperties).toBe(false)
+    expect(Object.keys(d.dropBox.properties)).toEqual(['type', 'schema'])
+    expect(validateDropBoxContent({ type: DEPOT_DROPBOX_CONTENT, schema: 1, dropKey: 'x' })).toMatchObject({ code: 'invalid_manifest' })
+    expect(validateDropBoxContent({ type: DEPOT_DROPBOX_CONTENT, schema: 1 })).toBeNull()
   })
 })

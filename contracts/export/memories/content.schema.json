@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veyq.dev/contracts/export/memories/content.schema.json",
+  "title": "Memories content in a veyq-subtree manifest",
+  "description": "The `content` of a Memories node in a download (ADR 0082, docs/apps/memories.md): what the envelope, core's ../veyq-subtree.schema.json, leaves opaque. A content of `type` `memories.memory` or `memories.chapter` is one of these; Memories' own `validateMemoryContent` (src/web/src/features/memories/exportImport.ts) checks it before an import writes anything, its caps pinned to this file by that module's test. Payloads are core's shape (`payload` in the envelope).",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/memory"
+    },
+    {
+      "$ref": "#/$defs/chapter"
+    }
+  ],
+  "$defs": {
+    "memory": {
+      "description": "Memories: the content of a MEMORY node. Its chapters are the node's CHAPTER children, each with its own `memories.chapter` content; the media listed here are the Memory's own.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "memories.memory"
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/medium"
+          }
+        },
+        "date": {
+          "$ref": "#/$defs/date"
+        },
+        "location": {
+          "$ref": "#/$defs/place"
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "description": "Who was there, as display names (text only): ids mean nothing in another instance, so an import never restores them (ADR 0083).",
+          "maxItems": 100
+        },
+        "cover": {
+          "$ref": "#/$defs/cover"
+        },
+        "banner": {
+          "$ref": "#/$defs/banner"
+        }
+      },
+      "required": [
+        "type",
+        "media"
+      ]
+    },
+    "chapter": {
+      "description": "Memories: the content of a CHAPTER node - the same fields as a Memory's (media, date, place, cover, participants).",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "memories.chapter"
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/medium"
+          }
+        },
+        "date": {
+          "$ref": "#/$defs/date"
+        },
+        "location": {
+          "$ref": "#/$defs/place"
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "maxItems": 100
+        },
+        "cover": {
+          "$ref": "#/$defs/cover"
+        },
+        "banner": {
+          "$ref": "#/$defs/banner"
+        }
+      },
+      "required": [
+        "type",
+        "media"
+      ]
+    },
+    "medium": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "../veyq-subtree.schema.json#/$defs/payload",
+          "description": "The pristine original, never a derivative."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "The original file name."
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The capture time as the Memory shows it (EXIF, the file's time, or the member's correction)."
+        },
+        "location": {
+          "type": "object",
+          "description": "Informational: an import re-reads the coordinate from the file's own EXIF (there is no way to seal one the file lacks) and restores only `place`. Version 1 left it out when `options.includeLocation` was false.",
+          "properties": {
+            "lat": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "lon": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            "place": {
+              "type": "string",
+              "maxLength": 1024,
+              "description": "The place name the Memory shows."
+            }
+          }
+        },
+        "exif": {
+          "type": "object",
+          "description": "Camera EXIF the original carries, as read; open. Version 1 left out the locating tags when `options.includeLocation` was false."
+        },
+        "contributor": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Text only: who added the medium (\"Anna\"). Not an identity; an import never maps it to a member."
+        },
+        "capturedAtCorrected": {
+          "const": true,
+          "description": "Present when the member had corrected the capture time (an override); an import restores it as one."
+        }
+      }
+    },
+    "date": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "auto",
+            "single",
+            "range",
+            "ongoing"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+      }
+    },
+    "place": {
+      "type": "object",
+      "description": "The Memory's place as it is sealed in the node's metadata (name, how it was named, whether its position is derived from the media or fixed). Version 1 left it out when `options.includeLocation` was false.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "nameSource": {
+          "enum": [
+            "geocoded",
+            "manual"
+          ]
+        },
+        "derivedMode": {
+          "enum": [
+            "auto",
+            "fixed"
+          ]
+        },
+        "derived": {
+          "type": "object",
+          "properties": {
+            "lat": {
+              "type": "number"
+            },
+            "lng": {
+              "type": "number"
+            }
+          }
+        },
+        "nameAnchor": {
+          "type": "object"
+        }
+      }
+    },
+    "cover": {
+      "description": "The cover: the node's own uploaded image (a payload), framed by a normalized 0..1 crop.",
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "../veyq-subtree.schema.json#/$defs/payload"
+        },
+        "crop": {
+          "type": "object"
+        }
+      }
+    },
+    "banner": {
+      "description": "The banner (uc.memory.banner): its own image or video as a payload (and a video's poster), framed by a fill or fit frame around a normalized 0..1 focal point.",
+      "type": "object",
+      "required": [
+        "file",
+        "medium"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "../veyq-subtree.schema.json#/$defs/payload"
+        },
+        "poster": {
+          "$ref": "../veyq-subtree.schema.json#/$defs/payload"
+        },
+        "medium": {
+          "enum": [
+            "image",
+            "video"
+          ]
+        },
+        "frame": {
+          "enum": [
+            "fill",
+            "fit"
+          ]
+        },
+        "focal": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

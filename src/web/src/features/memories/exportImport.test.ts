@@ -455,23 +455,26 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
   })
 
   it('each limit is the schema\'s maxLength / maxItems of that field', () => {
-    const schema = JSON.parse(readFileSync(new URL('../../../../../contracts/export/veyq-subtree.schema.json', import.meta.url), 'utf8'))
+    // Memories' own content schema (ADR 0082): core's envelope leaves `content` opaque.
+    const schema = JSON.parse(readFileSync(new URL('../../../../../contracts/export/memories/content.schema.json', import.meta.url), 'utf8'))
     const d = schema.$defs
     expect({
-      name: d.memoriesMedium.properties.name.maxLength,
-      contributor: d.memoriesMedium.properties.contributor.maxLength,
-      place: d.memoriesPlace.properties.name.maxLength,
-      participant: d.memoriesMemory.properties.participants.items.maxLength,
-      participants: d.memoriesMemory.properties.participants.maxItems,
+      name: d.medium.properties.name.maxLength,
+      contributor: d.medium.properties.contributor.maxLength,
+      place: d.place.properties.name.maxLength,
+      participant: d.memory.properties.participants.items.maxLength,
+      participants: d.memory.properties.participants.maxItems,
     }).toEqual(MEMORIES_LIMITS)
     // the banner has no description, and neither a cover nor a banner names a medium by index
-    expect(Object.keys(d.memoriesBanner.properties)).not.toContain('alt')
-    expect(Object.keys(d.memoriesBanner.properties)).not.toContain('mediaIndex')
-    expect(Object.keys(d.memoriesCover.properties)).not.toContain('mediaIndex')
-    expect(d.memoriesChapter.properties.banner.$ref).toBe('#/$defs/memoriesBanner')
-    expect(d.memoriesMedium.properties.location.properties.place.maxLength).toBe(MEMORIES_LIMITS.place)
-    expect(d.memoriesChapter.properties.participants.maxItems).toBe(MEMORIES_LIMITS.participants)
-    expect(d.memoriesChapter.properties.participants.items.maxLength).toBe(MEMORIES_LIMITS.participant)
+    expect(Object.keys(d.banner.properties)).not.toContain('alt')
+    expect(Object.keys(d.banner.properties)).not.toContain('mediaIndex')
+    expect(Object.keys(d.cover.properties)).not.toContain('mediaIndex')
+    expect(d.chapter.properties.banner.$ref).toBe('#/$defs/banner')
+    expect(d.medium.properties.location.properties.place.maxLength).toBe(MEMORIES_LIMITS.place)
+    expect(d.chapter.properties.participants.maxItems).toBe(MEMORIES_LIMITS.participants)
+    expect(d.chapter.properties.participants.items.maxLength).toBe(MEMORIES_LIMITS.participant)
+    // the file's content types are the two this module writes, and only those
+    expect(schema.oneOf.map((r: { $ref: string }) => d[r.$ref.replace('#/$defs/', '')].properties.type.const)).toEqual([MEMORY_CONTENT, CHAPTER_CONTENT])
   })
 })
 

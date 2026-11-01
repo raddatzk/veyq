@@ -245,7 +245,8 @@ archive's exact length before its first byte, which the save target `shared/save
 with), the safe names (`archiveName.ts`) and the manifest (`manifest.ts`, format version 2 written, 1 and 2 read). A
 kind brings its content through its registration (`exportContent`, `importContent`, `contentSchema`,
 `downloadsAsFile`, `importsAsFolder`). The manifest's schema is
-[`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json); the flows are
+[`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json), core's envelope, with
+each application's `content` in its own `contracts/export/<application>/content.schema.json` beside it; the flows are
 [uc.platform.export-import](../use-cases/uc.platform.export-import.md) and
 [uc.platform.copy-node](../use-cases/uc.platform.copy-node.md).
 

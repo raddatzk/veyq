@@ -237,7 +237,8 @@ export interface KindDescriptor {
    *  version alone). Absent: the content carries no application and version 1. */
   contentSchema?: { application: string; version: number }
   /** Check a node's content from a download against this kind's contract (decision 10: the archive is untrusted input) -
-   *  its shape and every field at its `maxLength` in `contracts/export/veyq-subtree.schema.json`. Called by the import's dry
+   *  its shape and every field at its `maxLength` in its application's own `contracts/export/<application>/content.schema.json`
+   *  (core's envelope leaves `content` opaque). Called by the import's dry
    *  run before anything is written; the answer names the problem, null when the content is sound. Core has already checked
    *  the payload references inside it (their paths, sizes and checksums' shape). Absent: no check of the kind's own. */
   validateContent?: (content: ManifestContent) => ContentProblem | null

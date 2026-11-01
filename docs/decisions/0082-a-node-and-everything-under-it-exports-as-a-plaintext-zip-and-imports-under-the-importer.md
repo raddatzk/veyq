@@ -51,8 +51,12 @@ a Memory, a chapter) is a directory; a node of a kind that IS one file (a Depot 
 node to its path; the path is a label, never an identity. The manifest — `format: "veyq-subtree"`, `version`,
 `exportedAt`, `appVersion`, the `applications` it carries (decision 9), and the tree (each node: archive-local `id`,
 `kind`, `name`, `path`, `cover`, `metadata`, the kind's `content` reference, `children`) — is specified by
-[`contracts/export/veyq-subtree.schema.json`](../../contracts/export/veyq-subtree.schema.json); a worked example is
-below. The writer and reader are **hand-written and streaming**, with **no new dependency**, so an import never holds
+[`contracts/export/veyq-subtree.schema.json`](../../contracts/export/veyq-subtree.schema.json), core's envelope, which
+names no application: a node's `content` is opaque to it beyond its `type` (`<application>.<name>`) and `schema`. Each
+application specifies its own content in `contracts/export/<application>/content.schema.json`
+([Depot's](../../contracts/export/depot/content.schema.json), [Memories'](../../contracts/export/memories/content.schema.json),
+[Expenses'](../../contracts/export/expenses/content.schema.json)), the `<application>` part of `type` naming the file. A worked
+example is below. The writer and reader are **hand-written and streaming**, with **no new dependency**, so an import never holds
 the file in memory. Payload paths come from the manifest
 only, lie at or under their node's path, and are refused when a segment is not a safe name or the path reaches into
 `.veyq/`; each payload's `sha256` is verified while streaming. ZIP64 is required from the start (a subtree exceeds 4 GiB).
@@ -109,7 +113,8 @@ lists, before anything is written, every node this build cannot import: a kind o
 silently, and nothing newer is read as if it were older.
 
 **10. The archive is untrusted input.** The import replays the ordinary writes, so the server checks what it always
-checks; the client additionally checks the archive before and while it reads it: the manifest against its schema; caps on
+checks; the client additionally checks the archive before and while it reads it: the manifest against core's envelope, and
+each node's `content` by its kind's `validateContent` against its application's content schema; caps on
 node count, depth, name length and every metadata field at the API's own limits; the ZIP structure itself (every offset
 inside the file, no overlapping entries, declared sizes equal to actual sizes, ZIP64 fields in range); each payload's
 `sha256`; and text that is rendered (a note, a description) only through the safe markdown renderer. Being store-only, an
@@ -204,7 +209,8 @@ shows it:
 ## Consequences
 
 - **Nothing in the backend or `contracts/api/`** — the client uses the existing node, blob and quota endpoints. The
-  schema under `contracts/export/` is the one contract artefact.
+  schemas under `contracts/export/` are the one contract artefact: core's envelope and each application's content
+  schema beside it, so a new application adds its own file and core's is not touched.
 - **The format is a public promise.** `version` bumps only for a change an old reader would misread; kinds version their
   own `content.schema`, named per application in `applications`. A reader that tolerates additions keeps old files
   importable, and a reader keeps every older `version` it ever wrote: the tree layout (2) replaced `data/<id>/` (1), and

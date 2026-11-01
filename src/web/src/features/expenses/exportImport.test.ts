@@ -26,7 +26,7 @@ import { activeSpace } from '../../app/activeSpace'
 import { ShareRole } from '../../api/generated/sharing'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { readFileSync } from 'node:fs'
-import { MAX_RECEIPT_NAME, exportPot, importPot, validatePotContent } from './exportImport'
+import { EXPENSES_POT_CONTENT, MAX_RECEIPT_NAME, exportPot, importPot, validatePotContent } from './exportImport'
 import { RECEIPT_MAX_BYTES } from './receipts'
 import { MAX_RECEIPTS } from './domain/format'
 import { appendPotWrites, readGuestPot, readMemberPot, sealPotWrites } from './domain/potApi'
@@ -201,13 +201,17 @@ describe('validatePotContent — the receipts an entry carries', () => {
   })
 
   it("each limit is the schema's", () => {
-    const schema = JSON.parse(readFileSync(new URL('../../../../../contracts/export/veyq-subtree.schema.json', import.meta.url), 'utf8'))
+    // Expenses' own content schema (ADR 0082): core's envelope leaves `content` opaque.
+    const schema = JSON.parse(readFileSync(new URL('../../../../../contracts/export/expenses/content.schema.json', import.meta.url), 'utf8'))
     const d = schema.$defs
     expect({
-      name: d.expensesReceipt.properties.name.maxLength,
-      size: d.expensesReceipt.properties.file.properties.size.maximum,
-      perEntry: d.expensesEntry.properties.receipts.maxItems,
+      name: d.receipt.properties.name.maxLength,
+      size: d.receipt.properties.file.properties.size.maximum,
+      perEntry: d.entry.properties.receipts.maxItems,
     }).toEqual({ name: MAX_RECEIPT_NAME, size: RECEIPT_MAX_BYTES, perEntry: MAX_RECEIPTS })
-    expect(d.expensesReceipt.required).toEqual(['id', 'file'])
+    expect(d.receipt.required).toEqual(['id', 'file'])
+    // the file's one content type is the one this module writes
+    expect(schema.oneOf).toEqual([{ $ref: '#/$defs/pot' }])
+    expect(d.pot.properties.type.const).toBe(EXPENSES_POT_CONTENT)
   })
 })

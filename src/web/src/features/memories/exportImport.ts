@@ -283,8 +283,8 @@ async function coverOf(
   return { file, crop: cover.crop }
 }
 
-/** The contract's `maxLength` / `maxItems` of Memories' fields (`contracts/export/veyq-subtree.schema.json`, `memories*`
- *  `$defs`); `exportImport.test.ts` pins each to the schema. */
+/** The contract's `maxLength` / `maxItems` of Memories' fields (Memories' own `contracts/export/memories/content.schema.json`);
+ *  `exportImport.test.ts` pins each to the schema. */
 export const MEMORIES_LIMITS = { name: 1024, contributor: 1024, place: 1024, participant: 1024, participants: 100 } as const
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
