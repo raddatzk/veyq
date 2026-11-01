@@ -33,7 +33,7 @@ import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 import { birthInstance, become, mkActor, onboardMember, type Actor } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
 import { registry } from '../../core/applications/registry'
-import { memoriesLifecycle } from '../memories/lifecycle'
+import { registerMemoriesLifecycle } from '../../test/memoriesLifecycle'
 import { CHAPTER_KIND, MEMORY_KIND } from '../memories/kinds'
 import { rekeyMemoryContent } from '../memories/rekey'
 import {
@@ -57,11 +57,11 @@ import { MANIFEST_FORMAT, MANIFEST_VERSION, type Manifest, type ManifestNode } f
 // Registered as Memories' `register.ts` does for what an export walk, an import and a re-key ask of a kind; a
 // node-environment suite gets no registry from `setup.ts`.
 beforeAll(() => {
-  registry.registerLifecycle('memories', memoriesLifecycle)
+  registerMemoriesLifecycle()
   for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
     if (registry.kind(kind).supported) continue
     registry.registerKind({
-      kind, icon: 'images', shareable: true, contentSchema: MEMORIES_CONTENT_SCHEMA, validateContent: validateMemoryContent,
+      kind, icon: 'images', contentSchema: MEMORIES_CONTENT_SCHEMA, validateContent: validateMemoryContent,
       exportContent: exportMemoryContent, importContent: importMemoryContent(kind), importStreams: true, rekeyContent: rekeyMemoryContent,
       placement: kind === MEMORY_KIND ? { root: true, parents: [FOLDER_KIND] } : { root: false, parents: [MEMORY_KIND] },
     })

@@ -18,7 +18,7 @@ afterEach(() => {
 })
 
 const act = (id: string, over: Partial<LevelRowAction> = {}): LevelRowAction => ({
-  id, label: `${id} thing`, icon: 'times', onClick: () => calls.push(id), ...over,
+  id, label: `${id} thing`, icon: 'times', shown: true, onClick: () => calls.push(id), ...over,
 })
 function row(over: Partial<LevelRow> = {}): LevelRow {
   return {

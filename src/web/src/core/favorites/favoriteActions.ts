@@ -19,11 +19,14 @@ type Failed = (summary: string) => void
 
 /** The heart of `node` for `access`, or none (a guest, the scope root, a kind this client cannot draw). */
 function heart(t: Translate, failed: Failed, access: Access, node: { id: string; kind: NodeKind } | null): (CoreHeaderAction & CoreRowAction)[] {
-  if (!node || !favoriteRights(access, node).favorite || access.mode !== 'member') return []
+  if (!node || access.mode !== 'member') return []
+  const shown = favoriteRights(access, node).favorite
+  if (!shown) return []
   const pinned = isFavorite(node.id)
   return [
     {
       id: 'favorite',
+      shown,
       label: pinned ? t('node.unfavorite') : t('node.favorite'),
       icon: pinned ? 'heart-fill' : 'heart',
       pressed: pinned,

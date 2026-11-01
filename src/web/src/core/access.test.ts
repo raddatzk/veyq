@@ -154,17 +154,14 @@ describe('targetOf: the node as a rights function is asked about it', () => {
     expect(targetOf(tree, null)).toEqual({ kind: null, inIdentityFolder: false, shareable: false })
   })
 
-  it('a kind is shareable only when its descriptor says so AND brings a share dialog (FOLDER: core\'s own)', () => {
+  it('a kind is shareable exactly when it brings a share dialog (FOLDER: core\'s own)', () => {
     expect(targetOf(tree, tree.node('f'))).toEqual({ kind: FOLDER_KIND, inIdentityFolder: true, shareable: true, parentKind: null })
     expect(targetOf(tree, tree.node('x')).shareable, 'a kind nobody registered').toBe(false)
-    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file', shareable: true })
-    expect(targetOf(tree, tree.node('x')).shareable, 'shareable, but no dialog to mount').toBe(false)
+    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file' })
+    expect(targetOf(tree, tree.node('x')).shareable, 'no dialog to mount').toBe(false)
     holder.reg = createRegistry()
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file', shareable: false, shareDialog: Dialog })
-    expect(targetOf(tree, tree.node('x')).shareable, 'a dialog, but the descriptor says no').toBe(false)
-    holder.reg = createRegistry()
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file', shareable: true, shareDialog: Dialog })
-    expect(targetOf(tree, tree.node('x')).shareable, 'control: both').toBe(true)
+    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file', shareDialog: Dialog })
+    expect(targetOf(tree, tree.node('x')).shareable, 'control: its dialog').toBe(true)
   })
 
   // inbox #358: a guest moves only what a FOLDER holds, and never the link's root, whose parent lies above the link.

@@ -203,7 +203,7 @@ describe('a guest places a node', () => {
   // registers the file folding (fileNameSlug: foto.jpg).
   describe('folds by kind (inbox #350)', () => {
     const LEAF = 'LEAFTEST'
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: LEAF, icon: 'file', shareable: false, slug: fileNameSlug })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: LEAF, icon: 'file', slug: fileNameSlug })
     const DIR = '6e5a0000-0000-4000-8000-0000000000b1'
     const FILE = '6e5a0000-0000-4000-8000-0000000000b2'
     const byKind = () => {

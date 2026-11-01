@@ -13,7 +13,7 @@ import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'
 import { favoritesStore } from './favoritesStore'
-import { registry, type SidebarPinsProps, type SidebarPinsEmits } from '../applications/registry'
+import { registry } from '../applications/registry'
 import { treeStore } from '../node/treeStore'
 import { displayNameOf, nodeById } from '../node/browse'
 import { hashForNode, parseHash } from '../node/location'
@@ -23,8 +23,10 @@ import { memberCoverStore } from '../node/cover/coverStore'
 import NodeCoverImage from '../node/cover/components/NodeCoverImage.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 
-defineProps<SidebarPinsProps>()
-const emit = defineEmits<SidebarPinsEmits>()
+/** Where the shell mounts it: the left rail, or the mobile navigation sheet. */
+defineProps<{ variant: 'rail' | 'sheet' }>()
+/** The member followed one of its links (the sheet closes). */
+const emit = defineEmits<{ navigate: [] }>()
 
 const { t } = useI18n()
 const route = useRoute()

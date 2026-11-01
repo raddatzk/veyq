@@ -46,7 +46,7 @@ const wire: string[] = []
 let realFetch: typeof fetch
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
   realFetch = globalThis.fetch
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url

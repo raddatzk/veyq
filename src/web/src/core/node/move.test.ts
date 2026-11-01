@@ -67,9 +67,9 @@ const hereAt = (tree: TreeSource, node: TreeNode, mode: Access['mode'], ats: (st
 
 beforeEach(() => {
   holder.reg = createRegistry()
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: ITEM, icon: 'images', shareable: false, placement: { root: true, parents: [FOLDER_KIND] } })
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: PART, icon: 'image', shareable: false, placement: { root: false, parents: [ITEM] } })
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX, icon: 'inbox', shareable: false, placement: { root: true, parents: [FOLDER_KIND] } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: ITEM, icon: 'images', placement: { root: true, parents: [FOLDER_KIND] } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: PART, icon: 'image', placement: { root: false, parents: [ITEM] } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX, icon: 'inbox', placement: { root: true, parents: [FOLDER_KIND] } })
   for (const f of Object.values(calls)) f.mockClear()
 })
 

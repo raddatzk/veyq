@@ -6,8 +6,8 @@
 // sign-out — the shell's one door into the hub).
 //
 // The rail also carries the **groups** section and, below the space switcher, the **Favorites** section (core's
-// `PinnedNodes`: every pinned node, each with its kind's icon - inbox #409) and whatever an application pins into the
-// `sidebarPins` list slot (none today — ADR 0079: the shell names no application kind). It imports no key API at all — the epoch chain that opens a node's `K_node` has no business in an
+// `PinnedNodes`: every pinned node of every kind, each with its kind's icon - inbox #409); no application adds to the
+// rail (ADR 0079: the shell names no application kind). It imports no key API at all — the epoch chain that opens a node's `K_node` has no business in an
 // always-mounted rail, and keeping it out is a property worth preserving, not an accident of one diff.
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -28,7 +28,6 @@ import CreateGroupDialog from '../../features/spaces/CreateGroupDialog.vue'
 import { useCapabilities } from '../../shared/state/useCapabilities'
 import { CORE_GROUP_SPACE } from '../../features/platform/capabilities'
 import { useThemeState } from '../../shared/state/useThemeState'
-import { registry } from '../../core/applications/registry'
 import { parseHash, TENANT_SCOPE, isPersonalScope, personalScope } from '../../core/node/location'
 import { getMyProfile } from '../../features/account/profile/profile'
 import { slugify } from '../../shared/naming'
@@ -218,9 +217,6 @@ const activeTenant = computed(
 // member belongs to and switches on select. Shown only when there is more than one tenant to switch between.
 const tenantOverview = ref<InstanceType<typeof VeyqPopover> | null>(null)
 
-// What the applications pinned into the rail, in their `order`; none → no section, no gap.
-const sidebarPins = registry.slotItems('sidebarPins')
-
 onMounted(async () => {
   await loadTenants()
   try {
@@ -366,7 +362,6 @@ function closeMobileMenu() {
     </nav>
 
     <PinnedNodes variant="rail" />
-    <component :is="pin.component" v-for="pin in sidebarPins" :key="pin.id" variant="rail" />
 
     <!-- Groups (en.spaces.group-scope, cr-0032). The header + "＋" is always present so the first group is
          creatable; the group links appear as they land. Desktop renders `.desktop-group-link`; the compact rail
@@ -537,7 +532,6 @@ function closeMobileMenu() {
         </section>
 
         <PinnedNodes variant="sheet" @navigate="closeMobileMenu" />
-        <component :is="pin.component" v-for="pin in sidebarPins" :key="pin.id" variant="sheet" @navigate="closeMobileMenu" />
       </div>
     </VeyqDialog>
 

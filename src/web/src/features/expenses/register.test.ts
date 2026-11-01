@@ -30,7 +30,7 @@ describe('registerExpenses', () => {
     const r = createRegistry()
     registerExpenses(r)
     expect(r.kind(POT_KIND)).toMatchObject({
-      supported: true, kind: POT_KIND, icon: 'wallet', shareable: true, detail: PotDetail, shareDialog: PotShareDialog, createDialog: PotCreateDialog,
+      supported: true, kind: POT_KIND, icon: 'wallet', detail: PotDetail, shareDialog: PotShareDialog, createDialog: PotCreateDialog,
       deleteTitle: 'expenses.delete', deleteCopy: 'expenses.deleteConfirm', nounWithArticle: 'expenses.aPot',
       list: { rows: potRows, tabLabel: 'expenses.title' }, placement: { root: true, parents: [FOLDER_KIND] },
       rekeyContent: rekeyPotContent, exportContent: exportPot, importContent: importPot, validateContent: validatePotContent,
@@ -93,7 +93,7 @@ describe('a Pot\'s row', () => {
     const guest = mountRows(potRows, ctx(() => key, guestAccessOf(ShareRole.ReadWrite, { head: { scopeId: SCOPE } as unknown as GuestAccess['head'] })))
     const row = guest.source().row(pot)!
     expect(row.details).toEqual([{ id: 'currency', text: 'CHF' }])
-    expect(row.actions.filter((a) => a.shown !== false)).toEqual([])
+    expect(row.actions.filter((a) => a.shown)).toEqual([])
     expect(row.standard).toEqual({ rename: false, move: false, delete: false })
     expect(await actionIdsOf(guest.w, 'Trip'), 'no default either').toEqual([])
     expect(row.selection).toEqual({ move: false, delete: false })

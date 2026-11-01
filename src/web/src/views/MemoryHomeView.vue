@@ -141,14 +141,14 @@ const shareDialog = computed(() => {
   const info = registry.kind(currentNode.value.kind)
   return info.supported ? (info.shareDialog ?? null) : null
 })
-// A share dialog opens only for a node whose kind descriptor says it is shareable AND brings a share dialog (cr-0104; the
+// A share dialog opens only for a node whose kind brings one (`KindDescriptor.shareDialog`, its whole answer; cr-0104; the
 // backend refuses a share root of a kind no application declares). Whether the share BUTTON shows is the rights
 // function's (the `core.public-shares` register leaves, ADR 0032/0088: an operator can turn public sharing off instance-wide,
 // and the server then rejects createShare with 422); this is the host's second gate on what it mounts.
 const kindShareable = computed(() => {
   if (!currentNode.value) return false
   const info = registry.kind(currentNode.value.kind)
-  return info.supported && info.shareable && !!shareDialog.value
+  return info.supported && !!shareDialog.value
 })
 
 // Who looks: the member (see the header). A pending deletion (cr-0090) takes every write away — the server refuses them

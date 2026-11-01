@@ -17,15 +17,14 @@
 import { beforeAll, describe, it, expect } from 'vitest'
 import { birthInstance, become, mkActor, onboardMember } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
-import { registry } from '../../core/applications/registry'
-import { memoriesLifecycle } from '../memories/lifecycle'
+import { registerMemoriesLifecycle } from '../../test/memoriesLifecycle'
 import { addGroupMember, listScopeMembers, rekeySpace, resolveGroupMember } from './members'
 import { commitRotation, createGroup, listMyScopes, openScopeById } from './scopes'
 import { createFolder, listTree } from '../../core/node/tree'
 import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { decodeHttpError } from '../../shared/httpError'
 
-beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
+beforeAll(() => registerMemoriesLifecycle())
 
 const GROUP_NAME = 'Chorprobe Ammersee'
 const FOLDER_NAME = 'Notenblaetter Herbstkonzert'

@@ -77,7 +77,7 @@ beforeEach(() => {
   })
   if (!registry.kind(FILE).supported) {
     registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-      kind: FILE, icon: 'file', shareable: false, downloadsAsFile: true, contentSchema: { application: 't', version: 1 },
+      kind: FILE, icon: 'file', downloadsAsFile: true, contentSchema: { application: 't', version: 1 },
       async exportContent(ctx) {
         const bytes = contents.get(ctx.node.id)!
         const file = ctx.addPayload(ctx.node.name, { size: bytes.length, mediaType: 'text/plain', chunks: async function* () { yield bytes.subarray(0, 3); yield bytes.subarray(3) } })
@@ -93,7 +93,7 @@ beforeEach(() => {
       },
     })
     registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-      kind: COLLECTION, icon: 'file', shareable: false, contentSchema: { application: 't', version: 1 },
+      kind: COLLECTION, icon: 'file', contentSchema: { application: 't', version: 1 },
       async exportContent(ctx) {
         const files = collectionFiles.map(([name, body]) => ctx.addPayload(name, { size: body.length, mediaType: 'text/plain', chunks: async function* () { yield text(body) } }))
         return { type: 't.collection', schema: 1, files }
@@ -106,10 +106,10 @@ beforeEach(() => {
         return { nodeId: made.nodeId, nodeKey: made.contentKey }
       },
     })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: ODD, icon: 'file', shareable: false }) // no hooks: cannot be downloaded
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: ODD, icon: 'file' }) // no hooks: cannot be downloaded
     // a container that downloads with a content of its own and imports as a plain folder (a Depot drop box's shape)
     registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-      kind: BOX, icon: 'file', shareable: false, contentSchema: { application: 't', version: 1 }, importsAsFolder: true,
+      kind: BOX, icon: 'file', contentSchema: { application: 't', version: 1 }, importsAsFolder: true,
       exportContent: async () => ({ type: 't.box', schema: 1 }),
       validateContent: (c) => (Object.keys(c).every((k) => k === 'type' || k === 'schema') ? null : { code: 'invalid_manifest', message: 'a box with more' }),
     })

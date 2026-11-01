@@ -50,7 +50,7 @@ describe('standardRowActions', () => {
 })
 
 describe('withStandardRowActions', () => {
-  const own = (id: string, over: Partial<LevelRowAction> = {}): LevelRowAction => ({ id, label: `own ${id}`, icon: 'pencil', onClick: () => {}, ...over })
+  const own = (id: string, over: Partial<LevelRowAction> = {}): LevelRowAction => ({ id, label: `own ${id}`, icon: 'pencil', shown: true, onClick: () => {}, ...over })
   const defaults = standardRowActions(t, node, { standard: ALL }, doors())
 
   it('adds the defaults around the application\'s own: rename and move before, delete after', () => {

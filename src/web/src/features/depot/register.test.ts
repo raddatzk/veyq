@@ -22,7 +22,6 @@ describe('registerDepot', () => {
       supported: true,
       kind: FILE_KIND,
       icon: 'file',
-      shareable: true,
       detail: FileDetail,
       shareDialog: FileShareDialog,
       deleteTitle: 'depot.deleteTitle',
@@ -67,15 +66,15 @@ describe('registerDepot', () => {
   it('folds a file name case-insensitively and keeps its punctuation', () => {
     const registry = createRegistry()
     registerDepot(registry)
-    expect(registry.slugFor(FILE_KIND, 'Foto.JPG')).toBe(registry.slugFor(FILE_KIND, 'foto.jpg'))
-    expect(registry.slugFor(FILE_KIND, 'Day1.md')).not.toBe(registry.slugFor(FILE_KIND, 'Day1 md'))
+    expect(registry.tokenInputFor(FILE_KIND, 'Foto.JPG')).toBe(registry.tokenInputFor(FILE_KIND, 'foto.jpg'))
+    expect(registry.tokenInputFor(FILE_KIND, 'Day1.md')).not.toBe(registry.tokenInputFor(FILE_KIND, 'Day1 md'))
   })
 
   it('leaves the folder folding alone', () => {
     const registry = createRegistry()
     registerDepot(registry)
-    expect(registry.slugFor(FOLDER_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG'))
-    expect(registry.slugFor(FOLDER_KIND, 'Foto.JPG')).not.toBe(fileNameSlug('Foto.JPG'))
+    expect(registry.tokenInputFor(FOLDER_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG'))
+    expect(registry.tokenInputFor(FOLDER_KIND, 'Foto.JPG')).not.toBe(fileNameSlug('Foto.JPG'))
   })
 
   it('registers the DEPOT_DROPBOX kind: shareable, its rows beside the files\', its dialogs, detail and share body (F3)', () => {
@@ -86,7 +85,6 @@ describe('registerDepot', () => {
       kind: DROPBOX_KIND,
       icon: 'inbox',
       cover: {}, // a drop box carries a cover (inbox #411)
-      shareable: true,
       detail: DropBoxDetail,
       deleteTitle: 'depot.dropBox.delete',
       deleteCopy: 'depot.dropBox.deleteConfirm',
@@ -106,7 +104,7 @@ describe('registerDepot', () => {
       rekeyContent: nothingOfItsOwnToRekey,
     })
     expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
-    expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
+    expect(registry.tokenInputFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
   })
 
   it('brings its own rows and tabs (files, then drop boxes), and no FILE create dialog, list item, drop page or lifecycle', () => {
@@ -120,7 +118,6 @@ describe('registerDepot', () => {
       [FILE_KIND, 'depot.title', [FILE_KIND]],
       [DROPBOX_KIND, 'depot.dropBox.section', [DROPBOX_KIND]],
     ])
-    for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
     expect(registry.shareBody(FILE_KIND)).toBeNull() // no WRITE_ONLY link on a file: core's page serves every file link
   })
 

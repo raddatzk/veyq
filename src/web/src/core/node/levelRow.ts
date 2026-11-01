@@ -207,7 +207,7 @@ export function splitRowActions(actions: readonly (LevelRowAction | CoreHeaderAc
   menu: LevelRowAction[]
   menuOnly: LevelRowAction[]
 } {
-  const shown = actions.filter((a) => a.shown !== false) as LevelRowAction[]
+  const shown = actions.filter((a) => a.shown) as LevelRowAction[]
   const buttons = shown.filter((a) => a.first === true && !isMenuOnly(a)).slice(0, MAX_FIRST_ACTIONS)
   const { buttons: rest, menuOnly } = partitionHeaderActions(shown.filter((a) => !buttons.includes(a)))
   const lead = ROW_MENU_LEAD.flatMap((id) => rest.filter((a) => a.id === id))

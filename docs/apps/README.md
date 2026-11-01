@@ -111,7 +111,9 @@ Core reaches application code only through interfaces each application implement
 `ModuleCompositionTest.seams()` (the root's test, which pins the composed sets). They fall into four groups:
 
 - **Erasure and accounts** — `ScopeEraser`, `NodeSubtreeEraser` (phase-ordered), `MembershipEraser` (one user loses
-  access to one scope; nothing of the scope is erased), `AccountEraser`, `GuestIdentityUsage`.
+  access to one scope; nothing of the scope is erased), `AccountEraser`, `GuestIdentityUsage`, `ApplicationErasures`
+  (the erasure-ledger kinds an application writes and their re-applier, which core runs at start after a restore, ADR
+  0056 decision 8).
 - **Kinds and uploads** — `NodeKindRules` (where a node of the kind may live, whether it takes a cover, which
   application owns it; core answers for `FOLDER`), `UploadCompletion` (what a verified upload becomes; its item is
   generic — an `ownerId`, role-tagged derivatives and the application's sealed payloads as opaque values core carries to
@@ -126,8 +128,10 @@ Core reaches application code only through interfaces each application implement
   create inside a `FOLDER` besides a folder: Depot's `FILE`; a kind two applications declare is created by nobody and
   fails startup), `ShareGuestWrites` (what "write" means on the application's node, asked for the kind written into),
   `SharedSubtreeContributor`, `GuestPlaceholders`.
-- **Moderation** — `ReportableItems` (where an application's item lies, for a report's reach) and
-  `HoldSnapshotContributor` (copies the application's rows into a hold).
+- **Moderation** — `ReportableItems` (where an application's item lies, for a report's reach),
+  `HoldSnapshotContributor` (copies the application's rows into a hold), `HeldUploaders` (the member accounts among
+  the uploaders of the application's held rows, which a moderator may propose to block, ADR 0093 § 6) and
+  `UploaderContent` (what one uploader put into a space, for "everything from this uploader", ADR 0093 §§ 1, 6).
 
 **They fail closed.** A role no application declares opens no member upload (`400 invalid_request`, before any quota
 is reserved); a kind no application (or two) claims takes no uploads (`illegal_target`), is placed nowhere
@@ -187,9 +191,10 @@ point 8).
 
 - **Import direction, not modules.** `src/web/src/features/<owner>` is an application's directory, named for its owner;
   no core file imports one except the composition root `src/web/src/applications.ts`. The shell asks a build-time
-  registry (`src/web/src/core/applications/registry.ts`) what to render for a node kind, which slot an application
-  fills, which page a `WRITE_ONLY` link shows, and what runs when a scope is entered or reset and when the Master Key
-  rotates (that hook is required: a rotation refuses to start without it).
+  registry (`src/web/src/core/applications/registry.ts`) what to render for a node kind, which page a `WRITE_ONLY`
+  link shows, and what runs when a scope is entered or reset and when the Master Key rotates (registered under the
+  application's own registered id; the Master-Key hook is required of every hook set, while a build with no hooks rotates,
+  core re-sealing its own pins). The shell's top bar and sidebar are core's alone: no application adds to them.
 - **Core draws the level.** The folder level view is core's (`core/node/LevelView.vue`): one list of the folders and
   every kind's rows, each from its application's row factory (below), and the presentations it switches between (core's
   grid and list, an application's own such as Memories' map) in core's toolbar. A folder's create, every node's rename,

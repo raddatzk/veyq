@@ -18,14 +18,10 @@ import type { VeyqMenuItem } from '../../shared/ui/menu'
 import { breadcrumb } from '../../app/breadcrumb'
 import InvitationsBadge from '../../features/spaces/InvitationsBadge.vue'
 import UploadStatusMenu from '../../core/blob/UploadStatusMenu.vue'
-import { registry } from '../../core/applications/registry'
 
 const router = useRouter()
 // The upload status is the platform's (cr-files-application B3): one core queue, every application's batches, so the
-// bar mounts the menu itself, where the Memories tray item sat before. What the applications add to the tray follows
-// it, in their `order`; none → nothing more rendered (the case with Memories alone, whose DOM is the pre-B3 one:
-// `AppShell.slots.test.ts`).
-const trayItems = registry.slotItems('topbarTray')
+// bar mounts the menu itself. No application adds anything to the bar (ADR 0079: the shell names no application).
 
 // Every crumb is a real link to its place (`VeyqBreadcrumb` runs the push on a plain click and lets a modified one
 // open the link elsewhere).
@@ -42,7 +38,6 @@ const items = computed<VeyqMenuItem[]>(() => breadcrumb.trail.slice(1).map((c) =
     <div class="workspace-topbar-actions">
       <InvitationsBadge />
       <UploadStatusMenu />
-      <component :is="item.component" v-for="item in trayItems" :key="item.id" />
     </div>
   </header>
 </template>

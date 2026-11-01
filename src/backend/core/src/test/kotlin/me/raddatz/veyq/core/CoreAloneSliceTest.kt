@@ -1,5 +1,9 @@
 package me.raddatz.veyq.core
 
+import me.raddatz.veyq.core.backup.ApplicationErasures
+import me.raddatz.veyq.core.moderation.block.UploaderContent
+import me.raddatz.veyq.core.moderation.hold.AttachmentHeldUploaders
+import me.raddatz.veyq.core.moderation.hold.HeldUploaders
 import me.raddatz.veyq.core.node.rekey.NodeRekeyParticipant
 import me.raddatz.veyq.core.node.rekey.NodeRekeyStageNodeSubtreeEraser
 import me.raddatz.veyq.core.node.rekey.NodeRekeyStageScopeEraser
@@ -95,8 +99,9 @@ import org.junit.jupiter.api.Test
  * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's four (attachments, pins, nodes, shares),
  *    `NodeKindRules`, `ShareRoots` and `GuestPlaceholders` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
  *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), `MembershipEraser` core's tenant
- *    verifications (ADR 0111 decision 12), and every other seam — `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds`,
- *    `GuestCreatableKinds`, `MemberBlobRoles` — none. The composed application's
+ *    verifications (ADR 0111 decision 12), `HeldUploaders` core's attachment one, and every other seam — `ShareGuestWrites`,
+ *    `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds`, `GuestCreatableKinds`, `UploaderContent`,
+ *    `ApplicationErasures` — none (`MemberBlobRoles` core's cover). The composed application's
  *    sets are the root's `ModuleCompositionTest`. (`GuestIdentityUsage` is therefore never empty: its fail-closed
  *    branch for no usage at all is `GuestIdentityUsageTest`'s, boot-free, and no longer reachable here.)
  * 2. **Every seam fails closed with nobody behind it**: a `FOLDER` is created and a `MEMORY` is `illegal_structure`;
@@ -141,6 +146,9 @@ class CoreAloneSliceTest {
     @Inject @All lateinit var guestPlaceholders: MutableList<GuestPlaceholders>
     @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
     @Inject @All lateinit var rekeyParticipants: MutableList<NodeRekeyParticipant>
+    @Inject @All lateinit var uploaderContent: MutableList<UploaderContent>
+    @Inject @All lateinit var heldUploaders: MutableList<HeldUploaders>
+    @Inject @All lateinit var applicationErasures: MutableList<ApplicationErasures>
 
     @Inject lateinit var nodes: NodesStore
     @Inject lateinit var dispatcher: UploadCompletions
@@ -187,10 +195,12 @@ class CoreAloneSliceTest {
         assertEquals(setOf(FolderGuestPlaceholders::class.java), classes(guestPlaceholders), "GuestPlaceholders: core's FOLDER answer only")
         assertEquals(setOf(VerificationMembershipEraser::class.java), classes(membershipErasers),
             "MembershipEraser: core's tenant verifications only (ADR 0111 decision 12)")
+        assertEquals(setOf(AttachmentHeldUploaders::class.java), classes(heldUploaders), "HeldUploaders: core's attachments only")
         for ((seam, beans) in mapOf(
             "NodeRekeyParticipant" to rekeyParticipants,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
             "WriteOnlyGuestKinds" to writeOnlyGuestKinds, "GuestCreatableKinds" to guestCreatableKinds,
+            "UploaderContent" to uploaderContent, "ApplicationErasures" to applicationErasures,
         )) {
             assertEquals(emptySet<Class<*>>(), classes(beans), "$seam: core implements none, and no application is here")
         }

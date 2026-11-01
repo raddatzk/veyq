@@ -156,8 +156,8 @@ beforeEach(async () => {
   seenCtx.ctx = null
   const r = createRegistry()
   const list = { rows: stubRows }
-  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: NOTE_KIND, icon: 'file', shareable: true, list })
-  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BROKEN_KIND, icon: 'file', shareable: true, list })
+  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: NOTE_KIND, icon: 'file', list })
+  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BROKEN_KIND, icon: 'file', list })
   r.claimShareBody(NOTE_KIND, StubBody) // a WRITE_ONLY drop page: never mounted on this page
   holder.reg = r
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
@@ -256,7 +256,7 @@ describe("ShareTreePage renders a node's detail for the guest", () => {
     return h0
   }
   beforeEach(() => {
-    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX_KIND, icon: 'inbox', shareable: true, detail: StubDetail })
+    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX_KIND, icon: 'inbox', detail: StubDetail })
     holder.reg!.claimShareBody(BOX_KIND, StubBody) // its WRITE_ONLY drop page: not this page's
   })
 
@@ -300,7 +300,7 @@ describe('ShareTreePage on a link rooted at a non-folder node', () => {
     }
   }
   beforeEach(() => {
-    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX_KIND, icon: 'inbox', shareable: true, detail: StubDetail })
+    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX_KIND, icon: 'inbox', detail: StubDetail })
     holder.reg!.claimShareBody(BOX_KIND, StubBody)
   })
 
@@ -396,7 +396,7 @@ describe('ShareTreePage: a READ_WRITE guest adds folders', () => {
   it("a guest's create of an application's kind is the page's name dialog, never the kind's createDialog, and sends no meta", async () => {
     const KindCreateDialog = defineComponent({ name: 'KindCreateDialog', setup: () => () => h('label', { class: 'kind-create-stub' }, t('memory.participants.wasThere')) })
     holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-      kind: 'MEMO', icon: 'images', shareable: true, list: { rows: stubRows }, createDialog: KindCreateDialog,
+      kind: 'MEMO', icon: 'images', list: { rows: stubRows }, createDialog: KindCreateDialog,
       createEntry: { label: 'memory.create', icon: 'images', order: 10, allowed: () => true },
     })
     saveGuestSession(SHARE_ID, { identityId: 'id-0', contributorToken: 'tok-0' })

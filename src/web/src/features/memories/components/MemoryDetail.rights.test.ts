@@ -87,7 +87,7 @@ const disabled = (w: Awaited<ReturnType<typeof mountDetail>>, selector: string) 
 
 describe('MemoryDetail follows rights', () => {
   it('a Memory\'s header in the owner\'s priority (ADR 0110), core\'s actions by their ids; report and delete in the ⋯', async () => {
-    const core = (id: string, over: Partial<CoreHeaderAction> = {}): CoreHeaderAction => ({ id, label: id, icon: 'heart', onClick: () => {}, ...over })
+    const core = (id: string, over: Partial<CoreHeaderAction> = {}): CoreHeaderAction => ({ id, label: id, icon: 'heart', shown: true, onClick: () => {}, ...over })
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, {
       coreActions: [core('favorite', { placement: 'before' }), core('cover'), core('copy', { placement: { after: 'move' } }), core('download'), core('report', { menuOnly: true })],
     })

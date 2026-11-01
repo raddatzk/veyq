@@ -1,9 +1,12 @@
 package me.raddatz.veyq.app
 
+import me.raddatz.veyq.core.backup.ApplicationErasures
 import me.raddatz.veyq.core.blob.MemberBlobRoles
 import me.raddatz.veyq.core.blob.UploadCompletion
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
+import me.raddatz.veyq.core.moderation.block.UploaderContent
+import me.raddatz.veyq.core.moderation.hold.HeldUploaders
 import me.raddatz.veyq.core.moderation.hold.HoldSnapshotContributor
 import me.raddatz.veyq.core.moderation.report.ReportableItems
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
@@ -96,6 +99,9 @@ class ModuleCompositionTest {
     @Inject @All lateinit var reportableItems: MutableList<ReportableItems>
     @Inject @All lateinit var holdContributors: MutableList<HoldSnapshotContributor>
     @Inject @All lateinit var rekeyParticipants: MutableList<NodeRekeyParticipant>
+    @Inject @All lateinit var uploaderContent: MutableList<UploaderContent>
+    @Inject @All lateinit var heldUploaders: MutableList<HeldUploaders>
+    @Inject @All lateinit var applicationErasures: MutableList<ApplicationErasures>
 
     @Inject lateinit var quota: StorageQuota
 
@@ -120,6 +126,9 @@ class ModuleCompositionTest {
         ReportableItems::class.java to reportableItems,
         HoldSnapshotContributor::class.java to holdContributors,
         NodeRekeyParticipant::class.java to rekeyParticipants,
+        UploaderContent::class.java to uploaderContent,
+        HeldUploaders::class.java to heldUploaders,
+        ApplicationErasures::class.java to applicationErasures,
     )
 
     private val compiled: List<Class<*>> by lazy {

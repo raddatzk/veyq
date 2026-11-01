@@ -35,7 +35,7 @@ import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { createMemory } from '../memories/memoryNodes'
 import { listMedia, setMediaMeta, unsealMeta } from '../memories/media'
 import { enqueueUploads, useUploadQueue } from '../memories/uploadQueue'
-import { memoriesLifecycle } from '../memories/lifecycle'
+import { registerMemoriesLifecycle } from '../../test/memoriesLifecycle'
 import { MEMORY_KIND } from '../memories/kinds'
 import { rekeyMemoryContent } from '../memories/rekey'
 import { ShareRole } from '../../api/generated/sharing'
@@ -43,8 +43,8 @@ import { decodeHttpError } from '../../shared/httpError'
 
 // The re-key fails closed on a kind nobody registered: register Memories' real `rekeyContent`, as the rotation suite does.
 beforeAll(() => {
-  registry.registerLifecycle('memories', memoriesLifecycle)
-  if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', shareable: true, rekeyContent: rekeyMemoryContent })
+  registerMemoriesLifecycle()
+  if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', rekeyContent: rekeyMemoryContent })
 })
 
 const TENANT_NAME = 'E2E Any Member Rekeys' // declared plaintext — NOT a canary

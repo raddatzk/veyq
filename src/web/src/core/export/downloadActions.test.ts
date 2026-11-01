@@ -11,9 +11,9 @@ const t = (k: string) => k
 
 beforeAll(() => {
   if (!registry.kind('X_WITH').supported) {
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITH', icon: 'file', shareable: false, exportContent: async () => null })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITHOUT', icon: 'file', shareable: false })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_ONE_FILE', icon: 'file', shareable: false, exportContent: async () => null, downloadsAsFile: true })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITH', icon: 'file', exportContent: async () => null })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITHOUT', icon: 'file' })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_ONE_FILE', icon: 'file', exportContent: async () => null, downloadsAsFile: true })
   }
 })
 

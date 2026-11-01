@@ -30,8 +30,9 @@ export interface NodeHeaderAction {
   severity?: 'primary' | 'secondary' | 'danger'
   /** Rendered but not clickable (e.g. keys still loading). */
   disabled?: boolean
-  /** Not rendered at all (the rights answer was no). Default: shown. */
-  shown?: boolean
+  /** Whether it is rendered at all: the caller's rights answer for it, REQUIRED so an action nobody gated does not
+   *  compile (a page passes what its fail-closed rights function said, never a constant where one exists). */
+  shown: boolean
   /** A toggle's state (a heart): sets `aria-pressed` and `is-pressed`. Omitted: not a toggle. */
   pressed?: boolean
   /** An extra class for the application's own styling hook. */

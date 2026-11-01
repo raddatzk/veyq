@@ -68,7 +68,6 @@ export function registerDepot(registry: Registry): void {
     // node's key (ADR 0109).
     rekeyContent: nothingOfItsOwnToRekey,
     icon: 'file',
-    shareable: true,
     detail: FileDetail,
     shareDialog: FileShareDialog,
     // Core's delete dialog (the detail's delete) names the file, not "item".
@@ -112,7 +111,6 @@ export function registerDepot(registry: Registry): void {
     icon: 'inbox',
     // A drop box carries a cover (inbox #411: core's action, picker, upload and display); a file does not.
     cover: {},
-    shareable: true,
     detail: DropBoxDetail,
     // Core's delete dialog (the detail's delete): "Delete drop box", the detail's own button label.
     deleteTitle: 'depot.dropBox.delete',

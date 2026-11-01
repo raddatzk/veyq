@@ -41,7 +41,6 @@ export function registerExpenses(registry: Registry): void {
   registry.registerKind({
     kind: POT_KIND,
     icon: 'wallet',
-    shareable: true,
     detail: PotDetail,
     shareDialog: PotShareDialog,
     deleteTitle: 'expenses.delete',

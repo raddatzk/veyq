@@ -1,6 +1,5 @@
 // The application registry (ADR 0079): what the shell asks instead of
-// importing an application. Core renders by node kind and by list slot; an application says, once, what it renders for
-// which kind and which list items it adds.
+// importing an application. Core renders by node kind; an application says, once, what it renders for which kind.
 //
 // **Build-time only (ADR 0079 Decision 5, ADR 0026).** The registry is filled by plain function calls from ONE
 // composition root (`src/web/src/applications.ts`), which statically imports each application. There is no glob, no
@@ -9,8 +8,8 @@
 // discovering one by glob.
 //
 // **Write-once.** Registered code runs with every unlocked key, so the registry is a trust surface and not a
-// convenience: registering a kind twice, claiming a drop page twice, or adding a list-slot item under a taken id THROWS —
-// it never overwrites and never merges. Nothing here is exported as mutable state; `registry` exposes only the two register doors and read-only lookups.
+// convenience: registering a kind twice, claiming a drop page twice, or naming an application or a route twice THROWS —
+// it never overwrites and never merges. Nothing here is exported as mutable state; `registry` exposes only the register doors and read-only lookups.
 //
 // **Dialogs per kind (cr-files-application P4c).** A kind brings its dialogs with its descriptor: `createDialog` (the
 // dialog that creates a node of the kind, mounted by the shell when a section or a detail asks for a create of that
@@ -19,7 +18,8 @@
 // folder's create and every node's rename are core's own `FolderNameDialog`
 // (`core/node/FolderNameDialog.vue`), which the shell mounts itself — a rename re-seals the name and derives the slug
 // token by the node's kind (`tokenInputFor`), whatever application it belongs to. A kind with no `shareDialog` offers no
-// share; a create for a kind with no `createDialog` opens nothing. Every shell slot is a list slot (below).
+// share - the dialog's presence is the kind's whole answer, there is no flag beside it; a create for a kind with no
+// `createDialog` opens nothing.
 //
 // **The unified level list (`KindDescriptor.list`, inbox #407).** The folder level view is core's (`core/node/LevelView.vue`):
 // the folder's header, the application tabs, then ONE list (or one set of tiles) of every node at the level - folders,
@@ -42,12 +42,9 @@
 // node, whatever the link's root kind, so a kind's rows and `detail` serve it as they serve a member; no guest-only
 // list or body per kind exists (`shareSection` was retired in S3, the embedded Memories body in S5).
 //
-// **List slots (`addSlotItem`).** The top-bar tray and the sidebar pins are places where several applications each add
-// their own entry, so they are ordered lists: an item is registered under an id (namespaced by its application, e.g.
-// `memories.pinned`), write-once per (slot, id) — a second registration of the same id in the same list throws. The
-// shell renders them sorted by `order` (default: registration order; a tie keeps registration order). `addSlotItem`
-// refuses a name that is no list slot at runtime too, so a caller outside the type checker gets an error, never a
-// silent no-op.
+// **No shell slots.** The shell's top bar and sidebar are core's alone: the upload status (`core/blob/UploadStatusMenu.vue`)
+// lists every application's uploads and the Favorites section (`core/favorites/PinnedNodes.vue`) every kind's pins, so no
+// application adds an entry there; a place in the shell for an application is a seam that comes with its first user.
 //
 // **Drop pages (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
 // kind-independent half (core/sharing/resolvePublicShare.ts) and runs the password and terms gates. A `READ` or
@@ -59,11 +56,12 @@
 // `WRITE_ONLY` root kind nobody claimed, or none at all, renders the shell's explicit unavailable state.
 //
 // **Lifecycle hooks (`registerLifecycle`).** What runs when a scope is entered or reset and when the master key
-// rotates. Registered per application id (a second registration of the same id throws); several applications may
-// each contribute, and the registry runs them all. The master-key hook is REQUIRED: material sealed under the master
-// key (Memories' pins) is undecryptable after a rotation that skipped it, so `rotateKeys` asks
-// `assertRotationHooks()` before it touches anything and refuses to start when no registered application carries the
-// hook (a composition root that registered nothing is that case too).
+// rotates. Registered under the id of an application already named (`registerApplication` first; an unknown id throws, so
+// a hook set cannot exist for an application this build does not have), once per id (a second registration throws);
+// several applications may each contribute, and the registry runs them all. The master-key hook is REQUIRED of every hook
+// set: material an application seals under the Master Key (Memories' item marks) is unverifiable after a rotation that
+// skipped it. There is no registry-wide rotation gate: core re-seals what it seals under the Master Key itself (the node
+// pins, `rotateKeys`), so a build with no application - or none that registers hooks - rotates as safely as any other.
 //
 // **Applications (`registerApplication`; uc.platform.switch-application-off).** An application names itself once: its id —
 // its own entry of the capability register (`memories`), which the Server Owner and a tenant owner switch off — the kinds
@@ -159,10 +157,8 @@ export interface KindDescriptor {
    *  upload never finished (inbox #391). Its restore stays offered, the row says what comes back. Omitted: no note (a
    *  kind whose content lives elsewhere, e.g. a Memory, holds no attachment and is not empty for it). */
   emptyInTrash?: string
-  /** Whether a public share can be created for a node of this kind (the rights check still applies). */
-  shareable: boolean
   /** How a name of this kind folds before it is HMAC'd into its blinded slug token (inbox #350; read through
-   *  {@link Registry.slugFor}). Omitted: `slugify`, the container folding that is also the URL segment. A kind that is
+   *  {@link Registry.tokenInputFor}). Omitted: `slugify`, the container folding that is also the URL segment. A kind that is
    *  need not fold like the URL segment (a file: `fileNameSlug`, which keeps punctuation; the URL segment of every kind is `slugify`). **Frozen into stored tokens**: the function
    *  a kind registers must never change once a node of the kind is stored, and must be pinned by vectors. */
   slug?: (name: string) => string
@@ -188,8 +184,9 @@ export interface KindDescriptor {
    *  application's row factory registers with the level (`core/node/levelActions.ts`), so core stays
    *  application-agnostic. Ids are write-once across the registry. */
   levelActions?: readonly (LevelMenuEntry & { id: string })[]
-  /** The share management dialog of a node of this kind (props `NodeShareDialogProps`, emits `close`). Omitted: the
-   *  kind offers no share, whatever `shareable` says. FOLDER's is core's own `FolderShareDialog`, pre-registered. */
+  /** The share management dialog of a node of this kind (props `NodeShareDialogProps`, emits `close`): its presence is
+   *  what makes the kind shareable (`targetOf`; the rights check still applies). Omitted: the kind offers no share.
+   *  FOLDER's is core's own `FolderShareDialog`, pre-registered. */
   shareDialog?: Component
   /** Where a node of this kind may be placed (inbox #358; read through {@link Registry.placementAllows}): at the scope
    *  root (`root`) and/or directly in a parent of one of `parents`. A HINT mirroring the server's `NodeKindRules` for the
@@ -428,16 +425,6 @@ export interface NodeShareDialogProps {
   readonly?: boolean
 }
 
-/** The shell's `sidebarPins` list slot: each component an application adds to it is mounted in the left rail
- *  (`variant: 'rail'`) and in the mobile navigation sheet (`'sheet'`); it renders nothing when it has nothing to
- *  pin. It emits `navigate` when the member follows one of its links, so the sheet can close. */
-export interface SidebarPinsProps {
-  variant: 'rail' | 'sheet'
-}
-export interface SidebarPinsEmits {
-  navigate: []
-}
-
 /** What the shell hands a `WRITE_ONLY` link's drop page, the one share body (event: `unavailable` — the page found the
  *  share unusable after the shell had already shown it). The page renders everything below the password and terms
  *  gates: its own naming (the guest's identity key is the application's), the drop, and the session's own tiles. */
@@ -458,11 +445,6 @@ export interface ShareBodyEmits {
   unavailable: []
 }
 
-/** The list slots: several applications may each add items (see the header). A `topbarTray` item takes no props (the
- *  shell's top bar mounts it after the invitations badge and core's own upload status menu); a `sidebarPins` item
- *  takes `SidebarPinsProps`. */
-export type ListSlotName = 'topbarTray' | 'sidebarPins'
-
 /**
  * What a moderator's review of a reported ITEM hands the application that owns it (uc.moderation.review-a-case A5): an
  * item is an application's record (a Memories medium), so core cannot draw it. `keys` are what the report shares handed
@@ -474,12 +456,6 @@ export interface ItemReviewProps {
   itemId: string
   scopeId: string
   keys: readonly { role: string; ref: string | null; key: Uint8Array }[]
-}
-
-/** One entry of a list slot, as the shell renders it (`id` is the item's key). */
-export interface SlotItem {
-  id: string
-  component: Component
 }
 
 /** What an application runs at the platform's lifecycle moments. `onMasterKeyRotated` is mandatory (the type says
@@ -512,8 +488,8 @@ export interface Registry {
   applications(): readonly ApplicationInfo[]
   /** The id of the application that owns `kind`, or null: core's FOLDER, a kind nobody named. */
   applicationOf(kind: NodeKind): string | null
-  /** Register an application's lifecycle hooks under its id. Throws if the id is already registered, or if
-   *  `onMasterKeyRotated` is not a function. */
+  /** Register an application's lifecycle hooks under its id. Throws if no application of that id was named
+   *  (`registerApplication` first), if the id already registered hooks, or if `onMasterKeyRotated` is not a function. */
   registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
   /** Claim the drop page of a `WRITE_ONLY` link rooted at `kind` (see the header). Throws if that kind is already
    *  claimed, and for FOLDER (the platform's: no `WRITE_ONLY` link roots at a folder). */
@@ -538,23 +514,18 @@ export interface Registry {
   scopeEntered(scopeId: string): Promise<void>
   /** Run every application's `onMasterKeyRotated`; rejects with the first failure after all ran. */
   masterKeyRotated(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void>
-  /** Throws unless at least one registered application carries `onMasterKeyRotated`: `rotateKeys` refuses to start
-   *  without it (fail closed — see the header). */
-  assertRotationHooks(): void
   /** Register a node kind. Throws if the kind is already registered (the platform's own FOLDER included), or if its
    *  `list` names a row factory another kind already named with different `views`. */
   registerKind(descriptor: KindDescriptor): void
-  /** Add an item to a list slot under `id`. Throws if that slot already holds an item with this id. `order` sorts the
-   *  list (ascending); omitted, the item's registration index is used. Ties keep registration order. */
-  addSlotItem(slot: ListSlotName, id: string, component: Component, order?: number): void
   /** The kind's descriptor, or `{ supported: false }` — never `undefined`. */
   kind(kind: NodeKind): KindLookup
-  /** The slug of `name` for a node of `kind`: the kind's own `slug` hook, else `slugify` (also for a kind nobody
-   *  registered: the server stores any kind, and a token must still be computable for it). Every slug token is
-   *  derived from this (through {@link Registry.tokenInputFor}), so a node's token always uses ITS kind's folding. */
-  slugFor(kind: NodeKind, name: string): string
+  /** Every registered kind, the platform's FOLDER first, then in registration order: what the composition's tests walk
+   *  (each kind's application, route and page), never a list core renders from. */
+  kinds(): readonly NodeKind[]
   /** The string a node's blinded slug token HMACs (`core/node/tree.ts` `slugTokenFor`), and so what its name is unique by
-   *  among its siblings (ADR 0080 decision 16): {@link Registry.slugFor}'s slug behind `<routeSlug>/` for
+   *  among its siblings (ADR 0080 decision 16): the name's slug by its kind's own `slug` hook, else `slugify` (also for a
+   *  kind nobody registered: the server stores any kind, and a token must still be computable for it), behind
+   *  `<routeSlug>/` for
    *  a kind whose application claimed a route slug (`memories/korfubanien`, `expenses/korfubanien`), the bare slug for a
    *  folder, Depot's kinds and a kind nobody claimed. A name is unique within its route group only, as the URL already
    *  separates them (`#foo/memories/korfubanien`, `#foo/expenses/korfubanien`): a Memory and a Pot of one name are
@@ -572,6 +543,9 @@ export interface Registry {
    *  Throws on a kind already claimed (or FOLDER), on an empty `kinds`, and when another application already declared
    *  it — the unprefixed names are one namespace. */
   claimNoRouteSegment(kinds: readonly NodeKind[]): void
+  /** Whether the application of `kind` decided its route: claimed a slug for it (`claimRouteSlug`) or declared it has none
+   *  (`claimNoRouteSegment`). False for FOLDER (the platform's) and for a kind nobody claimed. */
+  routeDecided(kind: NodeKind): boolean
   /** How a node of `kind` is addressed in the path: its application's `slug` (null: none — a folder, the application
    *  that declared no segment, a kind nobody claimed) and the `group` that kind's nodes are numbered in among equal
    *  siblings — one per application with a segment, one for the folders, one for every node with none (Depot and the kinds nobody claimed). */
@@ -581,8 +555,6 @@ export interface Registry {
   /** Whether a node of `kind` may be placed in a parent of `parentKind` (null: the scope root), by the kind's
    *  `placement` hint — false for a kind that declares none or nobody registered (fail closed). */
   placementAllows(kind: NodeKind, parentKind: NodeKind | null): boolean
-  /** The items of a list slot, sorted by `order` (stable); empty when nobody added one (the shell renders nothing). */
-  slotItems(slot: ListSlotName): readonly SlotItem[]
   /** The applications' entries of the level view's "New" menu, sorted by `order` (stable): every kind's `createEntry`
    *  (id `create:<KIND>`, `create` set) and every `levelActions` entry, each with the kind that declared it. Core adds its own
    *  folder entry. */
@@ -606,8 +578,6 @@ export const RESERVED_ROUTE_SEGMENTS: readonly string[] = [
 ]
 const ROUTE_SLUG = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
 
-const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies readonly ListSlotName[]
-
 /** A fresh registry holding only the platform's own kind (FOLDER: browsable, never openable, shareable through core's
  *  own `core/sharing/FolderShareDialog.vue`, its pre-registered `shareDialog` —
  *  uc.sharing.share-public-viewer:folder-share-root). The app uses the single `registry` below; tests build their own
@@ -616,12 +586,11 @@ export function createRegistry(): Registry {
   const kinds = new Map<NodeKind, KindDescriptor>([
     // A folder lives at the root or in another folder (the server's `FolderNodeRules`).
     [FOLDER_KIND, {
-      kind: FOLDER_KIND, icon: 'folder', shareable: true, shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
+      kind: FOLDER_KIND, icon: 'folder', shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
       placement: { root: true, parents: [FOLDER_KIND] }, cover: {}, copyLosses: ['node.copy.lossFolderCover'],
       rekeyContent: nothingOfItsOwnToRekey,
     }],
   ])
-  const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
   const applications: ApplicationInfo[] = []
   const applicationOfKind = new Map<NodeKind, string>()
@@ -683,6 +652,9 @@ export function createRegistry(): Registry {
     },
     itemReviews: () => [...itemReviews],
     registerLifecycle(applicationId, hooks) {
+      if (!applications.some((a) => a.id === applicationId)) {
+        throw new Error(`no application ${applicationId} is registered (registerApplication first): its lifecycle hooks are refused`)
+      }
       if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
       if (typeof hooks.onMasterKeyRotated !== 'function') {
         throw new Error(`application ${applicationId} registered no onMasterKeyRotated hook (it is required)`)
@@ -695,11 +667,6 @@ export function createRegistry(): Registry {
     },
     scopeEntered: (scopeId) => eachApplication((h) => h.onScopeEntered?.(scopeId)),
     masterKeyRotated: (oldMk, newMk, scopeIds) => eachApplication((h) => h.onMasterKeyRotated(oldMk, newMk, scopeIds)),
-    assertRotationHooks() {
-      if (lifecycles.size === 0) {
-        throw new Error('no application registered an onMasterKeyRotated hook; refusing to rotate keys (fail closed)')
-      }
-    },
     registerKind(descriptor) {
       if (kinds.has(descriptor.kind)) throw new Error(`node kind ${descriptor.kind} is already registered`)
       // Checked before anything is stored, so a contradiction registers nothing.
@@ -717,25 +684,11 @@ export function createRegistry(): Registry {
       kinds.set(descriptor.kind, { ...descriptor })
       joinList()
     },
-    addSlotItem(slot, id, component, order) {
-      if (!LIST_SLOTS.includes(slot)) throw new Error(`slot ${slot} is not a list slot`)
-      const items = lists.get(slot) ?? []
-      if (items.some((i) => i.id === id)) throw new Error(`slot ${slot} already holds an item ${id}`)
-      items.push({ id, component, order: order ?? items.length })
-      lists.set(slot, items)
-    },
-    slotItems(slot) {
-      return [...(lists.get(slot) ?? [])]
-        .sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps registration order
-        .map(({ id, component }) => ({ id, component }))
-    },
     kind(kind) {
       const d = kinds.get(kind)
       return d ? { supported: true, ...d } : { supported: false, kind }
     },
-    slugFor(kind, name) {
-      return (kinds.get(kind)?.slug ?? slugify)(name)
-    },
+    kinds: () => [...kinds.keys()],
     tokenInputFor(kind, name) {
       const slug = (kinds.get(kind)?.slug ?? slugify)(name)
       // FOLDER is never in `routes`; Depot's kinds are claimed with no slug (null), a kind nobody claimed is absent
@@ -753,6 +706,7 @@ export function createRegistry(): Registry {
       if ([...routes.values()].includes(null)) throw new Error('an application already declared that it has no route segment')
       claimKinds(claimed, null)
     },
+    routeDecided: (kind) => routes.has(kind),
     routeOf(kind) {
       if (kind === FOLDER_KIND) return { slug: null, group: 'folder' }
       const slug = routes.get(kind)

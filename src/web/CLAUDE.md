@@ -195,7 +195,8 @@ here; the server is blind.
   reads sizes no layout changes — the leading visual's registered `--veyq-node-header-leading-wide` (core's icon tile and cover, Memories' cover set
   it; core reads the number, never imports the application), `--veyq-node-header-name-min`, the column gaps — never the name or the layout in force,
   so it cannot flip. The application only feeds data: its action list
-  (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown`,
+  (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown` - REQUIRED, so an
+  action nobody gated does not compile, and a row's `LevelRowAction` inherits it -,
   `disabled`, `pressed`, `menuOnly`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions
   (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four - core's defaults, which
   every kind's page takes from it with its rights answer as the flags (a kind with its own implementation passes its own
@@ -301,7 +302,7 @@ here; the server is blind.
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
 `registerApplication({ id, name, kinds })` once — its register id (its switch), its name's i18n key and the kinds it owns, which
 `applicationOf(kind)` answers to core;
-  `registerKind` per node kind (detail component, icon, shareable, `deleteTitle` - the i18n key core's delete dialog
+  `registerKind` per node kind (detail component, icon, `deleteTitle` - the i18n key core's delete dialog
   titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence - `nounWithArticle`, the noun core's
   create and rename dialogs name a colliding sibling of the kind with ("There is already a file named ...", else "an item") - `emptyInTrash`, the note core's
   trash shows on a node of the kind that holds no attachment - `renameSelectionEnd`, where core's rename dialog ends the
@@ -357,11 +358,10 @@ here; the server is blind.
   drawn with `LevelRowItem`; it takes a node list, which a level's selection hands it through `MoveNodesDialog`), mounted by both hosts when a row factory or a
   detail asks the host to move the node, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
   guest's `placeShareNodeAsGuest`, none otherwise) and explaining each server refusal by its code; and FOLDER's share dialog
-  `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
-  and `sidebarPins` (an id namespaced by the application; none today - the Favorites section is core's, `core/favorites/PinnedNodes.vue`; write-once per (slot, id); the shell
-  renders `slotItems(slot)` sorted by `order`, ties in registration order — the top bar after core's own upload status
-  menu, `core/blob/UploadStatusMenu.vue`, which lists every application's batches of the one core queue and is no
-  application's item, so today no application adds to `topbarTray`); `claimRouteSlug(slug, kinds)` — the application's segment in a node's URL fragment path (`#foo/memories/rom`; Memories claims
+  `core/sharing/FolderShareDialog.vue` is pre-registered); no shell slot - the top bar and the sidebar are core's alone
+  (the upload status `core/blob/UploadStatusMenu.vue` lists every application's batches of the one core queue, the
+  Favorites `core/favorites/PinnedNodes.vue` every kind's pins), and a place there for an application is a seam that comes
+  with its first user; `claimRouteSlug(slug, kinds)` — the application's segment in a node's URL fragment path (`#foo/memories/rom`; Memories claims
   `memories`, a second claim of a slug or a kind throws, `RESERVED_ROUTE_SEGMENTS` are refused) — or `claimNoRouteSegment(kinds)`,
   the explicit "no segment" option only Depot takes (its nodes are plain names: `#foo/report`; one application at most). The grammar
   — a folder ends in a slash, a claimed slug is reserved among folder and file names (`memories-2`), folders and files are numbered
@@ -372,9 +372,13 @@ here; the server is blind.
   holding no key: Memories' photo drop (`MemoryShareBody`), Depot's drop box (`DropBoxShareBody`); `FOLDER` is claimed by
   nobody and refused. Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any
   guest a write;
-  `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
-  `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
-  Master Key (Memories' item marks; the node pins are core's, re-sealed by `rotateKeys` itself) is otherwise unverifiable after a rotation. A kind or share nobody registered renders
+  `registerLifecycle(id, hooks)` under the application's REGISTERED id (`registerApplication` first, an unknown id throws)
+  with `onScopeReset` / `onScopeEntered` and the **required** `onMasterKeyRotated` — material an application seals under the
+  Master Key (Memories' item marks) is otherwise unverifiable after a rotation. There is no registry-wide rotation gate:
+  core re-seals its own Master-Key material (the node pins) in `rotateKeys` itself, so a build with no application hook
+  rotates (`rotateKeys.test.ts` pins it); that Memories' hooks reach the real registry is `applications.test.ts`'s. Every
+  registered kind but FOLDER belongs to exactly one registered application and has its route decided (`registry.kinds()`,
+  `routeDecided`; `applications.test.ts`). A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
   `detail` (`NodeDetailProps`) and a row factory (`LevelRowsContext`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
   (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's three share leaves `publicShares`/`publicSharesContribute`/`publicSharesDropBox`, one boolean per register id the host fills from ONE `hasCapability` each — the server ANDs the path, a rights function never does, ADR 0088 — and `applicationsOff`, the ids of `registry.applications()` the read set lacks (`isSwitchedOff`, never an unread set): every rights function then drops every write but the delete - core's `nodeRights` and each application's ask `applicationWritable(access, kind)`, never `applicationsOff` itself, as core does for its own actions on the kind -, uc.platform.switch-application-off) or a share guest
@@ -398,7 +402,7 @@ here; the server is blind.
   (`features/memories/rights.ts`), `depotRights` (`features/depot/rights.ts`), `expensesRights`
   (`features/expenses/rights.ts`), core's `folderRights` for the level view; each matrix is its
   `docs/apps/<application>.md` table — never a `readonly`, `shareable` or `hasCapability` read inline; `targetOf`
-  carries the kind's descriptor (`shareable` AND a `shareDialog`), so no share button appears whose dialog the host
+  carries the kind's answer (`shareable`: the kind brings a `shareDialog`, its whole answer), so no share button appears whose dialog the host
   cannot mount. **Core's base, the application narrows** (owner 2026-11-01): what every node may do — `share`,
   `shareContribute`, `shareUpload`, `rename`, `move`, `delete`, one name per right everywhere (`NodeRights`) — is core's
   `nodeRights(access, target)` in `core/access.ts`: the member/guest role, a pending deletion (no write; the share
@@ -418,9 +422,8 @@ here; the server is blind.
   component with "Not you?" (`GuestNaming`, the shell's dialog behind `access.requestGuest`), the curator-note banner, the
   role badge and the breadcrumb up to the link's root (`ShareTreePage`), and the two `WRITE_ONLY` drop pages
   (`*ShareBody.vue`, claimed — `scripts/validate_web_share_bodies_are_drop_pages.py`). Every other separate guest body
-  drifted from its member twin (#356, #361, #363) and was deleted. **Limits, stated:** no slot is single-claim any
-  more (the dialogs are per kind since cr-files-application P4c; the two slots `topbarTray`, `sidebarPins` are ordered
-  lists); the level view (its list items `veyq-level-item`) and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
+  drifted from its member twin (#356, #361, #363) and was deleted. **Limits, stated:** the dialogs are per kind
+  (cr-files-application P4c) and the shell has no application slot; the level view (its list items `veyq-level-item`) and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
   `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read
   too for the shared labels; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
   `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memories/kinds.ts`, `features/depot/kinds.ts`), and no compiler lists the

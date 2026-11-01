@@ -97,8 +97,8 @@ function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode
 function fullRegistry(): Registry {
   const r = createRegistry()
   const list = { rows }
-  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, detail: Detail, icon: 'images', shareable: true, list, shareDialog: Share })
-  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, detail: Detail, icon: 'images', shareable: true, list, shareDialog: Share })
+  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, detail: Detail, icon: 'images', list, shareDialog: Share })
+  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, detail: Detail, icon: 'images', list, shareDialog: Share })
   return r
 }
 
@@ -130,8 +130,8 @@ describe('MemoryHomeView fail-closed rules', () => {
 
   it('a kind registered WITHOUT a detail shows the explicit unsupported state, not the level view', async () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, detail: Detail, icon: 'file', shareable: true })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', shareable: false }) // no detail
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, detail: Detail, icon: 'file' })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file' }) // no detail
     holder.reg = r
     const w = await mountAt('#~me/mem/chap')
     expect(w.text()).toContain(t('home.unsupportedKind'))
@@ -151,7 +151,7 @@ describe('MemoryHomeView fail-closed rules', () => {
   // (Before inbox #407 these were per-kind fallback sections with a heading; now they are rows of the one list.)
   it('no row factory registered: folders are still walkable, children of unlisted kinds show as unsupported rows', async () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, detail: Detail, icon: 'images', shareable: true }) // no list
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, detail: Detail, icon: 'images' }) // no list
     holder.reg = r
     treeStore.nodes = [
       node({ id: 'trips', kind: FOLDER_KIND, name: 'Trips' }),
@@ -191,27 +191,11 @@ describe('MemoryHomeView fail-closed rules', () => {
     expect(w.find('.statement-notice').exists(), 'a member no statement names reads no reason').toBe(false)
   })
 
-  it('shareable comes from the descriptor AND the right: a descriptor that says no wins over the right', async () => {
+  // cr-files-application P4c: the share dialog is the kind's, and it alone makes the kind shareable. A kind without a
+  // `shareDialog` offers no share — the host never shows a button whose dialog it cannot mount.
+  it('a kind without a shareDialog offers no share', async () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, detail: Detail, icon: 'file', shareable: false, shareDialog: Share })
-    holder.reg = r
-    const w = await mountAt('#~me/mem')
-    expect(w.find('.detail').text()).toBe('Mem|false')
-    // …and the host mounts no share dialog for it, whatever a detail emits
-    w.findComponent(Detail).vm.$emit('share', { contribute: false })
-    await flushPromises()
-    expect(w.find('.share').exists()).toBe(false)
-    holder.reg = fullRegistry()
-    expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|true')
-    capabilityState.ids = [MEMORIES, DEPOT] // control: the instance's switch alone takes it away too
-    expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
-  })
-
-  // cr-files-application P4c: the share dialog is the kind's. A kind that says `shareable` but brings no `shareDialog`
-  // offers no share — the host never shows a button whose dialog it cannot mount.
-  it('a kind without a shareDialog offers no share, even when its descriptor says shareable', async () => {
-    const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, detail: Detail, icon: 'file', shareable: true }) // no shareDialog
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, detail: Detail, icon: 'file' }) // no shareDialog
     holder.reg = r
     expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
     holder.reg = fullRegistry() // control: the same kind with its dialog is shared, and the dialog is the kind's own

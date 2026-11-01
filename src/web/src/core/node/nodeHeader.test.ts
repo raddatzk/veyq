@@ -15,7 +15,7 @@ import {
   type NodeHeaderAction,
 } from './nodeHeader'
 
-const act = (id: string, over: Partial<NodeHeaderAction> = {}): NodeHeaderAction => ({ id, label: id, icon: 'heart', onClick: () => {}, ...over })
+const act = (id: string, over: Partial<NodeHeaderAction> = {}): NodeHeaderAction => ({ id, label: id, icon: 'heart', shown: true, onClick: () => {}, ...over })
 
 describe('fitHeaderActions', () => {
   // 36 px buttons, 7 px gaps, a 36 px ⋯: n buttons alone take 36n + 7(n - 1); k buttons and the ⋯ take 43k + 36.

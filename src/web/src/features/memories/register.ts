@@ -6,10 +6,9 @@
 // the row factory once and draws every Memory as a row or a tile of the one list (cr-files-application P4b). So do its dialogs
 // (P4c): `MemoryNodeDialog` creates a Memory or a chapter (the kind picks which), `ShareDialog` manages a Memory's or a
 // chapter's links (its uploader variant included); a rename of either is core's `FolderNameDialog`. The same detail
-// serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. The sidebar's Favorites section is core's (`core/favorites/PinnedNodes.vue`, inbox #409), so Memories adds nothing to the
-// `sidebarPins` list. The top bar's upload status is core's (`core/blob/UploadStatusMenu.vue`,
-// cr-files-application B3) and lists Memories' batches with every other application's, so Memories adds nothing to the
-// `topbarTray` list.
+// serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. Memories adds nothing to the shell: the sidebar's
+// Favorites section is core's (`core/favorites/PinnedNodes.vue`, inbox #409), and so is the top bar's upload status
+// (`core/blob/UploadStatusMenu.vue`, cr-files-application B3), which lists Memories' batches with every other application's.
 import { rekeyMemoryContent } from './rekey'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { MEMORIES } from '../platform/capabilities'
@@ -50,7 +49,7 @@ export function registerMemories(registry: Registry): void {
   // tab while it has nothing.
   const list = { rows: memoryRows, tabLabel: 'memory.memories', views: MEMORY_VIEWS, emptyText: () => 'memory.memoryEmpty' }
   const memories = {
-    detail: MemoryDetailHost, icon: 'images' as const, shareable: true, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
+    detail: MemoryDetailHost, icon: 'images' as const, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
     // Both carry a cover (inbox #411: core's action, dialog, upload and display), set only by an upload in core's dialog. A
     // picked image equal to a gallery medium's original shares that medium's PREVIEW instead of being stored again.
     cover: { findStored: findStoredCover },
@@ -95,5 +94,5 @@ export function registerMemories(registry: Registry): void {
   registry.claimPersonSection(PersonMemories)
   // A reported medium's review (uc.moderation.review-a-case A5): a medium is Memories' record, core cannot draw it.
   registry.claimItemReview(MediumReview)
-  registry.registerLifecycle('memories', memoriesLifecycle)
+  registry.registerLifecycle(MEMORIES, memoriesLifecycle) // under the id it registered above
 }

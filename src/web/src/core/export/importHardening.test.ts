@@ -48,7 +48,7 @@ const created: { kind: string; name: string; parent: string | null; bytes: strin
 const grabbed: PayloadFile[] = []
 beforeAll(() => {
   registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-    kind: FILE, icon: 'file', shareable: false, downloadsAsFile: true, contentSchema: { application: 'h', version: 1 },
+    kind: FILE, icon: 'file', downloadsAsFile: true, contentSchema: { application: 'h', version: 1 },
     validateContent: (c) => (typeof c.note === 'string' && c.note.length > 10 ? { code: 'too_large', message: 'note' } : null),
     async exportContent(ctx) {
       const body = text(`bytes of ${ctx.node.name}`)
@@ -63,7 +63,7 @@ beforeAll(() => {
     },
   })
   registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-    kind: COLLECTION, icon: 'file', shareable: false, contentSchema: { application: 'h', version: 1 },
+    kind: COLLECTION, icon: 'file', contentSchema: { application: 'h', version: 1 },
     async exportContent(ctx) {
       const files = ['IMG.jpg', 'img.JPG'].map((n) => ctx.addPayload(n, { size: n.length, mediaType: 'image/jpeg', chunks: async function* () { yield text(n) } }))
       return { type: 'h.collection', schema: 1, files }
@@ -478,7 +478,7 @@ describe('each payload is checked through the digest worker\'s door, the next on
   let asks = bodies.length
   beforeAll(() => {
     registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-      kind: SERIES, icon: 'file', shareable: false, contentSchema: { application: 'h', version: 1 },
+      kind: SERIES, icon: 'file', contentSchema: { application: 'h', version: 1 },
       async exportContent() {
         throw new Error('not exported here')
       },

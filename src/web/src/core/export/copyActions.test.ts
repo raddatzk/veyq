@@ -16,11 +16,11 @@ const hooks = { exportContent: async () => null, importContent: async () => ({ n
 
 beforeAll(() => {
   if (!registry.kind('CP_STREAMS').supported) {
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_STREAMS', icon: 'file', shareable: false, ...hooks, importStreams: true })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_WHOLE', icon: 'file', shareable: false, ...hooks }) // its import needs whole payloads
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_AS_FOLDER', icon: 'file', shareable: false, exportContent: hooks.exportContent, importsAsFolder: true })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NO_IMPORT', icon: 'file', shareable: false, exportContent: hooks.exportContent, importStreams: true })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NONE', icon: 'file', shareable: false })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_STREAMS', icon: 'file', ...hooks, importStreams: true })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_WHOLE', icon: 'file', ...hooks }) // its import needs whole payloads
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_AS_FOLDER', icon: 'file', exportContent: hooks.exportContent, importsAsFolder: true })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NO_IMPORT', icon: 'file', exportContent: hooks.exportContent, importStreams: true })
+    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NONE', icon: 'file' })
     registry.registerApplication({ id: 'cp', name: 'cp.name', kinds: ['CP_STREAMS'] })
   }
 })
@@ -59,7 +59,7 @@ describe('canCopy', () => {
 })
 
 describe('the action', () => {
-  const app = (...ids: string[]): NodeHeaderAction[] => ids.map((id) => ({ id, label: id, icon: 'file', onClick: () => {} }))
+  const app = (...ids: string[]): NodeHeaderAction[] => ids.map((id) => ({ id, label: id, icon: 'file', shown: true, onClick: () => {} }))
 
   it('is one "Copy to…" for header and row alike, placed right after the application\'s move, that calls back', () => {
     let called = 0

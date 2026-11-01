@@ -60,8 +60,8 @@ beforeEach(() => {
   remove.mockClear()
   const a = stubRows('a', { selection: (n) => ALLOWS[n.kind] })
   const b = stubRows('b', { selection: (n) => (n.name === 'b-del' ? { move: false, delete: true, remove } : ALLOWS[n.kind]) })
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, tabLabel: LABEL_A } })
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', shareable: false, list: { rows: b.factory, tabLabel: LABEL_B } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: a.factory, tabLabel: LABEL_A } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: b.factory, tabLabel: LABEL_B } })
 })
 
 const TREE = [
@@ -183,7 +183,7 @@ describe('LevelView: Select', () => {
     holder.reg = createRegistry()
     const MAP = { mode: 'map', icon: 'map', label: 'node.folders' } as const
     const a = stubRows('a', { presentationFor: 'map', selection: () => ({ move: true, delete: true }) })
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory, views: [GRID_VIEW, LIST_VIEW, MAP] } })
+    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: a.factory, views: [GRID_VIEW, LIST_VIEW, MAP] } })
     const tree = [TRIPS, node('a1', 'ALPHA')]
     const w = mountLevel(tree)
     await startSelecting(w)
@@ -201,7 +201,7 @@ describe('LevelView: Select', () => {
     // a READ guest's sub-folders: core's matrix grants it nothing
     expect(selectButton(mountLevel([TRIPS, node('Sub', FOLDER_KIND)], guestAccessOf(ShareRole.Read))).exists()).toBe(false)
     holder.reg = createRegistry()
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: stubRows('a').factory } })
+    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory } })
     expect(selectButton(mountLevel([TRIPS, node('a1', 'ALPHA')], memberAccessOf({ readonly: true }))).exists()).toBe(false)
     // control: the same rows for a member who writes - a sub-folder moves
     expect(selectButton(mountLevel([TRIPS, node('Sub', FOLDER_KIND), node('a1', 'ALPHA')])).exists()).toBe(true)

@@ -27,8 +27,7 @@ import { TrustStateRefused } from '../features/account/trustMarks'
 const PERSONAL_SCOPE = '~me'
 import { treeStore, resetTree } from '../core/node/treeStore'
 import { favoritesStore, clearFavorites, loadFavoritesFor } from '../core/favorites/favoritesStore'
-import { registry } from '../core/applications/registry'
-import { memoriesLifecycle } from '../features/memories/lifecycle'
+import { registerMemoriesLifecycle } from '../test/memoriesLifecycle'
 import { getSetupStatus } from '../features/account/instance/instance'
 import { serverState } from '../shared/state/serverState'
 import { suspensionSignals } from './tenantSuspension'
@@ -49,7 +48,7 @@ const opened = (scopeId: string, kind: ScopeKind, key: Uint8Array) => ({ scopeId
 
 // A node-environment file: src/test/setup.ts registers no application here. The REAL Memories hooks go into the
 // REAL registry, so the scope tests below prove activeSpace resets/loads application state THROUGH the registry.
-beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
+beforeAll(() => registerMemoriesLifecycle())
 
 beforeEach(() => {
   vi.clearAllMocks()

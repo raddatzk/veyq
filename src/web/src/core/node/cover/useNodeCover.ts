@@ -255,10 +255,12 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
   }
 
   function build(node: TreeNode | null): (CoreHeaderAction & CoreRowAction)[] {
-    if (!node || !canSet(node)) return []
+    const shown = !!node && canSet(node)
+    if (!shown) return []
     return [
       {
         id: 'cover',
+        shown,
         label: translate(store.declared.has(node.id) ? 'node.cover.change' : 'node.cover.set'),
         icon: 'image',
         placement: 'after',

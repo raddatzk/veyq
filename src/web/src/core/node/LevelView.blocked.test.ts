@@ -45,7 +45,7 @@ beforeEach(() => {
   setViewMode('list')
   holder.reg = createRegistry()
   holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-    kind: 'ALPHA', icon: 'images', shareable: false,
+    kind: 'ALPHA', icon: 'images', 
     list: { rows: stubRows('a').factory }, // its rows carry a rename: the placeholder drops it
   })
 })

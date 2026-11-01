@@ -12,7 +12,7 @@
 //
 // Two foldings live here (inbox #350): `slugify` for containers (folders, Memories, chapters — the URL segment AND the
 // uniqueness) and `fileNameSlug` for files (uniqueness only). Which one a node uses is its kind's choice, made in the
-// application registry (`KindDescriptor.slug`, `registry.slugFor`); both are pinned by the `name_folding` vectors.
+// application registry (`KindDescriptor.slug`, read by `registry.tokenInputFor`); both are pinned by the `name_folding` vectors.
 
 const GERMAN_FOLDING: Record<string, string> = { ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' }
 

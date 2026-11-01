@@ -79,7 +79,7 @@ const StubDetail = defineComponent({ name: 'StubDetail', setup: () => () => h('d
 
 function registryWith(claims: NodeKind[], details: NodeKind[] = []): Registry {
   const r = createRegistry()
-  for (const key of details) r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: key, icon: 'file', shareable: true, detail: StubDetail })
+  for (const key of details) r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: key, icon: 'file', detail: StubDetail })
   for (const key of claims) r.claimShareBody(key, StubBody)
   return r
 }

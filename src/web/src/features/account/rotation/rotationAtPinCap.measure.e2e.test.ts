@@ -53,7 +53,7 @@ import { birthInstance } from '../../../test/e2eBootstrap'
 import { pinIdOf, sealPinEntry, sealPinHead } from '../../../test/pinStore'
 import { recordCanaries } from '../../../test/canaries'
 import { registry } from '../../../core/applications/registry'
-import { memoriesLifecycle } from '../../memories/lifecycle'
+import { registerMemoriesLifecycle } from '../../../test/memoriesLifecycle'
 import { MEMORY_KIND } from '../../memories/kinds'
 import { rekeyMemoryContent } from '../../memories/rekey'
 
@@ -65,8 +65,8 @@ const POINTS = (process.env.VEYQ_PIN_ROTATION_POINTS ?? String(CAP)).split(',').
 // As scopeRotation.e2e: `rotateKeys` fails closed without a registered `onMasterKeyRotated`, and the owner's sole-member
 // tenant is re-keyed after the publish, which needs the Memories kind's `rekeyContent`.
 beforeAll(() => {
-  registry.registerLifecycle('memories', memoriesLifecycle)
-  if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', shareable: true, rekeyContent: rekeyMemoryContent })
+  registerMemoriesLifecycle()
+  if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', rekeyContent: rekeyMemoryContent })
 })
 
 /** One reading of a rotation request, taken off the wire by [watchRotation]. */

@@ -100,7 +100,7 @@ beforeEach(() => {
   localStorage.clear()
   seen.props = null
   const r = createRegistry()
-  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: DOC_KIND, icon: 'file', shareable: false, list: { rows: stubRows } })
+  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: DOC_KIND, icon: 'file', list: { rows: stubRows } })
   holder.reg = r
   nav.route = reactive({ query: {} as Record<string, string>, hash: `#k=${b64url(K_SHARE)}` })
 })

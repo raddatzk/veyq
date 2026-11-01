@@ -168,10 +168,6 @@ export function mintSecretKey(): string {
  * the vault and finishes; it never mints a second set of keys.
  */
 export async function rotateKeys(password: string, secretKeyB64: string, next: NextCredential): Promise<RotationResult> {
-  // Fail closed BEFORE anything is proven, minted or written: material an application sealed under the Master Key
-  // (Memories' pins) is only recoverable through its `onMasterKeyRotated` hook, so a build whose composition root
-  // registered none must not rotate at all. A wiring defect, not a user refusal: it throws, it is not a RotationRefused.
-  registry.assertRotationHooks()
   const newSecretKey = fromB64std(next.secretKeyB64.trim())
   if (newSecretKey.length !== 32) {
     newSecretKey.fill(0)

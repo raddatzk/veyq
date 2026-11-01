@@ -22,7 +22,7 @@ const mountHeader = (props: InstanceType<typeof NodeHeader>['$props'], slots: Re
   mounted.push(w)
   return w
 }
-const act = (id: string, over: Partial<NodeHeaderAction> = {}): NodeHeaderAction => ({ id, label: `L-${id}`, icon: 'heart', onClick: () => {}, ...over })
+const act = (id: string, over: Partial<NodeHeaderAction> = {}): NodeHeaderAction => ({ id, label: `L-${id}`, icon: 'heart', shown: true, onClick: () => {}, ...over })
 const labels = (w: ReturnType<typeof mountHeader>) => w.findAll('.veyq-node-header-action').map((b) => b.attributes('aria-label'))
 
 describe('NodeHeader', () => {

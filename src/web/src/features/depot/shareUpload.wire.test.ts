@@ -35,7 +35,7 @@ const NAME = 'Rezept.pdf'
 const MODIFIED = 1_700_000_000_000
 
 beforeAll(() => {
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
 })
 afterEach(() => vi.unstubAllGlobals())
 

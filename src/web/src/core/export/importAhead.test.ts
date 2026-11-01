@@ -30,7 +30,7 @@ let asks = 1
 
 beforeAll(() => {
   registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-    kind: KIND, icon: 'file', shareable: false, contentSchema: { application: 'ha', version: 1 },
+    kind: KIND, icon: 'file', contentSchema: { application: 'ha', version: 1 },
     async exportContent() {
       throw new Error('not exported here')
     },

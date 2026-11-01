@@ -37,7 +37,7 @@ import { recordCanaries } from '../../test/canaries'
 import { runScopeRotationWorker } from './scopeRotationWorker'
 import { SCOPE_ROTATION } from './capabilityTags'
 import { registry } from '../../core/applications/registry'
-import { memoriesLifecycle } from '../memories/lifecycle'
+import { registerMemoriesLifecycle } from '../../test/memoriesLifecycle'
 import { MEMORY_KIND } from '../memories/kinds'
 import { rekeyMemoryContent } from '../memories/rekey'
 
@@ -49,8 +49,8 @@ import { rekeyMemoryContent } from '../memories/rekey'
 // 2026-10-23). The rest of the descriptor is the kind's identity only; `register.ts` is not imported here, as its
 // components need a window.
 beforeAll(() => {
-  registry.registerLifecycle('memories', memoriesLifecycle)
-  if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', shareable: true, rekeyContent: rekeyMemoryContent })
+  registerMemoriesLifecycle()
+  if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', rekeyContent: rekeyMemoryContent })
 })
 
 /** Add [who] to the group as the members panel does (ADR 0111 decision 4): resolve, then wrap the group's current key

@@ -27,8 +27,8 @@ export function canCopy(access: Access, node: { kind: NodeKind } | null): boolea
 }
 
 function action(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null, onCopy: () => void): (CoreRowAction & CoreHeaderAction)[] {
-  if (!canCopy(access, node)) return []
-  return [{ id: 'copy', label: t('node.copy.action'), icon: 'copy', placement: { after: 'move' }, onClick: onCopy }]
+  const shown = canCopy(access, node)
+  return shown ? [{ id: 'copy', label: t('node.copy.action'), icon: 'copy', placement: { after: 'move' }, shown, onClick: onCopy }] : []
 }
 
 export function copyHeaderActions(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null, onCopy: () => void): CoreHeaderAction[] {

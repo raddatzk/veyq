@@ -21,8 +21,7 @@ import { mailCursor, waitForMail } from '../../test/mailpit'
 import { memberInviteFragment, registerThroughMemberInvite } from '../../test/memberJoin'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { generateInviteCode } from '@veyq/crypto/invite'
-import { registry } from '../../core/applications/registry'
-import { memoriesLifecycle } from '../memories/lifecycle'
+import { registerMemoriesLifecycle } from '../../test/memoriesLifecycle'
 import { inviteMember, listScopeMembers, rekeySpace, removeTenantMember } from './members'
 import { listMyScopes, openScope } from './scopes'
 import { createFolder, listTree } from '../../core/node/tree'
@@ -33,7 +32,7 @@ import { scopesApi } from '../../api/client'
 import { ScopeKind } from '../../api/generated/scopes'
 import { decodeHttpError } from '../../shared/httpError'
 
-beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
+beforeAll(() => registerMemoriesLifecycle())
 
 const A_NAME = { firstName: 'Hildegunde', lastName: 'Ostermeier' }
 const B_NAME = { firstName: 'Bartholomaeus', lastName: 'Kleinschmidt' }

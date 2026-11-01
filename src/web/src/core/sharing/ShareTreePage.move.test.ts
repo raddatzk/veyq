@@ -115,7 +115,7 @@ beforeEach(async () => {
   authenticatedCalls.length = 0
   for (const f of Object.values(toast)) f.mockClear()
   const r = createRegistry()
-  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: NOTE_KIND, icon: 'file', shareable: false, list: { rows: moveRows }, placement: { root: true, parents: [FOLDER_KIND] } })
+  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: NOTE_KIND, icon: 'file', list: { rows: moveRows }, placement: { root: true, parents: [FOLDER_KIND] } })
   holder.reg = r
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
   await router.push(`/s/${SHARE_ID}${HASH}`)

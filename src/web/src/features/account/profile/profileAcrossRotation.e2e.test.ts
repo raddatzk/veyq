@@ -18,8 +18,7 @@ import { beforeAll, describe, it, expect } from 'vitest'
 import { effectScope } from 'vue'
 import { birthInstance, become, mkActor, onboardMember } from '../../../test/e2eBootstrap'
 import { recordCanaries } from '../../../test/canaries'
-import { registry } from '../../../core/applications/registry'
-import { memoriesLifecycle } from '../../memories/lifecycle'
+import { registerMemoriesLifecycle } from '../../../test/memoriesLifecycle'
 import { listMyScopes, openScope } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
 import { ScopeKind } from '../../../api/generated/scopes'
@@ -32,7 +31,7 @@ import { carryProfileForward } from './carryProfileForward'
 import { tenantsApi } from '../../../api/client'
 
 // `rotateKeys` fails closed without a registered `onMasterKeyRotated` (a node file gets no registry): the real Memories one.
-beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
+beforeAll(() => registerMemoriesLifecycle())
 
 const A_NAME = { firstName: 'Annegret', lastName: 'Vorderwuelbecke' }
 const C_NAME = { firstName: 'Cornelius', lastName: 'Haselgruber' }

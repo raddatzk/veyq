@@ -4,7 +4,7 @@
 //
 //  1. the NODE: for a new file, core's `createContentNode` births a `FILE` node — a fresh random node key wrapped under
 //     the parent's key (the folder's, `E_current` at the scope root; ADR 0080 Decision 1), its name sealed and its slug
-//     token derived under that same key by the kind's own folding (`fileNameSlug`, `registry.slugFor`, inbox #350). A
+//     token derived under that same key by the kind's own folding (`fileNameSlug`, `registry.tokenInputFor`, inbox #350). A
 //     replace targets the existing node the member confirmed, with its own key.
 //  2. the BLOB: core's `planBlob` under the file node's OWN key (role and owner `FILE_CONTENT` / the node id, so the
 //     `K_blob` wrap opens only there, ADR 0072 / ADR 0080 Decision 13) and `reserveAndPump` through core's authed blob

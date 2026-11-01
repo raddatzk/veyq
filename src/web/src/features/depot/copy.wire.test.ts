@@ -52,7 +52,7 @@ const originalBlob = {
 beforeAll(() => {
   if (!registry.kind(FILE_KIND).supported) {
     registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-      kind: FILE_KIND, icon: 'file', shareable: false, slug: fileNameSlug, downloadsAsFile: true,
+      kind: FILE_KIND, icon: 'file', slug: fileNameSlug, downloadsAsFile: true,
       exportContent: exportFile, importContent: importFile, importStreams: true,
     })
   }

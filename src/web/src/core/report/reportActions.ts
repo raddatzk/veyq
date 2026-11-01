@@ -56,9 +56,9 @@ export function reportNodes(access: Access, tree: TreeSource, nodes: readonly Tr
 }
 
 function action(t: Translate, offered: boolean, access: Access, node: TreeNode | null, onReport: () => void): (CoreRowAction & CoreHeaderAction)[] {
-  if (!offered || !node || !canReport(access)) return []
+  const shown = offered && !!node && canReport(access)
   // Never a button in a node header (ADR 0110): a report opens a consequential dialog.
-  return [{ id: 'report', label: t('report.action'), icon: 'flag', placement: 'after', menuOnly: true, onClick: onReport }]
+  return shown ? [{ id: 'report', label: t('report.action'), icon: 'flag', placement: 'after', menuOnly: true, shown, onClick: onReport }] : []
 }
 
 export function reportHeaderActions(t: Translate, offered: boolean, access: Access, node: TreeNode | null, onReport: () => void): CoreHeaderAction[] {

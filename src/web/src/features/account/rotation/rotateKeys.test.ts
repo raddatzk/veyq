@@ -124,7 +124,7 @@ import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favori
 import { retagItemMarksUnderNewMasterKey } from '../../memories/itemFavorites'
 import { httpError } from '../../../test/httpError'
 import { registry } from '../../../core/applications/registry'
-import { memoriesLifecycle } from '../../memories/lifecycle'
+import { registerMemoriesLifecycle } from '../../../test/memoriesLifecycle'
 import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -137,7 +137,7 @@ import { bundleB64, genesis, headOf, served, type ChainKeys } from '../../../tes
 // This file runs in the node environment (fake-indexeddb), where src/test/setup.ts registers no application. The REAL
 // Memories hooks go into the REAL registry, so the re-seal tests below prove rotateKeys reaches the favorites modules
 // (mocked above, at the module that seals) THROUGH the registry rather than by an import of its own.
-beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
+beforeAll(() => registerMemoriesLifecycle())
 
 const PASSWORD = 'correct horse battery staple'
 const EMAIL = 'me@example.test'
@@ -735,28 +735,25 @@ beforeEach(() => {
   vi.mocked(retagItemMarksUnderNewMasterKey).mockResolvedValue(undefined)
 })
 
-describe('the lifecycle gate: a rotation needs an application that carries the master-key hook', () => {
-  // The registry is write-once and filled by the real composition root (src/test/setup.ts), so the "nothing
-  // registered" build is simulated by making ITS gate answer as an empty registry does (proven separately in
-  // registry.test.ts). This test pins the other half: rotateKeys asks BEFORE it proves, mints or posts anything.
-  it('refuses to start when no application registered the hook, and touches nothing', async () => {
-    const srv = fakeServer()
-    const gate = vi.spyOn(registry, 'assertRotationHooks').mockImplementation(() => {
-      throw new Error('no application registered an onMasterKeyRotated hook; refusing to rotate keys (fail closed)')
-    })
+describe("the applications' master-key hooks: a rotation runs them, and needs none", () => {
+  // A build with no application hook rotates: core re-seals its own Master-Key material (the node pins) itself, and an
+  // application that seals under the Master Key brings the required hook with its lifecycle (the registry's header). The
+  // registry is write-once and filled with Memories' hooks above, so the hook-less build is simulated by making ITS
+  // `masterKeyRotated` answer as a registry with no hooks does (proven in registry.test.ts).
+  it("a build whose registry runs no application hook still rotates and re-seals core's pins", async () => {
+    const srv = fakeServer({ scopes: ordinaryScopes() })
+    const none = vi.spyOn(registry, 'masterKeyRotated').mockResolvedValue(undefined)
     try {
-      await expect(rotate()).rejects.toThrow(/refusing to rotate/)
-      expect(srv.getAccountKeyMaterial).not.toHaveBeenCalled()
-      expect(srv.openRotationStage).not.toHaveBeenCalled()
-      expect(srv.rotateAccountKeys).not.toHaveBeenCalled()
-      expect(setUnlocked).not.toHaveBeenCalled()
-      expect(resealFavoritesUnderNewMasterKey).not.toHaveBeenCalled()
+      await expect(rotate()).resolves.toMatchObject({ outcome: 'published' })
+      expect(srv.rotateAccountKeys).toHaveBeenCalled()
+      expect(resealFavoritesUnderNewMasterKey).toHaveBeenCalledTimes(1)
+      expect(retagItemMarksUnderNewMasterKey).not.toHaveBeenCalled()
     } finally {
-      gate.mockRestore()
+      none.mockRestore()
     }
   })
 
-  it('live control: with the real registry and the real Memories hooks the same call rotates and re-seals', async () => {
+  it('with the real registry and the real Memories hooks the same call rotates and re-seals the item marks too', async () => {
     const srv = fakeServer({ scopes: ordinaryScopes() })
     await expect(rotate()).resolves.toMatchObject({ outcome: 'published' })
     expect(srv.rotateAccountKeys).toHaveBeenCalled()

@@ -49,11 +49,11 @@ beforeEach(() => {
   setViewMode('list')
   // ALPHA copies (both hooks, an import that takes a payload by frame); BETA has no hooks: it is no copy's.
   holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
-    kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: stubRows('a').factory, tabLabel: 'memory.memories' },
+    kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: 'memory.memories' },
     exportContent: async () => null, importContent: async () => ({ nodeId: 'x', nodeKey: new Uint8Array(0) }), importStreams: true,
   })
   // BETA moves (its application's selection answer) but cannot be copied
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', shareable: false, list: { rows: stubRows('b', { selection: () => ({ move: true, delete: false }) }).factory, tabLabel: 'depot.title' } })
+  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b', { selection: () => ({ move: true, delete: false }) }).factory, tabLabel: 'depot.title' } })
 })
 
 function mountLevel(access: Access) {

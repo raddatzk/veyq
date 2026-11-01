@@ -100,8 +100,8 @@ export interface RightsTarget {
   /** It is a guest's identity folder in a drop box or lies below one (ADR 0080 decision 11: nothing is placed there but
    *  by that folder's own guest). */
   readonly inIdentityFolder: boolean
-  /** Its kind's descriptor says it is shareable AND brings a share dialog (the registry's answer): a share right
-   *  needs it, so no view shows a share button whose dialog the host cannot mount. False at the scope root. */
+  /** Its kind brings a share dialog (the registry's answer, `KindDescriptor.shareDialog`): a share right needs it, so no
+   *  view shows a share button whose dialog the host cannot mount. False at the scope root. */
   readonly shareable: boolean
   /** The kind of its parent as the session reads it (inbox #358: a guest moves only what a `FOLDER` lets out, core's
    *  `FolderGuestNodeRules`): null at the scope root (a member's top level); undefined where the session cannot read the
@@ -145,7 +145,7 @@ export function targetOf(tree: TreeSource, node: { id: string; kind: NodeKind } 
   return {
     kind: node.kind,
     inIdentityFolder: tree.inIdentityFolder(node.id),
-    shareable: info.supported && info.shareable && !!info.shareDialog,
+    shareable: info.supported && !!info.shareDialog,
     // The view's root has no parent this session reads (a guest's served root carries `parentId` null, the scope root's
     // marker — so the root is asked first); a parent the tree does not serve is unknown, never the scope root.
     parentKind: node.id === tree.rootId ? undefined : parentId === null ? null : (tree.node(parentId)?.kind ?? undefined),
