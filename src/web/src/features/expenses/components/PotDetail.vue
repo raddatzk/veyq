@@ -86,7 +86,7 @@ const POT_HEADER_ORDER = ['favorite', 'share', 'download', 'rename', 'move', 'co
 const headerActions = computed(() =>
   standardNodeActions(
     t,
-    { share: rights.value.share, rename: rights.value.renameNode, move: rights.value.moveNode, remove: rights.value.deleteNode, deleteLabel: t('expenses.delete') },
+    { ...rights.value, deleteLabel: t('expenses.delete') },
     { share: () => emit('share', { contribute: rights.value.shareContribute }), rename: () => emit('rename'), move: () => emit('move', props.node), remove: () => emit('delete') },
   ),
 )

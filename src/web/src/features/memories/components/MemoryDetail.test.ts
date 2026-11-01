@@ -67,7 +67,7 @@ function stubDeriver(): MediaDeriver {
 
 function mountDetail(memoryKey: Uint8Array, props: Partial<Record<string, unknown>> = {}) {
   return mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }), ...props },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }), canSetCover: true, ...props },
     global: { plugins: [realI18n()] },
   })
 }

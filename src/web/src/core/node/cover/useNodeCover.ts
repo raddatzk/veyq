@@ -56,6 +56,9 @@ export interface UseNodeCover {
   headerActions(node: TreeNode | null): CoreHeaderAction[]
   /** A row's core action for `node`. */
   rowActions(node: TreeNode | null): CoreRowAction[]
+  /** Whether whoever looks may set `node`'s cover (`coverRights`): what a kind's own cover control reads (Memories' cover
+   *  tile), so it offers exactly what core's action does. */
+  canSet(node: TreeNode): boolean
   /** The dialog's state while it is open (mounted by `CoverEditor.vue`), else null. */
   editor: Ref<CoverEditorState | null>
   /** Open the dialog on `node` (a no-op where the right says no). */
@@ -270,6 +273,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
     ensure: (extra) => store.ensure(extra, (id) => tree().keyOf(id)),
     headerActions: (node) => build(node),
     rowActions: (node) => build(node),
+    canSet,
     editor,
     open,
     close,

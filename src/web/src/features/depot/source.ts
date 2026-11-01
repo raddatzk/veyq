@@ -126,9 +126,10 @@ export function sourceRights(rights: DepotRights, source: DepotSource): DepotRig
     upload: rights.upload && !!source.upload,
     replace: rights.replace && !!source.upload,
     rename: rights.rename && !!source.rename,
-    deleteFile: rights.deleteFile && !!source.deleteFile,
-    moveFile: rights.moveFile && !!source.move,
-    moveNode: rights.moveNode && !!source.move,
+    move: rights.move && !!source.move,
+    delete: rights.delete && !!source.deleteFile,
+    moveGuestFolder: rights.moveGuestFolder && !!source.move,
+    deleteGuestFolder: rights.deleteGuestFolder && !!source.deleteFile,
   }
 }
 

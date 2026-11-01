@@ -420,6 +420,11 @@ export interface NodeShareDialogProps {
   nodeKind: NodeKind
   uploader?: boolean
   contribute?: boolean
+  /** The scope is pending deletion (`MemberAccess.readonly`, set by the host for every kind's dialog, core's rule): the
+   *  dialog lists the node's links and copies them, but mints none and changes none - the server refuses every share
+   *  write during the grace window, a revoke included (`ScopeAccess`'s WRITE answer `Deleting`), and serves no guest
+   *  then, so a link is dormant until a restore. */
+  readonly?: boolean
 }
 
 /** The shell's `sidebarPins` list slot: each component an application adds to it is mounted in the left rail

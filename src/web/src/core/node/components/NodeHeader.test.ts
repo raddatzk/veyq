@@ -298,7 +298,7 @@ describe('nodeHeader helpers', () => {
 
   it('standardNodeActions: only the granted ones, share, rename, move, delete; the kind may relabel', () => {
     const on = { share: vi.fn(), rename: vi.fn(), move: vi.fn(), remove: vi.fn() }
-    const all = standardNodeActions(t, { share: true, rename: true, move: true, remove: true, deleteLabel: 'Drop it' }, on)
+    const all = standardNodeActions(t, { share: true, rename: true, move: true, delete: true, deleteLabel: 'Drop it' }, on)
     expect(all.map((a) => a.id)).toEqual(['share', 'rename', 'move', 'delete'])
     expect(all[3].label).toBe('Drop it')
     expect(all[3].severity).toBe('danger')

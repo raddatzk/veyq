@@ -59,6 +59,7 @@ vi.mock('../core/node/tree', async (importOriginal) => ({
 import MemoryHomeView from './MemoryHomeView.vue'
 import { createRegistry, type Registry } from '../core/applications/registry'
 import { treeStore } from '../core/node/treeStore'
+import { activeSpace } from '../app/activeSpace'
 import { listMyTenants } from '../features/spaces/scopes'
 import type { TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
@@ -85,7 +86,7 @@ const Detail = defineComponent({
 const rows: LevelRowsFactory = () => ({
   row: (n) => ({ icon: 'images', title: n.name, meta: '', primary: { label: n.name, onClick: () => {} }, actions: [] }),
 })
-const Share = defineComponent({ props: ['nodeId'], setup: (p) => () => h('div', { class: 'share' }, p.nodeId) })
+const Share = defineComponent({ props: ['nodeId', 'readonly'], setup: (p) => () => h('div', { class: 'share', 'data-readonly': String(p.readonly === true) }, p.nodeId) })
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
   return treeNode({ parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over })
@@ -219,5 +220,23 @@ describe('MemoryHomeView fail-closed rules', () => {
     w.findComponent(Detail).vm.$emit('share', { contribute: false })
     await flushPromises()
     expect(w.find('.share').text()).toBe('mem')
+  })
+
+  // Owner decision 2026-11-01: a pending deletion keeps every kind's share dialog to see its links, and the HOST tells the
+  // dialog to mint and change none (`NodeShareDialogProps.readonly`) - core's rule, so no kind can drift from it.
+  it('hands every share dialog the pending deletion as `readonly`; control: a live space hands none', async () => {
+    try {
+      activeSpace.deletedAt = new Date('2026-11-01T00:00:00Z')
+      const w = await mountAt('#~me/mem')
+      w.findComponent(Detail).vm.$emit('share', { contribute: false })
+      await flushPromises()
+      expect(w.find('.share').attributes('data-readonly')).toBe('true')
+    } finally {
+      activeSpace.deletedAt = null
+    }
+    const live = await mountAt('#~me/mem')
+    live.findComponent(Detail).vm.$emit('share', { contribute: false })
+    await flushPromises()
+    expect(live.find('.share').attributes('data-readonly')).toBe('false')
   })
 })

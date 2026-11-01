@@ -333,7 +333,7 @@ describe("the member's source is today's calls, with its scope", () => {
 describe('no door, no right (the invariant every view rests on)', () => {
   const ALL: MemoryRights = {
     ...NO_MEMORY_RIGHTS, navigate: true, download: true, upload: true, deleteMedia: 'any', createMemory: true, createChapter: true,
-    editMeta: true, setCover: true, setBanner: true, mark: true, share: true, shareUpload: true, rename: true, deleteNode: true,
+    editMeta: true, setBanner: true, mark: true, share: true, shareUpload: true, rename: true, delete: true,
     mediaTrash: true, buckets: true,
   }
   const member = memberMemorySource({ scopeId: () => SCOPE })
@@ -361,9 +361,7 @@ describe('no door, no right (the invariant every view rests on)', () => {
 
   it('the rights no source door carries pass through unchanged (they are the host\'s dialogs and the tree\'s links)', () => {
     const narrowed = sourceRights(ALL, guest(ShareRole.Read).source)
-    // `setCover` rests on no source door since inbox #411: the write is core's (member-only by `coverRights`), and the guest's
-    // column of the matrix is false (`rights.test.ts`).
-    for (const k of ['navigate', 'download', 'createMemory', 'createChapter', 'share', 'shareUpload', 'rename', 'deleteNode', 'setCover'] as const) {
+    for (const k of ['navigate', 'download', 'createMemory', 'createChapter', 'share', 'shareUpload', 'rename', 'delete'] as const) {
       expect(narrowed[k], k).toBe(true)
     }
     for (const k of ['upload', 'editMeta', 'setBanner', 'mark', 'mediaTrash', 'buckets'] as const) expect(narrowed[k], k).toBe(false)

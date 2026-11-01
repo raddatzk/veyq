@@ -51,7 +51,7 @@ import { fileFacts } from './download'
 import { plaintextTotal } from '../../sw/range'
 import { isSaveCancelled, SaveTooLarge } from '../../shared/saveStream'
 import { canUploadFolder, depotRights } from './rights'
-import { targetOf, type GuestAccess, type TreeSource } from '../../core/access'
+import { rowRightsOf, targetOf, type GuestAccess, type TreeSource } from '../../core/access'
 import { pickedDirectory, type DirectoryInput } from '../../core/export/importSource'
 import { tenantStorageFits } from '../tenant/tenantStorage'
 import { createFolders, planFolderUpload, takeBackEmptyFolders } from './uploadFolder'
@@ -428,7 +428,8 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     const key = keyOf(node)
     const blob = blobs.value.get(node.id) ?? null
     const name = node.name
-    const c = rights.value
+    // The matrix for THIS file, as its own page (`FileDetail`) asks it: core's rename, move and delete narrowed by Depot.
+    const c = sourceRights(depotRights(ctx.value.access, targetOf(ctx.value.tree, node)), source)
     // Rename, move and delete are Depot's OWN, replacing core's defaults of the same ids (`core/node/standardRowActions.ts`):
     // they go through this session's source (a guest's has no rename and deletes only its own placeholder) and the delete
     // asks and offers its own Undo (inbox #385 (c)); labelled with the file's name.
@@ -440,11 +441,11 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
         onClick: () => void download(node, key, blob),
       },
       { id: 'rename', label: t('depot.rename', { name }), icon: 'pencil', shown: c.rename, onClick: () => source.rename?.(node) },
-      { id: 'move', label: t('depot.move', { name }), icon: 'file-export', shown: c.moveFile, onClick: () => source.move?.(node) },
+      { id: 'move', label: t('depot.move', { name }), icon: 'file-export', shown: c.move, onClick: () => source.move?.(node) },
       // Delete also where nothing is placed: a guest's identity folder, where a member removes what a guest sent file by
       // file - a content-less one too, a guest's upload that never finished (inbox #391).
       {
-        id: 'delete', label: t('depot.delete', { name }), icon: 'trash', severity: 'danger', shown: c.deleteFile,
+        id: 'delete', label: t('depot.delete', { name }), icon: 'trash', severity: 'danger', shown: c.delete,
         onClick: () => void remove(node, 'depot.deleteConfirm', 'depot.deleteTitle'),
       },
     ]
@@ -457,13 +458,13 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       actions,
       // With a selection of the level (inbox #421): the same answers, and the same door as this row's delete (Depot's source),
       // without its re-read - the selection re-reads the tree once.
-      selection: { move: c.moveFile, delete: c.deleteFile, ...(source.deleteFile ? { remove: (id: string) => source.deleteFile!(id, { reload: false }) } : {}) },
+      selection: { ...rowRightsOf(c).selection, ...(source.deleteFile ? { remove: (id: string) => source.deleteFile!(id, { reload: false }) } : {}) },
     }
   }
 
   function boxRow(node: TreeNode): LevelRow {
     const name = node.name
-    // The matrix for THIS drop box (`deleteNode`, `moveNode` are about the node on screen).
+    // The matrix for THIS drop box (`move`, `delete` are about the node on screen; the delete door is the source's).
     const c = sourceRights(depotRights(ctx.value.access, targetOf(ctx.value.tree, node)), source)
     const guests = ctx.value.tree.children(node.id).length
     return {
@@ -474,14 +475,14 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       primary: { label: t('depot.dropBox.open', { name }), onClick: () => host.open(node) },
       // Its own move and delete (core's defaults replaced, as a file's); a drop box is never renamed here.
       actions: [
-        { id: 'move', label: t('depot.move', { name }), icon: 'file-export', shown: c.moveNode, onClick: () => source.move?.(node) },
+        { id: 'move', label: t('depot.move', { name }), icon: 'file-export', shown: c.move, onClick: () => source.move?.(node) },
         {
-          id: 'delete', label: t('depot.delete', { name }), icon: 'trash', severity: 'danger', shown: c.deleteNode && !!source.deleteFile,
+          id: 'delete', label: t('depot.delete', { name }), icon: 'trash', severity: 'danger', shown: c.delete,
           onClick: () => void remove(node, 'depot.dropBox.deleteConfirm', 'depot.dropBox.delete'),
         },
       ],
       // With a selection of the level (inbox #421): the row's answers; deleted through core's `deleteNode`, as the drop box's own page does.
-      selection: { move: c.moveNode, delete: c.deleteNode && !!source.deleteFile },
+      selection: rowRightsOf(c).selection,
     }
   }
 

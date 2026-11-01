@@ -95,7 +95,7 @@ const DROP_BOX_HEADER_ORDER = ['favorite', 'share', 'download', 'cover', 'move',
 const headerActions = computed(() =>
   standardNodeActions(
     t,
-    { share: rights.value.share, move: rights.value.moveNode, remove: rights.value.deleteNode, shareLabel: t('depot.dropBox.share'), deleteLabel: t('depot.dropBox.delete') },
+    { share: rights.value.shareUpload, move: rights.value.move, delete: rights.value.delete, shareLabel: t('depot.dropBox.share'), deleteLabel: t('depot.dropBox.delete') },
     { share: () => emit('share', { contribute: rights.value.shareContribute }), move: () => source.move?.(props.node), remove: () => emit('delete') },
   ),
 )
@@ -116,7 +116,7 @@ const folders = computed(() => {
 
 async function removeFolder(folder: TreeNode, label: string) {
   const deleteFile = source.deleteFile
-  if (!deleteFile || !rights.value.deleteFile) return
+  if (!deleteFile || !rights.value.deleteGuestFolder) return
   const accepted = await ask({
     header: t('depot.dropBox.deleteFolder', { name: label }),
     message: t('depot.dropBox.deleteFolderConfirm', { name: label }),
@@ -161,7 +161,7 @@ async function removeFolder(folder: TreeNode, label: string) {
             </span>
           </button>
           <span class="veyq-action-group veyq-action-group-icons">
-            <VeyqTooltip v-if="rights.moveFile" :text="t('depot.dropBox.moveFolder', { name: row.label })">
+            <VeyqTooltip v-if="rights.moveGuestFolder" :text="t('depot.dropBox.moveFolder', { name: row.label })">
               <VeyqButton
                 class="veyq-icon-button veyq-prime-icon-button"
                 icon="file-export"
@@ -173,7 +173,7 @@ async function removeFolder(folder: TreeNode, label: string) {
               />
             </VeyqTooltip>
             <VeyqButton
-              v-if="rights.deleteFile"
+              v-if="rights.deleteGuestFolder"
               class="veyq-icon-button veyq-prime-icon-button"
               icon="trash"
               :aria-label="t('depot.dropBox.deleteFolder', { name: row.label })"

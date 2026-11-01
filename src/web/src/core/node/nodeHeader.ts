@@ -15,6 +15,7 @@
 // there is no guest-only header.
 
 import type { VeyqIconName } from '../../shared/ui/icons'
+import type { NodeRights } from '../access'
 
 /** One button of the header's action row. */
 export interface NodeHeaderAction {
@@ -159,12 +160,10 @@ export function headerLayout(l: HeaderLayoutInput): HeaderLayout {
   return need <= l.headerWidth + 0.01 ? 'wide' : 'compact'
 }
 
-/** The four actions every container-like node shares, in their fixed order: share, rename, move, delete. */
-export interface StandardActionFlags {
-  share?: boolean
-  rename?: boolean
-  move?: boolean
-  remove?: boolean
+/** The four actions every container-like node shares, in their fixed order: share, rename, move, delete - granted by
+ *  the node's rights answer under core's names (`NodeRights`, core/access.ts), so a page passes its rights object as it
+ *  is and its header, its rows and its selection read one answer. */
+export interface StandardActionFlags extends Partial<Pick<NodeRights, 'share' | 'rename' | 'move' | 'delete'>> {
   /** Where the kind says more than core's neutral words ("Delete drop box"). */
   shareLabel?: string
   deleteLabel?: string
@@ -188,7 +187,7 @@ export function standardNodeActions(
     { id: 'share', label: flags.shareLabel ?? t('share.share'), icon: 'share-alt', onClick: on.share ?? noop, shown: !!flags.share },
     { id: 'rename', label: t('node.rename'), icon: 'pencil', onClick: on.rename ?? noop, shown: !!flags.rename },
     { id: 'move', label: t('node.move.action'), icon: 'file-export', onClick: on.move ?? noop, shown: !!flags.move },
-    { id: 'delete', label: flags.deleteLabel ?? t('node.delete'), icon: 'trash', onClick: on.remove ?? noop, severity: 'danger', shown: !!flags.remove },
+    { id: 'delete', label: flags.deleteLabel ?? t('node.delete'), icon: 'trash', onClick: on.remove ?? noop, severity: 'danger', shown: !!flags.delete },
   ]
   return all.filter((a) => a.shown)
 }

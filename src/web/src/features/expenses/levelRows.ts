@@ -10,7 +10,7 @@ import { useI18n } from 'vue-i18n'
 import type { LevelRow, LevelRowSource, LevelRowsContext, LevelRowsHost } from '../../core/node/levelRow'
 import type { TreeNode } from '../../core/node/tree'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
-import { targetOf, type Access } from '../../core/access'
+import { rowRightsOf, targetOf, type Access } from '../../core/access'
 import { potMetaOf } from './domain/potMeta'
 import { expensesRights } from './rights'
 import { POT_KIND } from './kinds'
@@ -43,8 +43,7 @@ export function potRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsHos
       details: currency ? [{ id: 'currency', text: currency }] : [],
       primary: { label: t('expenses.open', { name: node.name }), onClick: () => host.open(node) },
       actions: [],
-      standard: { rename: c.renameNode, move: c.moveNode, delete: c.deleteNode },
-      selection: { move: c.moveNode, delete: c.deleteNode },
+      ...rowRightsOf(c),
     }
   }
 

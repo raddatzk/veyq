@@ -29,9 +29,9 @@ const stubs = {
   VeyqDateField: { props: ['modelValue'], template: '<input class="datepicker" />' },
 }
 
-function mountDialog() {
+function mountDialog(extra: { readonly?: boolean } = {}) {
   return mount(DropBoxShareDialog, {
-    props: { scopeId: 's', nodeId: 'n', nodeKey: new Uint8Array(32), epochs: { current: 0, keys: new Map() }, nodeEpoch: 0, nodeName: 'Box', nodeKind: 'DEPOT_DROPBOX' },
+    props: { scopeId: 's', nodeId: 'n', nodeKey: new Uint8Array(32), epochs: { current: 0, keys: new Map() }, nodeEpoch: 0, nodeName: 'Box', nodeKind: 'DEPOT_DROPBOX', ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -105,6 +105,31 @@ describe('DropBoxShareDialog — switch-off and delete only where the server all
       { switchOff: false, switchOn: true, remove: true },
       { switchOff: false, switchOn: true, remove: false },
     ])
+  })
+
+  // Owner decision 2026-11-01: during a pending deletion the dialog stays to SEE the links; the server refuses every share
+  // write in the grace window (a switch-off too), so it offers none and no new link, and says why.
+  it('a pending deletion (`readonly`): the links are listed, nothing is minted or changed', async () => {
+    vi.mocked(listSharesFor).mockResolvedValue([
+      { ...base, shareId: 'own', enabled: true, mine: true, deletable: true, guestStops: [] },
+      { ...base, shareId: 'orphan', enabled: false, mine: false, deletable: true, guestStops: [] },
+    ])
+    const w = mountDialog({ readonly: true })
+    await flushPromises()
+    expect(w.findAll('.veyq-list-row').map(offers)).toEqual([
+      { switchOff: false, switchOn: false, remove: false },
+      { switchOff: false, switchOn: false, remove: false },
+    ])
+    expect(createButton(w), 'no new link').toBeUndefined()
+    expect(w.text()).toContain(t('share.pendingDeletion'))
+    // control: outside a pending deletion the same rows offer their changes and the form mints
+    const live = mountDialog()
+    await flushPromises()
+    expect(live.findAll('.veyq-list-row').map(offers)).toEqual([
+      { switchOff: true, switchOn: false, remove: true },
+      { switchOff: false, switchOn: true, remove: true },
+    ])
+    expect(createButton(live)).toBeDefined()
   })
 })
 

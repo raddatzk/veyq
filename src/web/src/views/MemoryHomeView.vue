@@ -594,6 +594,7 @@ async function onDeleteDone() {
       :node-name="currentNode.name"
       :node-kind="currentNode.kind"
       :contribute="shareOffer.contribute"
+      :readonly="isPendingDeletion"
       @close="shareVisible = false"
     />
     <!-- The SAME dialog component, uploader variant (no role switcher, uploader shares only) — a separate detail action;
@@ -609,6 +610,7 @@ async function onDeleteDone() {
       :epochs="epochs"
       :node-name="currentNode.name"
       :node-kind="currentNode.kind"
+      :readonly="isPendingDeletion"
       @close="uploaderVisible = false"
     />
   </div>

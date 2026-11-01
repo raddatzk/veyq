@@ -52,9 +52,9 @@ const stubs = {
   ShareCreateDialog: true,
 }
 
-const mountList = () =>
+const mountList = (extra: { readonly?: boolean } = {}) =>
   mount(ShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), nodeEpoch: 0, epochs: EPOCHS, nodeName: 'Rom', nodeKind: 'MEMORY' },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), nodeEpoch: 0, epochs: EPOCHS, nodeName: 'Rom', nodeKind: 'MEMORY', ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 
@@ -231,6 +231,29 @@ describe('ShareDialog — renew vs re-activate (ADR 0075, W1)', () => {
 
 // W1 (ADR 0029 §7): delete is the trash can now, so switching off no longer wears it; delete is offered on a
 // switched-off link only, where the server's `deletable` says the gate would let it through, and behind a confirm.
+// Owner decision 2026-11-01: during a pending deletion the dialog stays to SEE the links; the server refuses every share
+// write in the grace window (a revoke too), so it offers none and says why.
+describe('ShareDialog — a pending deletion (`readonly`)', () => {
+  const CHANGES = ['share.edit', 'share.reissue', 'share.reactivate', 'share.revoke', 'share.delete']
+  it('lists the links but mints and changes none; control: the same list otherwise offers them', async () => {
+    listSharesFor.mockResolvedValue([share({ shareId: 'live' }), share({ shareId: 'off', enabled: false })])
+    const w = mountList({ readonly: true })
+    await flushPromises()
+    await openOff(w)
+    expect(w.findAll('.share-list-item')).toHaveLength(2)
+    expect(w.find('.share-new-button').exists(), 'no new link').toBe(false)
+    expect(w.text()).toContain(t('share.pendingDeletion'))
+    for (const label of CHANGES) expect(button(w, t(label)).exists(), label).toBe(false)
+
+    const live = mountList()
+    await flushPromises()
+    await openOff(live)
+    expect(live.find('.share-new-button').exists()).toBe(true)
+    expect(live.text()).not.toContain(t('share.pendingDeletion'))
+    for (const label of CHANGES) expect(button(live, t(label)).exists(), label).toBe(true)
+  })
+})
+
 describe('ShareDialog — delete a link (ADR 0029 §7, W1)', () => {
   it('folds switched-off links under a count, offers delete only there, and switching off wears no trash can', async () => {
     listSharesFor.mockResolvedValue([share({ shareId: 'on', enabled: true }), share({ shareId: 'off', enabled: false })])

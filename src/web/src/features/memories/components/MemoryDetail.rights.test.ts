@@ -64,9 +64,9 @@ async function seedDated(memoryKey: Uint8Array) {
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, deriver)
 }
 
-async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean; coreActions?: CoreHeaderAction[] } = {}) {
+async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean; coreActions?: CoreHeaderAction[]; canSetCover?: boolean } = {}) {
   const w = mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: o.personalScope ?? false, chapters: [chapter], rights, coreActions: o.coreActions ?? [] },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: o.personalScope ?? false, chapters: [chapter], rights, coreActions: o.coreActions ?? [], canSetCover: o.canSetCover ?? false },
     global: { plugins: [realI18n()] },
     ...(o.attach ? { attachTo: document.body } : {}),
   })
@@ -96,7 +96,7 @@ describe('MemoryDetail follows rights', () => {
   })
 
   it("a member's rights: every header action, all four tabs, the chapter card, the editable cover/date/place, the marks", async () => {
-    const w = await mountDetail(memberMemoryRights())
+    const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, { canSetCover: true })
     expect(await header(w)).toEqual([...HEADER])
     expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.buckets.title'), t('memory.trash.title')])
     expect(w.find('input[type="file"]').exists()).toBe(true)
@@ -141,20 +141,20 @@ describe('MemoryDetail follows rights', () => {
   })
 
   // The cover is edited in core's dialog, which the host mounts (inbox #411): this page only ASKS for it, from its tile, and only
-  // where the rights grant `setCover`. A cover is set only by an upload there: the lightbox offers no way in.
-  it('the cover tile asks for the dialog only with setCover; this page writes no cover itself', async () => {
+  // where core's cover right grants it (`coverRights`, the host's `canSetCover`). A cover is set only by an upload there: the lightbox offers no way in.
+  it('the cover tile asks for the dialog only with the core cover right; this page writes no cover itself', async () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
     for (const setCover of [false, true]) {
       updateNode.mockClear()
       const w = mount(MemoryDetail, {
-        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false, setCover } },
+        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false }, canSetCover: setCover },
         global: { plugins: [realI18n()] },
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
       await w.find('.memory-cover-preview').trigger('click')
       await flushPromises()
-      expect(w.emitted('editCover')?.length ?? 0, `tile, setCover ${setCover}`).toBe(setCover ? 1 : 0)
+      expect(w.emitted('editCover')?.length ?? 0, `tile, canSetCover ${setCover}`).toBe(setCover ? 1 : 0)
       expect(updateNode, 'this page writes no cover itself').not.toHaveBeenCalled()
       w.unmount()
     }

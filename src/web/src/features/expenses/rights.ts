@@ -18,20 +18,22 @@
 // | the Pot's meta (own categories, base currency)          | ✓      | ✗          | ✗                |
 // | the writer of each revision (the history's "who")       | ✓      | ✗          | ✗                |
 // | create a Pot                                            | ✓      | ✗          | ✗                |
+// | share, rename, move, delete the Pot (core's answer)     | ✓      | ✗          | ✗                |
 //
 // A link guest adds names only: it cannot see the space's members (ADR 0108 decision 2) — the member's view with one
 // function fewer, not a guest's own.
 //
 // A member's write needs the Expenses switch on (uc.platform.switch-application-off: off, a Pot is read-only — but its
 // delete to the trash and restore stay, as the server's exemptions) and the scope not pending deletion. A guest is never
-// told the switch (the server refuses its write).
+// told the switch (the server refuses its write). **The Pot's share, rename, move and delete are core's** (`nodeRights`,
+// core/access.ts), taken as they stand — so a pending deletion keeps the share dialog to see the Pot's links, as on every
+// other kind — and narrowed for a guest, who moves no Pot; `rights.test.ts` asserts that no answer here is wider.
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { Access, MemberAccess, RightsTarget } from '../../core/access'
+import { applicationWritable, nodeRights, type Access, type MemberAccess, type NodeRights, type RightsTarget } from '../../core/access'
 import { ShareRole } from '../../api/generated/sharing'
-import { EXPENSES } from '../platform/capabilities'
 import { POT_KIND } from './kinds'
 
-export interface ExpensesRights {
+export interface ExpensesRights extends Omit<NodeRights, 'shareUpload'> {
   /** See the Pot: its entries, history, balances, overviews; download it. */
   view: boolean
   /** Create, edit, delete and restore entries, and add and remove their receipts; record a settle-up transfer. */
@@ -48,14 +50,6 @@ export interface ExpensesRights {
   writers: boolean
   /** Create a Pot at this level. */
   createPot: boolean
-  /** Manage the Pot's public links (READ and READ_WRITE). */
-  share: boolean
-  /** The share dialog offers the READ_WRITE role (`core.public-shares.contribute`). */
-  shareContribute: boolean
-  /** Rename, move, delete the Pot on screen. */
-  renameNode: boolean
-  moveNode: boolean
-  deleteNode: boolean
 }
 
 export const NO_EXPENSES_RIGHTS: Readonly<ExpensesRights> = Object.freeze({
@@ -69,9 +63,9 @@ export const NO_EXPENSES_RIGHTS: Readonly<ExpensesRights> = Object.freeze({
   createPot: false,
   share: false,
   shareContribute: false,
-  renameNode: false,
-  moveNode: false,
-  deleteNode: false,
+  rename: false,
+  move: false,
+  delete: false,
 })
 
 /** The Expenses matrix (see the header). `at` is the node on screen: a folder level (`FOLDER`, or null at a member's scope
@@ -83,11 +77,11 @@ export function expensesRights(access: Access, at: RightsTarget): ExpensesRights
 }
 
 function memberRights(access: MemberAccess, at: RightsTarget): ExpensesRights {
-  const remove = !access.readonly
-  const write = remove && !access.applicationsOff.has(EXPENSES)
+  const write = !access.readonly && applicationWritable(access, POT_KIND)
   // Nothing is placed in a guest's identity folder (a server placement rule).
   if (at.kind === null || at.kind === FOLDER_KIND) return { ...NO_EXPENSES_RIGHTS, createPot: write && !at.inIdentityFolder }
   if (at.kind !== POT_KIND) return NO_EXPENSES_RIGHTS
+  const node = nodeRights(access, at)
   return {
     ...NO_EXPENSES_RIGHTS,
     view: true,
@@ -97,11 +91,11 @@ function memberRights(access: MemberAccess, at: RightsTarget): ExpensesRights {
     addMembers: write,
     managePeople: write,
     settings: write,
-    share: write && access.publicShares && at.shareable,
-    shareContribute: write && access.publicSharesContribute && at.shareable,
-    renameNode: write,
-    moveNode: write,
-    deleteNode: remove,
+    share: node.share,
+    shareContribute: node.shareContribute,
+    rename: node.rename,
+    move: node.move,
+    delete: node.delete,
   }
 }
 
@@ -111,7 +105,8 @@ function guestRights(role: string, at: RightsTarget): ExpensesRights {
     case ShareRole.Read:
       return { ...NO_EXPENSES_RIGHTS, view: true }
     case ShareRole.ReadWrite:
-      // Entries and adding or renaming people are the contributor's; the rest is a member's (ADR 0108 decision 6).
+      // Entries and adding or renaming people are the contributor's; the rest is a member's (ADR 0108 decision 6) — a Pot
+      // too, which core's answer would let a folder link's contributor move: Expenses offers it no move.
       return { ...NO_EXPENSES_RIGHTS, view: true, writeEntries: true, addPeople: true }
     default:
       // A WRITE_ONLY link on a Pot does not exist (the backend's share roots refuse it): nothing.
