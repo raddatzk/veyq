@@ -145,24 +145,29 @@ function cancelEdit() {
       class="locale-md-dialog"
       @update:visible="cancelEdit"
     >
-      <template v-if="adding">
-        <label class="locale-md-dialog-label" for="locale-md-language">{{ t('localeEditor.languageLabel') }}</label>
-        <VeyqSelect
-          v-model="editing"
-          input-id="locale-md-language"
-          class="locale-md-language"
-          :options="addableOptions"
-          :placeholder="t('localeEditor.languagePlaceholder')"
-        />
-      </template>
-      <label class="locale-md-dialog-label" for="locale-md-textarea">{{ t('localeEditor.bodyLabel') }}</label>
-      <textarea
-        id="locale-md-textarea"
-        v-model="draft"
-        class="locale-md-input"
-        rows="16"
-        :placeholder="placeholder"
-      ></textarea>
+      <!-- The app's form layout (`.veyq-form`, `.veyq-form-field`) and its control look: the select is the layer's, the
+           textarea wears the layer's input class, so both have one border, one field colour and one focus ring. -->
+      <div class="veyq-form locale-md-form">
+        <div v-if="adding" class="veyq-form-field">
+          <label for="locale-md-language">{{ t('localeEditor.languageLabel') }}</label>
+          <VeyqSelect
+            v-model="editing"
+            input-id="locale-md-language"
+            :options="addableOptions"
+            :placeholder="t('localeEditor.languagePlaceholder')"
+          />
+        </div>
+        <div class="veyq-form-field">
+          <label for="locale-md-textarea">{{ t('localeEditor.bodyLabel') }}</label>
+          <textarea
+            id="locale-md-textarea"
+            v-model="draft"
+            class="veyq-input locale-md-input"
+            rows="14"
+            :placeholder="placeholder"
+          ></textarea>
+        </div>
+      </div>
       <div class="veyq-dialog-action-row">
         <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="cancelEdit" />
         <VeyqButton :label="t('common.save')" icon="save" :disabled="!editing" @click="saveEdit" />
@@ -207,29 +212,16 @@ function cancelEdit() {
   gap: 0.15rem;
   flex: 0 0 auto;
 }
-.locale-md-language {
-  display: flex;
+/* The dialog's width is the form's; its fields fill it (a grid item stretches, the select's trigger included). */
+.locale-md-form {
   width: min(72vw, 620px);
   max-width: 100%;
-  margin-bottom: 0.8rem;
-}
-.locale-md-dialog-label {
-  display: block;
-  margin-bottom: 0.4rem;
-  font-size: 0.85rem;
-  font-weight: 600;
+  margin-bottom: 1rem;
 }
 .locale-md-input {
-  width: min(72vw, 620px);
-  max-width: 100%;
   box-sizing: border-box;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--app-line);
-  border-radius: 8px;
-  background: var(--app-surface);
-  color: var(--app-text);
-  font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
   resize: vertical;
 }
 </style>
