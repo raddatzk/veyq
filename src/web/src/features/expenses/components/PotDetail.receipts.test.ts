@@ -123,7 +123,8 @@ describe('receipts in the entry dialog', () => {
     await flushPromises()
     await buttonIn(w.element, t('expenses.entries.add'))!.click()
     await flushPromises()
-    const [title, amount] = [...dialog()!.querySelectorAll('input:not([type="file"])')] as HTMLInputElement[]
+    const [title] = [...dialog()!.querySelectorAll('input:not([type="file"])')] as HTMLInputElement[]
+    const amount = dialog()!.querySelector(`input[aria-label^="${t('expenses.entry.payerAmount', { name: '' }).trim()}"]`) as HTMLInputElement
     title!.value = 'Hotel'
     title!.dispatchEvent(new Event('input'))
     amount!.value = '120'

@@ -25,7 +25,6 @@ import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
 import VeyqToggleGroup from '../../../shared/ui/VeyqToggleGroup.vue'
-import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
 import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { Person } from '../../../core/people/directory'
@@ -35,12 +34,13 @@ import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import { namedParticipants, type PotLedger } from '../domain/ledger'
 import { PotWriteRefused, StaleRevisionError } from '../domain/potApi'
 import type { PotSession } from '../potSession'
-import { contentOf, emptyForm, formOf, problemKey, today, typedSum, withCurrency, type EntryForm, type FormProblem } from '../entryForm'
+import { contentOf, emptyForm, emptyItem, formOf, payersTotal, problemKey, restLeft, today, withCurrency, withKind, type EntryForm, type EntryKind, type FormProblem } from '../entryForm'
 import { crossRate, dayTable } from '../exchangeRates'
 import { formatMoney, knownCurrencies } from '../amounts'
 import { offeredPeople, personLabel, type MemberDirectory } from '../people'
 import EntryHistory from './EntryHistory.vue'
 import EntryReceipts from './EntryReceipts.vue'
+import EntrySplit from './EntrySplit.vue'
 import { purgeAfterOf, receiptsToDrop, restoreOffered } from '../domain/receiptRules'
 import type { HeldReceipt, ReceiptSource } from '../receipts'
 import { QUOTA_EXCEEDED } from '../../../core/blob/queue'
@@ -117,9 +117,8 @@ const offered = computed(() => {
 const personOptions = computed(() => offered.value.map((p) => ({ label: personLabel(props.ledger, p.id, t, props.directory ?? null), value: p.id })))
 const label = (id: string) => personLabel(props.ledger, id, t, props.directory ?? null)
 
+const offeredIds = computed(() => offered.value.map((p) => p.id))
 const kindOptions = computed(() => (['expense', 'refund', 'transfer'] as const).map((k) => ({ label: t(`expenses.kind.${k}`), value: k })))
-const modeOptions = computed(() => (['equal', 'shares', 'exact', 'items'] as const).map((m) => ({ label: t(`expenses.split.${m}`), value: m })))
-const restOptions = computed(() => (['proportional', 'equal'] as const).map((r) => ({ label: t(`expenses.split.rest.${r}`), value: r })))
 const own = computed(() => ownCategoryNames(props.meta))
 const categoryOptions = computed(() => {
   const ids = [...DEFAULT_CATEGORIES, ...props.meta.categories.map((c) => c.id)]
@@ -187,21 +186,23 @@ function setCurrency(currency: string | null | undefined) {
   fillAsked++
   if (editable.value && foreign.value) void fillRate(currency)
 }
-function toggle(list: string[], id: string, on: boolean): string[] {
-  return on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id)
+function setKind(kind: EntryKind | undefined) {
+  if (kind) form.value = withKind(form.value, kind, locale.value)
 }
 function addPayer() {
   const taken = new Set(form.value.payers.map((p) => p.participant))
   form.value.payers.push({ participant: offered.value.find((p) => !taken.has(p.id))?.id ?? '', amount: '' })
 }
 function addItem() {
-  form.value.items.push({ label: '', amount: '', participants: offered.value.map((p) => p.id) })
+  form.value.items.push(emptyItem(offeredIds.value))
 }
-const itemsLeft = computed(() => {
-  const total = typedSum([form.value.amount], form.value.minorUnits)
-  const items = typedSum(form.value.items.map((i) => i.amount), form.value.minorUnits)
-  return total - items
-})
+/** The amount: what the payers (receivers) typed, summed — never typed itself. */
+const total = computed(() => payersTotal(form.value))
+/** The amount less the items: the rest item's amount (negative: the items are above the amount, and nothing saves). */
+const rest = computed(() => restLeft(form.value))
+/** The rest item shows while there is a rest, and on an entry with no items, whose whole amount is the rest. */
+const showRest = computed(() => rest.value > 0n || form.value.items.length === 0)
+const money = (amount: bigint) => formatMoney(amount, form.value.currency, form.value.minorUnits, locale.value)
 
 const problemText = (p: FormProblem | PotWriteRefused['reason']) => t(`expenses.entry.problem.${problemKey(p)}`)
 
@@ -338,14 +339,14 @@ function restore() {
       </VeyqMessage>
       <VeyqMessage v-if="entry?.status === 'invalid'" tone="warn">{{ t('expenses.entry.invalid') }}</VeyqMessage>
 
-      <VeyqToggleGroup v-model="form.kind" :options="kindOptions" :disabled="!editable" />
+      <VeyqToggleGroup :model-value="form.kind" :options="kindOptions" :disabled="!editable" @update:model-value="setKind" />
 
       <label>
         {{ form.kind === 'transfer' ? t('expenses.entry.noteLabel') : t('expenses.entry.titleLabel') }}
         <VeyqInput v-model="form.title" autocomplete="off" :disabled="!editable" />
       </label>
       <div class="expenses-entry-row">
-        <label>
+        <label v-if="form.kind === 'transfer'">
           {{ t('expenses.entry.amountLabel') }}
           <VeyqInput v-model="form.amount" inputmode="decimal" autocomplete="off" :disabled="!editable" />
         </label>
@@ -384,17 +385,16 @@ function restore() {
         </div>
       </template>
 
-      <template v-else>
+      <div v-else class="expenses-entry-columns">
         <fieldset class="expenses-entry-fieldset">
           <legend>{{ form.kind === 'expense' ? t('expenses.entry.paidBy') : t('expenses.entry.receivedBy') }}</legend>
           <div v-for="(payer, i) in form.payers" :key="i" class="expenses-entry-row">
             <VeyqSelect v-model="payer.participant" :options="personOptions" :disabled="!editable" :aria-label="t('expenses.entry.personLabel')" />
             <VeyqInput
-              v-if="form.payers.length > 1"
               v-model="payer.amount"
               inputmode="decimal"
               autocomplete="off"
-              :aria-label="t('expenses.entry.payerAmount', { name: label(payer.participant) })"
+              :aria-label="t(form.kind === 'expense' ? 'expenses.entry.payerAmount' : 'expenses.entry.receiverAmount', { name: label(payer.participant) })"
               :disabled="!editable"
             />
             <VeyqButton
@@ -409,53 +409,42 @@ function restore() {
             />
           </div>
           <VeyqButton v-if="editable && form.payers.length < offered.length" :label="t('expenses.entry.addPayer')" icon="plus" variant="secondary" appearance="text" size="small" @click="addPayer" />
+          <p class="expenses-entry-total">
+            <span>{{ t('expenses.entry.amountLabel') }}</span>
+            <output>{{ money(total) }}</output>
+          </p>
         </fieldset>
 
         <fieldset class="expenses-entry-fieldset">
           <legend>{{ t('expenses.entry.splitLabel') }}</legend>
-          <VeyqToggleGroup v-model="form.mode" :options="modeOptions" :disabled="!editable" />
-          <template v-if="form.mode === 'equal'">
-            <label v-for="p in offered" :key="p.id" class="expenses-check-row">
-              <VeyqCheckbox :model-value="form.equal.includes(p.id)" :disabled="!editable" @update:model-value="(on: boolean) => (form.equal = toggle(form.equal, p.id, on))" />
-              {{ label(p.id) }}
-            </label>
-          </template>
-          <template v-else-if="form.mode === 'shares' || form.mode === 'exact'">
-            <label v-for="p in offered" :key="p.id" class="expenses-entry-row">
-              <span>{{ label(p.id) }}</span>
-              <VeyqInput v-if="form.mode === 'shares'" v-model="form.shares[p.id]" inputmode="numeric" autocomplete="off" :disabled="!editable" />
-              <VeyqInput v-else v-model="form.exact[p.id]" inputmode="decimal" autocomplete="off" :disabled="!editable" />
-            </label>
-          </template>
-          <template v-else>
-            <div v-for="(item, i) in form.items" :key="i" class="expenses-item">
-              <div class="expenses-entry-row">
-                <VeyqInput v-model="item.label" autocomplete="off" :aria-label="t('expenses.entry.itemLabel')" :placeholder="t('expenses.entry.itemLabel')" :disabled="!editable" />
-                <VeyqInput v-model="item.amount" inputmode="decimal" autocomplete="off" :aria-label="t('expenses.entry.itemAmount')" :placeholder="t('expenses.entry.itemAmount')" :disabled="!editable" />
-                <VeyqButton
-                  v-if="editable"
-                  class="veyq-icon-button"
-                  icon="times"
-                  variant="secondary"
-                  appearance="outlined"
-                  size="small"
-                  :aria-label="t('expenses.entry.removeItem')"
-                  @click="form.items.splice(i, 1)"
-                />
-              </div>
-              <div class="expenses-item-people">
-                <label v-for="p in offered" :key="p.id" class="expenses-check-row">
-                  <VeyqCheckbox :model-value="item.participants.includes(p.id)" :disabled="!editable" @update:model-value="(on: boolean) => (item.participants = toggle(item.participants, p.id, on))" />
-                  {{ label(p.id) }}
-                </label>
-              </div>
+          <div v-for="(item, i) in form.items" :key="i" class="expenses-item">
+            <div class="expenses-entry-row">
+              <VeyqInput v-model="item.label" autocomplete="off" :aria-label="t('expenses.entry.itemLabel')" :placeholder="t('expenses.entry.itemLabel')" :disabled="!editable" />
+              <VeyqInput v-model="item.amount" inputmode="decimal" autocomplete="off" :aria-label="t('expenses.entry.itemAmount')" :placeholder="t('expenses.entry.itemAmount')" :disabled="!editable" />
+              <VeyqButton
+                v-if="editable"
+                class="veyq-icon-button"
+                icon="times"
+                variant="secondary"
+                appearance="outlined"
+                size="small"
+                :aria-label="t('expenses.entry.removeItem')"
+                @click="form.items.splice(i, 1)"
+              />
             </div>
-            <VeyqButton v-if="editable" :label="t('expenses.entry.addItem')" icon="plus" variant="secondary" appearance="text" size="small" @click="addItem" />
-            <p class="veyq-form-copy">{{ t('expenses.entry.restLeft', { amount: formatMoney(itemsLeft, form.currency, form.minorUnits, locale) }) }}</p>
-            <VeyqToggleGroup v-model="form.rest" :options="restOptions" :disabled="!editable" />
-          </template>
+            <EntrySplit v-model="item.split" :people="offeredIds" :label="label" :editable="editable" />
+          </div>
+          <VeyqButton v-if="editable" :label="t('expenses.entry.addItem')" icon="plus" variant="secondary" appearance="text" size="small" @click="addItem" />
+          <div v-if="showRest" class="expenses-item expenses-rest">
+            <p class="expenses-entry-total">
+              <span>{{ form.items.length ? t('expenses.entry.restLabel') : t('expenses.entry.wholeLabel') }}</span>
+              <output>{{ money(rest > 0n ? rest : 0n) }}</output>
+            </p>
+            <EntrySplit v-model="form.rest" :people="offeredIds" :label="label" :editable="editable" />
+          </div>
+          <VeyqMessage v-if="rest < 0n" tone="warn">{{ t('expenses.entry.itemsOver', { amount: money(-rest) }) }}</VeyqMessage>
         </fieldset>
-      </template>
+      </div>
 
       <EntryReceipts
         :ids="form.receipts"
@@ -514,10 +503,20 @@ function restore() {
   padding: 0 0.25rem;
   font-weight: 700;
 }
-.expenses-check-row {
+/* Payers on one side, the items and the rest on the other, where the dialog has room for both; stacked on a phone. */
+.expenses-entry-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  align-items: start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.expenses-entry-total {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  font-weight: 700;
 }
 .expenses-item {
   display: grid;
@@ -525,9 +524,8 @@ function restore() {
   padding-bottom: 0.6rem;
   border-bottom: 1px solid var(--app-line);
 }
-.expenses-item-people {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
+.expenses-rest {
+  border-bottom: 0;
+  padding-bottom: 0;
 }
 </style>

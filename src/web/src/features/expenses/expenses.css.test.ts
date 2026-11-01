@@ -18,4 +18,10 @@ describe('the Pot page fits a phone', () => {
   it('and each panel the same way', () => {
     expect(rule('.expenses-pot section')).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/)
   })
+
+  it('the entry dialog is never wider than the screen, and its payers and items stack where two columns do not fit', () => {
+    expect(rule('.expenses-entry-dialog.veyq-dialog')).toMatch(/width:\s*min\([^;]*calc\(100vw - 2rem\)\)/)
+    const editor = readFileSync(new URL('./components/EntryEditor.vue', import.meta.url), 'utf8')
+    expect(/\.expenses-entry-columns \{[^}]*\}/.exec(editor)?.[0]).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,/)
+  })
 })

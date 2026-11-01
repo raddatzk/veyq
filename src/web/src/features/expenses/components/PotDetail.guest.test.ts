@@ -135,8 +135,9 @@ describe('a Pot under its own link', () => {
     const inputs = dialog()!.querySelectorAll('input')
     ;(inputs[0] as HTMLInputElement).value = 'Taxi'
     inputs[0]!.dispatchEvent(new Event('input'))
-    ;(inputs[1] as HTMLInputElement).value = '12.40'
-    inputs[1]!.dispatchEvent(new Event('input'))
+    const amount = dialog()!.querySelector(`input[aria-label^="${t('expenses.entry.payerAmount', { name: '' }).trim()}"]`) as HTMLInputElement
+    amount.value = '12.40'
+    amount.dispatchEvent(new Event('input'))
     await buttonIn(dialog()!, t('common.save'))!.click()
     await flushPromises()
     expect(dialog()).toBeNull()

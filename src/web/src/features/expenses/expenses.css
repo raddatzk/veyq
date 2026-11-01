@@ -120,3 +120,9 @@
   margin: 0.4rem 0 0;
   padding-left: 1.2rem;
 }
+
+/* The entry dialog: wide enough for its payers and its items side by side (`EntryEditor.vue` lays them out in columns that
+   stack below two of 18rem), never wider than the screen. Compounded with the layer's class, so specificity wins, not order. */
+.expenses-entry-dialog.veyq-dialog {
+  width: min(52rem, calc(100vw - 2rem));
+}
