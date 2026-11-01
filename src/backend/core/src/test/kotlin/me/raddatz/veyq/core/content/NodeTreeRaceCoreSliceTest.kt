@@ -77,6 +77,41 @@ class NodeTreeRaceCoreSliceTest {
     }
 
     /**
+     * A member's purge (`purgeNode`) overlapping a restore of the same trash root, both orders. The restore holds its
+     * commit: the purge waits on the scope lock, then reads the root live — no trash root, a 404, and the restored subtree
+     * stands. The purge holds its commit: the restore waits, then finds the rows gone — `NOT_FOUND`, never a flush failure.
+     * Each order's outcome is the one the other order's control shows without overlap.
+     */
+    @Test
+    fun aMemberPurgeAndARestoreOfOneTrashRootNeverBothLand() {
+        raceRounds { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val (memory, chapter) = trashedSubtree(scopeId)
+            val purged = whileUncommitted(
+                change = { assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, memory, slug(), null, 0, FIXTURE_EDITOR), "round $round") },
+                overlapping = { runCatching { handler.purge(userId, scopeId, memory) } },
+            )
+            assertEquals(Result.success(PurgeNodeOutcome.NotFound), purged, "round $round: a purge after a restore")
+            tx { listOf(memory, chapter).forEach { assertNull(NodeEntity.findById(it)!!.deletedAt, "round $round: the restored subtree stands") } }
+        }
+        raceRounds { round ->
+            val (_, scopeId) = seedMemberScope()
+            val (memory, chapter) = trashedSubtree(scopeId)
+            val restored = whileUncommitted(
+                change = { assertTrue(purge.eraseTrashRoot(scopeId, memory), "round $round") },
+                overlapping = { runCatching { store.restoreSubtree(scopeId, memory, slug(), null, 0, FIXTURE_EDITOR) } },
+            )
+            assertEquals(Result.success(NodesStore.RestoreResult.NOT_FOUND), restored, "round $round: a restore after a purge")
+            assertEquals(listOf(null, null), tx { listOf(memory, chapter).map { NodeEntity.findById(it) } }, "round $round")
+        }
+        // control: with nothing overlapping, a member's purge of the same subtree lands
+        val (userId, scopeId) = seedMemberScope()
+        val (memory, chapter) = trashedSubtree(scopeId)
+        assertEquals(PurgeNodeOutcome.Purged, handler.purge(userId, scopeId, memory), "control")
+        assertEquals(listOf(null, null), tx { listOf(memory, chapter).map { NodeEntity.findById(it) } }, "control: erased")
+    }
+
+    /**
      * ADR 0080 Decision 8 / uc.memory.delete-node:only-a-trash-root-restores under overlap: a child (trashed earlier, a
      * trash root while its parent is live) restored while its parent's trash is uncommitted. The restore waits for the
      * trash on the scope lock and then reads the parent trashed: `NOT_FOUND`, the child stays in the trash on the
@@ -204,6 +239,14 @@ class NodeTreeRaceCoreSliceTest {
             listOf(memory, chapter).forEach { NodeEntity.findById(it)!!.deletedAt = stamp }
             NodeEntity.findById(memory)!!.slugToken = memory
         }
+        return memory to chapter
+    }
+
+    /** A Memory with a Chapter under it, trashed by one delete now (inside the window). Returns (memory, chapter). */
+    private fun trashedSubtree(scopeId: String): Pair<String, String> {
+        val memory = seedNode(scopeId, "MEMORY", wrappedContentKey = CONTENT_KEY)
+        val chapter = seedNode(scopeId, "CHAPTER", parentId = memory, wrappedContentKey = CONTENT_KEY)
+        assertTrue(store.deleteSubtree(scopeId, memory))
         return memory to chapter
     }
 

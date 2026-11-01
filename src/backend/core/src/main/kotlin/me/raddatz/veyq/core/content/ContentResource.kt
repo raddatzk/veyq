@@ -141,6 +141,12 @@ class ContentResource(
             is HttpFailure -> httpError(o)
         }
 
+    override fun purgeNode(scopeId: UUID, nodeId: UUID): Response =
+        when (val o = handler.purge(identity.principal.name, scopeId.toString(), nodeId.toString())) {
+            PurgeNodeOutcome.Purged -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
     override fun listTrashedNodes(scopeId: UUID): Response {
         val sid = scopeId.toString()
         return when (val o = handler.listTrash(identity.principal.name, sid)) {

@@ -94,6 +94,13 @@ sealed interface RestoreNodeOutcome {
     object RekeyPending : RestoreNodeOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
+sealed interface PurgeNodeOutcome {
+    object Purged : PurgeNodeOutcome
+    object NotFound : PurgeNodeOutcome, HttpFailure by Failures.nodeNotFound
+    object Suspended : PurgeNodeOutcome, HttpFailure by Failures.tenantSuspended
+    object ScopeDeleting : PurgeNodeOutcome, HttpFailure by Failures.scopeDeleting
+}
+
 sealed interface ListTrashOutcome {
     data class Trash(val rows: List<TrashedNodeRow>) : ListTrashOutcome
     object NoScope : ListTrashOutcome, HttpFailure by Failures.scopeNotFound
@@ -108,7 +115,7 @@ sealed interface ListTrashOutcome {
  * `illegal_structure`; no cycle on move; slug unique per parent. Whether a kind may be created at all on this instance
  * is the same rule's [NodeKindRules.capabilityToCreate], asked of [capabilities] (`capability_disabled`); whether a node
  * of the kind takes writes at all is its application's switch, asked of [applications] by the kind on every create and
- * update (uc.platform.switch-application-off). A delete and a restore never ask it: what exists stays removable.
+ * update (uc.platform.switch-application-off). A delete, a restore and a purge never ask it: what exists stays removable.
  */
 @ApplicationScoped
 class NodesHandler(
@@ -120,6 +127,7 @@ class NodesHandler(
     private val applications: ApplicationSwitch,
     private val blocks: ModerationBlocks,
     private val gate: NodeEpochGate,
+    private val purge: NodeSubtreePurge,
 ) {
 
     private fun parentAllows(kind: String, parent: ParentSlot): Boolean =
@@ -451,6 +459,20 @@ class NodesHandler(
             NodesStore.RestoreResult.SLUG_TAKEN -> RestoreNodeOutcome.SlugTaken
             NodesStore.RestoreResult.NOT_FOUND -> RestoreNodeOutcome.NotFound
         }
+    }
+
+    /**
+     * A member's purge of a trash root (uc.memory.delete-node, `purgeNode`): the subtree is erased now, through the
+     * scheduled purge's own erase ([NodeSubtreePurge.eraseTrashRoot]), so every application's rows, the blobs, the links,
+     * the measures and the quota go exactly as they would at the end of the window. The gate a delete and a restore ask
+     * (`WRITE`: a member of the tenant, the scope not being deleted). Neither a content block nor a hold refuses it: a
+     * blocked item is deleted, never restored, and a hold blocks nothing (ADR 0093 § 4). One transaction of its own.
+     */
+    fun purge(userId: String, scopeId: String, nodeId: String): PurgeNodeOutcome {
+        access.check(userId, scopeId, WRITE)
+            .refusal(PurgeNodeOutcome.NotFound, PurgeNodeOutcome.Suspended, PurgeNodeOutcome.ScopeDeleting)?.let { return it }
+        val purged = QuarkusTransaction.requiringNew().call { purge.eraseTrashRoot(scopeId, nodeId) }
+        return if (purged) PurgeNodeOutcome.Purged else PurgeNodeOutcome.NotFound
     }
 
     fun listTrash(userId: String, scopeId: String): ListTrashOutcome {

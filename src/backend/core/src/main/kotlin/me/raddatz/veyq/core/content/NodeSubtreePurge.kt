@@ -19,11 +19,12 @@ import java.time.Instant
 import org.jboss.logging.Logger
 
 /**
- * Scheduled hard-purge of soft-deleted node subtrees (uc.memory.delete-node, ADR 0061 Decision 6). A node the
- * user deleted enters the space's trash; once its `deletedAt` is older than the retention window this erases it
- * for good — the applications' rows under the subtree (through each [NodeSubtreeEraser]), its blob rows and the
- * store objects behind them, then the node rows. Irreversible, and **not** a member action: deleting is reversible so any member may do it, purging
- * belongs to the system (security-model § *Deletion & erasure*).
+ * Hard-purge of soft-deleted node subtrees (uc.memory.delete-node, ADR 0061 Decision 6). A node the user deleted
+ * enters the space's trash; once its `deletedAt` is older than the retention window this erases it for good — the
+ * applications' rows under the subtree (through each [NodeSubtreeEraser]), its blob rows and the store objects behind
+ * them, then the node rows. Irreversible. Deleting is reversible, so any member may do it; purging is the scheduled
+ * job's ([run]) — or a member's who brings it forward for a subtree already in the trash ([eraseTrashRoot], `purgeNode`),
+ * never for a live one (security-model § *Deletion & erasure*). Both go through [erase], so nothing differs but the time.
  *
  * This is where inbox #131 closes. The hard delete this replaced removed the node rows and the cover blobs and
  * left `veyq_media`, `veyq_media_derivative` and `veyq_bucket` pointing at a node id that no longer existed:
@@ -110,23 +111,50 @@ class NodeSubtreePurge(
     fun eraseNodes(scopeId: String, nodeIds: List<String>): Int {
         ScopeEntity.lockRow(scopeId) ?: return 0
         val all = NodeEntity.find("scopeId", scopeId).list()
-        val byParent = all.groupBy { it.parentId }
-        val doomed = LinkedHashSet<String>()
-        val stack = ArrayDeque(nodeIds.filter { id -> all.any { it.id == id } })
-        while (stack.isNotEmpty()) {
-            val cur = stack.removeLast()
-            if (doomed.add(cur)) byParent[cur]?.forEach { stack.addLast(it.id) }
-        }
-        val erased = all.filter { it.id in doomed }
+        val erased = subtreesOf(all, nodeIds)
         erase(scopeId, erased)
         return erased.size
     }
 
     /**
+     * A member's purge of one trash ROOT (`purgeNode`, uc.memory.delete-node): erase [nodeId] of [scopeId] with its
+     * whole subtree now, through [erase] as the scheduled job would at the end of the window. False, with nothing
+     * erased, when [nodeId] is no trash root — unknown or already erased, live, or under a trashed parent (it goes with
+     * that parent, which the trash lists instead) — the same refusal a restore gives (`NodesStore.restoreSubtree`).
+     * Every node under a trash root is trashed (nothing is live under a trashed parent, ADR 0080 decision 8); one that
+     * is not refuses too, so a broken tree never costs a member a live node.
+     *
+     * The scope row's lock first and the decision under it, as [eraseExpiredIn] and the restore take it: a restore
+     * either committed before — the root is live, refused — or finds the rows gone. Joins the caller's transaction.
+     */
+    fun eraseTrashRoot(scopeId: String, nodeId: String): Boolean {
+        ScopeEntity.lockRow(scopeId) ?: return false
+        val all = NodeEntity.find("scopeId", scopeId).list()
+        val root = all.firstOrNull { it.id == nodeId && it.deletedAt != null } ?: return false
+        if (all.any { it.id == root.parentId && it.deletedAt != null }) return false
+        val erased = subtreesOf(all, listOf(nodeId))
+        if (erased.any { it.deletedAt == null }) return false
+        erase(scopeId, erased)
+        return true
+    }
+
+    /** The rows of [all] that are [rootIds] (those among them) or below one, state-blind: a node goes with its subtree. */
+    private fun subtreesOf(all: List<NodeEntity>, rootIds: List<String>): List<NodeEntity> {
+        val byParent = all.groupBy { it.parentId }
+        val doomed = LinkedHashSet<String>()
+        val stack = ArrayDeque(rootIds.filter { id -> all.any { it.id == id } })
+        while (stack.isNotEmpty()) {
+            val cur = stack.removeLast()
+            if (doomed.add(cur)) byParent[cur]?.forEach { stack.addLast(it.id) }
+        }
+        return all.filter { it.id in doomed }
+    }
+
+    /**
      * Erase [erased] — node rows of [scopeId] that are complete subtrees (every descendant among them) — for good,
-     * recording every store object it drops: the expired trash ([eraseExpiredIn]) and a guest's empty upload
-     * placeholder (`ShareNodesHandler.abandon`, which checked it has no child). Joins its caller's transaction, which
-     * holds the scope row's lock.
+     * recording every store object it drops: the expired trash ([eraseExpiredIn]), a member's purge of a trash root
+     * ([eraseTrashRoot]) and a guest's empty upload placeholder (`ShareNodesHandler.abandon`, which checked it has no
+     * child). Joins its caller's transaction, which holds the scope row's lock.
      */
     fun erase(scopeId: String, erased: List<NodeEntity>) {
         if (erased.isEmpty()) return

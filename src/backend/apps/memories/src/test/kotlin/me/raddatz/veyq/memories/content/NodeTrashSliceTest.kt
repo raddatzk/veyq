@@ -371,6 +371,75 @@ class NodeTrashSliceTest {
         }
     }
 
+    // --- 7. a member's purge (`purgeNode`) is the scheduled purge brought forward ---
+
+    /**
+     * A member purges a trashed Memory inside its window: everything the scheduled purge above erases goes now, through
+     * the same erase — the node and its Chapter, the media with their derivatives, the buckets, the cover, the item
+     * marks, the item-list counters — and every store object behind them reaches the store through the reclaim sweep.
+     * The controls on every arm: a Memory trashed but not purged, still in its window, and a live one keep all of theirs.
+     */
+    @Test
+    fun aMemberPurgeErasesATrashedMemoryNowLikeTheScheduledPurge() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bXAtbQ==","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val chapter = createNode(userId, scopeId, """{"parentEpoch":0,"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"bXAtYw==","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val trashedControl = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"dA==","slugToken":"bXAtdA==","orderIndex":1,"wrappedContentKey":"aw=="}""")
+        val liveControl = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bA==","slugToken":"bXAtbA==","orderIndex":2,"wrappedContentKey":"aw=="}""")
+
+        val original = startOne(userId, scopeId, TestBlob.ofChunks(2), "b3JpZw==")
+        val thumb = startOne(userId, scopeId, TestBlob.SMALL, "dGh1bWI=", TestBlob.ownerOf(original), "THUMBNAIL")
+        val mediaId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","nodeEpoch":0,"originalUploadId":"$original","derivatives":[{"kind":"THUMBNAIL","uploadId":"$thumb"}]}]}""")
+            .`when`().post("/api/scopes/$scopeId/media-batch")
+            .then().statusCode(200).body("results[0].error", nullValue())
+            .extract().path<String>("results[0].mediaId")
+        val chapterMedia = completeOne(userId, scopeId, chapter, "Y2hhcA==")
+        val coverBlob = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Y292ZXI=", memory, "COVER"))
+        for (n in listOf(memory, trashedControl, liveControl)) {
+            given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+                .body("""{"ciphertext":"bWFya3M="}""")
+                .`when`().put("/api/scopes/$scopeId/nodes/$n/item-favorites").then().statusCode(204)
+        }
+        val controlMedia = listOf(trashedControl, liveControl).map { completeOne(userId, scopeId, it, "Y3RybA==") }
+        for (n in listOf(memory, trashedControl)) {
+            given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$n").then().statusCode(204)
+        }
+        val keys = QuarkusTransaction.requiringNew().call {
+            val blobIds = listOf(MediaEntity.findById(mediaId)!!.blobId, MediaEntity.findById(chapterMedia)!!.blobId, coverBlob) +
+                MediaDerivativeEntity.find("mediaId = ?1", mediaId).list().map { it.blobId }
+            blobIds.map { BlobEntity.findById(it)!! }.flatMap { b -> chunkKeys(b.storageKey, b.chunkCount) }
+        }
+
+        QuarkusTransaction.requiringNew().run { StoreReclaimEntity.deleteAll() } // the JVM-shared backlog (see above)
+        recorder.reset()
+        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/nodes/$memory/purge").then().statusCode(204)
+        ageReclaimRowsPastThePresignBound(config)
+        sweep.run()
+
+        QuarkusTransaction.requiringNew().run {
+            assertNull(NodeEntity.findById(memory)) { "the Memory's row must be gone" }
+            assertNull(NodeEntity.findById(chapter)) { "its Chapter goes with it" }
+            assertNull(MediaEntity.findById(mediaId)) { "the Memory's media row must be gone" }
+            assertNull(MediaEntity.findById(chapterMedia)) { "the Chapter's media row must be gone" }
+            assertTrue(MediaDerivativeEntity.find("mediaId = ?1", mediaId).list().isEmpty()) { "derivative rows must be gone" }
+            assertTrue(BucketEntity.find("nodeId in ?1", listOf(memory, chapter)).list().isEmpty()) { "bucket rows must be gone" }
+            assertNull(BlobEntity.findById(coverBlob)) { "the cover blob row must be gone" }
+            assertEquals(0L, NodeAttachmentEntity.count("nodeId", memory), "the cover's attachment row must be gone")
+            assertNull(NodeItemsRevisionEntity.findById(memory)) { "the item-list counters must be gone" }
+            assertTrue(ItemFavoritesEntity.find("nodeId = ?1", memory).list().isEmpty()) { "the item marks must be gone" }
+            for ((n, m) in listOf(trashedControl, liveControl).zip(controlMedia)) {
+                assertNotNull(NodeEntity.findById(n)) { "control $n must survive" }
+                assertNotNull(MediaEntity.findById(m)) { "control $n keeps its media" }
+                assertTrue(ItemFavoritesEntity.find("nodeId = ?1", n).list().isNotEmpty()) { "control $n keeps its marks" }
+            }
+            assertNotNull(NodeEntity.findById(trashedControl)!!.deletedAt) { "the unpurged one is still in the trash" }
+        }
+        assertTrue(recorder.deletedKeys.containsAll(keys)) {
+            "the member's purge + the sweep must hand every chunk key to the store; expected $keys, handed ${recorder.deletedKeys}"
+        }
+    }
+
     // --- helpers ---
 
     private fun createNode(userId: String, scopeId: String, body: String): String =
