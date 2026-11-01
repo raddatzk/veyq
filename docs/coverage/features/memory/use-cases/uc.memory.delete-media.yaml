@@ -3,8 +3,8 @@ feature: memory
 title: Delete media — remove a photo into a recoverable per-Memory trash
 # Built by cr-0110 (contracts → backend → web). Soft-delete → per-Memory trash → 30-day retention (operator-
 # configurable) → scheduled hard-purge. Any scope member may TRASH and RESTORE (reversible, recovery-not-
-# destruction), audited by deleted_by/deleted_at; the irreversible purge is the scheduled system job, never a
-# member hand-action — per the security-model `Deletion & erasure` posture. Reuses the cr-0107 delete_revision
+# destruction), audited by deleted_by/deleted_at; the irreversible purge is the scheduled system job, or a
+# member expediting it for an item already in the trash — per the security-model `Deletion & erasure` posture. Reuses the cr-0107 delete_revision
 # reconcile (no new propagation) and the cr-0102 blob-reclaim path (the purge).
 acceptanceCriteria:
   - id: trash-soft-delete-any-member
@@ -81,7 +81,7 @@ acceptanceCriteria:
       backend:
         integration: [MediaTrashSliceTest.purgeHardDeletesTrashedPastRetention, StoreReclaimSweepSliceTest.aRefusedKeyKeepsItsRowCountedAndDeferredWhileTheRestOfTheTickIsReclaimed, StoreReclaimSweepSliceTest.aRowRefusedToTheThresholdIsAbandonedAndThenLeftAlone]
   - id: reversible-audit-vs-irreversible
-    text: The reversible trash step is any-member and audited (deleted_by/deleted_at, surfaced in the trashed listing); the irreversible purge is the scheduled system job — no member can delete-forever another member's content by hand. Trashing is idempotent. Matches the security-model `Deletion & erasure` reversible/irreversible split; the trash state (flag + actor + timestamp) is the disclosed server-visible operational metadata.
+    text: The reversible trash step is any-member and audited (deleted_by/deleted_at, surfaced in the trashed listing); the irreversible purge is the scheduled system job, or a member expediting it for an item already in the trash — no member deletes a live item forever in one step. Trashing is idempotent. Matches the security-model `Deletion & erasure` reversible/irreversible split; the trash state (flag + actor + timestamp) is the disclosed server-visible operational metadata.
     coverage:
       backend:
         integration: [MediaTrashSliceTest.trashedListingCarriesTheAuditAndExcludesFromActive, MediaTrashSliceTest.deleteIsIdempotent]

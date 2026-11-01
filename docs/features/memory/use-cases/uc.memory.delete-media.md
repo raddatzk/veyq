@@ -52,7 +52,8 @@ delete *whose* — is deferred to a later groups/moderation refine.)
    toolbar restores or purges the whole selection at once.
 5. After the **retention window** (default **30 days**, operator-configurable), a **scheduled purge job**
    hard-deletes each expired trashed media — its derivative + media + blob rows and the store objects (reusing the
-   blob-reclaim path). This step is **irreversible** and is **not** a member action.
+   blob-reclaim path). This step is **irreversible**; a member reaches it sooner only by step 4's **Delete forever**
+   on an item already in the trash.
 
 ## Alternate / exception flows
 
@@ -114,7 +115,7 @@ delete *whose* — is deferred to a later groups/moderation refine.)
   store objects — the same logic the anonymous share *delete-own* (cr-0102) already runs, minus its identity
   predicate — so no new blob-lifecycle code, only its schedule.
 - **Start light.** Soft-delete + retention **is** the security model's mechanism; a single **per-Memory trash tab**,
-  no per-item "delete forever" UI, no cross-scope trash. The store isn't freed until the purge — an honest
+  no cross-scope trash. The store isn't freed until the purge — an honest
   trade-off of recoverability, communicated by the retention window.
 
 ## User impact
