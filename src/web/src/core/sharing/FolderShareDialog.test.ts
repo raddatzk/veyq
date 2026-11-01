@@ -224,9 +224,10 @@ describe('FolderShareDialog — the folder\'s links', () => {
     expect(byLabel(other, t('share.copy')).exists(), 'control: the row renders its actions').toBe(true)
   })
 
-  // Owner decision 2026-11-01: during a pending deletion the dialog stays to SEE the links; the server refuses every share
-  // write in the grace window (a revoke too), so it offers none - only the copy, and says why.
-  it('a pending deletion (`readonly`): the links are listed and copied, nothing is minted or changed', async () => {
+  // Owner decisions 2026-11-01: during a pending deletion the dialog stays to SEE the links; the server refuses every share
+  // write in the grace window but a revoke (uc.spaces.scope-access A1), so it offers only that - besides the copy - and
+  // says so.
+  it('a pending deletion (`readonly`): the links are listed and copied, the own live one revoked, nothing else changed', async () => {
     const list = [row({ shareId: 'live' }), row({ shareId: 'off', enabled: false }), row({ shareId: 'renew', enabled: false, reissueRequired: true })]
     listSharesFor.mockResolvedValue(list)
     const w = mountDialog({ contribute: true, readonly: true })
@@ -236,9 +237,13 @@ describe('FolderShareDialog — the folder\'s links', () => {
     expect(byLabel(w, t('share.copy')).exists(), 'the live link copies').toBe(true)
     expect(w.text()).toContain(t('share.pendingDeletion'))
     expect(w.find('.folder-share-new').exists(), 'no new link').toBe(false)
-    for (const label of ['share.edit', 'share.reissue', 'share.reactivate', 'share.revoke', 'share.delete']) {
+    for (const label of ['share.edit', 'share.reissue', 'share.reactivate', 'share.delete']) {
       expect(byLabel(w, t(label)).exists(), label).toBe(false)
     }
+    expect(w.findAll(`button[aria-label="${t('share.revoke')}"]`), 'the one live link of mine, and only it').toHaveLength(1)
+    await byLabel(w, t('share.revoke')).trigger('click')
+    await flushPromises()
+    expect(revokeShare).toHaveBeenCalledWith('live')
     // control: the same list outside a pending deletion offers them
     const live = mountDialog({ contribute: true })
     await flushPromises()

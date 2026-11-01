@@ -142,8 +142,9 @@ function openReissue(share: ManagedShare) {
   reissueFrom.value = share
   createOpen.value = true
 }
-// A pending deletion (`readonly`, the host's): the server refuses every change below, so none is offered - the list and
-// the copy stay (`NodeShareDialogProps.readonly`).
+// A pending deletion (`readonly`, the host's): the server refuses every change below but switching a link off, so only
+// that is offered - with the list and the copy (`NodeShareDialogProps.readonly`). Revoking only closes exposure, and the
+// link stays off if the deletion is stopped (uc.spaces.scope-access A1).
 const changes = computed(() => !props.readonly)
 // Renew: the owner's own share, enabled or not; anyone's share once it is off (the new one is then theirs).
 const canReissue = (share: ManagedShare) => changes.value && (share.mine || !share.enabled)
@@ -312,7 +313,7 @@ function fmtDate(d: Date): string {
                 @click="onReactivate(share)"
               />
               <VeyqButton
-                v-else-if="changes && share.enabled && share.mine"
+                v-else-if="share.enabled && share.mine"
                 icon="ban"
                 :aria-label="t('share.revoke')"
                 :title="t('share.revoke')"

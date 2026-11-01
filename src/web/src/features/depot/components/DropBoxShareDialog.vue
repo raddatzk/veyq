@@ -34,8 +34,9 @@ const props = defineProps<NodeShareDialogProps>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 const { ask } = useConfirm()
-// A pending deletion (`readonly`, the host's): the server refuses every change below, so none is offered - the list and
-// the copy stay (`NodeShareDialogProps.readonly`).
+// A pending deletion (`readonly`, the host's): the server refuses every change below but switching a link off, so only
+// that is offered - with the list and the copy (`NodeShareDialogProps.readonly`). Revoking only closes exposure, and the
+// link stays off if the deletion is stopped (uc.spaces.scope-access A1).
 const changes = computed(() => !props.readonly)
 
 const shares = ref<ManagedShare[]>([])
@@ -233,7 +234,7 @@ async function copy(text: string, id: string) {
             <!-- inbox #596: switch-off and delete only where the server takes them — its owner switches a link off (the
                  served `mine`), and `deletable` is the delete gate's own answer; any other caller would get a 404. -->
             <VeyqButton
-              v-if="changes && row.share.enabled && row.share.mine"
+              v-if="row.share.enabled && row.share.mine"
               class="veyq-icon-button veyq-prime-icon-button"
               icon="power-off"
               :aria-label="t('depot.dropBox.shareRevoke')"

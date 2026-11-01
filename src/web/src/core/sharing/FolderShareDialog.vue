@@ -114,8 +114,9 @@ function roleLabel(r: ShareRole): string {
   return r === ShareRole.ReadWrite ? t('share.folder.roleContributor') : t('share.roleViewer')
 }
 const titleFor = (s: ManagedShare) => decoded.value.get(s.shareId)?.name || roleLabel(s.role)
-// A pending deletion (`readonly`, the host's): the server refuses every change below, so none is offered - the list and
-// the copy stay (`NodeShareDialogProps.readonly`).
+// A pending deletion (`readonly`, the host's): the server refuses every change below but switching a link off, so only
+// that is offered - with the list and the copy (`NodeShareDialogProps.readonly`). Revoking only closes exposure, and the
+// link stays off if the deletion is stopped (uc.spaces.scope-access A1).
 const changes = computed(() => !props.readonly)
 // Renew: the owner's own link, live or not; anyone's link once it is off (the new one is then theirs).
 const canReissue = (s: ManagedShare) => changes.value && (s.mine || !s.enabled)
@@ -688,7 +689,7 @@ function onDialogVisible(visible: boolean) {
                   @click="onReactivate(share)"
                 />
                 <VeyqButton
-                  v-else-if="changes && share.enabled && share.mine"
+                  v-else-if="share.enabled && share.mine"
                   class="veyq-icon-button"
                   icon="ban"
                   :aria-label="t('share.revoke')"

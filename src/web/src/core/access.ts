@@ -44,7 +44,8 @@ export interface MemberAccess {
    *  Null while the scope is not unlocked — every write right that needs a key is then the view's to disable. */
   readonly epochs: EpochKeys | null
   /** The scope is pending deletion (cr-0090, uc.spaces.scope-access): the server refuses every write during the grace
-   *  window, so no write is offered. Reads, downloads, pins and the listing of links stay. */
+   *  window, so no write is offered. Reads, downloads, pins and the listing of links stay, and so does revoking a link
+   *  (A1: it only closes exposure). */
   readonly readonly: boolean
   /** The instance offers READ public links (`core.public-shares`, ADR 0032, ADR 0088). One boolean per register leaf,
    *  each filled from ONE manifest id by the host: the server computes the AND along the path (a child whose parent is
@@ -205,8 +206,9 @@ export function memberTreeSource(from: {
  *  `standardNodeActions` flags. */
 export interface NodeRights {
   /** Open the node's share dialog: list and copy its `READ` / `READ_WRITE` links (`core.public-shares`). Listing is a
-   *  read, so a pending deletion keeps it; the dialog then mints none and changes none (the host's
-   *  `NodeShareDialogProps.readonly`: the server refuses every share write during the grace window). */
+   *  read, so a pending deletion keeps it; the dialog then mints none and changes none but switching the caller's own
+   *  live link off (the host's `NodeShareDialogProps.readonly`: the server refuses every share write during the grace
+   *  window but a revoke, uc.spaces.scope-access A1). */
   share: boolean
   /** The share dialog offers the READ_WRITE (contribute) role for a new link (`core.public-shares.contribute`); handed to
    *  the dialog as a prop by the host (`NodeShareDialogProps.contribute`), never read there. */

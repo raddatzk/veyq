@@ -348,7 +348,7 @@ here; the server is blind.
   unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's
   header (core's `NodeHeader`, which every node page opens with too - see above). Its `createDialog` - props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the shell when the "New" menu or a detail `createChild` emits that KIND; and its
-  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?, readonly?}` (`contribute`: offer READ_WRITE for a new link — the rights function's `shareContribute`, carried by the detail's `share` emit as a `NodeShareOffer`, never read by the dialog; `readonly`: the scope is pending deletion, set by the host for every kind - the dialog lists and copies the links and mints and changes none, as the server refuses every share write in the grace window); a
+  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?, readonly?}` (`contribute`: offer READ_WRITE for a new link — the rights function's `shareContribute`, carried by the detail's `share` emit as a `NodeShareOffer`, never read by the dialog; `readonly`: the scope is pending deletion, set by the host for every kind - the dialog lists and copies the links and offers revoking the caller's own live one, and mints and changes nothing else, as the server refuses every share write in the grace window but a revoke, uc.spaces.scope-access A1); a
   kind without one offers no share. There is no guest-only list or detail: core's page of a `READ`/`READ_WRITE` public
   share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node -
   the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
@@ -402,7 +402,7 @@ here; the server is blind.
   cannot mount. **Core's base, the application narrows** (owner 2026-11-01): what every node may do — `share`,
   `shareContribute`, `shareUpload`, `rename`, `move`, `delete`, one name per right everywhere (`NodeRights`) — is core's
   `nodeRights(access, target)` in `core/access.ts`: the member/guest role, a pending deletion (no write; the share
-  dialog stays, the host's `readonly` makes it mint and change nothing), the application switch, the instance's share
+  dialog stays, the host's `readonly` makes it mint and change nothing but a revoke), the application switch, the instance's share
   leaves, the kind's share dialog, a guest's identity folder, the scope root. Every rights function takes that answer
   and only ANDs its own conditions onto it (Depot's drop box is never renamed, a guest moves no Pot); its
   `rights.test.ts` asserts it is never wider over every access shape (`src/test/nodeRightsShapes.ts`). A row's

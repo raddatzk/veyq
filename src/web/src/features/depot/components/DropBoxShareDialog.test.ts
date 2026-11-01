@@ -13,7 +13,8 @@ vi.mock('../../../core/sharing/shareLink', () => ({ buildShareLink: vi.fn(() => 
 
 import DropBoxShareDialog from './DropBoxShareDialog.vue'
 import { mintDropBoxLink } from '../dropBox'
-import { listSharesFor, updateShare } from '../../../core/sharing/manageShares'
+import { listSharesFor, revokeShare, updateShare } from '../../../core/sharing/manageShares'
+import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { setTenantCapabilities } from '../../../shared/state/useCapabilities'
 import { realI18n, t } from '../../../test/i18n'
 
@@ -107,9 +108,10 @@ describe('DropBoxShareDialog — switch-off and delete only where the server all
     ])
   })
 
-  // Owner decision 2026-11-01: during a pending deletion the dialog stays to SEE the links; the server refuses every share
-  // write in the grace window (a switch-off too), so it offers none and no new link, and says why.
-  it('a pending deletion (`readonly`): the links are listed, nothing is minted or changed', async () => {
+  // Owner decisions 2026-11-01: during a pending deletion the dialog stays to SEE the links; the server refuses every share
+  // write in the grace window but a switch-off (uc.spaces.scope-access A1), so it offers only that and no new link, and
+  // says so.
+  it('a pending deletion (`readonly`): the links are listed, the own live one switched off, nothing else changed', async () => {
     vi.mocked(listSharesFor).mockResolvedValue([
       { ...base, shareId: 'own', enabled: true, mine: true, deletable: true, guestStops: [] },
       { ...base, shareId: 'orphan', enabled: false, mine: false, deletable: true, guestStops: [] },
@@ -117,11 +119,17 @@ describe('DropBoxShareDialog — switch-off and delete only where the server all
     const w = mountDialog({ readonly: true })
     await flushPromises()
     expect(w.findAll('.veyq-list-row').map(offers)).toEqual([
-      { switchOff: false, switchOn: false, remove: false },
+      { switchOff: true, switchOn: false, remove: false },
       { switchOff: false, switchOn: false, remove: false },
     ])
     expect(createButton(w), 'no new link').toBeUndefined()
     expect(w.text()).toContain(t('share.pendingDeletion'))
+    // the switch-off asks first, as outside the window, and then reaches the client
+    await w.find(`button[aria-label="${t('depot.dropBox.shareRevoke')}"]`).trigger('click')
+    expect(confirmRequest.value?.message).toBe(t('depot.dropBox.shareRevokeConfirm'))
+    settleConfirm(true)
+    await flushPromises()
+    expect(vi.mocked(revokeShare)).toHaveBeenCalledWith('own')
     // control: outside a pending deletion the same rows offer their changes and the form mints
     const live = mountDialog()
     await flushPromises()

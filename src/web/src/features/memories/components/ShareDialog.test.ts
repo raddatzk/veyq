@@ -52,7 +52,7 @@ const stubs = {
   ShareCreateDialog: true,
 }
 
-const mountList = (extra: { readonly?: boolean } = {}) =>
+const mountList = (extra: { readonly?: boolean; uploader?: boolean } = {}) =>
   mount(ShareDialog, {
     props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), nodeEpoch: 0, epochs: EPOCHS, nodeName: 'Rom', nodeKind: 'MEMORY', ...extra },
     global: { plugins: [realI18n()], stubs },
@@ -231,20 +231,29 @@ describe('ShareDialog — renew vs re-activate (ADR 0075, W1)', () => {
 
 // W1 (ADR 0029 §7): delete is the trash can now, so switching off no longer wears it; delete is offered on a
 // switched-off link only, where the server's `deletable` says the gate would let it through, and behind a confirm.
-// Owner decision 2026-11-01: during a pending deletion the dialog stays to SEE the links; the server refuses every share
-// write in the grace window (a revoke too), so it offers none and says why.
+// Owner decisions 2026-11-01: during a pending deletion the dialog stays to SEE the links; the server refuses every share
+// write in the grace window but a revoke (uc.spaces.scope-access A1), so it offers only that and says so.
 describe('ShareDialog — a pending deletion (`readonly`)', () => {
   const CHANGES = ['share.edit', 'share.reissue', 'share.reactivate', 'share.revoke', 'share.delete']
-  it('lists the links but mints and changes none; control: the same list otherwise offers them', async () => {
-    listSharesFor.mockResolvedValue([share({ shareId: 'live' }), share({ shareId: 'off', enabled: false })])
-    const w = mountList({ readonly: true })
-    await flushPromises()
-    await openOff(w)
-    expect(w.findAll('.share-list-item')).toHaveLength(2)
-    expect(w.find('.share-new-button').exists(), 'no new link').toBe(false)
-    expect(w.text()).toContain(t('share.pendingDeletion'))
-    for (const label of CHANGES) expect(button(w, t(label)).exists(), label).toBe(false)
+  it('lists the links, revokes the own live one and changes nothing else; control: the same list otherwise offers them', async () => {
+    for (const uploader of [false, true]) {
+      const role = uploader ? ShareRole.WriteOnly : ShareRole.Read // the uploader variant lists only uploader links
+      listSharesFor.mockResolvedValue([share({ shareId: 'live', role }), share({ shareId: 'off', enabled: false, role })])
+      const w = mountList({ readonly: true, uploader })
+      await flushPromises()
+      await openOff(w)
+      expect(w.findAll('.share-list-item')).toHaveLength(2)
+      expect(w.find('.share-new-button').exists(), 'no new link').toBe(false)
+      expect(w.text()).toContain(t('share.pendingDeletion'))
+      for (const label of CHANGES.filter((l) => l !== 'share.revoke')) expect(button(w, t(label)).exists(), label).toBe(false)
+      expect(w.findAll(`button[aria-label="${t('share.revoke')}"]`), `the one live link of mine (uploader: ${uploader})`).toHaveLength(1)
+      vi.mocked(shareModule.revokeShare).mockClear()
+      await button(w, t('share.revoke')).trigger('click')
+      await flushPromises()
+      expect(vi.mocked(shareModule.revokeShare)).toHaveBeenCalledWith('live')
+    }
 
+    listSharesFor.mockResolvedValue([share({ shareId: 'live' }), share({ shareId: 'off', enabled: false })])
     const live = mountList()
     await flushPromises()
     await openOff(live)
