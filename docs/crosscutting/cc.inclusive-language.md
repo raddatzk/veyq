@@ -2,7 +2,7 @@
 
 - **ID:** cc.inclusive-language
 - **Applies to:** every **German user-facing** string — the `de` blocks of web's catalogs (core's `src/web/src/i18n/index.ts` and each application's
-  `src/web/src/features/<owner>/i18n.ts`) and the
+  `src/web/src/features/<owner>/i18n.ts`), the `de` block of admin-web's (`src/admin-web/src/i18n/index.ts`) and the
   German pages of the docs site (`site/src/content/docs/de/`). **English strings and code/identifiers are unaffected** — this is a
   language convention for the German product voice only.
 
@@ -32,6 +32,10 @@ for a generic person.
 - **„Owner" is avoided entirely** in German. The role is expressed neutrally: **„wer … besitzt"**, **„die besitzende
   Person"**, **„Besitz-…"** (e.g. „Besitz-Einladung"), **„Mitbesitz"** (co-owner). (English keeps `owner` as the
   wire/role term; only the German voice avoids it.)
+- **No coined person-noun for it either.** „Besitzperson" was one (24 strings, removed 2026-11-01): grammatical, and
+  read as forced. Say what holds instead: „Nur **wer den Server besitzt**, kann …", „Melde dich mit dem Konto an,
+  **dem dieser Server gehört**", „**alle, denen** der Tenant gehört", „Der Tenant **gehört niemandem**". Where the
+  reader is the owner, address them: „Sie geht nur an **deine** Adresse".
 - **„Betreiber" (operator) → „die Person, die … betreibt" / „die betreibende Person" / „wer … betreibt".**
 - **„Benutzername" is kept** — it is a fixed **credential label** (mirrors EN „Username"), not a gendered
   person-reference. Do not swap it for „Nutzername" (keeps the gendered root) either; leave it.
