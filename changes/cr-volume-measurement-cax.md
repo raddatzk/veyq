@@ -127,7 +127,7 @@ while a phone uploads — the CAX run should watch the app there first.
   measurement overlay removes again. Re-read `tests/e2e/stack/docker-compose.e2e.yml`'s diff before booting.
 
 **The procedure, exactly as it ran** (`I` = an instance directory outside git; the readings go to `.run/measurements/`):
-1. Images from the tree: `docker build -f infra/docker/Dockerfile -t veyq-vol:local .` and `docker build -f src/admin-web/Dockerfile -t
+1. Images from the tree: `docker build -f src/backend/Dockerfile -t veyq-vol:local .` and `docker build -f src/admin-web/Dockerfile -t
    veyq-admin-vol:local .` (after a merge, `npm run generate:api` in `src/web/` first, or the seeders do not compile).
 2. `python3 scripts/measure_volume.py --instance I fixtures` (ImageMagick), `… boot --app veyq-vol:local --admin
    veyq-admin-vol:local` (lane L1's own install stages; ports 80/443/18081 free; recipe on vCPUs 2,3, doubles and

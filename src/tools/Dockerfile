@@ -4,7 +4,7 @@
 # never runs it (`veyqctl` fetches the tool as a release asset). Released and signed with the app and admin images
 # (ADR 0057), versioned with them: the gate refuses an app release that is not this image's own.
 #
-# Built from the repository root, like the other two: `docker build -f infra/kubernetes/tools/Dockerfile --target runtime-tools .`
+# Built from the repository root, like the other two: `docker build -f src/tools/Dockerfile --target runtime-tools .`
 
 # The client binaries of the server's own version (`mariadb:11.4`, the pin validate_image_pins.py holds): Ubuntu's
 # archive carries 10.11, so they are copied from the pinned server image, which is Ubuntu 24.04 like the base below

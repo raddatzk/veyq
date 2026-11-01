@@ -40,12 +40,16 @@ TOOLS_DIR = SRC / "tools"
 VEYQCTL = TOOLS_DIR / "veyqctl.py"
 INSTANCE_BACKUP = TOOLS_DIR / "instance_backup.py"
 
+# A released image's Dockerfile lives beside the code it ships (ADR 0106 decision 9), and every one is built from the
+# repository root (`docker build -f src/backend/Dockerfile .`). The app image is the backend's — the web's SPA is baked
+# into its resources —; the tools image (ADR 0098), which only the chart runs, packages `instance_backup.py`.
+APP_DOCKERFILE = BACKEND / "Dockerfile"
+TOOLS_DOCKERFILE = TOOLS_DIR / "Dockerfile"
+
 INFRA_DIR = ROOT / "infra"
 # What Docker builds and Compose runs. The dev file declares its project name (`infra`), so the directory's name is
 # not the project's (ADR 0106 decision 2).
 DOCKER_DIR = INFRA_DIR / "docker"
-# Built from the repository root, as before the move (`docker build -f infra/docker/Dockerfile .`).
-APP_DOCKERFILE = DOCKER_DIR / "Dockerfile"
 DEV_COMPOSE = DOCKER_DIR / "docker-compose.yml"
 PROD_COMPOSE = DOCKER_DIR / "docker-compose.prod.yml"
 # The Compose files a guard over "every compose file" reads - named, never globbed: lane L1's overlay is not one of
@@ -56,10 +60,9 @@ ENV_TEMPLATE = DOCKER_DIR / ".env.example"
 # Where `instance_backup.py capture` writes by default (gitignored).
 BACKUP_ROOT = INFRA_DIR / "backups"
 
-# The Helm chart, and the image only the chart runs (ADR 0098).
+# The Helm chart.
 KUBERNETES_DIR = INFRA_DIR / "kubernetes"
 CHART_DIR = KUBERNETES_DIR / "charts/veyq"
-TOOLS_DOCKERFILE = KUBERNETES_DIR / "tools/Dockerfile"
 # Where a release before ADR 0106 carries its chart: `chart_upgrade_check.py` reads a predecessor's tree, which may
 # be of either layout (ADR 0106 decision 3).
 LEGACY_CHART_PATH = "charts/veyq"

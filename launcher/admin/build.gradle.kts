@@ -35,7 +35,7 @@ tasks.register<Exec>("build") {
 tasks.register<Exec>("image") {
     group = "veyq"
     description = "Builds the admin image veyq-admin:local from src/admin-web/Dockerfile, context the repo root as " +
-        "container.yml builds it."
+        "ci.yml builds it."
     workingDir = rootDir
     commandLine("docker", "build", "-f", "src/admin-web/Dockerfile", "-t", "veyq-admin:local", ".")
 }

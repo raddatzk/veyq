@@ -1,10 +1,11 @@
 # infra — local dev stack
 
 The deployment lives here by target ([ADR 0106](../docs/decisions/0106-deployment-under-infra-tests-under-tests.md)):
-[`docker/`](docker/) holds what Docker builds and Compose runs — the app image's `Dockerfile` (built from the repo
-root), the dev stack's `docker-compose.yml` this file is about, the production recipe `docker-compose.prod.yml` and
-what both read beside them; [`kubernetes/`](kubernetes/) holds the Helm chart (`infra/kubernetes/charts/veyq/`) and
-the `veyq-tools` image only the chart runs (`infra/kubernetes/tools/`). An instance's local `.env` sits beside the compose file, in `infra/docker/`.
+[`docker/`](docker/) holds what Compose runs — the dev stack's `docker-compose.yml` this file is about, the production
+recipe `docker-compose.prod.yml` and what both read beside them; [`kubernetes/`](kubernetes/) holds the Helm chart
+(`infra/kubernetes/charts/veyq/`). An instance's local `.env` sits beside the compose file, in `infra/docker/`. The
+images' Dockerfiles are not here: each lives beside the code it ships (`src/backend/`, `src/admin-web/`, `src/tools/`
+for the `veyq-tools` image only the chart runs), built from the repo root.
 
 ## The launcher: `./gradlew <surface>:<verb>`
 
@@ -25,7 +26,7 @@ holds no surface's build, and no task aggregates their checks — each still pro
 | `backend:run` · `web:run` · `admin:run` · `site:run` | `quarkusDev` · Vite on 8081 · Vite on 5174 · Astro on 4321 |
 | `backend:seed` | `npm run bootstrap:user` in `src/web/` ([§ Seeding](#seeding-the-local-dev-principal)) |
 | `backend:build` · `web:build` · `admin:build` · `site:build` | `quarkusBuild` (no tests) · `npm run build` in each |
-| `backend:image` · `admin:image` | `docker build` of `infra/docker/Dockerfile` (the app image, web's SPA baked in) · of `src/admin-web/Dockerfile`, context the repo root as CI builds them; both tagged `local`, a tag no publish emits, so it is never one to deploy |
+| `backend:image` · `admin:image` | `docker build` of `src/backend/Dockerfile` (the app image, web's SPA baked in) · of `src/admin-web/Dockerfile`, context the repo root as CI builds them; both tagged `local`, a tag no publish emits, so it is never one to deploy |
 
 A cold start is `infra:up` → `backend:run` → `web:run` (and `admin:run` for first-run setup) → `backend:seed`, then
 browse `veyq.localhost:8081`. `backend:run` does not start the infra on its own: a backend restart should not touch

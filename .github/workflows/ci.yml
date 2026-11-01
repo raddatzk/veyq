@@ -511,13 +511,13 @@ jobs:
             platform: linux/arm64
             runner: ubuntu-24.04-arm
           - image: veyq
-            dockerfile: infra/docker/Dockerfile
+            dockerfile: src/backend/Dockerfile
             target: runtime-jvm
           - image: veyq-admin
             dockerfile: src/admin-web/Dockerfile
             target: runtime-nginx
           - image: veyq-tools
-            dockerfile: infra/kubernetes/tools/Dockerfile
+            dockerfile: src/tools/Dockerfile
             target: runtime-tools
     steps:
       - name: Check out repository
@@ -757,7 +757,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: infra/docker/Dockerfile
+          file: src/backend/Dockerfile
           target: runtime-jvm
           platforms: ${{ matrix.platform }}
           push: false
@@ -798,7 +798,7 @@ jobs:
           VEYQ_VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          docker build --file infra/docker/Dockerfile --target runtime-jvm --platform "$PLATFORM" \
+          docker build --file src/backend/Dockerfile --target runtime-jvm --platform "$PLATFORM" \
             --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
             --tag "veyq:candidate-${ARCH}" .
           docker build --file src/admin-web/Dockerfile --target runtime-nginx --platform "$PLATFORM" \

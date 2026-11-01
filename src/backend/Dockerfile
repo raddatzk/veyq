@@ -105,7 +105,7 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # published it. A native image returns only as a decision with its own CI build and e2e run (inbox #243).
 
 # --- runtime (JVM) — the target ci.yml's `build` job builds -------------------------------------------------
-# The LAST stage on purpose: a build with no `--target` (`docker build -f infra/docker/Dockerfile .`) builds the last
+# The LAST stage on purpose: a build with no `--target` (`docker build -f src/backend/Dockerfile .`) builds the last
 # stage, so it builds what the release publishes. scripts/validate_images_run_unprivileged.py holds every published target to its file's last stage.
 FROM eclipse-temurin:21-jre-jammy@sha256:61d6c7b34d36aee3f45d043101259f97f3c6d428dc2a6f75513789983c5e254f AS runtime-jvm
 WORKDIR /work/

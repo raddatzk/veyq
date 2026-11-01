@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Built: yes
-- Date: 2026-10-20
+- Date: 2026-10-20; amended 2026-11-01 (decision 9: the Dockerfiles moved out of `infra/` to the code they ship)
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
 ## Context
@@ -16,7 +16,7 @@ the published site — and conflicts with every branch that touches the moved fi
 ## Decision
 
 1. **Stage 1 — deployment under `infra/`, split by target; the harnesses under `tests/`.** `infra/docker/` holds what
-   Docker builds and Compose runs, `infra/kubernetes/` the chart and the image only the chart runs; `tests/e2e/` the
+   Compose runs, `infra/kubernetes/` the chart (the two Dockerfiles stage 1 put here moved on, decision 9); `tests/e2e/` the
    browser suite with lane L1's overlay in `tests/e2e/stack/`, `tests/fuzz/` the API fuzzer. `contracts/`, `scripts/`,
    `site/`, `docs/`, `changes/` and the launcher's root files stay at the root: every surface is generated from or pinned
    to `contracts/`, and a Gradle root build sits where `./gradlew` runs.
@@ -38,6 +38,15 @@ the published site — and conflicts with every branch that touches the moved fi
    operator tools a release carries, `veyqctl` and `instance_backup.py`, are in `src/tools/` with their selftests. They
    ship alone — Python 3.9 and the standard library, no import from `scripts/` — and prove themselves by their selftest,
    not by a coverage ref ([ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md)).
+9. **An image's Dockerfile lives beside the code it ships, not under `infra/`** (owner 2026-11-01). An image is part of
+   what a release ships, so by decision 8 it belongs under `src/`; `infra/` keeps only how a target runs it. Stage 1 had
+   put the app image's Dockerfile in `infra/docker/` and the tools image's in `infra/kubernetes/tools/`, while the admin
+   image's stayed in `src/admin-web/` — three released images in three kinds of place. Now: the app image's in
+   `src/backend/` (the backend is the server the image runs; the web's SPA is baked into its resources, as `contracts/`
+   is read at its build), the admin image's in `src/admin-web/`, the tools image's in `src/tools/` beside
+   `instance_backup.py`, which it packages. The API fuzzer's stays in `tests/fuzz/`: it ships nothing. Every one is
+   still built from the repository root, so only the `-f` path moved; `repo_layout.APP_DOCKERFILE` and
+   `TOOLS_DOCKERFILE` name them.
 
 ## Consequences
 
@@ -47,4 +56,6 @@ the published site — and conflicts with every branch that touches the moved fi
   chart's registry path `ghcr.io/<owner>/charts/veyq` is a name, so moving a file in the tree changes neither.
 - **Rejected — moving the code surfaces in stage 1's step**: the larger cost for the smaller gain, and a conflict with
   every branch that touches code.
+- **Rejected — the app image's Dockerfile loose in `src/`** (decision 9): a file beside the surfaces is what stage 1
+  cleared from the root, and the image runs the backend.
 - **Rejected — `tests/stack/` for L1's overlay**: the coverage surface `stack` already means the browser suite itself.

@@ -910,7 +910,7 @@ def forge_core_depends_on_application(root: pathlib.Path) -> str:
 
 
 SETTINGS = "src/backend/settings.gradle.kts"
-DOCKERFILE = "infra/docker/Dockerfile"
+DOCKERFILE = "src/backend/Dockerfile"
 # The Dockerfile's build-base `COPY` of Memories' build file; the forged application's is planted beside it.
 MEMORIES_BUILD_COPY = "src/backend/apps/memories/build.gradle.kts"
 

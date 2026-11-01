@@ -1,7 +1,7 @@
 # The Server-Owner administration surface as its own image (ADR 0065) — `ghcr.io/raddatzk/veyq-admin`,
 # versioned and signed the same way as the app image (ADR 0057).
 #
-# Separate from the app image's Dockerfile (infra/docker/Dockerfile) on purpose: that one builds a JVM application server with the app SPA baked
+# Separate from the app image's Dockerfile (src/backend/Dockerfile) on purpose: that one builds a JVM application server with the app SPA baked
 # into its resources, this one is static assets plus a reverse proxy. They share no stage and must not: the
 # whole point of the extraction is that an operator can firewall this container off the internet without
 # touching the app.

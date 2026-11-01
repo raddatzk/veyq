@@ -42,10 +42,12 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   release info and **first-run setup**; what looks admin-ish but is reachable by an ordinary member — accepting
   a tenant invite, accepting terms, and a tenant owner's own terms/mail settings — deliberately stays in `src/web/`.
 - `infra/` — the two deployment targets, one directory each ([ADR 0106](docs/decisions/0106-deployment-under-infra-tests-under-tests.md)):
-  `infra/docker/` — the app image's `Dockerfile` (built from the repo root), the dev and the production compose file
+  `infra/docker/` — the dev and the production compose file
   (the production one a release asset, [ADR 0057](docs/decisions/0057-release-identity-and-deployment-recipe.md)) and
   what they read beside them; `infra/kubernetes/` — the Helm chart (`infra/kubernetes/charts/veyq/`,
-  [ADR 0064](docs/decisions/0064-kubernetes-helm-deployment-target.md)) and the image only the chart runs (`tools/`).
+  [ADR 0064](docs/decisions/0064-kubernetes-helm-deployment-target.md)). The images are no deployment: each released
+  image's `Dockerfile` lives beside the code it ships — the app image's in `src/backend/`, the admin image's in
+  `src/admin-web/`, the tools image's in `src/tools/` — and every one is built from the repo root.
   Every infra-level decision has an answer on both, and a change to one checks the other; the docs site's Run area
   (`site/src/content/docs/run/`) owns the operator commands for both, and `infra/README.md` the dev stack and cutting
   a release. A script learns these paths from `scripts/repo_layout.py`, never by spelling them.
@@ -67,7 +69,8 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   itself with its own `npm run check`.
 - `src/tools/` — the two operator tools a release ships as assets: `veyqctl` (installs, upgrades and backs up a
   Compose instance from its releases, [ADR 0096](docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md))
-  and `instance_backup.py` (the backup tool it runs, and the `veyq-tools` image's entrypoint). Each ships alone.
+  and `instance_backup.py` (the backup tool it runs, and the `veyq-tools` image's entrypoint, whose `Dockerfile` is
+  beside it — an image only the chart runs, ADR 0098). Each ships alone.
 - `docs/` — internal engineering state (English) + working flow (`ai/`, `inbox.md`).
 - `scripts/` — what the repository runs on itself, in Python: the guards (`validate_*.py`, the trust chain below),
   the e2e orchestrators and the release producer.

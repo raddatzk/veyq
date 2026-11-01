@@ -58,13 +58,14 @@ updates:
     multi-ecosystem-group: "app-runtime"
     open-pull-requests-limit: 1
 
-  # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): the app image's in
-  # infra/docker/, the admin image's in src/admin-web/ and the tools image's in infra/kubernetes/tools/.
+  # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): each image's beside
+  # the code it ships — the app image's in src/backend/, the admin image's in src/admin-web/, the tools image's in
+  # src/tools/.
   - package-ecosystem: "docker"
     directories:
-      - "/infra/docker"
+      - "/src/backend"
       - "/src/admin-web"
-      - "/infra/kubernetes/tools"
+      - "/src/tools"
     patterns:
       - "*"
     multi-ecosystem-group: "images"
