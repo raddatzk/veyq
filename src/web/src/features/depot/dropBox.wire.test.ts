@@ -21,6 +21,7 @@ import { dropGuestContext, dropGuestJob, ensureDropFolder, forgetDropGuest, load
 import { guestFileUploadJob } from './shareUpload'
 import { FILE_KIND } from './kinds'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const SCOPE = '33333333-3333-4333-8333-333333333334'
 const SHARE = 'Dr0pB0xDr0pB0xDr0pB0xDr0pB0xDr0pB0xDr0pB0x_'
@@ -35,7 +36,7 @@ type Req = { method: string; path: string; json?: Record<string, unknown> }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 beforeAll(() => {
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
 })
 afterEach(() => vi.unstubAllGlobals())
 

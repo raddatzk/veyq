@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // A moderator's review of a reported medium (uc.moderation.review-a-case A5) — Memories' half of core's item review
-// (`registry.claimItemReview`). A medium's report share hands over each of its blobs' `K_blob` (role `BLOB`, by blob id),
+// (`app.itemReview`). A medium's report share hands over each of its blobs' `K_blob` (role `BLOB`, by blob id),
 // not a node key, so it is drawn on its own: the held row from the review's own listing (`listCaseMedia`, key-proved —
 // never the link's), its preview opened with that preview blob's key, and its original on request. Read-only.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'

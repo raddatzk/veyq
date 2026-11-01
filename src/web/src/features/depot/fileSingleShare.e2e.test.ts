@@ -37,6 +37,7 @@ import { fileUploadJob, StaleFileError } from './uploadFile'
 import { guestFileUploadJob } from './shareUpload'
 import { fetchFileContent, fileFacts } from './download'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const FOLDER_NAME = 'Nachlass Hohenfels'
 const TARGET_FILE = 'Kaufvertrag Hohenfels 1962.pdf'
@@ -49,7 +50,7 @@ let realFetch: typeof fetch
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding, as Depot's
   // `register.ts` registers it.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
   realFetch = globalThis.fetch
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url

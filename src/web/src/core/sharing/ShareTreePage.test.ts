@@ -44,6 +44,7 @@ import { authenticatedCalls } from '../../test/guestMode'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 import { injectNodeHost, type NodeHost } from '../node/nodeHost'
 import type { TreeNode } from '../node/tree'
+import { testApp, testKind } from '../../test/testApplication'
 
 const SCOPE_ID = '55555555-5555-4555-8555-555555555555'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_2'
@@ -164,9 +165,9 @@ beforeEach(async () => {
   seenCtx.ctx = null
   const r = createRegistry()
   const list = { rows: stubRows }
-  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: NOTE_KIND, icon: 'file', list })
-  r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BROKEN_KIND, icon: 'file', list })
-  r.claimShareBody(NOTE_KIND, StubBody) // a WRITE_ONLY drop page: never mounted on this page
+  testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: NOTE_KIND, icon: 'file', list })
+  testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: BROKEN_KIND, icon: 'file', list })
+  testApp(r).shareBody(NOTE_KIND, StubBody) // a WRITE_ONLY drop page: never mounted on this page
   holder.reg = r
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
   await at()
@@ -264,8 +265,8 @@ describe("ShareTreePage renders a node's detail for the guest", () => {
     return h0
   }
   beforeEach(() => {
-    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX_KIND, icon: 'inbox', detail: StubDetail })
-    holder.reg!.claimShareBody(BOX_KIND, StubBody) // its WRITE_ONLY drop page: not this page's
+    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey, kind: BOX_KIND, icon: 'inbox', detail: StubDetail })
+    testApp(holder.reg!).shareBody(BOX_KIND, StubBody) // its WRITE_ONLY drop page: not this page's
   })
 
   it("mounts the kind's detail with the node, the link's scope, no epochs, the chain's key, its children, the guest's access and tree", async () => {
@@ -324,8 +325,8 @@ describe('ShareTreePage on a link rooted at a non-folder node', () => {
     }
   }
   beforeEach(() => {
-    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX_KIND, icon: 'inbox', detail: StubDetail })
-    holder.reg!.claimShareBody(BOX_KIND, StubBody)
+    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey, kind: BOX_KIND, icon: 'inbox', detail: StubDetail })
+    testApp(holder.reg!).shareBody(BOX_KIND, StubBody)
   })
 
   for (const [role, badge] of [[ShareRole.Read, 'share.readonly'], [ShareRole.ReadWrite, 'share.contributorBadge']] as const) {
@@ -419,7 +420,7 @@ describe('ShareTreePage: a READ_WRITE guest adds folders', () => {
   // node is born with no meta, so a guest has no "I was there" and records no participant.
   it("a guest's create of an application's kind is the page's name dialog, never the kind's createDialog, and sends no meta", async () => {
     const KindCreateDialog = defineComponent({ name: 'KindCreateDialog', setup: () => () => h('label', { class: 'kind-create-stub' }, t('memory.participants.wasThere')) })
-    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey,
       kind: 'MEMO', icon: 'images', list: { rows: stubRows }, createDialog: KindCreateDialog,
       createEntry: { label: 'memory.create', icon: 'images', order: 10, allowed: () => true },
     })

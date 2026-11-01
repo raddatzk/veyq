@@ -2,10 +2,11 @@
 """Guard that a web share body is a registered WRITE_ONLY drop page and nothing else (inbox #401).
 
 **What it asserts.** Over `src/web/src` (tests and the generated client excluded):
-  1. every `*ShareBody.vue` is claimed by an application — its `register.ts` imports it and passes it to
-     `registry.claimShareBody(KIND, Component)`;
+  1. every `*ShareBody.vue` is claimed by an application — its `register.ts` imports it and passes it to its
+     registrar's `app.shareBody(KIND, Component)` (`core/applications/registry.ts`, the scoped registrar);
   2. every component an application claims that way is a `*ShareBody.vue`;
-  3. `claimShareBody(` is called from an application's `register.ts` only.
+  3. `.shareBody(` is called from an application's `register.ts` only (the registry's lookup is `shareBodyFor`, another
+     name, so every `.shareBody(` call is a claim).
 
 **Why.** A share view looks exactly like the member view; a link's role only removes functions (the owner principle
 of 2026-10-09, ADR 0079 Consequences, `src/web/CLAUDE.md`). The registry's share body is therefore the one page with no
@@ -18,7 +19,7 @@ name and mounted by hand, or a claim of something that is not one, is red.
 **Its limits.** It anchors on the file name and the claim call, so a guest-only UI under any other name is invisible
 to it — that the shell gives a `READ`/`READ_WRITE` link the member's views and never a claimed body is pinned by
 `src/web/src/views/ShareView.registry.test.ts`, which no text guard can replace. A claim spelled other than
-`claimShareBody(KIND, Identifier)` with a default import of a `.vue` file is reported as unresolved, never skipped.
+`<registrar>.shareBody(KIND, Identifier)` with a default import of a `.vue` file is reported as unresolved, never skipped.
 """
 from __future__ import annotations
 
@@ -30,7 +31,8 @@ import repo_layout  # where the code surfaces live (ADR 0106)
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_SRC = repo_layout.WEB / "src"
-CLAIM = re.compile(r"claimShareBody\(\s*[\w.]+\s*,\s*(\w+)\s*[,)]")
+ANCHOR = ".shareBody("
+CLAIM = re.compile(r"\.shareBody\(\s*[\w.]+\s*,\s*(\w+)\s*[,)]")
 IMPORT = re.compile(r"^import\s+(\w+)\s+from\s+'([^']+\.vue)'", re.MULTILINE)
 
 
@@ -53,15 +55,16 @@ def check(root: Path) -> list[str]:
     for p in files:
         text = p.read_text(encoding="utf-8")
         calls = CLAIM.findall(text)
-        if "claimShareBody(" not in text:
+        if ANCHOR not in text:
             continue
         rel = p.relative_to(root)
         if p.name != "register.ts":
             if p.name != "registry.ts":  # the registry declares and implements the door
-                errors.append(f"{rel}: calls claimShareBody — only an application's register.ts claims a drop page")
+                errors.append(f"{rel}: calls .shareBody( — only an application's register.ts claims a drop page")
             continue
-        if text.count("claimShareBody(") != len(calls):
-            errors.append(f"{rel}: a claimShareBody call is not `claimShareBody(KIND, Component)` — cannot resolve it")
+        if text.count(ANCHOR) != len(calls):
+            errors.append(f"{rel}: a .shareBody( call is not `app.shareBody(KIND, Component)` — cannot resolve it")
+
         imports = {name: path for name, path in IMPORT.findall(text)}
         for name in calls:
             if name not in imports:

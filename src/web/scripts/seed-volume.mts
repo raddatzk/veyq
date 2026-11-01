@@ -47,6 +47,8 @@ import { FOLDER_KIND } from '../src/core/node/kind'
 import { hashForNode, TENANT_SCOPE } from '../src/core/node/location'
 import { registry } from '../src/core/applications/registry'
 import { MEMORY_KIND, CHAPTER_KIND } from '../src/features/memories/kinds'
+import { MEMORIES } from '../src/features/platform/capabilities'
+import { nothingOfItsOwnToRekey } from '../src/core/node/rekey/hooks'
 import { createChapter, createMemory } from '../src/features/memories/memoryNodes'
 import { addCopiedMedia, listMedia, type CopiedMediaSource } from '../src/features/memories/media'
 import { ItemMarksTooMany, loadItemFavorites, saveItemFavorites } from '../src/features/memories/itemFavorites'
@@ -55,9 +57,13 @@ import { openOwnNameKey, sealAvatar, sealName, setMyAvatar, updateMyProfile } fr
 import { httpStatus } from '../src/shared/httpError'
 import { backingOff } from './backingOff.mts'
 
-// The Memories application's route slug, as its registration (`features/memories/register.ts`, which imports Vue
-// components and so cannot load here) claims it — only so `hashForNode` builds the URL the browser leg opens.
-registry.claimRouteSlug('memories', [MEMORY_KIND, CHAPTER_KIND])
+// The Memories application's kinds and route slug, as its registration (`features/memories/register.ts`, which imports Vue
+// components and so cannot load here) registers them — only so `hashForNode` builds the URL the browser leg opens: a
+// route is its application's, so the kinds are registered under it (with nothing else; this script re-keys nothing).
+const memories = registry.registerApplication({ id: MEMORIES, name: 'memory.memories' })
+for (const kind of [MEMORY_KIND, CHAPTER_KIND]) memories.kind(kind, { icon: 'images', rekeyContent: nothingOfItsOwnToRekey })
+memories.route('memories')
+
 
 function remember(update: Partial<Manifest>): void {
   writeJson('manifest.json', { ...manifest(), ...update })

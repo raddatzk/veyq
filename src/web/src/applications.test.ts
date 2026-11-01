@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+// Memories' real hooks, each watched: what reaches the registry through Memories' registrar is what the registry runs.
+vi.mock('./features/memories/lifecycle', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./features/memories/lifecycle')>()
+  const real = actual.memoriesLifecycle
+  return { ...actual, memoriesLifecycle: { ...real, onScopeReset: vi.fn(() => real.onScopeReset?.()) } }
+})
 import { registerApplications } from './applications'
+import { memoriesLifecycle } from './features/memories/lifecycle'
 import { registry } from './core/applications/registry'
 import { MEMORY_KIND, CHAPTER_KIND } from './features/memories/kinds'
 import { DROPBOX_KIND, FILE_KIND } from './features/depot/kinds'
@@ -28,7 +35,7 @@ describe('composition root', () => {
   // page and link dialog (inbox #378), its names folded as file names.
   it('registers the Depot kind into the same registry, shareable, with the file-name folding', () => {
     expect(registry.kind(FILE_KIND)).toMatchObject({ supported: true, slug: fileNameSlug, detail: FileDetail, shareDialog: FileShareDialog })
-    expect(registry.shareBody(FILE_KIND)).toBeNull()
+    expect(registry.shareBodyFor(FILE_KIND)).toBeNull()
   })
 
   // The dialogs are per kind (P4c): Memories' one create dialog and one share dialog serve both its kinds; FOLDER keeps
@@ -49,8 +56,8 @@ describe('composition root', () => {
   })
 
   it('claims the one Memories share body for both root kinds', () => {
-    expect(registry.shareBody(MEMORY_KIND)).not.toBeNull()
-    expect(registry.shareBody(CHAPTER_KIND)).toBe(registry.shareBody(MEMORY_KIND))
+    expect(registry.shareBodyFor(MEMORY_KIND)).not.toBeNull()
+    expect(registry.shareBodyFor(CHAPTER_KIND)).toBe(registry.shareBodyFor(MEMORY_KIND))
   })
 
   // The level view is core's (P4b) and draws ONE list (inbox #407): Memories' row factory serves both its kinds, Depot's serves
@@ -81,8 +88,13 @@ describe('composition root', () => {
   // the registry: this is the test that goes red when the composition root (or Memories' registration) stops registering
   // them, which rotateKeys.test.ts cannot see (it registers its own). A second registration of a registered id throws.
   it('registers the Memories lifecycle under the Memories application', () => {
-    expect(() => registry.registerLifecycle('memories', { onMasterKeyRotated: async () => {} })).toThrow(/already registered/)
+    expect(registry.applications().map((a) => a.id)).toContain('memories')
+    vi.mocked(memoriesLifecycle.onScopeReset!).mockClear()
+    registry.scopeReset()
+    expect(memoriesLifecycle.onScopeReset, 'the registry runs the hooks Memories registered').toHaveBeenCalledTimes(1)
+    expect(() => registry.registerApplication({ id: 'memories', name: 'memory.memories' }), 'the id is taken: no second registrar').toThrow(/already registered/)
   })
+
 
   // The composition is whole: every kind an application registered belongs to exactly one registered application (its
   // switch, uc.platform.switch-application-off) and has its route decided by it - a slug claimed or "no segment" declared

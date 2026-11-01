@@ -32,6 +32,7 @@ import { stubRows } from '../../test/stubRows'
 import { titlesOf } from '../../test/levelRows'
 import { isDisabled, openNewMenu } from '../../test/newMenu'
 import { nothingOfItsOwnToRekey } from './rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 function node(id: string, kind: NodeKind, parentId: string | null = null): TreeNode {
   return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
@@ -67,8 +68,8 @@ beforeEach(() => {
   setViewMode('grid')
   const a = stubRows('a')
   b = stubRows('b')
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: a.factory, tabLabel: LABEL_A } })
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: b.factory, tabLabel: LABEL_B } })
+  testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: a.factory, tabLabel: LABEL_A } })
+  testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: b.factory, tabLabel: LABEL_B } })
 })
 
 const TREE = [TRIPS, SUB, node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips'), node('x1', 'OTHER', 'Trips')]
@@ -120,7 +121,7 @@ describe('LevelView application tabs', () => {
     setLevelTab('BETA')
     // an identity folder offers no tab for a kind with nothing in it: here BETA has no node, so the bar has ALPHA and GAMMA only
     const c = stubRows('c')
-    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'GAMMA', icon: 'inbox', list: { rows: c.factory, tabLabel: 'depot.dropBox.section' } })
+    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey, kind: 'GAMMA', icon: 'inbox', list: { rows: c.factory, tabLabel: 'depot.dropBox.section' } })
     const level = childrenOf([TRIPS, node('a1', 'ALPHA', 'Trips'), node('g1', 'GAMMA', 'Trips')], TRIPS.id)
     const tree = memberTreeOf(() => [TRIPS])
     const w = mount(LevelView, {
@@ -140,13 +141,13 @@ describe('LevelView application tabs', () => {
   it('shows no tab bar with fewer than two applications that have a tab (and then no filtering, whatever is stored)', () => {
     setLevelTab('BETA')
     holder.reg = createRegistry()
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: LABEL_A } })
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: LABEL_A } })
     const one = mountLevel(TREE)
     expect(one.find('[role="tablist"]').exists()).toBe(false)
     expect(titlesOf(one)).toEqual(['Sub', 'a1', 'b1', 'x1'])
     holder.reg = createRegistry()
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: LABEL_A } })
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b').factory } }) // no label: no tab
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: LABEL_A } })
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b').factory } }) // no label: no tab
     const unlabelled = mountLevel(TREE)
     expect(unlabelled.find('[role="tablist"]').exists()).toBe(false)
     expect(titlesOf(unlabelled)).toEqual(['Sub', 'a1', 'b1', 'x1'])
@@ -181,9 +182,9 @@ describe('LevelView application tabs', () => {
   it('kinds sharing a tab label share ONE tab: its filter shows the nodes of both', async () => {
     holder.reg = createRegistry()
     const shared = stubRows('s')
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: shared.factory, tabLabel: LABEL_A } })
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA_PART', icon: 'images', list: { rows: shared.factory, tabLabel: LABEL_A } })
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: shared.factory, tabLabel: LABEL_A } })
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA_PART', icon: 'images', list: { rows: shared.factory, tabLabel: LABEL_A } })
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
     const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips'), node('p1', 'ALPHA_PART', 'Trips'), node('b1', 'BETA', 'Trips')])
     expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t(LABEL_B)])
     await tabNamed(w, t(LABEL_A)).trigger('mousedown')
@@ -200,8 +201,8 @@ describe('LevelView application tabs', () => {
   it('the view switch offers what the tab shows: a tab of a kind without views of its own leaves the grid and the list', async () => {
     holder.reg = createRegistry()
     const map = { mode: 'map', icon: 'map', label: 'node.viewGrid' } as const
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: LABEL_A, views: [map] } })
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: LABEL_A, views: [map] } })
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
     const w = mountLevel(TREE)
     expect(w.findAll('.view-mode-button')).toHaveLength(3)
     await tabNamed(w, t(LABEL_B)).trigger('mousedown')
@@ -215,11 +216,11 @@ describe('LevelView application tabs: the level action does not depend on the ta
   it('"Upload"-like entry of a kind in another tab stays enabled', async () => {
     holder.reg = createRegistry()
     const a = stubRows('a', { action: { id: 'a.up', handler: { enabled: () => true, run: () => {} } } })
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey,
       kind: 'ALPHA', icon: 'images', list: { rows: a.factory, tabLabel: LABEL_A },
       levelActions: [{ id: 'a.up', label: 'node.rename', icon: 'upload', order: 30, allowed: () => true }],
     })
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
     const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips')])
     await tabNamed(w, t(LABEL_B)).trigger('mousedown')
     expect(titlesOf(w)).toEqual(['b1'])
@@ -234,11 +235,11 @@ describe('LevelView application tabs: an empty tab', () => {
     holder.reg = createRegistry()
     const allow = () => true
     const Dialog = { name: 'D', render: () => null }
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey,
       kind: 'ALPHA', icon: 'images', createDialog: Dialog, createEntry: { label: 'node.anItem', icon: 'images', order: 10, allowed: allow },
       list: { rows: stubRows('a').factory, tabLabel: LABEL_A, emptyText: () => 'memory.memoryEmpty' },
     })
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey,
       kind: 'BETA', icon: 'file', createDialog: Dialog, createEntry: { label: 'node.anItem', icon: 'file', order: 20, allowed: allow },
       list: { rows: stubRows('b').factory, tabLabel: LABEL_B },
     })

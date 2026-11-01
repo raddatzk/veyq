@@ -103,7 +103,7 @@ describe('registerDepot', () => {
       copyLosses: ['depot.dropBox.copyLoss'],
       rekeyContent: nothingOfItsOwnToRekey,
     })
-    expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
+    expect(registry.shareBodyFor(DROPBOX_KIND)).toBe(DropBoxShareBody)
     expect(registry.tokenInputFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
   })
 
@@ -118,7 +118,7 @@ describe('registerDepot', () => {
       [FILE_KIND, 'depot.title', [FILE_KIND]],
       [DROPBOX_KIND, 'depot.dropBox.section', [DROPBOX_KIND]],
     ])
-    expect(registry.shareBody(FILE_KIND)).toBeNull() // no WRITE_ONLY link on a file: core's page serves every file link
+    expect(registry.shareBodyFor(FILE_KIND)).toBeNull() // no WRITE_ONLY link on a file: core's page serves every file link
   })
 
   it('is write-once: a second registration throws', () => {

@@ -13,6 +13,7 @@ import { registry } from '../applications/registry'
 import { fileNameSlug } from '../../shared/naming'
 import { treeNode } from '../../test/models'
 import { nothingOfItsOwnToRekey } from './rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const A = '5c09e000-0000-4000-8000-0000000000a0'
@@ -132,7 +133,7 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
 // caller that passes the wrong kind (or none) is told apart from one that passes the right one.
 describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
   const LEAF = 'LEAFTEST'
-  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: LEAF, icon: 'file', slug: fileNameSlug })
+  testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: LEAF, icon: 'file', slug: fileNameSlug })
   const NAME = 'Day1.MD'
   const leafToken = (key: Uint8Array, slot: string) => b64std(v1.slugToken(key, slot, 'day1.md'))
   const folderToken = (key: Uint8Array, slot: string) => b64std(v1.slugToken(key, slot, 'day1-md'))

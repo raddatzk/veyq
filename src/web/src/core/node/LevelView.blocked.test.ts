@@ -31,6 +31,7 @@ import { ShareRole } from '../../api/generated/sharing'
 import { stubRows } from '../../test/stubRows'
 import { actionIdsOf, rowOf } from '../../test/levelRows'
 import { nothingOfItsOwnToRekey } from './rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 function node(id: string, kind: NodeKind, parentId: string | null, blocked = false): TreeNode {
   return treeNode({
@@ -45,7 +46,7 @@ const tree = [TRIPS, node('open', 'ALPHA', 'Trips'), node('held', 'ALPHA', 'Trip
 beforeEach(() => {
   setViewMode('list')
   holder.reg = createRegistry()
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+  testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey,
     kind: 'ALPHA', icon: 'images', 
     list: { rows: stubRows('a').factory }, // its rows carry a rename: the placeholder drops it
   })

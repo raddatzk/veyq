@@ -56,6 +56,7 @@ import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 import { OPERATOR_SECTION } from '../test/models'
 import { nothingOfItsOwnToRekey } from '../core/node/rekey/hooks'
+import { testApp, testKind } from '../test/testApplication'
 
 function head(over: Partial<PublicShareHead> = {}): PublicShareHead {
   return {
@@ -79,8 +80,12 @@ const StubDetail = defineComponent({ name: 'StubDetail', setup: () => () => h('d
 
 function registryWith(claims: NodeKind[], details: NodeKind[] = []): Registry {
   const r = createRegistry()
-  for (const key of details) r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: key, icon: 'file', detail: StubDetail })
-  for (const key of claims) r.claimShareBody(key, StubBody)
+  for (const key of details) testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: key, icon: 'file', detail: StubDetail })
+  // A drop page is claimed by the application that registered its root kind.
+  for (const key of claims) {
+    if (!r.kind(key).supported) testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: key, icon: 'file' })
+    testApp(r).shareBody(key, StubBody)
+  }
   return r
 }
 

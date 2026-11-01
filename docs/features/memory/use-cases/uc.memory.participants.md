@@ -124,7 +124,7 @@ together with whom.
 - Header and picker: the `participants` action in `components/MemoryDetail.vue`'s header list, which opens the picker the row
   `components/MemoryParticipants.vue` exposes; `MemoryParticipantsDialog.vue`, `useMemoryParticipants.ts`; names
   from `core/people/directory.ts` (real name, else username; read from the tenant's member list).
-- Profile: `core/people/PersonProfile.vue` (core's frame, sections claimed through `registry.claimPersonSection`), Memories'
+- Profile: `core/people/PersonProfile.vue` (core's frame, sections claimed through an application's registrar, `app.personSection`), Memories'
   section `components/PersonMemories.vue` over `participantIndex.ts` (its presentations `memoryViews.ts`, the level's list; its map
   `components/SpaceMap.vue` with the pins of `spaceMap.ts` `locatedPin`, the level's rule); the route in `core/node/location.ts` and
   `views/SpaceView.vue`.

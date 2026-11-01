@@ -22,6 +22,7 @@ import type { GuestTreeContext } from '../../core/sharing/guestTree'
 import type { ShareNode } from '../../api/generated/sharing'
 import { fileNameSlug } from '../../shared/naming'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const SCOPE = '33333333-3333-4333-8333-333333333334'
 const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_4'
@@ -35,7 +36,7 @@ const NAME = 'Rezept.pdf'
 const MODIFIED = 1_700_000_000_000
 
 beforeAll(() => {
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
 })
 afterEach(() => vi.unstubAllGlobals())
 

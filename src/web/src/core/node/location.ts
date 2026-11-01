@@ -9,7 +9,7 @@
 //   - a **Depot** node (file, drop box) is its plain slug, no slash: `#reisen-2026/rechnung`;
 //   - a node of **any other application** carries the application's route slug before its name — a Memory `rom` is
 //     `#reisen-2026/memories/rom`, a chapter of it extends that (`…/rom/tag-1`; the segment is written where the path
-//     enters the application, not again below it). The slug is claimed once in the registry (`claimRouteSlug`).
+//     enters the application, not again below it). The slug is claimed once in the registry (`app.route`).
 // A claimed slug is therefore RESERVED among the unprefixed names: a folder (or file) called "Memories" is numbered
 // `memories-2` ({@link segmentsOf}). Folders and files are separate numbering spaces: file `a.b` and folder `a-b` are both
 // `a-b`. Without the trailing slash a path means the file when one has that slug, else the folder; with it, only the

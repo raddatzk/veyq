@@ -27,6 +27,7 @@ import { framesFor, framesOfBytes } from './copySource'
 import { ImportFailed } from './importSubtree'
 import type { ManifestPayload } from './manifest'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const FILE = 'C_FILE' // a Depot-like file: its import reads the payload by frame (`importStreams`)
 const COLLECTION = 'C_COLLECTION' // a Memory-like kind: both hooks, but its import needs whole payloads (no `importStreams`)
@@ -61,7 +62,7 @@ let failOn: string | null = null
 let corrupt: string | null = null
 
 beforeAll(() => {
-  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+  testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
     kind: FILE, icon: 'file', downloadsAsFile: true, importStreams: true, contentSchema: { application: 'c', version: 1 },
     copyLosses: ['c.fileLoss'],
     async exportContent(ctx) {
@@ -99,7 +100,7 @@ beforeAll(() => {
       return { nodeId: made.nodeId, nodeKey: made.contentKey }
     },
   })
-  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+  testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
     kind: COLLECTION, icon: 'file', contentSchema: { application: 'c', version: 1 }, copyLosses: ['c.collectionLoss'],
     async exportContent(ctx) {
       const bytes = contents.get('pic')!
@@ -111,7 +112,7 @@ beforeAll(() => {
       throw new Error('a collection is never handed a copy')
     },
   })
-  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+  testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
     kind: RAW, icon: 'file', importStreams: true, contentSchema: { application: 'c', version: 1 },
     // its import would take a payload by frame, but its export offers none: the copy cannot read it so
     async exportContent(ctx) {
@@ -123,7 +124,7 @@ beforeAll(() => {
       throw new Error('a raw node is never handed a copy')
     },
   })
-  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+  testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
     kind: BOX, icon: 'file', contentSchema: { application: 'c', version: 1 }, importsAsFolder: true, copyLosses: ['c.boxLoss'],
     exportContent: async () => ({ type: 'c.box', schema: 1 }),
   })

@@ -70,9 +70,10 @@ import { uploadBanner, writeMemoryBanner } from './banner/bannerWrite'
 
 export const MEMORY_CONTENT = 'memories.memory'
 export const CHAPTER_CONTENT = 'memories.chapter'
-/** The application id of both content types above, and the content schema this build writes and reads. */
-export const MEMORIES_CONTENT_SCHEMA = { application: 'memories', version: 1 } as const
-const SCHEMA = MEMORIES_CONTENT_SCHEMA.version
+/** The version of the content schema this build writes and reads; its application is Memories' registered id (`register.ts`), the
+ *  `<application>` part of both content types above. */
+export const MEMORIES_CONTENT_VERSION = 1
+const SCHEMA = MEMORIES_CONTENT_VERSION
 
 export type ExportedMedium = {
   file: ManifestPayload

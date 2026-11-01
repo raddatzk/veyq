@@ -34,6 +34,7 @@ import { fetchFileContent } from '../../features/depot/download'
 import { createDropBox, dropGuestContext, ensureDropFolder, mintDropBoxLink, nameDropGuest } from '../../features/depot/dropBox'
 import { guestFileUploadJob } from '../../features/depot/shareUpload'
 import { nothingOfItsOwnToRekey } from './rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const A_NAME = 'Umzug Kranichfeld'
 const B_NAME = 'Archiv Sommerwiese'
@@ -49,7 +50,7 @@ const wire: string[] = []
 let realFetch: typeof fetch
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
   realFetch = globalThis.fetch
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url

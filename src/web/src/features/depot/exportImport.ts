@@ -21,9 +21,10 @@ import { fileUploadJob } from './uploadFile'
 
 export const DEPOT_FILE_CONTENT = 'depot.file'
 export const DEPOT_DROPBOX_CONTENT = 'depot.drop-box'
-/** The application id of every content type above, and the content schema this build writes and reads. */
-export const DEPOT_CONTENT_SCHEMA = { application: 'depot', version: 1 } as const
-const SCHEMA = DEPOT_CONTENT_SCHEMA.version
+/** The version of the content schema this build writes and reads; its application is Depot's registered id (`register.ts`), the
+ *  `<application>` part of every content type above. */
+export const DEPOT_CONTENT_VERSION = 1
+const SCHEMA = DEPOT_CONTENT_VERSION
 
 /** The session's Depot source, made once per run. */
 function sourceOf(ctx: ExportNodeContext): DepotSource {

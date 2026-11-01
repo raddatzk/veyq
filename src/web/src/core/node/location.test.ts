@@ -23,6 +23,7 @@ import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memories/kinds'
 import { DROPBOX_KIND } from '../../features/depot/kinds'
 import type { TreeNode } from './tree'
 import { treeNode } from '../../test/models'
+import { testApp } from '../../test/testApplication'
 
 // A concrete personal token — any `~<username>` parses as personal (ADR 0023); `~me` is the fallback.
 const PERSONAL_SCOPE = '~me'
@@ -352,8 +353,8 @@ describe('displayNamesOf', () => {
 describe('the route grammar', () => {
   it('rests on what the applications claimed in the real registry: Memories `memories`, Depot no segment, Expenses `expenses`', () => {
     expect(registry.routeSlugs()).toEqual(['memories', 'expenses'])
-    expect(() => registry.claimRouteSlug('memories', ['SOMETHING'])).toThrow(/already claimed/) // Memories holds it
-    expect(() => registry.claimNoRouteSegment(['SOMETHING'])).toThrow(/no route segment/) // Depot declared it
+    expect(() => testApp(registry, 'loc-slug').route('memories')).toThrow(/already claimed/) // Memories holds it
+    expect(() => testApp(registry, 'loc-none').route(null)).toThrow(/no route segment/) // Depot declared it
     for (const kind of [MEMORY_KIND, CHAPTER_KIND]) expect(registry.routeOf(kind).slug).toBe('memories')
     for (const kind of ['FILE', DROPBOX_KIND]) expect(registry.routeOf(kind).slug).toBeNull()
   })

@@ -16,7 +16,7 @@ import { POT_KIND } from './kinds'
 import { expensesRights } from './rights'
 import { potRows } from './levelRows'
 import { rekeyPotContent } from './rekey'
-import { EXPENSES_CONTENT_SCHEMA, exportPot, importPot, validatePotContent } from './exportImport'
+import { EXPENSES_CONTENT_VERSION, exportPot, importPot, validatePotContent } from './exportImport'
 import PotCreateDialog from './components/PotCreateDialog.vue'
 import PotDetail from './components/PotDetail.vue'
 import PotShareDialog from './components/PotShareDialog.vue'
@@ -38,8 +38,10 @@ function emptyText(ctx: LevelActionContext): string {
 }
 
 export function registerExpenses(registry: Registry): void {
-  registry.registerKind({
-    kind: POT_KIND,
+  // Expenses names itself once (its entry of the capability register, which switches its kind,
+  // uc.platform.switch-application-off) and registers everything else through its registrar.
+  const app = registry.registerApplication({ id: EXPENSES, name: 'expenses.title' })
+  app.kind(POT_KIND, {
     icon: 'wallet',
     detail: PotDetail,
     shareDialog: PotShareDialog,
@@ -57,15 +59,14 @@ export function registerExpenses(registry: Registry): void {
     rekeyContent: rekeyPotContent,
     exportContent: exportPot,
     importContent: importPot,
-    contentSchema: EXPENSES_CONTENT_SCHEMA,
+    contentSchema: { version: EXPENSES_CONTENT_VERSION },
     validateContent: validatePotContent,
     // The import reads a receipt's payload only through the upload pump's frame-sized slices (the CSV is for a spreadsheet
     // only, never read), so a copy hands it the original read by frame and nothing is buffered whole.
     importStreams: true,
     copyLosses: ['expenses.copyLoss'],
   })
-  registry.claimRouteSlug('expenses', [POT_KIND])
-  registry.claimItemReview(PotEntryReview)
-  // Its kind is the Expenses application's, switched as one by its register entry (uc.platform.switch-application-off).
-  registry.registerApplication({ id: EXPENSES, name: 'expenses.title', kinds: [POT_KIND] })
+  app.route('expenses')
+  app.itemReview(PotEntryReview)
 }
+

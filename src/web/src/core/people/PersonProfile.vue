@@ -2,7 +2,7 @@
 // A member's profile page, `#people/<userId>` (ADR 0083 decision 6, uc.memory.participants). Members only: it is a route of
 // the unlocked shell (`SpaceView`), the share page has no such route and links to none. Core draws the page - the
 // name by the display rule (real name, else username), the avatar (the member's picture, else the letter; ADR 0084) -
-// and each application adds what it knows of the person as a SECTION (`registry.claimPersonSection`): Memories' "Memories
+// and each application adds what it knows of the person as a SECTION (`app.personSection`, its registrar's): Memories' "Memories
 // with this person". A user id the tenant directory does not list is a former member: greyed, no sections' data
 // is withheld from it (the sections still run - a former member can have been on a Memory), but nothing links to anything.
 // On a member's OWN page (`userId` is the signed-in account) an "Edit profile" control opens the shared name + picture editor

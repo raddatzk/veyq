@@ -24,6 +24,7 @@ import { epochsOf } from '../spaces/epochsTestUtil'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { session } from '../../app/session'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const SCOPE = '33333333-3333-4333-8333-333333333333'
 const FOLDER = '5c09e000-0000-4000-8000-0000000000f0'
@@ -38,7 +39,7 @@ const MODIFIED = 1_700_000_000_000
 // This node-environment suite gets no application registry (`src/test/setup.ts`), so it registers FILE with its own
 // folding on the app's registry, as Depot's `register.ts` does.
 beforeAll(() => {
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
   session.accessToken = 'access-token'
 })
 afterEach(() => {

@@ -18,6 +18,7 @@ import type { EpochKeys } from '../../features/spaces/epochs'
 import { importSubtree, openExport } from './importSubtree'
 import type { ManifestPayload } from './manifest'
 import { ZipWriter } from './zip'
+import { testKind } from '../../test/testApplication'
 
 const KIND = 'H_AHEAD'
 const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
@@ -29,7 +30,7 @@ const paths = ['Home/Series/a.txt', 'Home/Series/b.txt']
 let asks = 1
 
 beforeAll(() => {
-  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+  testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
     kind: KIND, icon: 'file', contentSchema: { application: 'ha', version: 1 },
     async exportContent() {
       throw new Error('not exported here')

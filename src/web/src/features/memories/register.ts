@@ -26,7 +26,7 @@ import MediumReview from './components/MediumReview.vue'
 import { memoriesLifecycle } from './lifecycle'
 import { memoryRights } from './rights'
 import { targetOf } from '../../core/access'
-import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_CONTENT_SCHEMA } from './exportImport'
+import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_CONTENT_VERSION } from './exportImport'
 // Memories' global stylesheet (inbox #513) — LAST, after the components above, as `memory.css` came after their scoped
 // styles; what its place before core's `style.css` means for its rules is that sheet's header.
 import './memories.css'
@@ -35,6 +35,10 @@ import './memories.css'
 export const MEMORIES_ROUTE_SLUG = 'memories'
 
 export function registerMemories(registry: Registry): void {
+  // Memories names itself once (its entry of the capability register, which switches its kinds as one,
+  // uc.platform.switch-application-off) and registers everything else through the registrar it is answered: its kinds are
+  // the ones registered here.
+  const app = registry.registerApplication({ id: MEMORIES, name: 'memory.memories' })
   // A Memory (cr-0104) and a chapter (ADR 0080 Decision 13) are both share roots for every role — the backend's
   // `MemoryShareRoots` — and both open the same detail, to the gallery (cr-0060). A chapter's share wraps its own
   // `K_node`: its guest holds nothing of the Memory above it.
@@ -54,7 +58,7 @@ export function registerMemories(registry: Registry): void {
     // picked image equal to a gallery medium's original shares that medium's PREVIEW instead of being stored again.
     cover: { findStored: findStoredCover },
     exportContent: exportMemoryContent,
-    contentSchema: MEMORIES_CONTENT_SCHEMA,
+    contentSchema: { version: MEMORIES_CONTENT_VERSION },
     validateContent: validateMemoryContent,
     // What a copy or an import does not carry of a Memory (core's copy dialog lists it). `importStreams`: a copy hands each
     // medium's existing tiers and sealed facts over and its import uploads them as they are, so it never decodes an original
@@ -71,28 +75,27 @@ export function registerMemories(registry: Registry): void {
     allowed: (ctx: LevelActionContext) => memoryRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createMemory,
     enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
   }
-  registry.registerKind({
-    kind: MEMORY_KIND, ...memories, importContent: importMemoryContent(MEMORY_KIND), rekeyContent: rekeyMemoryContent, createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
+  app.kind(MEMORY_KIND, {
+    ...memories, importContent: importMemoryContent(MEMORY_KIND), rekeyContent: rekeyMemoryContent, createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
     placement: { root: true, parents: [FOLDER_KIND] },
   })
-  registry.registerKind({
-    kind: CHAPTER_KIND, ...memories, importContent: importMemoryContent(CHAPTER_KIND), rekeyContent: rekeyMemoryContent, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
+  app.kind(CHAPTER_KIND, {
+    ...memories, importContent: importMemoryContent(CHAPTER_KIND), rekeyContent: rekeyMemoryContent, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
     placement: { root: false, parents: [MEMORY_KIND] },
   })
   // Its nodes' URLs carry the application's segment: a Memory `rom` in `reisen` is `#reisen/memories/rom`, its chapters
   // extend that (`…/rom/tag-1`). The slug is reserved in the unprefixed namespace: a folder called "Memories" is
   // `memories-2` (`core/node/location.ts`, inbox #328).
-  registry.claimRouteSlug(MEMORIES_ROUTE_SLUG, [MEMORY_KIND, CHAPTER_KIND])
-  // Its kinds are the Memories application's, switched as one by its register entry (uc.platform.switch-application-off).
-  registry.registerApplication({ id: MEMORIES, name: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] })
+  app.route(MEMORIES_ROUTE_SLUG)
   // The drop page of a WRITE_ONLY link rooted at a MEMORY or a CHAPTER (`PublicShare.rootKind`): its guest holds no key,
   // so it is the one page Memories draws for a guest alone. A viewer's or contributor's link is the detail above, for a
   // guest through core's share page (inbox #401).
-  registry.claimShareBody(MEMORY_KIND, MemoryShareBody)
-  registry.claimShareBody(CHAPTER_KIND, MemoryShareBody)
+  app.shareBody(MEMORY_KIND, MemoryShareBody)
+  app.shareBody(CHAPTER_KIND, MemoryShareBody)
   // A person's profile (`#people/<userId>`, ADR 0083) lists the Memories they took part in: Memories' section of core's page.
-  registry.claimPersonSection(PersonMemories)
+  app.personSection(PersonMemories)
   // A reported medium's review (uc.moderation.review-a-case A5): a medium is Memories' record, core cannot draw it.
-  registry.claimItemReview(MediumReview)
-  registry.registerLifecycle(MEMORIES, memoriesLifecycle) // under the id it registered above
+  app.itemReview(MediumReview)
+  app.lifecycle(memoriesLifecycle)
 }
+

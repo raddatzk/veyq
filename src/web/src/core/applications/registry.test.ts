@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { createRegistry, RESERVED_ROUTE_SEGMENTS, type KindDescriptor, type LifecycleHooks } from './registry'
+import { createRegistry, RESERVED_ROUTE_SEGMENTS, type KindRegistration, type LifecycleHooks } from './registry'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import { GRID_VIEW } from '../node/levelViews'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memories/kinds'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
+import { testApp, testKind } from '../../test/testApplication'
 
 const Stub = defineComponent({ template: '<div />' })
 const Other = defineComponent({ template: '<span />' })
@@ -21,14 +22,14 @@ describe('registry: kinds', () => {
 
   it('is write-once: registering the same kind twice throws and keeps the first descriptor', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'images' })
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file' })).toThrow(/already registered/)
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'images' })
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file' })).toThrow(/already registered/)
     expect(r.kind(MEMORY_KIND)).toMatchObject({ supported: true, icon: 'images' })
   })
 
   it('refuses an application re-registering the platform FOLDER', () => {
     const r = createRegistry()
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FOLDER_KIND, icon: 'file' })).toThrow(/already registered/)
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: FOLDER_KIND, icon: 'file' })).toThrow(/already registered/)
     expect(r.kind(FOLDER_KIND)).toMatchObject({ icon: 'folder' })
   })
 
@@ -45,7 +46,7 @@ describe('registry: kinds', () => {
   // registered from rendering as anything but the explicit unsupported state (cr-platform-contract-split slice 4).
   it('answers by the registered token only: an unregistered kind is unsupported, whatever its spelling', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'EXPENSE', icon: 'tag' })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'EXPENSE', icon: 'tag' })
     expect(r.kind('EXPENSE')).toMatchObject({ supported: true, kind: 'EXPENSE', icon: 'tag' })
     for (const unknown of ['INVOICE', 'expense', 'EXPENSES', '']) {
       expect(r.kind(unknown)).toEqual({ supported: false, kind: unknown })
@@ -56,8 +57,8 @@ describe('registry: kinds', () => {
 
   it('copies the descriptor: mutating the caller object afterwards does not change the registration', () => {
     const r = createRegistry()
-    const d: KindDescriptor = { kind: MEMORY_KIND, icon: 'images', rekeyContent: nothingOfItsOwnToRekey }
-    r.registerKind(d)
+    const d: KindRegistration = { icon: 'images', rekeyContent: nothingOfItsOwnToRekey }
+    testApp(r).kind(MEMORY_KIND, d)
     d.icon = 'file'
     expect(r.kind(MEMORY_KIND)).toMatchObject({ icon: 'images' })
   })
@@ -68,7 +69,7 @@ describe('registry: kinds', () => {
 describe('registry: the kind\'s slug folding', () => {
   it('folds with slugify for a kind that registers no hook, the platform FOLDER included', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'images' })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'images' })
     expect(r.tokenInputFor(FOLDER_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG'))
     expect(r.tokenInputFor(MEMORY_KIND, 'Day1.md')).toBe('day1-md')
   })
@@ -79,7 +80,7 @@ describe('registry: the kind\'s slug folding', () => {
 
   it('folds with the kind\'s own hook when it registers one, and only for that kind', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', slug: fileNameSlug })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', slug: fileNameSlug })
     expect(r.tokenInputFor('LEAF', 'Day1.md')).toBe('day1.md')
     expect(r.tokenInputFor('LEAF', 'Foto.JPG')).toBe(r.tokenInputFor('LEAF', 'foto.jpg'))
     expect(r.tokenInputFor(FOLDER_KIND, 'Day1.md')).toBe('day1-md')
@@ -88,8 +89,8 @@ describe('registry: the kind\'s slug folding', () => {
 
   it('keeps the first hook: a second registration of the kind throws and does not swap the folding', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', slug: fileNameSlug })
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', slug: () => 'x' })).toThrow(/already registered/)
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', slug: fileNameSlug })
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', slug: () => 'x' })).toThrow(/already registered/)
     expect(r.tokenInputFor('LEAF', 'A.B')).toBe('a.b')
   })
 })
@@ -100,12 +101,16 @@ describe('registry: the kind\'s slug folding', () => {
 describe('registry: tokenInputFor', () => {
   function routed() {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'images' })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'POT', icon: 'file' })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', slug: fileNameSlug })
-    r.claimRouteSlug('memories', [MEMORY_KIND, CHAPTER_KIND])
-    r.claimRouteSlug('expenses', ['POT'])
-    r.claimNoRouteSegment(['LEAF'])
+    const memories = r.registerApplication({ id: 'memories', name: 'm' })
+    memories.kind(MEMORY_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'images' })
+    memories.kind(CHAPTER_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'images' })
+    memories.route('memories')
+    const expenses = r.registerApplication({ id: 'expenses', name: 'e' })
+    expenses.kind('POT', { rekeyContent: nothingOfItsOwnToRekey, icon: 'file' })
+    expenses.route('expenses')
+    const depot = r.registerApplication({ id: 'depot', name: 'd' })
+    depot.kind('LEAF', { rekeyContent: nothingOfItsOwnToRekey, icon: 'file', slug: fileNameSlug })
+    depot.route(null)
     return r
   }
 
@@ -116,7 +121,7 @@ describe('registry: tokenInputFor', () => {
     expect(r.tokenInputFor('POT', 'Korfubanien')).toBe('expenses/korfubanien')
   })
 
-  it('keeps the bare slug for a folder, the application with no segment and a kind nobody claimed', () => {
+  it('keeps the bare slug for a folder, the application with no segment and a kind nobody registered', () => {
     const r = routed()
     expect(r.tokenInputFor(FOLDER_KIND, 'Korfubanien')).toBe('korfubanien')
     expect(r.tokenInputFor('LEAF', 'Korfubanien')).toBe('korfubanien')
@@ -131,10 +136,10 @@ describe('registry: tokenInputFor', () => {
     expect(r.tokenInputFor('LEAF', 'rom')).toBe(r.tokenInputFor(FOLDER_KIND, 'Rom'))
   })
 
-  it('takes the folding from the kind\'s hook, the prefix from its claim', () => {
+  it('takes the folding from the kind\'s hook, the prefix from its application\'s route', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', slug: fileNameSlug })
-    r.claimRouteSlug('leaves', ['LEAF'])
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', slug: fileNameSlug })
+    testApp(r).route('leaves')
     expect(r.tokenInputFor('LEAF', 'Day1.md')).toBe('leaves/day1.md')
   })
 })
@@ -157,9 +162,9 @@ describe('registry: dialogs per kind', () => {
 
   it('hands each kind its own createDialog and shareDialog; one component may serve several kinds', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', createDialog: Stub, shareDialog: Other })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', createDialog: Stub, shareDialog: Other })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file' })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', createDialog: Stub, shareDialog: Other })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', createDialog: Stub, shareDialog: Other })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file' })
     for (const k of [MEMORY_KIND, CHAPTER_KIND]) expect(r.kind(k)).toMatchObject({ createDialog: Stub, shareDialog: Other })
     const leaf = r.kind('LEAF')
     expect(leaf.supported && [leaf.createDialog, leaf.shareDialog]).toEqual([undefined, undefined])
@@ -169,7 +174,7 @@ describe('registry: dialogs per kind', () => {
   it("an application cannot replace FOLDER's share dialog (FOLDER is write-once like every kind)", () => {
     const r = createRegistry()
     const before = r.kind(FOLDER_KIND)
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FOLDER_KIND, icon: 'file', shareDialog: Stub })).toThrow(/already registered/)
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: FOLDER_KIND, icon: 'file', shareDialog: Stub })).toThrow(/already registered/)
     expect(r.kind(FOLDER_KIND)).toEqual(before)
   })
 
@@ -188,17 +193,17 @@ describe('registry: dialogs per kind', () => {
   it('two registries do not share state', () => {
     const a = createRegistry()
     const b = createRegistry()
-    a.registerApplication({ id: 'a', name: 'a.name', kinds: [MEMORY_KIND] })
-    a.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', shareDialog: Stub })
+    a.registerApplication({ id: 'a', name: 'a.name' }).kind(MEMORY_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'file', shareDialog: Stub })
     expect(b.applications()).toEqual([])
     expect(b.kind(MEMORY_KIND).supported).toBe(false)
+    b.registerApplication({ id: 'a', name: 'a.name' }) // the id is free in the other one
   })
 
   it('lists every registered kind, FOLDER first, then in registration order (a copy)', () => {
     const r = createRegistry()
     expect(r.kinds()).toEqual([FOLDER_KIND])
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file' })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file' })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file' })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file' })
     expect(r.kinds()).toEqual([FOLDER_KIND, MEMORY_KIND, 'LEAF'])
     ;(r.kinds() as string[]).push('FORGED')
     expect(r.kinds()).toEqual([FOLDER_KIND, MEMORY_KIND, 'LEAF'])
@@ -206,69 +211,84 @@ describe('registry: dialogs per kind', () => {
 })
 
 describe('registry: drop pages (share bodies)', () => {
-  it('is empty until claimed: shareBody() is null, not undefined', () => {
+  /** A registry whose test application owns `kinds`. */
+  const owning = (...kinds: string[]) => {
     const r = createRegistry()
-    expect(r.shareBody(MEMORY_KIND)).toBeNull()
+    for (const kind of kinds) testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind, icon: 'file' })
+    return r
+  }
+
+  it('is empty until claimed: shareBodyFor() is null, not undefined', () => {
+    const r = createRegistry()
+    expect(r.shareBodyFor(MEMORY_KIND)).toBeNull()
   })
 
   it('is single-claim per key: a second claim throws and the first body stays', () => {
-    const r = createRegistry()
-    r.claimShareBody(MEMORY_KIND, Stub)
-    expect(() => r.claimShareBody(MEMORY_KIND, Other)).toThrow(/already claimed/)
-    expect(r.shareBody(MEMORY_KIND)).toBe(Stub)
+    const r = owning(MEMORY_KIND)
+    testApp(r).shareBody(MEMORY_KIND, Stub)
+    expect(() => testApp(r).shareBody(MEMORY_KIND, Other)).toThrow(/already claimed/)
+    expect(r.shareBodyFor(MEMORY_KIND)).toBe(Stub)
   })
 
   it('answers by the claimed kind token only: a root kind nobody claimed has no body', () => {
-    const r = createRegistry()
-    r.claimShareBody('EXPENSE', Stub)
-    expect(r.shareBody('EXPENSE')).toBe(Stub)
-    for (const unclaimed of [MEMORY_KIND, 'expense', 'EXPENSES', 'drop', '']) expect(r.shareBody(unclaimed)).toBeNull()
+    const r = owning('EXPENSE', MEMORY_KIND)
+    testApp(r).shareBody('EXPENSE', Stub)
+    expect(r.shareBodyFor('EXPENSE')).toBe(Stub)
+    for (const unclaimed of [MEMORY_KIND, 'expense', 'EXPENSES', 'drop', '']) expect(r.shareBodyFor(unclaimed)).toBeNull()
     // Control: claiming one kind leaves another free to claim.
-    expect(() => r.claimShareBody(MEMORY_KIND, Other)).not.toThrow()
-    expect(r.shareBody(MEMORY_KIND)).toBe(Other)
+    expect(() => testApp(r).shareBody(MEMORY_KIND, Other)).not.toThrow()
+    expect(r.shareBodyFor(MEMORY_KIND)).toBe(Other)
   })
+
+  // An application draws the drop page of its OWN kind: another's kind, or one nobody registered, is refused.
+  it('refuses a claim of a kind the application does not own, and keeps nothing of it', () => {
+    const r = owning(MEMORY_KIND)
+    const other = r.registerApplication({ id: 'other', name: 'o' })
+    expect(() => other.shareBody(MEMORY_KIND, Stub)).toThrow(/not a kind of other/)
+    expect(() => other.shareBody('NOBODY', Stub)).toThrow(/not a kind of other/)
+    expect(r.shareBodyFor(MEMORY_KIND)).toBeNull()
+    testApp(r).shareBody(MEMORY_KIND, Stub) // control: its owner may
+  })
+
   // A WRITE_ONLY link's drop page is an application's (inbox #401 S5); no such link roots at a folder (ADR 0080 decision
   // 11), so FOLDER is claimed by nobody — an application's claim of it throws and leaves it unclaimed.
   it('refuses a claim of FOLDER: no drop page for the platform kind', () => {
     const r = createRegistry()
-    expect(r.shareBody(FOLDER_KIND)).toBeNull()
-    expect(() => r.claimShareBody(FOLDER_KIND, Stub)).toThrow(/already claimed/)
-    expect(r.shareBody(FOLDER_KIND)).toBeNull()
+    expect(r.shareBodyFor(FOLDER_KIND)).toBeNull()
+    expect(() => testApp(r).shareBody(FOLDER_KIND, Stub)).toThrow(/already claimed/)
+    expect(r.shareBodyFor(FOLDER_KIND)).toBeNull()
   })
 })
 
 describe('registry: lifecycle hooks', () => {
   const hooks = (over: Partial<LifecycleHooks> = {}): LifecycleHooks => ({ onMasterKeyRotated: async () => {}, ...over })
-  /** A registry that named the applications `ids` (one kind each), as a composition root does before their hooks. */
+  /** A registry that named the applications `ids`, as a composition root does; the registrars by id. */
   const named = (...ids: string[]) => {
     const r = createRegistry()
-    for (const id of ids) r.registerApplication({ id, name: `${id}.name`, kinds: [`K_${id.toUpperCase()}`] })
-    return r
+    const apps = Object.fromEntries(ids.map((id) => [id, r.registerApplication({ id, name: `${id}.name` })]))
+    return Object.assign(r, { apps })
   }
 
-  it('is write-once per application id: a second registration throws and the first hooks stay', () => {
+  it('is write-once per application: a second registration throws and the first hooks stay', () => {
     const r = named('memories')
     const first = vi.fn()
-    r.registerLifecycle('memories', hooks({ onScopeReset: first }))
-    expect(() => r.registerLifecycle('memories', hooks({ onScopeReset: vi.fn() }))).toThrow(/already registered/)
+    r.apps.memories.lifecycle(hooks({ onScopeReset: first }))
+    expect(() => r.apps.memories.lifecycle(hooks({ onScopeReset: vi.fn() }))).toThrow(/already registered/)
     r.scopeReset()
     expect(first).toHaveBeenCalledTimes(1)
   })
 
-  it('refuses the hooks of an application nobody named, and keeps nothing of them', async () => {
+  // Hooks go in only through an application's registrar: there is no door that takes an id an application does not hold.
+  it('has no free lifecycle door: hooks exist only for an application this build names', () => {
     const r = named('memories')
-    const rotated = vi.fn(async () => {})
-    expect(() => r.registerLifecycle('memoirs', hooks({ onMasterKeyRotated: rotated }))).toThrow(/no application memoirs is registered/)
-    expect(() => createRegistry().registerLifecycle('memories', hooks())).toThrow(/registerApplication first/)
-    await r.masterKeyRotated(new Uint8Array([1]), new Uint8Array([2]), [])
-    expect(rotated).not.toHaveBeenCalled()
-    r.registerLifecycle('memories', hooks()) // control: the named id is taken
+    // @ts-expect-error the free `registerLifecycle(id, hooks)` is gone (owner 2026-11-01): `app.lifecycle(hooks)`
+    expect(r.registerLifecycle).toBeUndefined()
   })
 
   it('refuses a hook set without onMasterKeyRotated (it is required, not optional)', () => {
     const r = named('x')
-    expect(() => r.registerLifecycle('x', {} as LifecycleHooks)).toThrow(/onMasterKeyRotated/)
-    r.registerLifecycle('x', hooks()) // the refused registration left nothing behind: the id is still free
+    expect(() => r.apps.x.lifecycle({} as LifecycleHooks)).toThrow(/onMasterKeyRotated/)
+    r.apps.x.lifecycle(hooks()) // the refused registration left nothing behind: the application may still register
   })
 
   // There is no registry-wide rotation gate (see the registry's header): core re-seals its own Master-Key material itself,
@@ -284,8 +304,8 @@ describe('registry: lifecycle hooks', () => {
     const r = named('a', 'b')
     const a = vi.fn(async () => {})
     const b = vi.fn(async () => {})
-    r.registerLifecycle('a', hooks({ onMasterKeyRotated: a }))
-    r.registerLifecycle('b', hooks({ onMasterKeyRotated: b }))
+    r.apps.a.lifecycle(hooks({ onMasterKeyRotated: a }))
+    r.apps.b.lifecycle(hooks({ onMasterKeyRotated: b }))
     const o = new Uint8Array([1])
     const n = new Uint8Array([2])
     await r.masterKeyRotated(o, n, ['s1'])
@@ -296,113 +316,168 @@ describe('registry: lifecycle hooks', () => {
   it('a failing hook does not stop the next application, and its error is rethrown afterwards', async () => {
     const r = named('a', 'b')
     const second = vi.fn()
-    r.registerLifecycle('a', hooks({ onScopeEntered: () => Promise.reject(new Error('boom')) }))
-    r.registerLifecycle('b', hooks({ onScopeEntered: second }))
+    r.apps.a.lifecycle(hooks({ onScopeEntered: () => Promise.reject(new Error('boom')) }))
+    r.apps.b.lifecycle(hooks({ onScopeEntered: second }))
     await expect(r.scopeEntered('s1')).rejects.toThrow('boom')
     expect(second).toHaveBeenCalledWith('s1')
   })
 
   it('optional hooks may be absent: scopeReset / scopeEntered are no-ops for an application that sets none', async () => {
     const r = named('a')
-    r.registerLifecycle('a', hooks())
+    r.apps.a.lifecycle(hooks())
     expect(() => r.scopeReset()).not.toThrow()
     await expect(r.scopeEntered('s1')).resolves.toBeUndefined()
   })
 })
 
-// Inbox #328: an application claims its URL route slug once (ADR 0015); Depot declares it has none.
+// The scoped registrar (owner 2026-11-01): an application names itself once and registers everything through what it is
+// answered - its kinds are the ones it registered, its id lives in one place.
 describe('registry: applications (uc.platform.switch-application-off)', () => {
-  it('names each application once with its kinds; a kind answers its application, a folder and a stranger none', () => {
+  it('derives ownership from the registrations: a kind answers the application that registered it, a folder and a stranger none', () => {
     const r = createRegistry()
-    r.registerApplication({ id: 'memories', name: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] })
-    r.registerApplication({ id: 'depot', name: 'depot.title', kinds: ['FILE', 'DEPOT_DROPBOX'] })
+    const memories = r.registerApplication({ id: 'memories', name: 'memory.memories' })
+    memories.kind(MEMORY_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'images' })
+    const depot = r.registerApplication({ id: 'depot', name: 'depot.title' })
+    depot.kind('FILE', { rekeyContent: nothingOfItsOwnToRekey, icon: 'file' })
+    memories.kind(CHAPTER_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'images' }) // in any order
+    depot.kind('DEPOT_DROPBOX', { rekeyContent: nothingOfItsOwnToRekey, icon: 'inbox' })
     expect(r.applications()).toEqual([{ id: 'memories', name: 'memory.memories' }, { id: 'depot', name: 'depot.title' }])
-    expect(r.applicationOf(CHAPTER_KIND)).toBe('memories')
-    expect(r.applicationOf('DEPOT_DROPBOX')).toBe('depot')
+    expect([MEMORY_KIND, CHAPTER_KIND, 'FILE', 'DEPOT_DROPBOX'].map((k) => r.applicationOf(k))).toEqual(['memories', 'memories', 'depot', 'depot'])
     expect(r.applicationOf(FOLDER_KIND)).toBeNull()
     expect(r.applicationOf('NOBODY')).toBeNull()
+    expect(memories.id).toBe('memories')
   })
 
-  it('refuses an id twice, a kind twice, FOLDER and no kind at all — and keeps nothing of a refused one', () => {
+  it('refuses an id twice, and a kind another application registered — keeping nothing of the refused one', () => {
     const r = createRegistry()
-    r.registerApplication({ id: 'memories', name: 'memory.memories', kinds: [MEMORY_KIND] })
-    expect(() => r.registerApplication({ id: 'memories', name: 'x', kinds: ['OTHER'] })).toThrow(/already registered/)
-    expect(() => r.registerApplication({ id: 'other', name: 'x', kinds: ['OTHER', MEMORY_KIND] })).toThrow(/already belongs to memories/)
-    expect(() => r.registerApplication({ id: 'other', name: 'x', kinds: [FOLDER_KIND] })).toThrow(/platform/)
-    expect(() => r.registerApplication({ id: 'other', name: 'x', kinds: [] })).toThrow(/names no node kind/)
-    expect(r.applicationOf('OTHER')).toBeNull()
-    expect(r.applications().map((a) => a.id)).toEqual(['memories'])
+    const memories = r.registerApplication({ id: 'memories', name: 'memory.memories' })
+    memories.kind(MEMORY_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'images' })
+    expect(() => r.registerApplication({ id: 'memories', name: 'x' })).toThrow(/already registered/)
+    const other = r.registerApplication({ id: 'other', name: 'x' })
+    expect(() => other.kind(MEMORY_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'file' })).toThrow(/already registered/)
+    expect(() => other.kind(FOLDER_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'file' })).toThrow(/already registered/)
+    expect(r.applicationOf(MEMORY_KIND)).toBe('memories')
+    expect(r.applicationOf(FOLDER_KIND)).toBeNull()
+    expect(r.kind(MEMORY_KIND)).toMatchObject({ icon: 'images' })
+    expect(r.applications().map((a) => a.id)).toEqual(['memories', 'other'])
+  })
+
+  // `app.id` is the one place the id lives: a kind's content schema names its application from it.
+  it('fills a kind\'s content schema in with its application\'s id', () => {
+    const r = createRegistry()
+    r.registerApplication({ id: 'pots', name: 'p' }).kind('POT', { rekeyContent: nothingOfItsOwnToRekey, icon: 'wallet', contentSchema: { version: 3 } })
+    r.registerApplication({ id: 'bare', name: 'b' }).kind('BARE', { rekeyContent: nothingOfItsOwnToRekey, icon: 'file' })
+    expect(r.kind('POT')).toMatchObject({ contentSchema: { application: 'pots', version: 3 } })
+    expect(r.kind('BARE')).not.toHaveProperty('contentSchema')
+  })
+
+  it('has no free register functions: everything an application registers goes through its registrar', () => {
+    const r = createRegistry()
+    for (const gone of ['registerKind', 'claimRouteSlug', 'claimNoRouteSegment', 'registerLifecycle', 'claimShareBody', 'claimPersonSection', 'claimItemReview']) {
+      expect((r as unknown as Record<string, unknown>)[gone], gone).toBeUndefined()
+    }
+    expect(Object.isFrozen(r.registerApplication({ id: 'a', name: 'a' })), 'a registrar cannot be patched').toBe(true)
   })
 })
 
-describe('registry: route slugs', () => {
-  it('maps the claimed kinds to their application\'s slug and group, a folder and the rest to none', () => {
+describe('registry: routes', () => {
+  /** A registry with Memories (slug `memories`) and Depot (no segment), as the composition root registers them. */
+  function routedApps() {
     const r = createRegistry()
-    r.claimRouteSlug('memories', [MEMORY_KIND, CHAPTER_KIND])
-    r.claimNoRouteSegment(['FILE', 'DEPOT_DROPBOX'])
+    const memories = r.registerApplication({ id: 'memories', name: 'm' })
+    memories.kind(MEMORY_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'images' })
+    memories.kind(CHAPTER_KIND, { rekeyContent: nothingOfItsOwnToRekey, icon: 'images' })
+    memories.route('memories')
+    const depot = r.registerApplication({ id: 'depot', name: 'd' })
+    depot.kind('FILE', { rekeyContent: nothingOfItsOwnToRekey, icon: 'file' })
+    depot.route(null)
+    depot.kind('DEPOT_DROPBOX', { rekeyContent: nothingOfItsOwnToRekey, icon: 'inbox' }) // a kind after the decision is covered too
+    return { r, memories, depot }
+  }
+
+  it('maps every kind of an application to its slug and group, a folder and the rest to none', () => {
+    const { r } = routedApps()
     expect(r.routeOf(MEMORY_KIND)).toEqual({ slug: 'memories', group: 'application:memories' })
     expect(r.routeOf(CHAPTER_KIND)).toEqual({ slug: 'memories', group: 'application:memories' })
     expect(r.routeOf('FILE')).toEqual({ slug: null, group: 'none' })
     expect(r.routeOf('DEPOT_DROPBOX')).toEqual(r.routeOf('FILE'))
     expect(r.routeOf(FOLDER_KIND)).toEqual({ slug: null, group: 'folder' })
-    // a kind nobody claimed has no segment and numbers among the plain names of the segment-less application
+    // a kind nobody registered has no segment and numbers among the plain names of the segment-less application
     expect(r.routeOf('FUTURE')).toEqual({ slug: null, group: 'none' })
     expect(r.routeSlugs()).toEqual(['memories'])
   })
 
-  it('is write-once: a second claim of a slug throws and keeps the first', () => {
-    const r = createRegistry()
-    r.claimRouteSlug('memories', [MEMORY_KIND])
-    expect(() => r.claimRouteSlug('memories', ['OTHER'])).toThrow(/already claimed/)
-    expect(r.routeOf('OTHER').slug).toBeNull()
+  it('is decided once per application: a second decision throws, whichever, and keeps the first', () => {
+    const { r, memories, depot } = routedApps()
+    expect(() => memories.route('memoirs')).toThrow(/already decided/)
+    expect(() => memories.route(null)).toThrow(/already decided/)
+    expect(() => depot.route('files')).toThrow(/already decided/)
     expect(r.routeOf(MEMORY_KIND).slug).toBe('memories')
+    expect(r.routeSlugs(), 'a refused decision claims no slug').toEqual(['memories'])
   })
 
-  it('refuses a kind claimed twice (also under another slug), FOLDER, and an empty claim — and registers nothing then', () => {
-    const r = createRegistry()
-    r.claimRouteSlug('memories', [MEMORY_KIND])
-    expect(() => r.claimRouteSlug('other', [MEMORY_KIND])).toThrow(/already claimed/)
-    expect(() => r.claimNoRouteSegment([MEMORY_KIND])).toThrow(/already claimed/)
-    expect(() => r.claimRouteSlug('folders', [FOLDER_KIND])).toThrow(/platform/)
-    expect(() => r.claimNoRouteSegment([FOLDER_KIND])).toThrow(/platform/)
-    expect(() => r.claimRouteSlug('empty', [])).toThrow(/no node kind/)
-    // an atomic claim: one bad kind among good ones claims none
-    expect(() => r.claimRouteSlug('mixed', ['A', MEMORY_KIND])).toThrow()
-    expect(r.routeOf('A').slug).toBeNull()
-    expect(r.routeSlugs()).toEqual(['memories'])
-    r.claimRouteSlug('mixed', ['A']) // the slug stayed free
+  it('refuses a slug another application claimed, and keeps it the first one\'s', () => {
+    const { r } = routedApps()
+    const other = r.registerApplication({ id: 'other', name: 'o' })
+    other.kind('OTHER', { rekeyContent: nothingOfItsOwnToRekey, icon: 'file' })
+    expect(() => other.route('memories')).toThrow(/already claimed/)
+    expect(r.routeOf('OTHER').slug).toBeNull()
+    expect(r.routeDecided('OTHER'), 'the refused decision decided nothing').toBe(false)
+    other.route('others') // control: the application may still decide
+    expect(r.routeOf('OTHER')).toEqual({ slug: 'others', group: 'application:others' })
   })
 
   it('lets one application declare it has no segment — a second one cannot share the plain names', () => {
-    const r = createRegistry()
-    r.claimNoRouteSegment(['FILE'])
-    expect(() => r.claimNoRouteSegment(['INVOICE'])).toThrow(/no route segment/)
-    expect(r.routeOf('INVOICE')).toEqual({ slug: null, group: 'none' }) // unclaimed, but only as any unknown kind is
+    const { r } = routedApps()
+    const invoices = r.registerApplication({ id: 'invoices', name: 'i' })
+    invoices.kind('INVOICE', { rekeyContent: nothingOfItsOwnToRekey, icon: 'file' })
+    expect(() => invoices.route(null)).toThrow(/no route segment/)
+    expect(r.routeOf('INVOICE')).toEqual({ slug: null, group: 'none' }) // undecided, but only as any unknown kind is
   })
 
-  it('tells a kind whose route was decided (a slug, or no segment) from one nobody claimed, which routes alike', () => {
-    const r = createRegistry()
-    r.claimRouteSlug('memories', [MEMORY_KIND])
-    r.claimNoRouteSegment(['FILE'])
+  it('tells a kind whose route was decided (a slug, or no segment) from one whose application decided nothing, which routes alike', () => {
+    const { r } = routedApps()
+    r.registerApplication({ id: 'invoices', name: 'i' }).kind('INVOICE', { rekeyContent: nothingOfItsOwnToRekey, icon: 'file' })
     expect([MEMORY_KIND, 'FILE'].map((k) => r.routeDecided(k))).toEqual([true, true])
-    expect(r.routeOf('INVOICE')).toEqual(r.routeOf('FILE')) // the premise: an unclaimed kind shares the plain names…
+    expect(r.routeOf('INVOICE')).toEqual(r.routeOf('FILE')) // the premise: an undecided kind shares the plain names…
     expect(r.routeDecided('INVOICE')).toBe(false) // …and yet decided nothing
-    expect(r.routeDecided(FOLDER_KIND)).toBe(false) // the platform's, claimed by no application
+    expect(r.routeDecided('NOBODY')).toBe(false) // a kind nobody registered
+    expect(r.routeDecided(FOLDER_KIND)).toBe(false) // the platform's, decided by no application
   })
 
   it('refuses a slug that is no slug, and the words the platform keeps', () => {
     const r = createRegistry()
+    const app = r.registerApplication({ id: 'a', name: 'a' })
     for (const bad of ['', 'Memories', 'a b', '-a', 'a-', 'a--b', '1a', 'a/b', '~me', '@g', 'a%2Fb']) {
-      expect(() => r.claimRouteSlug(bad, [`K${bad.length}`]), bad).toThrow(/not a slug/)
+      expect(() => app.route(bad), bad).toThrow(/not a slug/)
     }
     expect(RESERVED_ROUTE_SEGMENTS.length).toBeGreaterThan(0)
     for (const word of RESERVED_ROUTE_SEGMENTS) {
-      expect(() => r.claimRouteSlug(word, ['K']), word).toThrow(/reserved/)
+      expect(() => app.route(word), word).toThrow(/reserved/)
     }
     // the platform's history-mode routes are among them
     for (const word of ['login', 'settings', 'invitations', 's', 'api', 'people']) expect(RESERVED_ROUTE_SEGMENTS).toContain(word)
-    expect(() => r.claimRouteSlug('people', ['PERSON']), 'the profile route (ADR 0083)').toThrow(/reserved/)
+    expect(() => app.route('people'), 'the profile route (ADR 0083)').toThrow(/reserved/)
     expect(r.routeSlugs()).toEqual([])
+    app.route('fine') // every refusal left the decision open
+  })
+})
+
+// A kind whose nodes are no row (a future application's one pool per space, `docs/apps/inventory.md`).
+describe('registry: kinds that are no row (listed: false)', () => {
+  it('answers listed for every kind but one registered listed: false - a kind nobody registered is listed (as the unsupported row)', () => {
+    const r = createRegistry()
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'POOL', icon: 'inbox', listed: false })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ITEM', icon: 'file' })
+    expect(['POOL', 'ITEM', FOLDER_KIND, 'NOBODY'].map((k) => r.listed(k))).toEqual([false, true, true, true])
+  })
+
+  it('refuses a kind that is not listed but names a list, and registers nothing of it', () => {
+    const r = createRegistry()
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'POOL', icon: 'inbox', listed: false, list: { rows: () => ({ row: () => null }) } }))
+      .toThrow(/not listed but names a list/)
+    expect(r.kind('POOL').supported).toBe(false)
+    expect(r.lists()).toEqual([])
   })
 })
 
@@ -412,30 +487,30 @@ describe('registry: the level "New" menu (inbox #406)', () => {
 
   it('is empty until a kind brings an entry', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file' })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file' })
     expect(r.levelMenu()).toEqual([])
   })
 
   it('lists every create entry (id create:<KIND>) and level action by order, a tie in registration order', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'B', icon: 'file', createDialog: Stub, createEntry: entry(20, 'b.new') })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', createDialog: Stub, createEntry: entry(10, 'a.new'), levelActions: [{ id: 'a.up', ...entry(30, 'a.up') }] })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'C', icon: 'file', createDialog: Stub, createEntry: entry(20, 'c.new') })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'B', icon: 'file', createDialog: Stub, createEntry: entry(20, 'b.new') })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', createDialog: Stub, createEntry: entry(10, 'a.new'), levelActions: [{ id: 'a.up', ...entry(30, 'a.up') }] })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'C', icon: 'file', createDialog: Stub, createEntry: entry(20, 'c.new') })
     expect(r.levelMenu().map((e) => [e.id, e.create ?? null])).toEqual([['create:A', 'A'], ['create:B', 'B'], ['create:C', 'C'], ['a.up', null]])
   })
 
   it('refuses a create entry without a createDialog to open, and registers nothing', () => {
     const r = createRegistry()
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', createEntry: entry(1) })).toThrow(/no createDialog/)
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', createEntry: entry(1) })).toThrow(/no createDialog/)
     expect(r.kind('A')).toEqual({ supported: false, kind: 'A' })
   })
 
   it('is write-once for level action ids: a taken id, a duplicate within a kind and the reserved create: prefix throw', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', levelActions: [{ id: 'a.up', ...entry(1) }] })
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'B', icon: 'file', levelActions: [{ id: 'a.up', ...entry(2) }] })).toThrow(/already registered/)
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'C', icon: 'file', levelActions: [{ id: 'c.1', ...entry(1) }, { id: 'c.1', ...entry(2) }] })).toThrow(/already registered/)
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'D', icon: 'file', levelActions: [{ id: 'create:FOLDER', ...entry(1) }] })).toThrow(/already registered/)
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'A', icon: 'file', levelActions: [{ id: 'a.up', ...entry(1) }] })
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'B', icon: 'file', levelActions: [{ id: 'a.up', ...entry(2) }] })).toThrow(/already registered/)
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'C', icon: 'file', levelActions: [{ id: 'c.1', ...entry(1) }, { id: 'c.1', ...entry(2) }] })).toThrow(/already registered/)
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'D', icon: 'file', levelActions: [{ id: 'create:FOLDER', ...entry(1) }] })).toThrow(/already registered/)
     expect(r.levelMenu().map((e) => e.id)).toEqual(['a.up'])
   })
 })
@@ -460,17 +535,17 @@ describe('registry: the unified level list', () => {
 
   it('a kind without a list adds none, and a refused re-registration does not add its list or its tab', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file' })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file' })
     expect(r.lists()).toEqual([])
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file' })
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, tabLabel: 'x.mem' } })).toThrow(/already registered/)
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file' })
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, tabLabel: 'x.mem' } })).toThrow(/already registered/)
     expect(r.lists()).toEqual([])
     expect(r.tabs()).toEqual([])
   })
 
   it('hands out copies: mutating what lists() and tabs() returned changes nothing', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, tabLabel: 'x.mem' } })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, tabLabel: 'x.mem' } })
     const lists = r.lists() as unknown as { kinds: string[]; views: unknown[] }[]
     lists[0].kinds.push('FORGED')
     lists[0].views.push(GRID_VIEW)
@@ -483,9 +558,9 @@ describe('registry: the unified level list', () => {
 
   it('keys a row source by its function: two kinds naming one factory are ONE source carrying both, in registration order', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW, map] } })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'OTHER', icon: 'file', list: { rows: rowsB } })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'OTHER', icon: 'file', list: { rows: rowsB } })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW, map] } })
     expect(r.lists()).toEqual([
       { rows: rowsA, kinds: [MEMORY_KIND, CHAPTER_KIND], views: [GRID_VIEW, map] },
       { rows: rowsB, kinds: ['OTHER'], views: [] },
@@ -494,23 +569,23 @@ describe('registry: the unified level list', () => {
 
   it('refuses a kind naming a shared factory with other views, and registers nothing of it', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW, map] } })
-    expect(() => r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW] } }))
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    expect(() => testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW] } }))
       .toThrow(/CHAPTER names the row source of MEMORY with views \[grid\], not \[grid, map\]/)
     expect(r.kind(CHAPTER_KIND)).toEqual({ supported: false, kind: CHAPTER_KIND })
     expect(r.lists()).toHaveLength(1)
     // the refused kind added no tab either
     expect(r.tabs()).toEqual([])
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', list: { rows: rowsA, views: [GRID_VIEW, map] } })
     expect(r.lists()).toEqual([{ rows: rowsA, kinds: [MEMORY_KIND, CHAPTER_KIND], views: [GRID_VIEW, map] }])
   })
 
   it('derives one tab per distinct label, in registration order: kinds sharing a label share a tab, the id is its first kind', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, tabLabel: 'x.mem' } })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'FILE', icon: 'file', list: { rows: rowsB, tabLabel: 'x.files' } })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', list: { rows: rowsA, tabLabel: 'x.mem' } })
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'NOTAB', icon: 'file', list: { rows: rowsB } })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'file', list: { rows: rowsA, tabLabel: 'x.mem' } })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'FILE', icon: 'file', list: { rows: rowsB, tabLabel: 'x.files' } })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: CHAPTER_KIND, icon: 'file', list: { rows: rowsA, tabLabel: 'x.mem' } })
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'NOTAB', icon: 'file', list: { rows: rowsB } })
     expect(r.tabs().map((t) => ({ id: t.id, label: t.label, kinds: t.kinds }))).toEqual([
       { id: MEMORY_KIND, label: 'x.mem', kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { id: 'FILE', label: 'x.files', kinds: ['FILE'] },
@@ -519,7 +594,7 @@ describe('registry: the unified level list', () => {
 
   it('gives every menu entry the kind that declared it', () => {
     const r = createRegistry()
-    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey,
       kind: 'FILE', icon: 'file', 
       levelActions: [{ id: 'f.up', label: 'x', icon: 'file', order: 1, allowed: () => true, acceptsDrop: true }],
     })
@@ -533,9 +608,22 @@ describe('registry: person-profile sections (ADR 0083)', () => {
     const A = { name: 'A' }
     const B = { name: 'B' }
     expect(r.personSections()).toEqual([])
-    r.claimPersonSection(A)
-    r.claimPersonSection(B)
+    testApp(r).personSection(A)
+    testApp(r, 'other').personSection(B)
     expect(r.personSections()).toEqual([A, B])
-    expect(() => r.claimPersonSection(A)).toThrow(/already claimed/)
+    expect(() => testApp(r).personSection(A)).toThrow(/already claimed/)
+    expect(() => testApp(r, 'other').personSection(A), 'nor by another application').toThrow(/already claimed/)
   })
 })
+
+describe('registry: item reviews', () => {
+  it('lists the claimed reviews in order and refuses the same component twice', () => {
+    const r = createRegistry()
+    const A = { name: 'A' }
+    expect(r.itemReviews()).toEqual([])
+    testApp(r).itemReview(A)
+    expect(r.itemReviews()).toEqual([A])
+    expect(() => testApp(r, 'other').itemReview(A)).toThrow(/already claimed/)
+  })
+})
+

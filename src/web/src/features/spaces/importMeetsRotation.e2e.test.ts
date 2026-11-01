@@ -37,7 +37,7 @@ import { registerMemoriesLifecycle } from '../../test/memoriesLifecycle'
 import { CHAPTER_KIND, MEMORY_KIND } from '../memories/kinds'
 import { rekeyMemoryContent } from '../memories/rekey'
 import {
-  CHAPTER_CONTENT, MEMORIES_CONTENT_SCHEMA, MEMORY_CONTENT, exportMemoryContent, importMemoryContent, validateMemoryContent,
+  CHAPTER_CONTENT, MEMORIES_CONTENT_VERSION, MEMORY_CONTENT, exportMemoryContent, importMemoryContent, validateMemoryContent,
 } from '../memories/exportImport'
 import { listMedia, openOriginal, unsealMeta } from '../memories/media'
 import { addGroupMember, rekeySpace, resolveGroupMember } from './members'
@@ -53,6 +53,7 @@ import { memberAccess, memberTreeSource } from '../../core/access'
 import { replaySubtrees, type PayloadResolver } from '../../core/export/importSubtree'
 import { prepareCopy } from '../../core/export/copySubtree'
 import { MANIFEST_FORMAT, MANIFEST_VERSION, type Manifest, type ManifestNode } from '../../core/export/manifest'
+import { testKind } from '../../test/testApplication'
 
 // Registered as Memories' `register.ts` does for what an export walk, an import and a re-key ask of a kind; a
 // node-environment suite gets no registry from `setup.ts`.
@@ -60,8 +61,8 @@ beforeAll(() => {
   registerMemoriesLifecycle()
   for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
     if (registry.kind(kind).supported) continue
-    registry.registerKind({
-      kind, icon: 'images', contentSchema: MEMORIES_CONTENT_SCHEMA, validateContent: validateMemoryContent,
+    testKind(registry, {
+      kind, icon: 'images', contentSchema: { application: 'memories', version: MEMORIES_CONTENT_VERSION }, validateContent: validateMemoryContent,
       exportContent: exportMemoryContent, importContent: importMemoryContent(kind), importStreams: true, rekeyContent: rekeyMemoryContent,
       placement: kind === MEMORY_KIND ? { root: true, parents: [FOLDER_KIND] } : { root: false, parents: [MEMORY_KIND] },
     })

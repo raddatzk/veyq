@@ -11,7 +11,7 @@ Gradle module of its own; the web half is separated by import direction only (se
 - **Node kinds `MEMORY` and `CHAPTER`.** `FOLDER` is the platform's. On the wire a kind is an open token (the
   `NodeKind` of `contracts/api/_common.openapi.yaml`, `^[A-Z][A-Z0-9_]{0,15}$`, which core's specs alias), so the
   two values are Memories' own: `MemoriesNodeKinds` in the backend, `features/memories/kinds.ts` in the web, with their
-  rules (`MemoryNodeKindRules`, `registerKind`).
+  rules (`MemoryNodeKindRules`, `app.kind`).
 - **Contracts:** `contracts/api/memories/` (`media.openapi.yaml`, `item-favorites.openapi.yaml`, `share-media.openapi.yaml`
   — a guest's media under a share link: the list a guest is served with the uploader keys that open it
   (`listShareMedia`), complete and delete-own; rooted at `/api/shares/{shareId}/media`), generated into

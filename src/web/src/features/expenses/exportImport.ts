@@ -46,9 +46,10 @@ import { decimalOf } from './amounts'
 import { activeSpace } from '../../app/activeSpace'
 
 export const EXPENSES_POT_CONTENT = 'expenses.pot'
-/** The application id of the content type above, and the content schema this build writes and reads. */
-export const EXPENSES_CONTENT_SCHEMA = { application: 'expenses', version: 1 } as const
-const SCHEMA = EXPENSES_CONTENT_SCHEMA.version
+/** The version of the content schema this build writes and reads; its application is Expenses' registered id (`register.ts`), the
+ *  `<application>` part of the content type above. */
+export const EXPENSES_CONTENT_VERSION = 1
+const SCHEMA = EXPENSES_CONTENT_VERSION
 
 const MAX_PARTICIPANTS = 1000
 const MAX_ENTRIES = 100_000

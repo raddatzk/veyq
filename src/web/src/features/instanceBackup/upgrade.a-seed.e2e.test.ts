@@ -40,6 +40,7 @@ import { fileUploadJob } from '../depot/uploadFile'
 import { createDropBox, dropGuestContext, ensureDropFolder, mintDropBoxLink, nameDropGuest } from '../depot/dropBox'
 import { guestFileUploadJob } from '../depot/shareUpload'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 // Distinctive plaintext for the wire sweep (ADR 0053): spaces and umlauts, so no name is a run of base64 letters that
 // random ciphertext could contain (inbox #323).
@@ -65,7 +66,7 @@ const ctx = () => ({ onProgress: () => {}, signal: new AbortController().signal 
 beforeAll(() => {
   // A node-environment suite gets no application registry (`src/test/setup.ts`): FILE with its own folding, as Depot's
   // `register.ts` registers it, so the guest's slug is the one the page computes.
-  if (!registry.kind(FILE_KIND).supported) registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
+  if (!registry.kind(FILE_KIND).supported) testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: FILE_KIND, icon: 'file', slug: fileNameSlug })
 })
 
 describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {

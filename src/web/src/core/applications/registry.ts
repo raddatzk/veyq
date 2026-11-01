@@ -7,6 +7,14 @@
 // (`scripts/validate_web_core_imports_no_applications.py`) keeps core from importing an application and from
 // discovering one by glob.
 //
+// **One door per application: its registrar (owner 2026-11-01).** `registerApplication({ id, name })` names the
+// application and answers its SCOPED registrar (`ApplicationRegistrar`), through which it registers everything else:
+// `app.kind(kind, descriptor)` per node kind, `app.route(slug | null)` once, `app.lifecycle(hooks)`, `app.shareBody(rootKind,
+// body)`, `app.personSection(component)`, `app.itemReview(component)`. Ownership comes from the call: a kind belongs to the
+// application whose registrar registered it, so no list of its kinds exists beside the registrations, and `app.id` is the
+// one place an application's id lives on the web side (its kinds' `contentSchema.application` is read from it). There are
+// no free register functions.
+//
 // **Write-once.** Registered code runs with every unlocked key, so the registry is a trust surface and not a
 // convenience: registering a kind twice, claiming a drop page twice, or naming an application or a route twice THROWS —
 // it never overwrites and never merges. Nothing here is exported as mutable state; `registry` exposes only the register doors and read-only lookups.
@@ -31,7 +39,7 @@
 // the folders in every tab), `views` (the presentations beyond core's grid and list that its factory draws: Memories' map) and
 // `emptyText` (what its tab says when it has nothing). Several kinds may name the SAME factory (Memories: MEMORY and CHAPTER; Depot:
 // FILE and DEPOT_DROPBOX): it is one row source, called once, handed the nodes of every kind that names it; two kinds naming one
-// factory with different `views` is a contradiction, so `registerKind` throws (and registers nothing). `lists()` and `tabs()` list
+// factory with different `views` is a contradiction, so `app.kind` throws (and registers nothing). `lists()` and `tabs()` list
 // what the level builds from; a child whose kind nobody lists - or for which the factory has no row - is not dropped: core
 // shows the explicit unsupported row, never an empty area.
 //
@@ -46,39 +54,47 @@
 // lists every application's uploads and the Favorites section (`core/favorites/PinnedNodes.vue`) every kind's pins, so no
 // application adds an entry there; a place in the shell for an application is a seam that comes with its first user.
 //
-// **Drop pages (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
+// **Drop pages (`app.shareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
 // kind-independent half (core/sharing/resolvePublicShare.ts) and runs the password and terms gates. A `READ` or
 // `READ_WRITE` link then gets core's page (`core/sharing/ShareTreePage.vue`, the member's views with the guest's access and
 // tree); a `WRITE_ONLY` link gets the one page with no member equivalent — its guest holds no key, so there is nothing to
 // render the member's way — the drop page the application claimed for the share's ROOT kind (`PublicShare.rootKind`,
 // served for every role): Memories' photo drop, Depot's drop box (ADR 0079 Consequences, inbox #401). A kind is claimed
-// once (a second claim throws), FOLDER by nobody (no `WRITE_ONLY` link roots at a folder, ADR 0080 decision 11). A
-// `WRITE_ONLY` root kind nobody claimed, or none at all, renders the shell's explicit unavailable state.
+// once (a second claim throws), only by the application that registered it (another's kind throws), FOLDER by nobody (no
+// `WRITE_ONLY` link roots at a folder, ADR 0080 decision 11). A `WRITE_ONLY` root kind nobody claimed, or none at all,
+// renders the shell's explicit unavailable state.
 //
-// **Lifecycle hooks (`registerLifecycle`).** What runs when a scope is entered or reset and when the master key
-// rotates. Registered under the id of an application already named (`registerApplication` first; an unknown id throws, so
-// a hook set cannot exist for an application this build does not have), once per id (a second registration throws);
+// **Lifecycle hooks (`app.lifecycle`).** What runs when a scope is entered or reset and when the master key
+// rotates. Registered through the application's registrar - so a hook set cannot exist for an application this build does
+// not have -, once per application (a second registration throws);
 // several applications may each contribute, and the registry runs them all. The master-key hook is REQUIRED of every hook
 // set: material an application seals under the Master Key (Memories' item marks) is unverifiable after a rotation that
 // skipped it. There is no registry-wide rotation gate: core re-seals what it seals under the Master Key itself (the node
 // pins, `rotateKeys`), so a build with no application - or none that registers hooks - rotates as safely as any other.
 //
 // **Applications (`registerApplication`; uc.platform.switch-application-off).** An application names itself once: its id —
-// its own entry of the capability register (`memories`), which the Server Owner and a tenant owner switch off — the kinds
-// it owns, and its name as an i18n key of its own namespace. Core asks `applicationOf(kind)` for a node's application and
-// reads `Access.applicationsOff` with it, so core names no application and an application switched off is read-only
-// wherever core draws an action of its nodes (a cover, a copy); the host's banner names it by `applications()`. A kind no
-// application named belongs to none and is never switched off (core's FOLDER). An id or a kind named twice throws.
+// its own entry of the capability register (`memories`), which the Server Owner and a tenant owner switch off — and its
+// name as an i18n key of its own namespace; the kinds it owns are those its registrar registers. Core asks
+// `applicationOf(kind)` for a node's application and reads `Access.applicationsOff` with it, so core names no application
+// and an application switched off is read-only wherever core draws an action of its nodes (a cover, a copy); the host's
+// banner names it by `applications()`. A kind no application registered belongs to none and is never switched off (core's
+// FOLDER). An id or a kind registered twice throws.
 //
-// **Route slugs (`claimRouteSlug`, `claimNoRouteSegment`; inbox #328, ADR 0015).** A node's place is a path in the URL
+// **Routes (`app.route`; inbox #328, ADR 0015).** A node's place is a path in the URL
 // `#fragment` (`core/node/location.ts`); every application but one puts its slug before the name of its nodes
-// (`#foo/memories/rom`) so a path says what kind of thing it opens. An application claims its slug once for the kinds it
-// owns — a second claim of a slug throws, a slug the platform keeps for its own paths (`RESERVED_ROUTE_SEGMENTS`) is
-// refused, and so is a kind claimed twice — or declares, explicitly, that it has NO segment (Depot: its nodes are plain
+// (`#foo/memories/rom`) so a path says what kind of thing it opens. An application decides its route ONCE, for every kind
+// it owns (a second decision throws): its slug — a slug claimed by another throws, a slug the platform keeps for its own
+// paths (`RESERVED_ROUTE_SEGMENTS`) is refused — or, explicitly, `null`: NO segment (Depot: its nodes are plain
 // names, a file is `#foo/report`). Only one application may have none: the unprefixed names are one namespace. A claimed
 // slug is RESERVED in that namespace: a folder (or a file) whose name folds to it is numbered (`memories-2`) by
 // `location.ts`. The claimed slug also prefixes the kinds' slug-token input (`tokenInputFor`), so a name is unique among
-// its application's siblings only. A kind nobody claimed has no segment either and is numbered among the plain names of the application that has none.
+// its application's siblings only. A kind whose application decided no route has no segment either and is numbered among
+// the plain names of the application that has none.
+//
+// **Kinds that are no row (`KindDescriptor.listed: false`).** A kind whose nodes the level never draws - a future
+// application's one pool per space, created on first open and reached through its own entry, not as a row
+// (`docs/apps/inventory.md`): core's level shows no row for it and no unsupported row either; the node is still a node
+// everywhere else (the tree, the move, the trash, a download). Such a kind brings no `list` (`app.kind` throws on both).
 //
 // **The level view's "New" menu (inbox #406).** The creation entries leave the sections' headers and tiles for ONE menu in
 // core's level toolbar, derived from here: a kind's `createEntry` (label key of its own namespace, icon, order, the
@@ -115,7 +131,7 @@ import type { ManifestContent } from '../export/manifest'
 // own.
 const FolderShareDialog = defineAsyncComponent(() => import('../sharing/FolderShareDialog.vue').then((m) => m.default))
 
-/** The props of a section an application adds to a person's profile page (`Registry.claimPersonSection`, ADR 0083). */
+/** The props of a section an application adds to a person's profile page (`ApplicationRegistrar.personSection`, ADR 0083). */
 export interface PersonSectionProps {
   /** The person's user id (the fragment's). */
   userId: string
@@ -162,6 +178,9 @@ export interface KindDescriptor {
    *  need not fold like the URL segment (a file: `fileNameSlug`, which keeps punctuation; the URL segment of every kind is `slugify`). **Frozen into stored tokens**: the function
    *  a kind registers must never change once a node of the kind is stored, and must be pinned by vectors. */
   slug?: (name: string) => string
+  /** `false`: the level draws no row for a node of this kind - and no unsupported row (see the header). Omitted: listed,
+   *  through `list` (or as the unsupported row without one). */
+  listed?: boolean
   /** Where core's rename dialog (`core/node/FolderNameDialog.vue`) ends the selection it puts on a node's name when the
    *  field takes focus: the length of the part a rename usually changes (a file: the name without its extension, inbox
    *  #385). Omitted: no selection, the caret at the end. */
@@ -177,7 +196,7 @@ export interface KindDescriptor {
   /** The entry this kind adds to the level view's "New" menu (`core/node/LevelView.vue`, inbox #406): its label (an i18n
    *  key of its own application namespace), icon and order, and `allowed` - the application's fail-closed rights
    *  answer for the level on screen, so a menu entry shows exactly where the old section button did. Choosing it asks the
-   *  host for this kind's `createDialog` (which therefore must exist: `registerKind` throws without). Omitted: the kind
+   *  host for this kind's `createDialog` (which therefore must exist: `app.kind` throws without). Omitted: the kind
    *  is not created from a level (a chapter is created inside its Memory). */
   createEntry?: LevelMenuEntry
   /** Further entries of the "New" menu that are no create dialog - Depot's "Upload files". Each runs a handler the
@@ -212,7 +231,8 @@ export interface KindDescriptor {
   /** The application this kind's content belongs to and the highest version of its content schema this build writes and
    *  reads (ADR 0082 decision 9): a download names it in the manifest's `applications`, and an import's dry run lists a
    *  node whose content is newer as one it leaves out. `application` is the `<application>` part of every `content.type`
-   *  the hook writes. Absent: the content carries no application and version 1. */
+   *  the hook writes - the registering application's id, which the registry fills in (`KindRegistration` names the
+   *  version alone). Absent: the content carries no application and version 1. */
   contentSchema?: { application: string; version: number }
   /** Check a node's content from a download against this kind's contract (decision 10: the archive is untrusted input) -
    *  its shape and every field at its `maxLength` in `contracts/export/veyq-subtree.schema.json`. Called by the import's dry
@@ -332,6 +352,10 @@ export interface LevelTabSpec {
 }
 
 export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: false; kind: NodeKind }
+
+/** What an application hands `app.kind` for a kind: its descriptor without the kind (the call names it) and with its
+ *  content schema's version alone (the application is the registrar's). */
+export type KindRegistration = Omit<KindDescriptor, 'kind' | 'contentSchema'> & { contentSchema?: { version: number } }
 
 /** The generic context the host hands the `detail` component of an opened node, always through core's frame
  *  `core/node/components/NodePage.vue`, which supplies core's own header actions of the node (the heart, the cover, copy,
@@ -459,32 +483,49 @@ export interface ApplicationInfo {
   name: string
 }
 
-export interface Registry {
-  /** Name an application: its register id, its name's i18n key and the node kinds it owns (see the header). Throws on an
-   *  id named before, on an empty `kinds`, on FOLDER and on a kind another application already owns. */
-  registerApplication(info: ApplicationInfo & { kinds: readonly NodeKind[] }): void
-  /** The applications named, in registration order. */
-  applications(): readonly ApplicationInfo[]
-  /** The id of the application that owns `kind`, or null: core's FOLDER, a kind nobody named. */
-  applicationOf(kind: NodeKind): string | null
-  /** Register an application's lifecycle hooks under its id. Throws if no application of that id was named
-   *  (`registerApplication` first), if the id already registered hooks, or if `onMasterKeyRotated` is not a function. */
-  registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
-  /** Claim the drop page of a `WRITE_ONLY` link rooted at `kind` (see the header). Throws if that kind is already
-   *  claimed, and for FOLDER (the platform's: no `WRITE_ONLY` link roots at a folder). */
-  claimShareBody(kind: NodeKind, component: Component): void
-  /** The drop page claimed for a `WRITE_ONLY` link's root kind, or null when nobody claimed it (the shell renders its
-   *  unavailable state — never an empty page). */
-  shareBody(kind: NodeKind): Component | null
+/**
+ * What an application registers through (see the header): the scoped registrar `registerApplication` answers. Every
+ * call is write-once and refuses at runtime what would make the registry ambiguous.
+ */
+export interface ApplicationRegistrar {
+  /** The application's id - its entry of the capability register: the one place the id lives on the web side. */
+  readonly id: string
+  /** Register a node kind this application owns. Throws if the kind is already registered (the platform's own FOLDER
+   *  included), if its `list` names a row factory another kind already named with different `views`, on a create menu
+   *  entry without a `createDialog`, on a level action id already taken, and on `listed: false` beside a `list`. */
+  kind(kind: NodeKind, descriptor: KindRegistration): void
+  /** Decide the application's route for every kind it owns: its URL slug, or `null` for NO segment (see the header).
+   *  Throws on a second decision, on a slug that is malformed, reserved or already claimed, and on `null` when another
+   *  application already has no segment. */
+  route(slug: string | null): void
+  /** Register the application's lifecycle hooks. Throws on a second hook set and if `onMasterKeyRotated` is not a
+   *  function. */
+  lifecycle(hooks: LifecycleHooks): void
+  /** Claim the drop page of a `WRITE_ONLY` link rooted at `rootKind` (see the header). Throws if that kind is already
+   *  claimed, if it is not a kind this application registered, and for FOLDER. */
+  shareBody(rootKind: NodeKind, body: Component): void
   /** Add a section to a person's profile page (`#people/<userId>`, ADR 0083): what an application knows of the person -
    *  Memories' "Memories with this person". The component takes the props `PersonSectionProps` and draws its own loading,
    *  empty and error states. Sections show in registration order; the same component twice throws. */
-  claimPersonSection(component: Component): void
-  /** The sections claimed for a person's profile page, in registration order. */
-  personSections(): readonly Component[]
+  personSection(component: Component): void
   /** Claim the review of a reported item (props `ItemReviewProps`): what a moderator sees of an application's record.
    *  The same component twice throws. */
-  claimItemReview(component: Component): void
+  itemReview(component: Component): void
+}
+
+export interface Registry {
+  /** Name an application - its register id and its name's i18n key - and answer its registrar (see the header). Throws on
+   *  an id named before. */
+  registerApplication(info: ApplicationInfo): ApplicationRegistrar
+  /** The applications named, in registration order. */
+  applications(): readonly ApplicationInfo[]
+  /** The id of the application that registered `kind`, or null: core's FOLDER, a kind nobody registered. */
+  applicationOf(kind: NodeKind): string | null
+  /** The drop page claimed for a `WRITE_ONLY` link's root kind, or null when nobody claimed it (the shell renders its
+   *  unavailable state — never an empty page). */
+  shareBodyFor(kind: NodeKind): Component | null
+  /** The sections claimed for a person's profile page, in registration order. */
+  personSections(): readonly Component[]
   /** The item reviews claimed, in registration order — each draws only the items that are its application's. */
   itemReviews(): readonly Component[]
   /** Run every application's `onScopeReset`. */
@@ -493,20 +534,20 @@ export interface Registry {
   scopeEntered(scopeId: string): Promise<void>
   /** Run every application's `onMasterKeyRotated`; rejects with the first failure after all ran. */
   masterKeyRotated(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void>
-  /** Register a node kind. Throws if the kind is already registered (the platform's own FOLDER included), or if its
-   *  `list` names a row factory another kind already named with different `views`. */
-  registerKind(descriptor: KindDescriptor): void
   /** The kind's descriptor, or `{ supported: false }` — never `undefined`. */
   kind(kind: NodeKind): KindLookup
   /** Every registered kind, the platform's FOLDER first, then in registration order: what the composition's tests walk
    *  (each kind's application, route and page), never a list core renders from. */
   kinds(): readonly NodeKind[]
+  /** Whether the level draws a node of `kind` (`KindDescriptor.listed`): false only for a kind registered `listed: false`;
+   *  a kind nobody registered is listed - as the unsupported row. */
+  listed(kind: NodeKind): boolean
   /** The string a node's blinded slug token HMACs (`core/node/tree.ts` `slugTokenFor`), and so what its name is unique by
    *  among its siblings (ADR 0080 decision 16): the name's slug by its kind's own `slug` hook, else `slugify` (also for a
    *  kind nobody registered: the server stores any kind, and a token must still be computable for it), behind
    *  `<routeSlug>/` for
    *  a kind whose application claimed a route slug (`memories/korfubanien`, `expenses/korfubanien`), the bare slug for a
-   *  folder, Depot's kinds and a kind nobody claimed. A name is unique within its route group only, as the URL already
+   *  folder, Depot's kinds and a kind whose application decided no route. A name is unique within its route group only, as the URL already
    *  separates them (`#foo/memories/korfubanien`, `#foo/expenses/korfubanien`): a Memory and a Pot of one name are
    *  siblings, a folder and a Depot file of one name still meet. A route slug is `[a-z0-9-]` and the `/` ends it, so two
    *  applications' inputs never meet, and a container's `slugify` never yields a `/`. A file's folding keeps one: a Depot
@@ -514,20 +555,13 @@ export interface Registry {
    *  token and every client-side name check (`core/node/siblingCollision.ts`, the guest's, an import's numbering) goes
    *  through this, so they agree with the server, which compares tokens. */
   tokenInputFor(kind: NodeKind, name: string): string
-  /** Claim the URL route slug of an application for the `kinds` it owns (see the header). Throws on a slug that is
-   *  malformed or reserved, on a slug already claimed, on a kind already claimed (or FOLDER, the platform's), and on an
-   *  empty `kinds`. */
-  claimRouteSlug(slug: string, kinds: readonly NodeKind[]): void
-  /** Declare that the application owning `kinds` has NO route segment: its nodes are plain names in the path (Depot).
-   *  Throws on a kind already claimed (or FOLDER), on an empty `kinds`, and when another application already declared
-   *  it — the unprefixed names are one namespace. */
-  claimNoRouteSegment(kinds: readonly NodeKind[]): void
-  /** Whether the application of `kind` decided its route: claimed a slug for it (`claimRouteSlug`) or declared it has none
-   *  (`claimNoRouteSegment`). False for FOLDER (the platform's) and for a kind nobody claimed. */
+  /** Whether the application of `kind` decided its route (`app.route`: a slug, or none). False for FOLDER (the
+   *  platform's), for a kind nobody registered and for one whose application decided nothing. */
   routeDecided(kind: NodeKind): boolean
   /** How a node of `kind` is addressed in the path: its application's `slug` (null: none — a folder, the application
-   *  that declared no segment, a kind nobody claimed) and the `group` that kind's nodes are numbered in among equal
-   *  siblings — one per application with a segment, one for the folders, one for every node with none (Depot and the kinds nobody claimed). */
+   *  that declared no segment, a kind whose application decided nothing or nobody registered) and the `group` that kind's
+   *  nodes are numbered in among equal siblings — one per application with a segment, one for the folders, one for every
+   *  node with none (Depot and the kinds with no route). */
   routeOf(kind: NodeKind): KindRoute
   /** The claimed route slugs (the applications' own, not the platform's reserved words). */
   routeSlugs(): readonly string[]
@@ -579,16 +613,13 @@ export function createRegistry(): Registry {
   const shareBodies = new Map<NodeKind, Component>()
   const personSections: Component[] = []
   const itemReviews: Component[] = []
-  // kind → its application's route slug, or null for the application with no segment.
-  const routes = new Map<NodeKind, string | null>()
+  // application id → its route slug, or null for the application with no segment.
+  const routes = new Map<string, string | null>()
   const slugs = new Set<string>()
-  function claimKinds(kinds: readonly NodeKind[], slug: string | null) {
-    if (kinds.length === 0) throw new Error('a route claim names no node kind')
-    for (const k of kinds) {
-      if (k === FOLDER_KIND) throw new Error("FOLDER is the platform's: no application claims its route")
-      if (routes.has(k)) throw new Error(`the route of node kind ${k} is already claimed`)
-    }
-    for (const k of kinds) routes.set(k, slug)
+  /** The route slug of `kind`'s application: a slug, null (no segment), or undefined (nothing decided, or no application). */
+  const routeOfKind = (kind: NodeKind): string | null | undefined => {
+    const app = applicationOfKind.get(kind)
+    return app === undefined ? undefined : routes.get(app)
   }
   /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
   async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
@@ -602,94 +633,101 @@ export function createRegistry(): Registry {
     }
     if (failure) throw failure.error
   }
-  return {
-    registerApplication({ id, name, kinds: owned }) {
-      if (applications.some((a) => a.id === id)) throw new Error(`application ${id} is already registered`)
-      if (owned.length === 0) throw new Error(`application ${id} names no node kind`)
-      for (const k of owned) {
-        if (k === FOLDER_KIND) throw new Error("FOLDER is the platform's: no application owns it")
-        if (applicationOfKind.has(k)) throw new Error(`node kind ${k} already belongs to ${applicationOfKind.get(k)}`)
+  /** Register `kind` for application `id` (the registrar's `kind`). */
+  function registerKind(id: string, kind: NodeKind, registration: KindRegistration) {
+    if (kinds.has(kind)) throw new Error(`node kind ${kind} is already registered`)
+    const { contentSchema, ...rest } = registration
+    const descriptor: KindDescriptor = { ...rest, kind, ...(contentSchema ? { contentSchema: { application: id, version: contentSchema.version } } : {}) }
+    // Checked before anything is stored, so a contradiction registers nothing.
+    if (descriptor.listed === false && descriptor.list) throw new Error(`node kind ${kind} is not listed but names a list`)
+    const joinList = listJoin(listEntries, tabEntries, kind, descriptor.list)
+    if (descriptor.createEntry && !descriptor.createDialog) {
+      throw new Error(`node kind ${kind} has a create menu entry but no createDialog to open`)
+    }
+    const own = descriptor.levelActions ?? []
+    for (const a of own) {
+      const taken = a.id.startsWith('create:') || [...kinds.values()].some((k) => k.levelActions?.some((x) => x.id === a.id))
+      if (taken || own.filter((x) => x.id === a.id).length > 1) {
+        throw new Error(`level action ${a.id} is already registered (or reserved)`)
       }
+    }
+    kinds.set(kind, descriptor)
+    applicationOfKind.set(kind, id)
+    joinList()
+  }
+  /** The registrar of application `id` (see the header). */
+  function registrar(id: string): ApplicationRegistrar {
+    return Object.freeze({
+      id,
+      kind: (kind: NodeKind, registration: KindRegistration) => registerKind(id, kind, registration),
+      route(slug: string | null) {
+        if (routes.has(id)) throw new Error(`the route of application ${id} is already decided`)
+        if (slug === null) {
+          if ([...routes.values()].includes(null)) throw new Error('an application already declared that it has no route segment')
+        } else {
+          if (!ROUTE_SLUG.test(slug)) throw new Error(`route slug ${JSON.stringify(slug)} is not a slug ([a-z0-9-], starting with a letter)`)
+          if (RESERVED_ROUTE_SEGMENTS.includes(slug)) throw new Error(`route slug ${slug} is reserved by the platform`)
+          if (slugs.has(slug)) throw new Error(`route slug ${slug} is already claimed`)
+          slugs.add(slug)
+        }
+        routes.set(id, slug)
+      },
+      lifecycle(hooks: LifecycleHooks) {
+        if (lifecycles.has(id)) throw new Error(`lifecycle hooks of ${id} are already registered`)
+        if (typeof hooks.onMasterKeyRotated !== 'function') {
+          throw new Error(`application ${id} registered no onMasterKeyRotated hook (it is required)`)
+        }
+        lifecycles.set(id, { ...hooks })
+      },
+      shareBody(rootKind: NodeKind, body: Component) {
+        if (rootKind === FOLDER_KIND || shareBodies.has(rootKind)) throw new Error(`share body for ${rootKind} is already claimed`)
+        if (applicationOfKind.get(rootKind) !== id) throw new Error(`node kind ${rootKind} is not a kind of ${id}: its share body is refused`)
+        shareBodies.set(rootKind, body)
+      },
+      personSection(component: Component) {
+        if (personSections.includes(component)) throw new Error('this person-profile section is already claimed')
+        personSections.push(component)
+      },
+      itemReview(component: Component) {
+        if (itemReviews.includes(component)) throw new Error('this item review is already claimed')
+        itemReviews.push(component)
+      },
+    })
+  }
+  return {
+    registerApplication({ id, name }) {
+      if (applications.some((a) => a.id === id)) throw new Error(`application ${id} is already registered`)
       applications.push({ id, name })
-      for (const k of owned) applicationOfKind.set(k, id)
+      return registrar(id)
     },
     applications: () => applications.map((a) => ({ ...a })),
     applicationOf: (kind) => applicationOfKind.get(kind) ?? null,
-    claimShareBody(kind, component) {
-      if (kind === FOLDER_KIND || shareBodies.has(kind)) throw new Error(`share body for ${kind} is already claimed`)
-      shareBodies.set(kind, component)
-    },
-    shareBody: (kind) => shareBodies.get(kind) ?? null,
-    claimPersonSection(component) {
-      if (personSections.includes(component)) throw new Error('this person-profile section is already claimed')
-      personSections.push(component)
-    },
+    shareBodyFor: (kind) => shareBodies.get(kind) ?? null,
     personSections: () => [...personSections],
-    claimItemReview(component) {
-      if (itemReviews.includes(component)) throw new Error('this item review is already claimed')
-      itemReviews.push(component)
-    },
     itemReviews: () => [...itemReviews],
-    registerLifecycle(applicationId, hooks) {
-      if (!applications.some((a) => a.id === applicationId)) {
-        throw new Error(`no application ${applicationId} is registered (registerApplication first): its lifecycle hooks are refused`)
-      }
-      if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
-      if (typeof hooks.onMasterKeyRotated !== 'function') {
-        throw new Error(`application ${applicationId} registered no onMasterKeyRotated hook (it is required)`)
-      }
-      lifecycles.set(applicationId, { ...hooks })
-    },
     scopeReset() {
       // Synchronous on purpose: callers (enterScope, clearActiveSpace) rely on the state being gone on return.
       for (const h of lifecycles.values()) h.onScopeReset?.()
     },
     scopeEntered: (scopeId) => eachApplication((h) => h.onScopeEntered?.(scopeId)),
     masterKeyRotated: (oldMk, newMk, scopeIds) => eachApplication((h) => h.onMasterKeyRotated(oldMk, newMk, scopeIds)),
-    registerKind(descriptor) {
-      if (kinds.has(descriptor.kind)) throw new Error(`node kind ${descriptor.kind} is already registered`)
-      // Checked before anything is stored, so a contradiction registers nothing.
-      const joinList = listJoin(listEntries, tabEntries, descriptor.kind, descriptor.list)
-      if (descriptor.createEntry && !descriptor.createDialog) {
-        throw new Error(`node kind ${descriptor.kind} has a create menu entry but no createDialog to open`)
-      }
-      const own = descriptor.levelActions ?? []
-      for (const a of own) {
-        const taken = a.id.startsWith('create:') || [...kinds.values()].some((k) => k.levelActions?.some((x) => x.id === a.id))
-        if (taken || own.filter((x) => x.id === a.id).length > 1) {
-          throw new Error(`level action ${a.id} is already registered (or reserved)`)
-        }
-      }
-      kinds.set(descriptor.kind, { ...descriptor })
-      joinList()
-    },
     kind(kind) {
       const d = kinds.get(kind)
       return d ? { supported: true, ...d } : { supported: false, kind }
     },
     kinds: () => [...kinds.keys()],
+    listed: (kind) => kinds.get(kind)?.listed !== false,
     tokenInputFor(kind, name) {
       const slug = (kinds.get(kind)?.slug ?? slugify)(name)
-      // FOLDER is never in `routes`; Depot's kinds are claimed with no slug (null), a kind nobody claimed is absent
-      const route = routes.get(kind)
+      // FOLDER belongs to no application; Depot decided no slug (null), a kind whose application decided nothing is undefined
+      const route = routeOfKind(kind)
       return route ? `${route}/${slug}` : slug
     },
-    claimRouteSlug(slug, claimed) {
-      if (!ROUTE_SLUG.test(slug)) throw new Error(`route slug ${JSON.stringify(slug)} is not a slug ([a-z0-9-], starting with a letter)`)
-      if (RESERVED_ROUTE_SEGMENTS.includes(slug)) throw new Error(`route slug ${slug} is reserved by the platform`)
-      if (slugs.has(slug)) throw new Error(`route slug ${slug} is already claimed`)
-      claimKinds(claimed, slug)
-      slugs.add(slug)
-    },
-    claimNoRouteSegment(claimed) {
-      if ([...routes.values()].includes(null)) throw new Error('an application already declared that it has no route segment')
-      claimKinds(claimed, null)
-    },
-    routeDecided: (kind) => routes.has(kind),
+    routeDecided: (kind) => routeOfKind(kind) !== undefined,
     routeOf(kind) {
       if (kind === FOLDER_KIND) return { slug: null, group: 'folder' }
-      const slug = routes.get(kind)
-      // A kind nobody claimed shares the unprefixed namespace with the application that has no segment, so its names are
+      const slug = routeOfKind(kind)
+      // A kind with no route decided shares the unprefixed namespace with the application that has no segment, so its names are
       // numbered among that application's (two nodes never build one URL).
       return { slug: slug ?? null, group: slug ? `application:${slug}` : 'none' }
     },
@@ -715,6 +753,7 @@ export function createRegistry(): Registry {
 const modesOf = (views: readonly LevelViewOption[]) => views.map((v) => v.mode).join(', ')
 
 /** Check that `kind` may join the list `list` (a row factory already named with other `views` throws: one function renders one
+
  *  way) and return the join - the factory's entry and the kind's tab - to run once every check of the registration passed. */
 function listJoin(
   lists: { rows: LevelRowsFactory; views: readonly LevelViewOption[]; kinds: NodeKind[] }[],

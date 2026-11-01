@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Depot's share body for `DEPOT_DROPBOX` (`register.ts` `claimShareBody`): the page of the link rooted at the drop box —
+// Depot's share body for `DEPOT_DROPBOX` (`register.ts` `app.shareBody`): the page of the link rooted at the drop box —
 // such a link is WRITE_ONLY only (`DepotShareRoots`), so its guest holds no key to the drop box and has nothing to see
 // the member's way: name yourself, send files into your own folder (`DropBoxGuestForm.vue`). The one legitimate
 // guest-only page of Depot (ADR 0079 Consequences, inbox #401).

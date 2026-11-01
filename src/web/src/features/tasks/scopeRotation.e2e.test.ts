@@ -40,6 +40,7 @@ import { registry } from '../../core/applications/registry'
 import { registerMemoriesLifecycle } from '../../test/memoriesLifecycle'
 import { MEMORY_KIND } from '../memories/kinds'
 import { rekeyMemoryContent } from '../memories/rekey'
+import { testKind } from '../../test/testApplication'
 
 // A node-environment file is given no registry (`src/test/setup.ts`), and `rotateKeys` fails closed without a registered
 // `onMasterKeyRotated`; register the real Memories lifecycle, as the other node suites that rotate do (inbox #340).
@@ -50,7 +51,7 @@ import { rekeyMemoryContent } from '../memories/rekey'
 // components need a window.
 beforeAll(() => {
   registerMemoriesLifecycle()
-  if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', rekeyContent: rekeyMemoryContent })
+  if (!registry.kind(MEMORY_KIND).supported) testKind(registry, { kind: MEMORY_KIND, icon: 'images', rekeyContent: rekeyMemoryContent })
 })
 
 /** Add [who] to the group as the members panel does (ADR 0111 decision 4): resolve, then wrap the group's current key

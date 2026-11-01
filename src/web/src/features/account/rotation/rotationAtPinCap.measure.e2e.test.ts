@@ -56,6 +56,7 @@ import { registry } from '../../../core/applications/registry'
 import { registerMemoriesLifecycle } from '../../../test/memoriesLifecycle'
 import { MEMORY_KIND } from '../../memories/kinds'
 import { rekeyMemoryContent } from '../../memories/rekey'
+import { testKind } from '../../../test/testApplication'
 
 /** The contract's cap (`IdentityPinsWrite.put.maxItems`). */
 const CAP = 25_000
@@ -66,7 +67,7 @@ const POINTS = (process.env.VEYQ_PIN_ROTATION_POINTS ?? String(CAP)).split(',').
 // tenant is re-keyed after the publish, which needs the Memories kind's `rekeyContent`.
 beforeAll(() => {
   registerMemoriesLifecycle()
-  if (!registry.kind(MEMORY_KIND).supported) registry.registerKind({ kind: MEMORY_KIND, icon: 'images', rekeyContent: rekeyMemoryContent })
+  if (!registry.kind(MEMORY_KIND).supported) testKind(registry, { kind: MEMORY_KIND, icon: 'images', rekeyContent: rekeyMemoryContent })
 })
 
 /** One reading of a rotation request, taken off the wire by [watchRotation]. */

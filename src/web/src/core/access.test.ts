@@ -36,6 +36,7 @@ import type { ShareRole } from '../api/generated/sharing'
 import type { EpochKeys } from '../features/spaces/epochs'
 import { treeNode, memberAccessOf, guestAccessOf } from '../test/models'
 import { nothingOfItsOwnToRekey } from './node/rekey/hooks'
+import { testKind } from '../test/testApplication'
 
 const EPOCHS: EpochKeys = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) } as unknown as EpochKeys
 const n = (id: string, kind: string, parentId: string | null, over: Partial<TreeNode> = {}): TreeNode =>
@@ -157,10 +158,10 @@ describe('targetOf: the node as a rights function is asked about it', () => {
   it('a kind is shareable exactly when it brings a share dialog (FOLDER: core\'s own)', () => {
     expect(targetOf(tree, tree.node('f'))).toEqual({ kind: FOLDER_KIND, inIdentityFolder: true, shareable: true, parentKind: null })
     expect(targetOf(tree, tree.node('x')).shareable, 'a kind nobody registered').toBe(false)
-    holder.reg!.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file' })
+    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file' })
     expect(targetOf(tree, tree.node('x')).shareable, 'no dialog to mount').toBe(false)
     holder.reg = createRegistry()
-    holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file', shareDialog: Dialog })
+    testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file', shareDialog: Dialog })
     expect(targetOf(tree, tree.node('x')).shareable, 'control: its dialog').toBe(true)
   })
 
@@ -189,8 +190,8 @@ describe('targetOf: the node as a rights function is asked about it', () => {
 // application's kind (registered per test, so its switch can be off), BETA another application's, OMEGA nobody's.
 describe('nodeRights: core\'s base for every kind', () => {
   beforeEach(() => {
-    holder.reg!.registerApplication({ id: 'alpha', name: 'alpha.name', kinds: ['ALPHA'] })
-    holder.reg!.registerApplication({ id: 'beta', name: 'beta.name', kinds: ['BETA'] })
+    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'file' }, 'alpha')
+    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file' }, 'beta')
   })
   const at = (kind: string | null, o: Partial<RightsTarget> = {}): RightsTarget => ({ kind, inIdentityFolder: false, shareable: kind !== null, ...o })
   const grants = (...keys: (keyof NodeRights)[]): NodeRights => ({ ...NO_NODE_RIGHTS, ...Object.fromEntries(keys.map((k) => [k, true])) })

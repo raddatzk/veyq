@@ -13,10 +13,14 @@ import { createFolders, planFolderUpload, takeBackEmptyFolders, type FolderPlan 
 import { FileUploadError, type FileJobExtra, type FileUploadResult } from './uploadFile'
 import type { UploadItem, UploadStatus } from '../../core/blob/queue'
 import type { FilesTreeUpload } from './source'
+import { testApp, testKind } from '../../test/testApplication'
+import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 
 const reg = createRegistry()
 registerDepot(reg)
-reg.claimRouteSlug('t-routed', ['T_ROUTED']) // an application with a route slug, as Memories or Expenses
+// an application with a route slug, as Memories or Expenses
+testKind(reg, { rekeyContent: nothingOfItsOwnToRekey, kind: 'T_ROUTED', icon: 'file' }, 't-routed')
+testApp(reg, 't-routed').route('t-routed')
 // what the plan numbers by: the slug token's input, as the default `registry.tokenInputFor` does in the app
 const slugFor = (kind: string, name: string) => reg.tokenInputFor(kind, name)
 

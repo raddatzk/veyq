@@ -138,6 +138,16 @@ How each of these is built — the modules, the seams core asks, the web registr
   text guard, and the shell asks a build-time registry what to render for a kind. The kind is a string token on both
   sides, so the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness did. A cover and
   a record list's counters are core's (decision 3), so core's schema and config name no application concept.
+- **An application registers through one registrar; what it supplies asks the page through one host.** Naming itself
+  (its id, its name) answers an application the one scoped door it registers everything else through — its kinds, its
+  route, its lifecycle hooks, its drop pages, its sections — so what it owns is what it registered there and its id is
+  written once on the web side. Rejected: free register calls side by side — an application listed its kinds three
+  times and spelled its id in up to six places, and nothing tied a claim to the application making it. In turn every
+  view an application supplies — a kind's page, a row factory — asks the page around it through ONE set of doors
+  (rename, move, delete, share, create, open, …), each of which may be absent: an absent door is an action not
+  offered, so the member's page and a guest's differ only in the doors they hand on. Rejected: a page that emits events
+  beside a row factory that calls a host — two shapes of the same doors, and each host page mounting its own copy of
+  core's dialogs.
 - **One view per kind, for a member and a share guest alike.** A share view looks exactly like the member view; a
   link's role only removes functions. So the registry's contract does not know which of the two is looking: a view
   receives who looks and the tree that session reads, and what it offers is its application's **rights function**,

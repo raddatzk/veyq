@@ -5,15 +5,16 @@ import { guestAccessOf, memberAccessOf } from '../../test/models'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { canDownload, downloadHeaderActions, downloadRowActions } from './downloadActions'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const unlocked = memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) })
 const t = (k: string) => k
 
 beforeAll(() => {
   if (!registry.kind('X_WITH').supported) {
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITH', icon: 'file', exportContent: async () => null })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITHOUT', icon: 'file' })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'X_ONE_FILE', icon: 'file', exportContent: async () => null, downloadsAsFile: true })
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITH', icon: 'file', exportContent: async () => null })
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'X_WITHOUT', icon: 'file' })
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'X_ONE_FILE', icon: 'file', exportContent: async () => null, downloadsAsFile: true })
   }
 })
 

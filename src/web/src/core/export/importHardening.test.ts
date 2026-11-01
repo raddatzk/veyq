@@ -31,6 +31,7 @@ import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 import { contentDigest, payloadChecksums } from '../blob/sharedBlob'
 // on purpose the page-thread loop over the object's own bytes: what it answers is what those bytes hash to
 import { digestHere } from '../blob/digest'
+import { testKind } from '../../test/testApplication'
 
 const FILE = 'H_FILE'
 const COLLECTION = 'H_COLLECTION'
@@ -47,7 +48,7 @@ const created: { kind: string; name: string; parent: string | null; bytes: strin
 /** Every payload a FILE hook received, as the object `ctx.payload` returned. */
 const grabbed: PayloadFile[] = []
 beforeAll(() => {
-  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+  testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
     kind: FILE, icon: 'file', downloadsAsFile: true, contentSchema: { application: 'h', version: 1 },
     validateContent: (c) => (typeof c.note === 'string' && c.note.length > 10 ? { code: 'too_large', message: 'note' } : null),
     async exportContent(ctx) {
@@ -62,7 +63,7 @@ beforeAll(() => {
       return { nodeId: made.nodeId, nodeKey: made.contentKey }
     },
   })
-  registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+  testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
     kind: COLLECTION, icon: 'file', contentSchema: { application: 'h', version: 1 },
     async exportContent(ctx) {
       const files = ['IMG.jpg', 'img.JPG'].map((n) => ctx.addPayload(n, { size: n.length, mediaType: 'image/jpeg', chunks: async function* () { yield text(n) } }))
@@ -477,7 +478,7 @@ describe('each payload is checked through the digest worker\'s door, the next on
   const seen: number[][] = []
   let asks = bodies.length
   beforeAll(() => {
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
       kind: SERIES, icon: 'file', contentSchema: { application: 'h', version: 1 },
       async exportContent() {
         throw new Error('not exported here')

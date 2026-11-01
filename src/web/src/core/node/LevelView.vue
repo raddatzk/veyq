@@ -193,8 +193,14 @@ const trashOffered = computed(() => rights.value.nodeTrash && !!host.openTrash)
 const lists = registry.lists()
 const registryTabs = registry.tabs()
 
-const nodesOfKinds = (kinds: readonly NodeKind[]): TreeNode[] => kinds.flatMap((k) => props.level.byKind.get(k) ?? [])
-const present = computed(() => new Set([...props.level.byKind.entries()].filter(([, nodes]) => nodes.length > 0).map(([kind]) => kind)))
+// The level as core lists it: a kind registered `listed: false` (a future application's one pool per space, reached through
+// its own entry) has no row here - and no unsupported row either; the node stays a node everywhere else.
+const listedLevel = computed<Level>(() => ({
+  folders: props.level.folders,
+  byKind: new Map([...props.level.byKind].filter(([kind]) => registry.listed(kind))),
+}))
+const nodesOfKinds = (kinds: readonly NodeKind[]): TreeNode[] => kinds.flatMap((k) => listedLevel.value.byKind.get(k) ?? [])
+const present = computed(() => new Set([...listedLevel.value.byKind.entries()].filter(([, nodes]) => nodes.length > 0).map(([kind]) => kind)))
 // What the viewer may add here, by the kind that declared the entry.
 const creatable = computed(() => new Set(registryMenu.filter((e) => e.allowed(menuCtx.value)).map((e) => e.kind)))
 
@@ -207,13 +213,13 @@ function onTab(value: string | number): void {
 }
 const visible = (kind: NodeKind): boolean => kindVisible(shownTab.value, tabs.value, kind)
 
-const showFolders = computed(() => !hideEmptyTabs.value || props.level.folders.length > 0)
+const showFolders = computed(() => !hideEmptyTabs.value || listedLevel.value.folders.length > 0)
 
 /** Every non-folder node under the shown tab: those of a listed kind whose tab is shown, and (under `All`) the nodes of a kind
  *  nobody lists, which show as unsupported rows. */
 const visibleNodes = computed(() => {
   const nodes: TreeNode[] = []
-  for (const [kind, bucket] of props.level.byKind) if (visible(kind)) nodes.push(...bucket)
+  for (const [kind, bucket] of listedLevel.value.byKind) if (visible(kind)) nodes.push(...bucket)
   return nodes
 })
 
@@ -240,8 +246,8 @@ const mode = computed(() => effectiveViewMode(viewMode.value, views.value))
 // same decrypted image instead of loading its own.
 const levelNodes = computed<TreeNode[]>(() => [
   ...(props.folder ? [props.folder] : []),
-  ...props.level.folders,
-  ...[...props.level.byKind.values()].flat(),
+  ...listedLevel.value.folders,
+  ...[...listedLevel.value.byKind.values()].flat(),
 ])
 // Core's own actions of every node here (`coreNodeActions.ts`: the heart, the cover, "Copy to…", the download, Report), for
 // the rows and - provided to it - the folder header; the copy and the download open the host's dialogs.
@@ -287,7 +293,7 @@ function withStandard(node: TreeNode, row: LevelRow): LevelRow {
 
 // --- the one list ------------------------------------------------------------------------------------------------------
 // The sub-folders' labels: a repeated name numbered, in creation order - the rule the URL segments follow too.
-const folderLabels = computed(() => displayNamesOf(props.level.folders, (n) => n.name, compareByCreation))
+const folderLabels = computed(() => displayNamesOf(listedLevel.value.folders, (n) => n.name, compareByCreation))
 
 interface Item { key: string; node: TreeNode; kind: NodeKind; row: LevelRow; folder: boolean; unsupported: boolean }
 // A node's cover is the leading visual of its row or tile wherever its application did not supply one (a Memory's row draws its
@@ -299,7 +305,7 @@ function withCover(item: Item): Item {
   return { ...item, row: { ...item.row, leading: { component: NodeCoverImage, props: { src: loaded.url, crop: loaded.crop, alt: '' } } } }
 }
 const items = computed<Item[]>(() => {
-  const ordered = orderLevel(showFolders.value ? props.level.folders : [], visibleNodes.value, locale.value)
+  const ordered = orderLevel(showFolders.value ? listedLevel.value.folders : [], visibleNodes.value, locale.value)
   return ordered.map((node): Item => withCover(rawItem(node)))
 })
 function rawItem(node: TreeNode): Item {
@@ -354,7 +360,7 @@ function folderParts(node: TreeNode): Pick<LevelRow, 'standard' | 'selection'> {
 
 // --- the selection (inbox #421) ------------------------------------------------------------------------------------------
 // Every node at the level, whichever tab is shown: a selected node the tab hides still moves and is deleted with the rest.
-const levelItems = computed(() => new Map([...props.level.folders, ...[...props.level.byKind.values()].flat()].map((n) => [n.id, rawItem(n)])))
+const levelItems = computed(() => new Map([...listedLevel.value.folders, ...[...listedLevel.value.byKind.values()].flat()].map((n) => [n.id, rawItem(n)])))
 const selection = useSelection()
 const selecting = ref(false)
 const allowsOf = (id: string): LevelRowSelection | undefined => levelItems.value.get(id)?.row.selection
@@ -474,7 +480,7 @@ const notices = computed(() => lists.flatMap((list, i) => (list.kinds.some(visib
 const emptyText = computed<string | null>(() => {
   if (presentations.value.length) return null
   if (shownTab.value === ALL_TAB) {
-    if (props.level.folders.length > 0 || visibleNodes.value.length > 0) return null
+    if (listedLevel.value.folders.length > 0 || visibleNodes.value.length > 0) return null
     return menuEntries.value.length ? t('node.levelEmptyNew', { entries: menuEntries.value.map((e) => t(e.label)).join(', ') }) : t('node.levelEmpty')
   }
   if (visibleNodes.value.length > 0) return null

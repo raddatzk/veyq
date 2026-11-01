@@ -8,7 +8,7 @@
 //    link's root included — so a share looks exactly like the member view and the role only removes functions (inbox
 //    #401, the owner principle of 2026-10-09). The root kind must be one the app can render (FOLDER, or a kind with a
 //    `detail`);
-//  - for a `WRITE_ONLY` link, the drop page its root kind's application claimed (`registry.shareBody`): its guest holds
+//  - for a `WRITE_ONLY` link, the drop page its root kind's application claimed (`registry.shareBodyFor`): its guest holds
 //    no key, so there is nothing to render the member's way (Memories' photo drop, Depot's drop box).
 // Anything else — a root kind nobody can render, or none named — is the explicit unavailable state, never a blank page.
 // A footer links to veyq's security docs (the client-integrity trust tier, ADR 0026).
@@ -195,7 +195,7 @@ const securityDocUrl = computed(() =>
 function bodyFor(h: PublicShareHead) {
   const kind = h.rootKind
   if (!kind) return null
-  if (h.role === ShareRole.WriteOnly) return registry.shareBody(kind)
+  if (h.role === ShareRole.WriteOnly) return registry.shareBodyFor(kind)
   const info = registry.kind(kind)
   return kind === FOLDER_KIND || (info.supported && info.detail) ? ShareTreePage : null
 }

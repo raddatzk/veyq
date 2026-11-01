@@ -37,9 +37,10 @@ structure, attachments and guests, and the user interface. What a verified uploa
 - **Depends on core, never the reverse, never on another application.** Cross-application references are generic
   core object references (scope id + node id) only.
 - **Claims its URL route slug once.** A node of an application is addressed `#<path>/<slug>/<name>` in the URL
-  fragment ([ADR 0015](../decisions/0015-operator-blind-readable-urls.md)): the application claims its slug in the web
-  registry (`claimRouteSlug`; a second claim throws; a platform word, `RESERVED_ROUTE_SEGMENTS`, is refused), or
-  declares that it has none (`claimNoRouteSegment`) — Depot is the one that does. A claimed slug is reserved among
+  fragment ([ADR 0015](../decisions/0015-operator-blind-readable-urls.md)): the application decides its route once in
+  the web registry, for every kind it owns — its slug (`app.route(slug)`; a second decision throws, so does a slug
+  another claimed; a platform word, `RESERVED_ROUTE_SEGMENTS`, is refused), or that it has none (`app.route(null)`) —
+  Depot is the one that does. A claimed slug is reserved among
   folder and file names, which are numbered around it (`memories-2`; the module is `core/node/location.ts`,
   [en.platform.node-tree § Addressing](../features/platform/enablers/en.platform.node-tree.md#addressing-urls)).
 - **Own tables keyed by `node_id`.** The server side is as thin as possible; domain logic lives in the client.
@@ -57,8 +58,9 @@ structure, attachments and guests, and the user interface. What a verified uploa
   `MemberBlobRoles.application`, so core refuses its node writes by kind; each of its write handlers calling
   `ApplicationSwitch.requireWritable` right after its gate (`ApplicationSwitchSweepTest` is red on a write operation that
   neither answers `capability_disabled` off nor is exempt with its reason); and on the web
-  `registry.registerApplication` with its kinds and its rights function reading `access.applicationsOff`. Nothing
-  names the kinds' application for `applicationOf` but the application itself: a kind left out is never switched.
+  `registry.registerApplication({ id, name })`, through whose registrar it registers its kinds, and its rights function
+  reading `access.applicationsOff`. Nothing names the kinds' application for `applicationOf` but the application itself:
+  on the web a kind belongs to the application whose registrar registered it, so none can be left out.
 - **Wired in one step, on both sides.** An application's spec directory `contracts/api/<application>/` lands with its
   Gradle module `:apps:<application>`: buildSrc's `SpecSets.requireNoStray` refuses a spec no module generates while
   the build is configured, so `./gradlew check` runs no task at all (`./gradlew help` shows it at refine). On the web,
@@ -192,9 +194,24 @@ point 8).
 - **Import direction, not modules.** `src/web/src/features/<owner>` is an application's directory, named for its owner;
   no core file imports one except the composition root `src/web/src/applications.ts`. The shell asks a build-time
   registry (`src/web/src/core/applications/registry.ts`) what to render for a node kind, which page a `WRITE_ONLY`
-  link shows, and what runs when a scope is entered or reset and when the Master Key rotates (registered under the
-  application's own registered id; the Master-Key hook is required of every hook set, while a build with no hooks rotates,
-  core re-sealing its own pins). The shell's top bar and sidebar are core's alone: no application adds to them.
+  link shows, and what runs when a scope is entered or reset and when the Master Key rotates (the Master-Key hook is
+  required of every hook set, while a build with no hooks rotates, core re-sealing its own pins). The shell's top bar
+  and sidebar are core's alone: no application adds to them.
+- **One registrar per application.** An application names itself once, `const app = registry.registerApplication({ id,
+  name })`, and registers everything else through the scoped registrar it is answered: `app.kind(kind, descriptor)` per
+  node kind, `app.route(slug | null)` once for all its kinds, `app.lifecycle(hooks)`, `app.shareBody(rootKind, body)` (a
+  kind of its own only), `app.personSection(component)`, `app.itemReview(component)`. Ownership is the registration —
+  there is no list of an application's kinds beside it — and `app.id` is the one place its id is written on the web
+  side: a kind's `contentSchema` names its version, the registry fills the application in. Every call is write-once and
+  refuses at runtime what would be ambiguous; there are no free register functions. A kind may be registered
+  `listed: false`: core's level draws no row for its nodes, not even the unsupported one (the seam for a kind reached
+  another way, Inventory's pool, see [Decided, not built](#decided-not-built)).
+- **One host contract.** Whatever draws a node - a kind's page, a row factory, core's level - asks the page around it
+  through ONE set of doors (`core/node/nodeHost.ts`, `NodeHost`: open, rename, move, delete, share, create a child,
+  download, copy, import, the trash), injected by a kind's page and handed to a row factory as its `LevelRowsHost`. Every
+  door may be absent, and an absent door is an action not offered, whatever a rights function says. The dialogs behind
+  them are core's one set (`core/node/components/NodeDialogs.vue`), mounted by both pages: the member's space page
+  hands on every door, a share guest's page `open`, the download, the create and - a `READ_WRITE` link - the move.
 - **Core draws the level.** The folder level view is core's (`core/node/LevelView.vue`): one list of the folders and
   every kind's rows, each from its application's row factory (below), and the presentations it switches between (core's
   grid and list, an application's own such as Memories' map) in core's toolbar. A folder's create, every node's rename,
@@ -213,7 +230,7 @@ point 8).
   function answers each for the node (a row's `standard`, the header's flags), and no answer is no action. An
   application that needs its own implementation supplies an action of the same id, which replaces core's: Depot's file
   does for all three (its delete asks, writes through its session's source and offers its own Undo). A share guest's
-  level has core's move alone; no guest renames or deletes a node core's way.
+  page hands on core's move door alone (a `READ` link's not even that); no guest renames or deletes a node core's way.
 - **One view per kind, for a member and a share guest alike.** A kind's `detail` and its row factory receive `access`
   (a member of the unlocked scope, or a guest of a link) and `tree` (the member's decrypted scope tree or the guest's
   opened subtree, every navigation through its `linkTo`, so a guest keeps its `#k=` fragment); core mounts them in both
@@ -232,7 +249,7 @@ point 8).
   matrix allows it **and** the session's data source
   (`features/<owner>/source.ts`, the member's or the guest's, fixed at mount) implements the operation. Member-only
   state — pins under the Master Key, item marks, a node's sealed meta, the scope's member list — is granted to no
-  guest role. The one guest-only page is a `WRITE_ONLY` link's drop (`claimShareBody`), whose guest holds no key; the
+  guest role. The one guest-only page is a `WRITE_ONLY` link's drop (`app.shareBody`), whose guest holds no key; the
   guest shell (password and terms gates, one naming flow with "Not you?", the curator's note, the role badge) is core's.
 - **Strings and styles follow the directories.** Each application's i18n namespaces are its own catalog,
   `features/<owner>/i18n.ts`, which the composition root's data-only half (`src/web/src/applicationMessages.ts`) adds to
@@ -325,6 +342,13 @@ presentation (`presentation(mode)` beside `row`, named in its kinds' `list.views
 map the same way the level does, the same component over the person's Memories that have a place.
 
 ## Decided, not built
+
+- **An application's own entry in core's navigation** (for [Inventory](inventory.md)'s one pool per space, created on
+  first open and no row of a level). Built: the kind half, `listed: false` (above). Next, with Inventory: an
+  `app.entry({ label, icon, open(scope) })` on the registrar - core draws each registered entry in the space's
+  navigation, hidden while no application registers one, and `open` is the application's (it finds or creates the
+  space's pool and opens it). Its place (the sidebar or the space's header) is decided against the styleguide then,
+  with the pool's create flow (who creates it, under which key) beside it.
 
 - **The capability register's open entries and requirements** (ADR 0088):
   [en.platform.capability-register § Decided, not built](../features/platform/enablers/en.platform.capability-register.md#decided-not-built).

@@ -39,6 +39,7 @@ import type { GuestIdentity } from '../sharing/guestIdentity'
 import { treeNode, memberAccessOf, guestAccessOf, memberTreeOf } from '../../test/models'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import { nothingOfItsOwnToRekey } from './rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const ITEM = 'ITEM' // lives at the root or in a folder (as a Memory, a file)
 const PART = 'PART' // lives only in an ITEM (as a chapter)
@@ -67,9 +68,9 @@ const hereAt = (tree: TreeSource, node: TreeNode, mode: Access['mode'], ats: (st
 
 beforeEach(() => {
   holder.reg = createRegistry()
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: ITEM, icon: 'images', placement: { root: true, parents: [FOLDER_KIND] } })
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: PART, icon: 'image', placement: { root: false, parents: [ITEM] } })
-  holder.reg.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: BOX, icon: 'inbox', placement: { root: true, parents: [FOLDER_KIND] } })
+  testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: ITEM, icon: 'images', placement: { root: true, parents: [FOLDER_KIND] } })
+  testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: PART, icon: 'image', placement: { root: false, parents: [ITEM] } })
+  testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey, kind: BOX, icon: 'inbox', placement: { root: true, parents: [FOLDER_KIND] } })
   for (const f of Object.values(calls)) f.mockClear()
 })
 

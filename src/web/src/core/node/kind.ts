@@ -1,6 +1,6 @@
 // A node's kind (ADR 0079): on the wire an open, bounded token — `_common` `NodeKind`, `^[A-Z][A-Z0-9_]{0,15}$` — so
 // the generated client types it as a plain `string` and lists no kinds. Core names one kind, its own `FOLDER`;
-// every other kind belongs to an application, which registers it with the registry (`registerKind`), and the
+// every other kind belongs to an application, which registers it through its registrar (`app.kind`), and the
 // registry answers `{ supported: false }` for any kind nobody registered — that fail-closed answer and its tests
 // carry what a closed enum's exhaustiveness used to (cr-platform-contract-split slice 4).
 

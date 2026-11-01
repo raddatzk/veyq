@@ -175,7 +175,7 @@ here; the server is blind.
   `editParticipantsOf` (`core/node/nodeMeta.ts`), not `editField`. Names come from `core/people/directory.ts` (real name, else username, from the
   TENANT's member list). A person's profile is the fragment `#people/<userId>` (`parseHash().person` / `personHash` in `location.ts`, the one door;
   `people` is in `RESERVED_ROUTE_SEGMENTS` and numbered away from a root folder's name); core draws `core/people/PersonProfile.vue` and an application adds a
-  section with `registry.claimPersonSection` (Memories: `PersonMemories.vue` over `participantIndex.ts`, which holds Memory keys and so is dropped on
+  section with its registrar's `app.personSection` (Memories: `PersonMemories.vue` over `participantIndex.ts`, which holds Memory keys and so is dropped on
   every scope reset). A share view never links to a profile.
   **A member's profile picture (ADR 0084, `uc.spaces.set-profile-picture`).** A sealed attribute of the per-tenant profile row, a `member-avatar`
   field under `K_tenant` (`sealField`, ADR 0093 § 9; `features/account/profile/memberAvatar.ts`: 256 px WebP in the tenant icon's constant 16 KiB pad (shown at 128 px on the profile page), 21908 base64 chars = the contract's
@@ -327,10 +327,15 @@ here; the server is blind.
   (`list.emptyText`, an i18n key function over the level context), and a level with nothing at all says so ONCE in plain text
   composed from what the viewer may create (`node.levelEmptyNew`), or `node.levelEmpty` - no create tile.
 
-  **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
-`registerApplication({ id, name, kinds })` once — its register id (its switch), its name's i18n key and the kinds it owns, which
-`applicationOf(kind)` answers to core;
-  `registerKind` per node kind (detail component, icon, `deleteTitle` - the i18n key core's delete dialog
+  **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws). It
+  names itself ONCE, `const app = registry.registerApplication({ id, name })` — its register id (its switch, from
+  `features/platform/capabilities.ts`) and its name's i18n key — and registers everything else through the SCOPED
+  registrar it is answered (`ApplicationRegistrar`); there are no free register functions. **Ownership is the
+  registration:** a kind belongs to the application whose `app.kind` registered it (`applicationOf(kind)` answers that to
+  core), so no list of an application's kinds exists beside its registrations, and `app.id` is the one place the id is
+  written on the web side - a kind's `contentSchema` gives its version only (`{ version }`), the registry fills its
+  application in from the registrar. The registrar's doors:
+  `app.kind(kind, descriptor)` per node kind (`KindRegistration`: detail component, icon, `deleteTitle` - the i18n key core's delete dialog
   titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence - `nounWithArticle`, the noun core's
   create and rename dialogs name a colliding sibling of the kind with ("There is already a file named ...", else "an item") - `emptyInTrash`, the note core's
   trash shows on a node of the kind that holds no attachment - `renameSelectionEnd`, where core's rename dialog ends the
@@ -347,11 +352,11 @@ here; the server is blind.
   toggle offers it exactly where a shown tab includes the kind). The factory owns the DATA a row needs and the flows behind its
   actions (Depot: the blob listing, re-read on `liveTick`, the upload and replace flows with their confirmation and the
   picker it builds; Memories: covers, dates, the heart), so none of that depends on which tab is shown. Kinds naming the
-  same `rows` function share one row source and must agree on `views` (else `registerKind` throws). A kind registered
+  same `rows` function share one row source and must agree on `views` (else `app.kind` throws). A kind registered
   without a `list`, or not registered at all, is an unsupported row. For the level's "New" menu (inbox #406) a kind brings
   `createEntry` (`{ label, icon, order, allowed(ctx), enabled?(ctx) }`: the kind's menu entry, its label an i18n key of the
   application's own namespace, `allowed` its fail-closed rights function, and it needs a `createDialog`, which
-  `registerKind` checks) and `levelActions` (entries that are no create dialog - Depot's "Upload files" and "Upload folder…";
+  `app.kind` checks) and `levelActions` (entries that are no create dialog - Depot's "Upload files" and "Upload folder…";
   ids write-once, `create:` reserved; `acceptsDrop` makes the level hand it what is dropped onto it). The factory registers
   the action's handler with `host.registerAction(id, { enabled, run, drop?, dropDirectory? })` (`core/node/levelActions.ts`)
   for the level's life; an entry whose handler is not `enabled` is disabled, and a DROP reaches `drop` (files) or
@@ -390,24 +395,32 @@ here; the server is blind.
   `core/sharing/FolderShareDialog.vue` is pre-registered); no shell slot - the top bar and the sidebar are core's alone
   (the upload status `core/blob/UploadStatusMenu.vue` lists every application's batches of the one core queue, the
   Favorites `core/favorites/PinnedNodes.vue` every kind's pins), and a place there for an application is a seam that comes
-  with its first user; `claimRouteSlug(slug, kinds)` — the application's segment in a node's URL fragment path (`#foo/memories/rom`; Memories claims
-  `memories`, a second claim of a slug or a kind throws, `RESERVED_ROUTE_SEGMENTS` are refused) — or `claimNoRouteSegment(kinds)`,
+  with its first user; a kind registered `listed: false` is no row of the level at all - neither its own nor the
+  unsupported one (`registry.listed(kind)`, read by `LevelView`; it brings no `list`, `app.kind` throws on both): the seam
+  for a kind an application reaches another way (Inventory's one pool per space; its navigation entry is
+  [docs/apps § Decided, not built](../../docs/apps/README.md#decided-not-built)); `app.route(slug)` — ONCE, for every kind
+  the application owns: its segment in a node's URL fragment path (`#foo/memories/rom`; Memories claims
+  `memories`, a second decision or a slug another claimed throws, `RESERVED_ROUTE_SEGMENTS` are refused) — or `app.route(null)`,
   the explicit "no segment" option only Depot takes (its nodes are plain names: `#foo/report`; one application at most). The grammar
   — a folder ends in a slash, a claimed slug is reserved among folder and file names (`memories-2`), folders and files are numbered
   apart, no slash resolves to the file before the folder — lives in `core/node/location.ts` (ADR 0015, amended 2026-10-11) and
   nowhere else: `scripts/validate_web_fragment_paths_via_location.py` is red on a file that splits or hand-builds a fragment path;
-  `claimShareBody(rootKind, body)` for the drop page of
-  a `WRITE_ONLY` link rooted at that kind (`PublicShare.rootKind`) — the one page with no member equivalent, its guest
+  `app.shareBody(rootKind, body)` for the drop page of
+  a `WRITE_ONLY` link rooted at that kind (`PublicShare.rootKind`, a kind of the application's own - another's throws; the
+  shell reads it with `registry.shareBodyFor`) — the one page with no member equivalent, its guest
   holding no key: Memories' photo drop (`MemoryShareBody`), Depot's drop box (`DropBoxShareBody`); `FOLDER` is claimed by
   nobody and refused. Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any
-  guest a write;
-  `registerLifecycle(id, hooks)` under the application's REGISTERED id (`registerApplication` first, an unknown id throws)
+  guest a write; `app.personSection(component)` and `app.itemReview(component)` (above, and the moderator's review of an
+  application's reported record);
+  `app.lifecycle(hooks)` once
   with `onScopeReset` / `onScopeEntered` and the **required** `onMasterKeyRotated` — material an application seals under the
   Master Key (Memories' item marks) is otherwise unverifiable after a rotation. There is no registry-wide rotation gate:
   core re-seals its own Master-Key material (the node pins) in `rotateKeys` itself, so a build with no application hook
   rotates (`rotateKeys.test.ts` pins it); that Memories' hooks reach the real registry is `applications.test.ts`'s. Every
-  registered kind but FOLDER belongs to exactly one registered application and has its route decided (`registry.kinds()`,
-  `routeDecided`; `applications.test.ts`). A kind or share nobody registered renders
+  registered kind but FOLDER belongs to the one application that registered it and has its route decided (`registry.kinds()`,
+  `routeDecided`; `applications.test.ts`). A test registers its made-up kinds through `src/test/testApplication.ts`
+  (`testApp(registry, id?)`, `testKind(registry, descriptor, id?)`). A kind or share nobody registered renders
+
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
   `detail` (`NodeDetailProps`) and a row factory (`LevelRowsContext`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
   (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's three share leaves `publicShares`/`publicSharesContribute`/`publicSharesDropBox`, one boolean per register id the host fills from ONE `hasCapability` each — the server ANDs the path, a rights function never does, ADR 0088 — and `applicationsOff`, the ids of `registry.applications()` the read set lacks (`isSwitchedOff`, never an unread set): every rights function then drops every write but the delete - core's `nodeRights` and each application's ask `applicationWritable(access, kind)`, never `applicationsOff` itself, as core does for its own actions on the kind -, uc.platform.switch-application-off) or a share guest

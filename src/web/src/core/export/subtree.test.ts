@@ -24,6 +24,7 @@ import { memberAccessOf } from '../../test/models'
 import type { TreeSource } from '../access'
 import * as v1 from '@veyq/crypto/v1'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
+import { testApp, testKind } from '../../test/testApplication'
 
 const FILE = 'T_FILE'
 const COLLECTION = 'T_COLLECTION'
@@ -76,7 +77,7 @@ beforeEach(() => {
     return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 1 }
   })
   if (!registry.kind(FILE).supported) {
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
       kind: FILE, icon: 'file', downloadsAsFile: true, contentSchema: { application: 't', version: 1 },
       async exportContent(ctx) {
         const bytes = contents.get(ctx.node.id)!
@@ -92,7 +93,7 @@ beforeEach(() => {
         return { nodeId: made.nodeId, nodeKey: made.contentKey }
       },
     })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
       kind: COLLECTION, icon: 'file', contentSchema: { application: 't', version: 1 },
       async exportContent(ctx) {
         const files = collectionFiles.map(([name, body]) => ctx.addPayload(name, { size: body.length, mediaType: 'text/plain', chunks: async function* () { yield text(body) } }))
@@ -106,9 +107,9 @@ beforeEach(() => {
         return { nodeId: made.nodeId, nodeKey: made.contentKey }
       },
     })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: ODD, icon: 'file' }) // no hooks: cannot be downloaded
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: ODD, icon: 'file' }) // no hooks: cannot be downloaded
     // a container that downloads with a content of its own and imports as a plain folder (a Depot drop box's shape)
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey,
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,
       kind: BOX, icon: 'file', contentSchema: { application: 't', version: 1 }, importsAsFolder: true,
       exportContent: async () => ({ type: 't.box', schema: 1 }),
       validateContent: (c) => (Object.keys(c).every((k) => k === 'type' || k === 'schema') ? null : { code: 'invalid_manifest', message: 'a box with more' }),
@@ -264,7 +265,10 @@ describe('import', () => {
   // ADR 0080 decision 16: a name is numbered only against its own route group's siblings — a node of
   // a kind whose application claimed a route slug (a Memory, a Pot) is another group than the folder imported here.
   it('numbers a name per route group: a routed sibling of the name leaves it free, a folder of it does not', async () => {
-    if (!registry.routeSlugs().includes('t-routed')) registry.claimRouteSlug('t-routed', ['T_ROUTED'])
+    if (!registry.routeSlugs().includes('t-routed')) {
+      testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'T_ROUTED', icon: 'file' }, 't-routed')
+      testApp(registry, 't-routed').route('t-routed')
+    }
     const { archive } = await exported()
     await importSubtree({ scopeId: 's', epochs, tree: [node('t1', null, 'T_ROUTED', 'Trip')], parent: null, opened: await openExport(zipOf(archive)) })
     expect(imported[0].name).toBe('Trip')

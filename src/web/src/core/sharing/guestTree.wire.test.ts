@@ -25,6 +25,7 @@ import type { PublicShareHead } from './resolvePublicShare'
 import { ShareRole, type ShareNode } from '../../api/generated/sharing'
 import { t } from '../../test/i18n'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
+import { testApp, testKind } from '../../test/testApplication'
 
 const SCOPE_ID = '22222222-2222-4222-8222-222222222222'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_0' // a 43-char base64url id, as `newShareId` mints
@@ -126,7 +127,10 @@ describe('a guest creates a node', () => {
   // ADR 0080 decision 16: the guest's pre-check and token agree with the member's — a node of a kind
   // whose application claimed a route slug is another group than the folder `Fotos` beside it.
   it('a routed kind of a sibling folder\'s name is sent, its token input behind its route slug', async () => {
-    if (!registry.routeSlugs().includes('t-routed')) registry.claimRouteSlug('t-routed', ['T_ROUTED'])
+    if (!registry.routeSlugs().includes('t-routed')) {
+      testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'T_ROUTED', icon: 'file' }, 't-routed')
+      testApp(registry, 't-routed').route('t-routed')
+    }
     const sent = recordFetch(created)
     await createShareNodeAsGuest(context(), { parentId: ROOT, kind: 'T_ROUTED', name: 'FOTOS!' })
     expect(sent).toHaveLength(1)
@@ -203,7 +207,7 @@ describe('a guest places a node', () => {
   // registers the file folding (fileNameSlug: foto.jpg).
   describe('folds by kind (inbox #350)', () => {
     const LEAF = 'LEAFTEST'
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: LEAF, icon: 'file', slug: fileNameSlug })
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: LEAF, icon: 'file', slug: fileNameSlug })
     const DIR = '6e5a0000-0000-4000-8000-0000000000b1'
     const FILE = '6e5a0000-0000-4000-8000-0000000000b2'
     const byKind = () => {

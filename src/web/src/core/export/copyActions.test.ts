@@ -9,6 +9,7 @@ import { guestAccessOf, memberAccessOf } from '../../test/models'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { canCopy, copiesKind, copyHeaderActions, copyRowActions } from './copyActions'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
+import { testKind } from '../../test/testApplication'
 
 const unlocked = memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) })
 const t = (k: string) => k
@@ -16,12 +17,11 @@ const hooks = { exportContent: async () => null, importContent: async () => ({ n
 
 beforeAll(() => {
   if (!registry.kind('CP_STREAMS').supported) {
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_STREAMS', icon: 'file', ...hooks, importStreams: true })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_WHOLE', icon: 'file', ...hooks }) // its import needs whole payloads
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_AS_FOLDER', icon: 'file', exportContent: hooks.exportContent, importsAsFolder: true })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NO_IMPORT', icon: 'file', exportContent: hooks.exportContent, importStreams: true })
-    registry.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NONE', icon: 'file' })
-    registry.registerApplication({ id: 'cp', name: 'cp.name', kinds: ['CP_STREAMS'] })
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_STREAMS', icon: 'file', ...hooks, importStreams: true }, 'cp')
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_WHOLE', icon: 'file', ...hooks }) // its import needs whole payloads
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_AS_FOLDER', icon: 'file', exportContent: hooks.exportContent, importsAsFolder: true })
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NO_IMPORT', icon: 'file', exportContent: hooks.exportContent, importStreams: true })
+    testKind(registry, { rekeyContent: nothingOfItsOwnToRekey, kind: 'CP_NONE', icon: 'file' })
   }
 })
 

@@ -33,7 +33,7 @@ import FileShareDialog from './components/FileShareDialog.vue'
 import { canUploadFolder, depotRights } from './rights'
 import { depotRows, UPLOAD_ACTION, UPLOAD_FOLDER_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
-import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent, DEPOT_CONTENT_SCHEMA } from './exportImport'
+import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent, DEPOT_CONTENT_VERSION } from './exportImport'
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
  *  the last dot, unless the name starts with its only dot (`.env` stays whole). */
@@ -59,11 +59,13 @@ function depotEmptyText(ctx: LevelActionContext): string {
 }
 
 export function registerDepot(registry: Registry): void {
+  // Depot names itself once (its entry of the capability register, which switches its kinds as one,
+  // uc.platform.switch-application-off) and registers everything else through its registrar.
+  const app = registry.registerApplication({ id: DEPOT, name: 'depot.title' })
   // A file is a READ / READ_WRITE share root (the backend's `DepotShareRoots`), and is also shared through its folder.
   // Its name folds by `fileNameSlug` (inbox #350: `Foto.JPG` and `foto.jpg` collide, `Day1.md` and `Day1 md` do not) — frozen
   // into every stored slug token from the first `FILE` on, and pinned by `name_folding` in `contracts/crypto/vectors/v1.json`.
-  registry.registerKind({
-    kind: FILE_KIND,
+  app.kind(FILE_KIND, {
     // A file's content wrap is a core attachment and a drop box's guests are core's: Depot stores nothing else under a
     // node's key (ADR 0109).
     rekeyContent: nothingOfItsOwnToRekey,
@@ -77,7 +79,7 @@ export function registerDepot(registry: Registry): void {
     // A file downloads as itself (its row's and page's own action) and is one file inside a folder's ZIP (ADR 0082).
     exportContent: exportFile,
     importContent: importFile,
-    contentSchema: DEPOT_CONTENT_SCHEMA,
+    contentSchema: { version: DEPOT_CONTENT_VERSION },
     validateContent: validateFileContent,
     downloadsAsFile: true,
     importStreams: true,
@@ -103,8 +105,7 @@ export function registerDepot(registry: Registry): void {
     placement: DEPOT_PLACEMENT,
   })
   // Shared WRITE_ONLY only (the backend's `DepotShareRoots`); its name folds as a container's (`slugify`, the default).
-  registry.registerKind({
-    kind: DROPBOX_KIND,
+  app.kind(DROPBOX_KIND, {
     // A file's content wrap is a core attachment and a drop box's guests are core's: Depot stores nothing else under a
     // node's key (ADR 0109).
     rekeyContent: nothingOfItsOwnToRekey,
@@ -128,17 +129,16 @@ export function registerDepot(registry: Registry): void {
     placement: DEPOT_PLACEMENT,
     // Downloaded as a directory of its guests' folders; imported as a plain folder (ADR 0082 decision 4).
     exportContent: exportDropBox,
-    contentSchema: DEPOT_CONTENT_SCHEMA,
+    contentSchema: { version: DEPOT_CONTENT_VERSION },
     validateContent: validateDropBoxContent,
     importsAsFolder: true,
     copyLosses: ['depot.dropBox.copyLoss'],
   })
-  registry.claimShareBody(DROPBOX_KIND, DropBoxShareBody)
+  app.shareBody(DROPBOX_KIND, DropBoxShareBody)
   // Depot is the one application with NO route segment (inbox #328, ADR 0015, the grammar of a node's path): a file or
   // a drop box is its plain name in the path (`#reisen/report`), a folder of the same name needs the trailing slash
   // (`#reisen/report/`). Declared, not defaulted, so the registry knows it was chosen — and no second application can
   // choose it too.
-  registry.claimNoRouteSegment([FILE_KIND, DROPBOX_KIND])
-  // Its kinds are the Depot application's, switched as one by its register entry (uc.platform.switch-application-off).
-  registry.registerApplication({ id: DEPOT, name: 'depot.title', kinds: [FILE_KIND, DROPBOX_KIND] })
+  app.route(null)
 }
+
