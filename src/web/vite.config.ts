@@ -1,5 +1,4 @@
 import { randomBytes } from 'node:crypto'
-import { Agent } from 'node:http'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -20,7 +19,10 @@ import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIG
 const apiTarget = process.env.VEYQ_API_TARGET ?? 'http://127.0.0.1:8080'
 // `/blobs/` (presigned media) is proxied to the object store — only used with the s3 store profile. It is the
 // backend's default `veyq.blob-store.bucket`, spelled here because this file cannot read the setting.
-const storeTarget = process.env.VEYQ_STORE_TARGET ?? 'http://localhost:19000'
+// An address, not `localhost`: Node tries `::1` and 127.0.0.1 side by side and gives each a quarter second, and under an
+// upload's load the connect timed out on both — the proxy answered 502, the frame PUT never reached the store and the
+// upload stopped (a 700 MB video, 2026-11-01).
+const storeTarget = process.env.VEYQ_STORE_TARGET ?? 'http://127.0.0.1:19000'
 // Dev-server port. Default 8081, the origin the dev instance is browsed at (`veyq.localhost:8081`) and the one
 // `%dev`'s `veyq.bundled-store.public-endpoint` signs presigned URLs for — change one and change the other, or
 // uploads fail in the browser. `VITE_PORT` overrides it; the root launcher sets it from `veyq.webPort` together
@@ -305,10 +307,8 @@ export default defineConfig(({ command }) => {
             ? (proxy: any) => proxy.on('proxyReq', (req: any) => req.setHeader('host', smokeHost))
             : undefined,
         },
-        // Presigned media → object store, Host left untouched (SigV4 signs the Host). A fresh connection per request:
-        // Node's global agent keeps sockets alive, and a PUT sent on one the store is just closing never reaches it — the
-        // proxy answers 502 and the upload stops (2 of 600 frame PUTs, measured 2026-11-01; a 700 MB video lost two).
-        '/blobs/': { target: storeTarget, changeOrigin: false, agent: new Agent({ keepAlive: false }) },
+        // Presigned media → object store, Host left untouched (SigV4 signs the Host).
+        '/blobs/': { target: storeTarget, changeOrigin: false },
       },
     },
   }
