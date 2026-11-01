@@ -180,7 +180,10 @@ paths:
       description: >
         Disables the share (`enabled = false`). The next `resolve` + gated blob GET then `404`. Idempotent — an
         already-disabled share the caller owns still returns 204; a missing or deleted one is `404`. Only its creator, and only while they
-        are still a member of its space (uc.sharing.share-shared-scope A3). Soft (L1) revocation: already-
+        are still a member of its space (uc.sharing.share-shared-scope A3). It is the one link write a space in its
+        deletion grace allows (uc.spaces.scope-access A1): switching a link off only closes exposure, and the link
+        stays off if the deletion is stopped — so a revoke there is a `204`, never `409 scope_deleting`, while
+        creating, editing, re-activating, re-issuing and deleting a link stay refused. Soft (L1) revocation: already-
         downloaded ciphertext and a saved fragment link cannot be retracted (ADR 0029 §7, a stated limitation).
       security:
         - bearerAuth: []
@@ -202,7 +205,6 @@ paths:
           description: No such share owned by the caller, it was deleted, or the caller is no longer a member of its space.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/shares/{shareId}/reactivate:
     post:
