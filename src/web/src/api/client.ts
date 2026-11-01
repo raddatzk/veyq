@@ -30,7 +30,7 @@ import {
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
 import { Configuration as ScopesConfiguration, KeyChainApi, ScopesApi } from './generated/scopes'
 import { ContentApi, Configuration as ContentConfiguration, RekeyApi } from './generated/content'
-import { BlobApi, Configuration as BlobConfiguration } from './generated/blob'
+import { ApplicationBlobsApi, BlobApi, CaseApplicationBlobsApi, Configuration as BlobConfiguration, ShareApplicationBlobsApi } from './generated/blob'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
 import { ModerationApi, ReportsApi, StatementsApi, Configuration as ModerationConfiguration } from './generated/moderation'
 import { CaseReviewApi, SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
@@ -181,6 +181,21 @@ export function rekeyApi(): RekeyApi {
 // `features/memories/api.ts`) - or core's, for a node's cover (`contentApi().setNodeCover`, inbox #411).
 export function blobApi(): BlobApi {
   return new BlobApi(new BlobConfiguration(bearerParams()))
+}
+
+// Core's blob service for the blobs an application stores (ADR 0112, tags `application-blobs`, `share-application-blobs`,
+// `case-application-blobs`): a member's read and completion, a guest's on a link (no token), a moderator's case read.
+// The transport over them is `core/blob/applicationBlobs.ts`.
+export function applicationBlobsApi(): ApplicationBlobsApi {
+  return new ApplicationBlobsApi(new BlobConfiguration(bearerParams()))
+}
+
+export function publicShareApplicationBlobsApi(): ShareApplicationBlobsApi {
+  return new ShareApplicationBlobsApi(new BlobConfiguration(publicParams()))
+}
+
+export function caseApplicationBlobsApi(): CaseApplicationBlobsApi {
+  return new CaseApplicationBlobsApi(new BlobConfiguration(bearerParams()))
 }
 
 export function tasksApi(): TasksApi {

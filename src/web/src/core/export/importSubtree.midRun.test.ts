@@ -21,7 +21,7 @@ vi.mock('../../app/activeSpace', async () => {
   const { reactive } = await import('vue')
   return { activeSpace: reactive({ scopeId: '5c09e000-0000-4000-8000-0000000000cc' }), activeEpochKeys: () => held.epochs }
 })
-vi.mock('../../api/client', async (orig) => ({ ...(await orig<object>()), contentApi: vi.fn() }))
+vi.mock('../../api/client', async (orig) => ({ ...(await orig<object>()), contentApi: vi.fn(), applicationBlobsApi: vi.fn() }))
 vi.mock('../../features/expenses/api', async (orig) => ({ ...(await orig<object>()), expensesApi: vi.fn() }))
 vi.mock('../../features/depot/api', async (orig) => ({ ...(await orig<object>()), filesApi: vi.fn() }))
 vi.mock('../../features/memories/api', async (orig) => ({ ...(await orig<object>()), mediaApi: vi.fn() }))
@@ -33,7 +33,7 @@ vi.mock('../node/cover/coverWrite', async (orig) => ({ ...(await orig<object>())
 vi.mock('../../features/memories/media', async (orig) => ({ ...(await orig<object>()), addMedia: vi.fn(), addCopiedMedia: vi.fn(), prepareMedia: vi.fn() }))
 
 import { replaySubtrees, ImportFailed, type ReplayItem } from './importSubtree'
-import { contentApi } from '../../api/client'
+import { applicationBlobsApi, contentApi } from '../../api/client'
 import { expensesApi } from '../../features/expenses/api'
 import { filesApi } from '../../features/depot/api'
 import { mediaApi } from '../../features/memories/api'
@@ -41,7 +41,8 @@ import type { MediaApi, MediaListPage } from '../../api/generated/media'
 import { b64std } from '@veyq/crypto/base64'
 import { fakeApi } from '../../test/apiMock'
 import type { ContentApi, CreateNodeRequest, NodeSummary } from '../../api/generated/content'
-import type { ExpensesApi, PotReceipt } from '../../api/generated/expenses'
+import type { ExpensesApi } from '../../api/generated/expenses'
+import type { ApplicationBlob, ApplicationBlobsApi } from '../../api/generated/blob'
 import type { FileBlobRef, FilesApi } from '../../api/generated/depot'
 import { MANIFEST_FORMAT, MANIFEST_VERSION, type Manifest, type ManifestNode } from './manifest'
 import { FOLDER_KIND } from '../node/kind'
@@ -107,7 +108,8 @@ const one = (kind: string) => ofKind(kind)[0]!
 
 const pull = vi.fn()
 const creates: CreateNodeRequest[] = []
-let pot: { appendPotRevisions: ReturnType<typeof vi.fn>; completePotReceipt: ReturnType<typeof vi.fn> }
+let pot: { appendPotRevisions: ReturnType<typeof vi.fn> }
+let blobs: { completeApplicationBlob: ReturnType<typeof vi.fn> }
 let files: { completeFile: ReturnType<typeof vi.fn> }
 let plans: { blobId: string; chunkCount: number; byteSize: number; wrappedBlobKey: string }[]
 
@@ -137,10 +139,14 @@ beforeEach(() => {
   })
   pot = fakeApi(expensesApi, {
     appendPotRevisions: vi.fn<ExpensesApi['appendPotRevisions']>(async (r) => gate(r.nodeId, r.potAppendRequest.nodeEpoch!)),
-    completePotReceipt: vi.fn<ExpensesApi['completePotReceipt']>(async (r) => {
-      gate(r.nodeId, r.potReceiptCompleteRequest.nodeEpoch!)
+  })
+  // a Pot's receipt is completed through core's blob service (ADR 0112), through the same gate
+  blobs = fakeApi(applicationBlobsApi, {
+    completeApplicationBlob: vi.fn<ApplicationBlobsApi['completeApplicationBlob']>(async (r) => {
+      const q = r.applicationBlobCompleteRequest
+      gate(r.nodeId, q.nodeEpoch!)
       const p = plans.at(-1)!
-      return { ...p, receiptId: r.potReceiptCompleteRequest.receiptId, entryId: r.potReceiptCompleteRequest.entryId, createdAt: new Date(), blockedByOperator: false } as unknown as PotReceipt
+      return { ...p, id: q.id, ownerId: q.ownerId, role: q.role, createdAt: new Date(), keptAt: null, releasedAt: null, blockedByOperator: false } as unknown as ApplicationBlob
     }),
   })
   files = fakeApi(filesApi, {
@@ -323,7 +329,7 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
     await replay(potNode(true))
     const ski = one(POT_KIND)
     expect(pull).toHaveBeenCalledTimes(1)
-    expect(pot.completePotReceipt.mock.calls.map((c) => c[0].potReceiptCompleteRequest.nodeEpoch)).toEqual([0, 1])
+    expect(blobs.completeApplicationBlob.mock.calls.map((c) => c[0].applicationBlobCompleteRequest.nodeEpoch)).toEqual([0, 1])
     expect(pot.appendPotRevisions.mock.calls.map((c) => c[0].potAppendRequest.nodeEpoch)).toEqual([1])
     expect(openServedRevisions(SCOPE, ski, keyOf(ski), pot.appendPotRevisions.mock.calls[0]![0].potAppendRequest.revisions.map(wire))
       .every((h) => h.unreadable === null)).toBe(true)

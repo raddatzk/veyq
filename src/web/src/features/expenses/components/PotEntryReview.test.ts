@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // A moderator's review of a reported entry or receipt (uc.moderation.review-a-case, ADR 0108 decision 7): the receipts the
-// hold copied are listed beside the held revisions and opened with the K_blob the report share handed over for each blob
+// hold copied — core's case read of the application blobs (ADR 0112) — are listed beside the held revisions and opened
+// with the K_blob the report share handed over for each blob
 // (no Pot key), their bytes from the case's hold (the review's `chunkUrls`, `presignCaseBlobs`). A reported entry lists
 // every receipt of it and none of another entry; a receipt reported on its own lists itself alone; a receipt whose key the
 // share did not carry is listed as one the report cannot open, with nothing to open.
@@ -8,11 +9,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('../api', () => ({ caseExpensesApi: vi.fn() }))
+vi.mock('../../../api/client', async (orig) => ({ ...(await orig<object>()), caseApplicationBlobsApi: vi.fn() }))
 vi.mock('../../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlobWithKey: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import PotEntryReview from './PotEntryReview.vue'
 import { caseExpensesApi } from '../api'
+import { caseApplicationBlobsApi } from '../../../api/client'
+import { RECEIPT_ROLE } from '../receipts'
 import { openBlobWithKey } from '../../../core/blob/transport'
 import { beginReview } from '../../../core/sharing/review'
 import { fakeApi } from '../../../test/apiMock'
@@ -42,10 +46,13 @@ afterEach(() => {
 })
 
 function hold(receipts: ReturnType<PotServer['receipt']>[]) {
-  fakeApi(caseExpensesApi, {
-    listCasePotRevisions: async () => ({
-      revisions: [],
-      receipts: receipts.map((r) => ({ nodeId: POT_ID, receiptId: r.receiptId, entryId: r.entryId, blobId: r.blobId, chunkCount: r.chunkCount, byteSize: r.byteSize, wrappedBlobKey: r.wrappedBlobKey, wrappedBlobMeta: r.wrappedBlobMeta, createdAt: r.createdAt, droppedAt: null })),
+  fakeApi(caseExpensesApi, { listCasePotRevisions: async () => ({ revisions: [] }) })
+  fakeApi(caseApplicationBlobsApi, {
+    listCaseApplicationBlobs: async () => ({
+      blobs: receipts.map((r) => ({
+        nodeId: POT_ID, id: r.receiptId, ownerId: r.entryId, role: RECEIPT_ROLE, blobId: r.blobId, chunkCount: r.chunkCount, byteSize: r.byteSize,
+        wrappedBlobKey: r.wrappedBlobKey, wrappedBlobMeta: r.wrappedBlobMeta, createdAt: r.createdAt, keptAt: r.createdAt, releasedAt: null,
+      })),
     }),
   })
 }
@@ -98,9 +105,9 @@ describe('PotEntryReview revisions', () => {
           nodeId: POT_ID, entryId: r.entryId, revision: r.revision, tombstone: false, erasure: false,
           sealedBody: b64std(r.sealedBody), wrappedRevisionKey: b64std(r.wrappedRevisionKey), createdAt: r.createdAt,
         })),
-        receipts: [],
       }),
     })
+    fakeApi(caseApplicationBlobsApi, { listCaseApplicationBlobs: async () => ({ blobs: [] }) })
   }
   const titles = (w: ReturnType<typeof mountReview>) => w.findAll('.expenses-review ol .veyq-row-title').map((e) => e.text())
 

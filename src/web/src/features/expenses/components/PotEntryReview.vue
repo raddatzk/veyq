@@ -4,7 +4,8 @@
 // `../report.ts`), not the Pot's key, so the entry is drawn on its own: the held revisions from the review's own listing
 // (`listCasePotRevisions`, key-proved), each opened with whichever handed key its address takes (a seal binds its address,
 // ADR 0072). Read-only; it names no participant (their records were not reported) and no writer (the case read has none).
-// Beside them the receipts the hold copied (ADR 0108 decision 7): every receipt of a reported entry, or the one receipt
+// Beside them the receipts the hold copied (ADR 0108 decision 7), read from core's case read of the application blobs
+// (`listCaseApplicationBlobs`, key-proved, ADR 0112): every receipt of a reported entry (its owner), or the one receipt
 // reported on its own (its id is the item's) — each opened with the `K_blob` the share handed over for its blob
 // ({@link RECEIPT_KEY_ROLE}, the ref its blob id), its bytes from the case's hold (`presignCaseBlobs`, the review's
 // `chunkUrls`), drawn by the same `ReceiptView` a member's dialog uses. A receipt whose key the share did not carry (its
@@ -15,7 +16,9 @@ import { useI18n } from 'vue-i18n'
 import { fromB64std } from '@veyq/crypto/base64'
 import type { ItemReviewProps } from '../../../core/applications/registry'
 import { activeReview } from '../../../core/sharing/review'
-import type { CasePotReceipt, CasePotRevision } from '../../../api/generated/expenses'
+import type { CasePotRevision } from '../../../api/generated/expenses'
+import type { CaseApplicationBlob } from '../../../api/generated/blob'
+import { readCaseApplicationBlobs } from '../../../core/blob/applicationBlobs'
 import { openBlobWithKey } from '../../../core/blob/transport'
 import { openBlobMetaOf } from '../../../core/blob/meta'
 import { openSaveTarget } from '../../../shared/saveStream'
@@ -25,7 +28,7 @@ import { caseExpensesApi } from '../api'
 import { openRevisionWithKey, RevisionUnreadable } from '../domain/codec'
 import { isMoney, type RevisionBody } from '../domain/format'
 import { ENTRY_REVISION_ROLE, RECEIPT_KEY_ROLE } from '../report'
-import { receiptName, receiptSize, type ReceiptSource } from '../receipts'
+import { RECEIPT_ROLE, receiptName, receiptSize, type ReceiptSource } from '../receipts'
 import { formatMoney } from '../amounts'
 import ReceiptView from './ReceiptView.vue'
 
@@ -33,7 +36,7 @@ const props = defineProps<ItemReviewProps>()
 const { t, locale } = useI18n()
 
 const rows = ref<CasePotRevision[]>([])
-const held = ref<CasePotReceipt[]>([])
+const held = ref<CaseApplicationBlob[]>([])
 const opened = ref<string | null>(null)
 const when = computed(() => new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }))
 
@@ -85,7 +88,7 @@ const receipts = computed(() =>
       return openBlobWithKey(key, () => review.chunkUrls(r.blobId), { signal })
     }
     const source: ReceiptSource = {
-      id: r.receiptId,
+      id: r.id,
       name,
       size,
       blocked: false,
@@ -101,7 +104,7 @@ const receipts = computed(() =>
         }
       },
     }
-    return { id: r.receiptId, size: formatBytes(size, locale.value), source, opens: key !== null }
+    return { id: r.id, size: formatBytes(size, locale.value), source, opens: key !== null }
   }),
 )
 
@@ -111,8 +114,9 @@ onMounted(async () => {
   try {
     const listing = await caseExpensesApi().listCasePotRevisions({ caseId: props.caseId, ...(await review.proof('listCasePotRevisions')) })
     rows.value = listing.revisions.filter((r) => r.entryId === props.itemId)
-    // A reported receipt is the item itself; a reported entry brings every receipt kept with it.
-    held.value = (listing.receipts ?? []).filter((r) => r.receiptId === props.itemId || r.entryId === props.itemId)
+    // A reported receipt is the item itself; a reported entry brings every receipt it holds (their owner).
+    const blobs = await readCaseApplicationBlobs(props.caseId, await review.proof('listCaseApplicationBlobs'))
+    held.value = blobs.filter((r) => r.role === RECEIPT_ROLE && (r.id === props.itemId || r.ownerId === props.itemId))
   } catch {
     rows.value = [] // nothing of Expenses held for this case: not ours to draw
     held.value = []

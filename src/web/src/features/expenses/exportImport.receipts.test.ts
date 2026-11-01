@@ -69,7 +69,8 @@ const stored = new Map<string, Uint8Array[]>()
 /** Blob ids a moderator blocked: their presign item is `blocked_by_operator`. */
 const blocked = new Set<string>()
 /** The listing's own word on a receipt, as a server out of step (or a hostile one) might give it: dropped, or another entry's. */
-const served = new Map<string, { droppedAt?: string; entryId?: string }>()
+/** What the listing serves of a receipt beside its completion's row: released by name (a drop), held by another entry. */
+const served = new Map<string, { keptAt?: null; releasedAt?: string; ownerId?: string }>()
 /** A completion the server refuses (`422 upload_mismatch`), for the failed import. */
 let refuseCompletion = false
 
@@ -97,24 +98,25 @@ function fakeServer() {
         return { uploadId, presignedPuts: Array.from({ length: it.chunkCount as number }, (_, c) => ({ index: c, url: `https://store.test/${uploadId}/${c}` })), error: null }
       }) })
     }
-    const receipts = /^\/api\/scopes\/[^/]+\/pots\/([^/]+)\/receipts$/.exec(url.pathname)
+    // core's blob service (ADR 0112): a Pot's receipts are its application blobs, held by their entries
+    const receipts = /^\/api\/scopes\/[^/]+\/nodes\/([^/]+)\/application-blobs$/.exec(url.pathname)
     if (receipts && method === 'POST') {
       if (refuseCompletion) return json({ code: 'upload_mismatch' }, 422)
       const pot = receipts[1]!
       const d = declared.get(body!.uploadId as string)!
       expect(d.ownerId).toBe(pot) // the upload is the Pot's own
       const row = {
-        receiptId: body!.receiptId, entryId: body!.entryId, blobId: d.blobId, chunkCount: d.chunkCount, byteSize: d.byteSize,
+        id: body!.id, ownerId: body!.ownerId, role: body!.role, blobId: d.blobId, chunkCount: d.chunkCount, byteSize: d.byteSize,
         wrappedBlobKey: d.wrappedBlobKey, wrappedBlobMeta: d.wrappedBlobMeta ?? null, writer: 'user:u-anna', createdAt: new Date().toISOString(),
-        droppedAt: null, purgeAfter: null, blockedByOperator: false,
+        keptAt: null, releasedAt: null, purgeAfter: null, blockedByOperator: false,
       }
       listed.set(pot, [...(listed.get(pot) ?? []), row])
-      state.log.push(`complete:${String(body!.receiptId)}`)
+      state.log.push(`complete:${String(body!.id)}`)
       return json(row)
     }
     if (receipts && method === 'GET') {
-      const rows = (listed.get(receipts[1]!) ?? []).map((r) => ({ ...r, blockedByOperator: blocked.has(r.blobId as string), ...served.get(r.receiptId as string) }))
-      return json({ receipts: rows, more: false, cursor: null })
+      const rows = (listed.get(receipts[1]!) ?? []).map((r) => ({ ...r, blockedByOperator: blocked.has(r.blobId as string), ...served.get(r.id as string) }))
+      return json({ blobs: rows, more: false, cursor: null })
     }
     if (method === 'POST' && url.pathname === `/api/scopes/${SCOPE}/blob-downloads-batch`) {
       return json({ results: (body!.items as { blobId: string }[]).map(({ blobId }) => {
@@ -202,7 +204,7 @@ async function openedReceipts(potId: string, potKey: Uint8Array): Promise<Map<st
   const rows = (listed.get(potId) ?? []) as unknown as Record<string, unknown>[]
   const out = new Map<string, { held: HeldReceipt; name: string | undefined; type: string | undefined; bytes: Uint8Array }>()
   for (const raw of rows) {
-    const held = { ...raw, createdAt: new Date(raw.createdAt as string), droppedAt: null, purgeAfter: null } as unknown as HeldReceipt
+    const held = { ...raw, receiptId: raw.id, entryId: raw.ownerId, createdAt: new Date(raw.createdAt as string), droppedAt: null, purgeAfter: null } as unknown as HeldReceipt
     const meta = receiptMeta(SCOPE, potKey, potId, held)
     out.set(held.receiptId, { held, name: meta?.name as string | undefined, type: meta?.type as string | undefined, bytes: await potReceiptSource(access, SCOPE, potId, potKey, held).read() })
   }
@@ -285,8 +287,8 @@ describe('a Pot with receipts as a download', () => {
 
 describe('what the listing does not hold for the entry', () => {
   it('a receipt it holds dropped, or holds for another entry, is left out of the download with its bytes', async () => {
-    served.set(R1, { droppedAt: '2026-10-25T09:00:00Z' })
-    served.set(R2, { entryId: E1 })
+    served.set(R1, { keptAt: null, releasedAt: '2026-10-25T09:00:00Z' })
+    served.set(R2, { ownerId: E1 })
     const { prepared, zip } = await downloaded()
     expect(prepared.payloads).toBe(1) // the CSV alone
     const opened = await openZip(new File([zip], 'Trip.zip'))

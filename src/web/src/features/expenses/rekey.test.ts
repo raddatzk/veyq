@@ -1,13 +1,12 @@
 // A Pot's re-key (ADR 0109, ADR 0108 decision 4) through the real crypto: every revision's K_rev is re-wrapped under the
 // Pot's new key at the same address and staged under the commit's re-key id, page after page — no body is sent, so none
 // can change and every digest the heads name stays. A wrap that does not open under the old key fails the node (fail
-// closed: core does not commit it), and nothing of that page is staged. Each receipt's K_blob moves the same way, bound to
-// (blob, Pot, `EXPENSES_RECEIPT`) as before — its blob id from the Pot's receipt listing, since the re-key listing names
-// only the receipt — and a receipt whose blob no listing names fails the node rather than going unstaged.
+// closed: core does not commit it), and nothing of that page is staged. A receipt's K_blob is core's blob service's (ADR
+// 0112): Expenses stages none, and core's driver moves it from the node's parts in its role, bound to (blob, Pot,
+// `EXPENSES_RECEIPT`) as before.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./api', () => ({ expensesApi: vi.fn() }))
-vi.mock('./receipts', async (orig) => ({ ...(await orig<object>()), readMemberReceipts: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -18,8 +17,9 @@ import { fakeApi } from '../../test/apiMock'
 import { revisionKeyOf, revisionDigest } from './domain/codec'
 import { openServedRevisions } from './domain/revisions'
 import { ANNA, BEN, POT_ID, PotServer, SCOPE, expense, person } from './potTestUtil'
-import { readMemberReceipts, RECEIPT_ROLE } from './receipts'
+import { RECEIPT_ROLE } from './receipts'
 import { blobKeyContext } from '../../core/blob/keys'
+import { rewrapBlobKey } from '../../core/node/rekey/rekeyScope'
 
 const newKey = v1.randomBytes(32)
 let server: PotServer
@@ -38,8 +38,7 @@ beforeEach(() => {
   server.append([{ entryId: '0e000000-0000-4000-9000-000000000001', content: expense('Dinner', 4000, ANNA, [ANNA, BEN]) }])
   const wire = server.rows.map((r) => ({ entryId: r.entryId, revision: r.revision, wrappedRevisionKey: b64std(r.wrappedRevisionKey) }))
   // Two pages: the cursor of the first is the index of the second.
-  api.pages = [{ revisions: wire.slice(0, 2), receipts: [], more: true, cursor: '1' }, { revisions: wire.slice(2), receipts: [], more: false, cursor: null }]
-  vi.mocked(readMemberReceipts).mockImplementation(async () => ({ receipts: [...server.receipts], etag: null }))
+  api.pages = [{ revisions: wire.slice(0, 2), more: true, cursor: '1' }, { revisions: wire.slice(2), more: false, cursor: null }]
 })
 
 const ctx = (oldKey: Uint8Array) => ({
@@ -70,23 +69,17 @@ describe('rekeyPotContent', () => {
     expect(api.staged).toEqual([])
   })
 
-  it('re-wraps every receipt\'s K_blob under the new key, bound to its blob, the Pot and the receipt role as before', async () => {
-    const DINNER = '0e000000-0000-4000-9000-000000000001'
-    const bill = server.receipt(DINNER, { name: 'bill.jpg', type: 'image/jpeg' })
-    const dropped = server.receipt(DINNER, { name: 'old.pdf', type: 'application/pdf' }, { droppedAt: new Date() })
-    api.pages[1]!.receipts = [bill, dropped].map((r) => ({ receiptId: r.receiptId, wrappedBlobKey: r.wrappedBlobKey }))
+  it('stages revisions only: a receipt is no field of Expenses\' own re-key', async () => {
     await rekeyPotContent(ctx(server.potKey))
-    const staged = api.staged.flatMap((s) => (s as { potRekeyStage: { receipts?: { receiptId: string; wrappedBlobKey: string }[] } }).potRekeyStage.receipts ?? [])
-    expect(staged.map((r) => r.receiptId)).toEqual([bill.receiptId, dropped.receiptId])
-    for (const r of [bill, dropped]) {
-      const s = staged.find((x) => x.receiptId === r.receiptId)!
-      expect(v1.open(blobKeyContext(SCOPE, { blobId: r.blobId, ownerId: POT_ID, role: RECEIPT_ROLE }), newKey, fromB64std(s.wrappedBlobKey))).toEqual(r.blobKey)
-    }
+    expect(api.staged.map((s) => Object.keys((s as { potRekeyStage: object }).potRekeyStage).sort())).toEqual(api.staged.map(() => ['fromEpoch', 'revisions']))
   })
 
-  it('fails closed on a receipt whose blob no listing names, staging nothing of its page', async () => {
-    api.pages[1]!.receipts = [{ receiptId: '0e000000-0000-4000-a000-00000000dead', wrappedBlobKey: b64std(v1.randomBytes(80)) }]
-    await expect(rekeyPotContent(ctx(server.potKey))).rejects.toThrow('rekey_receipt_unknown')
-    expect(api.staged).toHaveLength(1) // the first page only
+  it('a receipt as core\'s parts list it re-wraps under the new key, bound to its blob, the Pot and the receipt role as before', () => {
+    const DINNER = '0e000000-0000-4000-9000-000000000001'
+    for (const r of [server.receipt(DINNER, { name: 'bill.jpg', type: 'image/jpeg' }), server.receipt(DINNER, { name: 'old.pdf', type: 'application/pdf' }, { droppedAt: new Date() })]) {
+      // core's driver (`rekeyScope.ts`) moves every listed blob so, the role being the one its row is listed in
+      const moved = rewrapBlobKey(SCOPE, server.potKey, newKey, { blobId: r.blobId, ownerId: POT_ID, role: RECEIPT_ROLE, wrappedBlobKey: r.wrappedBlobKey })
+      expect(v1.open(blobKeyContext(SCOPE, { blobId: r.blobId, ownerId: POT_ID, role: RECEIPT_ROLE }), newKey, fromB64std(moved))).toEqual(r.blobKey)
+    }
   })
 })
