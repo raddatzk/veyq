@@ -142,7 +142,10 @@ exception to it.
   `NodeSubtreeEraser`, by phase (Memories' `MediaNodeSubtreeEraser` routes each medium through
   `MediaStore.purgeMediaRows`: derivative, media and blob rows in FK order, the store objects on the reclaim list in
   the same transaction), then the node rows. The **cover-blob reclaim belongs here, not in the delete**, or a
-  restore returns a Memory whose cover is already gone.
+  restore returns a Memory whose cover is already gone. A member brings it forward for one trash ROOT (`purgeNode`,
+  `NodeSubtreePurge.eraseTrashRoot`): the same erase, decided under the scope lock as a restore is; a live node or
+  one under a trashed parent is a `404` ([ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md)
+  decision 6).
 - **Placement and trash agree** ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 8): create, move and restore refuse a trashed
   parent, so no child row outlives the parent whose key wraps its own. `veyq_node.parent_id` carries no foreign key;
   the trash consistency tests are the guarantee.

@@ -7,7 +7,8 @@ sources:
 import Screenshot from '../../../components/Screenshot.astro';
 
 Whatever you delete in a space, a folder, a Memory, a file or a drop box, goes to that space's trash first, with
-everything inside it. It stays there until the date shown, normally 30 days, and is then removed for good.
+everything inside it. It stays there until the date shown, normally 30 days, and is then removed for good, unless
+you remove it sooner yourself.
 
 ## Bring something back
 
@@ -17,12 +18,18 @@ everything inside it. It stays there until the date shown, normally 30 days, and
    first.
 4. Choose **Done**.
 
-<Screenshot id="spaces-trash" shows="The Trash window with two deleted entries, each with its deletion date, the date it is removed for good and a Restore button" />
+<Screenshot id="spaces-trash" shows="The Trash window with two deleted entries, each with its deletion date, the date it is removed for good, a Restore and a Delete forever button" />
 
 Right after deleting, the message at the bottom also offers **Undo** for a few seconds.
 
-You cannot empty the trash or remove something for good earlier yourself; it goes after its time. Until then it still
-counts towards your space's storage.
+## Remove something for good now
+
+1. In the trash, choose **Delete forever** beside the entry.
+2. veyq asks first, naming it, because this cannot be undone. Confirm with **Delete forever**.
+
+It is gone at once, with everything inside it, and cannot be brought back. Anyone who belongs to the space can do
+this, as anyone can delete and restore. Only what is already in the trash can be removed this way; there is no button
+that empties the whole trash at once. Until something is gone for good, it still counts towards your space's storage.
 
 Whatever you delete also leaves every link you shared at once: people who open the link no longer see it, or anything
 in it. If you restore it, it is back in those links; once it is removed for good, a link to it stops working for good.

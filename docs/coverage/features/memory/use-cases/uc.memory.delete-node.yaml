@@ -104,13 +104,26 @@ acceptanceCriteria:
         unit: [src/core/node/components/SpaceTrashDialog.test.ts]
 
   - id: scheduled-purge-erases-the-subtree
-    text: "A scheduled job hard-erases each subtree whose deleted_at is older than the retention window — media, derivative, bucket and blob rows in FK order and the store objects behind them, then the node rows — routed through the shared per-media purge body (rows AND their reclaim entries inside one transaction, the objects deleted by the single reclaim sweep once no URL signed for them can still land, ADR 0062) rather than a fourth copy of that logic. The cover-blob reclaim moves out of the delete path into this job, so a restore never returns a Memory whose cover was already reclaimed."
+    text: "A scheduled job (or a member, a-member-purges-a-trash-root) hard-erases each subtree whose deleted_at is older than the retention window — media, derivative, bucket and blob rows in FK order and the store objects behind them, then the node rows — routed through the shared per-media purge body (rows AND their reclaim entries inside one transaction, the objects deleted by the single reclaim sweep once no URL signed for them can still land, ADR 0062) rather than a fourth copy of that logic. The cover-blob reclaim moves out of the delete path into this job, so a restore never returns a Memory whose cover was already reclaimed."
     coverage:
       # Observed through the RecordingBlobStore seam, not from the DB alone: the in-memory store's delete is a
       # no-op, so a row-only assertion would prove the chunk keys were COMPUTED and never that they arrived.
       # Carries its own in-window control — a subtree trashed but not yet expired survives on every arm.
       backend:
         integration: [NodeTrashSliceTest.purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects, NodeCoverCoreSliceTest.aTrashedNodeKeepsItsCoverForTheRestoreAndThePurgeFreesIt]
+
+  - id: a-member-purges-a-trash-root
+    text: "Any member of the scope may delete a Trash entry forever (purgeNode) before its window ends: after one question naming the item and that it cannot be undone, the trash root and its whole subtree are erased at once through the scheduled purge's own erase — every application's rows, the cover, the item marks and counters, and every store object handed to the reclaim sweep — and the entry leaves the Trash; a restore of it is then a 404. Only a trash root is purged: a live node and a node inside a trashed subtree answer 404 with nothing erased, so destruction still goes trash -> purge. A member of another scope gets the non-enumerable 404, a share guest (no member session) a 401. A purge and a restore of one root never both land. A report's hold keeps its snapshot and pinned objects through the purge (ADR 0093 § 4)."
+    coverage:
+      # Each refusal carries its control on the same predicate (the same node purged once it is a trash root, by its
+      # own member) and is bitten on its own: dropping the trashed-parent check reddens only the inside-a-subtree case,
+      # accepting a live root only the live case, removing the scope lock only the race (2026-11-01). The Memories case
+      # mirrors the scheduled purge's own (purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects) through the
+      # member's call, with a trashed and a live control on every arm.
+      backend:
+        integration: [NodeTrashCoreSliceTest.aMemberPurgeErasesTheTrashRootAndItsSubtreeNowAndNothingElse, NodeTrashCoreSliceTest.aLiveNodeIsNotPurged, NodeTrashCoreSliceTest.aNodeInsideATrashedSubtreeIsNoTrashRoot, NodeTrashCoreSliceTest.anotherScopesMemberAndAShareGuestPurgeNothing, NodeTrashSliceTest.aMemberPurgeErasesATrashedMemoryNowLikeTheScheduledPurge, NodeTreeRaceCoreSliceTest.aMemberPurgeAndARestoreOfOneTrashRootNeverBothLand, HoldMemoriesSliceTest.aReportedMemoryAMemberPurgesFromTheTrashKeepsItsSnapshotAndItsObjects]
+      web:
+        unit: [src/core/node/components/SpaceTrashDialog.test.ts, src/core/node/tree.test.ts]
 
   - id: several-deleted-after-one-question
     text: "A level's selection is deleted after ONE question naming how many go and of which kinds (each kind's own noun); each node through the door its single delete uses (core's deleteNode, or the kind's own - Depot's source for a file), one after the other, the tree re-read once; a failure is named with its reason and the rest is deleted; one toast's Undo restores exactly the nodes that went through core's restoreNode; a share guest is offered no delete (inbox #421)."

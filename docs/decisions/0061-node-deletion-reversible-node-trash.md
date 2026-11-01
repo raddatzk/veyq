@@ -67,12 +67,21 @@ carry a **re-sealed `encryptedName`**, in the *same* request. The retry is "put 
 and a name sent apart from the token derived from it leaves the node live, briefly, carrying a slug its own name
 does not produce; a failure in between leaves it that way for good.
 
-**6. The purge is a scheduled job, and the blobs must outlive the grace window.** A node purge job hard-erases
-subtrees whose deletion is older than the retention window: media, derivatives, buckets, cover blobs and the store
-objects. The cover-blob reclaim belongs to it, never to the delete — reclaiming covers at soft-delete time would make
-a restore return a Memory whose cover is gone. `purgeAfter` is **derived**
+**6. The purge is a scheduled job a member may bring forward, and the blobs must outlive the grace window.** A node
+purge job hard-erases subtrees whose deletion is older than the retention window: media, derivatives, buckets, cover
+blobs and the store objects. The cover-blob reclaim belongs to it, never to the delete — reclaiming covers at
+soft-delete time would make a restore return a Memory whose cover is gone. `purgeAfter` is **derived**
 at the resource boundary from `deleted_at` plus the configured retention, not stored, matching both existing
 soft-delete precedents.
+
+Any member of the scope may **purge a trash root now** (`purgeNode`), the item the trash lists, with its subtree. It
+only brings the inevitable purge forward for what was already reversibly removed, so it is the security model's
+expedited purge, never a one-step destruction: a live node, or one inside a trashed subtree, is refused (`404`), and
+destruction still goes trash → purge. It runs the job's own erase under the same scope lock a restore takes, so every
+application's rows, the reclaim list, the links, the measures and a report's hold behave exactly as at the end of the
+window — one erase with two triggers, not a second copy that could drift. A member who wants their space back
+(storage, or a mistaken upload gone at once) otherwise waits out the window with no way to say "now"; the media trash
+already offered this, and the node trash was the odd one out.
 
 **7. Row-then-object ordering, per item.** Core's purge hands the subtree to each application's own eraser
 ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md); the `NodeSubtreeEraser` seam,

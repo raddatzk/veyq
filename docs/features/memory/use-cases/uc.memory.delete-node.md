@@ -5,7 +5,8 @@
   Chapter or a folder — together with everything inside it.
 - **Goal:** Take a node and its whole subtree out of the tree — it **disappears from the tree and from any public
   share immediately**, sits in the **space's trash** for a retention window, and is **hard-purged** (nodes, media,
-  derivatives, buckets, blobs and store objects) by a scheduled system job afterwards. **Operator-blind** — the
+  derivatives, buckets, blobs and store objects) by a scheduled system job afterwards — or earlier, when a member
+  deletes it forever from the trash. **Operator-blind** — the
   server sets a lifecycle timestamp and, at purge, removes opaque rows and blob objects; it never sees a name or a
   key.
 - **Preconditions:** The vault is unlocked and the scope is open (`K_SC` is held); the caller **belongs to the
@@ -14,8 +15,8 @@
   ([en.memory.media](../enablers/en.memory.media.md)).
 - **Postconditions (success):** The node and every descendant are gone from the tree on the next load, gone from
   the anonymous share resolve, and their blobs are no longer authorized for a presign. The subtree sits in the
-  **space's Trash**, restorable, until the retention window elapses; then a scheduled job **irreversibly purges**
-  it. Nothing under the subtree was destroyed at the moment of the delete.
+  **space's Trash**, restorable, until the retention window elapses or a member purges it from there; then it is
+  **irreversibly purged**. Nothing under the subtree was destroyed at the moment of the delete.
 
 ## What deletion is here
 
@@ -23,7 +24,8 @@ Deletion is the same **soft-delete → trash → retention window → scheduled 
 [security model](../../../crosscutting/security-model.md) mandates for every destruction, applied to a whole
 subtree instead of one item ([ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md)). The two
 steps carry **different authority**: deleting is reversible, so any member of the scope may do it; purging is
-irreversible and belongs to the scheduled job. A member never destroys another member's live content in one step
+irreversible and is the scheduled job's, which a member may only bring forward for what is already in the trash
+(step 8). A member never destroys another member's live content in one step
 — which a node delete would otherwise do, because the media inside a Memory carry an owner and its buckets are
 per-owner.
 
@@ -66,7 +68,14 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
    name is taken) (inbox #357).
 7. After the **retention window** (operator-configurable, the same shape as the media trash), a **scheduled purge
    job** hard-erases each expired subtree: its media, derivative, bucket and blob rows in FK order and the store
-   objects behind them, then the node rows. This step is **irreversible** and is **not** a member action.
+   objects behind them, then the node rows. This step is **irreversible**.
+8. **Delete forever** — a member brings step 7 forward for one entry of the Trash: the client asks first, naming the
+   item and that it cannot be undone, then calls **purge** on that trash root. The server erases the subtree at once
+   through the scheduled job's own erase, so everything inside goes exactly as it would at the end of the window, and
+   the entry leaves the Trash. Only a trash root is purged — a live node, or a node inside a trashed subtree (it goes
+   with its root), is a non-enumerable **404** and nothing is erased; so destruction still goes trash → purge
+   ([ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md) decision 6). A content block does not
+   stop it, and a report's hold keeps its copy (ADR 0093 § 4).
 
 ## Alternate / exception flows
 
@@ -75,12 +84,15 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
   path a create already takes, so the retry carries the **new name and its token together, in one request**: sent
   apart, the node is briefly live carrying a slug its own name does not produce, and permanently so if the second
   write fails. Silently renaming, or refusing the restore outright, would both be worse.
-- **A2 — restore after purge.** Once the scheduled job has run the subtree is **gone** (a non-enumerable 404); the
-  retention window is the only recovery path. There is no post-purge undo — that is the point of erasure.
-- **E1 — the scope is itself pending deletion.** The delete is rejected as a conflict, like every other write
-  during a space's grace window ([uc.spaces.delete-group](../../spaces/use-cases/uc.spaces.delete-group.md)).
-- **E2 — not a member / vault locked.** The delete and restore are scope-membership-gated; a non-member gets a
-  non-enumerable **404** (operator-blind), and a locked vault cannot open the space to reach the affordance.
+- **A2 — restore after purge.** Once the scheduled job has run, or a member purged it, the subtree is **gone** (a
+  non-enumerable 404); the retention window is the only recovery path. There is no post-purge undo — that is the point
+  of erasure. A restore and a purge of one trash root never both land: both decide under the scope lock, so the later
+  one finds the root live (the purge's 404) or gone (the restore's).
+- **E1 — the scope is itself pending deletion.** The delete, restore and purge are rejected as a conflict, like every
+  other write during a space's grace window ([uc.spaces.delete-group](../../spaces/use-cases/uc.spaces.delete-group.md)).
+- **E2 — not a member / vault locked.** The delete, restore and purge are scope-membership-gated; a non-member gets
+  a non-enumerable **404** (operator-blind), a share guest holds no member session at all, and a locked vault cannot
+  open the space to reach the affordance.
 - **E3 — concurrent / idempotent.** Deleting an already-deleted subtree is a no-op — the marker does not move,
   so a double delete cannot silently extend the window. Deleting a subtree that is only *partially* deleted is
   the opposite: it **re-stamps** every node in it, including descendants an earlier, narrower delete had already
@@ -122,7 +134,7 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
 ## User impact
 
 Deleting a Memory, chapter or folder takes it out of your space and its share links at once, yet you can restore it
-complete until the waiting period ends.
+complete until the waiting period ends, or delete it for good sooner.
 
 ## Related
 
