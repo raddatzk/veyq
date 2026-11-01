@@ -1,6 +1,7 @@
 // Test helpers for the unified level list (inbox #407): mount ONE application's row factory beside core's real item and
 // notice components (the application's rows without the rest of the level), and drive a row's actions the way a person
-// does - a real click on its button, or on its entry in the real "more" menu.
+// does - a real click on its button, or on its entry in the real "more" menu. Each row gets core's default rename, move and
+// delete as the level adds them (`standardRowActions.ts`, the same doors per access), recorded as the host's events.
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { computed, defineComponent, h, reactive, ref, type Ref } from 'vue'
 import LevelRowItem from '../core/node/components/LevelRowItem.vue'
@@ -11,11 +12,13 @@ import type { LevelActionHandler } from '../core/node/levelActions'
 import type { TreeNode } from '../core/node/tree'
 import type { LoadedCover } from '../core/node/cover/coverModel'
 import { realI18n } from './i18n'
+import { standardRowActions, standardRowDoors, withStandardRowActions } from '../core/node/standardRowActions'
+import type { SelectedForDelete } from '../core/node/selection'
 
 export interface RowsHarness {
   w: VueWrapper
-  /** What the factory asked of the host. */
-  events: { open: TreeNode[]; rename: TreeNode[]; move: TreeNode[]; ensuredCovers: TreeNode[] }
+  /** What the factory asked of the host - and, `rename` / `move` / `remove`, what core's default actions asked the level. */
+  events: { open: TreeNode[]; rename: TreeNode[]; move: TreeNode[]; remove: SelectedForDelete[]; ensuredCovers: TreeNode[] }
   /** The decrypted covers core's level hands the factory (`host.covers`); a test sets what the level would have resolved. */
   covers: Ref<Map<string, LoadedCover>>
   /** The level actions the factory registered. */
@@ -34,13 +37,16 @@ export function mountRows(
   mode: 'grid' | 'list' = 'list',
   options: { stubs?: Record<string, unknown>; screenUpload?: LevelRowsHost['screenUpload']; screenDirectory?: LevelRowsHost['screenDirectory'] } = {},
 ): RowsHarness {
-  const events = { open: [] as TreeNode[], rename: [] as TreeNode[], move: [] as TreeNode[], ensuredCovers: [] as TreeNode[] }
+  const events = { open: [] as TreeNode[], rename: [] as TreeNode[], move: [] as TreeNode[], remove: [] as SelectedForDelete[], ensuredCovers: [] as TreeNode[] }
   const covers = ref(new Map<string, LoadedCover>())
   const actions = new Map<string, LevelActionHandler>()
   const state = reactive({ ...ctx }) as LevelRowsContext
   let source!: LevelRowSource
+  const i18n = realI18n()
   const Host = defineComponent({
     setup() {
+      const t = (key: string) => i18n.global.t(key)
+      const doors = () => standardRowDoors(state.access, { rename: (n) => events.rename.push(n), move: (n) => events.move.push(n), remove: (x) => events.remove.push(x) })
       source = factory(computed(() => ({ ...state })), {
         open: (n) => events.open.push(n),
         rename: (n) => events.rename.push(n),
@@ -62,14 +68,15 @@ export function mountRows(
         return h('div', { class: 'rows-harness' }, [
           h(LevelNotices, { notices: (source.notices?.value ?? []) as readonly LevelNotice[] }),
           h('ul', { class: 'veyq-level-list' }, nodes.map((node) => {
-            const row = source.row(node)
+            const own = source.row(node)
+            const row = own && { ...own, actions: withStandardRowActions(own.actions, standardRowActions(t, node, own, doors())) }
             return row ? h(LevelRowItem, { key: node.id, row, mode, kind: node.kind }) : null
           })),
         ])
       }
     },
   })
-  const w = mount(Host, { global: { plugins: [realI18n()], directives: { tooltip: {} }, stubs: options.stubs as never } })
+  const w = mount(Host, { global: { plugins: [i18n], directives: { tooltip: {} }, stubs: options.stubs as never } })
   return { w, events, covers, actions, source: () => source, setCtx: async (over) => { Object.assign(state, over); await flushPromises() } }
 }
 

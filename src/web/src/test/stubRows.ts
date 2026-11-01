@@ -2,10 +2,12 @@
 // Kinds are made-up tokens (`ALPHA`, `BETA`, …); the stub draws each node as a row titled by its name, records what the level
 // handed it (called once per level view; the context, reactive; the host) and gives every row ONE menu action `rename` that
 // asks the host to rename it. Optional: a presentation for a mode (the stand-in for Memories' map), a level action, and each
-// row's part in a selection of the level (`selection`, inbox #421; omitted: the row carries none - it allows nothing).
+// row's part in a selection of the level (`selection`, inbox #421; omitted: the row carries none - it allows nothing) and its
+// answer for core's default rename, move and delete (`standard`; omitted: none - the stub's own `rename` still replaces
+// core's of that id).
 import { computed, defineComponent, h, ref, type Ref } from 'vue'
 import type { LevelActionHandler } from '../core/node/levelActions'
-import type { LevelNotice, LevelRowSelection, LevelRowsContext, LevelRowsFactory, LevelRowsHost, LevelRowSource } from '../core/node/levelRow'
+import type { LevelNotice, LevelRowSelection, LevelRowStandard, LevelRowsContext, LevelRowsFactory, LevelRowsHost, LevelRowSource } from '../core/node/levelRow'
 import type { TreeNode } from '../core/node/tree'
 import type { ViewMode } from '../shared/state/useViewMode'
 import type { VeyqIconName } from '../shared/ui/icons'
@@ -32,6 +34,9 @@ export function stubRows(
     action?: { id: string; handler: LevelActionHandler }
     shownActions?: boolean
     selection?: (node: TreeNode) => LevelRowSelection
+    standard?: (node: TreeNode) => LevelRowStandard
+    /** Leave out the stub's own `rename`, so core's default (if granted) is the row's. */
+    noOwnRename?: boolean
   } = {},
 ): StubRows {
   let calls = 0
@@ -54,8 +59,11 @@ export function stubRows(
         title: node.name,
         meta: `${name} meta`,
         primary: { label: `open ${node.name}`, onClick: () => host.open(node) },
-        actions: [{ id: 'rename', label: `rename ${node.name}`, icon: 'pencil', shown: opts.shownActions ?? true, onClick: () => host.rename(node) }],
+        actions: opts.noOwnRename
+          ? []
+          : [{ id: 'rename', label: `rename ${node.name}`, icon: 'pencil', shown: opts.shownActions ?? true, onClick: () => host.rename(node) }],
         ...(opts.selection ? { selection: opts.selection(node) } : {}),
+        ...(opts.standard ? { standard: opts.standard(node) } : {}),
       }),
       notices: computed(() => notices.value),
       presentation: (mode) => (opts.presentationFor === mode ? { component: Presentation, props: { nodes: ctx.value.nodes } } : null),

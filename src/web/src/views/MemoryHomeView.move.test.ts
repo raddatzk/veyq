@@ -203,6 +203,31 @@ describe('a member deletes a selection of the level', () => {
   })
 })
 
+// Owner 2026-11-01: a row's delete is core's default (`standardRowActions.ts`): the host's one question - the node's own,
+// named by its kind - with the selection's Undo.
+describe('a member deletes a Memory from its row', () => {
+  it('Delete, by its real menu entry: the Memory\'s question, core\'s write, one re-read, one Undo that restores it', async () => {
+    vi.mocked(deleteNode).mockClear()
+    vi.mocked(restoreNode).mockClear()
+    const w = await mountAt('#~me/trips/')
+    await clickAction(w, 'Italy', 'delete')
+    const dialog = () => document.body.querySelector('.delete-nodes-dialog')
+    expect(dialog()!.textContent).toContain(t('memory.deleteMemoryTitle'))
+    expect(dialog()!.textContent).toContain(t('node.deleteCopy', { name: 'Italy' }))
+    expect(deleteNode, 'nothing before the answer').not.toHaveBeenCalled()
+    const confirm = [...dialog()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('node.delete'))!
+    await click(confirm)
+    expect(vi.mocked(deleteNode).mock.calls.map((c) => c[1])).toEqual(['italy'])
+    expect(loadTree).toHaveBeenCalledTimes(1)
+    expect(dialog(), 'closed').toBeNull()
+    expect(router.currentRoute.value.hash, 'the level on screen stays').toBe('#~me/trips/')
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.deleteMany.moved', { count: 1 }, 1) }))
+    toast.showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+    expect(vi.mocked(restoreNode).mock.calls.map((c) => c[3].id)).toEqual(['italy'])
+  })
+})
+
 // ADR 0080 decision 11, inbox #377 (a): a member moves a guest's folder OUT of a drop box; its identity ends.
 describe('a member moves a guest\'s folder out of a drop box', () => {
   it('from the drop box\'s row: asked first, then moved; no undo', async () => {

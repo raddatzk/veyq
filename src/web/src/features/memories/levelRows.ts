@@ -15,10 +15,12 @@
 //   opened subtree. Only Memories offers it.
 //
 // What a row offers is Memories' rights matrix for the node (`./rights.ts`, inbox #401), fail closed: a share guest
-// gets the same row with the member-only functions removed. A row's primary click OPENS the Memory (its detail).
+// gets the same row with the member-only functions removed. Its rename, move and delete are core's defaults
+// (`core/node/standardRowActions.ts`): this source only answers them (`standard`). A row's primary click OPENS the Memory
+// (its detail).
 import { computed, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { LevelPresentation, LevelRow, LevelRowAction, LevelRowSource, LevelRowsContext, LevelRowsHost } from '../../core/node/levelRow'
+import type { LevelPresentation, LevelRow, LevelRowSource, LevelRowsContext, LevelRowsHost } from '../../core/node/levelRow'
 import { parentContentKey, type TreeNode } from '../../core/node/tree'
 import { nodeById } from '../../core/node/browse'
 import { treeStore } from '../../core/node/treeStore'
@@ -93,14 +95,10 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
   }, { immediate: true })
 
   function memoryRow(node: TreeNode): LevelRow {
-    // The matrix for THIS node: the rename and the move are about the Memory the row stands for. (The heart is core's
-    // row action, `core/favorites`: one for every kind.)
+    // The matrix for THIS node: the rename, the move and the delete are about the Memory the row stands for - core's
+    // default actions, which this answer grants. (The heart is core's row action too, `core/favorites`: one for every kind.)
     const c = memoryRights(ctx.value.access, targetOf(ctx.value.tree, node))
     const cover = coverMap.value.get(node.id)
-    const actions: LevelRowAction[] = [
-      { id: 'rename', label: t('node.rename'), icon: 'pencil', shown: c.rename, onClick: () => host.rename(node) },
-      { id: 'move', label: t('node.move.action'), icon: 'file-export', shown: c.move, onClick: () => host.move(node) },
-    ]
     return {
       icon: 'images',
       // The cover always: a Memory's tile stays a cover tile (the soft placeholder) while it has none or it is loading.
@@ -109,7 +107,8 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
       meta: t(node.kind === CHAPTER_KIND ? 'memory.kindChapter' : 'memory.kindMemory'),
       details: memoryDetails(facts.value.get(node.id) ?? NO_FACTS, t, locale.value),
       primary: { label: node.name, onClick: () => host.open(node) },
-      actions,
+      actions: [],
+      standard: { rename: c.rename, move: c.move, delete: c.deleteNode },
       // With a selection of the level (inbox #421): the same matrix for THIS node; its delete is core's `deleteNode`, as the
       // Memory's own page asks the host for.
       selection: { move: c.move, delete: c.deleteNode },

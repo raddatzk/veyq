@@ -6,10 +6,25 @@ const a = (id: string, over: Partial<CoreRowAction> = {}): CoreRowAction => ({ i
 const ids = (list: readonly LevelRowAction[]) => list.map((x) => x.id)
 
 describe('splitRowActions', () => {
-  it('makes the first-class actions buttons and everything else the menu, each in the given order', () => {
-    const { buttons, menu } = splitRowActions([a('open'), a('download', { first: true }), a('rename'), a('delete', { severity: 'danger' })])
+  it('makes the first-class actions buttons and everything else the menu: rename and move first, delete in the last group', () => {
+    const { buttons, menu, menuOnly } = splitRowActions([a('open'), a('download', { first: true }), a('rename'), a('delete', { severity: 'danger' })])
     expect(ids(buttons)).toEqual(['download'])
-    expect(ids(menu)).toEqual(['open', 'rename', 'delete'])
+    expect(ids(menu)).toEqual(['rename', 'open'])
+    expect(ids(menuOnly)).toEqual(['delete'])
+  })
+
+  it('orders the menu: rename, move, the others in their order, then the menu-only group - report, then delete', () => {
+    const { menu, menuOnly } = splitRowActions([
+      a('delete', { severity: 'danger' }), a('cover'), a('report', { menuOnly: true }), a('move'), a('copy'), a('rename'), a('download'),
+    ])
+    expect(ids(menu)).toEqual(['rename', 'move', 'cover', 'copy', 'download'])
+    expect(ids(menuOnly)).toEqual(['report', 'delete'])
+  })
+
+  it('never makes delete or report a button, even marked first', () => {
+    const { buttons, menuOnly } = splitRowActions([a('delete', { severity: 'danger', first: true }), a('report', { menuOnly: true, first: true }), a('heart', { first: true })])
+    expect(ids(buttons)).toEqual(['heart'])
+    expect(ids(menuOnly)).toEqual(['report', 'delete'])
   })
 
   it(`shows at most ${MAX_FIRST_ACTIONS} buttons: a third first-class action falls into the menu`, () => {

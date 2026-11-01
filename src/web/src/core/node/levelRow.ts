@@ -13,17 +13,26 @@
 // rights function (`core/access.ts`, `rights.ts`): an action it was not granted is `shown: false` or left out,
 // and core decides nothing of its own. A share guest gets this very row with fewer actions (inbox #401), never a
 // guest-only one. Core may add its own actions next to the application's (`coreActions`, merged by
-// {@link mergeRowActions}): the favourite heart of inbox #409 will be one, with no change to any application.
+// {@link mergeRowActions}): the favourite heart of inbox #409 is one, with no change to any application.
+//
+// **Rename, move and delete are core's defaults** (owner 2026-11-01, `standardRowActions.ts`): an application does not
+// build them; it answers its rights for THIS node in {@link LevelRow.standard} and core adds the granted ones through
+// the level's own doors (core's name dialog, move dialog and delete question with its Undo). No answer is none (fail
+// closed). **An application that implements one itself** supplies an action of that id (`rename`, `move`, `delete`) in
+// its `actions`, which REPLACES core's default whatever `standard` says - its own `shown` decides then (Depot's file:
+// its delete asks and offers its own Undo, its rename and move go through its source).
 //
 // **Visible and overflow.** At most {@link MAX_FIRST_ACTIONS} actions the kind marks `first` are real buttons on the row;
 // every other shown action sits in ONE "more" menu (a `VeyqMenu`), so a row stays readable at every width and no
-// action is hidden by a media query (a width-hidden button is a lost action).
+// action is hidden by a media query (a width-hidden button is a lost action). The menu's order is
+// {@link splitRowActions}': rename and move first, the other actions, then - after a separator - the menu-only ones,
+// report and then delete. Delete and report are never row buttons.
 import type { Component, Ref } from 'vue'
 import type { TreeNode } from './tree'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { Access, TreeSource } from '../access'
 import type { ViewMode } from '../../shared/state/useViewMode'
-import { placeCoreActions, type CoreActionPlacement, type CoreHeaderAction, type NodeHeaderAction } from './nodeHeader'
+import { isMenuOnly, partitionHeaderActions, placeCoreActions, type CoreActionPlacement, type CoreHeaderAction, type NodeHeaderAction } from './nodeHeader'
 import type { LevelActionHandler } from './levelActions'
 import type { LoadedCover } from './cover/coverModel'
 import type { DirectoryInput } from '../export/importSource'
@@ -80,9 +89,20 @@ export interface LevelRow {
   /** The row's primary click: what a plain click on the row does (open, or download). `label` is its accessible name. */
   primary: { label: string; onClick: () => void; disabled?: boolean }
   actions: readonly LevelRowAction[]
+  /** What core's default actions rename, move and delete may do with THIS node: its application's rights answer
+   *  (`standardRowActions.ts`). Omitted, or a flag left out: core adds none (fail closed). An action of the same id in
+   *  {@link actions} replaces core's default. */
+  standard?: LevelRowStandard
   /** What a selection of the level may do with THIS node (inbox #421): its application's rights answer, as its actions
    *  are. Omitted: nothing - the node can be selected, but no action of the selection reaches it (fail closed). */
   selection?: LevelRowSelection
+}
+
+/** A node's part in core's default row actions (owner 2026-11-01): which of rename, move and delete its application grants. */
+export interface LevelRowStandard {
+  rename?: boolean
+  move?: boolean
+  delete?: boolean
 }
 
 /** A node's part in a selection of several (inbox #421, `LevelView`'s Select mode). */
@@ -116,9 +136,10 @@ export interface LevelRowsContext {
 export interface LevelRowsHost {
   /** Open a node (its detail, or the folder). */
   open(node: TreeNode): void
-  /** Rename a node in place (core's `FolderNameDialog`). */
+  /** Rename a node in place (core's `FolderNameDialog`): the door of an application's OWN rename (Depot's file); core's
+   *  default rename (`LevelRow.standard`) needs none. */
   rename(node: TreeNode): void
-  /** Move a node (core's `MoveNodeDialog`). */
+  /** Move a node (core's `MoveNodeDialog`): the door of an application's own move, as {@link rename}. */
   move(node: TreeNode): void
   /** Register the handler of a level action (a "New" menu entry that is no create dialog) for the level's life. */
   registerAction(id: string, handler: LevelActionHandler): void
@@ -174,10 +195,21 @@ export function mergeRowActions(core: readonly CoreRowAction[], app: readonly Le
   return placeCoreActions(core, app)
 }
 
+/** The ids the row's menu opens with, in this order (src/web/CLAUDE.md § One list for the level). */
+export const ROW_MENU_LEAD = ['rename', 'move'] as const
+
 /** Split a row's actions into the buttons on the row and the overflow menu: the shown ones only, the first
- *  {@link MAX_FIRST_ACTIONS} of those marked `first` as buttons, everything else in the menu, each in the given order. */
-export function splitRowActions(actions: readonly (LevelRowAction | CoreHeaderAction)[]): { buttons: LevelRowAction[]; menu: LevelRowAction[] } {
+ *  {@link MAX_FIRST_ACTIONS} of those marked `first` as buttons - never a menu-only one (`isMenuOnly`: delete, report) -,
+ *  and everything else in the menu: `menu` is {@link ROW_MENU_LEAD} first, then the rest in the given order; `menuOnly`
+ *  the menu's last group, report before delete (`partitionHeaderActions`, the header's rule). */
+export function splitRowActions(actions: readonly (LevelRowAction | CoreHeaderAction)[]): {
+  buttons: LevelRowAction[]
+  menu: LevelRowAction[]
+  menuOnly: LevelRowAction[]
+} {
   const shown = actions.filter((a) => a.shown !== false) as LevelRowAction[]
-  const buttons = shown.filter((a) => a.first === true).slice(0, MAX_FIRST_ACTIONS)
-  return { buttons, menu: shown.filter((a) => !buttons.includes(a)) }
+  const buttons = shown.filter((a) => a.first === true && !isMenuOnly(a)).slice(0, MAX_FIRST_ACTIONS)
+  const { buttons: rest, menuOnly } = partitionHeaderActions(shown.filter((a) => !buttons.includes(a)))
+  const lead = ROW_MENU_LEAD.flatMap((id) => rest.filter((a) => a.id === id))
+  return { buttons, menu: [...lead, ...rest.filter((a) => !lead.includes(a))], menuOnly }
 }

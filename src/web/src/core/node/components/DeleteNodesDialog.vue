@@ -1,8 +1,10 @@
 <script setup lang="ts">
 // Core's delete question for a level's SELECTION (inbox #421, uc.memory.delete-node step 1): ONE question for the deletable
 // part of the selection, naming how many go and of which kinds (each kind's `nounWithArticle`, as core's other dialogs name
-// a node they cannot name by kind - core names no application kind), in place of the per-node questions. One node's own
-// delete (`DeleteNodeDialog`, a Depot row's question) stays as it is.
+// a node they cannot name by kind - core names no application kind), in place of the per-node questions. ONE node - a row's
+// default delete (`standardRowActions.ts`), or a selection of one - is asked one node's question instead (`deleteQuestion.ts`,
+// the one `DeleteNodeDialog` asks), with this dialog's Undo. One node's own delete (`DeleteNodeDialog`, a Depot row's
+// question) stays as it is.
 //
 // The write is `deleteSelection.ts`: each node through the door its single delete uses (core's `deleteNode`, or the kind's
 // own `remove`), one after the other, the tree re-read once. Then one toast with ONE Undo that restores exactly the nodes
@@ -14,6 +16,7 @@ import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import type { TreeNode } from '../tree'
 import { registry } from '../../applications/registry'
+import { deleteQuestion } from '../deleteQuestion'
 import { joinList, type SelectedForDelete } from '../selection'
 import { deleteRefusalOf, deleteSelection, restoreSelection } from '../deleteSelection'
 import { loadTree, treeStore } from '../treeStore'
@@ -49,6 +52,14 @@ const kinds = computed(() => {
     if (!nouns.includes(noun)) nouns.push(noun)
   }
   return joinList(locale.value, nouns)
+})
+
+/** The title and sentence: one node's own question when it is one, else the selection's. */
+const question = computed(() => {
+  const only = props.items.length === 1 ? props.items[0]!.node : null
+  return only
+    ? deleteQuestion(t, only, named(only))
+    : { header: t('node.deleteMany.title', { count: props.items.length }), copy: t('node.deleteMany.copy', { count: props.items.length, kinds: kinds.value }) }
 })
 
 const busy = ref(false)
@@ -93,7 +104,7 @@ async function confirm() {
 <template>
   <VeyqDialog
     :visible="true"
-    :header="t('node.deleteMany.title', { count: items.length })"
+    :header="question.header"
     :closable="!busy"
     :close-on-escape="!busy"
     class="delete-nodes-dialog"
@@ -110,7 +121,7 @@ async function confirm() {
       </div>
     </div>
     <template v-else>
-      <p class="dialog-copy">{{ t('node.deleteMany.copy', { count: items.length, kinds }) }}</p>
+      <p class="dialog-copy">{{ question.copy }}</p>
       <div class="veyq-dialog-action-row">
         <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="busy" @click="emit('close')" />
         <VeyqButton :label="t('node.delete')" icon="trash" variant="danger" :loading="busy" @click="confirm" />

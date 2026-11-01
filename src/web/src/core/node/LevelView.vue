@@ -17,6 +17,11 @@
 // `registerAction`); it keeps the data a row needs (Depot's blob listing: it re-reads on `liveTick`, inbox #408) and the flows
 // behind its actions (Depot's upload and replace) beside it, so none of that depends on which tab is shown.
 //
+// **Rename, move and delete are core's** (owner 2026-11-01, `standardRowActions.ts`): every row - a folder's too, by core's
+// `folderRights` - gets them from the level where its application's answer (`LevelRow.standard`) grants them, through the
+// level's doors: `renameNode`, `moveNode`, and `deleteNodes` with the one node (core's delete question with its Undo); a
+// guest's level has the move door alone. An application's own action of the same id replaces the default (Depot's file).
+//
 // **The order** (`levelList.ts`): folders first, then every other node MIXED BY NAME - natural, locale-aware, case-insensitive,
 // equal names in creation order (the rule that numbers equal names everywhere else). The folder cards' labels are numbered
 // the same way (`Anna`, `Anna (2)`, inbox #393).
@@ -86,6 +91,7 @@ import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './levelTabs'
 import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
 import { useSelection, type SelectedForDelete } from './selection'
+import { standardRowActions, standardRowDoors, withStandardRowActions } from './standardRowActions'
 import { favoriteHeaderActions, favoriteRowActions } from '../favorites/favoriteActions'
 import { useNodeCover } from './cover/useNodeCover'
 import NodeCoverImage from './cover/components/NodeCoverImage.vue'
@@ -132,8 +138,8 @@ const emit = defineEmits<{
   moveNode: [node: TreeNode]
   /** The movable part of the level's selection (inbox #421): the host mounts core's move dialog for several nodes. */
   moveNodes: [nodes: TreeNode[]]
-  /** The deletable part of the level's selection (inbox #421), each with its kind's own write where it has one: the host
-   *  asks once and deletes them. */
+  /** The deletable part of the level's selection (inbox #421), each with its kind's own write where it has one - or the
+   *  one node of a row's default delete: the host asks once and deletes them (core's `DeleteNodesDialog`, with its Undo). */
   deleteNodes: [nodes: SelectedForDelete[]]
   /** A node to download as a ZIP (ADR 0082): a row's, or the folder on screen. The host mounts core's `ExportSubtreeDialog`. */
   downloadNode: [node: TreeNode]
@@ -289,6 +295,18 @@ const sources = lists.map((list) => {
   return list.rows(ctx, host)
 })
 const sourceOfKind = new Map(lists.flatMap((list, i) => list.kinds.map((k) => [k, sources[i]] as const)))
+// The doors of core's default row actions (`standardRowActions.ts`): a member's all three, a guest's the move alone.
+const standardDoors = computed(() =>
+  standardRowDoors(props.access, {
+    rename: (node) => emit('renameNode', node),
+    move: (node) => emit('moveNode', node),
+    remove: (item) => emit('deleteNodes', [item]),
+  }),
+)
+/** The row with core's default rename, move and delete added where its application granted them and has none of its own. */
+function withStandard(node: TreeNode, row: LevelRow): LevelRow {
+  return { ...row, actions: withStandardRowActions(row.actions, standardRowActions(t, node, row, standardDoors.value)) }
+}
 
 // --- the one list ------------------------------------------------------------------------------------------------------
 // The sub-folders' labels: a repeated name numbered, in creation order - the rule the URL segments follow too.
@@ -333,14 +351,14 @@ function unblockedItem(node: TreeNode): Item {
     const label = folderLabels.value.get(node.id) ?? node.name
     return {
       key: node.id, node, kind: node.kind, folder: true, unsupported: false,
-      row: {
+      row: withStandard(node, {
         icon: 'folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => emit('openNode', node) }, actions: [],
-        selection: folderSelection(node),
-      },
+        ...folderParts(node),
+      }),
     }
   }
   const row = sourceOfKind.get(node.kind)?.row(node) ?? null
-  if (row) return { key: node.id, node, kind: node.kind, folder: false, unsupported: false, row }
+  if (row) return { key: node.id, node, kind: node.kind, folder: false, unsupported: false, row: withStandard(node, row) }
   // A kind no application serves (or one its source has no row for): listed, never dropped, and said plainly that this
   // client cannot show it. Not clickable - opening one lands on the host's same unsupported state.
   const info = registry.kind(node.kind)
@@ -352,10 +370,10 @@ function unblockedItem(node: TreeNode): Item {
     },
   }
 }
-/** A sub-folder's part in a selection: core's matrix for THAT folder (`folderRights`). */
-function folderSelection(node: TreeNode): LevelRowSelection {
+/** A sub-folder's part in core's default actions and in a selection: core's matrix for THAT folder (`folderRights`). */
+function folderParts(node: TreeNode): Pick<LevelRow, 'standard' | 'selection'> {
   const c = folderRights(props.access, targetOf(props.tree, node))
-  return { move: c.move, delete: c.deleteNode }
+  return { standard: { rename: c.rename, move: c.move, delete: c.deleteNode }, selection: { move: c.move, delete: c.deleteNode } }
 }
 
 // --- the selection (inbox #421) ------------------------------------------------------------------------------------------
@@ -457,7 +475,8 @@ watch(levelItems, (now) => selection.retain(now.keys()))
 // The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" /
 // cover" / "Remove cover" in the row's menu, gated by `coverRights` (a writer, a kind that opted in; a guest none).
 // Core's "Copy to…" (uc.platform.copy-node) sits beside the application's "Move to…" in the row's menu, for a member only.
-// A node a moderator blocked gets none of them: its placeholder keeps the application's delete alone (`blockedItem`).
+// A node a moderator blocked gets none of them: its placeholder keeps its delete alone (`blockedItem`), core's default or
+// the application's own.
 const coreRowActions = (item: Item): CoreRowAction[] =>
   item.unsupported || item.node.blockedByOperator
     ? []

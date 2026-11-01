@@ -5,8 +5,10 @@
 // a primary click and the actions. The application supplies the data and its rights answers; core owns the look, the
 // keyboard (every control is a real, labelled `<button>`), the dark mode (tokens) and the split of the actions: at most two
 // FIRST-CLASS buttons on the item, every other shown action in ONE "more" menu (a `VeyqMenu`, a real menu: arrow
-// keys, Escape). Core's own actions (the future favourite heart, inbox #409) plug in as `coreActions`, merged around the
-// application's list by `mergeRowActions`.
+// keys, Escape): rename and move first, the others, then - after a separator - report and delete (`splitRowActions`).
+// Core's own actions (the favourite heart, inbox #409) plug in as `coreActions`, merged around the application's list by
+// `mergeRowActions`; core's default rename, move and delete are already in `row.actions` (the level adds them,
+// `standardRowActions.ts`).
 //
 // The visual is hidden from assistive technology: an item is named by its title (the primary button's `aria-label`).
 //
@@ -50,7 +52,8 @@ const details = computed(() => levelRowDetails(props.row))
 
 const split = computed(() => splitRowActions(mergeRowActions(props.coreActions, props.row.actions)))
 const menu = ref<InstanceType<typeof VeyqMenu> | null>(null)
-const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([split.value.menu], 'veyq-row'))
+const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([split.value.menu, split.value.menuOnly], 'veyq-row'))
+const hasMenu = computed(() => split.value.menu.length + split.value.menuOnly.length > 0)
 const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.severity === 'danger' ? 'danger' : a.severity === 'primary' ? 'primary' : 'secondary')
 </script>
 
@@ -93,7 +96,7 @@ const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.
         >
       </span>
     </button>
-    <span v-if="split.buttons.length || split.menu.length" class="veyq-level-item-actions">
+    <span v-if="split.buttons.length || hasMenu" class="veyq-level-item-actions">
       <VeyqTooltip v-for="a in split.buttons" :key="a.id" :text="a.label">
         <VeyqButton
           class="veyq-icon-button veyq-prime-icon-button veyq-level-item-action"
@@ -110,7 +113,7 @@ const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.
           @click="a.onClick()"
         />
       </VeyqTooltip>
-      <template v-if="split.menu.length">
+      <template v-if="hasMenu">
         <VeyqTooltip :text="t('node.rowMore', { name: row.title })">
           <VeyqButton
             class="veyq-icon-button veyq-prime-icon-button veyq-level-item-more"

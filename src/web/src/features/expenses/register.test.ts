@@ -9,7 +9,7 @@ import { createRegistry, registry as applicationRegistry, type LevelActionContex
 import { FOLDER_KIND } from '../../core/node/kind'
 import { ShareRole } from '../../api/generated/sharing'
 import { guestAccessOf, memberAccessOf, treeNode } from '../../test/models'
-import { mountRows } from '../../test/levelRows'
+import { actionIdsOf, clickAction, mountRows } from '../../test/levelRows'
 import type { Access, GuestAccess, TreeSource } from '../../core/access'
 import type { TreeNode } from '../../core/node/tree'
 import { EXPENSES } from '../platform/capabilities'
@@ -77,18 +77,25 @@ describe('a Pot\'s row', () => {
     const h = mountRows(potRows, ctx(() => key))
     const row = h.source().row(pot)!
     expect(row).toMatchObject({ icon: 'wallet', title: 'Trip', meta: t('expenses.kindPot'), details: [{ id: 'currency', text: 'CHF' }] })
-    expect(row.actions.filter((a) => a.shown !== false).map((a) => a.id)).toEqual(['rename', 'move'])
+    // rename, move and delete are core's defaults (`standardRowActions.ts`): Expenses only answers them
+    expect(row.actions).toEqual([])
+    expect(row.standard).toEqual({ rename: true, move: true, delete: true })
+    expect(await actionIdsOf(h.w, 'Trip')).toEqual(['rename', 'move', 'delete'])
+    await clickAction(h.w, 'Trip', 'delete')
+    expect(h.events.remove.map((x) => x.node)).toEqual([pot])
     row.primary.onClick()
     expect(h.events.open).toEqual([pot])
   })
 
-  it('leaves the detail out where the key does not open the meta, and offers a guest no action', () => {
+  it('leaves the detail out where the key does not open the meta, and offers a guest no action', async () => {
     expect(mountRows(potRows, ctx(() => v1.randomBytes(32))).source().row(pot)!.details).toEqual([])
     expect(mountRows(potRows, ctx(() => null)).source().row(treeNode({ ...pot, wrappedMeta: null }))!.details).toEqual([])
     const guest = mountRows(potRows, ctx(() => key, guestAccessOf(ShareRole.ReadWrite, { head: { scopeId: SCOPE } as unknown as GuestAccess['head'] })))
     const row = guest.source().row(pot)!
     expect(row.details).toEqual([{ id: 'currency', text: 'CHF' }])
     expect(row.actions.filter((a) => a.shown !== false)).toEqual([])
+    expect(row.standard).toEqual({ rename: false, move: false, delete: false })
+    expect(await actionIdsOf(guest.w, 'Trip'), 'no default either').toEqual([])
     expect(row.selection).toEqual({ move: false, delete: false })
   })
 })

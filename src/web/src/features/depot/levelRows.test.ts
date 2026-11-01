@@ -639,6 +639,8 @@ describe('Depot rows', () => {
     await flushPromises()
     expect(deleteNode).toHaveBeenCalledWith(SCOPE, N)
     expect(loadTree).toHaveBeenCalled()
+    // Depot's own delete REPLACES core's default of that id (`standardRowActions.ts`): the level's delete door is never asked
+    expect(h.events.remove, 'core\'s default delete never runs for a file').toEqual([])
     // inbox #385 (c): said, with an undo (core's `trashUndo`, its toast clicked in `trashUndo.test.ts`) that restores the
     // node through core's trash restore and reloads the tree
     expect(showUndo).toHaveBeenCalledOnce()

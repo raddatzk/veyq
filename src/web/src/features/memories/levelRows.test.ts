@@ -158,13 +158,19 @@ describe('Memories rows', () => {
     expect(mountSection({ nodes: [solo], pending: true }).source().row(solo)!.selection).toEqual({ move: false, delete: false })
   })
 
-  it('a member\'s row offers rename and move in its menu, and no heart of its own: one heart, core\'s (inbox #409)', async () => {
+  it('a member\'s row offers core\'s rename, move and delete in its menu (granted by `memoryRights`, built by none of Memories), and no heart of its own: one heart, core\'s (inbox #409)', async () => {
     const h = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
-    expect(await actionIdsOf(h.w, 'Solo')).toEqual(['rename', 'move'])
+    const row = h.source().row(node('m1', MEMORY_KIND, 'Solo'))!
+    expect(row.actions, 'Memories builds no action of its own').toEqual([])
+    expect(row.standard).toEqual({ rename: true, move: true, delete: true })
+    expect(await actionIdsOf(h.w, 'Solo')).toEqual(['rename', 'move', 'delete'])
     await clickAction(h.w, 'Solo', 'rename')
     await clickAction(h.w, 'Solo', 'move')
+    await clickAction(h.w, 'Solo', 'delete')
     expect(h.events.rename.map((n) => n.id)).toEqual(['m1'])
     expect(h.events.move.map((n) => n.id)).toEqual(['m1'])
+    expect(h.events.remove.map((x) => x.node.id), 'the level\'s delete door, with core\'s own write').toEqual(['m1'])
+    expect(h.events.remove[0]!.remove).toBeUndefined()
   })
 
   it('in map mode asks core to draw the subtree map in place of the list and pins located nodes', () => {

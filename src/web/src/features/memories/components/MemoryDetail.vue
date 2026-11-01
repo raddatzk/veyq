@@ -54,7 +54,7 @@ import { useUploaderNames } from '../useUploaderNames'
 import MemoryCoverImage from './MemoryCoverImage.vue'
 import MemoryCard from './MemoryCard.vue'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
-import type { CoreHeaderAction, NodeHeaderAction } from '../../../core/node/nodeHeader'
+import { standardNodeActions, type CoreHeaderAction, type NodeHeaderAction } from '../../../core/node/nodeHeader'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -187,10 +187,13 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   { id: 'participants', label: t('memory.participants.title'), icon: 'users', shown: participantsRow.value?.canEdit === true, onClick: () => void participantsRow.value?.openPicker() },
   // The banner above the Memory (uc.memory.banner): who may choose the cover may set it (`setBanner`, a member's only).
   { id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'objects-column', shown: can.value.setBanner, disabled: !props.memoryKey, onClick: () => openBannerDialog() },
-  { id: 'rename', label: t('node.rename'), icon: 'pencil', shown: can.value.rename, onClick: () => emit('rename') },
-  // Core's move dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
-  { id: 'move', label: t('node.move.action'), icon: 'file-export', shown: can.value.move, onClick: () => emit('move') },
-  { id: 'delete', label: t('node.delete'), icon: 'trash', severity: 'danger', shown: can.value.deleteNode, onClick: () => emit('delete') },
+  // Rename, move and delete are core's standard three (`standardNodeActions`), granted by `can`; the move is core's dialog
+  // (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
+  ...standardNodeActions(
+    t,
+    { rename: can.value.rename, move: can.value.move, remove: can.value.deleteNode },
+    { rename: () => emit('rename'), move: () => emit('move'), remove: () => emit('delete') },
+  ),
 ])
 
 // --- item favorites (ADR 0068) ---

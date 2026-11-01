@@ -263,6 +263,78 @@ describe('LevelView: a kind no application serves (the unsupported row)', () => 
   })
 })
 
+// Owner 2026-11-01: rename, move and delete are core's defaults for every kind (`standardRowActions.ts`), granted by the
+// application's answer (`LevelRow.standard`), run through the level's doors; an application's own action replaces one.
+describe('LevelView: core\'s default rename, move and delete', () => {
+  const granted = (over: { rename?: boolean; move?: boolean; delete?: boolean } = { rename: true, move: true, delete: true }) =>
+    stubRows('a', { noOwnRename: true, standard: () => over })
+
+  it('adds the granted ones to a row - rename, move first, delete last in the menu - and runs each through the level\'s door', async () => {
+    const a = granted()
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory } })
+    const a1 = node('a1', 'ALPHA', 'Trips')
+    const w = mountLevel([TRIPS, a1], { folder: TRIPS })
+    expect(await actionIdsOf(w, 'a1')).toEqual(['favorite', 'rename', 'move', 'delete'])
+    await clickAction(w, 'a1', 'rename')
+    await clickAction(w, 'a1', 'move')
+    await clickAction(w, 'a1', 'delete')
+    expect(w.emitted('renameNode')).toEqual([[a1]])
+    expect(w.emitted('moveNode')).toEqual([[a1]])
+    // the delete is the host's one question with its Undo, for this one node, with core's own write (no `remove`)
+    expect(w.emitted('deleteNodes')).toEqual([[[{ node: a1 }]]])
+  })
+
+  it('offers only what the answer grants, and nothing without one (fail closed)', async () => {
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: granted({ move: true }).factory } })
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', shareable: false, list: { rows: stubRows('b', { noOwnRename: true }).factory } })
+    const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips')], { folder: TRIPS })
+    expect(await actionIdsOf(w, 'a1')).toEqual(['favorite', 'move'])
+    expect(await actionIdsOf(w, 'b1'), 'no answer: no default').toEqual(['favorite'])
+  })
+
+  it('an application\'s own action of the id replaces core\'s default (the stub\'s own rename, its label and its door)', async () => {
+    const a = stubRows('a', { standard: () => ({ rename: true, move: true, delete: true }) })
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: a.factory } })
+    const a1 = node('a1', 'ALPHA', 'Trips')
+    const w = mountLevel([TRIPS, a1], { folder: TRIPS })
+    expect(await actionIdsOf(w, 'a1')).toEqual(['favorite', 'rename', 'move', 'delete'])
+    const labels = async () => {
+      await rowOf(w, 'a1').find('.veyq-level-item-more').trigger('click')
+      await flushPromises()
+      const out = [...document.body.querySelectorAll('.veyq-row-action-rename')].map((e) => e.textContent?.trim())
+      await rowOf(w, 'a1').find('.veyq-level-item-more').trigger('click')
+      await flushPromises()
+      return out
+    }
+    expect(await labels(), 'one rename, the application\'s').toEqual(['rename a1'])
+  })
+
+  it('a share guest gets no default rename or delete whatever the answer, a READ_WRITE guest\'s move through the level\'s door', async () => {
+    reg().registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', shareable: false, list: { rows: granted().factory } })
+    const tree = [TRIPS, node('a1', 'ALPHA', 'Trips')]
+    for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
+      const w = mountGuest(role, tree)
+      expect((await actionIdsOf(w, 'a1')).filter((id) => ['rename', 'move', 'delete'].includes(id)), role).toEqual(['move'])
+      w.unmount()
+    }
+  })
+
+  it('a folder row: core\'s answer for THAT folder (`folderRights`) - a member all three, read-only none, a READ guest none', async () => {
+    const rome = node('Rome', FOLDER_KIND, 'Trips')
+    const defaultsOf = async (w: Level) => (await actionIdsOf(w, 'Rome')).filter((id) => ['rename', 'move', 'delete'].includes(id))
+    const member = mountLevel([TRIPS, rome], { folder: TRIPS })
+    expect(await defaultsOf(member)).toEqual(['rename', 'move', 'delete'])
+    await clickAction(member, 'Rome', 'delete')
+    expect(member.emitted('deleteNodes')).toEqual([[[{ node: rome }]]])
+    member.unmount()
+    const readonly = mountLevel([TRIPS, rome], { folder: TRIPS, pending: true })
+    expect(await defaultsOf(readonly)).toEqual([])
+    readonly.unmount()
+    const guest = mountGuest(ShareRole.Read, [TRIPS, rome])
+    expect(await defaultsOf(guest)).toEqual([])
+  })
+})
+
 describe('LevelView: the folders', () => {
   it('lists the sub-folders and opens one with a real click; the folder is created from the "New" menu, no tile', async () => {
     const rome = node('Rome', FOLDER_KIND, 'Trips')
@@ -271,7 +343,8 @@ describe('LevelView: the folders', () => {
     expect(w.emitted('openNode')).toEqual([[rome]])
     expect(rowOf(w, 'Rome').find('button.veyq-level-item-main').attributes('aria-label')).toBe('Rome')
     expect(w.find('.veyq-create-card').exists(), 'the create tile is retired (inbox #406)').toBe(false)
-    expect(await actionIdsOf(w, 'Rome'), 'a folder\'s row carries core\'s heart only; the rest is its own header\'s once opened').toEqual(['favorite'])
+    // a folder's row: core's heart, and core's default rename, move and delete by `folderRights` (owner 2026-11-01)
+    expect(await actionIdsOf(w, 'Rome')).toEqual(['favorite', 'rename', 'move', 'delete'])
     await chooseNew(w, t('node.folderCreate'))
     expect(w.emitted('create')).toEqual([[FOLDER_KIND]])
   })

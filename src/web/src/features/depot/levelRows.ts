@@ -429,6 +429,9 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     const blob = blobs.value.get(node.id) ?? null
     const name = node.name
     const c = rights.value
+    // Rename, move and delete are Depot's OWN, replacing core's defaults of the same ids (`core/node/standardRowActions.ts`):
+    // they go through this session's source (a guest's has no rename and deletes only its own placeholder) and the delete
+    // asks and offers its own Undo (inbox #385 (c)); labelled with the file's name.
     const actions: LevelRowAction[] = [
       // The one first-class action: a file's purpose is to be taken.
       {
@@ -469,6 +472,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       meta: t('depot.dropBox.kind'),
       details: [{ id: 'people', text: t('depot.dropBox.people', guests) }],
       primary: { label: t('depot.dropBox.open', { name }), onClick: () => host.open(node) },
+      // Its own move and delete (core's defaults replaced, as a file's); a drop box is never renamed here.
       actions: [
         { id: 'move', label: t('depot.move', { name }), icon: 'file-export', shown: c.moveNode, onClick: () => source.move?.(node) },
         {
