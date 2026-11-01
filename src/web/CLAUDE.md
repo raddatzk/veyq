@@ -144,6 +144,10 @@ here; the server is blind.
   them with `-u` and read the diff against what its header says may move (the field seal's salt shifted every later
   wrap and digest, ADR 0093 § 9).
 - **Core and application ([ADR 0079](../../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
+  **As much as can be core's is core's** (owner 2026-11-01, ADR 0079 decision 3): what every node or application needs is a
+  core building block an application uses or explicitly replaces, never one it rebuilds; an application keeps its own
+  domain, its narrowing rights answer and what it does differently. Ask before building in an application: would the next
+  one need this the same way?
   The applications are `src/features/memories/` (Memories) and `src/features/depot/` (Depot: the `FILE` and `DEPOT_DROPBOX` kinds, their rows in
   the level list, upload, download, the drop box — [docs/apps/depot.md](../../docs/apps/depot.md)) and `src/features/expenses/` (Expenses: the
   `EXPENSES_POT` kind — `domain/`: the entry codec, the ledger's arithmetic and check, the reads and writes; around it the

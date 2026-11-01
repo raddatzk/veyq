@@ -83,6 +83,12 @@ structure, attachments and guests, and the user interface. What a verified uploa
 
 ## How core and an application meet
 
+**The rule: as much as can be core's is core's** ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
+decision 3). Whatever every node or every application needs is a core building block; an application keeps its own
+domain, its rights answer (which only narrows core's) and what it deliberately does differently, by replacing a core
+default explicitly. Before building a function in an application, ask whether the next application would need it the
+same way — if so, it goes into core.
+
 ### The build
 
 - **Backend modules.** Core and each application are Gradle modules below `src/backend/`: `:core` (`src/backend/core`)
