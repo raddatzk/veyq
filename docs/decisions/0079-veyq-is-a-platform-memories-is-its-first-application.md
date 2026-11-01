@@ -41,15 +41,19 @@ screens. Memories owns `MEMORY` and `CHAPTER`, media and derivatives, the galler
 ([docs/apps/memories.md](../apps/memories.md)). What every kind can have is core's, even where Memories had it first:
 a node's cover and the counters a live list of records polls are core's, and an application uses them.
 
-**As much as can be core's is core's** (owner, 2026-11-01). Whatever is the same for every node or every application
-belongs in core: the actions every node offers (rename, move, delete, share, copy, download, cover, favorite, report),
-the rights that are not an application's own, the host doors and dialogs, registration, the trash. An application
-holds only its own domain (its payload formats and their rules), its rights answer, which may only narrow core's, and
-what it deliberately does differently — and that it does by replacing a core default explicitly, never by building its
-own beside it. The test for a new function: *would the next application need it the same way?* If so, it is built in
-core as a neutral building block. Two limits stand: core still never names an application (decision 4), and a block
-that holds an application's data is a typed template the application instantiates with its own table and rules, never
-the generic record store this ADR rejects.
+**Around a node is core's, behind it the application's** (owner, 2026-11-01). Everything around a node is core's:
+create, rename, move, delete, trash and purge, its key, the rights that are not an application's own, links and
+sharing, cover, favorite, report, the export envelope, the live tree, the host doors and dialogs, registration.
+Everything behind a node is its application's: its data model, tables, formats, records and their revisions,
+operations, screens, validation and arithmetic — shared with no other application, not even as a core template. One
+exception: **data management is core's.** The blobs an application stores are managed by a core service that carries
+the platform's duties over them — erasure, a report's hold, quota, reclaim, the re-key of their wraps, the export of
+their bytes ([ADR 0112](0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)); the application decides
+what it stores and which of its rows keeps it, and registers its blobs with the service. The crypto suite is core's
+toolbox; what an application seals is the application's. A shared helper library that owns nothing — no table, no
+route, no state — is allowed, never required. An application's rights answer may only narrow core's, and where it does
+something around its node differently it replaces a core default explicitly, never builds its own beside it. Core still
+never names an application (decision 4).
 
 **4. Dependency direction.** An application may depend on core; core never depends on an application, and an
 application never depends on another. Two applications that must refer to each other do so only through a

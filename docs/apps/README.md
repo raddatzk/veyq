@@ -89,11 +89,14 @@ structure, attachments and guests, and the user interface. What a verified uploa
 
 ## How core and an application meet
 
-**The rule: as much as can be core's is core's** ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
-decision 3). Whatever every node or every application needs is a core building block; an application keeps its own
-domain, its rights answer (which only narrows core's) and what it deliberately does differently, by replacing a core
-default explicitly. Before building a function in an application, ask whether the next application would need it the
-same way — if so, it goes into core.
+**The rule: around a node is core's, behind it the application's** ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
+decision 3). Core owns what every node has — create, rename, move, delete, trash and purge, its key, rights, links,
+cover, favorite, report, the export envelope, the live tree; an application owns what is behind its node — its data
+model, tables, formats, records, operations, screens, validation and arithmetic — and shares it with no other, not even
+as a core template. The exception is data management: the blobs an application stores are managed by a core service
+that carries the platform's duties over them, and the application registers its blobs with it
+([ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md), proposed). A shared helper
+library that owns nothing is allowed, never required; an application's rights answer only narrows core's.
 
 ### The build
 
@@ -364,7 +367,7 @@ map the same way the level does, the same component over the person's Memories t
 
 ## Decided, not built
 
-- **Records with revisions and attachments as a core template** (proposed, [ADR 0112](../decisions/0112-records-with-revisions-and-attachments-are-a-core-template.md)): an application declares its record types (node kind, own table, writer policy `ANY` / `FIRST_WRITER`, `KEEP` / `DROP` for a departing writer, attachment roles); core owns the write and read mechanics, one record-attachment arm (Expenses' receipt arm, generalised, still the fourth `veyq_blob` arm) with every blob seam, core routes and `core/records/` on the web. Expenses moves onto it first, unchanged in behaviour; Inventory is its second instance.
+- **An application's stored blobs managed by a core service** (proposed, [ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)): Expenses' receipt arm, generalised, becomes core's `veyq_application_blob` (still the fourth `veyq_blob` arm), and core implements every blob seam over it — completion, guest upload, link usage, share predicate, report and hold, uploader content, re-key, erasers, purge, reclaim, export of the bytes. An application declares its roles and tells the service which of its rows (an owner id opaque to core) keeps or released a blob. Expenses moves its receipts first, its dev data reset rather than migrated; its records stay its own.
 
 - **An application's own entry in core's navigation** (for [Inventory](inventory.md)'s one pool per space, created on
   first open and no row of a level). Built: the kind half, `listed: false` (above). Next, with Inventory: an

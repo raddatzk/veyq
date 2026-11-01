@@ -56,7 +56,8 @@ never learns what anyone owns, who lent it to whom, or when it is due back.
   personal space's pool, and — where one is lent out — that it is still with its holder. A copy is a new item there,
   its history along, a loan in it kept with the holder's name. The leaving member's loan entries on others' items stay,
   as their entries in a Pot do; an item of another's they still hold stays held by a former member until its owner
-  notes it back.
+  notes it back. The owner's direction (2026-11-01): a loan entry hangs on its item and the item on its owner, so
+  deleting an item takes its entries along, and its owner leaving takes both; how is worked out with the refinement.
 - **No links.** A pool cannot be shared by a link: a link guest is anonymous and names itself, which is not who should
   hold a club's rope. A person outside the space asks a member.
 - **QR labels.** A printable label per item that holds only a URL with the item's id on the tenant's domain — never a
@@ -81,10 +82,10 @@ What it takes from the platform as it stands:
 | The pool, its key, trash, moderation, the application switch | A node kind (`INVENTORY`) with `NodeKindRules` — Expenses' `ExpensesNodeKindRules` is the template — at most one per space, at its root; no share roles, so no link. |
 | Items, loans, reservations and notes as records with a history | ADR 0108's shape in Inventory's own table: one row per revision, the server takes `n + 1` only over `n` (`409 stale_revision`), tombstones, history kept, each revision under its own key wrapped under the pool's, bodies padded to size classes. |
 | A dropped or reordered revision is caught | ADR 0108 decision 5's graph of seen revisions, no signature (a seal under the pool's key already proves a key holder wrote it). |
-| Pictures per item | **New core piece:** a record with attachments, which ADR 0108 left until a third application needed it. Expenses' receipt table (`veyq_expenses_receipt`, the fourth `veyq_blob` arm) is where it is drawn from, so Inventory does not add a fifth arm of its own. Proposed in [ADR 0112](../decisions/0112-records-with-revisions-and-attachments-are-a-core-template.md): records are a core template Inventory instantiates (two record types, items and loans), pictures core's record-attachment arm. |
-| Only the owner writes an item; a loan entry only its writer | **New:** a writer check per record — revision `n + 1` only from the writer of revision 1 — over what the operator sees already; proposed as the template's `FIRST_WRITER` policy ([ADR 0112](../decisions/0112-records-with-revisions-and-attachments-are-a-core-template.md) decision 3). |
+| Pictures per item | **New core piece:** core's service for an application's stored blobs, Expenses' receipt arm generalised (`veyq_expenses_receipt`, the fourth `veyq_blob` arm, becomes `veyq_application_blob`), so Inventory adds no fifth arm and no blob seam of its own: it registers each picture under its item's id ([ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md), proposed). |
+| Only the owner writes an item; a loan entry only its writer | **New:** a writer check per record — revision `n + 1` only from the writer of revision 1 — over what the operator sees already, in Inventory's own revision store. |
 | Two reservations at once (where loans are only noted) | The server's time of each record's first revision, which every client reads alike: the first holds. No lock and no server-side overlap check — the spans are sealed. |
-| An owner's items go when they do | The writer check above names them: when a member leaves the space, the server drops the items whose first revision they wrote — hidden in the same step, erased by core's record purge, their loan entries kept ([ADR 0112](../decisions/0112-records-with-revisions-and-attachments-are-a-core-template.md) decision 4, `DROP`). A copy to their personal pool is their own client's, before they leave, as any write to their own space. |
+| An owner's items go when they do | The writer check above names them: when a member leaves the space, the server drops the items whose first revision they wrote — their pictures released to core's blob service, the loan entries they wrote on others' items kept; how, Inventory's refinement decides. A copy to their personal pool is their own client's, before they leave, as any write to their own space. |
 | Search and filter by tag, field, location, holder | In the client, over the decrypted list — a few thousand items fit in memory, as a Pot's entries do. |
 | "Due", "due back", "new on my items" (and, confirmed, "asked of me") | Shown when the pool opens, computed on the device. |
 
