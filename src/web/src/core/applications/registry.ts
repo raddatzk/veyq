@@ -210,13 +210,15 @@ export interface KindDescriptor {
   /** Where a node of this kind may be placed (inbox #358; read through {@link Registry.placementAllows}): at the scope
    *  root (`root`) and/or directly in a parent of one of `parents`. A HINT mirroring the server's `NodeKindRules` for the
    *  kind, so core's move dialog offers only destinations the server would take; the server stays the authority (its
-   *  `illegal_structure` is explained by name when the two disagree). Omitted: the move dialog offers no destination for
+   *  `illegal_structure` is explained by name when the two disagree). Both answer `contracts/platform/kinds/<owner>.json`
+   *  (`src/web/src/kindsContract.test.ts` holds this side to it). Omitted: the move dialog offers no destination for
    *  a node of the kind (fail closed). */
   placement?: KindPlacement
   /** A node of this kind can carry a COVER (inbox #411): an image the owner uploads as the node's own, shown as the node's
    *  leading visual wherever one is drawn. Core owns the action ("Set cover" / "Change cover" / "Remove cover"), the
    *  picker, the upload, the display and the guest read; the kind only opts in (and may say where an equal picture is
-   *  stored, `KindCover.findStored`) - the server's `NodeKindRules.takesCover` is the authority and must agree. Omitted: no
+   *  stored, `KindCover.findStored`) - the server's `NodeKindRules.takesCover` is the authority, and both answer the kind's
+   *  `cover` in `contracts/platform/kinds/<owner>.json` (`kindsContract.test.ts`). Omitted: no
    *  cover, no action. FOLDER's is core's own, pre-registered. */
   cover?: KindCover
   /** Export and import of this kind's CONTENT (ADR 0082): core walks the subtree and writes / reads the archive; the kind

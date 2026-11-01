@@ -1,0 +1,14 @@
+{
+  "$schema": "./kinds.schema.json",
+  "owner": "core",
+  "description": "Core's own kind (ADR 0079 decision 3): a FOLDER organizes only. It lives at the root or in another folder, carries a cover, roots a READ or READ_WRITE link (never WRITE_ONLY: a drop box is a node of its own, ADR 0080 decision 11), and is the one guest container (ADR 0080 decision 6).",
+  "kinds": {
+    "FOLDER": {
+      "placement": { "root": true, "parents": ["FOLDER"] },
+      "cover": true,
+      "createNeeds": null,
+      "shareRoles": ["READ", "READ_WRITE"],
+      "guest": { "creatableInFolder": true, "container": true, "writeOnlyCreates": [] }
+    }
+  }
+}

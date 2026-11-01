@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veyq.dev/contracts/platform/kinds/kinds.schema.json",
+  "title": "veyq node kinds of one owner",
+  "description": "The facts of the node kinds one owner answers for (ADR 0079 decision 3): core's own `FOLDER` (`core.json`) and each application's kinds (`<application>.json`, the file named for the application's id, its entry of contracts/platform/capabilities.json). Both clients answer the same facts by hand in their own language — the backend through its seams (`NodeKindRules`, `ShareRoots`, `GuestNodeRules`, `GuestCreatableKinds`, `WriteOnlyGuestKinds`), the web through its registry and its rights functions — and each holds its answers to this file in a test: the backend's `KindsContractTest` (src/backend/src/test/kotlin/me/raddatz/veyq/app/), which asks every deployed bean and finds every kind constant of the compiled code in a file, and the web's `kindsContract.test.ts` (src/web/src/), which asks the registry and each application's rights function. So the two cannot drift apart without one of them going red, and a new kind is written down here before either side takes it. The server stays the authority: the web's placement is a hint its move dialog offers by, the server's `illegal_structure` the answer. A file records what is built; changing a fact here changes it on both sides or neither test is green.",
+  "type": "object",
+  "required": ["owner", "kinds"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "owner": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$",
+      "description": "`core`, or the application's id (`memories`, `depot`, `expenses`): the file's name without `.json`. A kind of `core` belongs to no application and is never switched off; an application's kind answers its id as `NodeKindRules.applicationOf` on the backend and `registry.applicationOf` on the web, and its rules live in that application's code."
+    },
+    "description": { "type": "string" },
+    "kinds": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[A-Z][A-Z0-9_]{0,15}$" },
+      "additionalProperties": { "$ref": "#/$defs/kind" },
+      "description": "Each kind this owner answers for, by its wire token (`_common` `NodeKind`). A kind appears in exactly one file."
+    }
+  },
+  "$defs": {
+    "kind": {
+      "type": "object",
+      "required": ["placement", "cover", "createNeeds", "shareRoles", "guest"],
+      "additionalProperties": false,
+      "properties": {
+        "placement": {
+          "type": "object",
+          "required": ["root", "parents"],
+          "additionalProperties": false,
+          "description": "Where a node of the kind may live: the backend's `NodeKindRules.parentAllows` (`illegal_structure` elsewhere), the web's `KindDescriptor.placement` (core's move dialog). A kind no `parents` entry of any kind names takes no placed child.",
+          "properties": {
+            "root": { "type": "boolean", "description": "At the scope root." },
+            "parents": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,15}$" },
+              "description": "Directly in a node of each of these kinds, and of no other."
+            }
+          }
+        },
+        "cover": {
+          "type": "boolean",
+          "description": "It carries a cover in core's `COVER` slot: the backend's `NodeKindRules.takesCover`, the web's `KindDescriptor.cover`."
+        },
+        "createNeeds": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*$",
+          "description": "The capability id (contracts/platform/capabilities.json) creating a node of the kind needs, or null: the backend's `NodeKindRules.capabilityToCreate` (`capability_disabled`), the web's create entry, which a member with that leaf off is not offered."
+        },
+        "shareRoles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["READ", "READ_WRITE", "WRITE_ONLY"] },
+          "description": "The roles a link rooted at a node of the kind may have (`ShareRole`; empty: it roots no link): the backend's `ShareRoots`, the web's share dialog (`KindDescriptor.shareDialog`, present exactly when this is not empty), its rights function's `share` (READ), `shareContribute` (READ_WRITE) and `shareUpload` (WRITE_ONLY) for a member with every leaf on, and its drop page (`app.shareBody`, claimed exactly for a WRITE_ONLY root)."
+        },
+        "guest": {
+          "type": "object",
+          "required": ["creatableInFolder", "container", "writeOnlyCreates"],
+          "additionalProperties": false,
+          "description": "What a link's guest may do with the tree around a node of the kind (ADR 0080 decisions 6 and 11).",
+          "properties": {
+            "creatableInFolder": {
+              "type": "boolean",
+              "description": "A `READ_WRITE` guest of a folder link may create a node of the kind inside a `FOLDER`: core's `FolderGuestNodeRules` for `FOLDER`, an application's `GuestCreatableKinds` for its own kinds on the backend; on the web, a level menu entry of the kind (or core's folder create) that such a guest is offered."
+            },
+            "container": {
+              "type": "boolean",
+              "description": "Inside a node of the kind a `READ_WRITE` guest moves any kind in and out, renames any kind and creates the `creatableInFolder` kinds — the one guest container shape built, a `FOLDER`'s (`GuestNodeRules`); false: no guest tree operation inside it. On the web core's `nodeRights` lets such a guest move only what a container lets out."
+            },
+            "writeOnlyCreates": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,15}$" },
+              "description": "The kinds a `WRITE_ONLY` guest of a link rooted at a node of the kind may create inside its own identity folder (`WriteOnlyGuestKinds`); empty: none. Backend only: the web's drop page (`app.shareBody`) is the one place such a guest creates, and it is the application's own."
+            }
+          }
+        }
+      }
+    }
+  }
+}

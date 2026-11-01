@@ -66,7 +66,10 @@ structure, attachments and guests, and the user interface. What a verified uploa
   the build is configured, so `./gradlew check` runs no task at all (`./gradlew help` shows it at refine). On the web,
   its `generate:api` line in `src/web/package.json`, its directory in `OWNERS`, its kinds in `KIND` and its i18n
   namespace in `I18N_NAMESPACES` (`scripts/validate_web_core_imports_no_applications.py`, which derives every
-  application's client from that script) land together with a catalog for the namespace, or that guard is red.
+  application's client from that script) land together with a catalog for the namespace, or that guard is red. Its
+  kinds file `contracts/platform/kinds/<application>.json` lands with its first kind: the backend's `KindsContractTest`
+  is red on a kind constant no file states, and the web's `kindsContract.test.ts` on a registered kind no file states
+  (and on an application without its rights function in the test's `RIGHTS`).
 - **Crypto unchanged.** No application shares a key with another by accident: a node's key is random and wrapped
   under its parent's ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   and a blob's key is sealed bound to its node and its application's role token — so no application so far needed a
@@ -156,6 +159,15 @@ kind `FOLDER` only.
   (`NodeKindRules`, the web registry). The backend carries a kind as a string and checks a request's shape at the
   boundary (400); the web types it as a string with core's one `FOLDER` constant. No compiler lists the kinds: the
   registry's fail-closed answer, its tests and the kind guards carry what a closed enum's exhaustiveness did.
+- **A kind's facts are written once, in its owner's kinds file.** `contracts/platform/kinds/<owner>.json` (`core.json`
+  for `FOLDER`, one per application, schema `kinds.schema.json`) states per kind where it may live, whether it takes a
+  cover, what its creation needs, the roles a link rooted at it may have, and what a link's guest may do around it — the
+  facts the backend answers through its seams (`NodeKindRules`, `ShareRoots`, `GuestNodeRules`, `GuestCreatableKinds`,
+  `WriteOnlyGuestKinds`) and the web through its registry (`placement`, `cover`, `shareDialog`, `app.shareBody`) and its
+  rights functions. Each side keeps its own code and is held to the file by a test: the backend's `KindsContractTest`
+  (the root's, where every module runs together: every bean answers the file, and every kind constant of the compiled
+  code is in one) and the web's `src/web/src/kindsContract.test.ts` (every registered kind is in a file and answers it).
+  A new kind is written there first; a fact changed on one side only is red on that side.
   `PublicShare.rootKind` is the root row's kind as stored, served for every unlocked role (a `WRITE_ONLY` guest, served
   no node, learns this one structural fact) and omitted on a locked response and while the root is in the trash.
 - **The payload slot and the content key are core's.** Every node has one sealed, versioned payload (`wrappedMeta`,
@@ -278,7 +290,7 @@ point 8).
   `DropBoxDetail.guest.test.ts`, `FolderShareGuest.test.ts`) assert that a guest's page reads nothing of the member's
   world.
 - **Both kind rules read literals**, from lists a new application extends by hand: a kind missing there is guarded by
-  nothing.
+  nothing. (The kinds files of `contracts/platform/kinds/` hold the kinds' facts, not these guards' lists.)
 
 ## How an application publishes a revisioned list
 

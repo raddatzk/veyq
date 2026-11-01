@@ -19,6 +19,11 @@ sealed interface ParentSlot {
  * placed nowhere (`illegal_structure`), and so is a kind two implementations claim, rather than letting CDI bean
  * order choose — the partition `NodeKindRulesPartitionSliceTest` pins. An empty collection therefore refuses every
  * kind, `FOLDER` included: fail closed, never open.
+ *
+ * **What each answers is written down.** A kind's placement, cover, creation need and application — and its share roles
+ * and guest rules (`ShareRoots`, `GuestNodeRules`, `GuestCreatableKinds`, `WriteOnlyGuestKinds`) — are stated in its
+ * owner's `contracts/platform/kinds/<owner>.json`, which the web's registry answers too; the root's `KindsContractTest`
+ * holds every implementation of these seams to it.
  */
 interface NodeKindRules {
     /** Whether this implementation answers for nodes of [kind]. */

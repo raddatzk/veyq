@@ -1,0 +1,21 @@
+{
+  "$schema": "./kinds.schema.json",
+  "owner": "depot",
+  "description": "Depot's kinds (docs/apps/depot.md): a FILE and a DEPOT_DROPBOX, each at the root or in a folder and taking no placed child. A file roots a READ or READ_WRITE link and a folder link's contributor creates one; a drop box carries a cover, needs the drop-box links to be created, roots a WRITE_ONLY link only, and its guests create files in their own identity folders (ADR 0080 decision 11). A guest never creates a drop box (owner 2026-10-14).",
+  "kinds": {
+    "FILE": {
+      "placement": { "root": true, "parents": ["FOLDER"] },
+      "cover": false,
+      "createNeeds": null,
+      "shareRoles": ["READ", "READ_WRITE"],
+      "guest": { "creatableInFolder": true, "container": false, "writeOnlyCreates": [] }
+    },
+    "DEPOT_DROPBOX": {
+      "placement": { "root": true, "parents": ["FOLDER"] },
+      "cover": true,
+      "createNeeds": "core.public-shares.drop-box",
+      "shareRoles": ["WRITE_ONLY"],
+      "guest": { "creatableInFolder": false, "container": false, "writeOnlyCreates": ["FILE"] }
+    }
+  }
+}

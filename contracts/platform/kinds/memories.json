@@ -1,0 +1,21 @@
+{
+  "$schema": "./kinds.schema.json",
+  "owner": "memories",
+  "description": "Memories' kinds (docs/apps/memories.md): a MEMORY at the root or in a folder, a CHAPTER only directly inside a MEMORY; both carry a cover and root a link of every role (ADR 0080 decisions 9 and 13). A guest creates neither and does nothing to the tree inside either: what a guest adds to them is media, Memories' own rows.",
+  "kinds": {
+    "MEMORY": {
+      "placement": { "root": true, "parents": ["FOLDER"] },
+      "cover": true,
+      "createNeeds": null,
+      "shareRoles": ["READ", "READ_WRITE", "WRITE_ONLY"],
+      "guest": { "creatableInFolder": false, "container": false, "writeOnlyCreates": [] }
+    },
+    "CHAPTER": {
+      "placement": { "root": false, "parents": ["MEMORY"] },
+      "cover": true,
+      "createNeeds": null,
+      "shareRoles": ["READ", "READ_WRITE", "WRITE_ONLY"],
+      "guest": { "creatableInFolder": false, "container": false, "writeOnlyCreates": [] }
+    }
+  }
+}

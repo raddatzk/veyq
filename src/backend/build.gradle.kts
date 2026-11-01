@@ -96,6 +96,11 @@ tasks.named<Test>("test") {
     )
     val owners = listOf(me.raddatz.veyq.buildlogic.SpecSets.coreOwner) + sets.applications
     systemProperty("operatorBlindProbe.apiPackages", owners.joinToString(",") { sets.of(it).apiPackage })
+    // `KindsContractTest` holds every module's kind seams to `contracts/platform/kinds/`: an input of the task, so an edit
+    // there re-runs the suite instead of reading as up to date (measured: without it, a changed fact stayed green).
+    inputs.dir(rootDir.resolve("../../contracts/platform/kinds"))
+        .withPropertyName("kindsContract")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 kotlin {
