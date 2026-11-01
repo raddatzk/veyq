@@ -143,8 +143,9 @@ reads).
   `expectedBlobId` — nothing is written after it. The status menu shows progress; a final refusal (`slug_taken`, `illegal_structure`, `stale_file` — the job's `isFinal`, core's queue) fails the item at once and the menu offers no retry for it; the level shows, above the list, why a file of its
   folder was not uploaded (a taken name, `stale_file` with "replace anyway", no space). **A name another kind holds is
   not sent** (inbox #400): before anything is asked, every picked name is folded by the file's function and each
-  sibling's by its own kind's (core's `collidingSibling`, the dialogs' pre-check), and one that meets a folder, Memory
-  or drop box is skipped with a notice naming that sibling by its kind (core's `nameTakenMessage`) — for a guest too, who
+  sibling's by its own kind's (core's `collidingSibling`, the dialogs' pre-check), and one that meets a folder or a drop
+  box is skipped with a notice naming that sibling by its kind (core's `nameTakenMessage`; a Memory or an Expenses Pot is
+  another route group and never meets a file, ADR 0080 decision 16) — for a guest too, who
   is then not even asked to name itself; a server `409 slug_taken` for such a sibling (the race backstop) is named the
   same way. **A given-up job cleans up**
   (inbox #384): failed after its

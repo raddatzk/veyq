@@ -481,24 +481,24 @@ describe('Depot rows', () => {
     }])
   })
 
-  // Inbox #400: a picked name a sibling of ANOTHER kind holds - each name folded by its own kind - is not sent and not
-  // asked about: a notice names that sibling. A file of a name that only looks alike is sent.
-  it('a name a folder or a Memory here holds is not sent: the notice names the sibling by its kind; the rest is uploaded', async () => {
+  // Inbox #400: a picked name a sibling of ANOTHER kind of its route group holds - each name folded by its own kind - is not
+  // sent and not asked about: a notice names that sibling. A file of a name that only looks alike is sent, and so is one of a
+  // Memory's name: a Memory is another route group (ADR 0080 decision 16, amended 2026-11-01).
+  it('a name a folder here holds is not sent: the notice names the sibling by its kind; the rest, a Memory\'s name too, is uploaded', async () => {
     const AB = node('5c09e000-0000-4000-8000-0000000000e5', FOLDER_KIND, 'a.b')
     const h = mountSection({ nodes: [REPORT], siblings: [AB, MEMORY] })
     await flushPromises()
     // a folder `a.b` folds to `a-b` (a folder's slug), so a file `a-b` meets it, a file `a.b` does not (a file keeps its dot)
     await pick(MULTI, [new File(['1'], 'a-b'), new File(['2'], 'a.b'), new File(['3'], 'a-memory'), new File(['4'], 'a memory')])
     expect(confirmRequest.value).toBeNull()
-    // `a memory` keeps its space as a file name, so it does not meet the Memory `A Memory` (`a-memory`); `a-memory` does
-    expect(targets().map((x) => x.name)).toEqual(['a.b', 'a memory'])
+    // the Memory `A Memory` is `memories/a-memory` as a token input, so neither `a-memory` nor `a memory` meets it
+    expect(targets().map((x) => x.name)).toEqual(['a.b', 'a-memory', 'a memory'])
     expect(noticeTexts(h)).toEqual([
       t('depot.nameTakenBy', { name: 'a-b', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'a.b' }) }),
-      t('depot.nameTakenBy', { name: 'a-memory', reason: t('node.nameTakenBy', { kind: t('memory.aMemory'), name: 'A Memory' }) }),
     ])
-    // dismissed by its own button; the other stays
+    // dismissed by its own button
     await dismiss(h, 0)
-    expect(h.w.findAll('.veyq-level-notice')).toHaveLength(1)
+    expect(h.w.findAll('.veyq-level-notice')).toHaveLength(0)
     // a FILE sibling is still the replace question, not a refusal (the replace semantics are unchanged)
     const picking = pick(MULTI, [new File(['n'], 'report.pdf')])
     await flushPromises()

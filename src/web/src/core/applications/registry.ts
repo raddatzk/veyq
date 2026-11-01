@@ -18,7 +18,7 @@
 // `NodeShareDialogProps`). The platform pre-registers FOLDER's share dialog (`core/sharing/FolderShareDialog.vue`); a
 // folder's create and every node's rename are core's own `FolderNameDialog`
 // (`core/node/FolderNameDialog.vue`), which the shell mounts itself — a rename re-seals the name and derives the slug
-// token by the node's kind (`slugFor`), whatever application it belongs to. A kind with no `shareDialog` offers no
+// token by the node's kind (`tokenInputFor`), whatever application it belongs to. A kind with no `shareDialog` offers no
 // share; a create for a kind with no `createDialog` opens nothing. Every shell slot is a list slot (below).
 //
 // **The unified level list (`KindDescriptor.list`, inbox #407).** The folder level view is core's (`core/node/LevelView.vue`):
@@ -79,7 +79,8 @@
 // refused, and so is a kind claimed twice — or declares, explicitly, that it has NO segment (Depot: its nodes are plain
 // names, a file is `#foo/report`). Only one application may have none: the unprefixed names are one namespace. A claimed
 // slug is RESERVED in that namespace: a folder (or a file) whose name folds to it is numbered (`memories-2`) by
-// `location.ts`. A kind nobody claimed has no segment either and is numbered among the plain names of the application that has none.
+// `location.ts`. The claimed slug also prefixes the kinds' slug-token input (`tokenInputFor`), so a name is unique among
+// its application's siblings only. A kind nobody claimed has no segment either and is numbered among the plain names of the application that has none.
 //
 // **The level view's "New" menu (inbox #406).** The creation entries leave the sections' headers and tiles for ONE menu in
 // core's level toolbar, derived from here: a kind's `createEntry` (label key of its own namespace, icon, order, the
@@ -111,7 +112,7 @@ import type { ManifestContent } from '../export/manifest'
 
 // The platform's own share dialog for a FOLDER (uc.sharing.share-public-viewer:folder-share-root), FOLDER's
 // `shareDialog` since P4c. LAZY for a reason: the dialog's module graph reaches this registry again (measured:
-// `shareLink` → `manageShares` → `shareTree` → `core/node/tree`, which asks `registry.slugFor`), so a static import is
+// `shareLink` → `manageShares` → `shareTree` → `core/node/tree`, which asks `registry.tokenInputFor`), so a static import is
 // a cycle. `.default` explicitly: a test's `vi.mock` of the module is no ES-module namespace Vue would unwrap on its
 // own.
 const FolderShareDialog = defineAsyncComponent(() => import('../sharing/FolderShareDialog.vue').then((m) => m.default))
@@ -544,8 +545,19 @@ export interface Registry {
   kind(kind: NodeKind): KindLookup
   /** The slug of `name` for a node of `kind`: the kind's own `slug` hook, else `slugify` (also for a kind nobody
    *  registered: the server stores any kind, and a token must still be computable for it). Every slug token is
-   *  derived through this, so a node's token always uses ITS kind's folding (`core/node/tree.ts` `slugTokenFor`). */
+   *  derived from this (through {@link Registry.tokenInputFor}), so a node's token always uses ITS kind's folding. */
   slugFor(kind: NodeKind, name: string): string
+  /** The string a node's blinded slug token HMACs (`core/node/tree.ts` `slugTokenFor`), and so what its name is unique by
+   *  among its siblings (ADR 0080 decision 16, amended 2026-11-01): {@link Registry.slugFor}'s slug behind `<routeSlug>/` for
+   *  a kind whose application claimed a route slug (`memories/korfubanien`, `expenses/korfubanien`), the bare slug for a
+   *  folder, Depot's kinds and a kind nobody claimed. A name is unique within its route group only, as the URL already
+   *  separates them (`#foo/memories/korfubanien`, `#foo/expenses/korfubanien`): a Memory and a Pot of one name are
+   *  siblings, a folder and a Depot file of one name still meet. A route slug is `[a-z0-9-]` and the `/` ends it, so two
+   *  applications' inputs never meet, and a container's `slugify` never yields a `/`. A file's folding keeps one: a Depot
+   *  file literally named `memories/x` still meets a Memory `x` (accepted, like a folder `a.b` and a file `a-b`). Every
+   *  token and every client-side name check (`core/node/siblingCollision.ts`, the guest's, an import's numbering) goes
+   *  through this, so they agree with the server, which compares tokens. */
+  tokenInputFor(kind: NodeKind, name: string): string
   /** Claim the URL route slug of an application for the `kinds` it owns (see the header). Throws on a slug that is
    *  malformed or reserved, on a slug already claimed, on a kind already claimed (or FOLDER, the platform's), and on an
    *  empty `kinds`. */
@@ -717,6 +729,12 @@ export function createRegistry(): Registry {
     },
     slugFor(kind, name) {
       return (kinds.get(kind)?.slug ?? slugify)(name)
+    },
+    tokenInputFor(kind, name) {
+      const slug = (kinds.get(kind)?.slug ?? slugify)(name)
+      // FOLDER is never in `routes`; Depot's kinds are claimed with no slug (null), a kind nobody claimed is absent
+      const route = routes.get(kind)
+      return route ? `${route}/${slug}` : slug
     },
     claimRouteSlug(slug, claimed) {
       if (!ROUTE_SLUG.test(slug)) throw new Error(`route slug ${JSON.stringify(slug)} is not a slug ([a-z0-9-], starting with a letter)`)

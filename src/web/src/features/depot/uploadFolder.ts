@@ -6,8 +6,9 @@
 //
 // **Names.** Every name goes through core's `archiveName` - the one rule that makes a name safe on every file system - and its
 // clash suffix (`Name (2)`, before the extension), per directory. On top of it, a name whose SLUG a sibling already holds is
-// numbered further, each sibling folded by its own kind (`registry.slugFor`: a folder `a.b` and a folder `a b` meet, a file
-// `Foto.JPG` and `foto.jpg` meet), so the server's uniqueness never refuses a name the plan made. The top folder is numbered
+// numbered further, each sibling folded by its own kind into its token input (`registry.tokenInputFor`: a folder `a.b` and a
+// folder `a b` meet, a file `Foto.JPG` and `foto.jpg` meet, a Memory `Trip` meets neither), so the server's uniqueness never
+// refuses a name the plan made. The top folder is numbered
 // among the level's existing siblings the same way (as the import's root is), and a sibling only the server knows (a race, one
 // this session cannot read) moves it to the next suffix.
 //
@@ -65,7 +66,7 @@ type Draft = { files: { name: string; file: File }[]; folders: Map<string, Draft
  * folder, numbered among them. Paths below it are split at `/`; an empty segment is dropped.
  */
 export function planFolderUpload(
-  dir: DirectoryInput, siblings: readonly { kind: NodeKind; name: string }[], slugFor: SlugFor = (k, n) => registry.slugFor(k, n),
+  dir: DirectoryInput, siblings: readonly { kind: NodeKind; name: string }[], slugFor: SlugFor = (k, n) => registry.tokenInputFor(k, n),
 ): FolderUploadPlan {
   const top: Draft = { files: [], folders: new Map() }
   let files = 0

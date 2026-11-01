@@ -261,6 +261,20 @@ describe('import', () => {
     expect(imported[0].name).toBe('Trip (3)')
   })
 
+  // ADR 0080 decision 16, amended 2026-11-01: a name is numbered only against its own route group's siblings — a node of
+  // a kind whose application claimed a route slug (a Memory, a Pot) is another group than the folder imported here.
+  it('numbers a name per route group: a routed sibling of the name leaves it free, a folder of it does not', async () => {
+    if (!registry.routeSlugs().includes('t-routed')) registry.claimRouteSlug('t-routed', ['T_ROUTED'])
+    const { archive } = await exported()
+    await importSubtree({ scopeId: 's', epochs, tree: [node('t1', null, 'T_ROUTED', 'Trip')], parent: null, opened: await openExport(zipOf(archive)) })
+    expect(imported[0].name).toBe('Trip')
+
+    imported.length = 0
+    const both = [node('t1', null, 'T_ROUTED', 'Trip'), node('t2', null, 'T_ROUTED', 'Trip (2)'), node('t3', null, 'FOLDER', 'Trip')]
+    await importSubtree({ scopeId: 's', epochs, tree: both, parent: null, opened: await openExport(zipOf(archive)) })
+    expect(imported[0].name).toBe('Trip (2)')
+  })
+
   it('on a failure trashes the top-level node it created and says how far it got', async () => {
     const { archive } = await exported()
     failOn = 'three.txt'

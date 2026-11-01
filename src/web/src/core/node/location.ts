@@ -145,8 +145,8 @@ const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
  * path built here always resolves back to the node it was built for. (The application segment in front of it, where one
  * belongs, is {@link slugPathOf}'s.)
  *
- * A child's plain segment is `slugify(name)` whatever its kind (the URL folding; a kind's uniqueness folding,
- * `registry.slugFor`, is not the URL's). Equal plain segments are numbered **within a class** of siblings — the folders;
+ * A child's plain segment is `slugify(name)` whatever its kind (the URL folding; a name's uniqueness,
+ * `registry.tokenInputFor`, is not the URL's). Equal plain segments are numbered **within a class** of siblings — the folders;
  * one application's nodes (`registry.routeOf(kind).group`) — so a file `a.b` and a folder `a-b` are both `a-b` (the
  * trailing slash tells them apart), and a Memory and a folder of one name never meet. Among the siblings of one plain
  * segment of one class, in {@link compareByCreation} order, the first keeps it and each further one gets `<slug>-<n>`

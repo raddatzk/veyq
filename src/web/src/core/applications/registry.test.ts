@@ -94,6 +94,51 @@ describe('registry: slugFor', () => {
   })
 })
 
+// ADR 0080 decision 16, amended 2026-11-01: the slug token's input carries the route group, so a name is unique among the
+// siblings of its group only — each application with a route slug is one, the plain names (folders, the application with
+// no segment, a kind nobody claimed) another.
+describe('registry: tokenInputFor', () => {
+  function routed() {
+    const r = createRegistry()
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: MEMORY_KIND, icon: 'images', shareable: true })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'POT', icon: 'file', shareable: false })
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', shareable: false, slug: fileNameSlug })
+    r.claimRouteSlug('memories', [MEMORY_KIND, CHAPTER_KIND])
+    r.claimRouteSlug('expenses', ['POT'])
+    r.claimNoRouteSegment(['LEAF'])
+    return r
+  }
+
+  it('puts a claimed route slug and a slash before the kind\'s slug', () => {
+    const r = routed()
+    expect(r.tokenInputFor(MEMORY_KIND, 'Korfubanien')).toBe('memories/korfubanien')
+    expect(r.tokenInputFor(CHAPTER_KIND, 'Tag 1')).toBe('memories/tag-1')
+    expect(r.tokenInputFor('POT', 'Korfubanien')).toBe('expenses/korfubanien')
+  })
+
+  it('keeps the bare slug for a folder, the application with no segment and a kind nobody claimed', () => {
+    const r = routed()
+    expect(r.tokenInputFor(FOLDER_KIND, 'Korfubanien')).toBe('korfubanien')
+    expect(r.tokenInputFor('LEAF', 'Korfubanien')).toBe('korfubanien')
+    expect(r.tokenInputFor('FUTURE', 'Korfubanien')).toBe('korfubanien')
+  })
+
+  it('so two applications\' nodes of one name differ, and a folder and a plain-named file of one name do not', () => {
+    const r = routed()
+    expect(r.tokenInputFor(MEMORY_KIND, 'Rom')).not.toBe(r.tokenInputFor('POT', 'Rom'))
+    expect(r.tokenInputFor(MEMORY_KIND, 'Rom')).not.toBe(r.tokenInputFor(FOLDER_KIND, 'Rom'))
+    expect(r.tokenInputFor(MEMORY_KIND, 'Rom')).toBe(r.tokenInputFor(CHAPTER_KIND, 'rom'))
+    expect(r.tokenInputFor('LEAF', 'rom')).toBe(r.tokenInputFor(FOLDER_KIND, 'Rom'))
+  })
+
+  it('takes the folding from the kind\'s hook, the prefix from its claim', () => {
+    const r = createRegistry()
+    r.registerKind({ rekeyContent: nothingOfItsOwnToRekey, kind: 'LEAF', icon: 'file', shareable: false, slug: fileNameSlug })
+    r.claimRouteSlug('leaves', ['LEAF'])
+    expect(r.tokenInputFor('LEAF', 'Day1.md')).toBe('leaves/day1.md')
+  })
+})
+
 // cr-files-application P4c: a kind brings its create and share dialogs with its descriptor; no single-claim slot is left.
 describe('registry: dialogs per kind', () => {
   it("pre-registers core's FolderShareDialog as FOLDER's share dialog, and FOLDER has no create dialog", async () => {

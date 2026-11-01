@@ -16,7 +16,9 @@ import type { FilesTreeUpload } from './source'
 
 const reg = createRegistry()
 registerDepot(reg)
-const slugFor = (kind: string, name: string) => reg.slugFor(kind, name)
+reg.claimRouteSlug('t-routed', ['T_ROUTED']) // an application with a route slug, as Memories or Expenses
+// what the plan numbers by: the slug token's input, as the default `registry.tokenInputFor` does in the app
+const slugFor = (kind: string, name: string) => reg.tokenInputFor(kind, name)
 
 const file = (path: string, body = 'x', type = 'text/plain') => ({ path, file: new File([body], path.split('/').pop()!, { type, lastModified: 1234 }) })
 const dir = (name: string, ...files: { path: string; file: File }[]): DirectoryInput => ({ kind: 'directory', name, files })
@@ -57,6 +59,13 @@ describe('planFolderUpload', () => {
     const plan = planFolderUpload(dir('Trip', file('a.txt')), siblings, slugFor)
     expect(plan.root.name).toBe('Trip (3)')
     expect(plan.nextRootName()).toBe('Trip (4)')
+  })
+
+  // ADR 0080 decision 16, amended 2026-11-01: a name is unique within its route group, so a sibling of an application with
+  // a route slug (a Memory, a Pot) does not number the top folder.
+  it('leaves the top folder\'s name free beside a sibling of another route group of that name', () => {
+    const plan = planFolderUpload(dir('Trip', file('a.txt')), [{ kind: 'T_ROUTED', name: 'Trip' }], slugFor)
+    expect(plan.root.name).toBe('Trip')
   })
 
   it('a renamed file keeps its bytes, type and modified time; an unchanged one is the picked File itself', async () => {

@@ -336,12 +336,14 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
   const bytesTotal = plans.reduce((s, p) => s + p.bytes, 0)
   if (nodesTotal === 0) throw new ExportError('nothing_to_import', 'this build can import nothing in this download')
 
-  // slugs taken per parent: the target's siblings from the tree, a fresh folder's from what this run puts into it
+  // token inputs taken per parent: the target's siblings from the tree, a fresh folder's from what this run puts into it.
+  // A token input carries its route group (`registry.tokenInputFor`), so a name is numbered only against its own group's
+  // siblings: an imported Pot `Rom` beside a Memory `Rom` keeps its name (ADR 0080 decision 16, amended 2026-11-01).
   const taken = new Map<string | null, Set<string>>()
   const takenIn = (parentId: string | null): Set<string> => {
     let set = taken.get(parentId)
     if (!set) {
-      set = new Set(tree.filter((n) => n.parentId === parentId).map((n) => registry.slugFor(n.kind, n.name)))
+      set = new Set(tree.filter((n) => n.parentId === parentId).map((n) => registry.tokenInputFor(n.kind, n.name)))
       taken.set(parentId, set)
     }
     return set
@@ -373,7 +375,7 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
     // what this run created itself, once a rotation landed after it: the next create under it pulls it the same way.
     const createOptions = memberCreateOptions(scopeId, at)
     for (const name of candidates(n.name)) {
-      const slug = registry.slugFor(kind, name)
+      const slug = registry.tokenInputFor(kind, name)
       if (used.has(slug)) continue
       try {
         if (kind === FOLDER_KIND) {

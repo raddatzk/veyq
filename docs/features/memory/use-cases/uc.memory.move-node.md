@@ -28,7 +28,7 @@
    guest's folder. Every place and the breadcrumb are real buttons, so the browser is as reachable by keyboard and
    screen reader as the list was. Drag and drop comes later, as a second way (inbox #421).
 3. The user moves into the destination and chooses **Move here**, or **Cancel**. Before anything is sent, a node at the destination whose name folds to the
-   same slug is named ("There is already a file named … there").
+   same slug **in the same route group** (ADR 0080 decision 16: a Memory never meets a Pot or a folder) is named ("There is already a file named … there").
 4. Moving a drop-box guest's folder out asks first: it becomes an ordinary folder, its guest can add nothing more, and
    it cannot be moved back into the drop box.
 5. The client re-wraps the node's own content key under the destination's key (`K_SC` at the current epoch at the scope

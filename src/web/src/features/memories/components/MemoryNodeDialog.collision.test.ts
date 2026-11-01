@@ -56,12 +56,14 @@ afterEach(() => {
 })
 
 describe('MemoryNodeDialog names the sibling a name collides with (inbox #389)', () => {
-  it('a Memory onto a folder\'s slug at the root sends nothing and names the folder', async () => {
+  // ADR 0080 decision 16, amended 2026-11-01: a name is unique within its route group only — a folder is a plain name, a
+  // Memory is behind `memories/` in the URL and in its token input, so the two never meet.
+  it('a Memory of a folder\'s name at the root is sent: the folder is another route group', async () => {
     const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
     await typeAndClickSubmit(w, 'italien')
 
-    expect(createMemory).not.toHaveBeenCalled()
-    expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Italien' }))
+    expect(createMemory).toHaveBeenCalledOnce()
+    expect(w.find('.msg').exists()).toBe(false)
   })
 
   it('a Memory onto a sibling Memory in a folder names the Memory', async () => {

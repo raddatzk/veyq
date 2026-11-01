@@ -72,12 +72,14 @@ describe('FolderNameDialog names the sibling a name collides with (inbox #389)',
     expect(w.emitted('done')).toBeFalsy()
   })
 
-  it('a folder create at the scope root names a Memory there by ITS noun', async () => {
+  // ADR 0080 decision 16, amended 2026-11-01: a Memory's token input is `memories/rom`, a folder's `rom` — another route
+  // group, so the two coexist (a sibling's own noun is still named: the file case below).
+  it('a folder create at the scope root beside a Memory of its name is sent: the Memory is another route group', async () => {
     const w = mountDialog({ mode: 'create', parentId: null })
     await typeAndClickSubmit(w, 'rom')
 
-    expect(createFolder).not.toHaveBeenCalled()
-    expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('memory.aMemory'), name: 'Rom' }))
+    expect(createFolder).toHaveBeenCalledOnce()
+    expect(w.find('.msg').exists()).toBe(false)
   })
 
   it('the same name under another parent is sent (the control: the check is per parent)', async () => {

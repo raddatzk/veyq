@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // A rename through core's name dialog folds the new name by the RENAMED NODE's kind (inbox #350, cr-files-application
 // P4c): the dialog names no kind and no folding — it hands the node to the real `renameNode`, which asks
-// `registry.slugFor(node.kind, name)`. Proven on the wire (the JSON at `fetch`), over the app's real registry as
+// `registry.tokenInputFor(node.kind, name)`. Proven on the wire (the JSON at `fetch`), over the app's real registry as
 // `src/test/setup.ts` fills it (Memories and Depot: FILE folds by `fileNameSlug`). Each token is compared with both
 // foldings, so a dialog or a tree helper that fell back to the folder's `slugify` is told apart.
 import { describe, it, expect, vi, afterEach } from 'vitest'

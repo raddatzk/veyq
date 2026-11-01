@@ -64,8 +64,10 @@
   simply create a tenant whose `domain` equals the host the backend sees (with the default Vite proxy that is
   **`127.0.0.1`**, since `changeOrigin` rewrites the Host to the proxy target and the port is stripped). No
   dev-only code path.
-- **E2 — slug collision:** creating/renaming to a name whose blinded slug already exists under the parent is
-  rejected (the server enforces `UNIQUE(parentId, slugToken)` without seeing the name).
+- **E2 — slug collision:** creating/renaming to a name whose blinded slug token already exists under the parent is
+  rejected (the server enforces `UNIQUE(parentId, slugToken)` without seeing the name). A name is unique within its
+  route group: a Memory and an Expenses Pot of one name, or a Memory and a folder, coexist (the token of an
+  application's node HMACs `<routeSlug>/<slug>`, ADR 0080 decision 16).
 - **E3 — illegal structure:** a CHAPTER cannot live at a folder level (it belongs inside a Memory); the
   server rejects it. CHAPTER creation is part of the Memory-detail slice, not this browse.
 

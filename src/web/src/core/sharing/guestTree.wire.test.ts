@@ -123,6 +123,16 @@ describe('a guest creates a node', () => {
     expect(openName(kRoot, { scopeId: SCOPE_ID, nodeId, epoch: 5, placementRevision: 0 }, sent[0].json.encryptedName as string)).toBe('Neu')
   })
 
+  // ADR 0080 decision 16, amended 2026-11-01: the guest's pre-check and token agree with the member's — a node of a kind
+  // whose application claimed a route slug is another group than the folder `Fotos` beside it.
+  it('a routed kind of a sibling folder\'s name is sent, its token input behind its route slug', async () => {
+    if (!registry.routeSlugs().includes('t-routed')) registry.claimRouteSlug('t-routed', ['T_ROUTED'])
+    const sent = recordFetch(created)
+    await createShareNodeAsGuest(context(), { parentId: ROOT, kind: 'T_ROUTED', name: 'FOTOS!' })
+    expect(sent).toHaveLength(1)
+    expect(sent[0].json.slugToken).toBe(b64std(v1.slugToken(kRoot, ROOT, 't-routed/fotos')))
+  })
+
   it('refuses a parent whose key the guest does not hold, sending nothing', async () => {
     const sent = recordFetch(created)
     await expect(createShareNodeAsGuest(context(), { parentId: crypto.randomUUID(), kind: FOLDER_KIND, name: 'X' })).rejects.toThrow(v1.OpenRefused)
