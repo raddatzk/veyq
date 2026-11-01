@@ -2,7 +2,11 @@
 <!-- The root launcher build resolves nothing: no plugin, no dependency (settings.gradle.kts). This
      file is empty ON PURPOSE, with verification on — so the first plugin or dependency added to the root fails the
      build until someone writes metadata for it, and that is the moment to ask whether the launcher is turning into
-     an orchestrator. The backend's components are verified by src/backend/gradle/verification-metadata.xml, in its own
+     an orchestrator. Its one component is no dependency of the build: an IntelliJ sync with "download sources" fetches
+     the sources of the Groovy the Gradle distribution embeds (gradle-9.8.2/lib/groovy-4.0.33.jar), and with them that
+     Groovy's POM and module, which no trust rule may exempt (validate_build_input_pins.py); a wrapper bump that moves
+     the embedded Groovy owes the next version's two hashes here and in src/backend/'s file, checked against Maven
+     Central's .sha1 (2026-11-01). The backend's components are verified by src/backend/gradle/verification-metadata.xml, in its own
      build; the root never includes it (an included build's metadata would be ignored in favour of this file). -->
 <verification-metadata xmlns="https://schema.gradle.org/dependency-verification" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://schema.gradle.org/dependency-verification https://schema.gradle.org/dependency-verification/dependency-verification-1.3.xsd">
    <configuration>
@@ -14,5 +18,14 @@
          <trust group="gradle" name="gradle" file="gradle-.*-src[.]zip" regex="true"/>
       </trusted-artifacts>
    </configuration>
-   <components/>
+   <components>
+      <component group="org.apache.groovy" name="groovy" version="4.0.33">
+         <artifact name="groovy-4.0.33.module">
+            <sha256 value="b51f0a5b8ecfba534d47612a49aa51b279ecdac72e7f790a8ed3130070d80dc5" origin="Verified against Maven Central sha1"/>
+         </artifact>
+         <artifact name="groovy-4.0.33.pom">
+            <sha256 value="4a077cc859cb0fabab55f8637e77889fe03b2489692c9d1da253e43715c28cf8" origin="Verified against Maven Central sha1"/>
+         </artifact>
+      </component>
+   </components>
 </verification-metadata>
