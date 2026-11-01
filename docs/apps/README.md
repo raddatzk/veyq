@@ -364,6 +364,8 @@ map the same way the level does, the same component over the person's Memories t
 
 ## Decided, not built
 
+- **Records with revisions and attachments as a core template** (proposed, [ADR 0112](../decisions/0112-records-with-revisions-and-attachments-are-a-core-template.md)): an application declares its record types (node kind, own table, writer policy `ANY` / `FIRST_WRITER`, `KEEP` / `DROP` for a departing writer, attachment roles); core owns the write and read mechanics, one record-attachment arm (Expenses' receipt arm, generalised, still the fourth `veyq_blob` arm) with every blob seam, core routes and `core/records/` on the web. Expenses moves onto it first, unchanged in behaviour; Inventory is its second instance.
+
 - **An application's own entry in core's navigation** (for [Inventory](inventory.md)'s one pool per space, created on
   first open and no row of a level). Built: the kind half, `listed: false` (above). Next, with Inventory: an
   `app.entry({ label, icon, open(scope) })` on the registrar - core draws each registered entry in the space's
