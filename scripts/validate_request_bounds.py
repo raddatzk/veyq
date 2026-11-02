@@ -45,6 +45,12 @@ beside the `$ref`, or else the target's own `x-field-extra-annotation`, which th
      number's range) is named too, rather than passed unseen, and so is an `EachElement` on anything but such a list.
      A type-changing element `format` (a list of `uuid`s) needs no carrier: the element's type refuses the rest.
 
+  7. **a closed object refuses what it does not name.** Jackson drops an unknown field by default, so an object schema
+     that says `additionalProperties: false` holds only through core's class annotation
+     `@me.raddatz.veyq.core.http.UnknownFieldsRefused`, written beside it as its `x-class-extra-annotation` (the
+     generator puts it on the model class) — both ways: neither without the other (ADR 0115 decision 2: a value field
+     sent into a rotation's stage read as staged when it was dropped).
+
 The failure names the list — spec, schema, property, rule — never a count.
 
 **The defect that bought it.** `BlobUploadsBatchRequest.items` declared `maxItems: 256` with no `@Size` and no
@@ -59,7 +65,8 @@ spot until cr-platform-contract-split slice 4 opened `NodeKind` to a patterned t
 `@Valid` cascade descends are proven by the slice tests `MediaCoreSliceTest.startBlobUploadsOverItsItemBoundIs400`,
 `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem` and
 `ShareContributorSliceTest.shareUploadOverItsItemBoundIs400` — one per mechanism, not per field; `EachElement`'s by
-`MalformedRequestSliceTest.aListElementOutsideItsBoundsIsInvalidRequest`; the cascade into a nullable nested object
+`MalformedRequestSliceTest.aListElementOutsideItsBoundsIsInvalidRequest`; rule 7's refusal, nested objects included, by
+`ScopeRekeySliceTest.aStageWithoutTheWrapItReplacesOrWithAFieldItDoesNotNameIsMalformed`; the cascade into a nullable nested object
 (`oneOf` [a schema, `null`], whose annotation the generator dropped until `buildSrc`'s `NullableObjectCascade` wrote it
 back) by `MalformedRequestSliceTest.aNullableNestedObjectIsValidatedInto`. It does not see
 path/query/header **parameters** (the `jaxrs-spec` generator derives their annotations itself) or **response**
@@ -98,6 +105,8 @@ PATTERN_RE = re.compile(CONSTRAINT + r'Pattern\(regexp\s*=\s*"((?:[^"\\]|\\.)*)"
 # `format: email` is core's one reading of the format (inbox #510); Hibernate's `@Email` is laxer, so it is refused.
 EMAIL_RE = re.compile(r"@field:me\.raddatz\.veyq\.core\.validation\.Mailbox\b")
 HIBERNATE_EMAIL_RE = re.compile(CONSTRAINT + r"Email\b")
+# Rule 7: a closed object's refusal of an unknown field, on the model class (`core/http/UnknownFieldsRefused.kt`).
+CLOSED_RE = re.compile(r"@me\.raddatz\.veyq\.core\.http\.UnknownFieldsRefused\b")
 # Rule 6: the elements' bounds of a list of scalars, carried on the list (core's own constraint, `core/http/EachElement.kt`).
 EACH_RE = re.compile(r'@field:me\.raddatz\.veyq\.core\.http\.EachElement\(((?:[^()"]|"(?:[^"\\]|\\.)*")*)\)')
 EACH_ARG_RE = re.compile(r'(minLength|maxLength)\s*=\s*(\d+)|pattern\s*=\s*"((?:[^"\\]|\\.)*)"')
@@ -233,6 +242,7 @@ class Walker:
         if (file, label) in self.visited:
             return
         self.visited.add((file, label))
+        check_closed(f"{file}:{label}", unwrap_nullable(schema))
         for pname, prop, required in self.properties(schema, file):
             self.n_props += 1
             where = f"{file}:{label}.{pname}"
@@ -413,6 +423,18 @@ def check_elements(where: str, prop: dict, element: dict) -> None:
                   f"must agree value for value.")
 
 
+def check_closed(where: str, schema: dict) -> None:
+    """Rule 7: `additionalProperties: false` and the class annotation that enforces it come together."""
+    closed = schema.get("additionalProperties") is False
+    annotated = bool(CLOSED_RE.search(str(schema.get("x-class-extra-annotation") or "")))
+    if closed and not annotated:
+        errors.append(f"{where} [closed] — `additionalProperties: false` without the `x-class-extra-annotation` "
+                      f"`@me.raddatz.veyq.core.http.UnknownFieldsRefused`: Jackson drops the field the schema refuses.")
+    elif annotated and not closed:
+        errors.append(f"{where} [closed] — `UnknownFieldsRefused` on a schema that does not say "
+                      f"`additionalProperties: false`: the server refuses a field the contract allows.")
+
+
 def check_presence(where: str, prop: dict) -> None:
     """Rule 5 — a required primitive whose absence would bind to the type's default must be refused."""
     s = unwrap_nullable(prop)
@@ -463,7 +485,7 @@ def main() -> int:
         f"request bounds OK: {n_bodies} request bodies · {len(walker.visited)} reachable object schemas · "
         f"{walker.n_props} properties — every bound annotated value for value, nothing annotated beyond the "
         f"schema, every constrained nested object cascaded with @Valid, every required primitive refusing its absence, every "
-        f"bounded list element carried by EachElement.")
+        f"bounded list element carried by EachElement, every closed object refusing what it does not name.")
     print("  scope: annotation PRESENT and equal to its schema. NOT its effect, parameters, responses — see the "
           "docstring.")
     return 0

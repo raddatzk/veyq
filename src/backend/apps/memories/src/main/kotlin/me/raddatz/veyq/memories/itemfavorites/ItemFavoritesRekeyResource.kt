@@ -7,7 +7,6 @@ import me.raddatz.veyq.memories.generated.model.ScopeItemFavoritesRekeyStage
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.membership.AccessMode.READ
-import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.node.rekey.RekeyOutcome
 import me.raddatz.veyq.core.node.rekey.RekeyRight
 import me.raddatz.veyq.core.node.rekey.ScopeRekeyHandler
@@ -63,25 +62,15 @@ class ItemFavoritesRekeyResource(
     }
 
     override fun stageScopeItemFavoritesRekey(scopeId: UUID, rekeyId: UUID, scopeItemFavoritesRekeyStage: ScopeItemFavoritesRekeyStage): Response {
-        val sid = scopeId.toString()
-        val marks = scopeItemFavoritesRekeyStage.marks.orEmpty()
-        // The rights first: what a row holds is answered to the rotator only.
-        scopeRekey.refusal(identity.principal.name, sid, WRITE)?.let { return refused(it) }
-        // Each wrap names the digest of the wrap it replaces (ADR 0115 decision 2): a row that holds another by now —
-        // replaced since the read (a write mints a fresh value key), or gone, a mark of another scope among them — refuses
-        // the batch, so a write between the read and this stage is never replaced by a re-wrap of the key it replaced. The
-        // digest kept beside the wrap is the commit's compare-and-set for a write after it.
-        val stored = if (marks.isEmpty()) emptyMap()
-        else ItemFavoritesEntity.list("scopeId = ?1 and markId in ?2", sid, marks.map { it.markId.toString() })
-            .associate { it.markId to it.wrappedValueKey }
-        val values = marks.associate { m ->
-            val id = m.markId.toString()
-            val now = ScopeRekeyStage.digest(stored[id])
-            if (now != m.replacedDigest) return refused(RekeyOutcome.PartsStale)
-            ScopeRekeyStage.Key(id, ItemFavoritesScopeRekeyParticipant.FIELD) to ScopeRekeyStage.Value(m.wrappedValueKey, now)
+        // Each wrap beside the wrap it replaces (ADR 0115 decision 2): the commit refuses a row that holds another by
+        // then — replaced since the read (a write mints a fresh value key) — so no write is replaced by a re-wrap of the
+        // key it replaced. A mark of another scope is never this scope's row, so the commit never reads it.
+        val values = scopeItemFavoritesRekeyStage.marks.orEmpty().associate { m ->
+            ScopeRekeyStage.Key(m.markId.toString(), ItemFavoritesScopeRekeyParticipant.FIELD) to
+                ScopeRekeyStage.Value(m.wrappedValueKey, replaced = m.replacedValueKey)
         }
-        return when (val o = scopeRekey.stagePart(
-            identity.principal.name, sid, rekeyId.toString(), scopeItemFavoritesRekeyStage.fromEpoch.validated(),
+        return when (val o = scopeRekey.stage(
+            identity.principal.name, scopeId.toString(), rekeyId.toString(), scopeItemFavoritesRekeyStage.fromEpoch.validated(),
             ItemFavoritesScopeRekeyParticipant.PART, values,
         )) {
             RekeyOutcome.Staged -> Response.noContent().build()

@@ -53,8 +53,7 @@ One `veyq_share` row per link (`core/sharing/Entities.kt`):
 | `sealed_drop_public_key` | `WRITE_ONLY` only: the node's drop public key sealed under `K_share`; null for a closed link |
 | `sealed_name` | the root's name re-sealed under `K_share`, so the guest reads the title |
 | `sealed_note`, `sealed_share_name` | the curator note (per locale, with its accept switch inside the seal) and the private label, both under `K_share`; the label is never served to a guest |
-| `sealed_share_key`, `sealed_share_key_epoch` | the **recovery copy**: `K_share` sealed under the scope key `K_SC` at its current epoch (`share-key-recovery`, bound to scope, node, share and epoch), re-sealed by every rotation |
-| `minted_epoch` | the scope's epoch when the link was minted with a recovery copy, never moved; null without one |
+| `sealed_share_key`, `sealed_share_key_epoch` | the **recovery copy**: `K_share` sealed under a value key of its own (`share-key-recovery`, bound to scope, node, share and epoch) at the scope's epoch at the mint, both written once — a rotation re-wraps only the value key (`wrapped_recovery_value_key`), so the epoch is the link's mint |
 | `password_required`, `pw_salt`, `pw_verifier`, `sealed_password` | the password gate (§ Gates); `sealed_password` is the password under `K_share`, for members to reveal |
 | `write_verifier` | `SHA-256` of the guest-write token (§ Guests) |
 | `enabled`, `expires_at` | switched on or off; an optional expiry |
@@ -278,7 +277,7 @@ stateDiagram-v2
   everything added while the link was closed.
 - **Re-activation** turns a link on again and makes the caller its owner, unless the **re-issue rule** holds
   (`ReissuePolicy`, ADR 0075 point 4): the link is marked `reissue_only`; or its owner is no longer a member; or it
-  has a recovery copy and was minted below the scope's current epoch (`minted_epoch`) or the scope has lost a member
+  has a recovery copy and was minted below the scope's current epoch (`sealed_share_key_epoch`) or the scope has lost a member
   since (`member_removals_at_mint` below `member_removals`). Then it is `409 reissue_required`, and the manage list
   marks the link `reissueRequired` from the same predicate. So every link minted before a rotation carries the mark;
   it keeps serving while open. A member's own marked links

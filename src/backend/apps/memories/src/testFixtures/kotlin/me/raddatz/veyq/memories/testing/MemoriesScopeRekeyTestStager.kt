@@ -21,7 +21,7 @@ class MemoriesScopeRekeyTestStager : ScopeRekeyTestStager {
         QuarkusTransaction.requiringNew().run {
             val values = ItemFavoritesEntity.list("scopeId", scopeId).associate {
                 ScopeRekeyStage.Key(it.markId, ItemFavoritesScopeRekeyParticipant.FIELD) to
-                    ScopeRekeyStage.Value(it.wrappedValueKey, ScopeRekeyStage.digest(it.wrappedValueKey))
+                    ScopeRekeyStage.Value(it.wrappedValueKey, replaced = it.wrappedValueKey)
             }
             Arc.container().instance(ScopeRekeyStage::class.java).get()
                 .put(rekeyId, scopeId, ItemFavoritesScopeRekeyParticipant.PART, values)

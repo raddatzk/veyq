@@ -61,17 +61,20 @@ a scope key (`core/report/reportKeys.ts`); a seal's AAD encodes its binding fiel
    substituted `K_v` does not open either: **a rotator can junk a value, never forge one.** The rotating client pages
    through every wrap under the scope key and every scope-root entry, opens each wrap with the old key, wraps the same
    `K_v` under the new one and stages it before the commit, in a stage of its own (`veyq_scope_rekey_stage`: a
-   scope-level row is addressed by no node). The listing serves no value's ciphertext and no stage schema has a field
-   for one; a staged write to a value is refused at the commit, `422 rekey_writes_value`, nothing stored — for an owner
-   and a member rotator alike, since both hold only the key a wrap needs. The commit then, under the scope row's lock,
+   scope-level row is addressed by no node; sized for wraps and root entries, a root's name the largest part). The
+   listing serves no value's ciphertext and no stage schema has a field for one — a field a stage schema does not name
+   is `400 invalid_request`, never dropped as if staged; a staged write to a value is refused at the commit, `422
+   rekey_writes_value`, nothing stored — for an owner and a member rotator alike, since both hold only the key a wrap
+   needs. The commit then, under the scope row's lock,
    takes the new epoch, its grants and its succession statement (point 5), and swaps every staged wrap in — or nothing.
    It fails closed: a wrap under the scope key or a root entry without a staged replacement is `409
    rekey_parts_missing`; a row whose wrap is no longer the one the client re-wrapped is `409 rekey_parts_stale` — each
-   staged wrap names `replacedDigest`, the SHA-256 of the wrap it replaces (per item, and per field of a member's
-   profile), checked at the stage and again at the commit; every write of a value mints a fresh `K_v`, so a write
-   between the read and the commit is never overwritten by a re-wrap of the key it replaced, and no row needs a
-   revision of its own; a scope-root entry's name and slug are held by the node's placement revision instead. The
-   client stages those again, a bounded number of times. After the commit nothing at scope level is under the old key,
+   staged wrap carries the wrap it replaces as it was listed (`replacedValueKey`; a wrap is under 128 characters, so
+   the text itself is compared and nothing is digested), and the commit compares it with the row; every write of a
+   value mints a fresh `K_v` and so a fresh wrap, so a write anywhere between the read and the commit is never
+   overwritten by a re-wrap of the key it replaced, and no row needs a revision of its own; a scope-root entry is held
+   by the node's placement revision instead, which every rename, move and re-key of the entry moves. The client stages
+   those again, a bounded number of times. After the commit nothing at scope level is under the old key,
    and every node of the scope is **due** for its own re-key
    ([ADR 0114](0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 4). What moves, and who stages it:
 
@@ -79,7 +82,7 @@ a scope key (`core/report/reportKeys.ts`); a seal's AAD encodes its binding fiel
    |---|---|---|
    | Each scope-root node's entry, live and trashed: its key wrap, name, slug token | **re-sealed** — the one exemption: any member may write a root entry ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11), so a rotator rewrites nothing another member could not, and its slug token is a keyed MAC under the scope key that moves with the key. The node's current key re-wrapped, its name re-sealed, its token recomputed; the node's own key is replaced afterwards by its node commit | core |
    | A group's name (`group-name`) and a space's icon (`space-icon`) | their `K_v` re-wrapped; the name and the icon, and the epoch each was written at, stay | core |
-   | Each link's recovery copy (`share-key-recovery`) | its `K_v` re-wrapped; the copy stays, with the epoch the link was **minted** at beside it for the re-issue rule ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4). `K_share` is itself a key, so it has a value key too: a wrap a rotator substituted opens no `K_share` at all, never one of its choosing | core |
+   | Each link's recovery copy (`share-key-recovery`) | its `K_v` re-wrapped; the copy stays, with the epoch it was written at — the link's **mint**, which nothing moves after it — beside it for the re-issue rule ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4). `K_share` is itself a key, so it has a value key too: a wrap a rotator substituted opens no `K_share` at all, never one of its choosing | core |
    | A tenant member's name, picture and join record (`member-name`, `member-avatar`, `member-join-record`) | their `K_v` re-wrapped for every member; the fields stay byte-identical, the picture its 16 KiB pad (`ICON_PADDED_LEN`) | core |
    | A tenant's verifications (`member-verification`) | their `K_v` re-wrapped; the row, bound to the epoch it was written at, and the signed statement inside stay | core |
    | A Memory's item marks (`item-favorites`) | their `K_v` re-wrapped; each set and its self-tag stay | Memories, through core's scope re-key seam, handed only the re-wrap |
@@ -95,7 +98,7 @@ a scope key (`core/report/reportKeys.ts`); a seal's AAD encodes its binding fiel
 
    **One rule for every kind: a value that does not open is staged as one nobody opens, and read as unreadable.** A
    wrap the rotator cannot open under the old key is staged as a stand-in: a random `K_v` wrapped at the same slot under
-   a random key dropped at once, of the same length, with the `replacedDigest` of what it replaces (`rewrapValueKey`,
+   a random key dropped at once, of the same length, beside the wrap it replaces (`rewrapValueKey`,
    `src/web/src/features/spaces/valueKey.ts`); a scope-root entry's name or key wrap that does not open, as its purpose's
    own seal at the new epoch under such a key, of the replaced value's length (`unopenable`,
    `features/spaces/scopeRekey.ts`) — never a wrap or random bytes under the new key, which would open: as a name of
@@ -133,8 +136,8 @@ a scope key (`core/report/reportKeys.ts`); a seal's AAD encodes its binding fiel
 3. **A scope-level write states the epoch it seals under** — for a value, the epoch whose key wraps its fresh `K_v`,
    sent beside the value — and the server refuses another (`409 stale_epoch`) under the scope row's lock: a create at
    the scope root, a recovery copy, a group rename, an icon, a profile name or picture, a join record at accept, a
-   verification and an item-mark write. A write that lands while the rotation stages is caught by the digest of the
-   wrap it replaced (point 2); one that lands after the commit under the old key is refused.
+   verification and an item-mark write. A write that lands while the rotation stages is caught by the commit's
+   compare with the wrap it replaced (point 2); one that lands after the commit under the old key is refused.
 
 4. **One counter, one word: a key's epoch.** Every replaceable key — a scope's and a node's — counts its replacements
    as its **epoch**; nothing about the word implies a chain. A node's `epoch` is its own key's: `0` at its mint, `+1`
@@ -209,7 +212,7 @@ a scope key (`core/report/reportKeys.ts`); a seal's AAD encodes its binding fiel
 
 9. **What the server stores and learns.** Per epoch a succession public key and signature (`veyq_scope_succession`),
    which it stores and serves and never verifies; beside every authored scope-level value the wrap of its key, which
-   every write and every rotation rewrites; rewritten root entries; a minted-at epoch per link. It sees a rotation and
+   every write and every rotation rewrites; rewritten root entries. It sees a rotation and
    which wraps it rewrites — rows it serves anyway — and that a write minted a fresh wrap, which it saw as a write
    anyway. No key, no new correlation.
 
@@ -273,7 +276,7 @@ cannot give a wrap — a group's name stays, unreadable until renamed (`V2026110
 - **Re-seal scope-level rows lazily, on their next write.** Reading them in between needs the old key — a chain by
   another name — and a row nobody writes would stay under it for good.
 - **Hold every scope-level write while the rotation stages.** No stale re-stage, but a tenant's profile edits stop for
-  the whole staging; the digest compare re-stages only what changed.
+  the whole staging; the commit's compare re-stages only what changed.
 - **Replace an invite's anchor grant by the anchor epoch's public key, signed by the owner.** The newcomer would never
   hold an older key, but the invite protocol and its vectors change for a key that opens only a dump from before.
 - **The rotation re-seals every value under the new key** (what this decision first built). One envelope per value and
@@ -319,11 +322,12 @@ The acceptance criteria are [uc.spaces.rekey-after-rotation](../features/spaces/
   as unreadable, not as another value; a re-wrap leaves the value byte-identical; an unopenable wrap becomes the
   stand-in), `scopeRekey.test.ts` (a rotation stages wraps only — no value's ciphertext in any stage — and each moved
   wrap opens the unchanged value under the new key; a root entry's name and wrap, a group name's, an icon's, a recovery
-  copy's and a member's field's wrap that does not open, each staged under no key with its digest beside a re-wrapped
-  control), `itemFavorites.test.ts` (Memories' participant re-wraps and never re-seals a set), `scopes.test.ts` (a
+  copy's and a member's field's wrap that does not open, each staged under no key beside the wrap it replaces and a
+  re-wrapped control), `itemFavorites.test.ts` (Memories' participant re-wraps and never re-seals a set), `scopes.test.ts` (a
   rename after a rotation mints a fresh `K_v` and seals it to each invitee, clearing an anomaly's),
   `rekeyScope.test.ts` (a link whose copy's wrap does not open, or was substituted, named key-lost; a node whose key
   does not open holding up no other) and `ScopeRekeySliceTest` (the commit refuses a value write `422
-  rekey_writes_value`) and `LinkCloseRekeyCoreSliceTest` (the key-lost close, its digest and node checks, the rollback
+  rekey_writes_value`, a stale wrap or root entry `409 rekey_parts_stale`, a field no stage schema names `400`) and
+  `LinkCloseRekeyCoreSliceTest` (the key-lost close, its digest and node checks, the rollback
   of a refused commit, and that leaving an open link out never closes it).
 - The crypto conformance tests pin the succession statement, the value key, and that the `scope-epoch` seal is gone.

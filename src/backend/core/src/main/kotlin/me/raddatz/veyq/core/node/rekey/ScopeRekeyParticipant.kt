@@ -10,9 +10,9 @@ package me.raddatz.veyq.core.node.rekey
  * **Fail closed.** [commit] runs inside the rotation's commit (`ScopesStore.rotate`), after core has locked the scope,
  * applied a removal's deletes and decided its own rows. It first decides, without writing, whether [staged] holds a
  * field other than its own rows' wraps ([Verdict.WRITES_VALUE] — a write of a value), whether every row of its own that
- * holds a wrap under the scope key has a replacement in [staged] ([Verdict.MISSING] if not) and whether each was staged
- * against the wrap the row still holds ([ScopeRekeyStage.current], [Verdict.STALE] if not); only then does it write,
- * and nothing it does may fail after a write. Core rolls the whole rotation back on any verdict but [Verdict.APPLIED],
+ * holds a wrap under the scope key has a replacement in [staged] ([Verdict.MISSING] if not) and whether each replaces the
+ * wrap the row still holds ([ScopeRekeyStage.Value.replaced], [Verdict.STALE] if not); only then does it write, and
+ * nothing it does may fail after a write. Core rolls the whole rotation back on any verdict but [Verdict.APPLIED],
  * so a participant that refuses after another applied leaves nothing behind. A staged wrap for a row that no longer
  * exists (a removed member's, erased in the same transaction) is no refusal: there is nothing left under the old key.
  *

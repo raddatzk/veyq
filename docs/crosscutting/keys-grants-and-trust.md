@@ -283,15 +283,15 @@ value does not open), and a field-sealed value derives its field key from `K_v`.
 pages through every wrap under the scope key and every scope-root entry (`stageScopeLevelRekey`,
 `src/web/src/features/spaces/scopeRekey.ts`), opens each wrap with the old key, wraps the same `K_v` under the new one
 at the new epoch (`rewrapValueKey`, `valueKey.ts`), re-seals each root entry, and stages them under its re-key id
-(`veyq_scope_rekey_stage`). The listing serves no value's ciphertext and the stage has no field for one; the commit
-refuses a staged write to a value (`422 rekey_writes_value`) for an owner and a member rotator alike, so a rotator can
+(`veyq_scope_rekey_stage`). The listing serves no value's ciphertext and the stage has no field for one — a field it
+does not name is `400 invalid_request`; the commit refuses a staged write to a value (`422 rekey_writes_value`) for an owner and a member rotator alike, so a rotator can
 make a value unreadable — as any member can — and never rewrite another member's. Only a caller who may commit the
 rotation and holds the current grant reads and stages (`RekeyAccess.checkRotator`). The commit swaps every staged wrap
 in, in the rotation's transaction (`ScopeRekeyCommit`), or nothing: a wrap or a root entry without a staged
-replacement is `409 rekey_parts_missing`, and every staged one names `replacedDigest`, the SHA-256 of the wrap (or the
-root entry's key wrap) it replaces, per member field for a profile; every write of a value mints a fresh `K_v` and so a
-fresh wrap, so a value written since it was read is `409 rekey_parts_stale` — at the stage or at the commit — and the
-client stages again, a bounded number of times (`REKEY_RESTAGES`). Every scope-level write states the epoch its wrap is
+replacement is `409 rekey_parts_missing`, and every staged wrap carries the wrap it replaces as it was listed
+(`replacedValueKey`), which the commit compares with its row — a root entry its placement revision instead; every write
+of a value mints a fresh `K_v` and so a fresh wrap, so a value written since it was read is `409 rekey_parts_stale` at
+the commit, and the client stages again, a bounded number of times (`REKEY_RESTAGES`). Every scope-level write states the epoch its wrap is
 under, and one at another is `409 stale_epoch`. What moves:
 
 | Under the scope key | At the commit | Staged by |

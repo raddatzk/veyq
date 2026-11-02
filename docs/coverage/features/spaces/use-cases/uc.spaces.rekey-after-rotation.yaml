@@ -44,16 +44,17 @@ acceptanceCriteria:
           - ItemFavoritesScopeRekeySliceTest.aMarkWithNoStagedWrapRefusesTheRotation
       web: { unit: [src/features/spaces/scopeRekey.test.ts] }
   - id: a-row-changed-since-is-stale
-    text: Each staged wrap names the SHA-256 of the wrap it replaces, per item and per member field, and every write of a value mints a fresh value key and so a fresh wrap; a value written between the read and the stage is refused at the stage, one written between the stage and the commit makes the commit 409 rekey_parts_stale and writes nothing, a profile write racing the commit included; a member's wrap staged without its digest is malformed.
+    text: Each staged wrap names the wrap it replaces as it was listed, per item and per member field, each root entry the placement revision it was read at, and every write of a value mints a fresh value key and so a fresh wrap; a value or a root entry written anywhere between the read and the commit makes the commit 409 rekey_parts_stale and writes nothing, a profile write racing the commit included; a member's wrap staged without the wrap it replaces, or a stage carrying a field its schema does not name, is malformed and stages nothing.
     coverage:
       backend:
         integration:
           - ScopeRekeySliceTest.aWrapReplacedSinceItWasStagedIsStale
-          - ScopeRekeySliceTest.aWrapReplacedBetweenTheReadAndTheStageIsRefusedAtTheStage
-          - ScopeRekeySliceTest.aMemberWrapWithoutItsDigestIsMalformed
+          - ScopeRekeySliceTest.aWrapReplacedBetweenTheReadAndTheStageIsRefusedAtTheCommit
+          - ScopeRekeySliceTest.aRootEntryWrittenSinceItWasReadIsStale
+          - ScopeRekeySliceTest.aStageWithoutTheWrapItReplacesOrWithAFieldItDoesNotNameIsMalformed
           - ScopeRekeyRaceSliceTest.aRotationThatWaitsOnAProfileWriteFindsItsStageStaleAndRotatesNothing
           - ItemFavoritesScopeRekeySliceTest.aMarkRewrittenSinceItWasStagedIsStale
-          - ItemFavoritesScopeRekeySliceTest.aMarkRewrittenBetweenTheReadAndTheStageIsRefusedAtTheStage
+          - ItemFavoritesScopeRekeySliceTest.aMarkRewrittenBetweenTheReadAndTheStageIsRefusedAtTheCommit
       web: { unit: [src/features/spaces/scopeRekey.test.ts] }
   - id: a-scope-level-write-at-the-old-epoch-is-stale
     text: A scope-level write stating the epoch from before the rotation - a profile name or picture, a verification, an item mark, a group rename, an icon - is 409 stale_epoch and writes nothing, a profile write that waited on the commit included; the writer re-reads and seals under a fresh value key wrapped under the new key.

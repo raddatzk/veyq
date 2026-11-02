@@ -708,8 +708,9 @@ class SharingHandler(
         ReissuePolicy.required(
             reissueOnly = share.reissueOnly,
             ownerIsMember = ownerIsMember(share),
-            // The epoch the link was minted at, not its copy's: a rotation moves the copy (ADR 0115 decision 2).
-            mintedEpoch = share.mintedEpoch.takeIf { share.sealedShareKey != null },
+            // The epoch the copy was written at is the one the link was minted at: a rotation re-wraps the copy's key
+            // and leaves both (ADR 0115 decision 2).
+            mintedEpoch = share.sealedShareKeyEpoch.takeIf { share.sealedShareKey != null },
             currentEpoch = scope.currentEpoch,
             removalsAtMint = share.memberRemovalsAtMint,
             removals = scope.memberRemovals,

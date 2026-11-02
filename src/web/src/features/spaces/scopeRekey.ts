@@ -6,9 +6,9 @@
 // rotator, owner or member alike, can make a value unreadable but never rewrite another member's. The server refuses a
 // stage that writes a value (`422 rekey_writes_value`). The commit swaps every staged wrap in, or nothing: a wrap without
 // a staged replacement is `409 rekey_parts_missing`, one that changed since it was read `409 rekey_parts_stale` — each
-// staged wrap names the SHA-256 of the wrap TEXT it replaces (`replacedDigest`); every write of a value mints a fresh
-// `K_v` and so a fresh wrap, so a write between the read and the commit is never overwritten by a re-wrap of the key it
-// replaced. What moves, all staged here but an application's:
+// staged wrap names the wrap it replaces as it was read (`replacedValueKey`), a root entry its placement revision; every
+// write of a value mints a fresh `K_v` and so a fresh wrap, so a write between the read and the commit is never
+// overwritten by a re-wrap of the key it replaced. What moves, all staged here but an application's:
 //   - each scope-root node's entry (live and trashed) — the one thing re-sealed rather than re-wrapped, since any member
 //     may write a root entry (ADR 0111 decision 11) and its slug token is a keyed MAC under the scope key: its own key
 //     re-wrapped, its name re-sealed, its slug token recomputed, bound to its `scopeEpoch` and `placementRevision + 1` —
@@ -22,8 +22,8 @@
 // A pending group invitee's name key is sealed to the invitee, not under the scope key: a rotation leaves it, and a
 // rename hands the invitees the new name's key (`scopes.ts` `renameGroup`).
 // One rule for every kind (decision 2): what does not open under the old key is staged as one nobody opens — a wrap under
-// a key dropped at once (`rewrapValueKey`), a root entry's seal under one ({@link unopenable}) — with the digest of what
-// it replaces. Every reader shows it as it showed the value before: no name, the letter, an unnamed group, an ignored
+// a key dropped at once (`rewrapValueKey`), a root entry's seal under one ({@link unopenable}) — beside what it
+// replaces. Every reader shows it as it showed the value before: no name, the letter, an unnamed group, an ignored
 // verification, a tree that refuses the row, a link whose key is lost (its root's node re-key then closes it, ADR 0114).
 // One unreadable value must not stop every rotation of the scope, and nothing readable is lost.
 // Operator-blind: every key is opened and wrapped on this device; the server learns no key, and nothing it would not
@@ -31,11 +31,11 @@
 import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import * as verification from '@veyq/crypto/verification'
-import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { fromB64std } from '@veyq/crypto/base64'
 import { shallowReactive } from 'vue'
 import { rekeyApi } from '../../api/client'
 import type {
-  ScopeRekeyMember, ScopeRekeyMemberWrap, ScopeRekeyParts, ScopeRekeyRootEntry, ScopeRekeyRootNode, ScopeRekeyShareWrap,
+  ScopeRekeyMember, ScopeRekeyMemberWrap, ScopeRekeyParts, ScopeRekeyRewrap, ScopeRekeyRootEntry, ScopeRekeyRootNode,
   ScopeRekeyStage, ScopeRekeyVerification, ScopeRekeyVerificationWrap,
 } from '../../api/generated/content'
 import { withRefresh } from '../../app/sessionRefresh'
@@ -51,7 +51,8 @@ import { groupNameContext } from './inviteName'
 import { iconContext } from './spaceIcon'
 import { rewrapValueKey } from './valueKey'
 
-/** The stage's cap per call and kind (`ScopeRekeyStage`): every list 256 — a wrap is a few dozen bytes. */
+/** The listing's page (`listScopeRekeyParts`' `limit`, every kind together) and so each stage's: the stage caps every
+ *  kind at 256 too, so one page is one stage. */
 export const SCOPE_STAGE_BATCH = 256
 
 /** How often a commit refused `rekey_parts_stale` / `rekey_parts_missing` is staged again and retried — a row written
@@ -67,12 +68,6 @@ export const resealingScopes = shallowReactive(new Set<string>())
 export async function isRestageable(e: unknown): Promise<boolean> {
   return (await isCodedError(e, HttpStatus.conflict, 'rekey_parts_stale'))
     || isCodedError(e, HttpStatus.conflict, 'rekey_parts_missing')
-}
-
-/** SHA-256 of a served wrap's (or root entry wrap's) text, base64 — every staged value's `replacedDigest` (the contract's
- *  definition). */
-export function replacedDigestOf(ciphertext: string): string {
-  return b64std(v1.sha256Digest(v1.utf8(ciphertext)))
 }
 
 /** What one staging run needs: the scope, the re-key id, and the old key and the one minted. */
@@ -96,9 +91,8 @@ export async function stageScopeLevelRekey(run: ScopeLevelRekey): Promise<void> 
     let since: string | undefined
     for (let first = true; ; first = false) {
       const page = await withRefresh(() => rekeyApi().listScopeRekeyParts({ scopeId: run.scopeId, since, limit: SCOPE_STAGE_BATCH }))
-      for (const stage of await stagesOf(run, page, kindOf, first)) {
-        await withRefresh(() => rekeyApi().stageScopeRekey({ scopeId: run.scopeId, rekeyId: run.rekeyId, scopeRekeyStage: stage }))
-      }
+      const stage = await stageOf(run, page, kindOf, first)
+      if (stage) await withRefresh(() => rekeyApi().stageScopeRekey({ scopeId: run.scopeId, rekeyId: run.rekeyId, scopeRekeyStage: stage }))
       if (!page.more || !page.cursor) break
       since = page.cursor
     }
@@ -107,7 +101,6 @@ export async function stageScopeLevelRekey(run: ScopeLevelRekey): Promise<void> 
       rekeyId: run.rekeyId,
       fromEpoch: run.oldKey.epoch,
       rewrap: (value, wrapped) => rewrapValueKey(run.oldKey, run.newKey, value, wrapped),
-      digestOf: replacedDigestOf,
     }
     for (const participant of registry.scopeRekeyParticipants()) await participant(ctx)
   } finally {
@@ -133,52 +126,29 @@ async function rootKinds(scopeId: string): Promise<(nodeId: string) => Promise<s
   }
 }
 
-/** One listed page moved into the stages that carry it, each within the caps. */
-async function stagesOf(
+/** One listed page moved into the stage that carries it, or null for a page with nothing to move. */
+async function stageOf(
   run: ScopeLevelRekey, page: ScopeRekeyParts, kindOf: (nodeId: string) => Promise<string>, first: boolean,
-): Promise<ScopeRekeyStage[]> {
+): Promise<ScopeRekeyStage | null> {
   const { scopeId, oldKey, newKey } = run
-  const rewrap = (value: v1.ValueContext, wrapped: string) => rewrapValueKey(oldKey, newKey, value, wrapped)
+  const rewrap = (value: v1.ValueContext, wrapped: string): ScopeRekeyRewrap =>
+    ({ wrappedValueKey: rewrapValueKey(oldKey, newKey, value, wrapped), replacedValueKey: wrapped })
   const rootNodes: ScopeRekeyRootEntry[] = []
   for (const n of page.rootNodes) rootNodes.push(resealRootEntry(scopeId, oldKey, newKey, n, n.trashed ? null : await kindOf(n.nodeId)))
-  const shares = page.shares.map((s): ScopeRekeyShareWrap => ({
+  // A wrap nobody opens loses the link its key: its root's node re-key closes it as such (ADR 0114) — never a wrap under
+  // the new key of a key that is no one's, which would open as a K_share the link does not hold.
+  const shares = page.shares.map((s) => ({
     shareId: s.shareId,
-    // A wrap nobody opens loses the link its key: its root's node re-key closes it as such (ADR 0114) — never a wrap
-    // under the new key of a key that is no one's, which would open as a K_share the link does not hold.
-    wrappedRecoveryValueKey: rewrap(
-      recoveryCopyContext({ scopeId, nodeId: s.nodeId, shareId: s.shareId }, s.sealedShareKeyEpoch), s.wrappedRecoveryValueKey,
-    ),
-    replacedDigest: replacedDigestOf(s.wrappedRecoveryValueKey),
+    ...rewrap(recoveryCopyContext({ scopeId, nodeId: s.nodeId, shareId: s.shareId }, s.sealedShareKeyEpoch), s.wrappedRecoveryValueKey),
   }))
   const members = page.members.map((m) => rewrapMember(scopeId, rewrap, m))
   const verifications = page.verifications.map((v) => rewrapVerification(scopeId, rewrap, v))
-  const stages: ScopeRekeyStage[] = []
-  const batches = Math.max(1, ...[rootNodes, shares, members, verifications].map((l) => Math.ceil(l.length / SCOPE_STAGE_BATCH)))
-  for (let i = 0; i < batches; i++) {
-    const slice = <T>(l: T[]) => l.slice(i * SCOPE_STAGE_BATCH, (i + 1) * SCOPE_STAGE_BATCH)
-    const groupName = first && i === 0 ? page.groupName : null
-    const icon = first && i === 0 ? page.icon : null
-    const stage: ScopeRekeyStage = {
-      fromEpoch: oldKey.epoch,
-      groupName: groupName
-        ? {
-            wrappedNameValueKey: rewrap(groupNameContext(scopeId, groupName.nameEpoch), groupName.wrappedNameValueKey),
-            replacedDigest: replacedDigestOf(groupName.wrappedNameValueKey),
-          }
-        : null,
-      icon: icon
-        ? {
-            wrappedIconValueKey: rewrap(iconContext({ scopeId, iconEpoch: icon.iconEpoch }), icon.wrappedIconValueKey),
-            replacedDigest: replacedDigestOf(icon.wrappedIconValueKey),
-          }
-        : null,
-      rootNodes: slice(rootNodes), shares: slice(shares), members: slice(members), verifications: slice(verifications),
-    }
-    const empty = !stage.groupName && !stage.icon && ![stage.rootNodes, stage.shares, stage.members, stage.verifications]
-      .some((l) => l && l.length)
-    if (!empty) stages.push(stage)
-  }
-  return stages
+  // The name and the icon ride on the first page only.
+  const groupName = first && page.groupName
+    ? rewrap(groupNameContext(scopeId, page.groupName.nameEpoch), page.groupName.wrappedNameValueKey) : null
+  const icon = first && page.icon ? rewrap(iconContext({ scopeId, iconEpoch: page.icon.iconEpoch }), page.icon.wrappedIconValueKey) : null
+  if (!groupName && !icon && ![rootNodes, shares, members, verifications].some((l) => l.length)) return null
+  return { fromEpoch: oldKey.epoch, groupName, icon, rootNodes, shares, members, verifications }
 }
 
 /** A scope-root entry under the new key: the node's unchanged key re-wrapped, its name re-sealed and — for a live node —
@@ -204,35 +174,27 @@ function resealRootEntry(
       wrappedContentKey: nodeKey
         ? wrapContentKey(newKey.key, at, nodeKey)
         : unopenable(n.wrappedContentKey, (key, length) => wrapContentKey(key, at, v1.randomBytes(length))),
-      replacedDigest: replacedDigestOf(n.wrappedContentKey),
     }
   } finally {
     nodeKey?.fill(0)
   }
 }
 
-type Rewrap = (value: v1.ValueContext, wrapped: string) => string
+type Rewrap = (value: v1.ValueContext, wrapped: string) => ScopeRekeyRewrap
 
 /**
- * A member's profile fields' value keys under the new tenant key, each exactly where the row holds one, with the digest
- * of the wrap it replaces. The name, the picture and the join record themselves stay byte-identical — the picture keeps
- * its constant length (ADR 0084) because it is not touched at all. A wrap that does not open under the old key is staged
- * as one nobody opens, which every reader shows as before: no name, the letter, no join record.
+ * A member's profile fields' value keys under the new tenant key, each exactly where the row holds one, beside the wrap
+ * it replaces. The name, the picture and the join record themselves stay byte-identical — the picture keeps its constant
+ * length (ADR 0084) because it is not touched at all. A wrap that does not open under the old key is staged as one
+ * nobody opens, which every reader shows as before: no name, the letter, no join record.
  */
 function rewrapMember(tenantId: string, rewrap: Rewrap, m: ScopeRekeyMember): ScopeRekeyMemberWrap {
   const address = { scopeId: tenantId, userId: m.userId }
   const out: ScopeRekeyMemberWrap = { userId: m.userId }
-  if (m.wrappedNameValueKey) {
-    out.wrappedNameValueKey = rewrap(memberNameContext(address), m.wrappedNameValueKey)
-    out.replacedNameDigest = replacedDigestOf(m.wrappedNameValueKey)
-  }
-  if (m.wrappedAvatarValueKey) {
-    out.wrappedAvatarValueKey = rewrap(memberAvatarContext(address), m.wrappedAvatarValueKey)
-    out.replacedAvatarDigest = replacedDigestOf(m.wrappedAvatarValueKey)
-  }
+  if (m.wrappedNameValueKey) out.name = rewrap(memberNameContext(address), m.wrappedNameValueKey)
+  if (m.wrappedAvatarValueKey) out.avatar = rewrap(memberAvatarContext(address), m.wrappedAvatarValueKey)
   if (m.wrappedJoinRecordValueKey) {
-    out.wrappedJoinRecordValueKey = rewrap(invite.joinRecordContext({ tenantId, userId: m.userId }), m.wrappedJoinRecordValueKey)
-    out.replacedJoinRecordDigest = replacedDigestOf(m.wrappedJoinRecordValueKey)
+    out.joinRecord = rewrap(invite.joinRecordContext({ tenantId, userId: m.userId }), m.wrappedJoinRecordValueKey)
   }
   return out
 }
@@ -242,11 +204,7 @@ function rewrapMember(tenantId: string, rewrap: Rewrap, m: ScopeRekeyMember): Sc
  *  every reader ignores the row as before. */
 function rewrapVerification(tenantId: string, rewrap: Rewrap, v: ScopeRekeyVerification): ScopeRekeyVerificationWrap {
   const slot = { tenantId, verifierUserId: v.verifierUserId, subjectUserId: v.subjectUserId, epoch: v.epoch }
-  return {
-    verifierUserId: v.verifierUserId, subjectUserId: v.subjectUserId,
-    wrappedValueKey: rewrap(verification.verificationContext(slot), v.wrappedValueKey),
-    replacedDigest: replacedDigestOf(v.wrappedValueKey),
-  }
+  return { verifierUserId: v.verifierUserId, subjectUserId: v.subjectUserId, ...rewrap(verification.verificationContext(slot), v.wrappedValueKey) }
 }
 
 /**

@@ -93,16 +93,11 @@ class ShareEntity : PanacheEntityBase {
     var wrappedRecoveryValueKey: String? = null
 
     /** The scope epoch [sealedShareKey] was written at — non-null exactly when it is; the scope's current epoch at
-     *  create (a stale one is refused `stale_epoch`), and left by a rotation, which re-wraps only the copy's value key. */
+     *  create (a stale one is refused `stale_epoch`). Written once, at the mint (`SharingStore.persistShare`): a rotation
+     *  re-wraps only the copy's value key (ADR 0115 decision 2) and a re-issue mints a new row, so it is also the epoch
+     *  the link was minted at — what the re-issue rule compares with the scope's current one (ADR 0075 point 4). */
     @Column(name = "sealed_share_key_epoch")
     var sealedShareKeyEpoch: Int? = null
-
-    /** The scope's epoch when this link was minted with its recovery copy (ADR 0115 decision 2), null for one minted
-     *  without: what the re-issue rule compares with the scope's current epoch (ADR 0075 point 4). Stamped in the mint's
-     *  transaction (`SharingStore.persistShare`), never changed — equal to [sealedShareKeyEpoch] since a rotation no
-     *  longer moves that one (ADR 0115). */
-    @Column(name = "minted_epoch")
-    var mintedEpoch: Int? = null
 
     /** The scope's removal counter when this share was minted (ADR 0075 point 4): below the scope's current count, a
      *  member has left since — one who could have rebuilt this link from its recovery copy. Stamped in the mint's

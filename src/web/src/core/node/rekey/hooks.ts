@@ -54,8 +54,6 @@ export interface ScopeRekeyContext {
    * (`features/spaces/valueKey.ts` `rewrapValueKey`), so the value reads as unreadable and the rotation goes on.
    */
   rewrap(value: v1.ValueContext, wrapped: string): string
-  /** SHA-256 (base64) of a served wrap's TEXT — what each staged wrap names as `replacedDigest`. */
-  digestOf(wrapped: string): string
 }
 
 /** Re-wrap and stage an application's value keys under the scope key (see [ScopeRekeyContext]). Fails closed: a row it

@@ -34,7 +34,7 @@ class ItemFavoritesScopeRekeyParticipant : ScopeRekeyParticipant {
         val rows = ItemFavoritesEntity.list("scopeId", scopeId)
         val wraps = rows.map { row ->
             val v = staged[ScopeRekeyStage.Key(row.markId, FIELD)] ?: return ScopeRekeyParticipant.Verdict.MISSING
-            if (!ScopeRekeyStage.current(v, row.wrappedValueKey)) return ScopeRekeyParticipant.Verdict.STALE
+            if (v.replaced != row.wrappedValueKey) return ScopeRekeyParticipant.Verdict.STALE
             row to v.value
         }
         for ((row, wrap) in wraps) row.wrappedValueKey = wrap

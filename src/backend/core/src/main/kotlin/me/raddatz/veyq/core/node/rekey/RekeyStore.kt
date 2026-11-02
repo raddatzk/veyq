@@ -15,7 +15,9 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
+import java.security.MessageDigest
 import java.time.Instant
+import java.util.Base64
 
 /** One node as the re-key reads it: live or trashed, with the identity key its entry opens through, if any, and whether
  *  only an owner re-keys it ([OwnerOnlyRekey]). */
@@ -250,7 +252,7 @@ class RekeyStore(
         if (named.isEmpty()) return 0
         val open = rekeyedShares(nodeId, now).associateBy { it.id }
         val lost = named.map { (key, value) ->
-            open[key.itemId]?.takeIf { ScopeRekeyStage.digest(it.sealedShareKey) == value.value } ?: return null
+            open[key.itemId]?.takeIf { it.sealedShareKey?.let { copy -> copyDigest(copy) } == value.value } ?: return null
         }
         lost.forEach { sharing.close(it, SharingStore.CloseKind.KEY_LOST) }
         return lost.size
@@ -331,6 +333,11 @@ class RekeyStore(
         const val SHARE_DROP = "share.sealedDropPublicKey"
         /** A link whose recovery copy the re-keyer cannot open: the copy's digest, and the commit closes the link. */
         const val SHARE_LOST = "share.lost"
+
+        /** The digest a key-lost link is named by (the contract's `lostCopyDigest`): base64 SHA-256 of its recovery
+         *  copy's text. A digest, not the copy itself: the copy is a value of any length. */
+        fun copyDigest(sealedShareKey: String): String =
+            Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(sealedShareKey.toByteArray(Charsets.UTF_8)))
         const val IDENTITY_KEY = "identity.wrappedIdentityKey"
         const val IDENTITY_NAME = "identity.sealedDisplayName"
     }

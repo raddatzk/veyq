@@ -8,8 +8,8 @@ package me.raddatz.veyq.core.sharing
  *  - it carries a recovery copy ([mintedEpoch] non-null: the epoch it was minted at with one) that predates the scope's
  *    current state — minted **below the current epoch**, or **before a member removal** ([removalsAtMint] below
  *    [removals]): every member at the time could rebuild the link from the copy, one removed since included. The
- *    minted-at epoch, not the copy's: every rotation re-seals the copy at its new epoch (ADR 0115 decision 2), so the
- *    copy's epoch no longer says when the link was made. The counter carries what the epoch cannot: a tenant never
+ *    copy's epoch is the mint's: a rotation re-wraps the copy's value key and leaves the copy and its epoch (ADR 0115
+ *    decision 2), and a re-issue mints a new row. The counter carries what the epoch cannot: a tenant never
  *    rotates on a removal (ADR 0025), and a tenant removal only *queues* a co-shared group's rotation. The epoch half
  *    stays beside it for its one "false positive" — a key rotation after a compromise (ADR 0060 §5), when a stolen
  *    device could rebuild every link as well as a departed member could.

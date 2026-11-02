@@ -187,9 +187,7 @@ class SharingStore(
             noteEditorUserId = ownerAccount.takeIf { sealedNote != null }
             sealedShareKey = recoveryCopy?.value
             wrappedRecoveryValueKey = recoveryCopy?.wrappedValueKey
-            this.sealedShareKeyEpoch = sealedShareKeyEpoch
-            // The mint's epoch, for the re-issue rule (ADR 0075 point 4); a rotation re-wraps the copy's key and leaves it.
-            this.mintedEpoch = sealedShareKeyEpoch.takeIf { recoveryCopy != null }
+            this.sealedShareKeyEpoch = sealedShareKeyEpoch // the mint's epoch too: a rotation leaves it (ADR 0075 point 4)
             this.sealedShareName = sealedShareName
             shareNameEditorUserId = ownerAccount.takeIf { sealedShareName != null }
             this.passwordRequired = passwordRequired // cr-0118 (ADR 0037): the access-control gate + reveal copy
