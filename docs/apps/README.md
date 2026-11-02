@@ -396,9 +396,10 @@ map the same way the level does, the same component over the person's Memories t
 
 ## Decided, not built
 
-- **Memories' media and derivatives onto core's blob service** ([ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)
-  § Consequences): they keep their two arms for now, their duties carried by Memories' own implementations of the same
-  seams; moving them is the boundary's next step and its own record, since a derivative's rows are not a receipt's.
+- **Memories' media and derivatives onto core's blob service** ([ADR 0113](../decisions/0113-memories-media-are-blobs-of-cores-blob-service.md),
+  proposed): a medium stays Memories' record, its original and derivatives become blobs of the service held by it —
+  a role is an item of its own or its owner's content — and the arms go from four to two. Until it is built they keep
+  their two arms, their duties carried by Memories' own implementations of the same seams.
 
 - **An application's own entry in core's navigation** (for [Inventory](inventory.md)'s one pool per space, created on
   first open and no row of a level). Built: the kind half, `listed: false` (above). Next, with Inventory: an
