@@ -807,7 +807,11 @@ src/features/spaces/scopeRekey.test.ts src/features/spaces/epochs.replaced.probe
 src/features/spaces/valueKey.test.ts` from `src/web/`). Whoever
 obtains an old key later — a removed member's, a lost device's — opens what a dump taken **before** the rotation holds,
 that is an operator already malicious and archiving then; a later-turned operator, a backup taken after the rotation
-and a new operator hold nothing it opens. A member the rotation could not grant at once reads nothing of the scope
+and a new operator hold nothing it opens. **What this adds is narrow:** node keys, and with them the media, were
+already replaced at every rotation ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md));
+replacing the scope key extends that to the scope-level values, and it guards only what the holder had not extracted —
+whoever held the key could hand over whatever they decrypted while they held it. The other reason is one rule at every
+level (ADR 0115, Context). A member the rotation could not grant at once reads nothing of the scope
 until a grant reaches them. **The residual:** a re-key re-wraps keys and re-encrypts nothing, so a `K_blob` the party
 extracted while it held the key still opens that blob's bytes in a later dump — content they could read anyway; what is
 added after gets blob keys of its own. The same holds for a value whose own key a re-key keeps (an Expenses

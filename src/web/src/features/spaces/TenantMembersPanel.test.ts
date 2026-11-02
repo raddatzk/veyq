@@ -578,12 +578,13 @@ describe('TenantMembersPanel - a new lock for the space (ADR 0025 § 2)', () => 
     expect(wrapper.text()).toContain(t('spaceLock.failed'))
   })
 
-  // The copy says what the lock protects and what it does not, in both languages: what is added from now on is closed to
-  // the old key; what was already seen stays seen, and links made before keep working.
+  // The copy says what the lock protects and what it does not, in both languages: the old key opens nothing here any more,
+  // neither what is added nor what is already here (ADR 0115); what was already seen stays seen, and links made before keep
+  // working.
   it('the confirmation names what it protects and what it does not, in EN and DE', () => {
     const de = (i18n.global.getLocaleMessage('de') as { spaceLock: { confirm: string } }).spaceLock.confirm
     for (const copy of [t('spaceLock.confirm'), de]) {
-      expect(copy).toMatch(/from now on|ab jetzt/)
+      expect(copy).toMatch(/neither what is added nor what is already here|weder was dazukommt noch was schon da ist/)
       expect(copy).toMatch(/already saw stays seen|schon gesehen wurde, bleibt gesehen/)
       expect(copy).toMatch(/links made before keep working|vorher erstellte Links funktionieren weiter/i)
     }
