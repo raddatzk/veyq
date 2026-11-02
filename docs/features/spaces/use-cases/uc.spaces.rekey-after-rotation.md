@@ -91,9 +91,9 @@
   re-opens the scope, so the re-read after the wait opens the owner's re-key. Only when the waits run out is the run
   rolled back.
 - **E10 — the scope-level commit is refused.** A wrap or a root entry without a staged replacement is `409
-  rekey_parts_missing`, one written since the rotator read it `409 rekey_parts_stale` (each staged wrap names the digest
-  of the wrap it replaces, and every write of a value mints a fresh one): nothing commits, and the rotator stages
-  again, a bounded number of times. A stage that writes a value's ciphertext rather than its key's wrap is `422
+  rekey_parts_missing`, one written since the rotator read it `409 rekey_parts_stale` (each staged wrap names the wrap
+  it replaces, each root entry its placement revision, and every write of a value mints a fresh wrap): nothing commits,
+  and the rotator stages again, a bounded number of times. A stage that writes a value's ciphertext rather than its key's wrap is `422
   rekey_writes_value`, for an owner and a member rotator alike: a rotation never rewrites a value. A scope-level write
   stating the old epoch after the commit is `409 stale_epoch`. Only a caller who may commit the rotation and holds the
   current grant reads and stages the scope-level wraps.

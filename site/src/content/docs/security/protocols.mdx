@@ -565,7 +565,8 @@ of the space in the same act. Each switch-off is a close, which re-keys the subt
    public key — with the succession key derived from `E(n)`. It opens every value key wrapped under `E(n)` — a group's
    name and icon, each recovery copy, each member's name, picture and join record, each verification, each item-mark
    set — wraps the same key under `E(n+1)` and stages it, and re-seals each scope-root node's entry, the one exemption;
-   each staged part names the digest of the wrap it replaces. A wrap it cannot open becomes one nobody opens, so the
+   each staged wrap names the wrap it replaces, and each root entry the placement revision it read, so the commit
+   refuses a row written since. A wrap it cannot open becomes one nobody opens, so the
    value reads as unreadable, never as another. The stage carries no value: the server refuses one that writes a
    value (`422 rekey_writes_value`), so a rotator, owner or member, can junk a value and never forge one.
 3. For every member it read, **except** the one being removed, it runs the anchor gate (section 7) and seals and
