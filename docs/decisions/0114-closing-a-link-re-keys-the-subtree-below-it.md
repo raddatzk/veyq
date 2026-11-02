@@ -241,7 +241,7 @@ contracts on top of main's latest:
    old key and stores a chain link; a device peels an older epoch from a newer grant. Each a failing test, disabled,
    quoted.
 2. **Crypto and contracts.** The `scope-epoch` purpose and vector out, the succession statement and its derived key
-   in, the invite statement's anchor; the rotation's staged scope parts and its commit, the succession statements in
+   in; the rotation's staged scope parts and its commit, the succession statements in
    place of the chain links, the scope re-key seam's listing for an application, a stated epoch on every scope-level
    write, `scopeEpoch` on node rows, `due`, the reopen fields, a link's minted-at epoch. Proof: the crypto package's
    conformance tests and the trust-chain guards.

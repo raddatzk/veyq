@@ -109,9 +109,12 @@ a seal's AAD encodes its binding fields by position, never by name (`sed -n 327,
    - **A device's commitment** ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
      decision 23) is the succession public key of the newest epoch it held; a later grant counts only through statements
      from it. A member pending across several epochs checks every statement in between.
-   - **An invite's anchor** (ADR 0111 decision 19) becomes the anchor epoch's succession public key inside the
-     statement the owner signs over the invite, instead of the owner's grant beside the carried one; the newcomer
-     verifies the statements from it to the carried epoch and is never handed a key older than the one it joins with.
+   - **An invite's anchor** (ADR 0111 decision 19) stays the owner's grant beside the carried one; the newcomer
+     derives the anchor epoch's succession public key from it and verifies the statements from there to the carried
+     epoch, where it peeled the links before. The anchor key it is handed opens only a dump from before the rotation
+     that moved past it, since every row is re-sealed since.
+   - **No public key is published at a scope's birth**: a holder derives its own epoch's public key from the key it
+     holds, and each statement carries the next one.
    - **What stays open is unchanged:** a party that held epoch `n` can sign a successor of its own, as it could link
      one down today (ADR 0111 § What stays open); the device that minted or held the newer epoch refuses it.
 
@@ -155,7 +158,7 @@ statements, a node's `scope_epoch` and a link's minted-at epoch; a node's `epoch
 reset — the owner's step.
 
 **Crypto.** The `scope-epoch` purpose and its vector go; the succession statement and its derived key get vectors of
-their own; the invite statement's vector changes with its anchor (point 5). Every other seal keeps its bytes: renaming
+their own; the invite's statements keep theirs (point 5). Every other seal keeps its bytes: renaming
 a binding field (`epoch` → `scopeEpoch` in `content-key` and `node-name`) changes no AAD, since fields are encoded by
 position.
 
@@ -186,6 +189,8 @@ position.
   another name — and a row nobody writes would stay under it for good.
 - **Hold every scope-level write while the rotation stages.** No stale re-stage, but a tenant's profile edits stop for
   the whole staging; the digest compare re-stages only what changed.
+- **Replace an invite's anchor grant by the anchor epoch's public key, signed by the owner.** The newcomer would never
+  hold an older key, but the invite protocol and its vectors change for a key that opens only a dump from before.
 - **Give each picture a key of its own and re-wrap only that.** Saves the picture bytes at a tenant re-key, at the cost
   of a new envelope for one field; not taken while tenant rotations stay rare.
 
