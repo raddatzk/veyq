@@ -15,7 +15,6 @@ import me.raddatz.veyq.memories.generated.model.MediaRekeyPage
 import me.raddatz.veyq.memories.generated.model.MediaRekeyStage
 import me.raddatz.veyq.memories.generated.model.RekeyBucketName
 import me.raddatz.veyq.memories.generated.model.RekeyMedium
-import me.raddatz.veyq.memories.generated.model.RekeyMediumBlob
 import me.raddatz.veyq.core.node.rekey.NodeRekeyStage.Key
 import me.raddatz.veyq.core.node.rekey.NodeRekeyStage.Value
 import me.raddatz.veyq.core.node.rekey.RekeyOutcome
@@ -128,7 +127,6 @@ class MediaResource(
                         RekeyMedium(
                             mediaId = UUID.fromString(m.mediaId),
                             metaRevision = m.metaRevision,
-                            blobs = m.blobs.map { RekeyMediumBlob(UUID.fromString(it.blobId), it.role, it.wrappedBlobKey) },
                             wrappedMeta = m.wrappedMeta,
                             wrappedExif = m.wrappedExif,
                         )
@@ -155,7 +153,6 @@ class MediaResource(
                 val revision = m.metaRevision.validated()
                 m.wrappedMeta?.let { put(Key(id, MediaRekeyRows.META), Value(it, revision)) }
                 m.wrappedExif?.let { put(Key(id, MediaRekeyRows.EXIF), Value(it, revision)) }
-                m.blobs.forEach { put(Key(it.blobId.toString(), MediaRekeyRows.BLOB_WRAP), Value(it.wrappedBlobKey, null)) }
             }
             mediaRekeyStage.buckets.orEmpty().forEach { put(Key(it.bucketId.toString(), MediaRekeyRows.BUCKET_NAME), Value(it.sealedName, null)) }
         }

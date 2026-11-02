@@ -15,6 +15,8 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.memories.testing.MediaBlobRows
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduler
 import io.quarkus.test.junit.QuarkusTest
@@ -62,25 +64,52 @@ class MediaTrashSliceTest {
     lateinit var config: VeyqConfig
 
     @Inject
-    lateinit var mediaConfig: MemoriesMediaConfig
-
-    @Inject
     lateinit var scheduler: Scheduler
 
     /**
-     * The trash keys are Memories' (inbox #342) and sit in no properties file: core booted alone would refuse a
-     * `veyq.media.*` key no mapping of its own claims. Their defaults are [MemoriesMediaConfig]'s `@WithDefault`s,
-     * which SmallRye registers as config defaults, so the purge's `@Scheduled` expression resolves too.
+     * One trash window (ADR 0113 decision 5): a medium waits out core's node trash retention, the window its blobs —
+     * core's blob service's, released with its trash — are kept for, so a medium and its bytes are due at one instant.
+     * No `veyq.media.trash.*` key is left: the purge runs on the node purge's interval.
      */
     @Test
-    fun theTrashKeysDefaultFromMemoriesOwnMapping() {
-        assertEquals(Duration.ofDays(30), mediaConfig.trash().retention())
-        assertEquals(Duration.ofHours(1), mediaConfig.trash().purge().every())
-        assertEquals("1h", ConfigProvider.getConfig().getValue("veyq.media.trash.purge.every", String::class.java))
+    fun theMediaTrashWaitsOutTheNodeTrashRetention() {
+        assertEquals(config.node().trash().retention(), store.retention)
+        assertTrue(ConfigProvider.getConfig().getOptionalValue("veyq.media.trash.retention", String::class.java).isEmpty)
         assertTrue(
             scheduler.scheduledJobs.any { it.methodDescription.contains("MediaTrashPurge") },
-            "the media trash purge is scheduled from the mapping's default",
+            "the media trash purge is scheduled on the node purge's interval",
         )
+    }
+
+    /**
+     * A trash releases the medium's blobs with it and a restore keeps them again (ADR 0113 decision 5); a medium trashed
+     * longer than the retention is gone for a restore even before any purge ran — its blobs are the service purge's
+     * then, so a restore would bring it back without its bytes. The control: one just inside the window restores.
+     */
+    @Test
+    fun aTrashReleasesTheBlobsARestoreKeepsThem_andNoRestorePastTheWindow() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
+        fun released() = QuarkusTransaction.requiringNew().call {
+            ApplicationBlobEntity.list("ownerId", a).map { it.releasedAt != null }.distinct()
+        }
+        assertEquals(listOf(false), released(), "born kept")
+        given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/media/$a").then().statusCode(204)
+        assertEquals(listOf(true), released(), "released with the trash")
+        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/media/$a/restore").then().statusCode(204)
+        assertEquals(listOf(false), released(), "kept again by the restore")
+
+        given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/media/$a").then().statusCode(204)
+        fun backdate(by: Duration) = QuarkusTransaction.requiringNew().run {
+            MediaEntity.update("deletedAt = ?1 where id = ?2", Instant.now().minus(by), a)
+        }
+        backdate(store.retention.plusSeconds(60))
+        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/media/$a/restore").then().statusCode(404)
+        assertEquals(listOf(true), released(), "a refused restore keeps nothing")
+        backdate(store.retention.minusSeconds(60)) // control: inside the window
+        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/media/$a/restore").then().statusCode(204)
+        assertEquals(listOf(false), released())
     }
 
     @Test
@@ -218,7 +247,7 @@ class MediaTrashSliceTest {
 
         // the key the purge must not lose — read while the row that holds it still exists
         val storageKey = QuarkusTransaction.requiringNew().call {
-            BlobEntity.findById(MediaEntity.findById(b)!!.blobId)!!.storageKey
+            BlobEntity.findById(MediaBlobRows.blobOf(b)!!)!!.storageKey
         }
 
         // the retention purge (cutoff just after now) hard-deletes the trashed media row and writes its blob's
@@ -258,9 +287,9 @@ class MediaTrashSliceTest {
         // backdate past the configured retention so the job's own cutoff (not a hand-passed one) selects it
         val storageKey = QuarkusTransaction.requiringNew().call {
             val media = MediaEntity.findById(b)!!
-            media.deletedAt = Instant.now().minus(mediaConfig.trash().retention()).minusSeconds(60)
+            media.deletedAt = Instant.now().minus(store.retention).minusSeconds(60)
             media.persist()
-            BlobEntity.findById(media.blobId)!!.storageKey
+            BlobEntity.findById(MediaBlobRows.blobOf(b)!!)!!.storageKey
         }
 
         val recorder = blobStore as RecordingBlobStore
@@ -290,7 +319,7 @@ class MediaTrashSliceTest {
 
         // the key the purge must not lose — read while the row that holds it still exists
         val storageKey = QuarkusTransaction.requiringNew().call {
-            BlobEntity.findById(MediaEntity.findById(b)!!.blobId)!!.storageKey
+            BlobEntity.findById(MediaBlobRows.blobOf(b)!!)!!.storageKey
         }
 
         given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/media/$b/purge").then().statusCode(204)

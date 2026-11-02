@@ -47,8 +47,8 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_config_secret_persistence` pins the mount, so the KEK cannot silently stop surviving a
      container recreate (the hole ADR 0056 § Consequences surfaced)
   12 one more column referencing `veyq_blob`, declared in Kotlin and in a migration with its own foreign key —
-     rejected: `validate_blob_reference_arity` pins the arms by name (three since inbox #341 moved the cover onto
-     the attachment table), so an arm added without teaching the predicates that enumerate them cannot land
+     rejected: `validate_blob_reference_arity` pins the arms by name (two since ADR 0113 moved Memories' media onto
+     core's blob service), so an arm added without teaching the predicates that enumerate them cannot land
      quietly. It is the one case here whose cost is *user data*: a reclaim predicate short by one arm deletes live
      content wherever no foreign key refuses it (the cover column it was built for had none)
   13 a scheduled purge deleting store objects inline, under a receiver named something other than `blobStore`
@@ -103,7 +103,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      the module direction (ADR 0079 Decision 4: core depends on no application). Since the module split a core
      *file* importing Memories does not compile, so the edge it would need is the one place a text check can see
      the back-edge before a build; Gradle refuses that edge too, as a cycle, but only when it builds
-  35 a share-subtree contributor whose `authorizedBlobIds` forgets the derivative arm — rejected:
+  35 a share-subtree contributor whose `authorizedBlobIds` forgets its arm (core's blob service's) — rejected:
      `validate_blob_reference_arity` follows the arms into every `SharedSubtreeContributor`, not only core's
      `subtreeBlobIds` (the arm is red because of the follow: the file is present and still implements it)
   36 the media `ScopeEraser` stops deleting `veyq_media` — rejected: `validate_scope_erasure_arity` unions the
@@ -468,11 +468,11 @@ TRASH_PURGE = "src/backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memorie
 TENANT_HANDLER = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/TenantHandler.kt"
 # The suspend arm re-projects inside its `Done` block, before mailing a statement of reasons (cr-statement-legal-gaps).
 TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) {\n            reproject()\n"
-TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
-# The derivative arm of the share blob-GET authorization, which lives in the media implementation of
-# `SharedSubtreeContributor` (ADR 0079 phase 1, step 7) — the place the live-twin check must follow it to.
-MEDIA_SHARE_CONTRIBUTOR = "src/backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaSharedSubtreeContributor.kt"
-DERIVATIVE_ARM_LINE = '            MediaDerivativeEntity.find("mediaId = ?1", m.id).list().forEach { ids.add(it.blobId) }\n'
+TRASH_PURGE_CTOR_ANCHOR = "class MediaTrashPurge(private val store: MediaStore"
+# The application blob arm of the share blob-GET authorization, which lives in core's blob service's implementation of
+# `SharedSubtreeContributor` (ADR 0112, ADR 0113) — the place the live-twin check must follow it to.
+SERVICE_SHARE_CONTRIBUTOR = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/applicationblob/ApplicationBlobSeams.kt"
+SERVICE_ARM_CALL = ".forEach { row -> ids.add(row.blobId) }"
 
 # Where a Host read through an alias constant is forged: the recovery resource is where the hand parse that
 # bought validate_lookup_single_home used to live, so it is where a copy of it would plausibly come back.
@@ -482,7 +482,7 @@ RECOVERY_RESOURCE_ANCHOR = "class RecoveryResource("
 # so a hand parse beside it is where one would plausibly come back.
 RATE_LIMIT_FILTERS = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/ratelimit/RateLimitFilters.kt"
 RATE_LIMIT_FILTERS_ANCHOR = "@Provider\n@RateLimit(key = RateLimitKey.IP)"
-TRASH_PURGE_BODY_ANCHOR = "        store.purgeTrashedBefore(Instant.now().minus(retention))\n"
+TRASH_PURGE_BODY_ANCHOR = "        store.purgeTrashedBefore(Instant.now().minus(store.retention))\n"
 
 
 def _sub(text: str, old: str, new: str) -> str:
@@ -783,17 +783,16 @@ def forge_fourth_blob_reference_arm(root: pathlib.Path) -> str:
     return "a fourth column referencing veyq_blob, in Kotlin and SQL (must be REJECTED — consumers are now short an arm)"
 
 
-def forge_contributor_forgets_derivative_arm(root: pathlib.Path) -> str:
-    # The media contributor's `authorizedBlobIds` stops enumerating derivative blobs: the share listing still
-    # serves them, the blob GET 404s, and every declaration key of the arity guard is UNCHANGED. The file is
-    # present and still implements the interface, so this is red only because the guard FOLLOWS the arms into
-    # the contributor's body — a guard that merely scanned core's function would stay green on a missing arm
-    # it can no longer see.
-    f = root / MEDIA_SHARE_CONTRIBUTOR
+def forge_contributor_forgets_its_arm(root: pathlib.Path) -> str:
+    # Core's blob service's contributor `authorizedBlobIds` stops enumerating its blobs: Memories' listing still serves
+    # a medium's, the blob GET 404s, and every declaration key of the arity guard is UNCHANGED. The file is present and
+    # still implements the interface, so this is red only because the guard FOLLOWS the arms into the contributor's
+    # body — a guard that merely scanned core's function would stay green on a missing arm it can no longer see.
+    f = root / SERVICE_SHARE_CONTRIBUTOR
     if not f.is_file():
-        raise ForgeError(f"{MEDIA_SHARE_CONTRIBUTOR} is missing — the media contributor moved or was deleted")
-    f.write_text(_sub(f.read_text(), DERIVATIVE_ARM_LINE, ""))
-    return "a share-subtree contributor whose authorizedBlobIds forgets the derivative arm (must be REJECTED)"
+        raise ForgeError(f"{SERVICE_SHARE_CONTRIBUTOR} is missing — the service's contributor moved or was deleted")
+    f.write_text(_sub(f.read_text(), SERVICE_ARM_CALL, ".forEach { _ -> }"))
+    return "a share-subtree contributor whose authorizedBlobIds forgets its arm (must be REJECTED)"
 
 
 def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
@@ -808,7 +807,7 @@ def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
     src = _sub(
         f.read_text(),
         TRASH_PURGE_CTOR_ANCHOR,
-        TRASH_PURGE_CTOR_ANCHOR + "    private val objects: me.raddatz.veyq.core.blobstore.BlobStore,\n",
+        TRASH_PURGE_CTOR_ANCHOR + ", private val objects: me.raddatz.veyq.core.blobstore.BlobStore",
     )
     f.write_text(_sub(src, TRASH_PURGE_BODY_ANCHOR, TRASH_PURGE_BODY_ANCHOR + '        objects.delete(listOf("k/0"))\n'))
     return "a purge deleting store objects inline under a renamed, fully-qualified receiver (must be REJECTED)"
@@ -1623,7 +1622,7 @@ CASES = [
     ("32", "validate_wiki_sources.py", forge_wiki_backlink_removed,        False),
     ("33", "validate_wiki_sources.py", forge_wiki_prose_contradicts_doc,   True),
     ("34", "validate_backend_module_graph.py", forge_core_depends_on_application, False),
-    ("35", "validate_blob_reference_arity.py", forge_contributor_forgets_derivative_arm, False),
+    ("35", "validate_blob_reference_arity.py", forge_contributor_forgets_its_arm, False),
     ("36", "validate_scope_erasure_arity.py", forge_media_eraser_drops_a_table, False),
     ("37", "validate_node_subtree_erasure.py", forge_media_node_eraser_deleted, False),
     ("39", WEB_GUARD, forge_web_core_imports_application, False),

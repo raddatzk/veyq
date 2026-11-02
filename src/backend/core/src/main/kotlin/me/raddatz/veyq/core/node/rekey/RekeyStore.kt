@@ -1,6 +1,5 @@
 package me.raddatz.veyq.core.node.rekey
 
-import me.raddatz.veyq.core.applicationblob.applicationBlobRekeyParts
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.content.NodesStore
@@ -83,11 +82,12 @@ class RekeyStore(
     fun node(scopeId: String, nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId }
 
     /** The core fields sealed under [nodeId]'s key or as a wrap of it that are not on its row ([RekeyParts]): the
-     *  blobs are the node's attachments' and the blobs its application stores through core's service (ADR 0112), each in
-     *  its slot or role — the binding its wrap is sealed to. */
+     *  blobs are the node's attachments', each in its slot — the binding its wrap is sealed to. The blobs its application
+     *  stores through core's service are paged by `listApplicationBlobRekey` (ADR 0113: a Memory of many photos holds
+     *  thousands) and staged under core's part beside these. */
     fun parts(scopeId: String, nodeId: String): RekeyParts {
         val attachments = NodeAttachmentEntity.find("scopeId = ?1 and nodeId = ?2", scopeId, nodeId).list().map { it.blobId to it.slot }
-        val blobs = (attachments + applicationBlobRekeyParts(scopeId, nodeId)).mapNotNull { (blobId, role) ->
+        val blobs = attachments.mapNotNull { (blobId, role) ->
             BlobEntity.findById(blobId)?.let { RekeyParts.Blob(it.id, role, it.wrappedBlobKey) }
         }
         val shares = rekeyedShares(nodeId)

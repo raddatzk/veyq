@@ -1,6 +1,13 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobEntity
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobErasure
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobs
+import me.raddatz.veyq.core.applicationblob.BlobSource
+import me.raddatz.veyq.core.applicationblob.OwnedAttach
+import me.raddatz.veyq.core.applicationblob.OwnerState
 import me.raddatz.veyq.core.backup.ErasureLedger
+import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.MeasureTargets
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
@@ -23,6 +30,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -92,6 +100,10 @@ sealed interface AttachResult {
     /** A shared original's source did not pass [SharedBlobs.persist]. */
     object SharedSourceInvalid : AttachResult
 
+    /** Core's blob service refused one of the item's blobs ([ApplicationBlobs.attachIn]): [code] is the per-item error
+     *  (`upload_mismatch` — another owner or role, or one derivative kind twice; `id_taken`). Nothing was written. */
+    data class Refused(val code: String) : AttachResult
+
     /** The node's epoch gate refused the item's `nodeEpoch` (ADR 0109 point 6): [code] is the per-item error
      *  (`stale_epoch`, `node_rekey_pending`, or `node_not_found` for a node gone since). Its uploads stay open. */
     data class EpochRefused(val code: String) : AttachResult
@@ -125,9 +137,11 @@ data class BucketRow(
 )
 
 /**
- * Persistence for the Memories media (cr-0028): media, derivative and bucket rows and the gallery
- * revision counters, on top of core's [BlobUploadStore] (sessions and blob rows). A node's cover is core's
- * (`NodeCoverStore`, inbox #411). Operator-blind: stores ciphertext wraps + opaque metadata only.
+ * Persistence for the Memories media (cr-0028): media and bucket rows and the gallery revision counters. A medium's
+ * original and derivatives are blobs of core's blob service held by it (ADR 0113, [MemoriesMediaBlobs]): written in its
+ * attach through [ApplicationBlobs.attachIn], released and kept again with its trash and restore, erased with it
+ * ([ApplicationBlobErasure]). A node's cover is core's (`NodeCoverStore`, inbox #411). Operator-blind: stores
+ * ciphertext wraps + opaque metadata only.
  * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate. The
  * manifest (per-chunk ciphertext sizes) is held as a small JSON array of integers — itself only ciphertext-size metadata.
  */
@@ -145,7 +159,13 @@ class MediaStore(
     private val measures: MeasureTargets,
     /** Layer 1 of ADR 0109 point 6: every write here that seals under a node's key states that node's epoch. */
     private val epochs: NodeEpochGate,
+    /** Core's blob service: a medium's original and derivatives are its blobs (ADR 0113). */
+    private val service: ApplicationBlobs,
+    private val erasure: ApplicationBlobErasure,
+    config: VeyqConfig,
 ) {
+    /** The medium's trash window: core's node trash retention, the one its blobs are kept for (ADR 0113 decision 5). */
+    val retention: Duration = config.node().trash().retention()
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
      *  null` (ADR 0061): this is the gate every media/bucket/cover handler routes through, so filtering it once
@@ -154,13 +174,15 @@ class MediaStore(
     fun findNode(scopeId: String, nodeId: String): NodeEntity? =
         NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null }
 
-    /** Is the client-minted [mediaId] already a media, live or trashed, in any scope? */
-    fun mediaIdTaken(mediaId: String): Boolean = MediaEntity.findById(mediaId) != null
+    /** Is the client-minted [mediaId] already a media, live or trashed, in any scope — or an application blob's id
+     *  (both are reportable items' ids, ADR 0112)? */
+    fun mediaIdTaken(mediaId: String): Boolean = MediaEntity.findById(mediaId) != null || service.anyTaken(listOf(mediaId))
 
     /**
-     * Promote a media's verified sessions to blobs + attach to the node, consuming every session. The original
-     * session becomes `veyq_media.blob_id`; each derivative becomes its own blob + a `veyq_media_derivative`
-     * row. One transaction — all blobs, the media, and the derivative rows commit together. Returns
+     * Promote a media's verified sessions to blobs + attach to the node, consuming every session. The original and each
+     * derivative become blobs of core's blob service held by the medium in their role ([ApplicationBlobs.attachIn],
+     * ADR 0113 decision 4), born kept. One transaction — all blobs, their service rows and the media row commit
+     * together; a blob the service refuses rolls the whole item back ([AttachResult.Refused]). Returns
      * (originalBlobId, mediaId), or null — nothing written — when a session was already spent, or [admitted] refuses;
      * (null, mediaId) — nothing written — when a shared original's source does not pass [SharedBlobs.persist].
      * A shared original ([OriginalAttach.Shared], ADR 0013 § 5) is a new row on the stored object of the node's video
@@ -214,20 +236,35 @@ class MediaStore(
             QuarkusTransaction.setRollbackOnly() // a session spent elsewhere: unspend the ones this call took
             return AttachResult.NotAdmitted
         }
-        val originalBlobId = when (original) {
-            is OriginalAttach.Upload -> blobs.persistBlob(original.session, original.manifest)
-            is OriginalAttach.Shared -> shared.persist(scopeId, nodeId, original.spec) ?: run {
-                QuarkusTransaction.setRollbackOnly() // the derivatives' sessions stay open for a retry as an upload
-                return AttachResult.SharedSourceInvalid
-            }
+        val originalSource = when (original) {
+            is OriginalAttach.Upload -> BlobSource.Upload(original.session, original.manifest)
+            is OriginalAttach.Shared -> BlobSource.Shared(
+                shared.persist(scopeId, nodeId, original.spec) ?: run {
+                    QuarkusTransaction.setRollbackOnly() // the derivatives' sessions stay open for a retry as an upload
+                    return AttachResult.SharedSourceInvalid
+                },
+            )
         }
         val bucket = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         val now = Instant.now()
+        // The node passed the gate under its lock, which this transaction holds: it is live and of a media kind.
+        val kind = checkNotNull(NodeEntity.findById(nodeId)) { "the gate found the node" }.kind
+        val writer = checkNotNull(PrincipalKey.of(uploaderUserId, shareIdentityId)) { "a medium has an uploader" }
+        val tiers = listOf(MemoryBlobRoles.ORIGINAL to originalSource) + derivatives.map { it.kind to BlobSource.Upload(it.session, it.manifest) }
+        var originalBlobId: String? = null
+        for ((role, source) in tiers) {
+            when (val r = service.attachIn(scopeId, nodeId, kind, mediaId, role, source, writer, OwnerState.KEEPING, now)) {
+                is OwnedAttach.Attached -> if (role == MemoryBlobRoles.ORIGINAL) originalBlobId = r.row.blobId
+                OwnedAttach.Mismatch, OwnedAttach.IdTaken -> {
+                    QuarkusTransaction.setRollbackOnly() // nothing of the item stays; its sessions stay open
+                    return AttachResult.Refused(if (r == OwnedAttach.IdTaken) "id_taken" else "upload_mismatch")
+                }
+            }
+        }
         val medium = MediaEntity().apply {
             id = mediaId
             this.scopeId = scopeId
             this.nodeId = nodeId
-            this.blobId = originalBlobId
             this.wrappedMeta = wrappedMeta
             // ADR 0093 § 8: the uploader — the upload's authenticated opener — wrote the meta it carries.
             val uploader = PrincipalKey.of(uploaderUserId, shareIdentityId)?.takeIf { wrappedMeta != null }
@@ -239,20 +276,11 @@ class MediaStore(
             this.bucketId = bucket.id // cr-0113: the uploader's primary; a move files it elsewhere
             updatedAt = now // cr-0107: the attach time (the served `updatedAt`); the list order is `position`, below
         }.also { it.persist() }
-        for (d in derivatives) {
-            val derivBlobId = blobs.persistBlob(d.session, d.manifest)
-            MediaDerivativeEntity().apply {
-                id = UUID.randomUUID().toString()
-                this.mediaId = mediaId
-                kind = d.kind
-                blobId = derivBlobId
-            }.persist()
-        }
         // cr-0107: an add moves the node's item revision (the live-updates change signal), not its delete revision — and
         // the revision it moved to is the new medium's place at the list's end (ADR 0033 decision 3, [MediaEntity.position]).
         medium.position = items.bump(scopeId, nodeId)
         attached(mediaId)
-        return AttachResult.Attached(originalBlobId, mediaId)
+        return AttachResult.Attached(checkNotNull(originalBlobId), mediaId)
     }
 
     /**
@@ -311,29 +339,45 @@ class MediaStore(
         // gets. Read plainly, the trash flushed onto a row the delete had removed and answered 500 (inbox #313).
         val media = MediaEntity.findById(mediaId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.scopeId == scopeId } ?: return null
         if (media.deletedAt != null) return media.nodeId // already trashed — idempotent
-        media.deletedAt = Instant.now()
+        val now = Instant.now()
+        media.deletedAt = now
         media.deletedBy = userId
         media.persist()
+        // Its blobs are released with it (ADR 0113 decision 5): the service's purge erases them once the retention
+        // passed since `now`, the instant this medium's own purge reads. A medium's blobs are born only in its own
+        // completion, so no later one can add a blob this bulk update misses.
+        service.lock(listOf(media.id))
+        service.releaseOwners(media.nodeId, listOf(media.id), now)
         items.bump(scopeId, media.nodeId, deleted = true)
         return media.nodeId
     }
 
     /**
      * Restore a trashed media (cr-0110): clear `deleted_at`/`deleted_by`, advance `updated_at` so it re-surfaces
-     * in the live keyset delta, and bump the item revision (an add-back, not a delete). Idempotent on a live media.
-     * Returns the nodeId, or null when no such media in the scope (e.g. already purged) ⇒ a 404.
+     * in the live keyset delta, keep its blobs again (ADR 0113 decision 5), and bump the item revision (an add-back, not
+     * a delete). Idempotent on a live media. Returns the nodeId, or null when no such media in the scope (e.g. already
+     * purged) ⇒ a 404 — and so for one trashed longer than [retention]: its blobs are due for the service's purge, which
+     * may already have erased them, so it is gone even where its own purge has not run yet.
      */
     @Transactional
     fun restoreMedia(scopeId: String, mediaId: String): String? {
         // A guarded update, not a read and a managed write: a purge holds the row while it erases it, and this waits
         // and then matches nothing — the 404 a replay gets — where a flush of a row read before the erase was a 500
         // (developer-styleguide §12). `updatedAt` re-surfaces it in the live keyset delta (cr-0107).
+        val now = Instant.now()
         val restored = MediaEntity.update(
-            "deletedAt = null, deletedBy = null, updatedAt = ?1 where id = ?2 and scopeId = ?3 and deletedAt is not null",
-            Instant.now(), mediaId, scopeId,
+            "deletedAt = null, deletedBy = null, updatedAt = ?1 where id = ?2 and scopeId = ?3 and deletedAt is not null and deletedAt >= ?4",
+            now, mediaId, scopeId, now.minus(retention),
         ) == 1
         val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return null
-        if (restored) placeAt(mediaId, items.bump(scopeId, media.nodeId)) // back at the list's end: the bump's revision
+        if (!restored && media.deletedAt != null) return null // past its window: due for the purge, as if purged
+        if (restored) {
+            // The medium's row (the update's lock), then the service's rows: the one lock order. A service purge that
+            // judged its blobs first erased them under these locks only past the window this update just checked.
+            service.lock(listOf(mediaId))
+            service.keep(media.nodeId, listOf(mediaId), now)
+            placeAt(mediaId, items.bump(scopeId, media.nodeId)) // back at the list's end: the bump's revision
+        }
         return media.nodeId // restored now, or already live — idempotent
     }
 
@@ -346,9 +390,9 @@ class MediaStore(
         keysetPage(scopeId, nodeId, live = false, since, limit)
 
     /**
-     * Hard-delete one media's rows in FK order (derivative → media → blob) and put their store objects on the
-     * reclaim list — the single shared body behind the retention purge, the member-expedited purge and the
-     * contributor delete-own. The caller owns the `@Transactional` boundary and any revision bump (only a
+     * Hard-delete one medium: its row, and its blobs through core's blob service at once ([ApplicationBlobErasure],
+     * which puts their store objects on the reclaim list) — the single shared body behind the retention purge, the
+     * member-expedited purge, the contributor delete-own, the erasure ledger's re-apply and the subtree erase. The caller owns the `@Transactional` boundary and any revision bump (only a
      * LIVE-media removal bumps a revision; a trashed row is already hidden from every list, so the two trash
      * purges don't).
      *
@@ -357,14 +401,12 @@ class MediaStore(
      * across. `StoreReclaimStore.record` is `MANDATORY`, so a caller without one fails loudly here.
      */
     fun purgeMediaRows(media: MediaEntity) {
-        val derivatives = MediaDerivativeEntity.find("mediaId = ?1", media.id).list()
-        val blobIds = listOf(media.blobId) + derivatives.map { it.blobId }
+        val blobIds = service.blobIdsOfOwner(media.id)
         // Its objects, read while its rows still name them: one another row of the node keeps (a cover or a banner sharing
         // it, ADR 0013 § 5) is what a measure on the medium hangs on once the medium is gone (below).
         val keys = blobIds.mapNotNull { BlobEntity.findById(it)?.storageKey }.toSet()
-        derivatives.forEach { MediaDerivativeEntity.deleteById(it.id) } // FK: the referencing rows go first
         MediaEntity.deleteById(media.id)
-        blobs.deleteBlobRows(media.scopeId, blobIds) // its objects locked at once, in the one order (StoredObjectLocks)
+        erasure.eraseOwners(media.scopeId, listOf(media.id)) // its service rows, then its blob rows (StoredObjectLocks)
         val surviving = keys.filter { BlobEntity.count("storageKey", it) > 0 }.toSet()
         guestWriteRecords.forget(listOf(media.id)) // a guest's upload record names the medium: it goes with it
         // The erasure ledger's line (ADR 0056 decision 8): a guest's delete of its own upload leaves no trash to re-fire,
@@ -408,35 +450,37 @@ class MediaStore(
             .filter { it.deletedAt?.isBefore(cutoff) == true }
         // Every object of every expired medium locked at once, in the one lock order, before the first is deleted:
         // one medium at a time, they would be locked crosswise to a measure-taker's (StoredObjectLocks).
-        expired.groupBy { it.scopeId }.forEach { (scopeId, media) -> StoredObjectLocks.lockOf(scopeId, blobIdsOf(media)) }
+        // The service's rows of them first (the one lock order: item rows, the service's rows, blob rows).
+        expired.groupBy { it.scopeId }.forEach { (scopeId, media) ->
+            service.lock(media.map { it.id })
+            StoredObjectLocks.lockOf(scopeId, blobIdsOf(media))
+        }
         expired.forEach { purgeMediaRows(it) }
         return expired.size
     }
 
-    /** Every blob [media] name: their originals and their derivatives'. */
-    fun blobIdsOf(media: List<MediaEntity>): List<String> {
-        if (media.isEmpty()) return emptyList()
-        val derivatives = media.map { it.id }.chunked(500).flatMap { MediaDerivativeEntity.list("mediaId in ?1", it) }
-        return media.map { it.blobId } + derivatives.map { it.blobId }
-    }
+    /** Every blob [media] hold through core's blob service: their originals and their derivatives'. */
+    fun blobIdsOf(media: List<MediaEntity>): List<String> =
+        if (media.isEmpty()) emptyList() else service.ofOwners(media.map { it.id }).map { it.blobId }
 
     /**
-     * Map a page of media entities to their read-back rows, in their order: the derivatives of the whole page in one
-     * query, and every blob they and the originals name in one more — a constant number of queries per page, whatever
+     * Map a page of media entities to their read-back rows, in their order: the service's rows of the whole page in one
+     * query (ADR 0113), and every blob they name in one more — a constant number of queries per page, whatever
      * its size (cr-gallery-list-paging; one query per photo and one per derivative cost 40,017 SELECTs for 10,000
      * photos, `MediaListQueryCountSliceTest`). A medium whose original blob is missing is dropped, a derivative whose
      * blob is missing left out, as the per-row mapping did.
      */
     private fun toRows(media: List<MediaEntity>): List<MediaRow> {
         if (media.isEmpty()) return emptyList()
-        val derivatives = MediaDerivativeEntity.list("mediaId in ?1", media.map { it.id }).groupBy { it.mediaId }
-        val blobIds = media.map { it.blobId } + derivatives.values.flatten().map { it.blobId }
-        val blobRows = BlobEntity.list("id in ?1", blobIds.distinct()).associateBy { it.id }
+        val held = service.ofOwners(media.map { it.id }).groupBy { it.ownerId }
+        if (held.isEmpty()) return emptyList() // no medium has its original: every one is dropped
+        val blobRows = BlobEntity.list("id in ?1", held.values.flatten().map { it.blobId }).associateBy { it.id }
         return media.mapNotNull { m ->
-            val blob = blobRows[m.blobId] ?: return@mapNotNull null
-            val tiers = derivatives[m.id].orEmpty().mapNotNull { d ->
+            val own = held[m.id].orEmpty()
+            val blob = own.firstOrNull { it.role == MemoryBlobRoles.ORIGINAL }?.let { blobRows[it.blobId] } ?: return@mapNotNull null
+            val tiers = own.filter { it.role in MemoryBlobRoles.DERIVATIVES }.sortedBy(::tierOrder).mapNotNull { d ->
                 val derivBlob = blobRows[d.blobId] ?: return@mapNotNull null
-                DerivativeRow(d.kind, derivBlob.id, derivBlob.chunkCount, derivBlob.byteSize, derivBlob.wrappedBlobKey, blobs.decodeManifest(derivBlob.manifest), derivBlob.wrappedBlobMeta)
+                DerivativeRow(d.role, derivBlob.id, derivBlob.chunkCount, derivBlob.byteSize, derivBlob.wrappedBlobKey, blobs.decodeManifest(derivBlob.manifest), derivBlob.wrappedBlobMeta)
             }
             MediaRow(
                 m.id, blob.id, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey, blobs.decodeManifest(blob.manifest),
@@ -813,6 +857,9 @@ class MediaStore(
         items.bump(scopeId, nodeId) // cr-0113: a re-bucket changes the listing's bucketId → advance the ETag so clients re-list
         return true
     }
+
+    /** A medium's tiers in [MemoryBlobRoles.DERIVATIVES]' order, so a read serves them as stably as they are stored. */
+    private fun tierOrder(row: ApplicationBlobEntity): Int = MemoryBlobRoles.DERIVATIVES.indexOf(row.role)
 
     companion object {
         /** [epochRefusal]'s code for a node that is gone. */

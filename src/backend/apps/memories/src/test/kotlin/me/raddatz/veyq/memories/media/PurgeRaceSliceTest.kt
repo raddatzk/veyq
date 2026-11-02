@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * A purge erases only what is still due when it erases it, and a restore answers as a replay would (developer-
@@ -95,9 +96,9 @@ class PurgeRaceSliceTest {
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId
                 updatedAt = Instant.now(); deletedAt = Instant.now().minus(Duration.ofDays(1))
-            }.persist()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
         return scopeId to mediaId
     }

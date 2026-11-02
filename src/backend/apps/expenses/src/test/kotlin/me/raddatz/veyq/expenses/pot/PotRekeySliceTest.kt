@@ -110,8 +110,9 @@ class PotRekeySliceTest {
     }
 
     /**
-     * A receipt's `K_blob` is re-wrapped by core's blob service (ADR 0109 decision 3, ADR 0112 decision 1): core's parts
-     * read lists every receipt's blob in its role beside the node's own blobs, and its stage takes the wrap as a core blob
+     * A receipt's `K_blob` is re-wrapped by core's blob service (ADR 0109 decision 3, ADR 0112 decision 1): the service's
+     * paged re-key read lists every receipt's blob in its role, bound to the Pot (an item of its own, ADR 0113 decision
+     * 3), core's parts read lists the node's attachment slots alone, and core's stage takes the wrap as a core blob
      * wrap; a stage that misses one is `rekey_parts_missing`, one naming a blob the Pot does not hold is
      * `rekey_parts_stale`, and the control re-wraps every receipt's blob row — its stored object, size and meta untouched.
      * Expenses' own listing serves the revisions only.
@@ -123,9 +124,15 @@ class PotRekeySliceTest {
         list(w, "?limit=4").statusCode(200).body("revisions.size()", equalTo(3)).body("containsKey('receipts')", equalTo(false))
         val blobIds = receipts.map { ReceiptKit.blobOf(it) }
         given().header("Authorization", bearer(w.owner)).`when`().get("/api/scopes/${w.scopeId}/rekey/nodes/${w.pot}").then().statusCode(200)
+            .body("blobs.size()", equalTo(0))
+        given().header("Authorization", bearer(w.owner)).`when`()
+            .get("/api/scopes/${w.scopeId}/nodes/${w.pot}/application-blobs/rekey?limit=1").then().statusCode(200)
+            .body("blobs.size()", equalTo(1)).body("more", equalTo(true))
+        given().header("Authorization", bearer(w.owner)).`when`().get("/api/scopes/${w.scopeId}/nodes/${w.pot}/application-blobs/rekey").then().statusCode(200)
             .body("blobs.blobId", containsInAnyOrder(*blobIds.toTypedArray()))
             .body("blobs.role", equalTo(listOf(ExpensesBlobRoles.RECEIPT, ExpensesBlobRoles.RECEIPT)))
-            .body("blobs[0].wrappedBlobKey", equalTo(OLD_BLOB_WRAP))
+            .body("blobs.ownerId", equalTo(listOf(w.pot, w.pot)))
+            .body("blobs[0].wrappedBlobKey", equalTo(OLD_BLOB_WRAP)).body("more", equalTo(false))
         val before = blobRows(receipts)
 
         val missing = UUID.randomUUID()

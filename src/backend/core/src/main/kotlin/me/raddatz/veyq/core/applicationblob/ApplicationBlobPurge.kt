@@ -18,6 +18,40 @@ import java.time.Instant
 import org.jboss.logging.Logger
 
 /**
+ * An application's erase at once of the blobs its owners hold (ADR 0113 decision 5): in the application's own write,
+ * which erases or has erased the owners themselves — a member emptying a medium from the trash, a guest deleting its own
+ * upload, the erasure ledger erasing a medium again, the application's own trash purge. The irreversible half is still
+ * the platform's: the rows go, their blob rows go through core's `BlobUploadStore.deleteBlobRows`, which puts their
+ * store objects on the reclaim list in this transaction (ADR 0062), the guest-write records naming them go, and a block
+ * on one ends with it. Released or kept alike. It moves no item revision: the caller's write does, where a listed row
+ * went.
+ *
+ * **Lock order:** the caller holds its own rows; this locks the owners' rows (step 3 of [ApplicationBlobs]' order),
+ * then the blob rows (`StoredObjectLocks`, inside `deleteBlobRows`).
+ */
+@ApplicationScoped
+class ApplicationBlobErasure(
+    private val blobs: BlobUploadStore,
+    private val measures: MeasureTargets,
+    private val guestWriteRecords: GuestWriteRecords,
+) {
+    /** Erase every blob the owners [ownerIds] hold in [scopeId], at once. Answers how many went. */
+    fun eraseOwners(scopeId: String, ownerIds: Collection<String>): Int {
+        val rows = ownerIds.distinct().sorted().chunked(ApplicationBlobs.CHUNK).flatMap {
+            ApplicationBlobEntity.find("scopeId = ?1 and ownerId in ?2 order by id", scopeId, it)
+                .withLock(LockModeType.PESSIMISTIC_WRITE).list()
+        }
+        if (rows.isEmpty()) return 0
+        val ids = rows.map { it.id }
+        guestWriteRecords.forget(ids)
+        ids.chunked(ApplicationBlobs.CHUNK).forEach { ApplicationBlobEntity.delete("id in ?1", it) }
+        blobs.deleteBlobRows(scopeId, rows.map { it.blobId }) // the service rows first: fk_application_blob_blob
+        measures.erased(listOf(BlockKind.CONTENT_ITEM), ids)
+        return rows.size
+    }
+}
+
+/**
  * The service's retention purge (ADR 0112 decision 2): an application blob goes once the trash retention
  * (`veyq.node.trash.retention`, core's node retention — no application has a key of its own) has passed since
  *
@@ -27,7 +61,8 @@ import org.jboss.logging.Logger
  *   first write never came).
  *
  * [ApplicationBlobEntity.purgeAfter] serves the same rule as each blob's `purgeAfter`. The irreversible half of the
- * reversible/irreversible split: no member's or guest's action erases an application blob at once, only this system job.
+ * reversible/irreversible split: no member's or guest's action erases an application blob at once but through its
+ * application's own erase of the owner ([ApplicationBlobErasure], ADR 0113 decision 5) — otherwise only this system job.
  * It reads only the service's own rows, so it takes no application lock: the application's writes keep and release
  * under the service's row locks, which this takes too. Its blob rows go through core's `BlobUploadStore.deleteBlobRows`,
  * which puts the store objects on the reclaim list in the same transaction (ADR 0062: `StoreReclaimSweep` deletes them,

@@ -67,6 +67,8 @@ class NodeItemsRevisionBumpsTest {
         "keep" to "the blob service's keep, called inside an application's write, whose own items.bump moves the node's list (PotRevisionStore.append)",
         "releaseOwners" to "the blob service's release with an owner's end, called inside an application's write, which bumps",
         "release" to "the blob service's release by name, called inside an application's write, which bumps",
+        "attachIn" to "the blob service's attach of an owner's content inside its application's own write, which bumps once (MediaStore.attach, ADR 0113)",
+        "eraseOwners" to "the blob service's erase of an owner's blobs inside its application's erase of the owner, which bumps where a listed row went (ADR 0113)",
     )
 
     /** Writers that move no revision on their own, and why. */

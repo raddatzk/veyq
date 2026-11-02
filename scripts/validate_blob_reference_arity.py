@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """Guard the number of places that reference a `veyq_blob` row — and that the one predicate over them sees all of them (ADR 0013).
 
-**What it asserts.** Exactly **four arms** point at a blob row, and this pins each by name from four
-independent keys:
+**What it asserts.** Exactly **two arms** point at a blob row — one on each side of ADR 0079 decision 3's line, around
+a node and behind it (ADR 0113 decision 10) — and this pins each by name from four independent keys:
 
-  - *entity* — the Kotlin `@Column` declarations: `MediaEntity.blob_id`, `MediaDerivativeEntity.blob_id`,
-    `NodeAttachmentEntity.blob_id`, `ApplicationBlobEntity.blob_id` (core's blob service for the blobs an application
-    stores — Expenses' receipts, ADR 0112 — the arm every application to come stores through, so the count stays four).
-  - *schema* — the SQL declarations of the same four columns, keyed `<table>.<column>` by the statement that
-    declares them (`CREATE TABLE` body or `ALTER TABLE … ADD COLUMN`), with a later `DROP TABLE` replayed (its table's
-    columns and keys go with it — `veyq_expenses_receipt`, the receipt arm before the service, dropped by ADR 0112
-    decision 5): `veyq_media.blob_id`, `veyq_media_derivative.blob_id`, `veyq_node_attachment.blob_id`,
-    `veyq_application_blob.blob_id`. Keyed on the table, not the migration file: one baseline declares several tables,
-    so a file key would fold two arms into one name and stop telling them apart. A column is read on its own line, so a
-    declaration must keep `blob_id UUID` (or `VARCHAR`) there.
-  - *backstop* — which of those arms a foreign key refuses to orphan: **all four**, `veyq_media.fk_media_blob`,
-    `veyq_media_derivative.fk_derivative_blob`, `veyq_node_attachment.fk_attachment_blob` and
-    `veyq_application_blob.fk_application_blob_blob`. This one is asserted by name deliberately. An arm *gaining* a
+  - *entity* — the Kotlin `@Column` declarations: `NodeAttachmentEntity.blob_id` (core's node attachments: a cover, a
+    banner, a file's content, one blob per slot) and `ApplicationBlobEntity.blob_id` (core's blob service for every
+    blob an application stores — Expenses' receipts, ADR 0112, and Memories' media, ADR 0113 — the arm every
+    application to come stores through, so the count stays two).
+  - *schema* — the SQL declarations of the same two columns, keyed `<table>.<column>` by the statement that declares
+    them (`CREATE TABLE` body or `ALTER TABLE … ADD COLUMN`), with a later `DROP TABLE` replayed (its table's columns
+    and keys go with it — `veyq_expenses_receipt`, ADR 0112 decision 5, and `veyq_media_derivative`, ADR 0113
+    decision 9) and a later `ALTER TABLE … DROP COLUMN` replayed (that column goes — `veyq_media.blob_id`, ADR 0113):
+    `veyq_node_attachment.blob_id`, `veyq_application_blob.blob_id`. Keyed on the table, not the migration file: one
+    baseline declares several tables, so a file key would fold two arms into one name and stop telling them apart. A
+    column is read on its own line, so a declaration must keep `blob_id UUID` (or `VARCHAR`) there.
+  - *backstop* — which of those arms a foreign key refuses to orphan: **both**, `veyq_node_attachment.fk_attachment_blob`
+    and `veyq_application_blob.fk_application_blob_blob`, with a later `ALTER TABLE … DROP FOREIGN KEY` replayed (that
+    key goes — `veyq_media.fk_media_blob`, ADR 0113). This one is asserted by name deliberately. An arm *gaining* a
     foreign key is a real change in what the database guarantees, and it should turn this guard red and be recorded,
     not land silently as an improvement nobody notices — the attachment arm was recorded so (cr-files-application
     P3-S3), and the receipt arm (cr-expenses-receipts) and the service's that replaced it (ADR 0112), each born with
     its key.
-  - *live twin* — that `SharingStore.subtreeBlobIds` plus every `SharedSubtreeContributor.authorizedBlobIds` (the
-    media and derivative arms in Memories' contributor, the attachment arm and the service's in core's)
-    enumerate all four.
+  - *live twin* — that `SharingStore.subtreeBlobIds` plus every `SharedSubtreeContributor.authorizedBlobIds` (core's
+    attachment contributor and the service's) enumerate both.
 
 The first three keys pin how many arms **exist**. Only the fourth pins that the predicate already running over
 them in production **enumerates** them — and that is the one carrying the invariant, because the three
@@ -55,14 +55,16 @@ precondition any such sweep needs — this guard — and it protects a **live** 
       written later — a new reclaim predicate elsewhere gets no protection from this guard at all — nor an arm
       that is named in the body but unreachable (dead branch, always-empty query). It proves the arm is
       *mentioned*, not that it is *reached*. The markers are literal spellings: a contributor that collects
-      the media arm as `ids += m.blobId` instead of `ids.add(m.blobId)` enumerates it and is still red
+      the service's arm as `ids += row.blobId` instead of `ids.add(row.blobId)` enumerates it and is still red
       (conservative, never a false green) — re-spell the marker, do not loosen it to a bare `blobId`.
   (c) A `*blob_id` column declared a **non-reference** (`NOT_REFERENCE_*`, each with its reason) is trusted on
       that reason. The list is checked for staleness, not for truth: were such a column ever to start pointing at
       a live blob row, this guard would not notice. It names one column today, the upload session's minted id.
   (d) A `DROP TABLE` is replayed only on its own line, naming one table (`DROP TABLE [IF EXISTS] <name>;`), as every
-      statement here is written; one spelled otherwise is not replayed, so the dropped table's arm stays counted —
-      red as an extra arm, never a false green. A table renamed (`RENAME TO`) is not replayed either: none exists.
+      statement here is written, and so is a dropped column or foreign key (`ALTER TABLE <t> DROP COLUMN <c>;`,
+      `ALTER TABLE <t> DROP FOREIGN KEY <k>;`); one spelled otherwise is not replayed, so the dropped arm stays
+      counted — red as an extra arm, never a false green. A table or column renamed (`RENAME`) is not replayed
+      either: none exists.
 
 Two naive shapes were reached for first and are recorded so nobody reaches for them again — both are the
 easier thing to type and both are silently wrong. Anchoring the entity key on `@Column(name = ` assumes the
@@ -96,6 +98,9 @@ SQL_COLUMN = re.compile(r"^\s+([a-z_]*blob_id)\s+(?:UUID|VARCHAR)\b|ADD COLUMN\s
 SQL_TABLE = re.compile(r"\b(?:CREATE|ALTER)\s+TABLE\s+(\w+)", re.IGNORECASE)
 # A later migration dropping a table: its columns and keys go with it (limit (d) says how it must be spelled).
 SQL_DROP_TABLE = re.compile(r"\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+)\s*;", re.IGNORECASE)
+# A later migration dropping one column, or one foreign key, of a table that stays (limit (d)).
+SQL_DROP_COLUMN = re.compile(r"\bALTER\s+TABLE\s+(\w+)\s+DROP\s+COLUMN\s+(\w+)\s*;", re.IGNORECASE)
+SQL_DROP_FK = re.compile(r"\bALTER\s+TABLE\s+(\w+)\s+DROP\s+FOREIGN\s+KEY\s+(\w+)\s*;", re.IGNORECASE)
 
 # Case-insensitive on purpose: this tree already spells one `references` in lowercase.
 SQL_BLOB_FK = re.compile(r"references\s+veyq_blob\b", re.IGNORECASE)
@@ -103,20 +108,14 @@ SQL_CONSTRAINT_NAME = re.compile(r"constraint\s+(\w+)", re.IGNORECASE)
 
 EXPECTED_ENTITY_ARMS = [
     "ApplicationBlobEntity.blob_id",
-    "MediaDerivativeEntity.blob_id",
-    "MediaEntity.blob_id",
     "NodeAttachmentEntity.blob_id",
 ]
 EXPECTED_SCHEMA_ARMS = [
     "veyq_application_blob.blob_id",
-    "veyq_media.blob_id",
-    "veyq_media_derivative.blob_id",
     "veyq_node_attachment.blob_id",
 ]
 EXPECTED_FK_ARMS = [
     "veyq_application_blob.fk_application_blob_blob",
-    "veyq_media.fk_media_blob",
-    "veyq_media_derivative.fk_derivative_blob",
     "veyq_node_attachment.fk_attachment_blob",
 ]
 
@@ -129,20 +128,18 @@ EXPECTED_FK_ARMS = [
 NOT_REFERENCE_ENTITY = ["UploadSessionEntity.blob_id"]
 NOT_REFERENCE_SCHEMA = ["veyq_upload_session.blob_id"]
 
-# The four arms as the live twin spells them in its bodies. Each is the accessor that arm is READ by, so removing the
+# The two arms as the live twin spells them in its bodies. Each is the accessor that arm is READ by, so removing the
 # arm removes the marker. The attachment arm (a Memory's cover among its rows, inbox #341) is core's own contributor
 # (`AttachmentSharedSubtreeContributor`), and its marker is the entity it reads: that contributor is the only body
 # that names it. The application blob arm is core's blob service's (`ApplicationBlobSharedSubtreeContributor`, ADR
 # 0112), its marker the accessor it adds by.
 LIVE_TWIN_FN = "fun subtreeBlobIds"
-# Where the media, derivative and attachment arms live: every implementation of the interface,
-# found by its declaration, contributes its `authorizedBlobIds` body to the live twin.
+# Where the arms live: every implementation of the interface, found by its declaration, contributes its
+# `authorizedBlobIds` body to the live twin.
 CONTRIBUTOR_IMPL = ": SharedSubtreeContributor"
 CONTRIBUTOR_FN = "override fun authorizedBlobIds"
 EXPECTED_LIVE_TWIN_ARMS = {
     "attachment": "NodeAttachmentEntity",
-    "media": "ids.add(m.blobId)",
-    "derivative": "MediaDerivativeEntity",
     "application blob": "ids.add(row.blobId)",
 }
 
@@ -178,6 +175,12 @@ def _sql_lines():
                 table = None
 
 
+def _dropped_part(line: str, pattern: re.Pattern) -> tuple[str, str] | None:
+    """The (table, name) a line's `ALTER TABLE … DROP COLUMN|FOREIGN KEY` drops, lower case, or None."""
+    m = pattern.search(line)
+    return (m.group(1).lower(), m.group(2).lower()) if m else None
+
+
 def _live(found: list[tuple[str, str]]) -> list[str]:
     """The `<table>.<name>` labels of [found] (table, label) pairs — the dropped ones already taken out."""
     return sorted(f"{table}.{label}" for table, label in found)
@@ -189,6 +192,10 @@ def schema_arms() -> list[str]:
     for _path, _lineno, line, table, dropped in _sql_lines():
         if dropped:
             found = [f for f in found if f[0] != dropped]
+            continue
+        column = _dropped_part(line, SQL_DROP_COLUMN)
+        if column:
+            found = [f for f in found if (f[0], f[1].lower()) != column]
             continue
         m = SQL_COLUMN.search(line)
         if m:
@@ -203,6 +210,10 @@ def fk_arms() -> list[str]:
     for path, lineno, line, table, dropped in _sql_lines():
         if dropped:
             found = [f for f in found if f[0] != dropped]
+            continue
+        key = _dropped_part(line, SQL_DROP_FK)
+        if key:
+            found = [f for f in found if (f[0], f[1].lower()) != key]
             continue
         if not SQL_BLOB_FK.search(line):
             continue
@@ -228,8 +239,8 @@ def _fn_body(lines: list[str], fn: str) -> list[str] | None:
 
 def live_twin_body() -> list[str] | None:
     """The live twin: core's `subtreeBlobIds` body plus every contributor's `authorizedBlobIds` body, or None where
-    the core function is gone. The media and derivative arms live in the implementations of `SharedSubtreeContributor`
-    (ADR 0079 phase 1, step 7), so the check follows the arms to where they are."""
+    the core function is gone. The arms live in the implementations of `SharedSubtreeContributor` (ADR 0079 phase 1,
+    step 7), so the check follows the arms to where they are."""
     if not SHARING_STORE.exists():
         return None
     body = _fn_body(SHARING_STORE.read_text(encoding="utf-8").splitlines(), LIVE_TWIN_FN)

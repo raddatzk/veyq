@@ -2,9 +2,10 @@
 // kind's `rekeyContent`): what Memories stores sealed under a Memory's or a chapter's key moves to the node's new key,
 // and nothing else changes — every plaintext is re-sealed byte for byte, every `K_blob` kept with only its wrap moved.
 //   - in the node's meta: the banner's blob and poster wraps (owner = the node, roles BANNER / BANNER_POSTER);
-//   - per medium, live and trashed: its meta and EXIF (`media-meta` / `media-exif`, bound to scope + medium) and the wrap
-//     of its original and of each derivative (owner = the medium);
+//   - per medium, live and trashed: its meta and EXIF (`media-meta` / `media-exif`, bound to scope + medium);
 //   - each bucket name under the node's key (`bucket-name`, bound to scope + node + bucket).
+// A medium's original and derivatives are blobs of core's blob service (ADR 0113): core's driver re-wraps them with the
+// node's other service blobs, each bound to its medium as the server lists it (`listApplicationBlobRekey`).
 // Not here: a WRITE_ONLY guest's media and primary (under its own `K_up`, which the re-key keeps — the server does not
 // list them), and a READ_WRITE contributor's primary (the server copies its name again from the identity, which core's
 // part of the link root's commit re-sealed). Staged under the commit's re-key id at the contracts' caps.
@@ -48,10 +49,6 @@ export async function rekeyMemoryContent(ctx: RekeyNodeContext): Promise<void> {
       metaRevision: m.metaRevision,
       wrappedMeta: m.wrappedMeta ? reseal(mediaMetaContext(scopeId, m.mediaId), oldKey, newKey, m.wrappedMeta) : null,
       wrappedExif: m.wrappedExif ? reseal(mediaExifContext(scopeId, m.mediaId), oldKey, newKey, m.wrappedExif) : null,
-      blobs: m.blobs.map((b) => ({
-        blobId: b.blobId,
-        wrappedBlobKey: rewrapBlobKey(scopeId, oldKey, newKey, { blobId: b.blobId, ownerId: m.mediaId, role: b.role, wrappedBlobKey: b.wrappedBlobKey }),
-      })),
     }))
     // The buckets ride on every page; staged once (a later page's are the same rows).
     const buckets: RekeyBucketSeal[] = bucketsStaged ? [] : page.buckets

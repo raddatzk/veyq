@@ -614,8 +614,8 @@ paths:
       summary: The core-owned fields a node's re-key re-seals besides its own row (uc.spaces.rekey-after-rotation step 2).
       description: >
         Every field core stores under the node's key or as a wrap of it that is not on the node's row: the blobs in its
-        attachment slots (cover, banner, a file's content — each `K_blob` wrapped under the node's key) and the blobs its
-        application stores through core's blob service (Expenses' receipts, ADR 0112 — each in its role), every live
+        attachment slots (cover, banner, a file's content — each `K_blob` wrapped under the node's key; the blobs its
+        application stores through core's blob service are paged by `listApplicationBlobRekey`, ADR 0113), every live
         share rooted on it (its recovery copy, from which the re-keyer opens `K_share` to re-wrap the new key, ADR 0109
         point 4) and every guest identity of those shares (its `K_up` sealed to the node's drop public key, ADR 0109
         point 5; a `READ_WRITE` identity's name under the node's key). Rows a `WRITE_ONLY` guest sealed under its own
@@ -1568,10 +1568,11 @@ components:
         blobs:
           type: array
           description: >
-            Every blob in one of the node's attachment slots, and every blob its application stores through core's blob
-            service (ADR 0112), whose `K_blob` is wrapped under the node's key — each with the slot or role its wrap is bound
-            to. A staged wrap of no such blob (purged since) is the commit's `rekey_parts_stale`, a service blob the stage
-            misses its `rekey_parts_missing`.
+            Every blob in one of the node's attachment slots, whose `K_blob` is wrapped under the node's key — each with
+            the slot its wrap is bound to (and the node as its owner). The blobs its application stores through core's blob
+            service are read page by page through `listApplicationBlobRekey` (ADR 0113) and staged here beside these. A
+            staged wrap of no such blob (purged since) is the commit's `rekey_parts_stale`, a service blob the stage misses
+            its `rekey_parts_missing`.
           items: { $ref: "#/components/schemas/RekeyBlob" }
         shares:
           type: array

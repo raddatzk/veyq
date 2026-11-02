@@ -4,9 +4,23 @@ package me.raddatz.veyq.core.applicationblob
 data class ApplicationBlobRole(
     /** How many unreleased blobs of the role one owner holds at most — a completion past it is `too_many_blobs`. */
     val maxPerOwner: Int,
-    /** Whether a `READ_WRITE` link guest may add one (a guest's start and its completion). */
+    /** Whether a link guest may add one (a guest's start and its completion). */
     val guestMayAdd: Boolean,
-)
+    /**
+     * The role's form (ADR 0113 decision 2), one declaration the service reads five rules from. **An item of its own**
+     * (true, Expenses' receipt): its `K_blob` wrap is bound to its node (its owner's sealed record names it); it is
+     * completed through the service's own routes, one blob per call; it is an `ITEM` a report and a block reach on its
+     * own; a guest still reads it once released (an application's history); and the service's node, link and case reads
+     * list it. **Its owner's content** (false, a Memories medium's original and derivatives): its wrap is bound to its
+     * owner (nothing else names it); it is completed only in its owner's write, by its application ([ApplicationBlobs.attachIn]);
+     * it is reported, blocked and held with its owner, never alone; released with its owner's end it is in no share's
+     * reach; and its application's record reads serve it.
+     */
+    val ownItem: Boolean = true,
+) {
+    /** The id the `blob-key` wrap of a blob in this role is bound to as its `ownerId` (ADR 0113 decision 3). */
+    fun wrapOwner(nodeId: String, ownerId: String): String = if (ownItem) nodeId else ownerId
+}
 
 /** Where an owner stands when a blob is completed for it — the row's state at birth ([ApplicationBlobs.attach]). */
 enum class OwnerState {
@@ -59,7 +73,9 @@ interface ApplicationBlobOwners {
     /**
      * Whether the owner [ownerId] may hold the blob [blobRowId] in the node [nodeId] of [scopeId], and where it stands —
      * asked under the node's lock, which every writer of the application's records holds, so a plain read sees every
-     * record row committed before.
+     * record row committed before. Asked by the service's own completion only, so only for a role that is an item of
+     * its own: an owner's content is completed in its owner's write, whose application states the owner's state itself
+     * ([ApplicationBlobs.attachIn]).
      */
     fun admit(scopeId: String, nodeId: String, ownerId: String, blobRowId: String): OwnerAdmission
 }

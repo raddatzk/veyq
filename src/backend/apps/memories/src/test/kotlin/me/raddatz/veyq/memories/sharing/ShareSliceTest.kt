@@ -30,6 +30,7 @@ import org.hamcrest.Matchers.greaterThanOrEqualTo
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * Slice tests for public viewer shares (uc.sharing.share-public-viewer, cr-0100, ADR 0029) against the
@@ -323,9 +324,9 @@ class ShareSliceTest {
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId
                 updatedAt = Instant.now()
-            }.persist()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
         return mediaId to blobId
     }

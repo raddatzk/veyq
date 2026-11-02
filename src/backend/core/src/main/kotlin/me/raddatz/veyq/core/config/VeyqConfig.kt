@@ -24,8 +24,8 @@ import java.util.Optional
  * beans as raw property expressions (a `@Scheduled` string cannot read a mapping), but they are declared here too
  * so this interface stays the complete inventory of core's `veyq.*`.
  *
- * Core's only: an application's own keys are its own mapping in its own module, under a prefix of its own below
- * `veyq` (Memories' `veyq.media.*`, `MemoriesMediaConfig`; inbox #342), never a member of this interface — core
+ * Core's only: an application's own keys, should it have any, are its own mapping in its own module, under a prefix of
+ * its own below `veyq` (inbox #342; none has one today), never a member of this interface — core
  * reading one would be core naming an application (ADR 0079). Its defaults are its mapping's `@WithDefault`s, not
  * lines in `:core`'s `application.properties`: SmallRye refuses a `veyq.*` key no mapping claims (SRCFG00050), so
  * such a line would fail core's boot without the application (`:core`'s tests).

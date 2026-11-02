@@ -27,6 +27,7 @@ import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * A guest's name reaches the Memory's members only (uc.memory.buckets `guest-names-for-members-only`, ADR 0030
@@ -171,9 +172,9 @@ class ShareGuestNamesSliceTest {
                 isPrimary = true; createdAt = Instant.now()
             }.also { it.persist() }
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId
                 shareIdentityId = identityId; createdBy = bucket.ownerKey; bucketId = bucket.id; updatedAt = Instant.now()
-            }.persist()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
         return mediaId
     }

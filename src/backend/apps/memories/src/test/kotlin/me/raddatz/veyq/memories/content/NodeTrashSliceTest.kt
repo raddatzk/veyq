@@ -7,7 +7,6 @@ import me.raddatz.veyq.core.testing.CoverKit
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.memories.itemfavorites.ItemFavoritesEntity
 import me.raddatz.veyq.memories.media.BucketEntity
-import me.raddatz.veyq.memories.media.MediaDerivativeEntity
 import me.raddatz.veyq.memories.media.MediaEntity
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.TestIds
@@ -39,6 +38,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.content.NodeSubtreePurge
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * Slice tests for the node trash (uc.memory.delete-node, ADR 0061): a delete soft-deletes the whole subtree, the
@@ -326,9 +326,7 @@ class NodeTrashSliceTest {
         }
 
         val keys = QuarkusTransaction.requiringNew().call {
-            val media = MediaEntity.findById(mediaId)!!
-            val derivBlobIds = MediaDerivativeEntity.find("mediaId = ?1", mediaId).list().map { it.blobId }
-            val all = (listOf(media.blobId) + derivBlobIds + listOf(coverBlob)).map { BlobEntity.findById(it)!! }
+            val all = (MediaBlobRows.blobsOf(mediaId) + listOf(coverBlob)).map { BlobEntity.findById(it)!! }
             NodeEntity.findById(memory)!!.deletedAt =
                 Instant.now().minus(config.node().trash().retention()).minusSeconds(60)
             all.flatMap { b -> chunkKeys(b.storageKey, b.chunkCount) }
@@ -345,7 +343,7 @@ class NodeTrashSliceTest {
         QuarkusTransaction.requiringNew().run {
             assertNull(NodeEntity.findById(memory)) { "the node row must be gone" }
             assertNull(MediaEntity.findById(mediaId)) { "the subtree's media row must be gone" }
-            assertTrue(MediaDerivativeEntity.find("mediaId = ?1", mediaId).list().isEmpty()) { "derivative rows must be gone" }
+            assertEquals(0L, MediaBlobRows.countOf(mediaId), "its blobs' service rows must be gone")
             assertTrue(BucketEntity.find("nodeId = ?1", memory).list().isEmpty()) { "bucket rows must be gone" }
             assertNull(BucketEntity.findById(subBucket)) { "the sub-bucket row must be gone" }
             assertNull(BlobEntity.findById(coverBlob)) { "the cover blob row must be gone" }
@@ -406,8 +404,7 @@ class NodeTrashSliceTest {
             given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$n").then().statusCode(204)
         }
         val keys = QuarkusTransaction.requiringNew().call {
-            val blobIds = listOf(MediaEntity.findById(mediaId)!!.blobId, MediaEntity.findById(chapterMedia)!!.blobId, coverBlob) +
-                MediaDerivativeEntity.find("mediaId = ?1", mediaId).list().map { it.blobId }
+            val blobIds = MediaBlobRows.blobsOf(mediaId) + MediaBlobRows.blobsOf(chapterMedia) + listOf(coverBlob)
             blobIds.map { BlobEntity.findById(it)!! }.flatMap { b -> chunkKeys(b.storageKey, b.chunkCount) }
         }
 
@@ -422,7 +419,7 @@ class NodeTrashSliceTest {
             assertNull(NodeEntity.findById(chapter)) { "its Chapter goes with it" }
             assertNull(MediaEntity.findById(mediaId)) { "the Memory's media row must be gone" }
             assertNull(MediaEntity.findById(chapterMedia)) { "the Chapter's media row must be gone" }
-            assertTrue(MediaDerivativeEntity.find("mediaId = ?1", mediaId).list().isEmpty()) { "derivative rows must be gone" }
+            assertEquals(0L, MediaBlobRows.countOf(mediaId) + MediaBlobRows.countOf(chapterMedia), "their blobs' service rows must be gone")
             assertTrue(BucketEntity.find("nodeId in ?1", listOf(memory, chapter)).list().isEmpty()) { "bucket rows must be gone" }
             assertNull(BlobEntity.findById(coverBlob)) { "the cover blob row must be gone" }
             assertEquals(0L, NodeAttachmentEntity.count("nodeId", memory), "the cover's attachment row must be gone")

@@ -118,9 +118,9 @@ library that owns nothing is allowed, never required; an application's rights an
 - **Migrations and configuration.** Each module owns its migrations under one global version scheme
   (`V<yyyymmddHHMM>__<module>_<slug>.sql`, [src/backend/CLAUDE.md](../../src/backend/CLAUDE.md) § Migrations): a core
   migration names no application table, an application's references only core's and its own. Core's schema and config
-  name no application concept: an application's configuration keys are its own `@ConfigMapping` (Memories'
-  `veyq.media.*`, `MemoriesMediaConfig`), whose `@WithDefault`s are their only defaults, since SmallRye refuses a
-  `veyq.*` key no mapping claims and a line in core's base config would fail core's boot without that application.
+  name no application concept: an application's configuration keys, should it have any, are its own `@ConfigMapping`
+  (none has one today), whose `@WithDefault`s are their only defaults, since SmallRye refuses a `veyq.*` key no mapping
+  claims and a line in core's base config would fail core's boot without that application.
 
 ### The seams core asks
 
@@ -206,19 +206,33 @@ kind `FOLDER` only.
 
 The blobs an application stores — any number per node, unlike an attachment's one per slot — are managed by core
 ([ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md), ADR 0079 decision 3's one
-exception: data management is core's). Built, with Expenses' receipts its first application.
+exception: data management is core's). Built, with Expenses' receipts and Memories' media its applications
+([ADR 0113](../decisions/0113-memories-media-are-blobs-of-cores-blob-service.md)).
 
-- **The table is core's**: `veyq_application_blob` (`core/applicationblob/`), the fourth `veyq_blob` arm — one row per
+- **Two arms.** `veyq_blob` has two arms, one on each side of the line: core's node attachments (around a node — a
+  cover, a banner, a file's content, one blob per slot) and the service (behind it); `validate_blob_reference_arity`
+  pins them.
+- **The table is core's**: `veyq_application_blob` (`core/applicationblob/`), the service's `veyq_blob` arm — one row per
   blob: its client-minted id, scope, node, **owner** (the application's record, an id core stores and compares and
   never resolves), role, blob, writer, created, kept and released. Every platform duty is core's implementation of the
   seams above: the completion (`UploadCompletion`), a guest's upload (`ShareGuestWrites`), the link's usage
   (`UploadAdmission`), the share's blob predicate (`SharedSubtreeContributor`), a blob as an `ITEM` of a report and a
   block (`ReportableItems`), the hold (`HoldSnapshotContributor`), "everything from this uploader" (`UploaderContent`,
-  `HeldUploaders`), the re-key of every wrap (`NodeRekeyParticipant`: the wraps are core blob wraps, listed by
-  `getNodeRekeyParts` in their role and staged by `stageNodeRekey`), the erasers (subtree, scope, account, guest
-  identity), the retention purge (`ApplicationBlobPurge`) and the reclaim of the objects. Its wire is core's
-  (`blob.openapi.yaml`, tags `application-blobs`, `share-application-blobs`, `case-application-blobs`), and so is the
-  web's transport (`core/blob/applicationBlobs.ts`).
+  `HeldUploaders`), the re-key of every wrap (`NodeRekeyParticipant`: the wraps are core blob wraps, read page by page
+  by `listApplicationBlobRekey` with the id each is bound to and staged by `stageNodeRekey`; a `WRITE_ONLY` guest's,
+  under its own `K_up`, are left out), the erasers (subtree, scope, account, guest identity), the retention purge
+  (`ApplicationBlobPurge`), an application's erase at once of an owner's blobs (`ApplicationBlobErasure.eraseOwners`)
+  and the reclaim of the objects. Its wire is core's (`blob.openapi.yaml`, tags `application-blobs`,
+  `share-application-blobs`, `case-application-blobs`), and so is the web's transport (`core/blob/applicationBlobs.ts`).
+- **A role has one of two forms** (`ApplicationBlobRole.ownItem`), each with five rules the service reads from it. **An
+  item of its own** (Expenses' receipt): its wrap is bound to its node (`blob-key`'s `ownerId`), its owner's sealed
+  record naming it; it is completed through the service's routes one blob per call, is an `ITEM` of a report and a
+  block on its own, still reaches a guest once released (an application's history), and the service's node, link and
+  case reads list it. **Its owner's content** (a medium's `ORIGINAL`, `THUMBNAIL`, `PREVIEW`): its wrap is bound to its
+  owner; it is completed only in its owner's write, through `ApplicationBlobs.attachIn` in the application's own
+  completion (a medium is born with its blobs); it is reported, blocked and held with its owner; released with its
+  owner's end it is in no share's reach; and its application's record reads serve it from `ApplicationBlobs.ofOwners`.
+  The service's own completion and guest route accept only a kind that stores an item of its own.
 - **What an application implements** is `ApplicationBlobOwners`: which kinds' blobs are its own, its roles (with
   `MemberBlobRoles` for their size caps) each with a count per owner and whether a link guest may add one, and at a
   completion whether the owner may hold a blob in that node and where it stands (`NEW`, `KEEPING`, `ENDED`). In every
@@ -395,10 +409,6 @@ presentation (`presentation(mode)` beside `row`, named in its kinds' `list.views
 map the same way the level does, the same component over the person's Memories that have a place.
 
 ## Decided, not built
-
-- **Memories' media and derivatives onto core's blob service** ([ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)
-  § Consequences): they keep their two arms for now, their duties carried by Memories' own implementations of the same
-  seams; moving them is the boundary's next step and its own record, since a derivative's rows are not a receipt's.
 
 - **An application's own entry in core's navigation** (for [Inventory](inventory.md)'s one pool per space, created on
   first open and no row of a level). Built: the kind half, `listed: false` (above). Next, with Inventory: an

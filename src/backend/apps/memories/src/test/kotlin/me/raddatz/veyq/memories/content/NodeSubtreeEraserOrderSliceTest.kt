@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.content.NodeSubtreePurge
 import me.raddatz.veyq.core.applicationblob.ApplicationBlobNodeSubtreeEraser
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * The node subtree erasure's order is an explicit phase table, not bean order, and `dropDeadIdentities` runs only
@@ -94,9 +95,9 @@ class NodeSubtreeEraserOrderSliceTest {
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "b3JkZXI="
             }.persist()
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; nodeId = memory; this.blobId = blobId
+                id = mediaId; this.scopeId = scopeId; nodeId = memory
                 shareIdentityId = guestId; updatedAt = Instant.now()
-            }.persist()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
             BucketEntity().apply {
                 id = UUID.randomUUID().toString(); this.scopeId = scopeId; nodeId = memory; ownerKey = "share:$guestId"
                 isPrimary = true; createdAt = Instant.now()

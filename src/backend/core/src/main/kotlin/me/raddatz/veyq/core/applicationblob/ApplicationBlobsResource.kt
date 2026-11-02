@@ -6,6 +6,8 @@ import me.raddatz.veyq.core.generated.api.ShareApplicationBlobsApi
 import me.raddatz.veyq.core.generated.model.ApplicationBlob
 import me.raddatz.veyq.core.generated.model.ApplicationBlobCompleteRequest
 import me.raddatz.veyq.core.generated.model.ApplicationBlobPage
+import me.raddatz.veyq.core.generated.model.ApplicationBlobRekey
+import me.raddatz.veyq.core.generated.model.ApplicationBlobRekeyPage
 import me.raddatz.veyq.core.generated.model.CaseApplicationBlob
 import me.raddatz.veyq.core.generated.model.CaseApplicationBlobListing
 import me.raddatz.veyq.core.generated.model.ShareApplicationBlob
@@ -53,6 +55,20 @@ class ApplicationBlobsResource(private val handler: ApplicationBlobsHandler, pri
                 ApplicationBlobPage(blobs = page, more = more, cursor = cursor)
             }
             is HttpFailure -> httpError(o)
+        }
+
+    override fun listApplicationBlobRekey(scopeId: UUID, nodeId: UUID, after: UUID?, limit: Int?): Response =
+        when (val o = handler.rekeyPage(identity.principal.name, scopeId.toString(), nodeId.toString(), after?.toString(), ItemsPage.limitOf(limit))) {
+            is RekeyBlobsOutcome.Page -> Response.ok(
+                ApplicationBlobRekeyPage(
+                    blobs = o.page.items.map {
+                        ApplicationBlobRekey(UUID.fromString(it.blobId), it.role, UUID.fromString(it.wrapOwner), it.wrappedBlobKey)
+                    },
+                    more = o.page.more,
+                    cursor = o.page.cursor?.id,
+                ),
+            ).build()
+            is RekeyBlobsOutcome.Refused -> httpError(o.failure)
         }
 
     override fun completeApplicationBlob(scopeId: UUID, nodeId: UUID, applicationBlobCompleteRequest: ApplicationBlobCompleteRequest): Response {
@@ -124,7 +140,7 @@ class ShareApplicationBlobsResource(
     reason = "Key-proved and MODERATOR-only: every call spends a single-use challenge of a bounded set of accounts the " +
         "Server Owner appointed, and serves only rows a hold already copied.",
 )
-class CaseApplicationBlobsResource(private val snapshots: CaseSnapshots) : CaseApplicationBlobsApi {
+class CaseApplicationBlobsResource(private val snapshots: CaseSnapshots, private val service: ApplicationBlobs) : CaseApplicationBlobsApi {
 
     override fun listCaseApplicationBlobs(caseId: UUID, xVeyqModerationChallenge: String?, xVeyqModerationSignature: String?): Response {
         val held = QuarkusTransaction.requiringNew().call {
@@ -134,7 +150,10 @@ class CaseApplicationBlobsResource(private val snapshots: CaseSnapshots) : CaseA
         if (held.isEmpty()) return httpError(CaseFailures.nothingHeldRead)
         // A held row with its held blob row (core copies the row of every blob a contributor names, and pins it).
         val blobRows = held.filter { it.table == "veyq_blob" }.associateBy { it.sourceId }
-        val blobs = held.filter { it.table == ApplicationBlobs.TABLE }.sortedWith(compareBy({ it["node_id"] }, { it.sourceId }))
+        // Items of their own only: an owner's content is read in its application's case read (ADR 0113). The node may be
+        // gone, so the role's form is asked by its token.
+        val blobs = held.filter { it.table == ApplicationBlobs.TABLE && service.neverOwnersContent(it["role"].orEmpty()) }
+            .sortedWith(compareBy({ it["node_id"] }, { it.sourceId }))
             .mapNotNull { r -> blobRows[r["blob_id"]]?.let { toWire(r, it) } }
         return Response.ok(CaseApplicationBlobListing(blobs = blobs)).build()
     }

@@ -41,6 +41,7 @@ import java.util.concurrent.atomic.AtomicReference
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * The media writes' one lock order, **bucket → media → node** (inbox #313, #319; `MediaStore.ensurePrimaryBucket`'s
@@ -364,9 +365,9 @@ class MediaLockOrderRaceSliceTest {
                 parentBucketId = primary; sealedName = "c3Vi"; createdAt = Instant.now()
             }.persist()
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId
                 createdBy = ownerKey; bucketId = sub; updatedAt = Instant.now()
-            }.persist()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
         return Fixture(scopeId, nodeId, primary, sub, mediaId)
     }

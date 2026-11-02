@@ -200,6 +200,7 @@ class OperatorBlindProbeTest {
         // --- core's blob service (the world's node is a Memory, whose application stores no blob through it: the
         // control's call answers `404 node_not_found`, past the gate) ---
         "listApplicationBlobs" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/application-blobs") },
+        "listApplicationBlobRekey" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/application-blobs/rekey") },
         "completeApplicationBlob" to Probe(Address.SCOPE) { s ->
             Call(
                 "POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/application-blobs",

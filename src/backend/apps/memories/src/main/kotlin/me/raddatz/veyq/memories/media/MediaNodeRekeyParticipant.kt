@@ -1,7 +1,5 @@
 package me.raddatz.veyq.memories.media
 
-import me.raddatz.veyq.core.blob.BlobEntity
-import me.raddatz.veyq.core.blob.StoredObjectLocks
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.items.ItemsCursor
@@ -18,17 +16,14 @@ import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 
-/** One medium as its node's re-key reads it: what is sealed under the node's key (ADR 0109 point 2). */
+/** One medium as its node's re-key reads it: what Memories seals under the node's key (ADR 0109 point 2). Its `K_blob`
+ *  wraps are core's blob service's, re-wrapped through core's part (`listApplicationBlobRekey`, ADR 0113). */
 data class RekeyMediumRow(
     val mediaId: String,
     val metaRevision: Long,
     val wrappedMeta: String?,
     val wrappedExif: String?,
-    val blobs: List<RekeyMediumBlobRow>,
 )
-
-/** One `K_blob` wrap of a medium: its original ([MemoryBlobRoles.ORIGINAL]) or a derivative (its kind). */
-data class RekeyMediumBlobRow(val blobId: String, val role: String, val wrappedBlobKey: String)
 
 /**
  * One bucket name a re-key re-seals: under the node's key, or — a READ_WRITE contributor's primary, [shareId] and
@@ -45,8 +40,9 @@ sealed interface MediaRekeyListOutcome {
 /**
  * Which Memories rows of a node are sealed under the node's key — the one answer the listing and the commit share, so
  * the client is shown exactly what the commit then requires (ADR 0109 point 2). Every medium of the node, live and
- * trashed (a trashed node's included: nothing here asks `deletedAt`), its `wrappedMeta`, its `wrappedExif` and the
- * `K_blob` wrap of its original and of each derivative; and every bucket whose name is set. **Not** a row a
+ * trashed (a trashed node's included: nothing here asks `deletedAt`), its `wrappedMeta` and its `wrappedExif`; and every
+ * bucket whose name is set. A medium's `K_blob` wraps are core's blob service's (ADR 0113), whose part of the commit
+ * re-wraps them by the same `K_up` rule. **Not** a row a
  * `WRITE_ONLY` guest sealed under its own `K_up` (ADR 0109 point 5): a medium whose guest identity holds a wrapped key
  * ([MediaStore.uploaderKeysOf]'s rule), and that identity's primary bucket (owner `share:{id}`), whose name is under
  * the same key. The re-key leaves them as they are.
@@ -55,7 +51,6 @@ object MediaRekeyRows {
     const val PART = "memories"
     const val META = "media.wrappedMeta"
     const val EXIF = "media.wrappedExif"
-    const val BLOB_WRAP = "media.wrappedBlobKey"
     const val BUCKET_NAME = "bucket.sealedName"
 
     /** The node's media sealed under its key, in id order — immutable, so a page boundary never moves. */
@@ -71,12 +66,7 @@ object MediaRekeyRows {
             MediaEntity.find("$SEALED_MEDIA and m.id > ?3 order by m.id", scopeId, nodeId, since.id)
         }
         val page = ItemsPage.of(query.range(0, limit).list(), limit) // range is inclusive: limit + 1 rows
-        val blobs = blobsOf(page.items)
-        val wraps = blobRows(scopeId, blobs.values.flatten().map { it.first }).associate { it.id to it.wrappedBlobKey }
-        val rows = page.items.map { m ->
-            val own = blobs[m.id].orEmpty().mapNotNull { (id, role) -> wraps[id]?.let { RekeyMediumBlobRow(id, role, it) } }
-            RekeyMediumRow(m.id, m.metaRevision, m.wrappedMeta, m.wrappedExif, own)
-        }
+        val rows = page.items.map { m -> RekeyMediumRow(m.id, m.metaRevision, m.wrappedMeta, m.wrappedExif) }
         return ItemsPage(rows, page.more, page.items.lastOrNull()?.let { ItemsCursor(0, it.id) })
     }
 
@@ -85,19 +75,6 @@ object MediaRekeyRows {
     fun media(scopeId: String, nodeId: String, lock: Boolean = false): List<MediaEntity> =
         MediaEntity.find("$SEALED_MEDIA order by m.id", scopeId, nodeId)
             .let { if (lock) it.withLock(LockModeType.PESSIMISTIC_WRITE) else it }.list()
-
-    /** Each medium's blobs as (blob id, role): the original first, then its derivatives. */
-    fun blobsOf(media: List<MediaEntity>): Map<String, List<Pair<String, String>>> {
-        if (media.isEmpty()) return emptyMap()
-        val derivatives = media.map { it.id }.chunked(CHUNK)
-            .flatMap { MediaDerivativeEntity.list("mediaId in ?1 order by id", it) }.groupBy { it.mediaId }
-        return media.associate { m ->
-            m.id to listOf(m.blobId to MemoryBlobRoles.ORIGINAL) + derivatives[m.id].orEmpty().map { it.blobId to it.kind }
-        }
-    }
-
-    private fun blobRows(scopeId: String, ids: List<String>): List<BlobEntity> =
-        ids.distinct().chunked(CHUNK).flatMap { BlobEntity.list("id in ?1 and scopeId = ?2", it, scopeId) }
 
     /** The node's buckets whose name is sealed under its key ([lock]: each named bucket's row locked `FOR UPDATE`, a
      *  `WRITE_ONLY` primary's too — it is filtered out only after the read). */
@@ -113,7 +90,6 @@ object MediaRekeyRows {
         }
     }
 
-    private const val CHUNK = 500
 }
 
 /**
@@ -152,16 +128,17 @@ class MediaRekeyHandler(private val rekey: RekeyHandler) {
  * Memories' participant in core's commit of a node's re-key (core's `RekeyStore.commit`, [NodeRekeyParticipant]): it
  * runs in that transaction. Its existing rows are locked in [lockRows] — the media, then the buckets — after core's
  * scope and share locks and BEFORE the node's, the order every Memories writer takes (`MediaStore`'s lock-order note);
- * [commit] runs after the node's lock, locks the blob rows of their objects ([StoredObjectLocks]: item rows before blob
- * rows) and **decides before it writes**: every medium's set `wrappedMeta` and `wrappedExif`, every blob wrap of it and every bucket name
- * ([MediaRekeyRows]) must be staged ([NodeRekeyParticipant.Verdict.MISSING] if not), and a medium staged against a meta
- * revision it no longer has is [NodeRekeyParticipant.Verdict.STALE]. Only then it writes: the meta (its revision + 1, as
- * the contract says), the EXIF, each `K_blob` wrap, each bucket name. The editor columns stay — a re-seal is no edit
- * (ADR 0093 § 8). A trashed medium is re-sealed like a live one: a restore must open under the new key.
+ * [commit] runs after the node's lock and **decides before it writes**: every medium's set `wrappedMeta` and
+ * `wrappedExif` and every bucket name ([MediaRekeyRows]) must be staged ([NodeRekeyParticipant.Verdict.MISSING] if not),
+ * and a medium staged against a meta revision it no longer has is [NodeRekeyParticipant.Verdict.STALE]. Only then it
+ * writes: the meta (its revision + 1, as the contract says), the EXIF, each bucket name. The editor columns stay — a
+ * re-seal is no edit (ADR 0093 § 8). A trashed medium is re-sealed like a live one: a restore must open under the new
+ * key. Its `K_blob` wraps are core's blob service's part of the same commit (ADR 0113), which runs after this one.
  *
- * Once any medium was rewritten, the node's item revision moves once and every medium takes its position, so an open
- * gallery's next poll re-fetches them all with the new wraps (the keyset delta carries a row only past the cursor,
- * ADR 0033 decision 3); `updatedAt`, the served time of a change, stays.
+ * While the node holds a medium, the node's item revision moves once and every medium takes its position: core's part
+ * rewrites every medium's wraps in this all-or-nothing commit, so an open gallery's next poll must re-fetch them all
+ * (the keyset delta carries a row only past the cursor, ADR 0033 decision 3); `updatedAt`, the served time of a change,
+ * stays.
  */
 @ApplicationScoped
 class MediaNodeRekeyParticipant(private val items: NodeItemsRevisions) : NodeRekeyParticipant {
@@ -182,16 +159,12 @@ class MediaNodeRekeyParticipant(private val items: NodeItemsRevisions) : NodeRek
         // Held since [lockRows]: read, not locked again — a lock here, after the node's, would invert the order.
         val media = MediaRekeyRows.media(scopeId, nodeId)
         val buckets = MediaRekeyRows.buckets(scopeId, nodeId)
-        val blobIds = MediaRekeyRows.blobsOf(media)
-        val wanted = blobIds.values.flatten().mapTo(HashSet()) { it.first }
-        val blobs = StoredObjectLocks.lockOf(scopeId, wanted).filter { it.id in wanted }
 
         // Decide: every sealed field has its staged value …
         for (m in media) {
             if (m.wrappedMeta != null && Key(m.id, MediaRekeyRows.META) !in staged) return NodeRekeyParticipant.Verdict.MISSING
             if (m.wrappedExif != null && Key(m.id, MediaRekeyRows.EXIF) !in staged) return NodeRekeyParticipant.Verdict.MISSING
         }
-        if (blobs.any { Key(it.id, MediaRekeyRows.BLOB_WRAP) !in staged }) return NodeRekeyParticipant.Verdict.MISSING
         // A READ_WRITE contributor's primary holds the server's copy of that guest's name (`MediaStore.primarySealedNameFor`),
         // sealed under the link's ROOT key: copied again from the identity, whose name core's commit of the root re-sealed
         // — in this very transaction when the root is this node (core applies its own parts before the participants).
@@ -213,7 +186,6 @@ class MediaNodeRekeyParticipant(private val items: NodeItemsRevisions) : NodeRek
             }
             if (m.wrappedExif != null) m.wrappedExif = staged.getValue(Key(m.id, MediaRekeyRows.EXIF)).value
         }
-        for (b in blobs) b.wrappedBlobKey = staged.getValue(Key(b.id, MediaRekeyRows.BLOB_WRAP)).value
         for (b in buckets) b.sealedName = copies[b.id] ?: staged.getValue(Key(b.id, MediaRekeyRows.BUCKET_NAME)).value
         if (media.isNotEmpty()) {
             val position = items.bump(scopeId, nodeId) // after the media rows: record rows -> node row -> revision row

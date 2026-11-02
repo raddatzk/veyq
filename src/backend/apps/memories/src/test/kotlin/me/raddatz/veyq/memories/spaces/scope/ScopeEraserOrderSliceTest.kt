@@ -8,7 +8,6 @@ import me.raddatz.veyq.core.node.NodeScopeEraser
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.ShareScopeEraser
 import me.raddatz.veyq.memories.itemfavorites.ItemFavoritesScopeEraser
-import me.raddatz.veyq.memories.media.MediaDerivativeEntity
 import me.raddatz.veyq.memories.media.MediaEntity
 import me.raddatz.veyq.core.items.NodeItemsRevisionEntity
 import me.raddatz.veyq.memories.media.MediaScopeEraser
@@ -29,6 +28,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.spaces.scope.ScopePurge
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * The scope erasure's order is an explicit phase table, not bean order (ADR 0079 phase 1, step 5). The FK
@@ -88,12 +88,11 @@ class ScopeEraserOrderSliceTest {
                     wrappedBlobKey = "b3JkZXI="
                 }.persist()
             }
-            MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; blobId = blobIds[0]; updatedAt = Instant.now()
-            }.persist()
-            MediaDerivativeEntity().apply {
-                id = UUID.randomUUID().toString(); this.mediaId = mediaId; kind = "thumb"; blobId = blobIds[1]
-            }.persist()
+            val row = MediaEntity().apply {
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; updatedAt = Instant.now()
+            }.also { it.persist() }
+            MediaBlobRows.holdFor(row, blobIds[0])
+            MediaBlobRows.holdFor(row, blobIds[1], "THUMBNAIL")
             // the node's item-list counters (inbox #410): fk_items_revision_node refuses the node delete (700)
             // unless core's node eraser took the row first
             NodeItemsRevisionEntity().apply { this.nodeId = nodeId; revision = 1 }.persist()
@@ -104,7 +103,7 @@ class ScopeEraserOrderSliceTest {
         QuarkusTransaction.requiringNew().run {
             assertNull(ScopeEntity.findById(scopeId), "the scope is gone")
             assertEquals(0, MediaEntity.count("scopeId", scopeId))
-            assertEquals(0, MediaDerivativeEntity.count("mediaId", mediaId))
+            assertEquals(0, MediaBlobRows.countOf(mediaId), "its blobs' service rows went with the space")
             assertNull(NodeItemsRevisionEntity.findById(nodeId), "the item-list counters went with the node")
             assertEquals(0, BlobEntity.count("scopeId", scopeId))
         }

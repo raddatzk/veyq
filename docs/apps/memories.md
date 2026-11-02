@@ -21,13 +21,15 @@ Gradle module of its own; the web half is separated by import direction only (se
 - **Keys:** `K_node` per Memory (the share grain) and `K_blob` per blob under it
   ([ADR 0012](../decisions/0012-content-key-hierarchy.md)). These derive as they always have, the documented
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
-- **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
+- **Domain data:** media (Memories' record: its sealed meta and EXIF, its bucket, its place, its trash) and their
+  bytes — an original and its derivatives, blobs of core's blob service held by the medium, its owner's content
+  ([ADR 0113](../decisions/0113-memories-media-are-blobs-of-cores-blob-service.md), [Applications § Core's blob service](README.md#cores-blob-service)) —, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
   cover, banner), item favorites (the marks on media, [en.memory.favorites](../features/memory/enablers/en.memory.favorites.md); the member's *pin* of a node is core's, `core/favorites`, ADR 0068 §10), the live gallery list on core's item-list primitive (its counters are core's `veyq_node_items_revision`, bumped by every media writer through `NodeItemsRevisions.bump`; ADR 0033, inbox #410). The media tables key on
   `node_id` (measured: `grep -n "node_id" src/backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
   A cover is core's feature (inbox #341, #411): the node's `COVER` attachment in `veyq_node_attachment`, written by core's
   `setNodeCover` / `removeNodeCover` together with the sealed meta that names it; Memories opts its two kinds in
-  (`MemoryNodeKindRules.takesCover`) and adds one seam, `cover.findStored` (`storedMatch.ts`: an uploaded image equal to a gallery original shares that medium's PREVIEW, ADR 0013 § 5); a cover is set only by an upload in core's dialog; core's `veyq_node` carries no Memories column. Memories' configuration is its own
-  mapping, `veyq.media.*` (`MemoriesMediaConfig`, inbox #342).
+  (`MemoryNodeKindRules.takesCover`) and adds one seam, `cover.findStored` (`storedMatch.ts`: an uploaded image equal to a gallery original shares that medium's PREVIEW, ADR 0013 § 5); a cover is set only by an upload in core's dialog; core's `veyq_node` carries no Memories column. Memories has no configuration key of its own: a medium waits out core's
+  node trash retention, the window its blobs are kept for (ADR 0113 decision 5).
   A **banner** is Memories' own ([uc.memory.banner](../features/memory/use-cases/uc.memory.banner.md),
   [ADR 0102](../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)): the node's
   `BANNER` and `BANNER_POSTER` attachments in core's `veyq_node_attachment` (Memories' member-only roles,

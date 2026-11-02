@@ -1,5 +1,7 @@
 package me.raddatz.veyq.memories.moderation
 
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobs
+import me.raddatz.veyq.memories.media.MemoryBlobRoles
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.identity.PrincipalKey
@@ -49,11 +51,13 @@ class CaseMediaResource(
 
     private fun listingOf(held: List<HeldRow>): CaseMediaListing {
         val blobRows = held.filter { it.table == "veyq_blob" }.associateBy { it.sourceId }
-        val derivatives = held.filter { it.table == "veyq_media_derivative" }.groupBy { it["media_id"] }
+        // A medium's blobs are core's blob service's rows held by it (ADR 0113), which the service's hold copies by owner.
+        val owned = held.filter { it.table == ApplicationBlobs.TABLE }.groupBy { it["owner_id"] }
         val identities = held.filter { it.table == "veyq_share_identity" }.associateBy { it.sourceId }
         // What the reporter saw: the media live when the hold was taken (a trashed one is in no gallery and no listing).
         val media = held.filter { it.table == "veyq_media" && it["deleted_at"] == null }.mapNotNull { m ->
-            val blob = blobRows[m["blob_id"]] ?: return@mapNotNull null
+            val own = owned[m.sourceId].orEmpty()
+            val blob = own.firstOrNull { it["role"] == MemoryBlobRoles.ORIGINAL }?.let { blobRows[it["blob_id"]] } ?: return@mapNotNull null
             ShareMedia(
                 blockedByOperator = false,
                 nodeId = UUID.fromString(m["node_id"]),
@@ -64,10 +68,11 @@ class CaseMediaResource(
                 wrappedBlobKey = blob["wrapped_blob_key"]!!,
                 manifest = blobs.decodeManifest(blob["manifest"]),
                 wrappedBlobMeta = blob["wrapped_meta"],
-                derivatives = derivatives[m.sourceId].orEmpty().mapNotNull { d ->
+                derivatives = own.filter { it["role"] in MemoryBlobRoles.DERIVATIVES }
+                    .sortedBy { MemoryBlobRoles.DERIVATIVES.indexOf(it["role"]) }.mapNotNull { d ->
                     val db = blobRows[d["blob_id"]] ?: return@mapNotNull null
                     ShareMediaDerivative(
-                        kind = ShareMediaDerivative.Kind.valueOf(d["kind"]!!),
+                        kind = ShareMediaDerivative.Kind.valueOf(d["role"]!!),
                         blobId = UUID.fromString(db.sourceId),
                         chunkCount = db["chunk_count"]!!.toInt(),
                         byteSize = db["byte_size"]!!.toLong(),

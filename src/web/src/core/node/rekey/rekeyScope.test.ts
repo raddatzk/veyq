@@ -30,7 +30,9 @@ type Row = {
 }
 type Share = { shareId: string; nodeId: string; role: RekeyShareRoleEnum; sealedShareKey: string; sealedShareKeyEpoch: number; wrap: string | null; sealedDropPublicKey: string | null }
 type Identity = { identityId: string; shareId: string; wrappedIdentityKey: string | null; sealedDisplayName: string }
-type Blob = { blobId: string; nodeId: string; role: string; wrappedBlobKey: string }
+/** A blob of the node: an attachment slot's (bound to the node), or — with [ownerId] — one its application stores through
+ *  core's blob service (ADR 0113), bound to the id the server lists it with. */
+type Blob = { blobId: string; nodeId: string; role: string; wrappedBlobKey: string; ownerId?: string }
 type Stage = { children: RekeyChildEntry[]; blobs: RekeyBlobWrap[]; shares: RekeyShareWrap[]; identities: RekeyIdentitySeal[] }
 const server = {
   current: 1,
@@ -60,7 +62,7 @@ function ownerOnly(n: Row): boolean {
 
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../../features/spaces/scopes', () => ({ openScopeById: vi.fn() }))
-vi.mock('../../../api/client', () => ({ rekeyApi: vi.fn() }))
+vi.mock('../../../api/client', () => ({ rekeyApi: vi.fn(), applicationBlobsApi: vi.fn() }))
 vi.mock('../../../app/activeSpace', () => ({ activeSpace: { scopeId: null }, activeEpochKeys: () => null, refreshActiveScope: vi.fn() }))
 
 /** The in-memory server behind `rekeyApi` — it applies a commit as `RekeyStore.commit` does — and the member's scope
@@ -76,7 +78,7 @@ function installServer(): void {
     getNodeRekeyParts: async ({ nodeId }) => {
       const shares = server.shares.filter((s) => s.nodeId === nodeId)
       return {
-        blobs: server.blobs.filter((b) => b.nodeId === nodeId).map(({ blobId, role, wrappedBlobKey }) => ({ blobId, role, wrappedBlobKey })),
+        blobs: server.blobs.filter((b) => b.nodeId === nodeId && !b.ownerId).map(({ blobId, role, wrappedBlobKey }) => ({ blobId, role, wrappedBlobKey })),
         shares: shares.map((s) => ({ shareId: s.shareId, role: s.role, sealedShareKey: s.sealedShareKey, sealedShareKeyEpoch: s.sealedShareKeyEpoch, hasWrap: s.wrap !== null, hasDropPublicKey: s.sealedDropPublicKey !== null })),
         identities: server.identities.filter((i) => shares.some((s) => s.shareId === i.shareId)).map((i) => ({
           identityId: i.identityId, shareId: i.shareId, wrappedIdentityKey: i.wrappedIdentityKey, sealedDisplayName: i.wrappedIdentityKey ? null : i.sealedDisplayName,
@@ -118,6 +120,19 @@ function installServer(): void {
       server.stages.delete(rekeyId)
     },
   })
+  // The service's paged read (`listApplicationBlobRekey`): ONE row per page whatever the limit asks, so a client that
+  // stops after its first page misses a wrap — which the commit then lacks.
+  fakeApi(applicationBlobsApi, {
+    listApplicationBlobRekey: async ({ nodeId, after }) => {
+      const own = server.blobs.filter((b) => b.nodeId === nodeId && b.ownerId).sort((a, b) => a.blobId.localeCompare(b.blobId))
+      const rest = after ? own.filter((b) => b.blobId > after) : own
+      const page = rest.slice(0, 1)
+      return {
+        blobs: page.map((b) => ({ blobId: b.blobId, role: b.role, ownerId: b.ownerId!, wrappedBlobKey: b.wrappedBlobKey })),
+        more: rest.length > 1, cursor: page[0]?.blobId ?? null,
+      }
+    },
+  })
 }
 
 /** A thrown generated-client error carrying `{ code }`, the shape `isCodedError` reads. */
@@ -128,7 +143,7 @@ const refusal = (status: number, code: string) => Object.assign(new Error(code),
 const { rekeyScope, rekeyPath, pullRekeyPath, RekeyPathNotMineError } = await import('./rekeyScope')
 const { retryWhileRekeying, writeAtNodeEpoch } = await import('../../../shared/rekeyRetry')
 const { openScopeById } = await import('../../../features/spaces/scopes')
-const { rekeyApi } = await import('../../../api/client')
+const { rekeyApi, applicationBlobsApi } = await import('../../../api/client')
 
 // --- the world, sealed at epoch 0 ------------------------------------------------------------------------------
 const E0 = v1.randomBytes(32)
@@ -205,6 +220,36 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
     expect(unwrapBlobKey(SCOPE, newRoot, ref)).toEqual(kBlob) // control
     // and the node's own key no longer opens from the old epoch's K_SC (its entry is under E_1 now)
     expect(newRoot).not.toEqual(K.root)
+  })
+
+  // ADR 0113 decisions 3 and 7: a node's blobs in core's blob service are read page by page and each re-wrapped bound
+  // to the id the server lists it with — the owner for an owner's content (a medium), the node for an item of its own.
+  it('re-wraps every blob of core\'s blob service page by page, each bound to the id it is listed with', async () => {
+    const owner = crypto.randomUUID()
+    const kept = [v1.randomBytes(32), v1.randomBytes(32)]
+    const refs = [
+      { blobId: '00000000-0000-4000-8000-000000000001', ownerId: owner, role: 'ORIGINAL' }, // an owner's content
+      { blobId: '00000000-0000-4000-8000-000000000002', ownerId: ids.root, role: 'EXPENSES_RECEIPT' }, // an item of its own
+    ]
+    refs.forEach((r, i) => server.blobs.push({ ...r, nodeId: ids.root, wrappedBlobKey: b64std(v1.seal(blobKeyContext(SCOPE, r), K.root, kept[i])) }))
+    await rekeyScope(SCOPE)
+    const newRoot = keyOf(ids.root)
+    refs.forEach((r, i) => {
+      const wrap = server.blobs.find((b) => b.blobId === r.blobId)!.wrappedBlobKey
+      expect(unwrapBlobKey(SCOPE, newRoot, { ...r, wrappedBlobKey: wrap }), r.role).toEqual(kept[i])
+      expect(() => unwrapBlobKey(SCOPE, K.root, { ...r, wrappedBlobKey: wrap })).toThrow(v1.OpenRefused)
+    })
+    // bound as listed: the medium's wrap does not open as the node's
+    const medium = server.blobs.find((b) => b.blobId === refs[0].blobId)!.wrappedBlobKey
+    expect(() => unwrapBlobKey(SCOPE, newRoot, { ...refs[0], ownerId: ids.root, wrappedBlobKey: medium })).toThrow(v1.OpenRefused)
+  })
+
+  it('stops the re-key of a node whose service blob does not open under the id it is listed with (fail closed)', async () => {
+    const ref = { blobId: crypto.randomUUID(), ownerId: crypto.randomUUID(), role: 'ORIGINAL' }
+    const wrap = b64std(v1.seal(blobKeyContext(SCOPE, ref), K.root, v1.randomBytes(32)))
+    server.blobs.push({ ...ref, ownerId: crypto.randomUUID(), nodeId: ids.root, wrappedBlobKey: wrap }) // listed with another owner
+    await expect(rekeyScope(SCOPE)).rejects.toThrow(v1.OpenRefused)
+    expect(server.nodes.get(ids.root)!.epoch).toBe(0)
   })
 
   it('re-wraps every K_blob it covers without changing it, and re-seals the meta and a READ_WRITE guest\'s name', async () => {

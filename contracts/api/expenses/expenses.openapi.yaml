@@ -283,8 +283,8 @@ paths:
       description: >
         Every revision of the Pot — of a trashed Pot too — with what is sealed under the Pot's key: its `K_rev` wrap, and
         nothing else (the body is sealed under `K_rev`, so a re-key leaves it as it is, ADR 0108 decision 4). A receipt's
-        `K_blob` wrap is core's: core's `getNodeRekeyParts` lists it with the node's blobs and `stageNodeRekey` stages it
-        (ADR 0112 decision 1). Paged by `since` / `limit` / `more` as `listPotRevisions`. Only a caller who may commit the node's re-key (core's `listRekeyNodes`) reads it, else `403`.
+        `K_blob` wrap is core's: core's `listApplicationBlobRekey` lists it with the node's other service blobs and
+        `stageNodeRekey` stages it (ADR 0112 decision 1, ADR 0113). Paged by `since` / `limit` / `more` as `listPotRevisions`. Only a caller who may commit the node's re-key (core's `listRekeyNodes`) reads it, else `403`.
         Nothing here is new to the server.
       security:
         - bearerAuth: []

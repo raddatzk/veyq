@@ -15,8 +15,8 @@ import jakarta.persistence.LockModeType
  * - The selection is the media rows' lock (`PESSIMISTIC_WRITE`, `order by id`), as every other erase of a media row
  *   takes it (`purgeMedia`, the retention purge, a guest's delete): one that holds a row finishes first and the row
  *   is no longer selected. Selected plainly, this then deleted a row already gone and rolled the whole erase back.
- * - Media, derivatives and their blobs go one media at a time through the shared FK-ordered
- *   [MediaStore.purgeMediaRows] (derivative -> media -> blob; chunk-key reclaim in the same transaction).
+ * - Media and their blobs go one media at a time through the shared [MediaStore.purgeMediaRows] (the medium's row, then
+ *   its blobs through core's blob service, ADR 0113; chunk-key reclaim in the same transaction).
  * - The buckets go after, rows only: every medium that lived in them went above. No revision bump — a trashed node
  *   is already out of every listing, so no open gallery can be watching it; the node's item-list counters are core's
  *   and go with it (`NodeItemsRevisionNodeSubtreeEraser`, phase 300).
@@ -39,7 +39,7 @@ class MediaNodeSubtreeEraser(
         return guests
     }
 
-    /** Its media rows locked first, as [erase] locks them (item rows before blob rows), and every blob they name. */
+    /** Its media rows locked first, as [erase] locks them (item rows before blob rows), and every blob they hold. */
     override fun blobIdsOf(scopeId: String, nodeIds: List<String>): Collection<String> =
         mediaStore.blobIdsOf(MediaEntity.find("nodeId in ?1 order by id", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list())
 }

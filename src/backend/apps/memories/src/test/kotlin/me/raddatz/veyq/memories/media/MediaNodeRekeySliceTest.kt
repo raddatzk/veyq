@@ -16,6 +16,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedScopeMember
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchFixtures
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -26,16 +27,18 @@ import java.util.Base64
 import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItems
+import org.hamcrest.Matchers.containsInAnyOrder
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 /**
  * Memories' part of a node's re-key (ADR 0109 point 2): `listMediaRekey` serves, and Memories' participant
- * in core's `commitNodeRekey` rewrites, every field of a Memory sealed under its key — each medium's meta and EXIF, the
- * `K_blob` wrap of its original and of each derivative, a trashed medium's too, and every named bucket. A `WRITE_ONLY`
- * guest's medium and its primary bucket are under the guest's own `K_up` (point 5): neither listed, nor required, nor
- * touched. The commit is fail closed: a blob wrap not staged is `rekey_parts_missing`, a medium whose meta moved since
+ * in core's `commitNodeRekey` rewrites, every field Memories seals under a Memory's key — each medium's meta and EXIF, a
+ * trashed medium's too, and every named bucket. The `K_blob` wrap of each medium's original and of each derivative is
+ * core's blob service's (ADR 0113): `listApplicationBlobRekey` serves it bound to its medium, core's stage and the
+ * service's participant take it. A `WRITE_ONLY` guest's medium, its blob and its primary bucket are under the guest's own
+ * `K_up` (point 5): neither listed, nor required, nor touched, by Memories' read or the service's. The commit is fail closed: a blob wrap not staged is `rekey_parts_missing`, a medium whose meta moved since
  * staging `rekey_parts_stale`, and either writes nothing — core's rows included; each has its control on the same commit.
  * Core's own parts (children, shares, identities) are `RekeyCoreSliceTest`'s.
  */
@@ -62,8 +65,19 @@ class MediaNodeRekeySliceTest {
         list(w, "").statusCode(200)
             .body("media.find { it.mediaId == '${w.live}' }.wrappedMeta", equalTo(META_A))
             .body("media.find { it.mediaId == '${w.live}' }.wrappedExif", equalTo(EXIF_A))
-            .body("media.find { it.mediaId == '${w.live}' }.blobs.role", hasItems("ORIGINAL", "THUMBNAIL"))
+            .body("media.find { it.mediaId == '${w.live}' }.containsKey('blobs')", equalTo(false))
             .body("media.find { it.mediaId == '${w.trashed}' }.wrappedExif", nullValue())
+        // A medium's wraps are the blob service's, each bound to the medium it belongs to (ADR 0113 decision 3) — never
+        // the WRITE_ONLY guest's, which are under its K_up; core's parts read holds the node's attachment slots alone.
+        given().header("Authorization", bearer(w.owner)).`when`()
+            .get("/api/scopes/${w.scopeId}/nodes/${w.memory}/application-blobs/rekey").then().statusCode(200)
+            .body("blobs.blobId", containsInAnyOrder(*(w.liveBlobs + w.trashedBlob).toTypedArray()))
+            .body("blobs.find { it.blobId == '${w.liveBlobs[0]}' }.ownerId", equalTo(w.live))
+            .body("blobs.find { it.blobId == '${w.liveBlobs[1]}' }.role", equalTo("THUMBNAIL"))
+            .body("blobs.find { it.blobId == '${w.liveBlobs[1]}' }.ownerId", equalTo(w.live))
+            .body("blobs.find { it.blobId == '${w.trashedBlob}' }.ownerId", equalTo(w.trashed))
+        given().header("Authorization", bearer(w.owner)).`when`().get("/api/scopes/${w.scopeId}/rekey/nodes/${w.memory}").then()
+            .statusCode(200).body("blobs.size()", equalTo(0))
         // only a caller with the current grant reads it (a plain member's leg: aMemberWithTheCurrentGrantReKeysAMemory)
         QuarkusTransaction.requiringNew().run {
             MembershipEntity.update("grantedEpoch = 0 where scopeId = ?1 and userId = ?2", w.scopeId, w.owner)
@@ -110,7 +124,8 @@ class MediaNodeRekeySliceTest {
         post(
             w, "/rekey/nodes/${w.memory}/$rekeyId/parts",
             """{"fromEpoch":0,"shares":[{"shareId":"${w.shareId}","sealedDropPublicKey":"$NEW_DROP_PUBLIC"},{"shareId":"${w.rwShareId}","wrap":"bmV3LXJ3LXdyYXA="}],
-               "identities":[{"identityId":"${w.identityId}","wrappedIdentityKey":"bmV3LWt1cA=="},{"identityId":"${w.rwIdentityId}","sealedDisplayName":"$NEW_RW_NAME"}]}""",
+               "identities":[{"identityId":"${w.identityId}","wrappedIdentityKey":"bmV3LWt1cA=="},{"identityId":"${w.rwIdentityId}","sealedDisplayName":"$NEW_RW_NAME"}],
+               "blobs":${blobWraps(w)}}""",
             member,
         ).statusCode(204)
         commit(w, rekeyId, caller = member, sealedDropPrivateKey = NEW_DROP_PRIVATE).statusCode(204)
@@ -179,7 +194,8 @@ class MediaNodeRekeySliceTest {
         commit(w, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_missing"))
         assertUntouched(w)
 
-        stageMedia(w, rekeyId, onlyBlob = w.liveBlobs[1]) // control: the missing wrap staged under the same id
+        // control: the missing wrap staged under the same id, through core's stage (the blob service's part)
+        post(w, "/rekey/nodes/${w.memory}/$rekeyId/parts", """{"fromEpoch":0,"blobs":${blobWraps(w, only = w.liveBlobs[1])}}""").statusCode(204)
         commit(w, rekeyId).statusCode(204)
         assertEquals(1, QuarkusTransaction.requiringNew().call { NodeEntity.findById(w.memory)!!.epoch })
     }
@@ -227,8 +243,7 @@ class MediaNodeRekeySliceTest {
             listOf(original, thumb, trashedBlob, guestBlob).forEach { blob(scopeId, it) }
             bucket(scopeId, memory, primary, "user:$owner", null, primary = true)
             bucket(scopeId, memory, sub, "user:$owner", "c3Vi", primary = false, parent = primary)
-            medium(scopeId, memory, live, original, META_A, EXIF_A, owner, primary)
-            MediaDerivativeEntity().apply { id = UUID.randomUUID().toString(); mediaId = live; kind = "THUMBNAIL"; blobId = thumb }.persist()
+            MediaBlobRows.holdFor(medium(scopeId, memory, live, original, META_A, EXIF_A, owner, primary), thumb, "THUMBNAIL")
             medium(scopeId, memory, trashed, trashedBlob, META_B, null, owner, primary).deletedAt = Instant.now()
             ShareEntity().apply {
                 id = shareId; ownerAccount = owner; this.scopeId = scopeId; nodeId = memory; role = "WRITE_ONLY"
@@ -239,7 +254,7 @@ class MediaNodeRekeySliceTest {
                 tokenHash = "h-$identityId".take(64)
             }.persist()
             bucket(scopeId, memory, guestPrimary, "share:$identityId", GUEST_NAME, primary = true)
-            medium(scopeId, memory, guestMedium, guestBlob, "Z3Vlc3QtbWV0YQ==", null, null, guestPrimary).shareIdentityId = identityId
+            medium(scopeId, memory, guestMedium, guestBlob, "Z3Vlc3QtbWV0YQ==", null, null, guestPrimary, guest = identityId)
             // a READ_WRITE link with one contributor, whose primary is named with a copy of its display name
             ShareEntity().apply {
                 id = rwShareId; ownerAccount = owner; this.scopeId = scopeId; nodeId = memory; role = "READ_WRITE"
@@ -269,12 +284,15 @@ class MediaNodeRekeySliceTest {
             isPrimary = primary; parentBucketId = parent; createdAt = Instant.now()
         }.persist()
 
+    /** A medium and its original as core's blob service holds it; [guest]: a guest identity's upload, its writer. */
     private fun medium(
         scopeId: String, nodeId: String, id: String, blobId: String, meta: String, exif: String?, editor: String?, bucketId: String,
+        guest: String? = null,
     ): MediaEntity = MediaEntity().apply {
-        this.id = id; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId; wrappedMeta = meta; wrappedExif = exif
-        metaEditorUserId = editor; createdBy = editor?.let { "user:$it" }; this.bucketId = bucketId; updatedAt = Instant.now()
-    }.also { it.persist() }
+        this.id = id; this.scopeId = scopeId; this.nodeId = nodeId; wrappedMeta = meta; wrappedExif = exif; shareIdentityId = guest
+        metaEditorUserId = editor; createdBy = editor?.let { "user:$it" } ?: guest?.let { "share:$it" }; this.bucketId = bucketId
+        updatedAt = Instant.now()
+    }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
 
     private fun assertUntouched(w: World, liveRevision: Long = 0) = QuarkusTransaction.requiringNew().run {
         val a = MediaEntity.findById(w.live)!!
@@ -289,28 +307,30 @@ class MediaNodeRekeySliceTest {
     // --- HTTP -------------------------------------------------------------------------------------------------------
 
     private fun stageAll(w: World, rekeyId: UUID, skipBlob: String? = null, liveRevision: Long = 0, caller: String = w.owner) {
-        stageMedia(w, rekeyId, skipBlob = skipBlob, liveRevision = liveRevision, caller = caller)
+        stageMedia(w, rekeyId, liveRevision = liveRevision, caller = caller)
         post(
             w, "/rekey/nodes/${w.memory}/$rekeyId/parts",
             """{"fromEpoch":0,"shares":[{"shareId":"${w.shareId}","wrap":"bmV3LXNoYXJlLXdyYXA="},{"shareId":"${w.rwShareId}","wrap":"bmV3LXJ3LXdyYXA="}],
-               "identities":[{"identityId":"${w.identityId}","wrappedIdentityKey":"bmV3LWt1cA=="},{"identityId":"${w.rwIdentityId}","sealedDisplayName":"$NEW_RW_NAME"}]}""",
+               "identities":[{"identityId":"${w.identityId}","wrappedIdentityKey":"bmV3LWt1cA=="},{"identityId":"${w.rwIdentityId}","sealedDisplayName":"$NEW_RW_NAME"}],
+               "blobs":${blobWraps(w, skip = skipBlob)}}""",
             caller,
         ).statusCode(204)
     }
 
-    private fun stageMedia(w: World, rekeyId: UUID, skipBlob: String? = null, onlyBlob: String? = null, liveRevision: Long = 0, caller: String = w.owner) {
-        fun wraps(blobs: List<String>) = blobs.filter { it != skipBlob && (onlyBlob == null || it == onlyBlob) }
-            .joinToString(",", "[", "]") { """{"blobId":"$it","wrappedBlobKey":"${newWrap(it)}"}""" }
-        val body = if (onlyBlob != null) {
-            """{"fromEpoch":0,"media":[{"mediaId":"${w.live}","metaRevision":$liveRevision,"blobs":${wraps(w.liveBlobs)}}]}"""
-        } else {
-            """{"fromEpoch":0,"media":[
-                 {"mediaId":"${w.live}","metaRevision":$liveRevision,"wrappedMeta":"$NEW_META_A","wrappedExif":"$NEW_EXIF_A","blobs":${wraps(w.liveBlobs)}},
-                 {"mediaId":"${w.trashed}","metaRevision":0,"wrappedMeta":"$NEW_META_B","blobs":${wraps(listOf(w.trashedBlob))}}],
+    /** Memories' own stage: every medium's meta and EXIF and every bucket name — no blob wrap, which is core's part. */
+    private fun stageMedia(w: World, rekeyId: UUID, liveRevision: Long = 0, caller: String = w.owner) {
+        val body = """{"fromEpoch":0,"media":[
+                 {"mediaId":"${w.live}","metaRevision":$liveRevision,"wrappedMeta":"$NEW_META_A","wrappedExif":"$NEW_EXIF_A"},
+                 {"mediaId":"${w.trashed}","metaRevision":0,"wrappedMeta":"$NEW_META_B"}],
                "buckets":[{"bucketId":"${w.sub}","sealedName":"$NEW_SUB"}]}"""
-        }
         post(w, "/nodes/${w.memory}/media-rekey/$rekeyId", body, caller).statusCode(204)
     }
+
+    /** The media's re-wrapped `K_blob`s as core's stage takes them — never the WRITE_ONLY guest's ([skip]: all but that
+     *  one; [only]: just that one). */
+    private fun blobWraps(w: World, skip: String? = null, only: String? = null): String =
+        (w.liveBlobs + w.trashedBlob).filter { it != skip && (only == null || it == only) }
+            .joinToString(",", "[", "]") { """{"blobId":"$it","wrappedBlobKey":"${newWrap(it)}"}""" }
 
     /** The Memory's commit body; [sealedDropPrivateKey] is its new drop key, sent when the Memory carries one. */
     private fun commit(w: World, rekeyId: UUID, caller: String = w.owner, sealedDropPrivateKey: String? = null): ValidatableResponse {

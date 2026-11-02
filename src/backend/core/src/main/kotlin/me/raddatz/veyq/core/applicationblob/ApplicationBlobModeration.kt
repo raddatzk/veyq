@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.moderation.hold.HoldSnapshotContributor
 import me.raddatz.veyq.core.moderation.hold.HoldTarget
 import me.raddatz.veyq.core.moderation.report.ReportableItem
 import me.raddatz.veyq.core.moderation.report.ReportableItems
+import me.raddatz.veyq.core.node.NodeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -27,9 +28,13 @@ import jakarta.transaction.Transactional
  * `blockedByOperator`; a block on a blob ends with its purge.
  */
 @ApplicationScoped
-class ApplicationBlobReportableItems(private val items: NodeItemsRevisions) : ReportableItems {
-    override fun locate(itemId: String): ReportableItem? =
-        ApplicationBlobEntity.findById(itemId)?.let { ReportableItem(it.scopeId, it.nodeId) }
+class ApplicationBlobReportableItems(private val items: NodeItemsRevisions, private val service: ApplicationBlobs) : ReportableItems {
+    /** A blob that is an item of its own; an owner's content is reported with its owner, never alone (ADR 0113). */
+    override fun locate(itemId: String): ReportableItem? {
+        val row = ApplicationBlobEntity.findById(itemId) ?: return null
+        val kind = NodeEntity.findById(row.nodeId)?.kind ?: return null
+        return if (service.isOwnItem(kind, row.role)) ReportableItem(row.scopeId, row.nodeId) else null
+    }
 
     /** The blob's own — released or not (a content block refuses it either way). */
     override fun blobIdsOf(itemId: String): Set<String> = ApplicationBlobEntity.findById(itemId)?.let { setOf(it.blobId) } ?: emptySet()
@@ -86,10 +91,13 @@ class ApplicationBlobHoldSnapshot : HoldSnapshotContributor {
  * item a block or a hold reaches. The records an uploader wrote are its application's half.
  */
 @ApplicationScoped
-class ApplicationBlobUploaderContent : UploaderContent {
+class ApplicationBlobUploaderContent(private val service: ApplicationBlobs) : UploaderContent {
+    /** Its items of their own only: an owner's content is reached through its owner, which its application returns. */
     override fun of(scopeId: String, uploader: Uploader): UploadedItems {
         val column = if (uploader.guest) "writerIdentityId" else "writerUserId"
-        val ids = ApplicationBlobEntity.list("scopeId = ?1 and $column = ?2", scopeId, uploader.id).mapTo(LinkedHashSet()) { it.id }
+        val rows = ApplicationBlobEntity.list("scopeId = ?1 and $column = ?2", scopeId, uploader.id)
+        val kinds = service.kindsOf(rows.map { it.nodeId })
+        val ids = rows.filter { r -> kinds[r.nodeId]?.let { service.isOwnItem(it, r.role) } == true }.mapTo(LinkedHashSet()) { it.id }
         return UploadedItems(emptySet(), ids)
     }
 }
