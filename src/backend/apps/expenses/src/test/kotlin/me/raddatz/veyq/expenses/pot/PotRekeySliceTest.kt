@@ -71,6 +71,22 @@ class PotRekeySliceTest {
         assertEquals(rows(w).map { newWrap(it.entryId, it.revision) }, rows(w).map { it.wrap })
     }
 
+    /** A revision twice in one batch is replaced, the later value staying - as a value staged again in a later call is,
+     *  and as core's `stageNodeRekey` does (the API fuzzing sent such a batch as valid and met a 400). */
+    @Test
+    fun aRevisionStagedTwiceInOneBatchIsReplaced() {
+        val w = world()
+        val rekeyId = UUID.randomUUID()
+        val first = rows(w).first()
+        val stale = """{"entryId":"${first.entryId}","revision":${first.revision},"wrappedRevisionKey":"${PotWire.WRAP}"}"""
+        val wraps = listOf(stale) + rows(w).map {
+            """{"entryId":"${it.entryId}","revision":${it.revision},"wrappedRevisionKey":"${newWrap(it.entryId, it.revision)}"}"""
+        }
+        post(w, "/pots/${w.pot}/rekey/$rekeyId", """{"fromEpoch":0,"revisions":[${wraps.joinToString(",")}]}""").statusCode(204)
+        commit(w, rekeyId).statusCode(204)
+        assertEquals(rows(w).map { newWrap(it.entryId, it.revision) }, rows(w).map { it.wrap }, "the later value of the batch landed")
+    }
+
     @Test
     fun aPartNamingABodyIsRefusedAndLandsNothing_theWrapsAloneLandAndNoBodyMoves() {
         val w = world()

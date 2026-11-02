@@ -1,8 +1,10 @@
 package me.raddatz.veyq.expenses.pot
 
 import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.items.ItemsCursor
 import me.raddatz.veyq.core.items.ItemsRead
@@ -50,6 +52,10 @@ sealed interface PotWriteOutcome {
     /** `409 stale_revision` with every stale record and its latest revision (0: none). */
     data class Stale(val stale: List<RevisionRef>) : PotWriteOutcome, HttpFailure by Failures.staleRevision
     object Invalid : PotWriteOutcome, HttpFailure by Failures.invalidRequest
+    /** Two revisions of one record in the batch, or one dropped receipt twice ([PotRequests.Verdict.REPEATED]). */
+    object Repeated : PotWriteOutcome, HttpFailure by PotRequests.itemRepeated
+    /** A sealed body of no size class ([PotRequests.Verdict.NO_SIZE_CLASS]). */
+    object NoSizeClass : PotWriteOutcome, HttpFailure by PotRequests.sizeClassInvalid
     object NoScope : PotWriteOutcome, HttpFailure by Failures.scopeNotFound
     object Suspended : PotWriteOutcome, HttpFailure by Failures.tenantSuspended
     object Deleting : PotWriteOutcome, HttpFailure by Failures.scopeDeleting
@@ -77,12 +83,26 @@ internal object PotBlocks {
         !view.isEmpty && writes.any { !it.tombstone && view.itemBlocked(it.entryId, nodeId) }
 }
 
-/** The request checks the contract cannot write: one size class per body, one revision per record in a batch, each
- *  dropped receipt named once. */
+/**
+ * A batch's own checks, before any state is read — rules the contract states in words only, so each is a `422`, never the
+ * shape's `400` (`tests/fuzz/schemathesis.toml`: a 400 is a request the schema itself refuses): one size class per body
+ * (`size_class_invalid` — a `pattern` of the four lengths is one no JSON Schema generator draws within its size limits,
+ * measured on Schemathesis' `data_too_large`), and the rule across the items no schema states, one revision per record in
+ * a batch and each dropped receipt named once (`pot_item_repeated`, as core's `report_item_repeated`: `uniqueItems`
+ * compares whole items, inbox #507).
+ */
 internal object PotRequests {
-    fun valid(writes: List<RevisionWrite>): Boolean =
-        writes.map { it.entryId }.distinct().size == writes.size && writes.all { PotBodies.sizeClassOf(it.sealedBody.length) != null } &&
-            writes.flatMap { it.droppedReceipts }.let { it.distinct().size == it.size }
+    enum class Verdict { VALID, NO_SIZE_CLASS, REPEATED }
+
+    val itemRepeated = httpFailure("pot_item_repeated", FailureStatus.UNPROCESSABLE)
+    val sizeClassInvalid = httpFailure("size_class_invalid", FailureStatus.UNPROCESSABLE)
+
+    fun verdict(writes: List<RevisionWrite>): Verdict = when {
+        writes.any { PotBodies.sizeClassOf(it.sealedBody.length) == null } -> Verdict.NO_SIZE_CLASS
+        writes.map { it.entryId }.distinct().size != writes.size -> Verdict.REPEATED
+        writes.flatMap { it.droppedReceipts }.let { it.distinct().size != it.size } -> Verdict.REPEATED
+        else -> Verdict.VALID
+    }
 
     fun outcome(result: PotWriteResult): PotWriteOutcome = when (result) {
         is PotWriteResult.Stored -> PotWriteOutcome.Done
@@ -128,7 +148,11 @@ class PotsHandler(
 
     /** A member's batch of revisions (ADR 0108 decision 3). */
     fun append(userId: String, scopeId: String, nodeId: String, nodeEpoch: Int, writes: List<RevisionWrite>): PotWriteOutcome {
-        if (!PotRequests.valid(writes)) return PotWriteOutcome.Invalid
+        when (PotRequests.verdict(writes)) {
+            PotRequests.Verdict.NO_SIZE_CLASS -> return PotWriteOutcome.NoSizeClass
+            PotRequests.Verdict.REPEATED -> return PotWriteOutcome.Repeated
+            PotRequests.Verdict.VALID -> Unit
+        }
         access.check(userId, scopeId, WRITE)
             .refusal(PotWriteOutcome.NoScope, PotWriteOutcome.Suspended, PotWriteOutcome.Deleting)?.let { return it }
         applications.requireWritable(CapabilityIds.EXPENSES, scopeId) // switched off, read-only (uc.platform.switch-application-off)
@@ -143,7 +167,7 @@ class PotsHandler(
      * goes when a member says so.
      */
     fun erase(userId: String, scopeId: String, nodeId: String, nodeEpoch: Int, write: RevisionWrite): PotWriteOutcome {
-        if (PotBodies.sizeClassOf(write.sealedBody.length) == null) return PotWriteOutcome.Invalid
+        if (PotBodies.sizeClassOf(write.sealedBody.length) == null) return PotWriteOutcome.NoSizeClass
         access.check(userId, scopeId, WRITE)
             .refusal(PotWriteOutcome.NoScope, PotWriteOutcome.Suspended, PotWriteOutcome.Deleting)?.let { return it }
         potOf(scopeId, nodeId, liveOnly = true) ?: return PotWriteOutcome.NoPot

@@ -164,7 +164,7 @@ class PotReceiptSliceTest {
         // b's receipt is no receipt of a; an id the Pot holds none of neither: the batch is refused whole.
         append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(rb)))).statusCode(400).body("code", equalTo("invalid_request"))
         append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(UUID.randomUUID().toString())))).statusCode(400)
-        append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(ra, ra)))).statusCode(400)
+        append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(ra, ra)))).statusCode(422).body("code", equalTo("pot_item_repeated"))
         assertEquals(1L, QuarkusTransaction.requiringNew().call { PotRevisionEntity.count("entryId", a) }, "nothing of a refused batch is stored")
         assertNull(receipt(ra)!!.releasedAt)
 

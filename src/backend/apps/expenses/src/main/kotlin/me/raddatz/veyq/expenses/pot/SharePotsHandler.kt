@@ -49,6 +49,10 @@ sealed interface SharePotAppendOutcome {
     object PasswordIncorrect : SharePotAppendOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
     object RateLimited : SharePotAppendOutcome, HttpFailure by Failures.rateLimited
     object Invalid : SharePotAppendOutcome, HttpFailure by Failures.invalidRequest
+    /** As a member's: two revisions of one record, or one dropped receipt twice (`422 pot_item_repeated`). */
+    object Repeated : SharePotAppendOutcome, HttpFailure by PotRequests.itemRepeated
+    /** As a member's: a sealed body of no size class (`422 size_class_invalid`). */
+    object NoSizeClass : SharePotAppendOutcome, HttpFailure by PotRequests.sizeClassInvalid
 }
 
 /**
@@ -112,7 +116,11 @@ class SharePotsHandler(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, nodeEpoch: Int, writes: List<RevisionWrite>,
         seen: ClientSeen?,
     ): SharePotAppendOutcome {
-        if (!PotRequests.valid(writes)) return SharePotAppendOutcome.Invalid
+        when (PotRequests.verdict(writes)) {
+            PotRequests.Verdict.NO_SIZE_CLASS -> return SharePotAppendOutcome.NoSizeClass
+            PotRequests.Verdict.REPEATED -> return SharePotAppendOutcome.Repeated
+            PotRequests.Verdict.VALID -> Unit
+        }
         // A batch creates rows, so it spends the per-share upload budget a guest's other writes spend (ADR 0051).
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true, onlyRole = ShareEntity.READ_WRITE)) {
             is ShareWriteGate.Admitted -> g

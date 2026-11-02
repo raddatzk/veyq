@@ -102,9 +102,9 @@ class PotsResource(
         }
 
     override fun stagePotRekey(scopeId: UUID, nodeId: UUID, rekeyId: UUID, potRekeyStage: PotRekeyStage): Response {
+        // A revision twice in the batch is replaced, the later value staying, as a value staged again in a later call is
+        // and as core's stage does; an empty batch is the contract's `minItems`.
         val wraps = potRekeyStage.revisions.associate { RevisionRef(it.entryId.toString(), it.revision) to it.wrappedRevisionKey }
-        // One value per revision, and at least one value (the contract's rule beside its bounds).
-        if (wraps.size != potRekeyStage.revisions.size || wraps.isEmpty()) return httpError(RekeyOutcome.InvalidRequest)
         return when (
             val o = rekey.stage(
                 identity.principal.name, scopeId.toString(), nodeId.toString(), rekeyId.toString(), potRekeyStage.fromEpoch.validated(),

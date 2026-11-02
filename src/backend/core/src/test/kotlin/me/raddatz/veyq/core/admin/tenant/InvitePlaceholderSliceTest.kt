@@ -116,7 +116,8 @@ class InvitePlaceholderSliceTest {
         val sixDays = Instant.now().plus(6, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS)
         val body = TestGrants.memberInviteJson(tenantId, "a@ph-expiry.example.com", key)
             .replace(Regex(""""expiresAt":"[^"]+""""), """"expiresAt":"$sixDays"""")
-        invite(owner, tenantId, body).then().statusCode(400).body("code", equalTo("invalid_request"))
+        // a rule no schema states: the 422, never the shape's 400 (the API fuzzing sent such an expiry as valid)
+        invite(owner, tenantId, body).then().statusCode(422).body("code", equalTo("invite_expiry_invalid"))
         assertNull(tx { TenantInviteEntity.findById(key.inviteId) }, "nothing minted")
         // Control: the server's own lifetime.
         invite(owner, tenantId, TestGrants.memberInviteJson(tenantId, "a@ph-expiry.example.com", key)).then().statusCode(201)
@@ -130,7 +131,7 @@ class InvitePlaceholderSliceTest {
         val (tenantId, owner) = seedActiveTenant("ph-signature.example.com", mail)
         val key = TestInviteKey()
         val forged = TestGrants.memberInviteJson(tenantId, "a@ph-signature.example.com", key, signerSeed = ByteArray(32) { 0x11 })
-        invite(owner, tenantId, forged).then().statusCode(400).body("code", equalTo("invalid_request"))
+        invite(owner, tenantId, forged).then().statusCode(422).body("code", equalTo("invite_signature_invalid"))
         assertNull(tx { TenantInviteEntity.findById(key.inviteId) }, "nothing minted")
         // Control: the caller's own signature.
         invite(owner, tenantId, TestGrants.memberInviteJson(tenantId, "a@ph-signature.example.com", key)).then().statusCode(201)

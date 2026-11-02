@@ -3,6 +3,16 @@
   "schemathesis_version": "4.32.0",
   "entries": [
     {
+      "id": "afd694",
+      "operation": "POST /api/account/rotation/stage",
+      "check": "ensure_resource_availability",
+      "failure": "EnsureResourceAvailability",
+      "signature": "",
+      "first_seen": "2026-11-02",
+      "last_seen": "2026-11-02",
+      "reason": "Accepted by design: an account holds one rotation stage, so a second `openRotationStage` replaces the first (the operation's own description), and the first id then answers `404 rotation_stage_not_found` as every stage part declares (\"unknown, expired, replaced\"). Schemathesis' stateful phase opens stages in a row and then sends a part to an earlier one (measured 2026-11-02: two opens, then the first id's `PUT …/moderation-grants`)."
+    },
+    {
       "id": "b12c0e",
       "operation": "POST /api/scopes/{scopeId}/blob-uploads-batch",
       "check": "positive_data_acceptance",

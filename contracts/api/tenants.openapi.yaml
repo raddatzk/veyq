@@ -396,10 +396,7 @@ paths:
                 inviteExpiresAt: 2026-07-11T12:00:00Z
                 delivery: SENT
         "400":
-          description: >
-            The request was malformed (missing/invalid email or invite material), `expiresAt` is not the server's
-            invite lifetime from now (±1 minute), or `inviteKeySignature` does not verify under the caller's identity key
-            — a session without the owner's unlocked vault mints no invite — `invalid_request`.
+          description: The request was malformed (missing/invalid email or invite material) — `invalid_request`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -435,6 +432,16 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: already_member }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            Rules no schema states, nothing minted: `invite_expiry_invalid` — `expiresAt` is not the server's invite
+            lifetime from now (±1 minute); `invite_signature_invalid` — `inviteKeySignature` does not verify under the
+            caller's identity key over the invite's statement, whose expiry is whole seconds (a session without the owner's
+            unlocked vault mints no invite); `date_time_out_of_range` — `expiresAt` outside the range a stored time holds (1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00), a bound no date-time schema states.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_signature_invalid }
         "503":
           description: >
             This tenant cannot send mail, so the invite cannot reach anyone and none was minted
@@ -502,7 +509,7 @@ paths:
       description: >
         Supersedes the given pending MEMBER invite — its key and grant are dropped with it — and mints a **new
         invite** for the same email from the body, exactly as `inviteTenantMember` takes it: a new invite key, grant,
-        sealed link and code (the body's `email` must be the old invite's, else `400 invalid_request`). Emailed to
+        sealed link and code (the body's `email` must be the old invite's, else `422 invite_email_mismatch`). Emailed to
         that address (the old link dies) — for when the invitee lost or ignored the first one, or its code.
         Owner-gated. Never returned to the caller (ADR 0055). Like the first mint, it needs a sendable mailer and is
         refused with `503` without one. Note the ordering cost: the outstanding invite is superseded before the new
@@ -540,10 +547,7 @@ paths:
                 inviteExpiresAt: 2026-07-11T12:00:00Z
                 delivery: SENT
         "400":
-          description: >
-            The request was malformed, its `email` is not the reissued invite's, `expiresAt` is not the server's
-            invite lifetime from now (±1 minute), or `inviteKeySignature` does not verify under the caller's identity key
-            — `invalid_request`.
+          description: The request was malformed — `invalid_request`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -588,6 +592,14 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: mail_unavailable }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            Rules no schema states, nothing superseded: `invite_email_mismatch` — the body's `email` is not the reissued
+            invite's; `invite_expiry_invalid` and `invite_signature_invalid` as for `inviteTenantMember`; `date_time_out_of_range` — `expiresAt` outside the range a stored time holds (1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00), a bound no date-time schema states.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_email_mismatch }
 
   /api/tenants/{tenantId}/member-invites/{inviteId}:
     delete:
@@ -2858,7 +2870,7 @@ components:
           description: >
             The inviting owner's Ed25519 identity signature over `encode(invite-key: tenantId, inviteId,
             sha256(invitePublicKey), expiresAt in Unix seconds)`. The server verifies it under the caller's stored
-            identity key before it mints (`400 invalid_request`) — so a session without the owner's unlocked vault mints
+            identity key before it mints (`422 invite_signature_invalid`) — so a session without the owner's unlocked vault mints
             no invite — and stores it beside that key; the invitee checks it under the key the owner's chain reaches from the
             head inside the link's seal.
           contentEncoding: base64
@@ -2871,7 +2883,7 @@ components:
           format: date-time
           description: >
             The invite's expiry, in whole seconds — the owner signs it. The server takes it only within one minute of
-            its own invite lifetime from now (`veyq.tenant.invite.ttl`), else `400 invalid_request`, and stores it as
+            its own invite lifetime from now (`veyq.tenant.invite.ttl`), else `422 invite_expiry_invalid`, and stores it as
             the invite's expiry.
           example: 2026-07-11T12:00:00Z
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
