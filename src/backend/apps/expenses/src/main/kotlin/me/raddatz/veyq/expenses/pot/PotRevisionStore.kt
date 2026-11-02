@@ -22,7 +22,8 @@ object PotBodies {
     /** Base64 length of the sealed body → its padded plaintext size class in bytes. */
     private val CLASSES = mapOf(744 to 512, 2792 to 2048, 10984 to 8192, 21908 to 16384)
 
-    /** The size class of a sealed body of [base64Length] characters, or null for a length no class has (`400`). */
+    /** The size class of a sealed body of [base64Length] characters, or null for a length no class has
+     *  (`422 size_class_invalid`). */
     fun sizeClassOf(base64Length: Int): Int? = CLASSES[base64Length]
 }
 
@@ -60,7 +61,7 @@ sealed interface PotWriteResult {
     data class Stale(val stale: List<RevisionRef>) : PotWriteResult
     /** A new record's id belongs to another Pot, or is an application blob's (a receipt's). */
     object IdTaken : PotWriteResult
-    /** A dropped receipt is no receipt of its record in this Pot (`400 invalid_request`). */
+    /** A dropped receipt is no receipt of its record in this Pot (`422 receipt_not_held`). */
     object ReceiptNotHeld : PotWriteResult
     /** No live Pot of that id in the scope — or, for a guest, the link or the Pot's place in its subtree gone since. */
     object NotFound : PotWriteResult

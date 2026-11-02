@@ -49,10 +49,10 @@ async function downloaded(page: Page, name: string): Promise<{ name: string; sha
   return { name: download.suggestedFilename(), sha256: sha256(readFileSync(await download.path())) }
 }
 
-/** A row's action behind its "More actions" menu. */
+/** A row's action behind its "More actions" menu: core's default rename, move and delete, named by the menu's opener. */
 async function rowAction(page: Page, name: string, action: string): Promise<void> {
   await page.getByRole('button', { name: `More actions for “${name}”`, exact: true }).click()
-  await page.getByRole('menuitem', { name: `${action} ${name}`, exact: true }).click()
+  await page.getByRole('menuitem', { name: action, exact: true }).click()
 }
 
 const question = (page: Page, text: string) =>
@@ -146,7 +146,8 @@ test(
     const ask = question(page, 'moves to the trash')
     await ask.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(downloadButton(page, name)).toHaveCount(0)
-    await expect(toast(page, `“${name}” moved to the trash.`)).toBeVisible()
+    // core's delete question and its toast (`DeleteNodesDialog`), the file's sentence the kind's own `deleteCopy`
+    await expect(toast(page, '1 item moved to the trash.')).toBeVisible()
     await page.getByRole('button', { name: 'Undo', exact: true }).click()
     await expect(downloadButton(page, name)).toBeVisible({ timeout: 60_000 })
 

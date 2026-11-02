@@ -142,7 +142,7 @@ paths:
         content. The sealed body is one of the four size classes exactly (else `422 size_class_invalid`), and its key wrap is bound to the revision it
         opens (both are checked by the client that reads them; the server checks only the body's length). A revision that
         no longer holds a receipt its record held names it in `droppedReceipts` (a receipt of another record, or none
-        of this Pot, is `400 invalid_request`): core's blob service releases it, and its purge erases the receipt after
+        of this Pot, is `422 receipt_not_held` — a rule on what is stored, which no schema states): core's blob service releases it, and its purge erases the receipt after
         the trash retention (ADR 0112 decision 2). Every revision keeps its record's other receipts, a tombstone releases
         them, and a later revision of a deleted record keeps them again. Every Pot write states `nodeEpoch`, the Pot's key epoch as read (ADR 0109 point
         6). The Pot must be a live `EXPENSES_POT` of the scope.
@@ -168,7 +168,7 @@ paths:
         "204":
           description: Every revision of the batch is stored, and the Pot's list moved once for them all.
         "400":
-          description: Malformed request — a body outside its contract, or a dropped receipt that is no receipt of its record in this Pot (`invalid_request`).
+          description: Malformed request — a body outside its contract (`invalid_request`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -201,7 +201,10 @@ paths:
             `pot_item_repeated` — two revisions of one record in the batch, or one receipt among the batch's
             `droppedReceipts` twice: a rule across the items no schema states (`uniqueItems` compares whole items, and the
             generators would turn the list into a set). `size_class_invalid` — a `sealedBody` whose length is none of the
-            four size classes (`PotRevisionWrite.sealedBody`). Nothing is stored on either. `capability_disabled` — Expenses is switched off
+            four size classes (`PotRevisionWrite.sealedBody`). `receipt_not_held` — a receipt among a revision's
+            `droppedReceipts` is no receipt of that revision's record in this Pot (`PotRevisionWrite.droppedReceipts`): a
+            rule on what is stored, so asked after the batch's own checks and its revisions' `409`s. Nothing is stored on
+            any of them. `capability_disabled` — Expenses is switched off
             for the instance or the tenant (uc.platform.switch-application-off): read-only, nothing is stored.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: pot_item_repeated } }
@@ -495,7 +498,7 @@ paths:
         "204":
           description: Every revision of the batch is stored and recorded as a guest write.
         "400":
-          description: Malformed request — a body outside its contract, or a dropped receipt that is no receipt of its record in this Pot (`invalid_request`).
+          description: Malformed request — a body outside its contract (`invalid_request`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
@@ -533,7 +536,10 @@ paths:
             `pot_item_repeated` — two revisions of one record in the batch, or one receipt among the batch's
             `droppedReceipts` twice: a rule across the items no schema states (`uniqueItems` compares whole items, and the
             generators would turn the list into a set). `size_class_invalid` — a `sealedBody` whose length is none of the
-            four size classes (`PotRevisionWrite.sealedBody`). Nothing is stored on either. `capability_disabled` — Expenses is switched off
+            four size classes (`PotRevisionWrite.sealedBody`). `receipt_not_held` — a receipt among a revision's
+            `droppedReceipts` is no receipt of that revision's record in this Pot (`PotRevisionWrite.droppedReceipts`): a
+            rule on what is stored, so asked after the batch's own checks and its revisions' `409`s. Nothing is stored on
+            any of them. `capability_disabled` — Expenses is switched off
             for the instance or the tenant (uc.platform.switch-application-off): read-only, nothing is stored.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: pot_item_repeated } }
@@ -768,7 +774,7 @@ components:
             The receipts of this record that this revision no longer holds and the one before it did (ADR 0108 decision 7):
             core's blob service releases each one for good, and its purge erases it once the trash retention has passed
             since (ADR 0112 decision 2). Each must
-            be a receipt of this record in this Pot, else the batch is `400 invalid_request` and nothing is stored, and
+            be a receipt of this record in this Pot, else the batch is `422 receipt_not_held` and nothing is stored, and
             named once in the batch, else `422 pot_item_repeated`; one
             dropped before stays dropped at its first time. A dropped receipt is never held again. A tombstone needs to name
             none: a deleted entry's receipts go after the retention on their own, and come back with a restore within it.

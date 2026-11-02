@@ -259,6 +259,12 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `revisions.revision` — rejected: `validate_write_concurrency` reads a batch's per-item revision declaration in the
      array's item schema and holds it to the rules a top-level one meets. Before, a declared field had to be top-level,
      so a batch whose every item is compare-and-set (cr-expenses-ledger's append) could not be declared at all
+  95 `takeModerationMeasure`'s `422` dropped, its request date-time two `$ref`s and a `oneOf` down
+     (`statement.deferral.oneOf[0].until`) — rejected: `validate_date_time_422` follows a request's schemas through
+     `$ref`, `oneOf` and nested properties, so the server's `422 date_time_out_of_range` cannot go undeclared where
+     the date-time sits deep. Before it only the API fuzzing noticed, and it found two such operations (4d3ad8a02)
+  96 `reissueShare`'s `422` kept but no longer naming `date_time_out_of_range` — rejected: the 422 must name the code
+     (read through its `$ref`), so a sibling refusal's 422 alone does not document it
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -327,6 +333,11 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      every column sealed under a node key today carries one of those prefixes or is named in the guard, and a guard
      that read types or seal purposes would need the client's seal map, which the backend does not have. Pinned so the
      name limit in its docstring is executable.
+  97 a date-time query parameter on `appendPotRevisions`, its `422` naming `date_time_out_of_range`, passes
+     `validate_date_time_422`, which reads the contract only: the server checks the range while Jackson binds a JSON
+     body, and its parameter converters (`StrictParamConverters`) check none, so that 422 would never come. **Left
+     open on purpose** — no request date-time is a parameter today; the first one is where the converters get the
+     range or the rule narrows. Pinned so the limit in that guard's docstring is executable rather than a sentence.
   84 a baseline entry recording a `500` under `status_code_conformance`, with a reason, passes
      `validate_api_fuzz_baseline`, which keeps `not_a_server_error` out of the baseline by its check name. **Left
      open on purpose** — the same response is red under `not_a_server_error` in the same run, and that entry is the
@@ -1507,6 +1518,30 @@ def forge_rekey_column_named_outside_the_prefixes(root: pathlib.Path) -> str:
     return "a ciphertext column named node_ciphertext that no re-key rewrites (must stay ACCEPTED — the gap is open)"
 
 
+DATE_TIME_422 = "validate_date_time_422.py"
+
+
+def forge_nested_date_time_422_dropped(root: pathlib.Path) -> str:
+    # The status renamed, the rest left whole: only the missing key can make the guard red.
+    _in_operation(root, "moderation.openapi.yaml", "takeModerationMeasure", '        "422":', '        "499":')
+    return "takeModerationMeasure's 422 gone, its $ref'd oneOf-nested request date-time left (must be REJECTED)"
+
+
+def forge_date_time_422_code_unnamed(root: pathlib.Path) -> str:
+    _in_operation(root, "sharing.openapi.yaml", "reissueShare", "date_time_out_of_range", "date_time_0ut_of_range", every=True)
+    return "reissueShare's 422 kept, no longer naming date_time_out_of_range (must be REJECTED)"
+
+
+def forge_date_time_query_parameter(root: pathlib.Path) -> str:
+    _in_operation(root, "expenses/expenses.openapi.yaml", "appendPotRevisions",
+                  '        - $ref: "#/components/parameters/NodeId"\n',
+                  '        - $ref: "#/components/parameters/NodeId"\n'
+                  '        - { name: notBefore, in: query, required: false, schema: { type: string, format: date-time } }\n')
+    _in_operation(root, "expenses/expenses.openapi.yaml", "appendPotRevisions", "`capability_disabled` — Expenses",
+                  "`date_time_out_of_range` — `notBefore` outside the range a stored time holds. `capability_disabled` — Expenses")
+    return "a date-time query parameter, its 422 named, no converter range check (must still PASS — the guard reads the contract only)"
+
+
 def forge_revision_field_named_version(root: pathlib.Path) -> str:
     # Both sides renamed together, so every other rule still holds: only the word is wrong.
     _in_operation(root, "account.openapi.yaml", "writeIdentityPins", "          - field: revision\n",
@@ -1671,6 +1706,9 @@ CASES = [
     ("91", WRITE_CONCURRENCY, forge_batch_epoch_undeclared, False),
     ("92", WRITE_CONCURRENCY, forge_epoch_refusal_unnamed, False),
     ("94", WRITE_CONCURRENCY, forge_batch_revision_not_required, False),
+    ("95", DATE_TIME_422, forge_nested_date_time_422_dropped, False),
+    ("96", DATE_TIME_422, forge_date_time_422_code_unnamed, False),
+    ("97", DATE_TIME_422, forge_date_time_query_parameter, True),
     ("93", "validate_node_rekey_arity.py", forge_rekey_column_named_outside_the_prefixes, True),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
     ("86", WEB_GUARD, forge_web_application_catalog_carries_another_namespace, False),

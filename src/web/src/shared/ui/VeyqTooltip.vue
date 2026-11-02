@@ -2,14 +2,15 @@
 // A short text shown below a control on hover and keyboard focus (ADR 0107), on Reka's Tooltip:
 // `<VeyqTooltip :text="…"><button …/></VeyqTooltip>`. It wraps exactly one element and renders no element of its own
 // around it, so it changes no layout. The text is a hint, never the control's only name: an icon-only control still
-// carries its `aria-label`. Styled in `layer.css` (`veyq-tooltip`).
+// carries its `aria-label`. Styled in `layer.css` (`veyq-tooltip`), which takes no pointer: a hint never covers a
+// neighbour's click, so it closes once the pointer leaves the trigger (`disable-hoverable-content`).
 import { TooltipArrow, TooltipContent, TooltipPortal, TooltipProvider, TooltipRoot, TooltipTrigger } from 'reka-ui'
 
 defineProps<{ text?: string }>()
 </script>
 
 <template>
-  <TooltipProvider :delay-duration="0" :skip-delay-duration="0">
+  <TooltipProvider :delay-duration="0" :skip-delay-duration="0" disable-hoverable-content>
     <TooltipRoot :disabled="!text">
       <TooltipTrigger as-child><slot /></TooltipTrigger>
       <TooltipPortal>
