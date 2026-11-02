@@ -30,9 +30,7 @@ describe('rekeyMemoryContent (ADR 0109, real crypto)', () => {
   it('re-seals every Memories field under the new key and leaves a contributor primary to the server', async () => {
     const oldKey = v1.randomBytes(32)
     const newKey = v1.randomBytes(32)
-    const kBlob = v1.randomBytes(32)
     const kBanner = v1.randomBytes(32)
-    const original = { blobId: crypto.randomUUID(), ownerId: MEDIUM, role: 'ORIGINAL' }
     const banner = { blobId: crypto.randomUUID(), ownerId: NODE, role: 'BANNER' }
     const sub = crypto.randomUUID()
     const contributor = crypto.randomUUID()
@@ -43,7 +41,6 @@ describe('rekeyMemoryContent (ADR 0109, real crypto)', () => {
           mediaId: MEDIUM, metaRevision: 3,
           wrappedMeta: b64std(v1.sealField(mediaMetaContext(SCOPE, MEDIUM), oldKey, v1.utf8('{"t":1}'))),
           wrappedExif: b64std(v1.sealField(exifContext, oldKey, v1.utf8('{"Make":"x"}'))),
-          blobs: [{ blobId: original.blobId, role: 'ORIGINAL', wrappedBlobKey: b64std(v1.seal(blobKeyContext(SCOPE, original), oldKey, kBlob)) }],
         }],
         buckets: [
           { bucketId: sub, sealedName: b64std(v1.sealField(bucketContext(sub), oldKey, v1.utf8('Tag 1'))) },
@@ -61,15 +58,15 @@ describe('rekeyMemoryContent (ADR 0109, real crypto)', () => {
       oldKey, newKey, meta, shareRootKeys: () => null,
     })
 
-    const staged = net.staged.flatMap((s) => (s.media ?? []) as { wrappedMeta: string; wrappedExif: string; metaRevision: number; blobs: { wrappedBlobKey: string }[] }[])
+    // A medium's blob wraps are core's blob service's (ADR 0113): Memories stages its meta and EXIF only.
+    const staged = net.staged.flatMap((s) => (s.media ?? []) as { wrappedMeta: string; wrappedExif: string; metaRevision: number }[])
     expect(staged).toHaveLength(1)
     const m = staged[0]
     expect(m.metaRevision).toBe(3)
     expect(new TextDecoder().decode(v1.openField(mediaMetaContext(SCOPE, MEDIUM), newKey, fromB64std(m.wrappedMeta)))).toBe('{"t":1}')
     expect(() => v1.openField(mediaMetaContext(SCOPE, MEDIUM), oldKey, fromB64std(m.wrappedMeta)), 'not under the old key').toThrow(v1.OpenRefused)
     expect(new TextDecoder().decode(v1.openField(exifContext, newKey, fromB64std(m.wrappedExif)))).toBe('{"Make":"x"}')
-    expect(unwrapBlobKey(SCOPE, newKey, { ...original, wrappedBlobKey: m.blobs[0].wrappedBlobKey })).toEqual(kBlob)
-    expect(() => unwrapBlobKey(SCOPE, oldKey, { ...original, wrappedBlobKey: m.blobs[0].wrappedBlobKey })).toThrow(v1.OpenRefused)
+    expect(Object.keys(m)).not.toContain('blobs')
 
     const buckets = net.staged.flatMap((s) => (s.buckets ?? []) as { bucketId: string; sealedName: string }[])
     expect(buckets.map((b) => b.bucketId), 'the contributor primary is the server\'s copy: not staged').toEqual([sub])

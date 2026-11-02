@@ -17,7 +17,8 @@
 //   - each child's entry under the new key: its own key re-wrapped, its name re-sealed, its slug token recomputed, bound
 //     to the child's epoch and next placement revision (a guest's identity folder excepted: its entry is under `K_up`);
 //   - its meta (core's cover wrap inside it, and the kind's own references through `rekeyContent`);
-//   - every `K_blob` wrap in its attachment slots (`K_blob` itself is kept: no byte is read from or written to the store);
+//   - every `K_blob` wrap in its attachment slots and of every blob its application stores through core's blob service
+//     (`K_blob` itself is kept: no byte is read from or written to the store);
 //   - each link rooted on it: the new key under the link's `K_share`, recovered from its recovery copy, which stays at its
 //     epoch so the link stays marked `reissueRequired` (ADR 0109 point 4);
 //   - its drop key, replaced: the new private half under the new key, the public half under each WRITE_ONLY link's
@@ -30,7 +31,7 @@
 // where the rows say (E1). A conflict (a writer won the node's lock, another member committed it) re-lists.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { rekeyApi } from '../../../api/client'
+import { applicationBlobsApi, rekeyApi } from '../../../api/client'
 import type { RekeyNode } from '../../../api/generated/content'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { activeEpochKeys, activeSpace, refreshActiveScope } from '../../../app/activeSpace'
@@ -286,6 +287,9 @@ export async function rekeyNode(run: Run, node: Row): Promise<void> {
 
     // attachment blobs: K_blob kept, its wrap moved
     const blobs = parts.blobs.map((b) => ({ blobId: b.blobId, wrappedBlobKey: rewrapBlobKey(scopeId, oldKey, newKey, { blobId: b.blobId, ownerId: node.id, role: b.role, wrappedBlobKey: b.wrappedBlobKey }) }))
+    // the blobs the node's application stores through core's blob service, page by page, each bound as the server says
+    // (ADR 0113 decision 3: the node for an item of its own, its owner for an owner's content — a wrong id does not open)
+    blobs.push(...await applicationBlobWraps(scopeId, node.id, oldKey, newKey))
 
     // the drop key, replaced (point 5)
     const drop = node.sealedDropPrivateKey ? replaceDropKey(scopeId, node.id, oldKey, newKey, node.sealedDropPrivateKey) : null
@@ -358,6 +362,27 @@ export async function rekeyNode(run: Run, node: Row): Promise<void> {
 
 const address = (scopeId: string, node: { id: string }, epoch: number, placementRevision: number) =>
   ({ scopeId, nodeId: node.id, epoch, placementRevision })
+
+/**
+ * Every `K_blob` wrap of the node's blobs in core's blob service (`listApplicationBlobRekey`, ADR 0113 decision 7),
+ * moved to the new key: read page by page at the stage's cap, each opened bound to the `ownerId` the server lists it
+ * with — fail closed: a wrap that does not open under that binding throws, so a lying server only stops the re-key. A
+ * `WRITE_ONLY` guest's, under its own `K_up`, is not listed (the re-key keeps it).
+ */
+async function applicationBlobWraps(
+  scopeId: string, nodeId: string, oldKey: Uint8Array, newKey: Uint8Array,
+): Promise<{ blobId: string; wrappedBlobKey: string }[]> {
+  const wraps: { blobId: string; wrappedBlobKey: string }[] = []
+  let after: string | undefined
+  for (;;) {
+    const page = await withRefresh(() => applicationBlobsApi().listApplicationBlobRekey({ scopeId, nodeId, after, limit: STAGE_BATCH }))
+    for (const b of page.blobs) {
+      wraps.push({ blobId: b.blobId, wrappedBlobKey: rewrapBlobKey(scopeId, oldKey, newKey, b) })
+    }
+    if (!page.more || !page.cursor) return wraps
+    after = page.cursor
+  }
+}
 
 /** A `K_blob` wrap moved from the old node key to the new one, bound as before (scope, owner, blob, role). */
 export function rewrapBlobKey(
