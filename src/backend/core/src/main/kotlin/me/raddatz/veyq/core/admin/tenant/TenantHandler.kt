@@ -146,9 +146,12 @@ sealed interface MemberInviteOutcome {
     data object IdTaken : MemberInviteOutcome, HttpFailure by Failures.idTaken
     /** The grant's `recipientIdentityDigest` is not the invite key's. */
     data object RecipientKeyNotCurrent : MemberInviteOutcome, HttpFailure by Failures.recipientKeyNotCurrent
-    /** `expiresAt` is not the server's invite lifetime from now, within a minute; or the owner's signature over the
-     *  invite key does not verify under the caller's identity key. */
-    data object BadExpiry : MemberInviteOutcome, HttpFailure by Failures.invalidRequest
+    /** `sealedLink` is not base64 — the shape's 400, which the contract's own bounds refuse first. */
+    data object Invalid : MemberInviteOutcome, HttpFailure by Failures.invalidRequest
+    /** `expiresAt` is not the server's invite lifetime from now, within a minute ([InviteFailures.expiryInvalid]). */
+    data object ExpiryInvalid : MemberInviteOutcome, HttpFailure by InviteFailures.expiryInvalid
+    /** The owner's signature over the invite key does not verify under the caller's identity key ([InviteFailures.signatureInvalid]). */
+    data object SignatureInvalid : MemberInviteOutcome, HttpFailure by InviteFailures.signatureInvalid
 
     /** The tenant cannot send mail, and a member invite has no other channel (ADR 0055 §2) — nothing is minted. */
     data object MailUnavailable : MemberInviteOutcome, HttpFailure by Failures.mailUnavailable
@@ -183,6 +186,22 @@ sealed interface MemberInvitesOutcome {
     data object NotOwner : MemberInvitesOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
 }
 
+/**
+ * What a member invite's material is refused for against what the server holds or computes (ADR 0111 decisions 1-2):
+ * rules no schema states, so each is a `422` of its own, never the shape's `400` (`tests/fuzz/schemathesis.toml`'s
+ * positive acceptance: a 400 is a request the contract itself refuses).
+ */
+object InviteFailures {
+    /** `expiresAt` is not the server's invite lifetime from now, within a minute: the owner signs the expiry, so the server
+     *  takes the client's, but only near its own. */
+    val expiryInvalid = httpFailure("invite_expiry_invalid", FailureStatus.UNPROCESSABLE)
+    /** `inviteKeySignature` does not verify under the caller's identity key over the invite's statement, whose expiry is
+     *  whole Unix seconds — so an `expiresAt` with a fraction of a second is one too. */
+    val signatureInvalid = httpFailure("invite_signature_invalid", FailureStatus.UNPROCESSABLE)
+    /** A reissue's `email` is not the reissued invite's: a reissue re-sends to the same person. */
+    val emailMismatch = httpFailure("invite_email_mismatch", FailureStatus.UNPROCESSABLE)
+}
+
 /** Result of re-issuing a pending member invite (cr-0082). */
 sealed interface ReissueOutcome {
     data class Done(val invite: InviteView, val delivery: DeliveryResult) : ReissueOutcome
@@ -192,8 +211,11 @@ sealed interface ReissueOutcome {
     data object NotFound : ReissueOutcome, HttpFailure by Failures.tenantNotFound        // no such tenant
     data object NotOwner : ReissueOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
     data object InviteNotFound : ReissueOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)  // no such pending invite for this tenant
-    /** The body's email is not the reissued invite's, or `expiresAt` is off the server's invite lifetime. */
+    /** `sealedLink` is not base64 — the shape's 400, which the contract's own bounds refuse first. */
     data object InvalidRequest : ReissueOutcome, HttpFailure by Failures.invalidRequest
+    data object EmailMismatch : ReissueOutcome, HttpFailure by InviteFailures.emailMismatch
+    data object ExpiryInvalid : ReissueOutcome, HttpFailure by InviteFailures.expiryInvalid
+    data object SignatureInvalid : ReissueOutcome, HttpFailure by InviteFailures.signatureInvalid
     data object StaleEpoch : ReissueOutcome, HttpFailure by Failures.staleEpoch
     data object IdTaken : ReissueOutcome, HttpFailure by Failures.idTaken
     data object RecipientKeyNotCurrent : ReissueOutcome, HttpFailure by Failures.recipientKeyNotCurrent
@@ -509,12 +531,12 @@ class TenantHandler(
         val normalizedEmail = normalizeEmail(input.email)
         val existing = accounts.findByEmail(normalizedEmail)
         if (existing != null && store.belongsToTenant(existing.id, tenantId)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.AlreadyMember)
-        if (!expiryIsTheLifetime(input.expiresAt)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.BadExpiry)
-        if (!signedByCaller(callerId, tenantId, input)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.BadExpiry)
+        if (!expiryIsTheLifetime(input.expiresAt)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.ExpiryInvalid)
+        if (!signedByCaller(callerId, tenantId, input)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.SignatureInvalid)
         if (!InviteAcceptProof.digestMatches(input.invitePublicKey, input.recipientIdentityDigest)) {
             return@commitThenSend MintResult.Rejected(MemberInviteOutcome.RecipientKeyNotCurrent)
         }
-        val fragmentTail = linkTail(input.sealedLink) ?: return@commitThenSend MintResult.Rejected(MemberInviteOutcome.BadExpiry)
+        val fragmentTail = linkTail(input.sealedLink) ?: return@commitThenSend MintResult.Rejected(MemberInviteOutcome.Invalid)
         // Mail is the only channel for a member invite (ADR 0055 §2), so ask *before* minting: an invitation that
         // cannot be delivered is a live secret with no recipient, and there is no copy-link to hand it to.
         if (!mailer.canSend(tenant.id)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.MailUnavailable)
@@ -614,9 +636,9 @@ class TenantHandler(
         // this lock, and the fresh invite's grant must be of the epoch that lock holds.
         store.lockTenantScope(tenantId)
         val invite = store.findPendingMemberInvite(tenantId, inviteId) ?: return@commitThenSend MintResult.Rejected(ReissueOutcome.InviteNotFound)
-        if (normalizeEmail(input.email) != invite.ownerEmail || !expiryIsTheLifetime(input.expiresAt) || !signedByCaller(callerId, tenantId, input)) {
-            return@commitThenSend MintResult.Rejected(ReissueOutcome.InvalidRequest)
-        }
+        if (normalizeEmail(input.email) != invite.ownerEmail) return@commitThenSend MintResult.Rejected(ReissueOutcome.EmailMismatch)
+        if (!expiryIsTheLifetime(input.expiresAt)) return@commitThenSend MintResult.Rejected(ReissueOutcome.ExpiryInvalid)
+        if (!signedByCaller(callerId, tenantId, input)) return@commitThenSend MintResult.Rejected(ReissueOutcome.SignatureInvalid)
         if (!InviteAcceptProof.digestMatches(input.invitePublicKey, input.recipientIdentityDigest)) {
             return@commitThenSend MintResult.Rejected(ReissueOutcome.RecipientKeyNotCurrent)
         }

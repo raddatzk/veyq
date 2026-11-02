@@ -33,7 +33,8 @@ This use-case is the tenant consumer of the grant-distribution primitive
    hand the operator the invite.
 2. The server checks the grant is of the **current** epoch under the tenant's lock (`409 stale_epoch`), that it
    names the invite key it stores beside it (`409 recipient_key_not_current`), and that the signed expiry is its
-   own lifetime within a minute (`400`); it stores the public key, the signature, the signer's key as it signed and
+   own lifetime within a minute (`422 invite_expiry_invalid`), as the owner's signature over the invite key is its
+   caller's (`422 invite_signature_invalid`); it stores the public key, the signature, the signer's key as it signed and
    the grant on the invite row — the grant a second time as the invite's **anchor** (ADR 0111 decision 19) — mints the **single-use** token (hashed), and **mails** `…/tenant/accept#<token>.<sealed>`
    to the address — keeping no copy of the sealed part. Mail is the **only** channel: the response carries no
    secret ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)). A tenant with no

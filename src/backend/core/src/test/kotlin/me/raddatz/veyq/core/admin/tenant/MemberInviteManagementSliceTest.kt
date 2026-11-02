@@ -107,13 +107,13 @@ class MemberInviteManagementSliceTest {
 
     @Test
     fun aReissueForAnotherAddressIsRefusedAndLeavesTheInviteAlone(): Unit = TestMailbox(REISSUE_EMAIL_SMTP_PORT).start().use { mail ->
-        // A reissue re-sends to the SAME person: a body naming another address is a 400, nothing minted.
+        // A reissue re-sends to the SAME person: a body naming another address is refused, nothing minted.
         val (tenantId, owner) = seedActiveTenant("reissue-email.example.com", "owner@reissue-email.example.com", mail)
         seedMemberInvite(tenantId, owner, "m@reissue-email.example.com", "reissue-email-seed-secret")
         val inviteId = firstPendingInviteId(tenantId)
 
         reissue(owner, tenantId, inviteId, "other@reissue-email.example.com", TestInviteKey())
-            .then().statusCode(400).body("code", equalTo("invalid_request"))
+            .then().statusCode(422).body("code", equalTo("invite_email_mismatch"))
         assertEquals(inviteId, firstPendingInviteId(tenantId), "the outstanding invite must survive a refusal")
         // Control: the same reissue for the invite's own address goes through.
         reissue(owner, tenantId, inviteId, "m@reissue-email.example.com", TestInviteKey()).then().statusCode(200)
