@@ -578,7 +578,7 @@ test(
     const more = page.getByRole('button', { name: `More actions for “${trayFiles[0].name}”`, exact: true })
     await more.focus()
     await page.keyboard.press('Enter')
-    await expect(page.getByRole('menuitem', { name: `Rename ${trayFiles[0].name}`, exact: true })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Rename', exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(page.getByRole('menu')).toHaveCount(0)
     await expect(more).toBeFocused()
