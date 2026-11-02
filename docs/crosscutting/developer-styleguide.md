@@ -179,7 +179,7 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   not convert (`StrictParamConverters`: canonical UUIDs, `true`/`false`, plain integers, enum names). One refusal while
   binding is no shape's: a well-formed date-time no time column holds (before 1582-10-15, past 9999-12-31, an offset
   past ±18:00) is `422 date_time_out_of_range` (`StrictJsonTypes`, inbox #509), a bound no date-time schema states,
-  declared by every operation that takes one. A path segment
+  declared, naming that code, by every operation that takes one (`scripts/validate_date_time_422.py`). A path segment
   that does not convert stays the `404` of an id that names nothing, with `ErrorResponse{code: not_found}`
   (`EmptyNotFoundFilter`). A method a path does not declare answers `405 ErrorResponse{code: method_not_allowed}` with
   an `Allow` naming exactly the path's declared methods, `OPTIONS` and `TRACE` included — the API is same-origin and
