@@ -1374,7 +1374,14 @@
 }
 
 /* ── Tooltip ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+/* A hint is never a target: a tooltip over a neighbouring control (the level head's one row puts "Share"'s below "New")
+   must not take that control's click, so neither the tooltip nor Reka's popper wrapper around it takes a pointer. */
+[data-reka-popper-content-wrapper]:has(> .veyq-tooltip) {
+  pointer-events: none;
+}
+
 .veyq-tooltip {
+  pointer-events: none;
   z-index: 1300;
   max-width: 12.5rem;
   padding: 0.5rem 0.75rem;
