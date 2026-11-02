@@ -15,10 +15,14 @@ info:
     **core's blob service** ([ADR 0112](../../docs/decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md),
     tags `application-blobs`, `share-application-blobs`, `case-application-blobs`): any number per node, each in a role
     its application declares and held by an **owner** — the application's record, an id the server stores and compares
-    and never resolves (Expenses: an entry's receipts). The service carries every platform duty over them — the
-    completion, a guest's, the link's usage, the share's blob predicate, a report and a block, a hold, the re-key of
-    their wraps (core's `getNodeRekeyParts` lists them), the erasure and the retention purge; the application only tells
-    it, in its own write, which blobs an owner keeps and which it released.
+    and never resolves (Expenses: an entry's receipts; Memories: a medium's original and derivatives). The service
+    carries every platform duty over them — the completion, a guest's, the link's usage, the share's blob predicate, a
+    report and a block, a hold, the re-key of their wraps (`listApplicationBlobRekey`), the erasure and the retention
+    purge; the application only tells it, in its own write, which blobs an owner keeps and which it released. A role is
+    either **an item of its own** (Expenses' receipt: completed, listed and reported here, its wrap bound to its node) or
+    **its owner's content** (a medium's tiers, [ADR 0113](../../docs/decisions/0113-memories-media-are-blobs-of-cores-blob-service.md): completed and served by its application's own
+    record operations, its wrap bound to its owner, reported and held with its owner, out of a guest's reach once
+    released). The operations of these three tags serve the first form only.
 
     **Operator-blind:** the server + object store hold only ciphertext chunks + opaque metadata (`chunkCount`,
     `byteSize`, the per-chunk size `manifest`) and the `K_blob` wrap; never a plaintext byte, a content key, or a
@@ -32,9 +36,9 @@ tags:
       three paths differ at the segment after it), distinct from the applications' resources under the same root.
   - name: application-blobs
     description: >
-      A member's application blobs of a node (ADR 0112): read them, complete one. One tag = one resource interface rooted
-      at `/api/scopes/{scopeId}/nodes/{nodeId}/application-blobs` — longer than `blob`'s and `content`'s roots, so these
-      routes reach it and every other route stays theirs.
+      A member's application blobs of a node (ADR 0112): read them, complete one, and read their wraps for a re-key. One
+      tag = one resource interface rooted at `/api/scopes/{scopeId}/nodes/{nodeId}/application-blobs` — longer than
+      `blob`'s and `content`'s roots, so these routes reach it and every other route stays theirs.
   - name: share-application-blobs
     description: >
       A guest's application blobs of a node on a public share link — read them, complete one (unauthenticated). One tag =
@@ -215,6 +219,7 @@ paths:
       summary: A node's application blobs — every blob its application stores through core's service, with its blob reference (ADR 0112).
       description: >
         Every blob the node's application stores through core's blob service ([ADR 0112](../../docs/decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md))
+        in a role that is an item of its own (an owner's content is served by its application's record reads, ADR 0113)
         — kept, released or never kept yet, until the purge erases it — with what the client needs to open it: the blob
         reference (`presignBlobDownloads` by `blobId`), its `K_blob` wrap under the node's key and its sealed `blob-meta`.
         Each carries its `ownerId` (the application's record that holds it, an id opaque to the server), its `role`, who
@@ -277,8 +282,9 @@ paths:
         in this node (`409 id_taken`: Expenses' entry of another Pot, or an id that names a record); an owner holds at
         most the application's count per owner of unreleased blobs (`409 too_many_blobs`; Expenses: 100). The owner may
         not have written anything yet — a blob completed before its record is erased after the trash retention unless
-        the record keeps it. The node must be live, of a kind whose application stores blobs through the service; every
-        write states `nodeEpoch` (ADR 0109 point 6).
+        the record keeps it. The node must be live, of a kind whose application stores an item of its own through the
+        service (a kind whose blobs are all its owners' content completes them in its own record operation, ADR 0113:
+        `node_not_found` here); every write states `nodeEpoch` (ADR 0109 point 6).
       security:
         - bearerAuth: []
       parameters:
@@ -342,14 +348,62 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: blocked_by_operator } }
 
+  /api/scopes/{scopeId}/nodes/{nodeId}/application-blobs/rekey:
+    get:
+      tags: [application-blobs]
+      operationId: listApplicationBlobRekey
+      summary: One page of the `K_blob` wraps a node's re-key re-wraps among its application blobs (ADR 0109 point 2, ADR 0113).
+      description: >
+        Every blob of the node its application stores through core's blob service — in either form, kept, released or
+        never kept, live or trashed node alike — whose `K_blob` is wrapped under the node's key, each with its role and
+        the `ownerId` its wrap is bound to (`blob-key`: the node for an item of its own, the owner for an owner's
+        content, ADR 0113 decision 3). A re-keyer opens each wrap with the old key under that binding, re-wraps it under
+        the new one and stages it through core's `stageNodeRekey`; `commitNodeRekey` refuses a commit that misses one of
+        them (`rekey_parts_missing`). A row a `WRITE_ONLY` guest wrote under its own `K_up` is not listed: the re-key
+        leaves it as it is (ADR 0109 point 5). Ordered by blob id; **pages** of at most `limit`, `more: true` while rows
+        remain — ask again with the page's `cursor` as `after`. The caller's rights are `getNodeRekeyParts`'s. Nothing
+        here is new to the server.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/ApplicationBlobsAfter"
+        - $ref: "_common.openapi.yaml#/components/parameters/ItemsLimit"
+      responses:
+        "200":
+          description: One page of the node's application-blob wraps.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApplicationBlobRekeyPage" }
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: >
+            The caller may not re-key the node — its grant lags (`grant_behind`), or the node is one only an owner
+            re-keys (core's `RekeyNode.ownerOnly`) and the caller is no owner (`not_scope_owner`) — or the tenant is
+            suspended.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope or node in it, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+
   /api/shares/{shareId}/nodes/{nodeId}/application-blobs:
     get:
       tags: [share-application-blobs]
       operationId: listShareApplicationBlobs
       summary: A node's application blobs under a share (unauthenticated) — sealed, and without who completed them.
       description: >
-        **No auth.** A guest's `listApplicationBlobs`: every application blob of one live node of the live shared subtree,
-        with its blob reference, its `K_blob` wrap and its sealed `blob-meta`, its owner and role, its kept and released
+        **No auth.** A guest's `listApplicationBlobs`: every application blob of one live node of the live shared subtree
+        in a role that is an item of its own, with its blob reference, its `K_blob` wrap and its sealed `blob-meta`, its owner and role, its kept and released
         times, when the purge erases it and whether a moderator blocked its bytes — and **no writer** (inbox #190): the
         guest's schema has no such field. Its bytes are core's `resolveShareBlob` by `blobId` (a blocked one answers
         `451 blocked_by_operator`). Core's guest gate runs first (`ShareGuestGate`): an active share → the password → the
@@ -484,7 +538,8 @@ paths:
       summary: A moderator's review of a case's application blobs — the held blobs in the guest's shape, with their node.
       description: >
         An application's moderation view reads this beside its own case read (uc.moderation.review-a-case): every
-        application blob the case's hold copied — every blob of a reported owner (Expenses: an entry's receipts), a
+        application blob in a role that is an item of its own the case's hold copied (an owner's content is read in its
+        application's case read, ADR 0113) — every blob of a reported owner (Expenses: an entry's receipts), a
         reported blob on its own, or every blob of every node under a reported node — with its held blob row, from the
         snapshot only, so it answers after the blobs, their node or the space were deleted. The moderator opens each with
         the `K_blob` the report share hands over, or with the node's key a node's report hands over; its bytes are core's
@@ -937,7 +992,7 @@ components:
           items: { type: integer, format: int64, example: 65536 }
         wrappedBlobKey:
           type: string
-          description: The blob's `K_blob` wrapped under the node's key (opaque base64) — re-wrapped by a re-key (core's `getNodeRekeyParts`).
+          description: The blob's `K_blob` wrapped under the node's key (opaque base64) — re-wrapped by a re-key (`listApplicationBlobRekey`).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
@@ -1015,6 +1070,48 @@ components:
           maxLength: 36
           description: The id of this page's last blob; null when the page carries none.
           example: 8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+
+    ApplicationBlobRekey:
+      type: object
+      description: One application blob's `K_blob` wrap as a re-key reads it.
+      required: [blobId, role, ownerId, wrappedBlobKey]
+      properties:
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        role: { $ref: "#/components/schemas/BlobRole" }
+        ownerId:
+          type: string
+          format: uuid
+          x-veyq-visibility: id
+          description: >
+            The id the wrap is bound to (`blob-key`'s `ownerId`): the node for a role that is an item of its own, the
+            owner (Memories: the medium) for an owner's content (ADR 0113 decision 3).
+          example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
+        wrappedBlobKey:
+          type: string
+          description: The blob's `K_blob` wrapped under the node's key (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+    ApplicationBlobRekeyPage:
+      type: object
+      description: One page of a node's application-blob wraps for its re-key, ordered by blob id.
+      required: [blobs, more]
+      properties:
+        blobs:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ApplicationBlobRekey" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Rows remain past this page — ask again with this page's `cursor` as `after`.
+          example: false
+        cursor:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          maxLength: 36
+          description: The blob id of this page's last row; null when the page carries none.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
 
     ShareApplicationBlob:
       type: object

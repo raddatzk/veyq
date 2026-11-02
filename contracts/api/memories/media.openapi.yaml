@@ -50,14 +50,17 @@ paths:
         (THUMBNAIL, PREVIEW — generated client-side, [en.memory.derivatives](../../../docs/features/memory/enablers/en.memory.derivatives.md)).
         The server verifies **every** upload session of the item, **stats the stored chunk objects** per blob
         (declare-then-verify: every chunk must be present at exactly the length its declared `byteSize` derives,
-        else the objects are purged and the item fails `budget_exceeded`), records one `blob` per upload (each
-        with its own per-chunk size `manifest` and `K_blob` wrap), and one `media` row under the client-minted
-        `mediaId` ([ADR 0072](../../../docs/decisions/0072-a-seal-binds-its-object.md)) linking the original blob to `nodeId` with a derivative row per derivative. Each
-        upload must have been started for this media in the role it is used in — the original as `ORIGINAL`, each
-        derivative as its `kind`, all with `ownerId = mediaId` — else the item fails `upload_mismatch`, since its
-        `K_blob` wrap would not open where it is attached. A `mediaId` already taken, in any scope, fails the item
-        `id_taken` (never overwritten, not idempotent). Returns `{ blobId (the original), mediaId }` — or a per-item
-        error. The target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER).
+        else the objects are purged and the item fails `budget_exceeded`), and records, in one transaction, one
+        `media` row under the client-minted `mediaId` ([ADR 0072](../../../docs/decisions/0072-a-seal-binds-its-object.md))
+        on `nodeId` and one blob of core's blob service per upload, held by the medium in its role, each with its own
+        per-chunk size `manifest` and `K_blob` wrap ([ADR 0113](../../../docs/decisions/0113-memories-media-are-blobs-of-cores-blob-service.md):
+        the service stores, erases and re-keys them; the medium is Memories' record). Each upload must have been
+        started for this media in the role it is used in — the original as `ORIGINAL`, each derivative as its `kind`,
+        all with `ownerId = mediaId` — else the item fails `upload_mismatch`, since its `K_blob` wrap would not open
+        where it is attached; a medium holds one blob per role, so an item naming one derivative kind twice fails
+        `upload_mismatch` too. A `mediaId` already taken, in any scope, fails the item `id_taken` (never overwritten,
+        not idempotent). Returns `{ blobId (the original), mediaId }` — or a per-item error. The target node must be a
+        **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER).
       security:
         - bearerAuth: []
       parameters:
@@ -184,9 +187,10 @@ paths:
       operationId: listMediaRekey
       summary: The Memories fields a node's re-key re-seals — its media, live and trashed, and its bucket names (ADR 0109 point 2).
       description: >
-        Every medium of the node — live, trashed, and on a trashed node — with what is sealed under the node's key:
-        its `wrappedMeta`, its `wrappedExif` and the `K_blob` wrap of its original and of each derivative; and every
-        bucket name sealed under the node's key. Rows a `WRITE_ONLY` guest sealed under its own `K_up` are not listed
+        Every medium of the node — live, trashed, and on a trashed node — with what Memories seals under the node's
+        key: its `wrappedMeta` and its `wrappedExif`; and every bucket name sealed under the node's key. The `K_blob`
+        wraps of its original and derivatives are blobs of core's blob service, re-wrapped through core's part
+        (`listApplicationBlobRekey`, ADR 0113). Rows a `WRITE_ONLY` guest sealed under its own `K_up` are not listed
         (its identity has a wrapped key, `uploaderKeys`): the re-key leaves them as they are (ADR 0109 point 5). Paged
         by `since` / `limit` / `more` as `listNodeMedia`; the buckets ride on every page. Only a caller who may commit
         the node's re-key (core's `listRekeyNodes`) reads it, else `403`. Nothing here is new to the server.
@@ -226,8 +230,8 @@ paths:
       summary: Stage one batch of a node's re-sealed Memories fields under a core re-key id (ADR 0109 point 2).
       description: >
         Up to 256 media and 256 buckets per call, each value re-sealed under the node's NEW key: a medium's
-        `wrappedMeta` and `wrappedExif` (bound as before, its `metaRevision` + 1 for the meta), and every `K_blob` of it
-        re-wrapped (`K_blob` itself unchanged — no store object is read or written, ADR 0109 point 3); a bucket's name.
+        `wrappedMeta` and `wrappedExif` (bound as before, its `metaRevision` + 1 for the meta); a bucket's name. A
+        medium's `K_blob` wraps are staged through core's `stageNodeRekey` (ADR 0113).
         Nothing staged is served before core's `commitNodeRekey` under the same `rekeyId`, whose transaction swaps it in
         through Memories' participant. A value staged twice is replaced; an unclaimed stage expires after a day.
         `fromEpoch` is the node's epoch as read; a node re-keyed since is `409 stale_epoch`.
@@ -644,7 +648,8 @@ paths:
         Clear the media's `deleted_at`/`deleted_by` and bump the node's `media_revision` (moving the media to the end
         of the list's keyset and advancing its `updatedAt`) so the tile returns to every open gallery in its date position — a pure flag flip, its blobs
         were never removed. **Any member** of the scope may restore. Idempotent on a live media (`204`). A media
-        already **purged** by the retention job is gone (`404`).
+        already **purged**, or trashed longer than the trash retention (`veyq.node.trash.retention`, the window its
+        blobs are kept for, ADR 0113) and so due for the purge, is gone (`404`).
       security:
         - bearerAuth: []
       parameters:
@@ -1388,7 +1393,7 @@ components:
 
     RekeyMedium:
       type: object
-      required: [mediaId, metaRevision, blobs]
+      required: [mediaId, metaRevision]
       properties:
         mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
         metaRevision:
@@ -1407,23 +1412,6 @@ components:
           contentEncoding: base64
           maxLength: 16384
           example: null
-        blobs:
-          type: array
-          description: The original and each derivative — every `K_blob` of the medium wrapped under the node's key.
-          items: { $ref: "#/components/schemas/RekeyMediumBlob" }
-
-    RekeyMediumBlob:
-      type: object
-      required: [blobId, role, wrappedBlobKey]
-      properties:
-        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
-        role:
-          $ref: "../_common.openapi.yaml#/components/schemas/BlobRole"
-        wrappedBlobKey:
-          type: string
-          contentEncoding: base64
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
 
     RekeyBucketName:
       type: object
@@ -1477,7 +1465,7 @@ components:
 
     RekeyMediumSeal:
       type: object
-      required: [mediaId, metaRevision, blobs]
+      required: [mediaId, metaRevision]
       properties:
         mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
         metaRevision:
@@ -1500,24 +1488,6 @@ components:
           maxLength: 16384
           example: null
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16384) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        blobs:
-          type: array
-          maxItems: 8
-          items: { $ref: "#/components/schemas/RekeyMediumBlobWrap" }
-          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 8)'
-
-    RekeyMediumBlobWrap:
-      type: object
-      required: [blobId, wrappedBlobKey]
-      properties:
-        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
-        wrappedBlobKey:
-          type: string
-          contentEncoding: base64
-          minLength: 1
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RekeyBucketSeal:
       type: object
