@@ -446,7 +446,7 @@ class RekeyCoreSliceTest {
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 id = shareId; ownerAccount = owner; this.scopeId = scopeId; nodeId = root; role = "READ_WRITE"
-                wrap = "b2xkLXNoYXJlLXdyYXA="; sealedShareKey = "cmVjb3Zlcnk="; wrappedRecoveryValueKey = "d3JhcHBlZC12YWx1ZS1rZXk="; sealedShareKeyEpoch = 0; mintedEpoch = 0; createdAt = Instant.now()
+                wrap = "b2xkLXNoYXJlLXdyYXA="; sealedShareKey = "cmVjb3Zlcnk="; wrappedRecoveryValueKey = "d3JhcHBlZC12YWx1ZS1rZXk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
                 sealedName = "bGluaw==" // a listed share is never a tombstone
             }.persist()
             ShareIdentityEntity().apply {

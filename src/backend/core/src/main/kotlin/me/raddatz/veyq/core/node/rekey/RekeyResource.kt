@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.generated.model.ScopeRekeyGroupName
 import me.raddatz.veyq.core.generated.model.ScopeRekeyIcon
 import me.raddatz.veyq.core.generated.model.ScopeRekeyMember
 import me.raddatz.veyq.core.generated.model.ScopeRekeyParts
+import me.raddatz.veyq.core.generated.model.ScopeRekeyRewrap
 import me.raddatz.veyq.core.generated.model.ScopeRekeyRootNode
 import me.raddatz.veyq.core.generated.model.ScopeRekeyShare
 import me.raddatz.veyq.core.generated.model.ScopeRekeyStage as ScopeRekeyStageRequest
@@ -136,51 +137,37 @@ class RekeyResource(
 
     override fun stageScopeRekey(scopeId: UUID, rekeyId: UUID, scopeRekeyStage: ScopeRekeyStageRequest): Response {
         val r = scopeRekeyStage
-        val sid = scopeId.toString()
-        // A member's wrap and its digest come together (the contract's rule); one without the other is malformed.
-        if (r.members.orEmpty().any {
-                (it.wrappedNameValueKey == null) != (it.replacedNameDigest == null) ||
-                    (it.wrappedAvatarValueKey == null) != (it.replacedAvatarDigest == null) ||
-                    (it.wrappedJoinRecordValueKey == null) != (it.replacedJoinRecordDigest == null)
-            }
-        ) {
-            return refused(RekeyOutcome.InvalidRequest)
-        }
-        // Each wrap beside the digest of the wrap it replaces (ADR 0115 decision 2); a root's name and slug are held by
-        // its placement revision instead. No field here maps to a value's ciphertext: a rotation writes only wraps.
-        val fields = buildList {
-            r.groupName?.let {
-                add(ScopeRekeyField(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME_WRAP, it.wrappedNameValueKey, replacedDigest = it.replacedDigest))
-            }
-            r.icon?.let { add(ScopeRekeyField(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON_WRAP, it.wrappedIconValueKey, replacedDigest = it.replacedDigest)) }
+        // Each wrap beside the wrap it replaces (ADR 0115 decision 2), which the commit compares with its row; a root
+        // entry is held by its placement revision instead. No field here maps to a value's ciphertext: a rotation writes
+        // only wraps.
+        val values = buildMap {
+            fun wrap(itemId: String, field: String, wrapped: String, replaced: String) =
+                put(ScopeRekeyStage.Key(itemId, field), ScopeRekeyStage.Value(wrapped, replaced = replaced))
+            fun wrap(itemId: String, field: String, w: ScopeRekeyRewrap?) = w?.let { wrap(itemId, field, it.wrappedValueKey, it.replacedValueKey) }
+            wrap(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME_WRAP, r.groupName)
+            wrap(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON_WRAP, r.icon)
             r.rootNodes.orEmpty().forEach { n ->
                 val id = n.nodeId.toString()
                 val revision = n.placementRevision.validated()
-                add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_WRAP, n.wrappedContentKey, revision, n.replacedDigest))
-                add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_NAME, n.encryptedName, revision))
-                n.slugToken?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_SLUG, it, revision)) }
+                fun entry(field: String, value: String) = put(ScopeRekeyStage.Key(id, field), ScopeRekeyStage.Value(value, revision = revision))
+                entry(ScopeRekeyCommit.ROOT_WRAP, n.wrappedContentKey)
+                entry(ScopeRekeyCommit.ROOT_NAME, n.encryptedName)
+                n.slugToken?.let { entry(ScopeRekeyCommit.ROOT_SLUG, it) }
             }
-            r.shares.orEmpty().forEach {
-                add(ScopeRekeyField(it.shareId, ScopeRekeyCommit.SHARE_WRAP, it.wrappedRecoveryValueKey, replacedDigest = it.replacedDigest))
-            }
+            r.shares.orEmpty().forEach { wrap(it.shareId, ScopeRekeyCommit.SHARE_WRAP, it.wrappedValueKey, it.replacedValueKey) }
             r.members.orEmpty().forEach { m ->
                 val id = m.userId.toString()
-                m.wrappedNameValueKey?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_NAME_WRAP, it, replacedDigest = m.replacedNameDigest)) }
-                m.wrappedAvatarValueKey?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_AVATAR_WRAP, it, replacedDigest = m.replacedAvatarDigest)) }
-                m.wrappedJoinRecordValueKey?.let {
-                    add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_JOIN_WRAP, it, replacedDigest = m.replacedJoinRecordDigest))
-                }
+                wrap(id, ScopeRekeyCommit.MEMBER_NAME_WRAP, m.name)
+                wrap(id, ScopeRekeyCommit.MEMBER_AVATAR_WRAP, m.avatar)
+                wrap(id, ScopeRekeyCommit.MEMBER_JOIN_WRAP, m.joinRecord)
             }
             r.verifications.orEmpty().forEach { v ->
-                add(
-                    ScopeRekeyField(
-                        "${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION_WRAP, v.wrappedValueKey,
-                        replacedDigest = v.replacedDigest,
-                    ),
-                )
+                wrap("${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION_WRAP, v.wrappedValueKey, v.replacedValueKey)
             }
         }
-        return when (val o = scopeRekey.stage(identity.principal.name, sid, rekeyId.toString(), r.fromEpoch.validated(), fields)) {
+        return when (val o = scopeRekey.stage(
+            identity.principal.name, scopeId.toString(), rekeyId.toString(), r.fromEpoch.validated(), ScopeRekeyStage.CORE, values,
+        )) {
             RekeyOutcome.Staged -> Response.noContent().build()
             else -> refused(o)
         }

@@ -1,7 +1,6 @@
 package me.raddatz.veyq.core.node.rekey
 
 import me.raddatz.veyq.core.admin.tenant.VerificationEntity
-import me.raddatz.veyq.core.admin.tenant.VerificationKey
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.node.NodeEntity
@@ -32,20 +31,15 @@ data class ScopeRekeyPage(
     val cursor: String?,
 )
 
-/** One core value a rotator stages ([ScopeRekeyCommit.stage]): the row it is for, the column, the new wrap (or a root
- *  entry's re-sealed part), a scope-root node's placement revision as read, and the digest of the wrap the rotator opened
- *  ([ScopeRekeyStage.digest]; null for a root's name and slug, held by [revision] instead). */
-data class ScopeRekeyField(
-    val itemId: String, val field: String, val value: String, val revision: Long? = null, val replacedDigest: String? = null,
-)
-
 /**
  * A rotation's scope-level move (ADR 0115 decisions 1–2, owner 2026-11-02): **a rotation re-wraps keys and never
  * rewrites a value.** Every scope-level value that has an author is sealed under a value key `K_v` of its own and only
  * `K_v` is under the scope key, so the commit swaps in each value key's re-wrapped wrap; the one thing under the scope
  * key it re-seals is each scope-root node's entry — any member may write that anyway (ADR 0111 decision 11), and its
- * slug token is a keyed MAC that must move with the key. This class is the listing in pages, the stage, and the swap
- * that `ScopesStore.rotate` runs in the rotation's own transaction. The rows, in the fixed order the listing serves them:
+ * slug token is a keyed MAC that must move with the key. This class is the listing in pages and the swap that
+ * `ScopesStore.rotate` runs in the rotation's own transaction; between them the rotator stages into [ScopeRekeyStage],
+ * under core's part ([ScopeRekeyStage.CORE], each field one of [STAGED_FIELDS]). The rows, in the fixed order the
+ * listing serves them:
  *
  * | Kind | Row | Column(s) the commit writes | Staged by |
  * |---|---|---|---|
@@ -177,46 +171,6 @@ class ScopeRekeyCommit(
         return companion.find(clause, Sort.by(idColumn), params).range(0, n - 1).list()
     }
 
-    // --- the stage -----------------------------------------------------------------------------------------------
-
-    /**
-     * Stage core's [fields] for [scope] under [rekeyId], each beside the digest of what its row holds now — or nothing,
-     * answering false, when a field's [ScopeRekeyField.replacedDigest] is not that digest (ADR 0115 decision 2): the row
-     * was written between the rotator's read and this stage — a write mints a fresh value key and so a fresh wrap — and
-     * a re-wrap of the key read before it would replace that write. The commit compares the same digest again
-     * ([ScopeRekeyStage.current]).
-     */
-    fun stage(rekeyId: String, scope: ScopeEntity, fields: List<ScopeRekeyField>): Boolean {
-        val values = fields.associate { f ->
-            val now = ScopeRekeyStage.digest(stored(scope, f.itemId, f.field))
-            if (f.replacedDigest != null && f.replacedDigest != now) return false
-            Key(f.itemId, f.field) to Value(f.value, now, f.revision)
-        }
-        stage.put(rekeyId, scope.id, ScopeRekeyStage.CORE, values)
-        return true
-    }
-
-    /** What the row [itemId] of [scope] holds in [field] now, or null (no such row, or nothing in that column). */
-    private fun stored(scope: ScopeEntity, itemId: String, field: String): String? = when (field) {
-        ROOT_NAME, ROOT_SLUG, ROOT_WRAP -> NodeEntity.findById(itemId)?.takeIf { it.scopeId == scope.id && it.parentId == scope.id }?.let {
-            when (field) { ROOT_NAME -> it.encryptedName; ROOT_SLUG -> it.slugToken; else -> it.wrappedContentKey }
-        }
-        GROUP_NAME_WRAP -> scope.wrappedNameValueKey.takeIf { itemId == GROUP_ITEM }
-        ICON_WRAP -> scope.wrappedIconValueKey.takeIf { itemId == ICON_ITEM }
-        SHARE_WRAP -> ShareEntity.findById(itemId)?.takeIf { it.scopeId == scope.id }?.wrappedRecoveryValueKey
-        MEMBER_NAME_WRAP, MEMBER_AVATAR_WRAP, MEMBER_JOIN_WRAP ->
-            TenantProfileEntity.find("tenantId = ?1 and userId = ?2", scope.id, itemId).firstResult()?.let {
-                when (field) {
-                    MEMBER_NAME_WRAP -> it.wrappedNameValueKey
-                    MEMBER_AVATAR_WRAP -> it.wrappedAvatarValueKey
-                    else -> it.wrappedJoinRecordValueKey
-                }
-            }
-        VERIFICATION_WRAP -> itemId.split('|').takeIf { it.size == 2 }
-            ?.let { (v, s) -> VerificationEntity.findById(VerificationKey(scope.id, v, s))?.wrappedValueKey }
-        else -> null
-    }
-
     // --- the commit ----------------------------------------------------------------------------------------------
 
     /**
@@ -231,8 +185,8 @@ class ScopeRekeyCommit(
      * [Verdict.WRITES_VALUE], decided before anything else: a rotation never rewrites a value.
      *
      * **Fail closed** (decision 2): a row holding a wrap (or a root entry) with no staged replacement is
-     * [Verdict.MISSING]; a row whose wrap changed since its replacement was staged ([ScopeRekeyStage.current]), a
-     * scope-root node moved since its stated placement revision, or a wrap staged for a column the row does not hold is
+     * [Verdict.MISSING]; a row whose wrap is no longer the one its replacement names ([ScopeRekeyStage.Value.replaced]),
+     * a scope-root node moved since its stated placement revision, or a wrap staged for a column the row does not hold is
      * [Verdict.STALE]. Core decides its own rows first, then each participant decides and writes its own, then core writes.
      *
      * **Lock order:** the scope row (the caller's), the shares it rewrites (the rotation's own rows since the removal),
@@ -288,15 +242,15 @@ class ScopeRekeyCommit(
 
         private fun refuse(v: Verdict) { if (verdict == null) verdict = v }
 
-        /** The staged value for [field] of [itemId], given what the row holds there now ([stored]): null when the row
-         *  holds none and none is staged; a refusal when only one of the two is there or the value is stale. */
+        /** The staged wrap for [field] of [itemId], given the wrap the row holds there now ([stored]): null when the row
+         *  holds none and none is staged; a refusal when only one of the two is there or the staged one replaces another. */
         private fun take(itemId: String, field: String, stored: String?): String? {
             val v = staged[Key(itemId, field)]
             return when {
                 stored == null && v == null -> null
                 stored == null -> null.also { refuse(Verdict.STALE) }
                 v == null -> null.also { refuse(Verdict.MISSING) }
-                !ScopeRekeyStage.current(v, stored) -> null.also { refuse(Verdict.STALE) }
+                v.replaced != stored -> null.also { refuse(Verdict.STALE) }
                 else -> v.value
             }
         }
@@ -313,7 +267,7 @@ class ScopeRekeyCommit(
 
         fun shares(rows: List<ShareEntity>) = rows.forEach { s ->
             val wrap = take(s.id, SHARE_WRAP, s.wrappedRecoveryValueKey) ?: return@forEach
-            // The copy and the epochs beside it stay: the one it was written at, the one the link was minted at.
+            // The copy and the epoch beside it stay — the one it was written at, the link's mint (ADR 0075 point 4).
             writes += { s.wrappedRecoveryValueKey = wrap }
         }
 
@@ -340,13 +294,17 @@ class ScopeRekeyCommit(
             // A trashed root holds its freed slug (its own id, `NodesStore.deleteSubtree`): no name in it, and the
             // restore supplies a fresh token — kept, as the node's own commit keeps it.
             val freed = n.slugToken == n.id
-            val wrap = take(n.id, ROOT_WRAP, n.wrappedContentKey)
-            val name = take(n.id, ROOT_NAME, n.encryptedName)
-            val slug = if (freed) null else take(n.id, ROOT_SLUG, n.slugToken)
-            if (listOf(ROOT_WRAP, ROOT_NAME).any { staged[Key(n.id, it)]?.revision != n.placementRevision }) refuse(Verdict.STALE)
-            if (wrap == null || name == null || (!freed && slug == null)) return@forEach
-            // The one entry a rotation re-seals (any member may write it, ADR 0111 decision 11), in its own file.
-            writes += { ScopeRootEntries.reseal(n, wrap, name, slug) }
+            val wrap = staged[Key(n.id, ROOT_WRAP)]
+            val name = staged[Key(n.id, ROOT_NAME)]
+            val slug = if (freed) null else staged[Key(n.id, ROOT_SLUG)]
+            // Held by the placement revision, not by what it replaces: every write of an entry — a rename, a move, a
+            // re-key — moves it, and the re-seal binds the stated revision + 1.
+            when {
+                wrap == null || name == null || (!freed && slug == null) -> refuse(Verdict.MISSING)
+                listOfNotNull(wrap, name, slug).any { it.revision != n.placementRevision } -> refuse(Verdict.STALE)
+                // The one entry a rotation re-seals (any member may write it, ADR 0111 decision 11), in its own file.
+                else -> writes += { ScopeRootEntries.reseal(n, wrap.value, name.value, slug?.value) }
+            }
         }
 
         fun apply(scope: ScopeEntity) {

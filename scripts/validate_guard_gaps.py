@@ -286,6 +286,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      held to the crypto package's own list both ways, so the two cannot disagree about which values carry a key
   105 the root-entry re-seal `ScopeRootEntries` writing a group's `encryptedName` too — rejected: the exempt file may name
      no entity holding a value, so the one place a rotation re-seals cannot become the door a value write goes through
+  106 `ScopeRekeyRewrap` keeping `additionalProperties: false` but losing its `UnknownFieldsRefused` class annotation —
+     rejected: `validate_request_bounds` rule 7. Jackson drops an unknown field unless the class refuses it, so a value
+     field sent into a rotation's stage read as staged when nothing of it was (ADR 0115 decision 2)
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -747,6 +750,21 @@ def forge_request_list_elements_unbounded(root: pathlib.Path) -> str:
     _in_request_property(root, "tasks.openapi.yaml", "ClaimRequest", "capabilityTags",
                          " @field:me.raddatz.veyq.core.http.EachElement(maxLength = 64, pattern = \"[0-9a-f]+\")", "")
     return "ClaimRequest.capabilityTags' EachElement removed, its items' $ref'd scalar bounds kept (must be REJECTED)"
+
+
+def forge_request_closed_object_unenforced(root: pathlib.Path) -> str:
+    f = root / "contracts" / "api" / "content.openapi.yaml"
+    lines = f.read_text().split("\n")
+    try:
+        start = lines.index("    ScopeRekeyRewrap:")
+        at = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("      x-class-extra-annotation:"))
+    except (ValueError, StopIteration):
+        raise ForgeError("content.openapi.yaml: ScopeRekeyRewrap's class annotation not found (renamed?)")
+    if not lines[at - 1].startswith("      additionalProperties: false"):
+        raise ForgeError("content.openapi.yaml: ScopeRekeyRewrap no longer says additionalProperties: false beside it")
+    del lines[at]
+    f.write_text("\n".join(lines))
+    return "ScopeRekeyRewrap's UnknownFieldsRefused removed, additionalProperties: false kept (must be REJECTED)"
 
 
 def forge_ratelimit_state_under_another_name(root: pathlib.Path) -> str:
@@ -1829,6 +1847,7 @@ CASES = [
     ("103", SCOPE_REKEY_ARITY, forge_scope_rekey_participant_writes_marks, False),
     ("104", SCOPE_REKEY_ARITY, forge_value_key_purpose_dropped, False),
     ("105", SCOPE_REKEY_ARITY, forge_root_entry_reseal_writes_a_value, False),
+    ("106", "validate_request_bounds.py", forge_request_closed_object_unenforced, False),
     ("100", LINK_CLOSE_ARITY, forge_link_closed_outside_the_body, False),
     ("101", LINK_CLOSE_ARITY, forge_link_closed_by_a_bulk_update, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),

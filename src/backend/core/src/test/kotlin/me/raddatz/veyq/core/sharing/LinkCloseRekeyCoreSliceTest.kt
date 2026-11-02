@@ -2,7 +2,7 @@ package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.node.NodeEntity
-import me.raddatz.veyq.core.node.rekey.ScopeRekeyStage
+import me.raddatz.veyq.core.node.rekey.RekeyStore
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -333,7 +333,7 @@ class LinkCloseRekeyCoreSliceTest {
         val elsewhere = createShare(w, w.beside)
         markRootDue(w)
         val rekeyId = UUID.randomUUID()
-        val otherDigest = ScopeRekeyStage.digest("c29tZS1vdGhlci1jb3B5")!!
+        val otherDigest = RekeyStore.copyDigest("c29tZS1vdGhlci1jb3B5")
         stage(w, rekeyId, """"shares":[{"shareId":"$link","lostCopyDigest":"$otherDigest"}]""").statusCode(204)
         commitRoot(w, rekeyId, scopeEpoch = 0).statusCode(409).body("code", equalTo("rekey_parts_stale"))
         assertTrue(row(link).enabled, "a stale name closes nothing")
@@ -375,7 +375,7 @@ class LinkCloseRekeyCoreSliceTest {
     }
 
     /** The digest a re-keyer names a link's lost copy by: SHA-256 of the copy's text as served. */
-    private fun copyDigest(shareId: String): String = ScopeRekeyStage.digest(row(shareId).sealedShareKey)!!
+    private fun copyDigest(shareId: String): String = RekeyStore.copyDigest(row(shareId).sealedShareKey!!)
 
     /** The root alone due — the frontier a rotation's or a close's re-key starts from — so a mark below it is the commit's. */
     private fun markRootDue(w: World) = QuarkusTransaction.requiringNew().run {

@@ -10,10 +10,8 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.transaction.Transactional
 import org.hibernate.annotations.DynamicUpdate
-import java.security.MessageDigest
 import java.time.Duration
 import java.time.Instant
-import java.util.Base64
 import java.util.UUID
 
 /**
@@ -21,11 +19,11 @@ import java.util.UUID
  * entry's re-sealed part — the rotation's commit (`rotateScope`, [ScopeRekeyCommit]) swaps into the row [itemId] names,
  * in the column [field] names, of the owner [part] (`core`, or an application's name, [ScopeRekeyParticipant.part]).
  * Never a value's own ciphertext: the commit refuses a field it does not know as a wrap (`422 rekey_writes_value`).
- * [replacedDigest] is the digest of what the row held in that column when it was staged ([ScopeRekeyStage.digest]; null
- * for a row that held none), so the commit refuses a row written since (`409 rekey_parts_stale`) with no revision of its
- * own; [revision] is a scope-root node's placement revision the client stated, where the row has one. Nothing serves or
- * reads a staged value but the commit; a stage no commit took is deleted after [ScopeRekeyStage.TTL] ([createdAt] is
- * that reader). Operator-blind: the same ciphertext the commit carries.
+ * [replaced] is the wrap the rotator re-wrapped, as it read it, so the commit refuses a row that holds another (`409
+ * rekey_parts_stale`) with no revision of its own; [revision] is a scope-root node's placement revision the client
+ * stated — what holds a root entry instead. Nothing serves or reads a staged value but the commit; a stage no commit took
+ * is deleted after [ScopeRekeyStage.TTL] ([createdAt] is that reader). Operator-blind: the same ciphertext the commit
+ * carries.
  */
 @Entity
 @Table(name = "veyq_scope_rekey_stage")
@@ -50,11 +48,11 @@ class ScopeRekeyStageEntity : PanacheEntityBase {
     @Column(name = "field", nullable = false, length = 32)
     lateinit var field: String
 
-    @Column(name = "stage_value", nullable = false, columnDefinition = "MEDIUMTEXT")
+    @Column(name = "stage_value", nullable = false, columnDefinition = "TEXT")
     lateinit var stageValue: String
 
-    @Column(name = "replaced_digest", length = 44)
-    var replacedDigest: String? = null
+    @Column(name = "replaced", length = 128)
+    var replaced: String? = null
 
     @Column(name = "revision")
     var revision: Long? = null
@@ -70,15 +68,14 @@ class ScopeRekeyStageEntity : PanacheEntityBase {
  * wrap under the scope key with the old key, wraps the same key under the one it minted (one it cannot open under a key
  * it drops) and re-seals each scope-root entry, and sends them here in pages, under a re-key id it then names in
  * `rotateScope`. Core's own rows and each application's ([ScopeRekeyParticipant.part]) share the table. A row staged
- * twice is replaced — and takes the digest of what the row holds at that later stage.
+ * twice is replaced.
  *
- * **What the digest covers.** Each staged wrap names the digest of the wrap it replaces (the contract's
- * `replacedDigest`, ADR 0115 decision 2), and the stage refuses one whose row holds another by then
- * (`ScopeRekeyCommit.stage`, Memories' item-mark stage) — a write between the rotator's read and its stage, which minted
- * a fresh value key and so a fresh wrap. The digest kept here is that same one, so the commit refuses a row written
- * between the stage and the commit — the long window, a tenant's whole profile directory staged page by page. A
- * scope-root's name and slug are held by the placement revision the rotator states instead ([Value.revision]), which
- * every rename, move and re-key moves.
+ * **The compare-and-set.** Each staged wrap carries the wrap it replaces as the rotator read it ([Value.replaced], the
+ * contract's `replacedValueKey`), and the commit refuses a row that holds another by then — any write between the read
+ * and the commit, the long window of a tenant's whole profile directory staged page by page: every write of a value
+ * mints a fresh value key and so a fresh wrap (a seal draws its own nonce, so no two wraps are one text). A wrap is under
+ * 128 characters, so the text itself is compared, no digest of it; nothing is checked at the stage. A scope-root entry
+ * is held by the placement revision the rotator states instead ([Value.revision]), which every write of an entry moves.
  */
 @ApplicationScoped
 class ScopeRekeyStage {
@@ -86,9 +83,9 @@ class ScopeRekeyStage {
     /** Which row and column a staged value is for. */
     data class Key(val itemId: String, val field: String)
 
-    /** A staged value, the digest of the ciphertext the row held when it was staged, and a stated revision where the row
-     *  has one. */
-    data class Value(val value: String, val replacedDigest: String?, val revision: Long? = null)
+    /** A staged value with the wrap it replaces ([replaced]) — or, for a root entry, the placement revision it was
+     *  re-sealed against ([revision]). */
+    data class Value(val value: String, val replaced: String? = null, val revision: Long? = null)
 
     /** Stage [values] of [part] for [scopeId] under [rekeyId]; first deletes every stage older than [TTL] (any scope's —
      *  the one reader of `created_at`). */
@@ -110,7 +107,7 @@ class ScopeRekeyStage {
                 itemId = key.itemId
                 field = key.field
                 stageValue = v.value
-                replacedDigest = v.replacedDigest
+                replaced = v.replaced
                 revision = v.revision
                 createdAt = now
             }.persist()
@@ -120,7 +117,7 @@ class ScopeRekeyStage {
     /** What [rekeyId] staged of [part] for [scopeId] — a stage under another scope's id is not this scope's. */
     fun read(rekeyId: String, scopeId: String, part: String): Map<Key, Value> =
         ScopeRekeyStageEntity.find("rekeyId = ?1 and scopeId = ?2 and part = ?3", rekeyId, scopeId, part).list()
-            .associate { Key(it.itemId, it.field) to Value(it.stageValue, it.replacedDigest, it.revision) }
+            .associate { Key(it.itemId, it.field) to Value(it.stageValue, it.replaced, it.revision) }
 
     /** Drop everything [rekeyId] staged for [scopeId] — the commit took it. */
     fun clear(rekeyId: String, scopeId: String) {
@@ -132,14 +129,6 @@ class ScopeRekeyStage {
         val TTL: Duration = Duration.ofDays(1)
         private const val CHUNK = 500
         const val CORE = "core"
-
-        /** The digest a staged value's compare-and-set keeps of what it replaces — a wrap, or a root entry's wrap
-         *  (base64 SHA-256 of the stored text), or null for a row that holds none. */
-        fun digest(stored: String?): String? =
-            stored?.let { Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(it.toByteArray(Charsets.UTF_8))) }
-
-        /** Whether [staged] was staged against what the row holds now, [stored]: the same ciphertext, or none both times. */
-        fun current(staged: Value, stored: String?): Boolean = staged.replacedDigest == digest(stored)
     }
 }
 

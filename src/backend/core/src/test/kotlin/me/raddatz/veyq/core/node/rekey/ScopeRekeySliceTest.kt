@@ -88,8 +88,8 @@ class ScopeRekeySliceTest {
                 "a pending invitee's name key is sealed to the invitee, no wrap under the scope key: the rotation leaves it")
             val share = ShareEntity.findById(g.shareId)!!
             assertEquals(NEW_COPY_WRAP, share.wrappedRecoveryValueKey, "the copy's key re-wrapped")
-            assertEquals(COPY, share.sealedShareKey, "the recovery copy never rewritten"); assertEquals(0, share.sealedShareKeyEpoch)
-            assertEquals(0, share.mintedEpoch, "the epoch the link was minted at stays (ADR 0075 point 4)")
+            assertEquals(COPY, share.sealedShareKey, "the recovery copy never rewritten")
+            assertEquals(0, share.sealedShareKeyEpoch, "nor its epoch, the link's mint (ADR 0075 point 4)")
             // ADR 0114 decision 4: every node of the scope, below the root and in the trash too, is due for its own re-key.
             assertTrue(NodeEntity.list("scopeId", g.scopeId).all { it.rekeyDue }, "every node is due after the commit")
             assertEquals(0L, ScopeRekeyStageEntity.count("rekeyId", rekeyId.toString()), "the commit took the stage")
@@ -127,7 +127,7 @@ class ScopeRekeySliceTest {
         rotate(g.owner, g.scopeId, rekeyId, removes = member).statusCode(409).body("code", equalTo("rekey_parts_missing"))
         assertEquals(1L, tx { MembershipEntity.count("userId = ?1 and scopeId = ?2", member, g.scopeId) }, "the removal rolled back with it")
         g.assertUntouched()
-        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"icon":{"wrappedIconValueKey":"$NEW_ICON_WRAP","replacedDigest":"${d(ICON_WRAP)}"}}""").statusCode(204)
+        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"icon":${rewrap(NEW_ICON_WRAP, ICON_WRAP)}}""").statusCode(204)
         rotate(g.owner, g.scopeId, rekeyId, removes = member).statusCode(201)
         assertEquals(0L, tx { MembershipEntity.count("userId = ?1 and scopeId = ?2", member, g.scopeId) }, "control: the removal landed")
     }
@@ -147,23 +147,25 @@ class ScopeRekeySliceTest {
             assertEquals(RENAMED, scope.encryptedName, "the rename stands"); assertEquals(RENAMED_WRAP, scope.wrappedNameValueKey)
         }
         // Control: the name's key re-staged against the wrap the row holds now, the rotation commits.
-        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"groupName":{"wrappedNameValueKey":"$NEW_NAME_WRAP","replacedDigest":"${d(RENAMED_WRAP)}"}}""").statusCode(204)
+        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"groupName":${rewrap(NEW_NAME_WRAP, RENAMED_WRAP)}}""").statusCode(204)
         rotate(g.owner, g.scopeId, rekeyId).statusCode(201)
         assertEquals(RENAMED, tx { ScopeEntity.findById(g.scopeId)!!.encryptedName }, "the rotation re-wrapped the renamed name's key, nothing more")
     }
 
-    /** ADR 0115 decision 2: each staged wrap names the digest of the wrap it replaces, so a write between the rotator's
-     *  read and its stage — which minted a fresh key — is refused at the stage, never replaced by a re-wrap of the old one. */
+    /** ADR 0115 decision 2: each staged wrap names the wrap it replaces, so a write between the rotator's read and its
+     *  stage — which minted a fresh key — is refused by the commit like one after the stage, never replaced by a re-wrap
+     *  of the old one. */
     @Test
-    fun aWrapReplacedBetweenTheReadAndTheStageIsRefusedAtTheStage() {
+    fun aWrapReplacedBetweenTheReadAndTheStageIsRefusedAtTheCommit() {
         val g = groupWorld()
         parts(g.owner, g.scopeId).statusCode(200).body("groupName.wrappedNameValueKey", equalTo(NAME_WRAP)) // the rotator reads
         rename(g, RENAMED, RENAMED_WRAP, epoch = 0).statusCode(204)
         val rekeyId = UUID.randomUUID()
-        stage(g.owner, g.scopeId, rekeyId, g.fullStage()).statusCode(409).body("code", equalTo("rekey_parts_stale"))
-        assertEquals(0L, tx { ScopeRekeyStageEntity.count("rekeyId", rekeyId.toString()) }, "nothing of the batch is staged")
-        // Control: re-read, the same batch against the renamed row stages, and the rotation commits.
-        stage(g.owner, g.scopeId, rekeyId, g.fullStage(nameDigest = d(RENAMED_WRAP))).statusCode(204)
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage()).statusCode(204) // against the wrap it read
+        rotate(g.owner, g.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_stale"))
+        assertEquals(RENAMED_WRAP, tx { ScopeEntity.findById(g.scopeId)!!.wrappedNameValueKey }, "the rename stands")
+        // Control: re-read, the same batch against the renamed row, and the rotation commits.
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage(nameReplaced = RENAMED_WRAP)).statusCode(204)
         rotate(g.owner, g.scopeId, rekeyId).statusCode(201)
         tx {
             val scope = ScopeEntity.findById(g.scopeId)!!
@@ -171,17 +173,46 @@ class ScopeRekeySliceTest {
         }
     }
 
+    /** A root entry is held by its placement revision: a rename (or a move, or its own re-key) after the read moves it,
+     *  and the re-seal of the entry it replaced is refused, nothing written. */
     @Test
-    fun aMemberWrapWithoutItsDigestIsMalformed() {
+    fun aRootEntryWrittenSinceItWasReadIsStale() {
+        val g = groupWorld()
+        val rekeyId = UUID.randomUUID()
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage()).statusCode(204)
+        // A member renames the live root: a new name and key wrap at the next placement revision.
+        tx { NodeEntity.findById(g.liveRoot)!!.apply { encryptedName = RENAMED; wrappedContentKey = RENAMED_WRAP; placementRevision += 1 } }
+        rotate(g.owner, g.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_stale"))
+        tx {
+            val live = NodeEntity.findById(g.liveRoot)!!
+            assertEquals(RENAMED, live.encryptedName, "the rename stands"); assertEquals(1L, live.placementRevision)
+            assertEquals(0, ScopeEntity.findById(g.scopeId)!!.currentEpoch, "nothing written")
+        }
+        // Control: the entry re-sealed against the revision it holds now, the rotation commits.
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage(liveRevision = 1)).statusCode(204)
+        rotate(g.owner, g.scopeId, rekeyId).statusCode(201)
+        assertEquals(2L, tx { NodeEntity.findById(g.liveRoot)!!.placementRevision })
+    }
+
+    /** A stage carries exactly its schema: a wrap without the wrap it replaces, or a field the schema does not name — the
+     *  digest the wire carried before, say — is malformed, nothing staged. */
+    @Test
+    fun aStageWithoutTheWrapItReplacesOrWithAFieldItDoesNotNameIsMalformed() {
         val owner = seedUser()
         val tenantId = seedTenant(owner = owner)
         tx { profile(owner, tenantId, name = "b3duZXI=", avatar = null, join = null) }
-        stage(owner, tenantId, UUID.randomUUID(), """{"fromEpoch":0,"members":[{"userId":"$owner","wrappedNameValueKey":"bmV3"}]}""")
-            .statusCode(400).body("code", equalTo("invalid_request"))
-        stage(owner, tenantId, UUID.randomUUID(), """{"fromEpoch":0,"members":[{"userId":"$owner","replacedNameDigest":"${d(wrapOf("b3duZXI="))}"}]}""")
-            .statusCode(400).body("code", equalTo("invalid_request"))
-        // Control: the wrap with its digest stages.
-        stage(owner, tenantId, UUID.randomUUID(), """{"fromEpoch":0,"members":[{"userId":"$owner","wrappedNameValueKey":"bmV3","replacedNameDigest":"${d(wrapOf("b3duZXI="))}"}]}""")
+        val rekeyId = UUID.randomUUID()
+        for (body in listOf(
+            """{"fromEpoch":0,"members":[{"userId":"$owner","name":{"wrappedValueKey":"bmV3"}}]}""",
+            """{"fromEpoch":0,"members":[{"userId":"$owner","name":{"replacedValueKey":"${wrapOf("b3duZXI=")}"}}]}""",
+            """{"fromEpoch":0,"members":[{"userId":"$owner","wrappedNameValueKey":"bmV3","replacedNameDigest":"bmV3"}]}""",
+            """{"fromEpoch":0,"members":[{"userId":"$owner","name":${rewrap("bmV3", wrapOf("b3duZXI="))}}],"sealedName":"Zm9yZ2Vk"}""",
+        )) {
+            stage(owner, tenantId, rekeyId, body).statusCode(400).body("code", equalTo("invalid_request"))
+        }
+        assertEquals(0L, tx { ScopeRekeyStageEntity.count("rekeyId", rekeyId.toString()) }, "nothing staged")
+        // Control: the wrap beside the wrap it replaces stages.
+        stage(owner, tenantId, rekeyId, """{"fromEpoch":0,"members":[{"userId":"$owner","name":${rewrap("bmV3", wrapOf("b3duZXI="))}}]}""")
             .statusCode(204)
     }
 
@@ -189,27 +220,28 @@ class ScopeRekeySliceTest {
      * The owner's decision of 2026-11-02, on the wire: a member who secured their account holds a pending re-key row and
      * may run the tenant's rotation (ADR 0111 decision 8) — and before the value keys its stage re-sealed every other
      * member's name, so it could rewrite them. A value field smuggled into the stage's body has no field to land in and is
-     * dropped; a staged write of a value that reaches the stage anyway (a stage left from before the value keys, a forged
-     * row) refuses the whole commit, `422 rekey_writes_value`, nothing written. Control: the same commit carrying only
-     * the re-wrapped keys lands, and the owner's name is byte-identical.
+     * refused, `400 invalid_request`, nothing staged; a staged write of a value that reaches the stage anyway (a stage
+     * left from before the value keys, a forged row) refuses the whole commit, `422 rekey_writes_value`, nothing written.
+     * Control: the same commit carrying only the re-wrapped keys lands, and the owner's name is byte-identical.
      */
     @Test
     fun aMemberRotatorsCommitThatRewritesAnotherMembersNameIsRefusedAndWritesNothing() {
         val t = tenantWorld()
         tx { RotationRegrantEntity().apply { id = UUID.randomUUID().toString(); userId = t.member; scopeId = t.tenantId; epochAtRotation = 0 }.persist() }
         val rekeyId = UUID.randomUUID()
-        // A value field in the body: the schema has none, so nothing of it is staged.
+        // A value field in the body: the schema has none, so the batch is refused and nothing of it is staged.
         val smuggled = tenantStage(t.owner, t.member).replace(
             """{"userId":"${t.owner}",""", """{"userId":"${t.owner}","sealedName":"Zm9yZ2Vk",""",
         )
-        stage(t.member, t.tenantId, rekeyId, smuggled).statusCode(204)
-        assertEquals(0L, tx { ScopeRekeyStageEntity.count("rekeyId = ?1 and stageValue = ?2", rekeyId.toString(), "Zm9yZ2Vk") }, "dropped")
+        stage(t.member, t.tenantId, rekeyId, smuggled).statusCode(400).body("code", equalTo("invalid_request"))
+        assertEquals(0L, tx { ScopeRekeyStageEntity.count("rekeyId", rekeyId.toString()) }, "nothing staged")
+        stage(t.member, t.tenantId, rekeyId, tenantStage(t.owner, t.member)).statusCode(204)
         // A staged write of the owner's name, as a stage from before the value keys held it.
         tx {
             ScopeRekeyStageEntity().apply {
                 id = UUID.randomUUID().toString(); this.rekeyId = rekeyId.toString(); scopeId = t.tenantId; part = ScopeRekeyStage.CORE
                 itemId = t.owner; field = "member.sealedName"; stageValue = "Zm9yZ2Vk"
-                replacedDigest = ScopeRekeyStage.digest("b3duZXI="); createdAt = Instant.now()
+                replaced = wrapOf("b3duZXI="); createdAt = Instant.now()
             }.persist()
         }
         rotate(t.member, t.tenantId, rekeyId).statusCode(422).body("code", equalTo("rekey_writes_value"))
@@ -299,11 +331,12 @@ class ScopeRekeySliceTest {
             .body("members.find { it.userId == '${t.member}' }.wrappedAvatarValueKey", equalTo(wrapOf("YXZhdGFy")))
             .body("members.find { it.userId == '${t.member}' }.sealedName", nullValue())
         val rekeyId = UUID.randomUUID()
-        // A wrap staged where the row holds none is stale: the owner has no picture — refused at the stage, which
-        // compares the digest it names with the row's (ADR 0115 decision 2), and the rotation has nothing of the batch.
-        stage(t.owner, t.tenantId, rekeyId, tenantStage(t.owner, t.member, ownerAvatar = true)).statusCode(409).body("code", equalTo("rekey_parts_stale"))
-        rotate(t.owner, t.tenantId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_missing"))
+        // A wrap staged where the row holds none is stale: the owner has no picture — refused by the commit, which
+        // compares every staged wrap with its row (ADR 0115 decision 2), nothing written.
+        stage(t.owner, t.tenantId, rekeyId, tenantStage(t.owner, t.member, ownerAvatar = true)).statusCode(204)
+        rotate(t.owner, t.tenantId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_stale"))
         assertEquals(wrapOf("bWVtYmVy"), tx { TenantProfileEntity.find("userId", t.member).firstResult()!!.wrappedNameValueKey }, "nothing written")
+        // Control: the owner's row staged again without it — a row staged twice replaces all its fields — and it commits.
         stage(t.owner, t.tenantId, rekeyId, tenantStage(t.owner, t.member)).statusCode(204)
         rotate(t.owner, t.tenantId, rekeyId).statusCode(201)
         tx {
@@ -381,16 +414,16 @@ class ScopeRekeySliceTest {
         val owner: String, val scopeId: String, val liveRoot: String, val trashedRoot: String, val child: String,
         val invitee: String, val shareId: String,
     ) {
-        fun shareWrap() = """{"shareId":"$shareId","wrappedRecoveryValueKey":"$NEW_COPY_WRAP","replacedDigest":"${d(COPY_WRAP)}"}"""
+        fun shareWrap() = """{"shareId":"$shareId","wrappedValueKey":"$NEW_COPY_WRAP","replacedValueKey":"$COPY_WRAP"}"""
 
-        /** Every value key re-wrapped and every root entry re-sealed, each naming the digest of what it replaces (ADR
-         *  0115 decision 2) — no value's ciphertext anywhere. */
-        fun fullStage(shares: Boolean = true, icon: Boolean = true, nameDigest: String = d(NAME_WRAP)): String =
-            """{"fromEpoch":0,"groupName":{"wrappedNameValueKey":"$NEW_NAME_WRAP","replacedDigest":"$nameDigest"},""" +
-                (if (icon) """"icon":{"wrappedIconValueKey":"$NEW_ICON_WRAP","replacedDigest":"${d(ICON_WRAP)}"},""" else "") +
+        /** Every value key re-wrapped beside the wrap it replaces and every root entry re-sealed at the placement
+         *  revision it read (ADR 0115 decision 2) — no value's ciphertext anywhere. */
+        fun fullStage(shares: Boolean = true, icon: Boolean = true, nameReplaced: String = NAME_WRAP, liveRevision: Int = 0): String =
+            """{"fromEpoch":0,"groupName":${rewrap(NEW_NAME_WRAP, nameReplaced)},""" +
+                (if (icon) """"icon":${rewrap(NEW_ICON_WRAP, ICON_WRAP)},""" else "") +
                 """"rootNodes":[""" +
-                """{"nodeId":"$liveRoot","placementRevision":0,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","slugToken":"$NEW_SLUG","wrappedContentKey":"$NEW_WRAP","replacedDigest":"${d(CONTENT_KEY)}"},""" +
-                """{"nodeId":"$trashedRoot","placementRevision":0,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","wrappedContentKey":"$NEW_WRAP","replacedDigest":"${d(CONTENT_KEY)}"}]""" +
+                """{"nodeId":"$liveRoot","placementRevision":$liveRevision,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","slugToken":"$NEW_SLUG","wrappedContentKey":"$NEW_WRAP"},""" +
+                """{"nodeId":"$trashedRoot","placementRevision":0,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","wrappedContentKey":"$NEW_WRAP"}]""" +
                 (if (shares) ""","shares":[${shareWrap()}]""" else "") + "}"
 
         /** Nothing a refused rotation could have written: the epoch, the wraps, the values, the marks, the statement. */
@@ -470,14 +503,15 @@ class ScopeRekeySliceTest {
         return p
     }
 
-    private fun tenantStage(owner: String, member: String, ownerAvatar: Boolean = false): String =
-        """{"fromEpoch":0,"members":[""" +
-            """{"userId":"$owner","wrappedNameValueKey":"bmV3LW93bmVy","replacedNameDigest":"${d(wrapOf("b3duZXI="))}"""" +
-            (if (ownerAvatar) ""","wrappedAvatarValueKey":"bmV3LWF2YXRhcg==","replacedAvatarDigest":"${d(wrapOf("YXZhdGFy"))}"""" else "") + "}," +
-            """{"userId":"$member","wrappedNameValueKey":"bmV3LW1lbWJlcg==","replacedNameDigest":"${d(wrapOf("bWVtYmVy"))}",""" +
-            """"wrappedAvatarValueKey":"bmV3LWF2YXRhcg==","replacedAvatarDigest":"${d(wrapOf("YXZhdGFy"))}",""" +
-            """"wrappedJoinRecordValueKey":"bmV3LWpvaW4=","replacedJoinRecordDigest":"${d(wrapOf("am9pbg=="))}"}],""" +
-            """"verifications":[{"verifierUserId":"$owner","subjectUserId":"$member","wrappedValueKey":"bmV3LXZlcmlmaWVk","replacedDigest":"${d(wrapOf("dmVyaWZpZWQ="))}"}]}"""
+    private fun tenantStage(owner: String, member: String, ownerAvatar: Boolean = false): String {
+        val ownerAvatarWrap = if (ownerAvatar) ""","avatar":${rewrap("bmV3LWF2YXRhcg==", wrapOf("YXZhdGFy"))}""" else ""
+        return """{"fromEpoch":0,"members":[""" +
+            """{"userId":"$owner","name":${rewrap("bmV3LW93bmVy", wrapOf("b3duZXI="))}$ownerAvatarWrap},""" +
+            """{"userId":"$member","name":${rewrap("bmV3LW1lbWJlcg==", wrapOf("bWVtYmVy"))},""" +
+            """"avatar":${rewrap("bmV3LWF2YXRhcg==", wrapOf("YXZhdGFy"))},"joinRecord":${rewrap("bmV3LWpvaW4=", wrapOf("am9pbg=="))}}],""" +
+            """"verifications":[{"verifierUserId":"$owner","subjectUserId":"$member","wrappedValueKey":"bmV3LXZlcmlmaWVk",""" +
+            """"replacedValueKey":"${wrapOf("dmVyaWZpZWQ=")}"}]}"""
+    }
 
     /** The owner's rename of [g]'s group: the name under a fresh key, that key's [wrap], and the key sealed to the pending
      *  invitee (to [inviteeDigest]'s identity). */
@@ -494,8 +528,8 @@ class ScopeRekeySliceTest {
     /** A stand-in wrap of the value key [value] is sealed under — distinct per value, as each write mints its own key. */
     private fun wrapOf(value: String): String = "d3JhcC0$value"
 
-    /** The digest a rotator names of the wrap it replaces ([ScopeRekeyStage.digest], the server's own rule). */
-    private fun d(opened: String): String = ScopeRekeyStage.digest(opened)!!
+    /** One value key moved: [wrapped] under the new key, beside the wrap it [replaced] as the rotator read it. */
+    private fun rewrap(wrapped: String, replaced: String): String = """{"wrappedValueKey":"$wrapped","replacedValueKey":"$replaced"}"""
 
     private fun domainOf(tenantId: String): String = tx { me.raddatz.veyq.core.tenant.TenantEntity.findById(tenantId)!!.domain }
 

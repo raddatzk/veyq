@@ -2,7 +2,9 @@ package me.raddatz.veyq.core.testing
 
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.node.rekey.ScopeRekeyCommit
-import me.raddatz.veyq.core.node.rekey.ScopeRekeyField
+import me.raddatz.veyq.core.node.rekey.ScopeRekeyStage
+import me.raddatz.veyq.core.node.rekey.ScopeRekeyStage.Key
+import me.raddatz.veyq.core.node.rekey.ScopeRekeyStage.Value
 import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -20,7 +22,8 @@ interface ScopeRekeyTestStager {
 /**
  * A rotation's scope-level move for backend tests (ADR 0115 decision 2). The server never opens what it re-wraps, so a
  * test stages every value key's wrap (and every scope-root entry) under the scope key with the ciphertext it holds now —
- * what the commit checks is the digest of the wrap it replaces and that every row has one, both real here. Wraps only,
+ * what the commit checks is the wrap it replaces (the placement revision, for a root entry) and that every row has one,
+ * both real here. Wraps only,
  * as a rotator's client stages: never a value's ciphertext. The succession statement is two well-formed public values
  * the server stores and never verifies (decision 5).
  */
@@ -38,26 +41,29 @@ object TestScopeRekey {
             val commit = Arc.container().instance(ScopeRekeyCommit::class.java).get()
             val scope = ScopeEntity.findById(scopeId)!!
             val page = commit.parts(scope, null, ALL)
-            val fields = buildList {
-                page.groupName?.let { add(ScopeRekeyField(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME_WRAP, it.first)) }
-                page.icon?.let { add(ScopeRekeyField(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON_WRAP, it.first)) }
+            val values = buildMap {
+                // The same wrap as the one it replaces: what the commit checks is only that it replaces the row's own.
+                fun wrap(itemId: String, field: String, wrapped: String?) = wrapped?.let { put(Key(itemId, field), Value(it, replaced = it)) }
+                page.groupName?.let { wrap(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME_WRAP, it.first) }
+                page.icon?.let { wrap(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON_WRAP, it.first) }
                 page.rootNodes.forEach { n ->
-                    add(ScopeRekeyField(n.id, ScopeRekeyCommit.ROOT_WRAP, n.wrappedContentKey, n.placementRevision))
-                    add(ScopeRekeyField(n.id, ScopeRekeyCommit.ROOT_NAME, n.encryptedName, n.placementRevision))
-                    if (n.slugToken != n.id) add(ScopeRekeyField(n.id, ScopeRekeyCommit.ROOT_SLUG, n.slugToken, n.placementRevision))
+                    fun entry(field: String, value: String) = put(Key(n.id, field), Value(value, revision = n.placementRevision))
+                    entry(ScopeRekeyCommit.ROOT_WRAP, n.wrappedContentKey)
+                    entry(ScopeRekeyCommit.ROOT_NAME, n.encryptedName)
+                    if (n.slugToken != n.id) entry(ScopeRekeyCommit.ROOT_SLUG, n.slugToken)
                 }
-                page.shares.forEach { add(ScopeRekeyField(it.id, ScopeRekeyCommit.SHARE_WRAP, it.wrappedRecoveryValueKey!!)) }
+                page.shares.forEach { wrap(it.id, ScopeRekeyCommit.SHARE_WRAP, it.wrappedRecoveryValueKey) }
                 page.members.forEach { p ->
-                    p.wrappedNameValueKey?.let { add(ScopeRekeyField(p.userId, ScopeRekeyCommit.MEMBER_NAME_WRAP, it)) }
-                    p.wrappedAvatarValueKey?.let { add(ScopeRekeyField(p.userId, ScopeRekeyCommit.MEMBER_AVATAR_WRAP, it)) }
-                    p.wrappedJoinRecordValueKey?.let { add(ScopeRekeyField(p.userId, ScopeRekeyCommit.MEMBER_JOIN_WRAP, it)) }
+                    wrap(p.userId, ScopeRekeyCommit.MEMBER_NAME_WRAP, p.wrappedNameValueKey)
+                    wrap(p.userId, ScopeRekeyCommit.MEMBER_AVATAR_WRAP, p.wrappedAvatarValueKey)
+                    wrap(p.userId, ScopeRekeyCommit.MEMBER_JOIN_WRAP, p.wrappedJoinRecordValueKey)
                 }
                 page.verifications.forEach { v ->
-                    add(ScopeRekeyField("${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION_WRAP, v.wrappedValueKey))
+                    wrap("${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION_WRAP, v.wrappedValueKey)
                 }
             }
             check(!page.more) { "a test scope with more than $ALL scope-level rows" }
-            commit.stage(rekeyId, scope, fields)
+            Arc.container().instance(ScopeRekeyStage::class.java).get().put(rekeyId, scopeId, ScopeRekeyStage.CORE, values)
         }
         Arc.container().select(ScopeRekeyTestStager::class.java).forEach { it.stageAll(scopeId, rekeyId) }
         return rekeyId

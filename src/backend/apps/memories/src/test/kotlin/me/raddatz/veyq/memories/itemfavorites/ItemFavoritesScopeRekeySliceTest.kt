@@ -1,16 +1,12 @@
 package me.raddatz.veyq.memories.itemfavorites
 
-import me.raddatz.veyq.core.node.rekey.ScopeRekeyStage
 import me.raddatz.veyq.core.node.rekey.ScopeRekeyStageEntity
 import me.raddatz.veyq.core.membership.TestGrants
-import me.raddatz.veyq.core.node.rekey.ScopeRekeyCommit
-import me.raddatz.veyq.core.node.rekey.ScopeRekeyField
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedScopeMember
 import me.raddatz.veyq.core.testing.TestScopeRekey
-import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -47,7 +43,7 @@ class ItemFavoritesScopeRekeySliceTest {
             .body("marks[0].ciphertext", nullValue()).body("marks[0].wrappedValueKey", not(nullValue())).extract()
         val markIds = page.path<List<String>>("marks.markId")
         val before = tx { ItemFavoritesEntity.list("scopeId", w.scopeId).associate { it.markId to it.ciphertext } }
-        val rekeyId = coreStaged(w.scopeId)
+        val rekeyId = UUID.randomUUID().toString() // core has no scope-level row here but the grants
         stage(w.owner, w.scopeId, rekeyId, markIds.map { it to REWRAPPED }).statusCode(204)
         rotate(w.owner, w.scopeId, rekeyId).statusCode(201)
         tx {
@@ -68,13 +64,13 @@ class ItemFavoritesScopeRekeySliceTest {
         val w = world()
         val markIds = list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId")
         val memberMark = tx { ItemFavoritesEntity.findById(ItemFavoritesEntity.key(w.member, w.scopeId, w.node))!!.markId }
-        val rekeyId = coreStaged(w.scopeId)
+        val rekeyId = UUID.randomUUID().toString()
         stage(w.owner, w.scopeId, rekeyId, markIds.map { it to REWRAPPED }).statusCode(204)
         tx {
             ScopeRekeyStageEntity().apply {
                 id = UUID.randomUUID().toString(); this.rekeyId = rekeyId; scopeId = w.scopeId
                 part = ItemFavoritesScopeRekeyParticipant.PART; itemId = memberMark; field = "mark.ciphertext"
-                stageValue = "Zm9yZ2Vk"; replacedDigest = null; createdAt = Instant.now()
+                stageValue = "Zm9yZ2Vk"; replaced = null; createdAt = Instant.now()
             }.persist()
         }
         rotate(w.owner, w.scopeId, rekeyId).statusCode(422).body("code", equalTo("rekey_writes_value"))
@@ -93,7 +89,7 @@ class ItemFavoritesScopeRekeySliceTest {
     @Test
     fun aMarkWithNoStagedWrapRefusesTheRotation() {
         val w = world()
-        val rekeyId = coreStaged(w.scopeId)
+        val rekeyId = UUID.randomUUID().toString()
         stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to REWRAPPED }).statusCode(204)
         // A member marks another Memory after the rotator staged: a row the rotation has no wrap for.
         put(w.member, w.scopeId, UUID.randomUUID().toString(), epoch = 0).statusCode(204)
@@ -108,7 +104,7 @@ class ItemFavoritesScopeRekeySliceTest {
     @Test
     fun aMarkRewrittenSinceItWasStagedIsStale() {
         val w = world()
-        val rekeyId = coreStaged(w.scopeId)
+        val rekeyId = UUID.randomUUID().toString()
         stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to REWRAPPED }).statusCode(204)
         // A rewrite mints a fresh value key: its wrap is no longer the one the stage replaces.
         put(w.member, w.scopeId, w.node, epoch = 0, ciphertext = "Y2hhbmdlZA==").statusCode(204)
@@ -118,18 +114,24 @@ class ItemFavoritesScopeRekeySliceTest {
         rotate(w.owner, w.scopeId, rekeyId).statusCode(201)
     }
 
+    /** The window before the stage: a mark rewritten after the rotator read it is refused by the commit like one after
+     *  the stage — the stage carries the wrap it read — and a field the stage does not name is malformed. */
     @Test
-    fun aMarkRewrittenBetweenTheReadAndTheStageIsRefusedAtTheStage() {
+    fun aMarkRewrittenBetweenTheReadAndTheStageIsRefusedAtTheCommit() {
         val w = world()
-        val rekeyId = coreStaged(w.scopeId)
+        val rekeyId = UUID.randomUUID().toString()
         val read = list(w.owner, w.scopeId).extract()
         val opened = read.path<List<String>>("marks.markId").zip(read.path<List<String>>("marks.wrappedValueKey")).toMap()
         // A member rewrites their mark after the rotator read the page, before it stages its re-wrap.
         put(w.member, w.scopeId, w.node, epoch = 0, ciphertext = "Y2hhbmdlZA==").statusCode(204)
-        stage(w.owner, w.scopeId, rekeyId, opened.keys.map { it to REWRAPPED }, opened.mapValues { ScopeRekeyStage.digest(it.value)!! })
-            .statusCode(409).body("code", equalTo("rekey_parts_stale"))
+        stage(w.owner, w.scopeId, rekeyId, opened.keys.map { it to REWRAPPED }, opened).statusCode(204)
+        rotate(w.owner, w.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_stale"))
         assertEquals("Y2hhbmdlZA==", tx { ItemFavoritesEntity.findById(ItemFavoritesEntity.key(w.member, w.scopeId, w.node))!!.ciphertext })
-        rotate(w.owner, w.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_missing")) // nothing was staged
+        // A set smuggled beside a wrap has no field to land in: the batch is refused.
+        given().header("Authorization", bearer(w.owner)).contentType(ContentType.JSON)
+            .body("""{"fromEpoch":0,"marks":[{"markId":"${opened.keys.first()}","wrappedValueKey":"$REWRAPPED","replacedValueKey":"$REWRAPPED","ciphertext":"Zm9yZ2Vk"}]}""")
+            .`when`().post("/api/scopes/${w.scopeId}/item-favorites-rekey/$rekeyId").then()
+            .statusCode(400).body("code", equalTo("invalid_request"))
         // Control: read again, the same stage lands, and the rotation commits.
         stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to REWRAPPED }).statusCode(204)
         rotate(w.owner, w.scopeId, rekeyId).statusCode(201)
@@ -157,16 +159,6 @@ class ItemFavoritesScopeRekeySliceTest {
         return World(owner, member, scopeId, node)
     }
 
-    /** Core's scope-level rows of [scopeId] staged under a fresh re-key id (none but the grants here), and the id. */
-    private fun coreStaged(scopeId: String): String {
-        val rekeyId = UUID.randomUUID().toString()
-        tx {
-            val commit = Arc.container().instance(ScopeRekeyCommit::class.java).get()
-            commit.stage(rekeyId, ScopeEntity.findById(scopeId)!!, emptyList<ScopeRekeyField>())
-        }
-        return rekeyId
-    }
-
     /** A member's write of their marks: the ciphertext under a fresh value key, its fresh wrap beside it. */
     private fun put(userId: String, scopeId: String, nodeId: String, epoch: Int, ciphertext: String = "bWFya3M="): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
@@ -176,22 +168,22 @@ class ItemFavoritesScopeRekeySliceTest {
     private fun list(caller: String, scopeId: String): ValidatableResponse =
         given().header("Authorization", bearer(caller)).`when`().get("/api/scopes/$scopeId/item-favorites-rekey").then()
 
-    /** Stage [marks] (`markId` to its re-wrapped value key), each naming the digest of the wrap it replaces: [opened]'s,
-     *  or by default what the row holds as the rotator reads it now. */
+    /** Stage [marks] (`markId` to its re-wrapped value key), each beside the wrap it replaces: [opened]'s, or by default
+     *  what the row holds as the rotator reads it now. */
     private fun stage(
         caller: String, scopeId: String, rekeyId: String, marks: List<Pair<String, String>>,
-        opened: Map<String, String> = currentDigests(scopeId),
+        opened: Map<String, String> = currentWraps(scopeId),
     ): ValidatableResponse =
         given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
             .body(
                 """{"fromEpoch":0,"marks":[${marks.joinToString(",") { (id, wrap) ->
-                    """{"markId":"$id","wrappedValueKey":"$wrap","replacedDigest":"${opened[id] ?: ScopeRekeyStage.digest("absent")}"}"""
+                    """{"markId":"$id","wrappedValueKey":"$wrap","replacedValueKey":"${opened[id] ?: "YWJzZW50"}"}"""
                 }}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/item-favorites-rekey/$rekeyId").then()
 
-    private fun currentDigests(scopeId: String): Map<String, String> =
-        tx { ItemFavoritesEntity.list("scopeId", scopeId).associate { it.markId to ScopeRekeyStage.digest(it.wrappedValueKey)!! } }
+    private fun currentWraps(scopeId: String): Map<String, String> =
+        tx { ItemFavoritesEntity.list("scopeId", scopeId).associate { it.markId to it.wrappedValueKey } }
 
     private fun rotate(owner: String, scopeId: String, rekeyId: String): ValidatableResponse =
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
