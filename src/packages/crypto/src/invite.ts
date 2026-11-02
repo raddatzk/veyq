@@ -20,7 +20,7 @@
 //     the server unchecked.
 //   - **It grants itself and writes a join record**: the `invite-accept` proof (signed by the invite key, checked by the
 //     server) and the join record — signed by the invite key AND the new identity over the `join-record` statement,
-//     sealed under the tenant key as the field `member-join-record`.
+//     sealed as the field `member-join-record` under a value key of its own, which the tenant key wraps (ADR 0115).
 //   - **An owner's securing endorses the join records it rooted** (`join-endorsement`): the new key signs SHA-256 of each
 //     OPENED record (ADR 0115 decision 8, so a rotation's re-seal of the envelope leaves it valid), so a record the
 //     retired key signed still counts — and one a thief signs with that key after does not.
@@ -538,15 +538,17 @@ export function joinEndorsementVerifies(ownerSignPublicKey: Uint8Array, e: JoinE
   }
 }
 
-const joinRecordContext = (a: JoinRecordAddress) => ({ purpose: 'member-join-record', scopeId: a.tenantId, userId: a.userId }) as const
+/** A join record's own seal context — what the wrap of its value key is addressed by (v1.ts `wrapValueKey`). */
+export const joinRecordContext = (a: JoinRecordAddress) =>
+  ({ purpose: 'member-join-record', scopeId: a.tenantId, userId: a.userId }) as const
 
-/** Seal a join record under the tenant key, bound to (tenant, member) like the member's name. */
-export const sealJoinRecord = (tenantKey: Uint8Array, a: JoinRecordAddress, r: JoinRecord): Uint8Array =>
-  sealField(joinRecordContext(a), tenantKey, encodeJoinRecord(r))
+/** Seal a join record under its fresh value key `K_v` (ADR 0115), bound to (tenant, member) like the member's name. */
+export const sealJoinRecord = (valueKey: Uint8Array, a: JoinRecordAddress, r: JoinRecord): Uint8Array =>
+  sealField(joinRecordContext(a), valueKey, encodeJoinRecord(r))
 
-/** Open a join record with the tenant key it was sealed under. */
-export const openJoinRecord = (tenantKey: Uint8Array, a: JoinRecordAddress, envelope: Uint8Array): JoinRecord =>
-  decodeJoinRecord(openField(joinRecordContext(a), tenantKey, envelope))
+/** Open a join record with the value key its wrap carries. */
+export const openJoinRecord = (valueKey: Uint8Array, a: JoinRecordAddress, envelope: Uint8Array): JoinRecord =>
+  decodeJoinRecord(openField(joinRecordContext(a), valueKey, envelope))
 
 // ── helpers ───────────────────────────────────────────────────────────────────────────────────────────
 

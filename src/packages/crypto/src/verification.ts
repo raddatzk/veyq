@@ -1,7 +1,8 @@
 // A verification (ADR 0111 decisions 12–14): after two members compared safety number and chain code, the verifier's
 // identity signs that, in this tenant, the verifier at this head of their own key chain confirmed the subject at this
 // head of theirs. It is written only into the verifier's own records in the tenant (one row per verifier and subject,
-// replaced by a newer one) and read by every member there, sealed under the tenant key — the operator reads none of it.
+// replaced by a newer one) and read by every member there, sealed under a value key of its own whose wrap the tenant key
+// holds (`value-key`, ADR 0115) — the operator reads none of it, and a rotation re-wraps that key and leaves the row.
 //
 //   - **It counts** while it names the subject's CURRENT head and verifies under the verifier's CURRENT identity — the
 //     key at the head the verifier's chain ends at — with that head named as `verifierHead`. A rotation of the subject
@@ -85,10 +86,11 @@ export function decodeVerification(b: Uint8Array): Verification {
   return { subjectHead: out[0], verifierHead: out[1], signature: out[2] }
 }
 
-/** Where a row is sealed: its address and the tenant epoch whose key it is sealed under. */
+/** Where a row is sealed: its address and the tenant epoch it was written at. */
 export type VerificationSlot = VerificationAddress & { epoch: number }
 
-const context = (s: VerificationSlot) =>
+/** The row's own seal context — what the wrap of its value key is addressed by (v1.ts `wrapValueKey`). */
+export const verificationContext = (s: VerificationSlot) =>
   ({
     purpose: 'member-verification',
     scopeId: s.tenantId,
@@ -97,10 +99,10 @@ const context = (s: VerificationSlot) =>
     epoch: s.epoch,
   }) as const
 
-/** Seal a verification under the tenant key of epoch `slot.epoch`, bound to its address and that epoch. */
-export const sealVerification = (tenantKeyAtEpoch: Uint8Array, slot: VerificationSlot, v: Verification): Uint8Array =>
-  sealField(context(slot), tenantKeyAtEpoch, encodeVerification(v))
+/** Seal a verification under its fresh value key `K_v`, bound to its address and the epoch it is written at. */
+export const sealVerification = (valueKey: Uint8Array, slot: VerificationSlot, v: Verification): Uint8Array =>
+  sealField(verificationContext(slot), valueKey, encodeVerification(v))
 
-/** Open a row with the tenant key of the epoch it says it is sealed at; `OpenRefused` for another slot's ciphertext. */
-export const openVerification = (tenantKeyAtEpoch: Uint8Array, slot: VerificationSlot, envelope: Uint8Array): Verification =>
-  decodeVerification(openField(context(slot), tenantKeyAtEpoch, envelope))
+/** Open a row with the value key its wrap carries; `OpenRefused` for another slot's ciphertext or another `K_v`. */
+export const openVerification = (valueKey: Uint8Array, slot: VerificationSlot, envelope: Uint8Array): Verification =>
+  decodeVerification(openField(verificationContext(slot), valueKey, envelope))

@@ -8,7 +8,16 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js'
 import { argon2id } from '@noble/hashes/argon2.js'
 import { aeadOpen, aeadSeal, concat, kemPublic, lp, u32be, utf8, type HybridPublic, type HybridSecret } from './primitives'
-import { encodeStatement, SealContextInvalid, type ScopeKind, type StatementContext } from './seal'
+import {
+  encodeStatement,
+  encodeValueContext,
+  open,
+  seal,
+  SealContextInvalid,
+  type ScopeKind,
+  type StatementContext,
+  type ValueContext,
+} from './seal'
 
 export { concat, lp, utf8, type HybridPublic, type HybridSecret }
 export {
@@ -24,6 +33,8 @@ export {
   encodeSealToContext,
   encodeFieldContext,
   encodeStatement,
+  encodeValueContext,
+  VALUE_KEY_PURPOSES,
   OpenRefused,
   SealContextInvalid,
   type BlobRole,
@@ -35,6 +46,8 @@ export {
   type FieldPurpose,
   type ScopeKind,
   type StatementContext,
+  type ValueContext,
+  type ValuePurpose,
 } from './seal'
 export {
   sealBlobMeta,
@@ -832,6 +845,42 @@ const u64be = (n: number): Uint8Array => {
   new DataView(b.buffer).setBigUint64(0, BigInt(n), false)
   return b
 }
+
+// ── Value keys (ADR 0115, owner 2026-11-02) ──────────────────────────────────────────────────────────────
+// A rotation re-wraps keys and never rewrites a value. Every scope-level value that has an author (VALUE_KEY_PURPOSES)
+// is sealed under a value key K_v of its own — 32 random bytes the author mints at EVERY write of the value — and only
+// K_v is sealed under the scope key (`value-key`), bound to the scope, the scope epoch whose key wraps it, and the
+// value's address: SHA-256 of the canonical encoding of the value's own seal context. A field-sealed value derives its
+// K_field from K_v; a plain-sealed one (a group's name, an icon, a recovery copy, item marks) is sealed under K_v
+// itself. So a rotator — owner or member — opens each wrap with the old key and wraps the same K_v under the new one; a
+// wrap it cannot open it replaces by one under a key it drops, and the value reads as unreadable, as before. A wrap moved
+// onto another value's slot does not open, and the value under a substituted K_v does not open either: a rotator can
+// junk a value, never forge one. Conformance: v1.json#value_key and seal.sym['value-key'].
+
+/** A value key's length: 32 random bytes, an AES-256 key. */
+export const VALUE_KEY_BYTES = 32
+
+/** A fresh value key — one per write of one value, never reused for another write or another value. */
+export const generateValueKey = (): Uint8Array => randomBytes(VALUE_KEY_BYTES)
+
+/** A value's address: SHA-256 of the canonical encoding of its own seal context (`encodeValueContext`). */
+export const valueAddress = (value: ValueContext): Uint8Array => sha256(encodeValueContext(value))
+
+/** Where a value key is wrapped: the scope, the scope epoch whose key wraps it, and the value it opens. */
+export type ValueKeySlot = { scopeId: string; epoch: number; value: ValueContext }
+
+const valueKeyContext = (s: ValueKeySlot) =>
+  ({ purpose: 'value-key', scopeId: s.scopeId, epoch: s.epoch, valueAddress: valueAddress(s.value) }) as const
+
+/** Wrap a value's `K_v` under the scope key of `slot.epoch`, bound to the value's address. */
+export function wrapValueKey(scopeKey: Uint8Array, slot: ValueKeySlot, valueKey: Uint8Array): Uint8Array {
+  if (!(valueKey instanceof Uint8Array) || valueKey.length !== VALUE_KEY_BYTES) throw new TypeError('value key: not 32 bytes')
+  return seal(valueKeyContext(slot), scopeKey, valueKey)
+}
+
+/** Open a value's `K_v` with the scope key of `slot.epoch`; `OpenRefused` for a wrap of another value, epoch or scope. */
+export const unwrapValueKey = (scopeKey: Uint8Array, slot: ValueKeySlot, wrapped: Uint8Array): Uint8Array =>
+  open(valueKeyContext(slot), scopeKey, wrapped)
 
 // ── Scope succession (ADR 0115 decision 5) ───────────────────────────────────────────────────────────────
 // A scope key is replaced at each rotation, never chained: no stored value lets a newer epoch's key open an older one,

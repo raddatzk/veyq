@@ -591,19 +591,6 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
-  it('group name-key derivation from the name epoch key (cr-0096, ADR 0027)', () => {
-    const g = vectors.group_name_key
-    // K_name = HKDF-SHA256(E_e, salt="", info=utf8("veyq/v1/group-name-key"), 32).
-    expect(hex(v1.hkdfSha256(unhex(g.epoch_key), unhex(g.salt), unhex(g.info), g.length))).toBe(g.okm)
-  })
-
-  it('space icon-key derivation from the icon epoch key (uc.spaces.set-space-icon, ADR 0027)', () => {
-    const s = vectors.space_icon_key
-    // K_icon = HKDF-SHA256(E_e, salt="", info=utf8("veyq/v1/space-icon-key"), 32). Distinct info from
-    // group_name_key (same epoch_key here) → a different okm: an icon-key wrap can never be a name-key.
-    expect(hex(v1.hkdfSha256(unhex(s.epoch_key), unhex(s.salt), unhex(s.info), s.length))).toBe(s.okm)
-  })
-
   // An Expenses revision (ADR 0108 decision 4): K_rev wrapped under the Pot's K_node (`expense-entry-key`), the body a
   // field seal under that K_rev (`expense-entry`), padded to a size class. The two vectors are one chain, and what makes a
   // re-key safe is that it is a chain: a new K_node re-wraps K_rev, and the body, its envelope and so its digest stay put.

@@ -9,6 +9,10 @@
 // A text or icon field is sealed by a seal of its own (`sealField`, below, ADR 0093 § 9): under a key derived per write
 // from the key it would otherwise be sealed under, so a key handed over for one field opens that one revision of it.
 //
+// A scope-level value that has an author is sealed under a value key of its own (`value-key`, below, ADR 0115): K_v,
+// 32 random bytes its author mints at every write, and only K_v is sealed under the scope key. A rotation re-wraps K_v
+// and never rewrites the value, so a rotator can junk a value — make it unreadable — but never forge one.
+//
 // The unions below are data, not only types: the encoder walks them (so the field ORDER is the table's order), and
 // the conformance test compares their purposes with `contracts/crypto/vectors/v1.json#seal` and `#field_seal` in both
 // directions, and asserts that no purpose sits in two tables.
@@ -66,8 +70,10 @@ export const SEAL_PURPOSES = {
   'content-key': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
   // ownerId is the media id for a media's blobs, the node id for a cover or a file's content; the role names which.
   'blob-key': [['scopeId', 'id'], ['ownerId', 'id'], ['blobId', 'id'], ['role', 'role']],
-  // A share's K_share, recoverable by the Memory's scope members only: sealed under the scope key at the epoch stored
-  // beside it, re-sealed at every rotation (ADR 0115 decision 2) — a key no share link carries (ADR 0036 point 4), where K_node is one every viewer/contributor link does.
+  // A share's K_share, recoverable by the Memory's scope members only: sealed under its own value key K_v (`value-key`),
+  // which the scope key wraps, at the epoch the copy was written at — a key no share link carries (ADR 0036 point 4),
+  // where K_node is one every viewer/contributor link does. A rotation re-wraps K_v and leaves the copy: a K_share is
+  // a key, so a wrap a rotator substituted fails here instead of handing every re-keyer a K_share of its choosing.
   'share-key-recovery': [['scopeId', 'id'], ['nodeId', 'id'], ['shareId', 'shareId'], ['epoch', 'uint']],
   // A Memory's drop PRIVATE key (ADR 0031 point 7), under that Memory's K_node — a node field of its own, never
   // inside node-meta, so a date or location edit never carries it.
@@ -75,8 +81,11 @@ export const SEAL_PURPOSES = {
   // No member id: a reader addresses every member's entry by scope + node only, because the read deliberately
   // carries no member id (ADR 0068 §6 — the aggregate is anonymous in the DATA), so an opener could not supply one.
   // WHOSE an entry is rides inside the plaintext instead, as the `item-mark-self` statement's tag below (ADR 0068 §9).
+  // Under the entry's own value key K_v (`value-key`), minted at every write; the scope key wraps K_v.
   'item-favorites': [['scopeId', 'id'], ['nodeId', 'id']],
   favorites: [['scopeId', 'id']],
+  // A group's name and a space's icon, each under its own value key K_v (`value-key`), minted at every rename or icon
+  // write, at the scope epoch of that write. A pending group invitee is handed the name's K_v (`group-name-key`).
   'group-name': [['scopeId', 'id'], ['nameEpoch', 'uint']],
   'space-icon': [['scopeId', 'id'], ['iconEpoch', 'uint']],
   // The pin store's HEAD (ADR 0104): its version, entry count and the digest of the whole entry set, at its revision.
@@ -118,18 +127,43 @@ export const SEAL_PURPOSES = {
   // decision 1, ./invite.ts) — under `Argon2id(code or password, salt)`. The KEK is unique to the link, and the seal
   // still binds the tenant and the invite, so a sealed part pasted behind another invite's token does not open.
   'invite-link': [['tenantId', 'id'], ['inviteId', 'id']],
+  // A value key K_v (ADR 0115, owner 2026-11-02): the 32 random bytes one write of one scope-level value is sealed under
+  // (VALUE_KEY_PURPOSES below), wrapped under the scope key of `epoch`. Bound to the value's address — `valueAddress`,
+  // SHA-256 of the canonical encoding of the value's own seal context (v1.ts `valueAddress`) — so a wrap moved onto
+  // another value's slot does not open, and the value under a substituted K_v does not open either: a rotator that
+  // re-wraps can make a value unreadable, never another value. A rotation rewrites only this wrap.
+  'value-key': [['scopeId', 'id'], ['epoch', 'uint'], ['valueAddress', 'digest']],
 } as const satisfies Schema
+
+/**
+ * The purposes whose value is sealed under a value key of its own (`value-key`, ADR 0115): every scope-level value that
+ * has an author — its K_v minted fresh at every write, only K_v under the scope key. A seal or field purpose; what a
+ * rotation re-seals instead (a scope-root node's entry: its key wrap, name and slug token, which any member may write)
+ * and what it re-issues (grants, succession statements) is not here. `scripts/validate_scope_rekey_arity.py` reads this
+ * list and requires it to be exactly the purposes a rotation re-wraps.
+ */
+export const VALUE_KEY_PURPOSES = [
+  'group-name',
+  'space-icon',
+  'share-key-recovery',
+  'item-favorites',
+  'member-name',
+  'member-avatar',
+  'member-join-record',
+  'member-verification',
+] as const
 
 /**
  * Field purposes (`sealField`/`openField`, ADR 0093 § 9): every text or icon field a member writes and a report may
  * have to hand over one of. Each seals under `K_field = HKDF(K_parent, salt, "veyq/v1/field/<purpose>")` with a salt
  * drawn per write, where K_parent is the key the field's object hands its fields: the parent's key for a node's name
  * (the directory entry, ADR 0080 Decision 2), the node's own key for its meta, `K_node` or a guest's `K_up` for a
- * medium's tiers, a bucket's name and a guest's display name, `K_share` for a share's fields, `K_tenant` for a member's
- * name and picture, an Expenses revision's own `K_rev` for its body. The AAD binds the object as it would for a plain seal (ADR 0072 Decision 1); the share's three
+ * medium's tiers, a bucket's name and a guest's display name, `K_share` for a share's fields, the value's own key `K_v`
+ * (`value-key`, minted at every write and wrapped under `K_tenant`) for a member's name, picture, join record and
+ * verification, an Expenses revision's own `K_rev` for its body. The AAD binds the object as it would for a plain seal (ADR 0072 Decision 1); the share's three
  * fields stay purpose-only, because `K_share` — and so each `K_field` under it — is unique to one share (Decision 2).
- * `group-name` and `space-icon` are not here: they derive their key per (scope, epoch), not per write, because a pending
- * invitee is handed that key (`group-name-key`).
+ * `group-name` and `space-icon` are not here: each is sealed directly under its own `K_v`, because a pending invitee is
+ * handed the name's `K_v` (`group-name-key`).
  */
 export const FIELD_PURPOSES = {
   // The directory entry binds the placement revision the wire stores it at (ADR 0080 Decision 3), as the key wrap
@@ -148,9 +182,9 @@ export const FIELD_PURPOSES = {
   // name and the picture. Not `join-record`, which is the statement both of its signatures cover.
   'member-join-record': [['scopeId', 'id'], ['userId', 'id']],
   // A member's verification of another member (ADR 0111 decision 12, ./verification.ts): one row per (tenant, verifier,
-  // subject), written only by the verifier, beside the name and the join record. It binds the tenant epoch it is sealed
-  // under, so a row served at another epoch does not open (a rotation re-seals it at its new one, ADR 0115 decision 2);
-  // and the subject, so a row moved to another subject's slot does not open. Not `verification`, which is the statement inside.
+  // subject), written only by the verifier, beside the name and the join record. It binds the tenant epoch it was
+  // written at, so a row served at another epoch does not open (a rotation re-wraps its K_v and leaves the row, ADR
+  // 0115); and the subject, so a row moved to another subject's slot does not open. Not `verification`, which is the statement inside.
   'member-verification': [['scopeId', 'id'], ['userId', 'id'], ['subjectUserId', 'id'], ['epoch', 'uint']],
   // One revision of an Expenses entry (ADR 0108 decision 4), padded to its size class (./pad.ts): its K_parent is that
   // revision's own K_rev (`expense-entry-key`), never the Pot's key, so a re-key re-wraps K_rev and never re-seals the
@@ -346,6 +380,23 @@ function encode(schema: Schema, context: { purpose: string }): Uint8Array {
 export const encodeSealContext = (context: SealContext): Uint8Array => encode(SEAL_PURPOSES, context)
 export const encodeSealToContext = (context: SealToContext): Uint8Array => encode(SEAL_TO_PURPOSES, context)
 export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(FIELD_PURPOSES, context)
+
+/** A purpose whose value is sealed under a value key of its own ({@link VALUE_KEY_PURPOSES}). */
+export type ValuePurpose = (typeof VALUE_KEY_PURPOSES)[number]
+/** The seal or field context of a value under a value key: what the wrap of its `K_v` is addressed by. */
+export type ValueContext = Extract<SealContext | FieldContext, { purpose: ValuePurpose }>
+
+/**
+ * The canonical encoding of a value's own seal context — a plain seal's or a field seal's, which the disjoint purposes
+ * tell apart — refused for a purpose that is not sealed under a value key. What v1.ts `valueAddress` digests.
+ */
+export function encodeValueContext(context: ValueContext): Uint8Array {
+  const purpose: string = context.purpose
+  if (!(VALUE_KEY_PURPOSES as readonly string[]).includes(purpose)) {
+    throw new SealContextInvalid(`${purpose} is not sealed under a value key`)
+  }
+  return Object.hasOwn(FIELD_PURPOSES, purpose) ? encode(FIELD_PURPOSES, context) : encode(SEAL_PURPOSES, context)
+}
 
 /**
  * Statements a key MACs or signs rather than seals — in the same canonical encoding, so their label domain-separates
