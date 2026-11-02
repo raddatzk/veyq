@@ -103,10 +103,13 @@ re-keys
 ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 11). ADR 0024 rejected
 full re-encryption on every removal (gigabytes re-keyed per leave, for content that is existing but unopened).
 
-**Replaced, because an old key obtained later must open nothing new.** After a rotation the live store holds
-everything under the new key, so an old key — a removed member's, a lost device's — opens nothing in a dump taken
-after it; only a dump from before the rotation does, which takes an operator already malicious and archiving then. A
-later-turned operator, a backup taken after the rotation and a new operator are kept out. The price is a rotation that
+**Replaced, so one rule holds at every level.** After a rotation the live store holds everything under the new key,
+so an old key — a removed member's, a lost device's — opens nothing in a dump taken after it; only a dump from before
+the rotation does, which takes an operator already malicious and archiving then. A later-turned operator, a backup
+taken after the rotation and a new operator are kept out. What this adds over the chain it replaced is narrow: node
+keys, and with them the media, were already replaced at every rotation (ADR 0109); replacing `K_SC` extends that to
+the scope-level values, and it guards only what the key's holder had not extracted — whoever held the key could hand
+over whatever they decrypted while they held it. The other reason is one model at every level: no key is chained. The price is a rotation that
 re-wraps every scope-level value key on the rotating device (a tenant of 300 members moves about 900 wraps, some 55 KB,
 down and up), and a member it could not grant at once reads nothing of the scope until re-granted. What the re-key
 leaves in the excluded party's reach: a re-key re-wraps keys and re-encrypts no content, so a `K_blob` they extracted
