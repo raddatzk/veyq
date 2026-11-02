@@ -212,11 +212,11 @@ export const ITEM_MARKS_REKEY_BATCH = 256
 /**
  * Memories' part of a rotation's scope-level move (ADR 0115 decision 2, core's `ScopeRekeyParticipant`): every member's
  * marked set of every Memory in the scope, listed page by page as its value key's wrap — never its ciphertext — and that
- * wrap moved to the new scope key by core's re-wrap, staged under the rotation's re-key id with the digest of the wrap it
- * replaces. The set itself stays byte-identical: its self-tag stays its marker's, nobody can attribute a mark (the listing
- * carries a row id, never a member's), and no rotator can rewrite another member's marks. A wrap that does not open under
- * the old key is staged as one nobody opens, so the set reads as an empty set that is nobody's own, as before: one
- * member's unreadable row must not stop every rotation of the scope.
+ * wrap moved to the new scope key by core's re-wrap, staged under the rotation's re-key id beside the wrap it replaces.
+ * The set itself stays byte-identical: its self-tag stays its marker's, nobody can attribute a mark (the listing carries
+ * a row id, never a member's), and no rotator can rewrite another member's marks. A wrap that does not open under the
+ * old key is staged as one nobody opens, so the set reads as an empty set that is nobody's own, as before: one member's
+ * unreadable row must not stop every rotation of the scope.
  */
 export async function stageItemMarksRekey(ctx: ScopeRekeyContext): Promise<void> {
   const { scopeId, rekeyId } = ctx
@@ -228,7 +228,7 @@ export async function stageItemMarksRekey(ctx: ScopeRekeyContext): Promise<void>
     const marks = page.marks.map((m) => ({
       markId: m.markId,
       wrappedValueKey: ctx.rewrap(itemFavContext(scopeId, m.nodeId), m.wrappedValueKey),
-      replacedDigest: ctx.digestOf(m.wrappedValueKey),
+      replacedValueKey: m.wrappedValueKey,
     }))
     if (marks.length) {
       await withRefresh(() =>

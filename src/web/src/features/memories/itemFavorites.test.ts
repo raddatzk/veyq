@@ -28,7 +28,6 @@ import { itemFavoritesStore, loadItemFavoritesFor, toggleItemFavorite, clearItem
 import { itemFavoritesApi, itemFavoritesRekeyApi, ownItemFavoritesApi } from './api'
 import type { ItemFavoritesRekeyApi, ScopeItemFavoritesRekeyStage } from '../../api/generated/item-favorites'
 import { httpError } from '../../test/httpError'
-import { b64std } from '@veyq/crypto/base64'
 import { isStaleEpoch, openScopeById } from '../spaces/scopes'
 import { HttpStatus, isCodedError } from '../../shared/httpError'
 import { ScopeKind } from '../../api/generated/scopes'
@@ -258,14 +257,14 @@ describe('how many marks one Memory holds (inbox #500)', () => {
   it('the cap the client enforces is the contract\'s, on every item-mark ciphertext', () => {
     const spec = readFileSync(new URL('../../../../../contracts/api/memories/item-favorites.openapi.yaml', import.meta.url), 'utf8')
     const caps = [...spec.matchAll(/maxLength: (\d+)/g)].map((m) => Number(m[1]))
-    // the re-key listing's cursor (80), a staged wrap's replaced digest (44, a SHA-256 in base64) and a value key's wrap
-    // (128) are no ciphertext; every other cap is one — the stored, the written and the own listing's (ADR 0115: a
-    // re-key lists and stages wraps only, never a set) — and the client's
-    const ciphertextCaps = caps.filter((c) => c !== 80 && c !== 44 && c !== 128)
+    // the re-key listing's cursor (80) and a value key's wrap (128) are no ciphertext; every other cap is one — the
+    // stored, the written and the own listing's (ADR 0115: a re-key lists and stages wraps only, never a set) — and the
+    // client's
+    const ciphertextCaps = caps.filter((c) => c !== 80 && c !== 128)
     expect(ciphertextCaps).toEqual(Array(3).fill(ITEM_MARKS_CIPHERTEXT_MAX))
-    expect(caps.filter((c) => c === 44).length).toBe(1)
-    // a wrap beside each of them, and on each of the re-key's listed and staged rows
-    expect(caps.filter((c) => c === 128).length).toBe(5)
+    // a wrap beside each of them, and on each of the re-key's listed and staged rows — a staged one beside the wrap it
+    // replaces
+    expect(caps.filter((c) => c === 128).length).toBe(6)
     expect(spec).toContain(`Size(max = ${ITEM_MARKS_CIPHERTEXT_MAX})`)
   })
 
@@ -453,7 +452,6 @@ describe('Memories\' part of a rotation: every member\'s value key re-wrapped un
   const ctx = () => ({
     scopeId: SCOPE, rekeyId: 'r-1', fromEpoch: SK.epoch,
     rewrap: (value: v1.ValueContext, wrapped: string) => rewrapValueKey(SK, NEW, value, wrapped),
-    digestOf: (c: string) => b64std(v1.sha256Digest(v1.utf8(c))),
   })
   /** The listing as the server serves it: each row's value key's wrap, never its set. */
   const listed = (markId: string, blob: Blob, nodeId = NODE) => ({ markId, nodeId, wrappedValueKey: blob.wrappedValueKey })
@@ -483,14 +481,14 @@ describe('Memories\' part of a rotation: every member\'s value key re-wrapped un
     expect(staged.every((s) => s.fromEpoch === SK.epoch)).toBe(true)
     expect(marks.map((m) => m.markId)).toEqual(['m1', 'm2'])
     for (const [i, served] of [mine, bobs].entries()) {
-      expect(Object.keys(marks[i]).sort()).toEqual(['markId', 'replacedDigest', 'wrappedValueKey']) // a wrap, never a set
+      expect(Object.keys(marks[i]).sort()).toEqual(['markId', 'replacedValueKey', 'wrappedValueKey']) // a wrap, never a set
       expect(JSON.stringify(staged).includes(served.ciphertext)).toBe(false)
       // the set as stored opens through the new wrap under the new key: the self-tag and the ids, byte for byte
       const moved = { ciphertext: served.ciphertext, wrappedValueKey: marks[i].wrappedValueKey }
       expect(plaintextOf(moved, NODE, NEW)).toEqual(plaintextOf(served))
       expect(() => plaintextOf(moved, NODE, SK)).toThrow(v1.OpenRefused) // the new wrap is shut to the old key
       expect(() => plaintextOf(served, NODE, NEW)).toThrow(v1.OpenRefused) // and the old wrap to the new key
-      expect(marks[i].replacedDigest).toBe(b64std(v1.sha256Digest(v1.utf8(served.wrappedValueKey))))
+      expect(marks[i].replacedValueKey).toBe(served.wrappedValueKey)
     }
     // the set is still mine, read under the new key
     vault.mk = MK_ME
