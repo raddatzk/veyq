@@ -2778,6 +2778,21 @@ components:
         found not to be its outgoing key's, which the publish ends rather than re-signs. Without the declaration one
         invite the operator minted in the caller's name would block every securing of the account.
       required: [inviteId, anchorEpoch]
+      # Both signatures or neither (the stage's shape check, before any state is read): a string one brings the other as a
+      # string, and a null or absent one is the declaration's. Under `dependentSchemas`, as CreateNodeRequest's
+      # `parentId`: the generators ignore the keyword, Schemathesis reads it (the API fuzzing sent one signature alone as
+      # valid and met the 400).
+      dependentSchemas:
+        inviteKeySignature:
+          if: { properties: { inviteKeySignature: { type: string } } }
+          then:
+            required: [anchorGrantSignature]
+            properties: { anchorGrantSignature: { type: string } }
+        anchorGrantSignature:
+          if: { properties: { anchorGrantSignature: { type: string } } }
+          then:
+            required: [inviteKeySignature]
+            properties: { inviteKeySignature: { type: string } }
       properties:
         inviteId:
           x-veyq-visibility: id

@@ -94,21 +94,37 @@ const medium = (name: PhotoName, extra: Record<string, unknown> = {}) => ({
 
 /**
  * The run's medium completions (`completeMedia`, `POST …/media-batch`): `before[n]` runs before the n-th of them is sent
- * (1-based), and each one's per-item answer is recorded (its `error`, null when the medium landed).
+ * (1-based), and each one's per-item answer is recorded (its `error`, null when the medium landed), beside the media id
+ * it completed and the original's upload it attached.
  */
-function onCompletions(before: Record<number, () => Promise<void>>): { codes: (string | null)[]; restore: () => void } {
+type Completion = { mediaId: string; originalUploadId: string | null }
+function onCompletions(before: Record<number, () => Promise<void>>): { codes: (string | null)[]; sent: Completion[]; restore: () => void } {
   const codes: (string | null)[] = []
+  const sent: Completion[] = []
   const inner = globalThis.fetch
-  let sent = 0
   globalThis.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     const completion = url.endsWith('/media-batch')
-    if (completion) await before[++sent]?.()
+    if (completion) {
+      await before[sent.length + 1]?.()
+      const body = input instanceof Request ? await input.clone().text() : String(init?.body)
+      const item = (JSON.parse(body) as { items: { mediaId: string; originalUploadId?: string | null }[] }).items[0]!
+      sent.push({ mediaId: item.mediaId, originalUploadId: item.originalUploadId ?? null })
+    }
     const res = await inner(input, init)
     if (completion && res.ok) codes.push(((await res.clone().json()) as { results: { error?: string | null }[] }).results[0]?.error ?? null)
     return res
   }
-  return { codes, restore: () => void (globalThis.fetch = inner) }
+  return { codes, sent, restore: () => void (globalThis.fetch = inner) }
+}
+
+/** Every completion a fresh medium - its own media id, its own upload of the original: a retry re-planned every blob (a
+ *  fresh `K_blob` wrapped under the node key it re-read, ADR 0109 decision 6), never sent again the upload whose wrap the
+ *  refusal was about. */
+function eachCompletionFresh(sent: Completion[]): void {
+  expect(new Set(sent.map((s) => s.mediaId)).size, 'every completion a fresh media id').toBe(sent.length)
+  expect(sent.every((s) => s.originalUploadId !== null), 'every completion attaches an original it uploaded').toBe(true)
+  expect(new Set(sent.map((s) => s.originalUploadId)).size, 'every completion its own upload').toBe(sent.length)
 }
 
 describe.skipIf(!process.env.VEYQ_E2E)('an import and a copy meet a rotation mid-run (inbox #701, ADR 0111 decision 11, live, real crypto)', () => {
@@ -211,7 +227,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('an import and a copy meet a rotation mid
     // the rotations were met mid-run: the first left the Memory behind, the second's re-key moved it past B's key
     expect(rotations).toEqual([{ epoch: 1, memoryEpoch: 0 }, { epoch: 2, memoryEpoch: 2 }])
     expect(imported.codes, 'p1, p2 refused, p2 again, p3 refused, p3 again, p4').toEqual([null, 'node_rekey_pending', null, 'stale_epoch', null, null])
-    expect(resolves, 'each refused medium was uploaded again, nothing else').toEqual({ 'p1.jpg': 1, 'p2.jpg': 2, 'p3.jpg': 2, 'p4.jpg': 1 })
+    // Each refused medium was uploaded again, nothing else: six completions for four media, each its own upload. The
+    // download is asked for each original once - a retry seals the same key-free on-device stage again (inbox #784).
+    eachCompletionFresh(imported.sent)
+    expect(resolves, 'each original asked for once, a retried one included').toEqual({ 'p1.jpg': 1, 'p2.jpg': 1, 'p3.jpg': 1, 'p4.jpg': 1 })
     expect(activeEpochKeys()?.current, 'B\'s device re-opened G at each epoch it met').toBe(2)
     await readsEverything([A, B, C], 2, [MEMORY_NAME])
 
@@ -235,6 +254,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('an import and a copy meet a rotation mid
     expect(copy.nodes).toBe(2)
     expect(rotations).toEqual([{ epoch: 3, memoryEpoch: 2 }, { epoch: 4, memoryEpoch: 4 }])
     expect(copied.codes, 'the copy\'s media: the same two refusals, each met once').toEqual([null, 'node_rekey_pending', null, 'stale_epoch', null, null])
+    eachCompletionFresh(copied.sent)
     expect(activeEpochKeys()?.current).toBe(4)
     await readsEverything([A, B, C], 4, [MEMORY_NAME, COPY_NAME])
 

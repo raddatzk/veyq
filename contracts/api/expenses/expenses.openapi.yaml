@@ -136,10 +136,10 @@ paths:
         record, whose id the client mints, ADR 0072 decision 3). All land or none does: one stale revision fails the batch
         `409 stale_revision`, naming every record whose latest is not the `revision - 1` it was written on, with that
         latest (0 where the record does not exist), and nothing of the batch is stored. A batch serves a Pot's first
-        participants, every transfer of a settle-up at once, an import and a copy. Two revisions of one record in a batch
-        are `400 invalid_request`. A record id that already belongs to another Pot, in any scope, is `409 id_taken`, the
+        participants, every transfer of a settle-up at once, an import and a copy. Two revisions of one record in a batch,
+        or one receipt dropped twice in it, are `422 pot_item_repeated` — a rule across the items no schema states. A record id that already belongs to another Pot, in any scope, is `409 id_taken`, the
         same wherever it lives. `tombstone` marks a delete; it is the only thing the server learns of a revision's
-        content. The sealed body is one of the four size classes exactly, and its key wrap is bound to the revision it
+        content. The sealed body is one of the four size classes exactly (else `422 size_class_invalid`), and its key wrap is bound to the revision it
         opens (both are checked by the client that reads them; the server checks only the body's length). A revision that
         no longer holds a receipt its record held names it in `droppedReceipts` (a receipt of another record, or none
         of this Pot, is `400 invalid_request`): core's blob service releases it, and its purge erases the receipt after
@@ -168,7 +168,7 @@ paths:
         "204":
           description: Every revision of the batch is stored, and the Pot's list moved once for them all.
         "400":
-          description: Malformed request — a body outside its contract, a body of no size class, two revisions of one record, or a dropped receipt that is no receipt of its record in this Pot (`invalid_request`).
+          description: Malformed request — a body outside its contract, or a dropped receipt that is no receipt of its record in this Pot (`invalid_request`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -196,7 +196,15 @@ paths:
                   - entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
                     revision: 2
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
-        "422": { $ref: "../_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
+        "422":
+          description: >
+            `pot_item_repeated` — two revisions of one record in the batch, or one receipt among the batch's
+            `droppedReceipts` twice: a rule across the items no schema states (`uniqueItems` compares whole items, and the
+            generators would turn the list into a set). `size_class_invalid` — a `sealedBody` whose length is none of the
+            four size classes (`PotRevisionWrite.sealedBody`). Nothing is stored on either. `capability_disabled` — Expenses is switched off
+            for the instance or the tenant (uc.platform.switch-application-off): read-only, nothing is stored.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: pot_item_repeated } }
         "451":
           description: >
             A moderator blocked this Pot, a node above it, or the record a revision edits (`blocked_by_operator`,
@@ -246,7 +254,7 @@ paths:
         "204":
           description: The erasure revision is stored and the record's earlier revisions are gone.
         "400":
-          description: Malformed request — a body outside its contract or of no size class (`invalid_request`).
+          description: Malformed request — a body outside its contract (`invalid_request`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -273,7 +281,14 @@ paths:
                   - entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
                     revision: 3
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
-        "422": { $ref: "../_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
+        "422":
+          description: >
+            `size_class_invalid` — a `sealedBody` whose length is none of the four size classes
+            (`PotRevisionWrite.sealedBody`); nothing is stored. `capability_disabled` — as the switch's answer elsewhere
+            (uc.platform.switch-application-off), though an erasure is a removal, which an application switched off never
+            refuses.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: size_class_invalid } }
 
   /api/scopes/{scopeId}/pots/{nodeId}/rekey:
     get:
@@ -327,7 +342,7 @@ paths:
         and its digest stay byte-identical. Nothing staged is served before core's `commitNodeRekey` under the same
         `rekeyId`, whose transaction swaps it in through Expenses' participant; a staged revision that no longer exists
         (erased since) is the commit's `rekey_parts_stale`, a revision the stage misses its `rekey_parts_missing`. A value
-        staged twice is replaced; an unclaimed stage expires after a day. `fromEpoch` is the Pot's epoch as read; a Pot
+        staged twice — in one batch or in two — is replaced, as in core's `stageNodeRekey`; an unclaimed stage expires after a day. `fromEpoch` is the Pot's epoch as read; a Pot
         re-keyed since is `409 stale_epoch`.
       security:
         - bearerAuth: []
@@ -344,7 +359,7 @@ paths:
         "204":
           description: The batch is staged.
         "400":
-          description: Malformed request (a list over 256 entries, a malformed value, no value at all, or one revision twice).
+          description: Malformed request (no revision, or more than 256, or a malformed value).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -480,7 +495,7 @@ paths:
         "204":
           description: Every revision of the batch is stored and recorded as a guest write.
         "400":
-          description: Malformed request — a body outside its contract, a body of no size class, two revisions of one record, or a dropped receipt that is no receipt of its record in this Pot (`invalid_request`).
+          description: Malformed request — a body outside its contract, or a dropped receipt that is no receipt of its record in this Pot (`invalid_request`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
@@ -513,7 +528,15 @@ paths:
                   - entryId: 5e3b6c1a-2f4d-4a8e-9b7c-1d2e3f4a5b6c
                     revision: 2
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
-        "422": { $ref: "../_common.openapi.yaml#/components/responses/ApplicationSwitchedOff" }
+        "422":
+          description: >
+            `pot_item_repeated` — two revisions of one record in the batch, or one receipt among the batch's
+            `droppedReceipts` twice: a rule across the items no schema states (`uniqueItems` compares whole items, and the
+            generators would turn the list into a set). `size_class_invalid` — a `sealedBody` whose length is none of the
+            four size classes (`PotRevisionWrite.sealedBody`). Nothing is stored on either. `capability_disabled` — Expenses is switched off
+            for the instance or the tenant (uc.platform.switch-application-off): read-only, nothing is stored.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: pot_item_repeated } }
         "429":
           description: Too many wrong password attempts on this share (the password gate's own limiter).
           content:
@@ -721,7 +744,10 @@ components:
             The revision (`contracts/expenses/entry.v1.schema.json`) padded to a size class and sealed under its own
             `K_rev` (field purpose `expense-entry`, bound to scope, Pot, `entryId` and `revision`; opaque base64). Its
             length is one of exactly four, one per size class — 744, 2792, 10984 or 21908 characters (512, 2048, 8192 or
-            16384 bytes of padded plaintext, the 16 KiB cap) — and anything else is `400 invalid_request`.
+            16384 bytes of padded plaintext, the 16 KiB cap). A length between them is `422 size_class_invalid`: a rule
+            no generator can be given — a `pattern` of the four lengths is one no JSON Schema generator draws within its
+            size limits (measured: Schemathesis failed its `data_too_large` health check on the batch) — so not the shape's
+            400.
           contentEncoding: base64
           minLength: 744
           maxLength: 21908
@@ -742,7 +768,8 @@ components:
             The receipts of this record that this revision no longer holds and the one before it did (ADR 0108 decision 7):
             core's blob service releases each one for good, and its purge erases it once the trash retention has passed
             since (ADR 0112 decision 2). Each must
-            be a receipt of this record in this Pot, else the batch is `400 invalid_request` and nothing is stored; one
+            be a receipt of this record in this Pot, else the batch is `400 invalid_request` and nothing is stored, and
+            named once in the batch, else `422 pot_item_repeated`; one
             dropped before stays dropped at its first time. A dropped receipt is never held again. A tombstone needs to name
             none: a deleted entry's receipts go after the retention on their own, and come back with a restore within it.
             Omitted = none.
@@ -1141,7 +1168,7 @@ components:
 
     PotRekeyStage:
       type: object
-      description: One batch of re-wrapped revision keys; at least one value (else `400 invalid_request`).
+      description: One batch of re-wrapped revision keys, 1–256 of them.
       required: [fromEpoch, revisions]
       properties:
         fromEpoch:
@@ -1153,10 +1180,10 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         revisions:
           type: array
-          minItems: 0
+          minItems: 1
           maxItems: 256
           items: { $ref: "#/components/schemas/PotRekeyWrap" }
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 0, max = 256) @field:jakarta.validation.Valid'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'
