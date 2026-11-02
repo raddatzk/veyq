@@ -27,7 +27,7 @@ import { listMyScopes, openScope } from './scopes'
 import { createFolder, listTree } from '../../core/node/tree'
 import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { avatarUrlOf, loadTenantPeople, refreshPeopleDirectory, resetPeopleDirectory } from '../../core/people/directory'
-import { openOwnNameKey, sealAvatar, sealName, setMyAvatar, updateMyProfile } from '../account/profile/profile'
+import { openOwnNameKey, sealAvatar, sealName, setMyAvatar, unsealName, updateMyProfile } from '../account/profile/profile'
 import { scopesApi } from '../../api/client'
 import { ScopeKind } from '../../api/generated/scopes'
 import { decodeHttpError } from '../../shared/httpError'
@@ -41,11 +41,13 @@ const FOLDER_NAME = 'Sommerfest Tegernsee'
 // A tiny PNG (the header `sniffImage` recognises, then filler), padded to the avatar's constant length by `sealAvatar`.
 const PICTURE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...Array.from({ length: 64 }, (_, i) => (i * 41) & 0xff)])
 
-/** Set the signed-in member's name (and picture) under the tenant key its grant opens now. */
-async function saveProfile(name: { firstName: string; lastName: string }, picture?: Uint8Array): Promise<void> {
+/** Set the signed-in member's name (and picture) under the tenant key its grant opens now, stating its epoch (ADR 0115
+ *  decision 3). Returns a copy of that key — the test's oracle for "under the replaced key". */
+async function saveProfile(name: { firstName: string; lastName: string }, picture?: Uint8Array): Promise<Uint8Array> {
   const own = (await openOwnNameKey())!
-  await updateMyProfile({ sealedName: sealName(own.key, own.address, name) })
-  if (picture) await setMyAvatar(sealAvatar(own.key, own.address, picture))
+  await updateMyProfile({ sealedName: sealName(own.key, own.address, name), epoch: own.epochs.epoch })
+  if (picture) await setMyAvatar(sealAvatar(own.key, own.address, picture), own.epochs.epoch)
+  return own.key.slice()
 }
 
 const fullName = (n: { firstName: string; lastName: string }) => `${n.firstName} ${n.lastName}`
@@ -59,7 +61,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('a tenant owner gives the space a new loc
     const C = await onboardMember(tenant.tenantId, mkActor('c'), salt)
     recordCanaries(fullName(A_NAME), fullName(B_NAME), fullName(C_NAME), FOLDER_NAME)
     await become(B)
-    await saveProfile(B_NAME, PICTURE)
+    const E0 = await saveProfile(B_NAME, PICTURE)
     await become(C)
     await saveProfile(C_NAME)
     await become(A)
@@ -90,22 +92,27 @@ describe.skipIf(!process.env.VEYQ_E2E)('a tenant owner gives the space a new loc
     expect(remaining.map((m) => m.userId).sort()).toEqual([A.userId, B.userId].sort())
     expect(remaining.every((m) => !m.pending), 'B\'s key is anchored: granted, not declared pending').toBe(true)
 
-    // --- B, who stays: holds epoch 1 and peels epoch 0 from it, reads every name, the picture and the folder -------------
+    // --- B, who stays: holds epoch 1's key — which replaced epoch 0's, every row re-sealed under it — and reads every
+    //     name, the picture and the folder under it (ADR 0115 decisions 1-2) ---------------------------------------------
     await become(B)
     resetPeopleDirectory()
     const heldB = (await openScope(ScopeKind.Tenant))!
-    expect(heldB.epochs.current, 'B was granted the new epoch').toBe(1)
-    expect(heldB.epochs.keys.has(0), 'and opens the one before it through the chain link').toBe(true)
+    expect(heldB.epochs.epoch, 'B was granted the new epoch').toBe(1)
+    const bAddress = { scopeId: tenantScopeId, userId: B.userId! }
+    const bRow = (await listScopeMembers(tenantScopeId)).find((m) => m.userId === B.userId)?.sealedName
+    expect(unsealName(heldB.epochs.key, bAddress, bRow), 'B\'s name was re-sealed under epoch 1').toEqual(B_NAME)
+    expect(unsealName(E0, bAddress, bRow), 'and nothing of it is left under epoch 0').toBeNull()
     const seenByB = await loadTenantPeople()
     expect(seenByB.get(A.userId!)?.displayName).toBe(fullName(A_NAME))
     expect(seenByB.get(B.userId!)?.displayName).toBe(fullName(B_NAME))
     await refreshPeopleDirectory()
-    expect(avatarUrlOf(B.userId!), 'B\'s picture from before the rotation').not.toBeNull()
+    expect(avatarUrlOf(B.userId!), 'B\'s picture, re-sealed by the rotation').not.toBeNull()
     const treeB = await listTree(tenantScopeId, heldB.epochs)
     expect(treeB.find((n) => n.id === folderId)?.name).toBe(FOLDER_NAME)
-    expect(treeB.find((n) => n.id === folderId)?.epoch, 'the folder carries the new epoch').toBe(1)
+    expect(treeB.find((n) => n.id === folderId)?.epoch, 'the folder was re-keyed: its own key at its epoch 1').toBe(1)
+    expect(treeB.find((n) => n.id === folderId)?.scopeEpoch, '…minted under the tenant\'s new epoch').toBe(1)
 
-    // --- C, removed: outside the scope, no epoch chain to read ---------------------------------------------------------
+    // --- C, removed: outside the scope, no succession statement to read ------------------------------------------------
     await become(C)
     const refused = await scopesApi().listScopeEpochs({ scopeId: tenantScopeId }).then(() => null, decodeHttpError)
     expect(refused?.status, 'the removed member reads no epoch of the tenant').toBe(404)
@@ -116,7 +123,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('a tenant owner gives the space a new loc
     await become(D)
     resetPeopleDirectory()
     const heldD = (await openScope(ScopeKind.Tenant))!
-    expect(heldD.epochs.current, 'the open invite was re-granted the new epoch').toBe(1)
+    expect(heldD.epochs.epoch, 'the open invite was re-granted the new epoch').toBe(1)
     const seenByD = await loadTenantPeople()
     expect(seenByD.get(A.userId!)?.displayName).toBe(fullName(A_NAME))
     expect(seenByD.get(B.userId!)?.displayName).toBe(fullName(B_NAME))

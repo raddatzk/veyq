@@ -68,7 +68,7 @@ beforeAll(() => {
     })
   }
 })
-// The scope this suite entered holds the epoch keys and two background polls: dropped whatever the outcome.
+// The scope this suite entered holds the scope key and two background polls: dropped whatever the outcome.
 afterAll(() => clearActiveSpace())
 
 const GROUP_NAME = 'Segelclub Chiemsee'
@@ -149,36 +149,37 @@ describe.skipIf(!process.env.VEYQ_E2E)('an import and a copy meet a rotation mid
     // times every re-key itself.
     stopScopeRotationPolling()
     stopGrantDeliveryPolling()
-    expect([activeSpace.status, activeSpace.scopeId, activeEpochKeys()?.current]).toEqual(['ready', gG, 0])
+    expect([activeSpace.status, activeSpace.scopeId, activeEpochKeys()?.epoch]).toEqual(['ready', gG, 0])
 
     /** A rotates G (and with `rekeyNodes` re-keys every node on its device), then B is signed in again; what it
-     *  committed and where the run's Memory `name` stood after it. */
-    const rotations: { epoch: number; memoryEpoch: number }[] = []
+     *  committed and where the run's Memory `name` stood after it: its own key's epoch and the scope epoch that key was
+     *  minted under (ADR 0114 decision 3). */
+    const rotations: { epoch: number; memoryEpoch: number; memoryScopeEpoch: number }[] = []
     const rotateAsA = (name: string, rekeyNodes: boolean) => async () => {
       await become(A)
       const epoch = await rekeySpace(gG)
       if (rekeyNodes) expect((await rekeyScope(gG)).done, 'A\'s device re-keyed every node').toBe(true)
       const memory = (await listTree(gG, (await openScopeById(gG))!.epochs)).find((n) => n.name === name)!
-      rotations.push({ epoch, memoryEpoch: memory.epoch })
+      rotations.push({ epoch, memoryEpoch: memory.epoch, memoryScopeEpoch: memory.scopeEpoch })
       await become(B)
     }
     /** The folder as B's device holds it now: the parent a run is started under. */
     const folderNow = async () => {
       await loadTree()
       const at = treeStore.nodes.find((n) => n.id === folderId)!
-      return { id: folderId, key: nodeContentKey(gG, activeEpochKeys()!, treeStore.nodes, folderId)!, epoch: at.epoch }
+      return { id: folderId, key: nodeContentKey(gG, activeEpochKeys()!, treeStore.nodes, folderId)!, epoch: at.epoch, scopeEpoch: at.scopeEpoch }
     }
 
-    /** Every member holds `epoch`, opens every node at it and every medium of each Memory in `memories` and of its chapter:
-     *  the original's bytes, its listed tier, p2's restored facts. */
+    /** Every member holds `epoch`, opens every node - each one's key minted under it - and every medium of each Memory
+     *  in `memories` and of its chapter: the original's bytes, its listed tier, p2's restored facts. */
     async function readsEverything(members: Actor[], epoch: number, memories: string[]): Promise<void> {
       for (const who of members) {
         await become(who)
         const held = (await openScopeById(gG))!
-        expect(held.epochs.current, `${who.username} holds epoch ${epoch}`).toBe(epoch)
+        expect(held.epochs.epoch, `${who.username} holds epoch ${epoch}`).toBe(epoch)
         const tree = await listTree(gG, held.epochs)
         const expected = [[FOLDER_NAME, epoch], ...memories.flatMap((m) => [[m, epoch], [CHAPTER_NAME, epoch]])]
-        expect(tree.map((n) => [n.name, n.epoch]).sort(), `${who.username} opens every node at epoch ${epoch}`).toEqual(expected.sort())
+        expect(tree.map((n) => [n.name, n.scopeEpoch]).sort(), `${who.username} opens every node, each key minted at epoch ${epoch}`).toEqual(expected.sort())
         for (const memoryName of memories) {
           const memory = tree.find((n) => n.name === memoryName)!
           const chapterNode = tree.find((n) => n.parentId === memory.id)!
@@ -224,14 +225,15 @@ describe.skipIf(!process.env.VEYQ_E2E)('an import and a copy meet a rotation mid
       scopeId: gG, epochs: activeEpochKeys()!, tree: treeStore.nodes, parent: await folderNow(), items: [{ manifest, payload }],
     }).finally(imported.restore)
     expect(made.nodes).toBe(2)
-    // the rotations were met mid-run: the first left the Memory behind, the second's re-key moved it past B's key
-    expect(rotations).toEqual([{ epoch: 1, memoryEpoch: 0 }, { epoch: 2, memoryEpoch: 2 }])
+    // the rotations were met mid-run: the first left the Memory behind (its key from scope epoch 0, own epoch 0), B's pull
+    // re-keyed it (own 1), and the second's re-key moved it past B's key (own 2, minted under scope epoch 2)
+    expect(rotations).toEqual([{ epoch: 1, memoryEpoch: 0, memoryScopeEpoch: 0 }, { epoch: 2, memoryEpoch: 2, memoryScopeEpoch: 2 }])
     expect(imported.codes, 'p1, p2 refused, p2 again, p3 refused, p3 again, p4').toEqual([null, 'node_rekey_pending', null, 'stale_epoch', null, null])
     // Each refused medium was uploaded again, nothing else: six completions for four media, each its own upload. The
     // download is asked for each original once - a retry seals the same key-free on-device stage again (inbox #784).
     eachCompletionFresh(imported.sent)
     expect(resolves, 'each original asked for once, a retried one included').toEqual({ 'p1.jpg': 1, 'p2.jpg': 1, 'p3.jpg': 1, 'p4.jpg': 1 })
-    expect(activeEpochKeys()?.current, 'B\'s device re-opened G at each epoch it met').toBe(2)
+    expect(activeEpochKeys()?.epoch, 'B\'s device re-opened G at each epoch it met').toBe(2)
     await readsEverything([A, B, C], 2, [MEMORY_NAME])
 
     // --- B copies the Memory it imported beside it; A rotates under the copy as under the import ----------------------
@@ -252,10 +254,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('an import and a copy meet a rotation mid
     const copy = await prepared.run({ scopeId: gG, epochs: activeEpochKeys()!, tree: treeStore.nodes, parent: await folderNow() })
       .finally(copied.restore)
     expect(copy.nodes).toBe(2)
-    expect(rotations).toEqual([{ epoch: 3, memoryEpoch: 2 }, { epoch: 4, memoryEpoch: 4 }])
+    // the copy was minted under scope epoch 2 at its own epoch 0; B's pull after the first rotation re-keyed it (own 1),
+    // A's re-key after the second moved it to own 2 under scope epoch 4
+    expect(rotations).toEqual([{ epoch: 3, memoryEpoch: 0, memoryScopeEpoch: 2 }, { epoch: 4, memoryEpoch: 2, memoryScopeEpoch: 4 }])
     expect(copied.codes, 'the copy\'s media: the same two refusals, each met once').toEqual([null, 'node_rekey_pending', null, 'stale_epoch', null, null])
     eachCompletionFresh(copied.sent)
-    expect(activeEpochKeys()?.current).toBe(4)
+    expect(activeEpochKeys()?.epoch).toBe(4)
     await readsEverything([A, B, C], 4, [MEMORY_NAME, COPY_NAME])
 
   }, 480_000)

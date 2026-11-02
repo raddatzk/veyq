@@ -24,8 +24,9 @@ sealed interface PutVerificationOutcome {
     data object OfSelf : PutVerificationOutcome, HttpFailure by httpFailure("verification_of_self", FailureStatus.BAD_REQUEST)
     /** The subject is no accepted member of the tenant. */
     data object MemberNotFound : PutVerificationOutcome, HttpFailure by Failures.memberNotFound
-    /** The statement names an epoch the tenant scope has not reached: no member holds its key. */
-    data object EpochAhead : PutVerificationOutcome, HttpFailure by Failures.invalidRequest
+    /** The statement is sealed under a tenant epoch that is not the current one (ADR 0115 decision 3): the tenant has one
+     *  key at a time, and a rotation re-seals every verification under it, so none lands under another. */
+    data object StaleEpoch : PutVerificationOutcome, HttpFailure by Failures.staleEpoch
 }
 
 /** Result of reading a tenant's verifications. */
@@ -37,8 +38,8 @@ sealed interface ListVerificationsOutcome {
 
 /**
  * The members' verifications of each other in a tenant (ADR 0111 decisions 12-13). Each is one opaque ciphertext the
- * server stores and relays and cannot check: it checks only who may write which row and that the tenant has reached
- * the epoch it names. Both operations sit behind the tenant membership gate (the directory's, ADR 0042) and nothing a
+ * server stores and relays and cannot check: it checks only who may write which row and that the epoch it names is the
+ * tenant's current one. Both operations sit behind the tenant membership gate (the directory's, ADR 0042) and nothing a
  * guest reaches.
  *
  * **The verifier is always the caller** — the row a put writes is keyed by the authenticated caller's id, never by
@@ -62,7 +63,7 @@ class TenantVerificationHandler(
             access.check(callerId, tenantId, WRITE)
                 .refusal(PutVerificationOutcome.NotFound, PutVerificationOutcome.Suspended)?.let { return@call it }
             if (!memberships.belongsToTenant(subjectUserId, tenantId)) return@call PutVerificationOutcome.MemberNotFound
-            if (epoch > scope.currentEpoch) return@call PutVerificationOutcome.EpochAhead
+            if (epoch != scope.currentEpoch) return@call PutVerificationOutcome.StaleEpoch
             store.put(tenantId, callerId, subjectUserId, epoch, sealedStatement, Instant.now())
             PutVerificationOutcome.Stored
         }

@@ -34,7 +34,7 @@ import { FOLDER_KIND } from './kind'
 import { PlacementConflictError, type TreeNode } from './tree'
 import { GuestTreeError } from '../sharing/guestTree'
 import type { Access, TreeSource } from '../access'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import type { GuestIdentity } from '../sharing/guestIdentity'
 import { treeNode, memberAccessOf, guestAccessOf, memberTreeOf } from '../../test/models'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
@@ -198,7 +198,7 @@ describe('the move browser: what a guest is offered (its subtree, its folders)',
 
 describe('nodeMover: the door per session', () => {
   it('a member moves through moveNode over the loaded tree, then re-reads it', async () => {
-    const epochs: EpochKeys = { current: 0, keys: new Map() }
+    const epochs: ScopeKey = { epoch: 0, key: new Uint8Array(32) }
     const m = nodeMover(() => memberAccessOf({ epochs }))!
     await m.move('a', 'b')
     expect(calls.moveNode).toHaveBeenCalledWith('scope-1', epochs, expect.any(Array), 'a', 'b')
@@ -268,7 +268,7 @@ describe('several at once: the place, the pre-check, the writes', () => {
   })
 
   it('a member: one placement write per node, in order, and the tree re-read ONCE after the last', async () => {
-    const epochs: EpochKeys = { current: 0, keys: new Map() }
+    const epochs: ScopeKey = { epoch: 0, key: new Uint8Array(32) }
     const out = await nodeMover(() => memberAccessOf({ epochs }))!.moveMany([{ nodeId: 'a', to: 'b' }, { nodeId: 'item2', to: 'b' }, { nodeId: 'box', to: 'b' }])
     expect((calls.moveNode.mock.calls as unknown[][]).map((c) => [c[3], c[4]])).toEqual([['a', 'b'], ['item2', 'b'], ['box', 'b']])
     expect(calls.moveNode).toHaveBeenCalledWith('scope-1', epochs, expect.any(Array), 'a', 'b')
@@ -279,7 +279,7 @@ describe('several at once: the place, the pre-check, the writes', () => {
   it('a refusal mid-way leaves the earlier moves, still sends the rest, and says per node how it ended', async () => {
     const refused = new GuestTreeError('slug_taken')
     calls.moveNode.mockImplementationOnce(async () => {}).mockRejectedValueOnce(refused)
-    const out = await nodeMover(() => memberAccessOf({ epochs: { current: 0, keys: new Map() } }))!.moveMany([
+    const out = await nodeMover(() => memberAccessOf({ epochs: { epoch: 0, key: new Uint8Array(32) } }))!.moveMany([
       { nodeId: 'a', to: 'b' }, { nodeId: 'item2', to: 'b' }, { nodeId: 'box', to: 'b' },
     ])
     expect(calls.moveNode).toHaveBeenCalledTimes(3)

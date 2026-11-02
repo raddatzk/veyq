@@ -6,7 +6,7 @@
   node's leading visual in the level list and tiles, in the node's header and in the sidebar's Favorites, with the kind's icon as
   the default. Core's feature (inbox #411): the action, **the dialog (choose, crop, remove)**, the derive, the upload, the write and
   the display belong to the platform; a kind only **opts in** (`NodeKindRules.takesCover` on the server, `cover` on the web descriptor).
-- **Preconditions:** The scope is unlocked (the epoch keys are loaded), not pending deletion, the member may write it, and the
+- **Preconditions:** The scope is unlocked (the scope key is loaded), not pending deletion, the member may write it, and the
   node's kind opted in (FOLDER — core's own, `DEPOT_DROPBOX`, `MEMORY`, `CHAPTER`; **not** `FILE`: a file's own thumbnail is a
   different idea, it needs the client to understand many formats). The node is not a guest's identity folder.
 - **Postconditions (success):** The image is the node's own blob in core's `COVER` attachment slot — not a child, not a file in

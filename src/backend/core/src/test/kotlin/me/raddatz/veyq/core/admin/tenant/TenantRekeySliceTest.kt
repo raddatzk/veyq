@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.membership.TestInviteKey
@@ -109,7 +110,7 @@ class TenantRekeySliceTest {
         inviteGrants: List<TestInviteKey> = emptyList(), pendingInvites: List<TestInviteKey> = emptyList(),
     ) = given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
         .body(
-            """{"epoch":1,"wrappedPrev":"cHJldg==",""" +
+            """{"epoch":1,${TestScopeRekey.rotationJson(tenantId)},""" +
                 """"grants":[${granted.joinToString(",") {
                     """{"userId":"$it","wrappedGrant":"$REGRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(it)}"}"""
                 }}],""" +

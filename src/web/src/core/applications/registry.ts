@@ -72,6 +72,12 @@
 // skipped it. There is no registry-wide rotation gate: core re-seals what it seals under the Master Key itself (the node
 // pins, `rotateKeys`), so a build with no application - or none that registers hooks - rotates as safely as any other.
 //
+// **A scope's re-key (`app.scopeRekey`, ADR 0115 decision 2).** A rotation replaces the scope key and re-seals every row
+// sealed under it before its commit; core stages its own rows, and an application that stores rows under the scope key
+// (Memories' item marks) re-seals and stages its own through the participant it registers here — once per application.
+// Not required: an application with no such row registers none, and the server refuses a commit that leaves any row
+// unstaged (`rekey_parts_missing`), so a forgotten participant fails closed, never silently.
+//
 // **Applications (`registerApplication`; uc.platform.switch-application-off).** An application names itself once: its id —
 // its own entry of the capability register (`memories`), which the Server Owner and a tenant owner switch off — and its
 // name as an i18n key of its own namespace; the kinds it owns are those its registrar registers. Core asks
@@ -108,7 +114,7 @@
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
 // is an open string token (`core/node/kind.ts`), so no compiler checks that every kind is handled: this answer and its
 // tests (`registry.test.ts`) are what does.
-import { nothingOfItsOwnToRekey, type RekeyContentHook } from '../node/rekey/hooks'
+import { nothingOfItsOwnToRekey, type RekeyContentHook, type ScopeRekeyParticipant } from '../node/rekey/hooks'
 import { defineAsyncComponent, type Component } from 'vue'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import type { TreeNode } from '../node/tree'
@@ -116,7 +122,7 @@ import type { Level } from '../node/browse'
 import type { LevelViewOption } from '../node/levelViews'
 import type { LevelRowsFactory } from '../node/levelRow'
 import type { StoredBlob } from '../blob/sharedBlob'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
 import { slugify } from '../../shared/naming'
@@ -288,7 +294,7 @@ export interface LevelActionContext {
   access: Access
   tree: TreeSource
   folder: TreeNode | null
-  epochs: EpochKeys | null
+  epochs: ScopeKey | null
 }
 
 /** One entry of the "New" menu, declared by an application on its kind. `allowed` is the rights answer (fail closed:
@@ -371,7 +377,7 @@ export type KindRegistration = Omit<KindDescriptor, 'kind' | 'contentSchema'> & 
 export interface NodeDetailProps {
   node: TreeNode
   scopeId: string
-  epochs: EpochKeys | null
+  epochs: ScopeKey | null
   /** The opened node's content key, resolved by walking the content-key chain (null while the keys are not ready). */
   contentKey: Uint8Array | null
   /** The opened node's children, bucketed by kind (`byKind`). */
@@ -392,12 +398,15 @@ export interface NodeDetailProps {
 export interface NodeCreateDialogProps {
   kind: NodeKind
   scopeId: string
-  epochs: EpochKeys
+  epochs: ScopeKey
   parentId: string | null
   parentKey: Uint8Array | null
-  /** The parent's epoch as read (`TreeNode.epoch`): the create states it as `parentEpoch` (ADR 0109 point 6). Null at
-   *  the scope root. */
+  /** The parent's own epoch as read (`TreeNode.epoch`): the create states it as `parentEpoch` (ADR 0114 decision 3).
+   *  Null at the scope root. */
   parentEpoch: number | null
+  /** The scope epoch the parent's key was minted under (`TreeNode.scopeEpoch`): the device floor's (ADR 0115 decision
+   *  6). Null at the scope root. */
+  parentScopeEpoch: number | null
 }
 export interface NodeCreateDialogEmits {
   done: []
@@ -418,7 +427,7 @@ export interface NodeShareDialogProps {
   /** The node's epoch as read (`TreeNode.epoch`): the epoch `nodeKey` was minted at, which a mint or re-issue states as
    *  `nodeEpoch` (ADR 0109 point 6). */
   nodeEpoch: number
-  epochs: EpochKeys
+  epochs: ScopeKey
   nodeName: string
   nodeKind: NodeKind
   uploader?: boolean
@@ -504,6 +513,8 @@ export interface ApplicationRegistrar {
   /** Register the application's lifecycle hooks. Throws on a second hook set and if `onMasterKeyRotated` is not a
    *  function. */
   lifecycle(hooks: LifecycleHooks): void
+  /** Register the application's part of a rotation's scope-level re-seal (see the header). Throws on a second one. */
+  scopeRekey(participant: ScopeRekeyParticipant): void
   /** Claim the drop page of a `WRITE_ONLY` link rooted at `rootKind` (see the header). Throws if that kind is already
    *  claimed, if it is not a kind this application registered, and for FOLDER. */
   shareBody(rootKind: NodeKind, body: Component): void
@@ -537,6 +548,8 @@ export interface Registry {
   scopeEntered(scopeId: string): Promise<void>
   /** Run every application's `onMasterKeyRotated`; rejects with the first failure after all ran. */
   masterKeyRotated(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void>
+  /** Every application's scope re-key participant, in registration order (ADR 0115 decision 2). */
+  scopeRekeyParticipants(): readonly ScopeRekeyParticipant[]
   /** The kind's descriptor, or `{ supported: false }` — never `undefined`. */
   kind(kind: NodeKind): KindLookup
   /** Every registered kind, the platform's FOLDER first, then in registration order: what the composition's tests walk
@@ -608,6 +621,7 @@ export function createRegistry(): Registry {
     }],
   ])
   const lifecycles = new Map<string, LifecycleHooks>()
+  const scopeRekeys = new Map<string, ScopeRekeyParticipant>()
   const applications: ApplicationInfo[] = []
   const applicationOfKind = new Map<NodeKind, string>()
   // The unified list's row sources and tabs (inbox #407), in registration order.
@@ -682,6 +696,11 @@ export function createRegistry(): Registry {
         }
         lifecycles.set(id, { ...hooks })
       },
+      scopeRekey(participant: ScopeRekeyParticipant) {
+        if (scopeRekeys.has(id)) throw new Error(`the scope re-key of ${id} is already registered`)
+        if (typeof participant !== 'function') throw new Error(`application ${id} registered no scope re-key function`)
+        scopeRekeys.set(id, participant)
+      },
       shareBody(rootKind: NodeKind, body: Component) {
         if (rootKind === FOLDER_KIND || shareBodies.has(rootKind)) throw new Error(`share body for ${rootKind} is already claimed`)
         if (applicationOfKind.get(rootKind) !== id) throw new Error(`node kind ${rootKind} is not a kind of ${id}: its share body is refused`)
@@ -714,6 +733,7 @@ export function createRegistry(): Registry {
     },
     scopeEntered: (scopeId) => eachApplication((h) => h.onScopeEntered?.(scopeId)),
     masterKeyRotated: (oldMk, newMk, scopeIds) => eachApplication((h) => h.onMasterKeyRotated(oldMk, newMk, scopeIds)),
+    scopeRekeyParticipants: () => [...scopeRekeys.values()],
     kind(kind) {
       const d = kinds.get(kind)
       return d ? { supported: true, ...d } : { supported: false, kind }

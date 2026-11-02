@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-09-20
 - Model: [en.memory.favorites](../features/memory/enablers/en.memory.favorites.md)
+- Replaced in part: decision 1's item-mark seal at `E_0` by ADR 0115 (built)
 
 ## Context
 

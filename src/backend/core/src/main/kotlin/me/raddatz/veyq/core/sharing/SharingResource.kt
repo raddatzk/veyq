@@ -6,6 +6,7 @@ import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.generated.api.SharingApi
 import me.raddatz.veyq.core.generated.model.CreateShareIdentityRequest
 import me.raddatz.veyq.core.generated.model.CreateShareNodeRequest
+import me.raddatz.veyq.core.generated.model.ReactivateShareRequest
 import me.raddatz.veyq.core.generated.model.ShareNodeCreated
 import me.raddatz.veyq.core.generated.model.UpdateShareNodeRequest
 import me.raddatz.veyq.core.generated.model.CreateShareRequest
@@ -181,8 +182,18 @@ class SharingResource(
             is HttpFailure -> httpError(o)
         }
 
-    override fun reactivateShare(shareId: String): Response =
-        when (val o = handler.reactivate(identity.principal.name, shareId)) {
+    // ADR 0114 decision 7: a switched-off link comes back with the root's key and name under its `K_share`, stating the
+    // root's own epoch; which key its role takes is the handler's to judge (the schema cannot know the role).
+    override fun reactivateShare(shareId: String, reactivateShareRequest: ReactivateShareRequest): Response =
+        when (val o = handler.reactivate(
+            identity.principal.name, shareId,
+            SharingHandler.ReopenRequest(
+                nodeEpoch = reactivateShareRequest.nodeEpoch.validated(),
+                wrap = reactivateShareRequest.wrap,
+                sealedDropPublicKey = reactivateShareRequest.sealedDropPublicKey,
+                sealedName = reactivateShareRequest.sealedName,
+            ),
+        )) {
             ReactivateShareOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
@@ -215,13 +226,20 @@ class SharingResource(
 
     // Edit a share in place (cr-0115/cr-0116/cr-0119, ADR 0036) — owner-gated in the handler (404 if not the
     // caller's). The K_share-sealed ciphertexts (note + name) are re-sealed client-side; an optional `role` changes
-    // the grant in place (READ ↔ READ_WRITE — WRITE_ONLY is 422). The link/K_share/wrap are untouched either way.
+    // the grant in place (READ ↔ READ_WRITE — WRITE_ONLY is 422). The link/K_share/wrap are untouched — unless the edit
+    // reopens a link its end date closed, which carries the root's key and name like a re-activation (ADR 0114 decision 7).
     override fun updateShare(shareId: String, updateShareRequest: UpdateShareRequest): Response =
         when (val o = handler.updateShare(
             identity.principal.name, shareId,
             updateShareRequest.sealedNote, updateShareRequest.sealedShareName, updateShareRequest.role?.value,
             updateShareRequest.expiresAt?.toInstant(),
             updateShareRequest.passwordRequired, updateShareRequest.pwSalt, updateShareRequest.pwVerifier, updateShareRequest.sealedPassword,
+            SharingHandler.ReopenRequest(
+                nodeEpoch = updateShareRequest.nodeEpoch,
+                wrap = updateShareRequest.wrap,
+                sealedDropPublicKey = updateShareRequest.sealedDropPublicKey,
+                sealedName = updateShareRequest.sealedName,
+            ),
         )) {
             UpdateShareOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
@@ -258,6 +276,7 @@ class SharingResource(
                     // ADR 0109 point 6: what a guest's write states as the root's epoch. In the body, so the tag below moves
                     // when a re-key reaches the root and an open page re-reads its keys.
                     rootEpoch = o.rootEpoch,
+                    rootScopeEpoch = o.rootScopeEpoch,
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = blocks.contentView(o.share.scopeId).let { view -> o.nodes.map { toShareNode(it, view.nodeBlocked(it.id)) } },
@@ -347,6 +366,7 @@ class SharingResource(
         parentId = n.parentId?.let(UUID::fromString),
         orderIndex = n.orderIndex,
         epoch = n.epoch,
+        scopeEpoch = n.scopeEpoch,
         wrappedContentKey = n.wrappedContentKey,
         encryptedName = n.encryptedName,
         placementRevision = n.placementRevision,
@@ -449,7 +469,7 @@ class SharingResource(
             encryptedName = createShareNodeRequest.encryptedName,
             slugToken = createShareNodeRequest.slugToken,
             orderIndex = createShareNodeRequest.orderIndex ?: 0,
-            epoch = createShareNodeRequest.epoch.validated(),
+            scopeEpoch = createShareNodeRequest.scopeEpoch.validated(),
             wrappedContentKey = createShareNodeRequest.wrappedContentKey,
             parentEpoch = createShareNodeRequest.parentEpoch.validated(),
             seen = client.seen(),

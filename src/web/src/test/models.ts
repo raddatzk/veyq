@@ -14,7 +14,7 @@ import { MEMORY_KIND } from '../features/memories/kinds'
 import type { MediaItem } from '../features/memories/media'
 import type { TreeNode } from '../core/node/tree'
 import type { NodeKind } from '../core/node/kind'
-import type { EpochKeys } from '../features/spaces/epochs'
+import type { ScopeKey } from '../features/spaces/epochs'
 import type { OwnNameKey } from '../features/account/profile/profile'
 import type { MemberNameAddress } from '../features/account/profile/memberName'
 import { memberAccess, memberTreeSource, type GuestAccess, type MemberAccess, type TreeSource } from '../core/access'
@@ -87,6 +87,7 @@ export const treeNode = (o: Partial<TreeNode> = {}): TreeNode => ({
   kind: MEMORY_KIND,
   orderIndex: 0,
   epoch: 0,
+  scopeEpoch: 0,
   name: 'n',
   wrappedContentKey: 'eA==',
   wrappedMeta: null,
@@ -132,7 +133,7 @@ export const guestAccessFor = (
 /** A member's `TreeSource` over `nodes` (a getter, so a test's reactive store is read anew), keys opened under `epochs`. */
 export const memberTreeOf = (
   nodes: () => TreeNode[],
-  o: { scopeId?: string | null; epochs?: EpochKeys | null; scope?: string } = {},
+  o: { scopeId?: string | null; epochs?: ScopeKey | null; scope?: string } = {},
 ): TreeSource<TreeNode> =>
   memberTreeSource({ nodes, scopeId: () => o.scopeId ?? 'scope-1', epochs: () => o.epochs ?? null, scope: () => o.scope ?? '~me' })
 
@@ -156,7 +157,7 @@ export const scopeMember = (o: Partial<ScopeMember> = {}): ScopeMember => ({
 export const openedScope = (o: Partial<OpenedScope> = {}): OpenedScope => {
   const key = o.key ?? new Uint8Array(32).fill(7)
   return {
-    scopeId: 'scope-1', tenantId: 'tenant-1', kind: ScopeKind.Tenant, key, epochs: { current: 0, keys: new Map([[0, key]]) },
+    scopeId: 'scope-1', tenantId: 'tenant-1', kind: ScopeKind.Tenant, key, epochs: { epoch: 0, key },
     nameEpoch: 0, deletedAt: null, purgeAfter: null, ...o,
   }
 }
@@ -165,7 +166,7 @@ export const openedScope = (o: Partial<OpenedScope> = {}): OpenedScope => {
  *  test's own key must never be the one handed out. */
 export const ownNameKey = (key: Uint8Array, address: MemberNameAddress): OwnNameKey => {
   const k = key.slice()
-  return { key: k, epochs: { current: 0, keys: new Map([[0, k]]) }, tenantId: address.scopeId, address }
+  return { key: k, epochs: { epoch: 0, key: k }, tenantId: address.scopeId, address }
 }
 
 export const scopeSummary = (o: Partial<ScopeSummary> = {}): ScopeSummary => ({

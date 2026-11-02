@@ -46,7 +46,7 @@ import { MEMORY_KIND } from '../../../features/memories/kinds'
 import { FILE_KIND, DROPBOX_KIND } from '../../../features/depot/kinds'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { FileListPage } from '../../../api/generated/depot'
-import type { EpochKeys } from '../../../features/spaces/epochs'
+import type { ScopeKey } from '../../../features/spaces/epochs'
 import type { PublicShareHead } from '../../sharing/resolvePublicShare'
 import { stubApi } from '../../../test/apiMock'
 import { authenticatedCalls } from '../../../test/guestMode'
@@ -56,7 +56,7 @@ import { actionIdsOf, actionLabel, clickAction, rowOf } from '../../../test/leve
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const KEY = v1.randomBytes(32)
-const EPOCHS = {} as EpochKeys // only its presence matters: the right asks "are the keys loaded", the tree source supplies the key
+const EPOCHS = {} as ScopeKey // only its presence matters: the right asks "are the keys loaded", the tree source supplies the key
 
 const id = (n: number) => `d0000000-0000-4000-8000-00000000000${n}`
 const sealCover = (nodeId: string, blobId: string) =>

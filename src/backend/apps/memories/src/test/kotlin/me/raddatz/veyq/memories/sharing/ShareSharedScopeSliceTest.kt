@@ -1,6 +1,9 @@
 package me.raddatz.veyq.memories.sharing
 
+import me.raddatz.veyq.core.testing.TestNodeRekey
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.spaces.scope.ScopeSuccession
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.spaces.scope.RotationDecision
 import me.raddatz.veyq.core.spaces.scope.RotationGrant
@@ -108,7 +111,7 @@ class ShareSharedScopeSliceTest {
         // the owner removes the member from the group — a removal-rotation, the one way a keyed member leaves
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
+                """{"epoch":1,${TestScopeRekey.rotationJson(group)},"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
                     """${TestGrants.openInvitesJson(group)},"removesUserId":"$member"}""",
             )
             .`when`().post("/api/scopes/$group/epochs").then().statusCode(201)
@@ -146,7 +149,7 @@ class ShareSharedScopeSliceTest {
         given().`when`().get("/api/shares/$shareId").then().statusCode(404)
 
         // another current member (the owner) re-activates it → 204, it resolves again, and it is now theirs
-        given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(shareId)).`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
         given().`when`().get("/api/shares/$shareId").then().statusCode(200)
 
         // ownership transferred: the new owner now lists it; the original creator no longer does
@@ -168,7 +171,7 @@ class ShareSharedScopeSliceTest {
         removeByRotation(owner, group, member).then().statusCode(201)
         given().`when`().get("/api/shares/$shareId").then().statusCode(404)
 
-        given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$shareId/reactivate")
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(shareId)).`when`().post("/api/shares/$shareId/reactivate")
             .then().statusCode(409).body("code", equalTo("reissue_required"))
         given().`when`().get("/api/shares/$shareId").then().statusCode(404)
     }
@@ -187,7 +190,7 @@ class ShareSharedScopeSliceTest {
         given().header("Authorization", bearer(coMember)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
         removeByRotation(owner, group, member).then().statusCode(201)
 
-        given().header("Authorization", bearer(coMember)).`when`().post("/api/shares/$shareId/reactivate")
+        given().header("Authorization", bearer(coMember)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(shareId)).`when`().post("/api/shares/$shareId/reactivate")
             .then().statusCode(409).body("code", equalTo("reissue_required"))
         given().`when`().get("/api/shares/$shareId").then().statusCode(404)
     }
@@ -200,7 +203,7 @@ class ShareSharedScopeSliceTest {
         val shareId = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
         given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
 
-        given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(shareId)).`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
         given().`when`().get("/api/shares/$shareId").then().statusCode(200)
     }
 
@@ -212,7 +215,7 @@ class ShareSharedScopeSliceTest {
         val outsider = seedUser(email = "out@g-react404.example.com")
 
         given().header("Authorization", bearer(outsider))
-            .`when`().post("/api/shares/$shareId/reactivate")
+            .contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(shareId)).`when`().post("/api/shares/$shareId/reactivate")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
     }
 
@@ -299,6 +302,7 @@ class ShareSharedScopeSliceTest {
         val group = seedGroup(tenantId, owner)
         val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         repeat(ROUNDS) { round ->
+            TestNodeRekey.finish(group) // the last round's re-issue closed a link on the Memory (ADR 0114 decision 1)
             val old = createShare(owner, memory, copyEpoch = 0)
             val ids = listOf(TestIds.shareId(), TestIds.shareId())
             val answers = race(
@@ -397,6 +401,7 @@ class ShareSharedScopeSliceTest {
         resolves(old, 200)
 
         given().header("Authorization", bearer(member)).`when`().post("/api/shares/$old/revoke").then().statusCode(204)
+        TestNodeRekey.finish(group) // the revoke marked the Memory due; a re-issue wraps its next key (ADR 0114 decision 1)
         val newId = TestIds.shareId()
         reissue(owner, old, epoch = 0, newId = newId).then().statusCode(201)
         given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
@@ -481,7 +486,7 @@ class ShareSharedScopeSliceTest {
         val share = createShare(member, seedNode(tenantId, MemoriesNodeKinds.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
         given().header("Authorization", bearer(owner)).`when`().delete("/api/tenants/$tenantId/members/$member").then().statusCode(204)
 
-        given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$share/reactivate")
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(share)).`when`().post("/api/shares/$share/reactivate")
             .then().statusCode(409).body("code", equalTo("reissue_required"))
         resolves(share, 404)
         assertEquals(0, TestGrants.epochOf(tenantId)) // the tenant epoch never moved
@@ -694,7 +699,7 @@ class ShareSharedScopeSliceTest {
             whileUncommitted(
                 change = { assertEquals(1, sharing.deactivateSharesByOwnerInScope(member, group), "round $round") },
                 overlapping = {
-                    sharing.updateShare(member, shareId, note, null, null, null, null, null, null, null)
+                    sharing.updateShare(member, shareId, note, null, null, null, null, null, null, null, null, Instant.now())
                 },
             )
             QuarkusTransaction.requiringNew().run {
@@ -721,15 +726,16 @@ class ShareSharedScopeSliceTest {
             val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
             val shareId = createShare(owner, memory)
             revoke(owner, shareId)
+            val rekeyId = TestScopeRekey.stageAll(group) // the Memory's root entry and the link's recovery copy (ADR 0115)
             val outcome = whileUncommitted(
                 change = {
                     val decision = scopes.rotate(
-                        group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
+                        group, 1, ScopeSuccession(1, TestScopeRekey.SUCCESSION_PUBLIC_KEY, TestGrants.SIGNATURE), rekeyId, owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
                         emptyList(), emptySet(), removes = member,
                     )
                     assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
                 },
-                overlapping = { handler.reactivate(member, shareId) },
+                overlapping = { handler.reactivate(member, shareId, SharingHandler.ReopenRequest(0, ShareWriteProof.REOPEN_WRAP, null, ShareWriteProof.REOPEN_NAME)) },
             )
             assertEquals(ReactivateShareOutcome.NotFound, outcome, "round $round")
             QuarkusTransaction.requiringNew().run {
@@ -741,7 +747,9 @@ class ShareSharedScopeSliceTest {
             // for re-issue by the removal, ADR 0075) — once the Memory is re-keyed to the removal's epoch (ADR 0109 point 6).
             val later = createShare(owner, atCurrentEpoch(memory))
             revoke(owner, later)
-            assertEquals(ReactivateShareOutcome.Done, handler.reactivate(owner, later), "round $round")
+            TestNodeRekey.finish(group) // the revoke marked the Memory due (ADR 0114 decision 1)
+            val reopen = SharingHandler.ReopenRequest(TestNodeRekey.epochOf(memory), ShareWriteProof.REOPEN_WRAP, null, ShareWriteProof.REOPEN_NAME)
+            assertEquals(ReactivateShareOutcome.Done, handler.reactivate(owner, later, reopen), "round $round")
             QuarkusTransaction.requiringNew().run { assertEquals(true, ShareEntity.findById(later)!!.enabled) }
         }
     }
@@ -779,7 +787,11 @@ class ShareSharedScopeSliceTest {
     /** [nodeId] with its key at its scope's current epoch — minted after a rotation, or re-keyed since (the re-key's
      *  own commit is `RekeyCoreSliceTest`'s). */
     private fun atCurrentEpoch(nodeId: String): String = QuarkusTransaction.requiringNew().call {
-        NodeEntity.findById(nodeId)!!.apply { epoch = ScopeEntity.findById(scopeId)!!.currentEpoch }.id
+        NodeEntity.findById(nodeId)!!.apply {
+            // The node's own commit after the rotation (ADR 0114 decision 4): its key replaced, no longer due.
+            if (rekeyDue) epoch += 1
+            scopeEpoch = ScopeEntity.findById(scopeId)!!.currentEpoch; rekeyDue = false
+        }.id
     }
 
     /** The epoch [nodeId]'s key was minted at (ADR 0109 point 6) — what a link's create states; 0 for an unknown node. */
@@ -810,7 +822,7 @@ class ShareSharedScopeSliceTest {
     }
 
     private fun reactivate(userId: String, shareId: String) =
-        given().header("Authorization", bearer(userId)).`when`().post("/api/shares/$shareId/reactivate")
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(shareId)).`when`().post("/api/shares/$shareId/reactivate")
 
     private fun revokeScopeShares(userId: String, scopeId: String) =
         given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/shares/revoke")
@@ -826,7 +838,7 @@ class ShareSharedScopeSliceTest {
     private fun removeByRotation(owner: String, group: String, member: String?, revokeLinks: Boolean? = null) =
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":${TestGrants.epochOf(group) + 1},"wrappedPrev":"cHJldg==",""" +
+                """{"epoch":${TestGrants.epochOf(group) + 1},${TestScopeRekey.rotationJson(group)},""" +
                     """"grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
                     TestGrants.openInvitesJson(group) + "," + TestGrants.othersPendingJson(group, owner, member) +
                     (member?.let { ""","removesUserId":"$it"""" } ?: "") +

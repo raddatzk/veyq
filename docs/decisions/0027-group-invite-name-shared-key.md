@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-07-06
 - Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
+- Replaced in part: Decision 2's plain rotation that leaves the name at its epoch by ADR 0115 (built)
 
 ## Context
 

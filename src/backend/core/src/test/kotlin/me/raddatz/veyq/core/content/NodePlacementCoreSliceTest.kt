@@ -74,10 +74,9 @@ class NodePlacementCoreSliceTest {
     }
 
     /**
-     * uc.memory.move-node:a-placement-keeps-the-nodes-epoch, under ADR 0109 point 6: an entry at the scope root lives
-     * under `K_SC` at the node's epoch — the epoch its key was minted at, which a placement never changes. After a
-     * rotation a node the re-key has not reached may not be renamed at the root (`node_rekey_pending`); a placement
-     * stating another epoch than the node's is `stale_epoch`.
+     * uc.memory.move-node:a-placement-keeps-the-nodes-epoch, under ADR 0114 decision 3: a placement re-wraps the node's
+     * own key and keeps it, stating the node's own epoch. After a rotation a node the re-key has not reached is due and
+     * may not be renamed (`node_rekey_pending`); a placement stating another epoch than the node's is `stale_epoch`.
      */
     @Test
     fun aRootRenameOfANodeTheReKeyHasNotReachedIsPendingAndAnotherEpochStale() {
@@ -95,10 +94,10 @@ class NodePlacementCoreSliceTest {
     }
 
     /**
-     * uc.memory.move-node:a-placement-keeps-the-nodes-epoch, under ADR 0109 point 6: a placement never changes the
+     * uc.memory.move-node:a-placement-keeps-the-nodes-epoch, under ADR 0114 decisions 3-4: a placement never changes the
      * node's epoch. Below the root the entry is under the destination's key, so a destination the re-key has not
-     * reached refuses (`node_rekey_pending`); the node itself may still be not re-keyed and move between re-keyed
-     * parents (its key is re-wrapped, nothing is sealed under it) — but not into the root.
+     * reached refuses (`node_rekey_pending`); and a due node waits wherever it goes — the placement re-wraps the very
+     * key its re-key is about to replace ("a move states the node's epoch and waits while it lags anyway").
      */
     @Test
     fun aPlacementKeepsTheNodesEpochAndWaitsForItsDestination() {
@@ -110,19 +109,20 @@ class NodePlacementCoreSliceTest {
         assertRow(t.child, parent = t.a, name = "Y2hpbGQ=", wrap = CONTENT_KEY, revision = 0, epoch = 0)
 
         setEpoch(t.b, 1)
-        // b re-keyed, the destination epoch stated as read; the child (still at 0) moves and keeps its epoch
-        place(t, t.child, to = t.b, revision = 0, name = "aW4tYg==", wrap = "aW4tYi13cmFw", epoch = 0, parentEpoch = 1).statusCode(204)
-        assertRow(t.child, parent = t.b, name = "aW4tYg==", wrap = "aW4tYi13cmFw", revision = 1, epoch = 0)
-        // a destination epoch below the stored one is stale
-        setEpoch(t.a, 1)
-        place(t, t.child, to = t.a, revision = 1, name = "aW4tYQ==", wrap = "aW4tYS13cmFw", epoch = 0, parentEpoch = 0)
-            .statusCode(409).body("code", equalTo("stale_epoch"))
-        // into the root: the child's key is from before, so not yet
-        place(t, t.child, to = null, revision = 1, name = "cm9vdA==", wrap = "cm9vdC13cmFw", epoch = 0)
+        // b re-keyed, the destination epoch stated as read — but the child is still due: it waits, wherever it goes
+        place(t, t.child, to = t.b, revision = 0, name = "aW4tYg==", wrap = "aW4tYi13cmFw", epoch = 0, parentEpoch = 1)
             .statusCode(409).body("code", equalTo("node_rekey_pending"))
-        assertRow(t.child, parent = t.b, name = "aW4tYg==", wrap = "aW4tYi13cmFw", revision = 1, epoch = 0)
+        place(t, t.child, to = null, revision = 0, name = "cm9vdA==", wrap = "cm9vdC13cmFw", epoch = 0)
+            .statusCode(409).body("code", equalTo("node_rekey_pending"))
+        assertRow(t.child, parent = t.a, name = "Y2hpbGQ=", wrap = CONTENT_KEY, revision = 0, epoch = 0)
 
-        setEpoch(t.child, 1)
+        setEpoch(t.child, 1) // the child's own commit: its key replaced, one epoch up
+        place(t, t.child, to = t.b, revision = 0, name = "aW4tYg==", wrap = "aW4tYi13cmFw", epoch = 1, parentEpoch = 1).statusCode(204)
+        assertRow(t.child, parent = t.b, name = "aW4tYg==", wrap = "aW4tYi13cmFw", revision = 1, epoch = 1)
+        // a destination epoch other than the stored one is stale
+        setEpoch(t.a, 1)
+        place(t, t.child, to = t.a, revision = 1, name = "aW4tYQ==", wrap = "aW4tYS13cmFw", epoch = 1, parentEpoch = 0)
+            .statusCode(409).body("code", equalTo("stale_epoch"))
         place(t, t.child, to = null, revision = 1, name = "cm9vdA==", wrap = "cm9vdC13cmFw", epoch = 1).statusCode(204) // control
         assertRow(t.child, parent = t.scopeId, name = "cm9vdA==", wrap = "cm9vdC13cmFw", revision = 2, epoch = 1)
         // and out of the root again: the epoch stays the node's
@@ -243,12 +243,19 @@ class NodePlacementCoreSliceTest {
         epoch?.let { assertEquals(it, row.epoch, "epoch") }
     }
 
+    /** The node's own re-key commit: its own epoch [to], its scope epoch the current one, no longer due. */
     private fun setEpoch(node: String, to: Int) {
-        QuarkusTransaction.requiringNew().run { NodeEntity.findById(node)!!.epoch = to }
+        QuarkusTransaction.requiringNew().run {
+            NodeEntity.findById(node)!!.apply { epoch = to; scopeEpoch = ScopeEntity.findById(scopeId)!!.currentEpoch; rekeyDue = false }
+        }
     }
 
+    /** The scope moves to [to] and every node of it is due, as a rotation's commit leaves them (ADR 0114 decision 4). */
     private fun rotate(scopeId: String, to: Int) {
-        QuarkusTransaction.requiringNew().run { ScopeEntity.findById(scopeId)!!.currentEpoch = to }
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity.findById(scopeId)!!.currentEpoch = to
+            NodeEntity.update("rekeyDue = true where scopeId = ?1", scopeId)
+        }
     }
 
     private fun slug(): String = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().toByteArray())

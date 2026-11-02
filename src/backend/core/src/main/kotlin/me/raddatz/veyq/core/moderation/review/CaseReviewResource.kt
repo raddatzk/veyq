@@ -147,6 +147,7 @@ class CaseReviewResource(
                         id = UUID.fromString(n.sourceId),
                         kind = n["kind"]!!,
                         epoch = n["epoch"]!!.toInt(),
+                        scopeEpoch = n.scopeEpoch(),
                         blockedByOperator = false,
                         parentId = if (isRoot) null else n["parent_id"]?.let(UUID::fromString),
                         orderIndex = n["order_index"]?.toInt(),
@@ -176,6 +177,7 @@ class CaseReviewResource(
                             id = UUID.fromString(n.sourceId),
                             kind = n["kind"]!!,
                             epoch = n["epoch"]!!.toInt(),
+                            scopeEpoch = n.scopeEpoch(),
                             blockedByOperator = false,
                             placementRevision = n["placement_revision"]?.toLong(),
                             encryptedName = n["encrypted_name"],
@@ -189,6 +191,10 @@ class CaseReviewResource(
         }
         else -> PublicShare(role = ShareRole.READ, nodes = emptyList(), scopeId = UUID.fromString(case.scopeId))
     }
+
+    /** A held node's `scopeEpoch` (ADR 0115 decision 4) — what its entry's seals bind. A copy taken before the column
+     *  existed holds it in `epoch`, which meant just that then. */
+    private fun HeldRow.scopeEpoch(): Int = (this["scope_epoch"] ?: this["epoch"])!!.toInt()
 
     private companion object {
         const val NODE = "veyq_node"

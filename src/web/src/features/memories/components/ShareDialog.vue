@@ -29,6 +29,7 @@ import {
   readShareName,
   readShareNote,
   hasLocaleText,
+  rekeyingClosedLinks,
   type ManagedShare,
 } from '../share'
 import { recoverShareLink } from '../shareLink'
@@ -171,11 +172,14 @@ async function copyShareLink(share: ManagedShare) {
   }
 }
 
-async function onRevoke(shareId: string) {
-  revokingId.value = shareId
+// A switch-off is a close (ADR 0114): the server marks what lies below the link due and `revokeShare` starts its re-key
+// here in the background. The switched-off fold opens, so the row that says so stays in view.
+async function onRevoke(share: ManagedShare) {
+  revokingId.value = share.shareId
   actionError.value = false
   try {
-    await revokeShare(shareId)
+    await revokeShare({ ...addressOf(share), role: share.role })
+    offOpen.value = true
     await loadShares()
   } catch {
     actionError.value = true
@@ -187,7 +191,7 @@ async function onReactivate(share: ManagedShare) {
   reactivatingId.value = share.shareId
   actionError.value = false
   try {
-    await reactivateShare(share.shareId)
+    await reactivateShare(share, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName)
     await loadShares()
   } catch (e) {
     // The other half of the refusal — its owner left — is the server's to know: offer the renew it asks for.
@@ -210,7 +214,7 @@ async function onDelete(share: ManagedShare) {
   deletingId.value = share.shareId
   actionError.value = false
   try {
-    await deleteShare(share.shareId)
+    await deleteShare({ ...share, ...addressOf(share) })
     // Gone for good — the server lists it nowhere any more, so drop it here rather than re-load for it.
     shares.value = shares.value.filter((s) => s.shareId !== share.shareId)
   } catch {
@@ -250,6 +254,8 @@ function fmtDate(d: Date): string {
               <strong class="share-list-title">{{ titleFor(share) }}</strong>
               <span class="share-list-when">{{ t('share.created', { date: fmtDate(share.createdAt) }) }}</span>
               <span v-if="share.expiresAt" class="share-list-when share-list-expires">{{ t('share.expires', { date: fmtDate(share.expiresAt) }) }}</span>
+              <!-- ADR 0114 decision 9: what lies below a closed link is re-keyed on this device while this shows. -->
+              <span v-if="!share.enabled && rekeyingClosedLinks.has(share.shareId)" class="share-list-when share-list-rekeying">{{ t('share.closedRekeying') }}</span>
               <div class="share-list-badges">
                 <span class="share-list-role">{{ roleLabel(share.role) }}</span>
                 <span v-if="decoded.get(share.shareId)?.hasNote" class="veyq-badge">{{ t('share.hasNote') }}</span>
@@ -320,7 +326,7 @@ function fmtDate(d: Date): string {
                 variant="danger"
                 appearance="text"
                 :disabled="revokingId === share.shareId"
-                @click="onRevoke(share.shareId)"
+                @click="onRevoke(share)"
               />
               <!-- Delete is offered on a switched-off link only, and only where the server's gate would let it through
                    (its owner, or anyone once the owner left): deleting a co-member's parked link would destroy their

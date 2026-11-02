@@ -21,12 +21,12 @@ import { joinList, type SelectedForDelete } from '../selection'
 import { deleteRefusalOf, deleteSelection, restoreSelection } from '../deleteSelection'
 import { loadTree, treeStore } from '../treeStore'
 import { TRASH_UNDO_MS } from '../trashUndo'
-import type { EpochKeys } from '../../../features/spaces/epochs'
+import type { ScopeKey } from '../../../features/spaces/epochs'
 import { useToast } from '../../../shared/state/useToast'
 
 const props = defineProps<{
   scopeId: string
-  epochs: EpochKeys
+  epochs: ScopeKey
   /** The deletable part of the selection, each with its kind's own door where it has one. */
   items: readonly SelectedForDelete[]
   /** Each node's name as its siblings tell it apart; omitted: its own. */

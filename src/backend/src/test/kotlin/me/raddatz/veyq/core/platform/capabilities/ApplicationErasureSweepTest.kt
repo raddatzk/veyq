@@ -269,7 +269,7 @@ class ApplicationErasureSweepTest {
         val chapter = createNode(owner, personal, memory, "CHAPTER")
         val (medium, unheldKeys) = medium(owner, personal, memory)
         CoverKit.set(owner, personal, memory, CoverKit.start(owner, personal, memory).uploadId, expectedBlobId = null).statusCode(204)
-        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON).body("""{"ciphertext":"bWFya3M="}""")
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON).body("""{"ciphertext":"bWFya3M=","epoch":0}""")
             .`when`().put("/api/scopes/$personal/nodes/$memory/item-favorites").then().statusCode(204)
         val link = GuestTreeShare.seed(owner, personal, memory, ShareEntity.READ).shareId
         QuarkusTransaction.requiringNew().run {

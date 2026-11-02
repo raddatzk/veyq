@@ -29,7 +29,7 @@
 // report and then delete. Delete and report are never row buttons.
 import type { Component, Ref } from 'vue'
 import type { TreeNode } from './tree'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import type { Access, TreeSource } from '../access'
 import type { ViewMode } from '../../shared/state/useViewMode'
 import { isMenuOnly, partitionHeaderActions, placeCoreActions, type CoreActionPlacement, type CoreHeaderAction, type NodeHeaderAction } from './nodeHeader'
@@ -124,7 +124,7 @@ export interface LevelRowsContext {
    *  application loads for them does not depend on it). */
   nodes: readonly TreeNode[]
   /** The member's epoch keys; `null` for a guest, whose keys come through `tree`. */
-  epochs: EpochKeys | null
+  epochs: ScopeKey | null
   access: Access
   tree: TreeSource
   /** The mode the level shows (inbox #404), already clamped to what is on screen. */

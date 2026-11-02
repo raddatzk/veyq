@@ -157,7 +157,7 @@ beforeEach(async () => {
     pot.append(writes, 'user:u-anna', held, base)
     return sealed
   })
-  vi.mocked(createContentNode).mockImplementation(async () => ({ nodeId: TARGET, contentKey: target().potKey, epoch: 0 }))
+  vi.mocked(createContentNode).mockImplementation(async () => ({ nodeId: TARGET, contentKey: target().potKey, epoch: 0, scopeEpoch: 0 }))
   vi.mocked(deleteNode).mockClear()
 
   const s = source()

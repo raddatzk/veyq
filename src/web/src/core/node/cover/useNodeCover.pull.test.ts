@@ -10,9 +10,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
-import type { EpochKeys } from '../../../features/spaces/epochs'
+import type { ScopeKey } from '../../../features/spaces/epochs'
 
-const held = vi.hoisted(() => ({ epochs: { current: 0, keys: new Map() } as EpochKeys }))
+const held = vi.hoisted(() => ({ epochs: { epoch: 0, key: new Uint8Array(32) } as ScopeKey }))
 vi.mock('../../../app/activeSpace', async () => {
   const { reactive } = await import('vue')
   return { activeSpace: reactive({ scopeId: '5c09e000-0000-4000-8000-0000000000cc' }), activeEpochKeys: () => held.epochs }
@@ -79,12 +79,12 @@ const settled = async () => {
 beforeEach(() => {
   vi.clearAllMocks()
   clearUploads()
-  held.epochs = { current: 0, keys: new Map() }
+  held.epochs = { epoch: 0, key: new Uint8Array(32) }
   vi.mocked(pullRekeyPath).mockReturnValue(pull)
   vi.mocked(loadTree).mockImplementation(async () => {})
   pull.mockResolvedValue(true)
-  // the re-read after the pull: the node at the scope's current epoch under its new key
-  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: NEW_KEY, epoch: 1 }))
+  // the re-read after the pull: the node re-keyed under its new key, minted at the scope's current epoch
+  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: NEW_KEY, epoch: 1, scopeEpoch: 1 }))
   vi.mocked(uploadCoverImage).mockImplementation(async (_s, nodeId) => ({
     uploadId: `up-${vi.mocked(uploadCoverImage).mock.calls.length}`,
     plan: { blobId: `blob-${vi.mocked(uploadCoverImage).mock.calls.length}`, chunkCount: 1, byteSize: 9, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId },
@@ -106,7 +106,7 @@ describe('a member\'s cover into a node not re-keyed yet (ADR 0111 decision 11)'
   })
 
   it('the device floor already shows the node lags: the pull runs before anything is sealed, and the cover is uploaded once', async () => {
-    held.epochs = { current: 1, keys: new Map() }
+    held.epochs = { epoch: 1, key: new Uint8Array(32) } // the device holds scope epoch 1; the node's key is from 0
     harness([FOLDER]).save(FOLDER, { kind: 'upload', file: image(), crop })
     expect((await settled()).status).toBe('done')
     expect(pull).toHaveBeenCalledOnce()

@@ -54,15 +54,19 @@ export function wrapNameKeyToInvitee(
 /**
  * Open a pending invitation's name on-device: unwrap `sealedNameKey` with the caller's **own** vaulted identity →
  * `K_name`, then decrypt the scope's **canonical** `encryptedName` under it → the group name; null if the vault is
- * locked or the ciphertext won't open (wrong recipient / corrupt / renamed since the invite). The invitee's
+ * locked, the ciphertext won't open (wrong recipient / corrupt / renamed since the invite) or a rotation cleared the
+ * name key (the view then shows the proposal unnamed). The invitee's
  * Accept/Decline view uses this to show the **group-consistent** name — not an owner-typed claim.
  */
 export function openInviteeName(invitation: {
   scopeId: string
   nameEpoch: number
-  sealedNameKey: string
+  /** Null when a rotation cleared it (its device could not anchor this account's key, ADR 0111 decision 9). */
+  sealedNameKey: string | null
   encryptedName: string
 }): string | null {
+  if (invitation.sealedNameKey == null) return null
+  const sealedNameKey = invitation.sealedNameKey
   const priv = identityPrivate()
   if (!priv) return null
   let nameKey: Uint8Array | null = null
@@ -70,7 +74,7 @@ export function openInviteeName(invitation: {
     // Both seals are bound to the invitation's (scope, name epoch) — the row's scope is the one the invitee accepts
     // or declines by, so a name-key or a name moved from another group's invitation does not open here.
     const { scopeId, nameEpoch } = invitation
-    nameKey = v1.openAs(nameKeyContext(scopeId, nameEpoch), v1.hybridSecret(priv), fromB64std(invitation.sealedNameKey))
+    nameKey = v1.openAs(nameKeyContext(scopeId, nameEpoch), v1.hybridSecret(priv), fromB64std(sealedNameKey))
     return openGroupNameWith(nameKey, scopeId, nameEpoch, invitation.encryptedName)
   } catch {
     return null

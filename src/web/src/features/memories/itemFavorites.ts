@@ -3,11 +3,10 @@
 // "everyone's / only mine" filter and its per-tile count are computed on device, so the read hands back every
 // member's sealed blob and the client opens each one.
 //
-// Sealed under `K_SC` at the **base epoch `E_0`** (ADR 0024, cr-0089). This rationale moved here from the pin
-// store when the pin moved to the master key, and it still holds for exactly this object: the marked set is
-// one blob re-sealed on every toggle, so it must key off a **stable** scope key that a rotation never changes
-// — otherwise a rotation strands the previously-sealed set. For an unrotated scope `E_0` is simply the current
-// key. (Node content still seals under the *write* epoch; item marks are the deliberate exception.)
+// Sealed under the scope's **one key** (ADR 0115 decision 1), stating its epoch on every write (decision 3: another
+// than the current one is `409 stale_epoch`, and the scope is opened again and the set sealed once more). A rotation
+// re-seals every member's set under its new key before its commit — Memories' scope re-key participant
+// ({@link stageItemMarksRekey}, registered by `register.ts`), the self-tag inside unchanged — so no set is stranded.
 //
 // Partitioned per **node**, not per scope: the client has just listed that node's media, so the server already
 // observed the node id and the partition leaks nothing new — and a single toggle re-uploads that Memory's set, never
@@ -24,8 +23,10 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { itemFavoritesApi, ownItemFavoritesApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { masterKey } from '../../app/vault'
-import { openScopeById } from '../spaces/scopes'
-import { keyAt, zeroEpochKeys } from '../spaces/epochs'
+import { isStaleEpoch, openScopeById } from '../spaces/scopes'
+import { zeroScopeKey, type ScopeKey } from '../spaces/epochs'
+import type { ScopeRekeyContext } from '../../core/node/rekey/hooks'
+import { itemFavoritesRekeyApi } from './api'
 
 /**
  * Every member's marks on one node, bound to (scope, node) (ADR 0072). Deliberately NOT to the marking member: the
@@ -72,11 +73,30 @@ function openMarks(scopeId: string, nodeId: string, scopeKey: Uint8Array, cipher
  * Seal `ids` with their self-tag under `selfKey` and store them as the caller's blob for the node. A set past the cap
  * throws {@link ItemMarksTooMany} before the PUT, so the server never sees the attempt and the caller can say why.
  */
-async function putMarks(scopeId: string, nodeId: string, scopeKey: Uint8Array, selfKey: Uint8Array, ids: Set<string>): Promise<void> {
+async function putMarks(scopeId: string, nodeId: string, scopeKey: ScopeKey, selfKey: Uint8Array, ids: Set<string>): Promise<void> {
   const tag = v1.itemMarkSelfTag(selfKey, { scopeId, nodeId, ids })
-  const ciphertext = b64std(v1.seal(itemFavContext(scopeId, nodeId), scopeKey, v1.encodeItemMarks(tag, ids)))
+  const ciphertext = b64std(v1.seal(itemFavContext(scopeId, nodeId), scopeKey.key, v1.encodeItemMarks(tag, ids)))
   if (ciphertext.length > ITEM_MARKS_CIPHERTEXT_MAX) throw new ItemMarksTooMany(`${ids.size} marks do not fit one Memory's set`)
-  await withRefresh(() => itemFavoritesApi().putItemFavorites({ scopeId, nodeId, putItemFavoritesRequest: { ciphertext } }))
+  await withRefresh(() =>
+    itemFavoritesApi().putItemFavorites({ scopeId, nodeId, putItemFavoritesRequest: { ciphertext, epoch: scopeKey.epoch } }),
+  )
+}
+
+/** {@link putMarks}, and once more under the scope opened again when a rotation replaced the key in between
+ *  (`409 stale_epoch`, ADR 0115 decision 3). */
+async function putMarksAtCurrentEpoch(scopeId: string, nodeId: string, scopeKey: ScopeKey, selfKey: Uint8Array, ids: Set<string>): Promise<void> {
+  try {
+    await putMarks(scopeId, nodeId, scopeKey, selfKey, ids)
+  } catch (e) {
+    if (!(await isStaleEpoch(e))) throw e
+    const opened = await openScopeById(scopeId)
+    if (!opened) throw e
+    try {
+      await putMarks(scopeId, nodeId, opened.epochs, selfKey, ids)
+    } finally {
+      zeroScopeKey(opened.epochs)
+    }
+  }
 }
 
 /** The caller's self-tag key, derived per call from the vault's Master Key — null while the vault is locked. */
@@ -126,13 +146,13 @@ export async function loadItemFavorites(
 export async function saveItemFavorites(
   scopeId: string,
   nodeId: string,
-  scopeKey: Uint8Array,
+  scopeKey: ScopeKey,
   ids: Set<string>,
 ): Promise<void> {
   const selfKey = selfTagKey()
   if (!selfKey) throw new Error('item marks: the vault is locked, so there is no key to tag them as mine')
   try {
-    await putMarks(scopeId, nodeId, scopeKey, selfKey, ids)
+    await putMarksAtCurrentEpoch(scopeId, nodeId, scopeKey, selfKey, ids)
   } finally {
     selfKey.fill(0)
   }
@@ -160,18 +180,58 @@ export async function retagItemMarksUnderNewMasterKey(oldMk: Uint8Array, newMk: 
       const opened = await openScopeById(scopeId).catch(() => null)
       if (!opened) continue
       try {
-        const e0 = keyAt(opened.epochs, 0)
         for (const { nodeId, ciphertext } of scopeRows) {
-          const { ids, tag } = openMarks(scopeId, nodeId, e0, ciphertext)
+          const { ids, tag } = openMarks(scopeId, nodeId, opened.epochs.key, ciphertext)
           if (!tag || !v1.itemMarkSelfTagVerifies(oldKey, { scopeId, nodeId, ids }, tag)) continue
-          await putMarks(scopeId, nodeId, e0, newKey, ids).catch(() => undefined)
+          await putMarksAtCurrentEpoch(scopeId, nodeId, opened.epochs, newKey, ids).catch(() => undefined)
         }
       } finally {
-        zeroEpochKeys(opened.epochs)
+        zeroScopeKey(opened.epochs)
       }
     }
   } finally {
     oldKey.fill(0)
     newKey.fill(0)
+  }
+}
+
+/** The contract's cap per page of the scope re-key listing and per stage (`ScopeItemFavoritesRekeyStage`). */
+export const ITEM_MARKS_REKEY_BATCH = 32
+
+/**
+ * Memories' part of a rotation's scope-level re-seal (ADR 0115 decision 2, core's `ScopeRekeyParticipant`): every
+ * member's marked set of every Memory in the scope, listed page by page, opened with the old scope key and sealed under
+ * the new one as it is — the plaintext, its self-tag included, unchanged, so each set stays its marker's and nobody can
+ * attribute a mark (the listing carries a row id, never a member's) — and staged under the rotation's re-key id with the
+ * digest of the ciphertext it replaces. A set that does not open under the old key — what every reader shows as an
+ * empty set that is nobody's own — is staged as an empty set under a tag no key verifies, which reads the same: one
+ * member's unreadable row must not stop every rotation of the scope.
+ */
+export async function stageItemMarksRekey(ctx: ScopeRekeyContext): Promise<void> {
+  const { scopeId, rekeyId, oldKey, newKey } = ctx
+  let since: string | undefined
+  for (;;) {
+    const page = await withRefresh(() =>
+      itemFavoritesRekeyApi().listScopeItemFavoritesRekey({ scopeId, since, limit: ITEM_MARKS_REKEY_BATCH }),
+    )
+    const marks = page.marks.map((m) => {
+      const context = itemFavContext(scopeId, m.nodeId)
+      let plaintext: Uint8Array
+      try {
+        plaintext = v1.open(context, oldKey.key, fromB64std(m.ciphertext))
+      } catch {
+        plaintext = v1.encodeItemMarks(v1.randomBytes(32), [])
+      }
+      return { markId: m.markId, ciphertext: b64std(v1.seal(context, newKey.key, plaintext)), replacedDigest: ctx.digestOf(m.ciphertext) }
+    })
+    if (marks.length) {
+      await withRefresh(() =>
+        itemFavoritesRekeyApi().stageScopeItemFavoritesRekey({
+          scopeId, rekeyId, scopeItemFavoritesRekeyStage: { fromEpoch: oldKey.epoch, marks },
+        }),
+      )
+    }
+    if (!page.more || !page.cursor) return
+    since = page.cursor
   }
 }

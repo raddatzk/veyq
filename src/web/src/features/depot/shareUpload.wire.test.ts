@@ -42,15 +42,18 @@ afterEach(() => vi.unstubAllGlobals())
 
 const fileOf = (n: number) => new File([new Uint8Array(n).map((_, i) => i % 251)], NAME, { type: 'application/pdf', lastModified: MODIFIED })
 
+// a scope rotated to epoch 2 that re-keyed the folder and its file once: their own epoch 1, their keys minted under
+// scope epoch 2
+const existing = (): ShareNode => ({ blockedByOperator: false, id: EXISTING, parentId: ROOT, kind: FILE_KIND, epoch: 1, scopeEpoch: 2, placementRevision: 0 })
+
 function context(): GuestTreeContext {
-  const root: ShareNode = { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 2 }
-  const existing: ShareNode = { blockedByOperator: false, id: EXISTING, parentId: ROOT, kind: FILE_KIND, epoch: 2, placementRevision: 0 }
+  const root: ShareNode = { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 1, scopeEpoch: 2 }
   return {
     head: {} as GuestTreeContext['head'],
     rootId: ROOT,
     keys: new Map([[ROOT, rootKey], [EXISTING, existingKey]]),
     names: new Map([[EXISTING, 'Alt.txt']]),
-    nodes: new Map([[ROOT, root], [EXISTING, existing]]),
+    nodes: new Map([[ROOT, root], [EXISTING, existing()]]),
     shareId: SHARE, scopeId: SCOPE, pwToken: PW, contributorToken: TOKEN,
     reresolve: async () => { throw new Error('not in this test') },
   }
@@ -130,12 +133,18 @@ describe("a guest's new file on the wire", () => {
     expect(requests[1].json!.contributorToken).toBe(TOKEN)
     expect(requests[2].json!.contributorToken).toBe(TOKEN)
 
-    // The node: kind FILE under the folder, its key wrapped under the FOLDER's key at the folder's epoch.
+    // The node: kind FILE under the folder, its key minted under the folder's scope epoch (2) and wrapped under the
+    // FOLDER's key, whose own epoch (1) it states as `parentEpoch` (ADR 0114 decision 3) — no node epoch of its own.
     const created = requests[0].json!
-    expect(created).toMatchObject({ parentId: ROOT, kind: FILE_KIND, epoch: 2 })
+    expect(created).toMatchObject({ parentId: ROOT, kind: FILE_KIND, scopeEpoch: 2, parentEpoch: 1 })
+    expect(created).not.toHaveProperty('epoch')
     const nodeKey = v1.open(
       { purpose: 'content-key', scopeId: SCOPE, nodeId: node, epoch: 2, placementRevision: 0 }, rootKey, fromB64std(created.wrappedContentKey as string),
     )
+    // the seal's `epoch` field binds the scope epoch: bound to the folder's own epoch it does not open
+    expect(() => v1.open(
+      { purpose: 'content-key', scopeId: SCOPE, nodeId: node, epoch: 1, placementRevision: 0 }, rootKey, fromB64std(created.wrappedContentKey as string),
+    )).toThrow()
 
     // The upload: target = the new node, role FILE_CONTENT, owner = the node, `K_blob` under the NODE's key.
     const start = requests[1].json!
@@ -146,12 +155,12 @@ describe("a guest's new file on the wire", () => {
     expect(() => v1.open(blobCtx, nodeKey, fromB64std(item.wrappedBlobKey))).not.toThrow()
     expect(() => v1.open(blobCtx, rootKey, fromB64std(item.wrappedBlobKey)), 'never under the folder key').toThrow()
 
-    // The meta: the blob's own, declared with it, describing the picked file; the completion: ids and the new node's
-    // epoch (its parent's served one, ADR 0109 point 6).
+    // The meta: the blob's own, declared with it, describing the picked file; the completion: ids and the new node's own
+    // epoch (0 at its mint, ADR 0114 decision 3) — not its parent's, not the scope's.
     expect(declaredMeta(start, node, nodeKey)).toEqual({ v: 1, type: 'application/pdf', name: NAME, modifiedAt: MODIFIED })
     const done = requests[2].json!
     expect(Object.keys(done).sort()).toEqual(['contributorToken', 'nodeEpoch', 'uploadId'])
-    expect(done.nodeEpoch).toBe(2)
+    expect(done.nodeEpoch).toBe(0)
     expectNoPlaintextName(requests, NAME)
   })
 
@@ -217,19 +226,20 @@ describe("a guest's given-up new file on the wire", () => {
 describe("a guest's replace on the wire", () => {
   it('sends no create, expects the blob it saw, and declares the NEW file\'s meta on the new blob', async () => {
     const requests = fakeServer()
-    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, nodeEpoch: 0, expectedBlobId: 'b0b0b0b0-0000-4000-8000-000000000001' } }
+    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, nodeEpoch: existing().epoch, expectedBlobId: 'b0b0b0b0-0000-4000-8000-000000000001' } }
     await guestFileUploadJob(target, fileOf(7)).run(ctx())
 
     expect(control(requests)).toEqual([`POST /api/shares/${SHARE}/blob-uploads`, `POST /api/shares/${SHARE}/files/${EXISTING}/content`])
     expect(declaredMeta(requests[0].json!, EXISTING, existingKey)).toEqual({ v: 1, type: 'application/pdf', name: NAME, modifiedAt: MODIFIED })
     const done = requests[1].json!
     expect(done.expectedBlobId).toBe('b0b0b0b0-0000-4000-8000-000000000001')
+    expect(done.nodeEpoch, "the file's own served epoch, under whose key the blob is sealed").toBe(1)
     expect('wrappedMeta' in done).toBe(false)
   })
 
   it('a 409 stale_file is StaleFileError with the current blob, and a rerun sends nothing', async () => {
     const requests = fakeServer(() => json({ code: 'stale_file', currentBlobId: 'c0c0c0c0-0000-4000-8000-000000000002' }, 409))
-    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, nodeEpoch: 0, expectedBlobId: null } }
+    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, nodeEpoch: existing().epoch, expectedBlobId: null } }
     const job = guestFileUploadJob(target, fileOf(7))
     const err = await job.run(ctx()).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(StaleFileError)

@@ -20,7 +20,7 @@ vi.mock('../app/activeSpace', async () => {
       deletedAt: null, purgeAfter: null, trustRefusal: null,
     }),
     enterScope: vi.fn(async () => {}),
-    activeEpochKeys: () => ({ current: 0, keys: new Map([[0, new Uint8Array(32).fill(7)]]) }),
+    activeEpochKeys: () => ({ epoch: 0, key: new Uint8Array(32).fill(7) }),
   }
 })
 vi.mock('../api/client', async (importOriginal) => ({
@@ -69,8 +69,8 @@ const ROME = '5c09e000-0000-4000-8000-0000000000b3'
 const OTHER = '5c09e000-0000-4000-8000-0000000000f4'
 const tripsKey = v1.randomBytes(32)
 const romeKey = v1.randomBytes(32)
-const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 })
-const base = { orderIndex: 0, epoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0), slugToken: 'c2x1Zw==' }
+const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE_ID, nodeId, scopeEpoch: 0, placementRevision: 0 })
+const base = { orderIndex: 0, epoch: 0, scopeEpoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0), slugToken: 'c2x1Zw==' }
 const folder = (id: string, name: string, key: Uint8Array, blockedByOperator = false): NodeSummary => ({
   ...base, id, kind: 'FOLDER', blockedByOperator, encryptedName: sealName(SCOPE_KEY, at(id), name), wrappedContentKey: wrapContentKey(SCOPE_KEY, at(id), key),
 })

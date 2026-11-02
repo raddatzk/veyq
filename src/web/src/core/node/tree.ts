@@ -6,15 +6,15 @@
 // MAC under it. So whoever holds a node's key reads every name below it — a share guest included — and nothing
 // above it; a member, holding K_SC, opens the whole tree top-down in one pass ({@link listTree}).
 //
-// **Epochs (ADR 0024, cr-0089).** A rotated scope's `K_SC` is a chain of epoch keys E_0, E_1, …; the caller
-// opens the scope into an {@link EpochKeys} set (the write key `E_current` + a per-epoch lookup) and passes it
-// in. New content is tagged with the current epoch, and a **scope-root** entry (name, slug, key wrap) is sealed under
-// the **write key**; a read opens a scope-root entry under **its own** epoch key, so a tree spanning several epochs
-// decrypts fully. Below the root an entry is under its parent's key (epoch-independent) — only scope-root entries key
-// off the epoch, although every seal still binds the node's epoch (ADR 0072).
+// **Epochs (ADR 0115, ADR 0114 decisions 3-4).** A scope has ONE key at a time (its {@link ScopeKey}); a rotation
+// re-seals every scope-root entry under the new one in its commit. So a scope-root entry (name, slug, key wrap) opens and
+// is sealed under the one key the caller holds, and an entry below the root under its parent's key. A node carries two
+// numbers: its own `epoch` (its key's: 0 at its mint, +1 at every replacement — what every write sealing under its key
+// states as `nodeEpoch` / `parentEpoch`), and its `scopeEpoch` (the scope's epoch when its key was minted — what its
+// `content-key` and `node-name` seals bind, and what the device floor reads).
 //
-// **Every seal names its node (ADR 0072).** A name and a `K_node` wrap are bound to (scope, node, epoch, placement
-// revision) — the node id the client mints at creation, the epoch it is sealed at, and the revision of its placement
+// **Every seal names its node (ADR 0072).** A name and a `K_node` wrap are bound to (scope, node, scope epoch, placement
+// revision) — the node id the client mints at creation, the scope epoch its key was minted under, and the revision of its placement
 // the wire stores them at (0 at birth, n+1 after a move or rename built on n; ADR 0080 Decision 3) — so a server that
 // serves one node's wrap on another's row, or a wrap a move superseded, gets a refusal, never the other Memory's key
 // (the upload chain: every upload into X would land under the key of whichever Memory's wrap was served). A reader
@@ -29,7 +29,7 @@ import { contentApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import type { NodeSummary, TrashedNodeSummary } from '../../api/generated/content'
 import { FOLDER_KIND, type NodeKind } from './kind'
-import { writeKey, keyAt, zeroEpochKeys, type EpochKeys } from '../../features/spaces/epochs'
+import { zeroScopeKey, type ScopeKey } from '../../features/spaces/epochs'
 import { openScopeById } from '../../features/spaces/scopes'
 import { registry } from '../applications/registry'
 import { HttpStatus, isCodedError, isHttpStatus } from '../../shared/httpError'
@@ -39,13 +39,14 @@ import { assertNodeKeyAtFloor, nodeKeyForWrite } from './rekey/floor'
 import { pullRekeyPath } from './rekey/rekeyScope'
 import { identityEntryKey } from '../sharing/dropKey'
 
-/** Which node a seal belongs to: its scope, its id, the epoch it is sealed at and the placement revision the wire stores
- *  it at (ADR 0072, ADR 0080 Decision 3). */
-export type NodeAddress = { scopeId: string; nodeId: string; epoch: number; placementRevision: number }
+/** Which node a seal belongs to: its scope, its id, the scope epoch its key was minted under (`scopeEpoch`) and the
+ *  placement revision the wire stores it at (ADR 0072, ADR 0080 Decision 3, ADR 0115 decision 4). */
+export type NodeAddress = { scopeId: string; nodeId: string; scopeEpoch: number; placementRevision: number }
+// The seal's binding field is named `epoch` (`seal.ts`) and holds the node's `scopeEpoch`: fields are encoded by position.
 const nameContext = (a: NodeAddress) =>
-  ({ purpose: 'node-name', scopeId: a.scopeId, nodeId: a.nodeId, epoch: a.epoch, placementRevision: a.placementRevision }) as const
+  ({ purpose: 'node-name', scopeId: a.scopeId, nodeId: a.nodeId, epoch: a.scopeEpoch, placementRevision: a.placementRevision }) as const
 const contentKeyContext = (a: NodeAddress) =>
-  ({ purpose: 'content-key', scopeId: a.scopeId, nodeId: a.nodeId, epoch: a.epoch, placementRevision: a.placementRevision }) as const
+  ({ purpose: 'content-key', scopeId: a.scopeId, nodeId: a.nodeId, epoch: a.scopeEpoch, placementRevision: a.placementRevision }) as const
 const decoder = new TextDecoder()
 
 /** A decrypted tree node for the UI. `name` is decrypted client-side; the server never saw it. */
@@ -54,9 +55,12 @@ export type TreeNode = {
   parentId: string | null
   kind: NodeKind
   orderIndex: number
-  /** The scope content-key **epoch** this node is tagged with (ADR 0024); 0 for pre-rotation nodes. A scope-root
-   *  node's entry (name / slug / key wrap) is sealed under `E_epoch`; every seal of the node binds it (ADR 0072). */
+  /** The node's own key's epoch (ADR 0114 decision 3): 0 at its mint, +1 at each replacement. What every write that
+   *  seals under its key states (`nodeEpoch`, `parentEpoch`). */
   epoch: number
+  /** The scope epoch its key was minted under (ADR 0115 decision 4): what its entry's seals bind and the device floor
+   *  reads (`core/node/rekey/floor.ts`). */
+  scopeEpoch: number
   name: string
   /** The name as the wire serves it (the `node-name` field envelope): what a report hands over its `K_field` for
    *  (uc.moderation.report). Absent where a source does not carry it. */
@@ -105,8 +109,8 @@ export function childEntryKey(scopeId: string, parent: DropParent, parentKey: Ui
 }
 
 /** Seal a node's name (the `node-name` field, ADR 0012), bound to the node, under a field key of its own derived from
- *  the key its **directory entry** lives under: its parent's content key, or `K_SC` at the node's epoch for a scope-root
- *  node (ADR 0080 Decision 2, ADR 0093 § 9). A group's name and a share's Memory name are their own purposes
+ *  the key its **directory entry** lives under: its parent's content key, or the scope key for a scope-root node
+ *  (ADR 0080 Decision 2, ADR 0093 § 9). A group's name and a share's Memory name are their own purposes
  *  (`group-name`, `share-memory-name`, ADR 0072). */
 export function sealName(entryKey: Uint8Array, node: NodeAddress, name: string): string {
   return b64std(v1.sealField(nameContext(node), entryKey, v1.utf8(name)))
@@ -130,12 +134,12 @@ export function slugTokenFor(entryKey: Uint8Array, parentSlot: string, kind: Nod
 
 /** The fields of a listed row that its directory entry and key chain need. */
 type EntryRow = {
-  id: string; parentId: string | null; epoch: number; placementRevision: number; encryptedName: string; wrappedContentKey: string
+  id: string; parentId: string | null; scopeEpoch: number; placementRevision: number; encryptedName: string; wrappedContentKey: string
 } & DropParent & IdentityChild
 
 /**
- * Open every row's name **top-down in one pass** (ADR 0080 Decision 2): a scope-root entry under its own epoch's
- * `K_SC` (ADR 0024), every other one under its parent's content key, opened one level up on the way down. The keys
+ * Open every row's name **top-down in one pass** (ADR 0080 Decision 2): a scope-root entry under the scope's one key
+ * (ADR 0115 decision 1), every other one under its parent's content key, opened one level up on the way down. The keys
  * live only in this call. A row whose chain does not reach the scope root (its parent is not listed, or a served
  * parent cycle) has no key to open its name with: it is refused like a name that does not open (`OpenRefused`), and
  * so is a name or a wrap the server moved onto another row.
@@ -145,18 +149,18 @@ type EntryRow = {
  * not open (a guest's garbage, a wrap of another identity) leaves that folder's subtree out of the result instead of
  * refusing the member's whole space; every other row keeps the strict rule above.
  */
-function openEntries(scopeId: string, epochs: EpochKeys, rows: EntryRow[]): Map<string, string> {
+function openEntries(scopeId: string, epochs: ScopeKey, rows: EntryRow[]): Map<string, string> {
   const children = new Map<string | null, EntryRow[]>()
   for (const r of rows) children.set(r.parentId, [...(children.get(r.parentId) ?? []), r])
   const names = new Map<string, string>()
   let leftOut = 0
   const countSubtree = (id: string): number => 1 + (children.get(id) ?? []).reduce((n, c) => n + countSubtree(c.id), 0)
   type Item = { row: EntryRow; parent: EntryRow | null; parentKey: Uint8Array; guestSealed: boolean }
-  const level: Item[] = (children.get(null) ?? []).map((row) => ({ row, parent: null, parentKey: keyAt(epochs, row.epoch), guestSealed: false }))
+  const level: Item[] = (children.get(null) ?? []).map((row) => ({ row, parent: null, parentKey: epochs.key, guestSealed: false }))
   while (level.length) {
     const { row, parent, parentKey, guestSealed } = level.shift()!
     const inGuestFolder = guestSealed || !!row.shareIdentityId
-    const node = { scopeId, nodeId: row.id, epoch: row.epoch, placementRevision: row.placementRevision }
+    const node = { scopeId, nodeId: row.id, scopeEpoch: row.scopeEpoch, placementRevision: row.placementRevision }
     let key: Uint8Array
     try {
       const entryKey = parent ? childEntryKey(scopeId, parent, parentKey, row) : parentKey
@@ -213,14 +217,14 @@ export async function fetchTree(scopeId: string, ifNoneMatch?: string | null): P
 export function treeFingerprint(rows: readonly NodeSummary[]): string {
   return rows
     .map((r) =>
-      [r.id, r.parentId ?? '', r.kind, r.orderIndex, r.epoch, r.placementRevision, r.metaRevision, r.encryptedName, r.wrappedContentKey, r.wrappedMeta ?? '', r.shareIdentityId ?? '', r.wrappedIdentityKey ?? '', r.sealedDropPrivateKey ?? '', r.blockedByOperator].join('|'),
+      [r.id, r.parentId ?? '', r.kind, r.orderIndex, r.epoch, r.scopeEpoch, r.placementRevision, r.metaRevision, r.encryptedName, r.wrappedContentKey, r.wrappedMeta ?? '', r.shareIdentityId ?? '', r.wrappedIdentityKey ?? '', r.sealedDropPrivateKey ?? '', r.blockedByOperator].join('|'),
     )
     .sort()
     .join('\n')
 }
 
 /** Open listed rows into the decrypted tree: each name under the key its entry lives under ({@link openEntries}). */
-export function openTree(scopeId: string, epochs: EpochKeys, rows: NodeSummary[]): TreeNode[] {
+export function openTree(scopeId: string, epochs: ScopeKey, rows: NodeSummary[]): TreeNode[] {
   const names = openEntries(scopeId, epochs, rows.map((r) => ({ ...r, parentId: r.parentId ?? null })))
   return rows.filter((r) => names.has(r.id)).map((r) => ({
     id: r.id,
@@ -228,6 +232,7 @@ export function openTree(scopeId: string, epochs: EpochKeys, rows: NodeSummary[]
     kind: r.kind,
     orderIndex: r.orderIndex,
     epoch: r.epoch,
+    scopeEpoch: r.scopeEpoch,
     name: names.get(r.id)!,
     encryptedName: r.encryptedName,
     wrappedContentKey: r.wrappedContentKey,
@@ -243,40 +248,39 @@ export function openTree(scopeId: string, epochs: EpochKeys, rows: NodeSummary[]
 }
 
 /** List the scope's tree, each name opened under the key its entry lives under ({@link openEntries}): a scope-root
- *  entry under **its own** epoch key `E_{node.epoch}` (ADR 0024), every other under its parent's content key — so a
- *  tree spanning several epochs (post-rotation) decrypts fully for a current member. */
-export async function listTree(scopeId: string, epochs: EpochKeys): Promise<TreeNode[]> {
+ *  entry under the scope's one key, every other under its parent's content key. */
+export async function listTree(scopeId: string, epochs: ScopeKey): Promise<TreeNode[]> {
   return openTree(scopeId, epochs, await fetchTreeRows(scopeId))
 }
 
 /**
  * Where a new node goes (ADR 0080 Decision 1): its parent's id, the parent's **content key** — the key the new node's own
- * key wraps under — and the parent's **epoch** as read (`TreeNode.epoch`, the epoch that key was minted at: the create
- * states it as `parentEpoch`, ADR 0109 point 6); or `null` for the scope root, where it wraps under the write key
- * `E_current`. The parent's key comes from {@link nodeContentKey}.
+ * key wraps under — the parent's own **epoch** as read (`TreeNode.epoch`, its key's: the create states it as
+ * `parentEpoch`, ADR 0114 decision 3) and its `scopeEpoch` (the device floor's, `core/node/rekey/floor.ts`); or `null`
+ * for the scope root, where it wraps under the scope key. The parent's key comes from {@link nodeContentKey}.
  */
-export type NodeParent = { id: string; key: Uint8Array; epoch: number } | null
+export type NodeParent = { id: string; key: Uint8Array; epoch: number; scopeEpoch: number } | null
 
 /** Create a FOLDER. Like every node it births a random content key wrapped under its parent's (ADR 0080
  *  Decision 1), so whoever holds the folder's key opens every key created below it. Returns its node id. */
 export async function createFolder(
-  scopeId: string, epochs: EpochKeys, name: string, parent: NodeParent = null, opts: CreateNodeOptions = {},
+  scopeId: string, epochs: ScopeKey, name: string, parent: NodeParent = null, opts: CreateNodeOptions = {},
 ): Promise<string> {
   return (await createContentNode(scopeId, epochs, parent, FOLDER_KIND, name, undefined, opts)).nodeId
 }
 
 /**
  * Create a node of any kind: births a fresh random content key wrapped under the **parent's content key**
- * (`parent.key`; the write key `E_current` at the scope root; recursive keys, ADR 0012 / ADR 0080 Decision 1), and
- * seals its directory entry — name + slug token — under that same key (ADR 0080 Decision 2). The node is tagged with
- * the **current epoch** (ADR 0024). The kind is the caller's: core's {@link createFolder} and an application's own
+ * (`parent.key`; the scope key at the scope root; recursive keys, ADR 0012 / ADR 0080 Decision 1), and seals its
+ * directory entry — name + slug token — under that same key (ADR 0080 Decision 2). Its key is minted under the scope's
+ * **current epoch** (`scopeEpoch`) and starts at its own epoch 0 (ADR 0114 decision 3). The kind is the caller's: core's {@link createFolder} and an application's own
  * wrappers (Memories: `createMemory` / `createChapter`) call this.
  */
 export async function createContentNode(
-  scopeId: string, epochs: EpochKeys, parent: NodeParent, kind: NodeKind, name: string,
+  scopeId: string, epochs: ScopeKey, parent: NodeParent, kind: NodeKind, name: string,
   metaSealer?: (contentKey: Uint8Array, node: NodeAddress) => string,
   opts: CreateNodeOptions = {},
-): Promise<{ nodeId: string; contentKey: Uint8Array; epoch: number }> {
+): Promise<{ nodeId: string; contentKey: Uint8Array; epoch: number; scopeEpoch: number }> {
   const reread = opts.reread
   // the epochs this device holds NOW: a long run (an import, a copy) outlives a rotation, and the node it mints states the
   // epoch the device re-opened the scope at when its pull met that rotation (inbox #670)
@@ -295,23 +299,23 @@ export async function createContentNode(
 export type CreateNodeOptions = {
   reread?: () => Promise<NodeParent>
   pull?: () => Promise<boolean>
-  epochs?: () => EpochKeys | null
+  epochs?: () => ScopeKey | null
 }
 
 /** One create attempt (see {@link createContentNode}). The device floor runs first: a parent whose key is from before
  *  the last rotation this device holds is not sealed under (`NodeKeyBelowFloorError`, layer 2). */
 async function createContentNodeOnce(
-  scopeId: string, epochs: EpochKeys, parent: NodeParent, kind: NodeKind, name: string,
+  scopeId: string, epochs: ScopeKey, parent: NodeParent, kind: NodeKind, name: string,
   metaSealer?: (contentKey: Uint8Array, node: NodeAddress) => string,
-): Promise<{ nodeId: string; contentKey: Uint8Array; epoch: number }> {
+): Promise<{ nodeId: string; contentKey: Uint8Array; epoch: number; scopeEpoch: number }> {
   if (parent) assertNodeKeyAtFloor(parent, epochs)
   const parentId = parent?.id ?? null
   const parentSlot = parentId ?? scopeId
-  const entryKey = parent?.key ?? writeKey(epochs)
+  const entryKey = parent?.key ?? epochs.key
   const contentKey = v1.randomBytes(32)
   // The client mints the node's id, so its name, K_node wrap and meta are all sealed bound to it (ADR 0072), at the
-  // placement revision a new node has (0, ADR 0080 Decision 3).
-  const node = { scopeId, nodeId: crypto.randomUUID(), epoch: epochs.current, placementRevision: 0 }
+  // placement revision a new node has (0, ADR 0080 Decision 3) and the scope epoch its key is minted under.
+  const node = { scopeId, nodeId: crypto.randomUUID(), scopeEpoch: epochs.epoch, placementRevision: 0 }
   const wrappedContentKey = wrapContentKey(entryKey, node, contentKey)
   const res = await withRefresh(() =>
     contentApi().createNode({
@@ -323,19 +327,20 @@ async function createContentNodeOnce(
         encryptedName: sealName(entryKey, node, name),
         slugToken: slugTokenFor(entryKey, parentSlot, kind, name),
         orderIndex: 0,
-        epoch: epochs.current,
-        // the epoch of the parent key the entry is sealed under, as read (ADR 0109 point 6)
+        // the scope epoch the node's key is minted under (ADR 0115 decision 4): the server refuses another than current
+        scopeEpoch: epochs.epoch,
+        // the parent's own epoch as read: the entry is sealed under its key (ADR 0114 decision 3)
         parentEpoch: parent?.epoch,
         wrappedContentKey,
         wrappedMeta: metaSealer?.(contentKey, node), // sealed under the just-minted K_node (e.g. a pre-armed location)
       },
     }),
   )
-  // the node's key is minted at the current epoch: what every later write to it states as `nodeEpoch`
-  return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey, epoch: node.epoch }
+  // a new key is at its own epoch 0 (ADR 0114 decision 3): what every later write to it states as `nodeEpoch`
+  return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey, epoch: 0, scopeEpoch: node.scopeEpoch }
 }
 
-/** Wrap a node's content key under the key its entry lives under (its parent's, `K_SC` at a scope-root), bound to the
+/** Wrap a node's content key under the key its entry lives under (its parent's, the scope key at a scope-root), bound to the
  *  node's address (the counterpart to {@link openContentKey}). The one place the `content-key` seal is made: a guest's
  *  tree operations (`core/sharing/guestTree.ts`) wrap through it too, so no second copy of the context drifts. */
 export function wrapContentKey(entryKey: Uint8Array, node: NodeAddress, contentKey: Uint8Array): string {
@@ -344,16 +349,16 @@ export function wrapContentKey(entryKey: Uint8Array, node: NodeAddress, contentK
 
 /**
  * Open a node's content key by unwrapping `node.wrappedContentKey` under its parent's content key
- * (`parentKey` = `K_SC` at the node's epoch for a scope-root node, the parent node's key below it; every node carries
- * a wrap, ADR 0080 Decision 1). Bound to (scope, the node's id, its epoch, its placement revision) — the node the caller
+ * (`parentKey` = the scope key for a scope-root node, the parent node's key below it; every node carries a wrap, ADR 0080
+ * Decision 1). Bound to (scope, the node's id, its scope epoch, its placement revision) — the node the caller
  * addresses, at the revision listed with it — so a wrap the server moved onto this row from another node, or one a move
  * superseded, throws `OpenRefused` instead of yielding a key. For a node at arbitrary depth, resolve `parentKey` with
  * [nodeContentKey].
  */
 export function openContentKey(
-  scopeId: string, parentKey: Uint8Array, node: { id: string; epoch: number; placementRevision: number; wrappedContentKey: string },
+  scopeId: string, parentKey: Uint8Array, node: { id: string; scopeEpoch: number; placementRevision: number; wrappedContentKey: string },
 ): Uint8Array {
-  const address = { scopeId, nodeId: node.id, epoch: node.epoch, placementRevision: node.placementRevision }
+  const address = { scopeId, nodeId: node.id, scopeEpoch: node.scopeEpoch, placementRevision: node.placementRevision }
   return v1.open(contentKeyContext(address), parentKey, fromB64std(node.wrappedContentKey))
 }
 
@@ -362,12 +367,10 @@ export const openMemory = openContentKey
 
 /**
  * Resolve a node's content key, walking **every** ancestor top-down (ADR 0080 Decision 1: a folder is a link of the
- * chain like any other node, never transparent). The **scope-root ancestor** opens under `E_{its epoch}`
- * (ADR 0024) and each node below under its parent's key. Returns null if the node is not in the tree or its chain does
- * not reach the scope root. (Recursive keys, ADR 0012: only the scope-root wrap keys off the epoch; deeper links chain
- * through their parent's key.)
+ * chain like any other node, never transparent). The **scope-root ancestor** opens under the scope key and each node
+ * below under its parent's key. Returns null if the node is not in the tree or its chain does not reach the scope root.
  */
-export function nodeContentKey(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string): Uint8Array | null {
+export function nodeContentKey(scopeId: string, epochs: ScopeKey, tree: TreeNode[], nodeId: string): Uint8Array | null {
   return contentKeyChain(scopeId, epochs, tree, nodeId)[0] ?? null
 }
 
@@ -389,7 +392,7 @@ export function sameKeyOr(previous: Uint8Array | null | undefined, next: Uint8Ar
  * the scope root. What a member reads that was sealed under an ANCESTOR's key needs it: a folder link's guest names
  * itself under the folder's key, and its name is read on a Memory below (`features/memories/mediaBuckets.ts`).
  */
-export function contentKeyChain(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string): Uint8Array[] {
+export function contentKeyChain(scopeId: string, epochs: ScopeKey, tree: TreeNode[], nodeId: string): Uint8Array[] {
   const byId = new Map(tree.map((n) => [n.id, n]))
   // collect the chain from the node up to the scope root (nearest-last → reverse to top-down)
   const chain: TreeNode[] = []
@@ -397,7 +400,7 @@ export function contentKeyChain(scopeId: string, epochs: EpochKeys, tree: TreeNo
     chain.unshift(cur) // the length bound stops a served parent cycle, which then reaches no root below
   }
   if (!chain.length || chain[0].parentId !== null) return [] // an ancestor missing from the tree: no chain
-  let key = keyAt(epochs, chain[0].epoch) // the scope-root node's key is wrapped under its own epoch's K_SC
+  let key = epochs.key // the scope-root node's key is wrapped under the scope's one key (ADR 0115 decision 1)
   const keys: Uint8Array[] = []
   chain.forEach((node, i) => {
     // an identity folder's wrap is under its guest's K_up, opened through the parent's drop key (ADR 0080 decision 11)
@@ -408,11 +411,11 @@ export function contentKeyChain(scopeId: string, epochs: EpochKeys, tree: TreeNo
 }
 
 /** The key `node`'s directory entry (name, slug token) and its own key wrap live under (ADR 0080 Decisions 1 and 2):
- *  its parent's content key, or `E_{node.epoch}` for a scope-root node. Null when the parent's chain does not open. */
+ *  its parent's content key, or the scope key for a scope-root node. Null when the parent's chain does not open. */
 export function parentContentKey(
-  scopeId: string, epochs: EpochKeys, tree: TreeNode[], node: { parentId: string | null; epoch: number } & IdentityChild,
+  scopeId: string, epochs: ScopeKey, tree: TreeNode[], node: { parentId: string | null } & IdentityChild,
 ): Uint8Array | null {
-  if (node.parentId === null) return keyAt(epochs, node.epoch)
+  if (node.parentId === null) return epochs.key
   const parentKey = nodeContentKey(scopeId, epochs, tree, node.parentId)
   const parent = tree.find((n) => n.id === node.parentId)
   if (!parentKey || !parent) return null
@@ -423,7 +426,7 @@ export function parentContentKey(
 /** {@link parentContentKey} for a write or a read that cannot go on without it: a parent whose chain does not open has
  *  no key to seal or open the entry under, refused like a name that does not open. */
 function entryKeyOf(
-  scopeId: string, epochs: EpochKeys, tree: TreeNode[], node: { parentId: string | null; epoch: number } & IdentityChild,
+  scopeId: string, epochs: ScopeKey, tree: TreeNode[], node: { parentId: string | null } & IdentityChild,
 ): Uint8Array {
   const key = parentContentKey(scopeId, epochs, tree, node)
   if (!key) throw new v1.OpenRefused('node-name')
@@ -447,10 +450,9 @@ export class PlacementConflictError extends Error {
 export const PLACEMENT_RETRIES = 1
 
 /**
- * The epoch a placement seals its entry at: ALWAYS the node's own (ADR 0109 point 6). A node's epoch is the epoch its key
- * was minted at, and no placement changes it — the server checks the request's `epoch` against the stored one and keeps
- * that. At the scope root the entry is under `K_SC` at that epoch; a node whose epoch lags the scope's current one is not
- * re-keyed yet, and the server answers a placement into the root `409 node_rekey_pending`.
+ * The epoch a placement states: ALWAYS the node's own (ADR 0114 decision 3) — the placement re-wraps the node's key, and
+ * no placement replaces it. The server checks the request's `epoch` against the stored one (`stale_epoch`) and refuses a
+ * node due for its re-key (`node_rekey_pending`). The entry's seals bind the node's `scopeEpoch`, which no placement moves.
  */
 export function placementEpoch(node: { epoch: number }): number {
   return node.epoch
@@ -459,7 +461,7 @@ export function placementEpoch(node: { epoch: number }): number {
 /**
  * The one placement write (ADR 0080 Decision 3): move `nodeId` to `to.parentId`, renaming it to `to.name` when given —
  * a rename is a move to the same parent. The node's own content key, opened from the loaded `tree`, is re-wrapped under
- * the destination parent's key (`E_current` at the scope root), and its name and slug token are re-sealed under that
+ * the destination parent's key (the scope key at the scope root), and its name and slug token are re-sealed under that
  * key, all bound to the NEXT placement revision (`placementRevision + 1`), which the server compare-and-sets against the
  * version this write states. A rename re-wraps too: the old wrap is bound to the old version and would stop opening.
  *
@@ -473,11 +475,11 @@ export function placementEpoch(node: { epoch: number }): number {
  * in the scope, the kind's placement rule, no cycle).
  */
 export async function placeNode(
-  scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string, to: Placement,
+  scopeId: string, epochs: ScopeKey, tree: TreeNode[], nodeId: string, to: Placement,
 ): Promise<void> {
   let current = tree
   // A member's placement pulls forward what it seals under (ADR 0111 decision 11): the destination's path, or the node's
-  // own at the scope root (its entry is under `K_SC` at its own epoch there).
+  // own at the scope root (the placement re-wraps its key, which must not be due).
   const pull = pullRekeyPath(scopeId, [to.parentId ?? nodeId])
   for (let attempt = 0; ; attempt++) {
     try {
@@ -495,31 +497,31 @@ export async function placeNode(
 }
 
 /** Rename a node in place: {@link placeNode} to its current parent under `newName`. */
-export function renameNode(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string, newName: string): Promise<void> {
+export function renameNode(scopeId: string, epochs: ScopeKey, tree: TreeNode[], nodeId: string, newName: string): Promise<void> {
   const node = tree.find((n) => n.id === nodeId)
   if (!node) return Promise.reject(new v1.OpenRefused('content-key'))
   return placeNode(scopeId, epochs, tree, nodeId, { parentId: node.parentId, name: newName })
 }
 
 /** Move a node under `parentId` (`null` = the scope root), keeping its name: {@link placeNode}. */
-export function moveNode(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string, parentId: string | null): Promise<void> {
+export function moveNode(scopeId: string, epochs: ScopeKey, tree: TreeNode[], nodeId: string, parentId: string | null): Promise<void> {
   return placeNode(scopeId, epochs, tree, nodeId, { parentId })
 }
 
 /** Build and send one placement against `tree` (see {@link placeNode}). */
-async function sendPlacement(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string, to: Placement): Promise<void> {
+async function sendPlacement(scopeId: string, epochs: ScopeKey, tree: TreeNode[], nodeId: string, to: Placement): Promise<void> {
   const node = tree.find((n) => n.id === nodeId)
   const contentKey = node ? nodeContentKey(scopeId, epochs, tree, nodeId) : null
   if (!node || !contentKey) throw new v1.OpenRefused('content-key') // its chain does not open: nothing to re-wrap
   const epoch = placementEpoch(node)
-  // The key the entry is sealed under, through the device floor (layer 2): at the scope root `K_SC` at the node's epoch,
-  // which must be the current one; else the destination's key, whose epoch the request states.
+  // The key the entry is sealed under, through the device floor (layer 2): at the scope root the scope key — the node's
+  // own key, re-wrapped, must be from this scope epoch —; else the destination's key, whose epoch the request states.
   if (to.parentId === null) assertNodeKeyAtFloor(node, epochs)
   const destination = to.parentId === null ? null : nodeKeyForWrite(scopeId, epochs, tree, to.parentId)
-  const destinationKey = to.parentId === null ? keyAt(epochs, epoch) : destination?.key
+  const destinationKey = to.parentId === null ? epochs.key : destination?.key
   if (!destinationKey) throw new v1.OpenRefused('content-key') // a destination whose chain does not open
   const name = to.name ?? node.name
-  const sealedAt = { scopeId, nodeId, epoch, placementRevision: node.placementRevision + 1 }
+  const sealedAt = { scopeId, nodeId, scopeEpoch: node.scopeEpoch, placementRevision: node.placementRevision + 1 }
   await withRefresh(() =>
     contentApi().updateNode({
       scopeId,
@@ -530,7 +532,7 @@ async function sendPlacement(scopeId: string, epochs: EpochKeys, tree: TreeNode[
         encryptedName: sealName(destinationKey, sealedAt, name),
         slugToken: slugTokenFor(destinationKey, to.parentId ?? scopeId, node.kind, name),
         epoch,
-        // the destination parent's epoch as read: the entry is sealed under its key (ADR 0109 point 6)
+        // the destination parent's own epoch as read: the entry is sealed under its key (ADR 0114 decision 3)
         parentEpoch: destination?.epoch,
         placementRevision: node.placementRevision,
       },
@@ -560,7 +562,9 @@ export type TrashedNode = {
   id: string
   parentId: string | null
   kind: NodeKind
+  /** Its own key's epoch, and the scope epoch that key was minted under (see {@link TreeNode}). */
   epoch: number
+  scopeEpoch: number
   /** The placement revision its name is sealed at; a trash and a restore leave it alone. */
   placementRevision: number
   name: string
@@ -576,19 +580,19 @@ export type TrashedNode = {
 /** The space's node trash: the ROOT of each deleted subtree (the descendants went with it and return with it — except
  *  one whose own name an earlier delete freed: a restore of its parent leaves it in the trash, where it is a root of
  *  its own from then on, inbox #357), each name opened under the key its entry lives under — its **live** parent's
- *  content key, resolved from the loaded `tree` (a trashed root's parent is always live, or the scope root), or **its
- *  own** epoch key `E_{node.epoch}` at the scope root — exactly as {@link listTree} does. So after a restore the list is
+ *  content key, resolved from the loaded `tree` (a trashed root's parent is always live, or the scope root), or the
+ *  scope key at the scope root — exactly as {@link listTree} does. So after a restore the list is
  *  read against the RELOADED tree: the parent that just came back is in no older one, and its left-behind child's
  *  entry opens under no key there (`OpenRefused`). */
-export async function listTrash(scopeId: string, epochs: EpochKeys, tree: TreeNode[]): Promise<TrashedNode[]> {
+export async function listTrash(scopeId: string, epochs: ScopeKey, tree: TreeNode[]): Promise<TrashedNode[]> {
   const rows = await withRefresh(() => contentApi().listTrashedNodes({ scopeId }))
   return rows.flatMap((r: TrashedNodeSummary) => {
     const parentId = r.parentId ?? null
     const identity = { shareIdentityId: r.shareIdentityId ?? null, wrappedIdentityKey: r.wrappedIdentityKey ?? null }
     let name: string
     try {
-      const entryKey = entryKeyOf(scopeId, epochs, tree, { parentId, epoch: r.epoch, ...identity })
-      name = openName(entryKey, { scopeId, nodeId: r.id, epoch: r.epoch, placementRevision: r.placementRevision }, r.encryptedName)
+      const entryKey = entryKeyOf(scopeId, epochs, tree, { parentId, ...identity })
+      name = openName(entryKey, { scopeId, nodeId: r.id, scopeEpoch: r.scopeEpoch, placementRevision: r.placementRevision }, r.encryptedName)
     } catch (e) {
       // a guest-sealed entry that does not open is left out, never failing the member's trash (ADR 0080 decision 11)
       if (identity.shareIdentityId) return []
@@ -599,6 +603,7 @@ export async function listTrash(scopeId: string, epochs: EpochKeys, tree: TreeNo
       parentId,
       kind: r.kind,
       epoch: r.epoch,
+      scopeEpoch: r.scopeEpoch,
       placementRevision: r.placementRevision,
       ...identity,
       name,
@@ -614,8 +619,7 @@ export async function listTrash(scopeId: string, epochs: EpochKeys, tree: TreeNo
  * Restore a trashed subtree. The client **must** supply the slug token: it is a blinded MAC under the parent's key, so
  * the server cannot recompute one, and the delete consumed the original when it freed the name. It is derived under
  * the **live** parent's content key (ADR 0080 Decision 8), resolved from the loaded `tree`; at the scope root under
- * the node's **own** epoch key — a restore does not re-tag the epoch (ADR 0024), and neither does a placement
- * ({@link placementEpoch}, ADR 0109 point 6).
+ * the scope key — a restore moves no epoch, and neither does a placement ({@link placementEpoch}).
  *
  * `newName` is the A1 retry after a `slug_taken`: a node created while this one sat in the trash already holds
  * the name, so the user picks another. The re-sealed name travels in the SAME request as the token derived from
@@ -623,7 +627,7 @@ export async function listTrash(scopeId: string, epochs: EpochKeys, tree: TreeNo
  */
 export async function restoreNode(
   scopeId: string,
-  epochs: EpochKeys,
+  epochs: ScopeKey,
   tree: TreeNode[],
   node: RestoredNode,
   newName?: string,
@@ -632,13 +636,13 @@ export async function restoreNode(
   // server's gate asks for all of them) pulls them forward on this device and restores the node as the re-key left it,
   // re-read from the scope opened anew (ADR 0111 decision 11); `stale_epoch` re-reads the same way, once.
   let at = { epochs, tree, node }
-  let opened: EpochKeys | null = null
+  let opened: ScopeKey | null = null
   try {
     await writeAtNodeEpoch(async (reread) => {
       if (reread) {
         const scope = await openScopeById(scopeId)
         if (!scope) throw new v1.OpenRefused('content-key')
-        if (opened) zeroEpochKeys(opened)
+        if (opened) zeroScopeKey(opened)
         opened = scope.epochs
         const live = await listTree(scopeId, opened)
         const again = (await listTrash(scopeId, opened, live)).find((n) => n.id === node.id)
@@ -648,23 +652,23 @@ export async function restoreNode(
       await restoreOnce(scopeId, at.epochs, at.tree, at.node, newName)
     }, { pull: pullRekeyPath(scopeId, [node.id], { subtree: true }) })
   } finally {
-    if (opened) zeroEpochKeys(opened)
+    if (opened) zeroScopeKey(opened)
   }
 }
 
 /** What a restore reads of the trashed node: a {@link TrashedNode} carries it. */
-type RestoredNode = { id: string; parentId: string | null; kind: NodeKind; epoch: number; placementRevision: number; name: string } & IdentityChild
+type RestoredNode = { id: string; parentId: string | null; kind: NodeKind; epoch: number; scopeEpoch: number; placementRevision: number; name: string } & IdentityChild
 
 /** One restore attempt (see {@link restoreNode}). */
-async function restoreOnce(scopeId: string, epochs: EpochKeys, tree: TreeNode[], node: RestoredNode, newName?: string): Promise<void> {
+async function restoreOnce(scopeId: string, epochs: ScopeKey, tree: TreeNode[], node: RestoredNode, newName?: string): Promise<void> {
   const parentSlot = node.parentId ?? scopeId
   const key = entryKeyOf(scopeId, epochs, tree, node)
   const name = newName ?? node.name
   // A restore is not a placement: the node comes back under the parent it left, its key wrap untouched, so the revision
   // does not move and a re-sealed name binds the one the node already has (ADR 0080 Decision 3).
-  const address = { scopeId, nodeId: node.id, epoch: node.epoch, placementRevision: node.placementRevision }
-  // The epoch of the key the entry is re-sealed under (ADR 0109 point 6): the live parent's, or at the scope root the
-  // node's own (its entry is under `K_SC` at it).
+  const address = { scopeId, nodeId: node.id, scopeEpoch: node.scopeEpoch, placementRevision: node.placementRevision }
+  // The own epoch the request states (ADR 0114 decision 3): the live parent's, whose key the entry is re-sealed under,
+  // or at the scope root the restored node's own (its entry is under the scope key; a due node restores only re-keyed).
   const parent = node.parentId === null ? node : tree.find((n) => n.id === node.parentId)
   if (!parent) throw new v1.OpenRefused('content-key') // a parent the loaded tree does not hold
   assertNodeKeyAtFloor(parent, epochs) // the device floor (layer 2): never re-seal under a key from before the last rotation

@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.generated.model.SetAvatarRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.tenant.RequestTenant
+import me.raddatz.veyq.core.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -38,14 +39,16 @@ class AccountProfileResource(
     override fun updateMyProfile(profileUpdateRequest: ProfileUpdateRequest): Response =
         when (val outcome = handler.update(
             identity.principal.name, tenant.resolve()?.id, profileUpdateRequest.username, profileUpdateRequest.sealedName,
-            profileUpdateRequest.requireGroupAddConsent,
+            profileUpdateRequest.epoch, profileUpdateRequest.requireGroupAddConsent,
         )) {
             is ProfileOutcome.Found -> Response.ok(memberProfile(outcome)).build()
             is HttpFailure -> httpError(outcome)
         }
 
     override fun setMyAvatar(setAvatarRequest: SetAvatarRequest): Response =
-        when (val outcome = handler.setAvatar(identity.principal.name, tenant.resolve()?.id, setAvatarRequest.sealedAvatar)) {
+        when (val outcome = handler.setAvatar(
+            identity.principal.name, tenant.resolve()?.id, setAvatarRequest.sealedAvatar, setAvatarRequest.epoch.validated(),
+        )) {
             AvatarWriteOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(outcome)
         }

@@ -2,8 +2,8 @@
 // exactly that, role-tagged, for `v1.sealReportShare`. An application's item brings its own keys (Memories' medium:
 // `features/memories/media.ts`, `mediumReportKeys`).
 //
-// A node's NAME is sealed under the key its directory entry lives under — its parent's `K_node`, `K_SC` at the node's
-// epoch for a scope-root node, a guest's `K_up` for an identity folder — so `K_node` does not open it, and the report
+// A node's NAME is sealed under the key its directory entry lives under — its parent's `K_node`, the scope's one key
+// for a scope-root node, a guest's `K_up` for an identity folder — so `K_node` does not open it, and the report
 // hands over the name's own `K_field` beside `K_node` and the meta's. A link's root, seen by its guest, is named by the
 // link (`share-memory-name` under `K_share`): its own entry lies above the link (ADR 0080 Decision 9).
 //
@@ -14,7 +14,6 @@ import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
 import type { Access, GuestAccess, TreeSource } from '../access'
 import { childEntryKey, type TreeNode } from '../node/tree'
-import { keyAt } from '../../features/spaces/epochs'
 import { SHARE_MEMORY_NAME, SHARE_NOTE } from '../sharing/resolvePublicShare'
 
 /** The `K_field` of `envelope` for `context` under `parentKey`, or null when there is none or it does not open. */
@@ -30,7 +29,7 @@ function fieldKey(context: v1.FieldContext, parentKey: Uint8Array | null, envelo
 /** The key `node`'s directory entry lives under, as `access` reads the tree; null where this session cannot reach it. */
 function entryKeyOf(access: Access, tree: TreeSource, scopeId: string, node: TreeNode): Uint8Array | null {
   try {
-    if (node.parentId === null) return access.mode === 'member' && access.epochs ? keyAt(access.epochs, node.epoch) : null
+    if (node.parentId === null) return access.mode === 'member' && access.epochs ? access.epochs.key : null
     const parent = tree.node(node.parentId) as TreeNode | null
     const parentKey = tree.keyOf(node.parentId)
     return parent && parentKey ? childEntryKey(scopeId, parent, parentKey, node) : null
@@ -41,7 +40,8 @@ function entryKeyOf(access: Access, tree: TreeSource, scopeId: string, node: Tre
 
 /** The `K_field` of the revision of `node`'s name this session reads, or null. */
 function nameKeyOf(access: Access, tree: TreeSource, scopeId: string, node: TreeNode): Uint8Array | null {
-  const address = { scopeId, nodeId: node.id, epoch: node.epoch, placementRevision: node.placementRevision }
+  // the seal's `epoch` binding holds the node's scopeEpoch (ADR 0115 decision 4)
+  const address = { scopeId, nodeId: node.id, epoch: node.scopeEpoch, placementRevision: node.placementRevision }
   return fieldKey({ purpose: 'node-name', ...address }, entryKeyOf(access, tree, scopeId, node), node.encryptedName)
 }
 

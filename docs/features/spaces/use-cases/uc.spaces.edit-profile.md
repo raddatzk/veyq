@@ -35,10 +35,11 @@
   alone can still be saved. Once the current grant lands, the name can be set here ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md) E2).
 - **A1 — remove your real name:** empty both name fields and save. An empty name is sealed, and the directory
   shows only `@username` from then on.
-- **A2 — the tenant rotated since the name was saved** (a member secured their account, or one was removed): the name
-  still opens under the older epoch, in the directory of every member and in this form, and the member is not asked to
-  finish a profile they finished. On entering the tenant the member's own client seals it again under the current epoch
-  ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md) § The epoch of a sealed name).
+- **A2 — the tenant rotated since the name was saved** (a member secured their account, or an owner re-keyed it): the
+  rotation re-sealed every member's name under the tenant's new key, so it opens in the directory of every member
+  holding that key and in this form, and the member is not asked to finish a profile they finished. A save states
+  the epoch it seals under; one that meets a rotation is answered `409 stale_epoch` and sealed once more under the new
+  key ([en.spaces.member-identity § The epoch of a sealed field](../enablers/en.spaces.member-identity.md#the-epoch-of-a-sealed-field)).
 - **E3 — the profile does not load:** the panel shows a load error instead of the form. A refused session ends
   the way every refused session ends ([uc.account.sign-out](../../account/use-cases/uc.account.sign-out.md) E1).
 

@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-07-05
 - Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
-- Replaced in part: Decision 4, Decision 5, § Guarantee by ADR 0111 (built)
+- Replaced in part: Decision 4, Decision 5, § Guarantee by ADR 0111 (built); Decision 1, Decision 2 and the rejected single-key rotation by ADR 0115 (built)
 
 ## Context
 

@@ -61,7 +61,7 @@ beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: T, memberInviteTtlSeconds: TTL })])
   vi.mocked(openScopeById).mockImplementation(async () => {
     const key = TENANT_KEY.slice()
-    lastOpened = openedScope({ scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { current: EPOCH, keys: new Map([[EPOCH, key]]) } })
+    lastOpened = openedScope({ scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { epoch: EPOCH, key } })
     return lastOpened
   })
   vi.mocked(identityPrivate).mockImplementation(() => ({ kemSeed: OWNER.priv.kemSeed.slice(), sign: OWNER.priv.sign.slice() }))
@@ -268,7 +268,7 @@ describe('a code prepared ahead (inbox #566): its link key derived while the own
     vi.mocked(openScopeById).mockImplementationOnce(async () => {
       seen.push('open')
       const key = TENANT_KEY.slice()
-      return openedScope({ scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { current: EPOCH, keys: new Map([[EPOCH, key]]) } })
+      return openedScope({ scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { epoch: EPOCH, key } })
     })
     const send = vi.fn<TenantsApi['inviteTenantMember']>().mockImplementation(async () => {
       seen.push('post')
@@ -284,7 +284,7 @@ describe('a code prepared ahead (inbox #566): its link key derived while the own
     vi.mocked(openScopeById).mockImplementationOnce(async () => {
       seen.push('open')
       const key = TENANT_KEY.slice()
-      return openedScope({ scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { current: EPOCH, keys: new Map([[EPOCH, key]]) } })
+      return openedScope({ scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { epoch: EPOCH, key } })
     })
     const send = vi.fn<TenantsApi['reissueMemberInvite']>().mockImplementation(async () => {
       seen.push('post')

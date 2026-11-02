@@ -8,17 +8,20 @@ vi.mock('../../api/client', () => ({ sharesApi: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
-import { mintShare, readShareNote, recoverShareKey, remintShare, resealShareNames, updateShare, NO_NOTE, type ReissuableShare } from './manageShares'
+import {
+  mintShare, reactivateShare, readShareNote, recoverShareKey, remintShare, resealShareNames, updateShare, NO_NOTE, type ReissuableShare,
+} from './manageShares'
 import { SHARE_KEY } from './shareTree'
 import { SHARE_MEMORY_NAME, SHARE_NOTE } from './resolvePublicShare'
 import { sharesApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
 import { ShareRole, type ShareSummary, type SharingApi } from '../../api/generated/sharing'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 
 const SCOPE_ID = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 const NODE_ID = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'
-const EPOCHS: EpochKeys = { current: 1, keys: new Map([[0, v1.randomBytes(32)], [1, v1.randomBytes(32)]]) }
+// A rotated scope at epoch 1: its ONE key (ADR 0115) — every recovery copy is sealed and opened under it at epoch 1.
+const EPOCHS: ScopeKey = { epoch: 1, key: v1.randomBytes(32) }
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -35,6 +38,8 @@ describe('mintShare', () => {
     expect(v1.open(SHARE_KEY, minted.kShare, fromB64std(req.wrap!))).toEqual(nodeKey)
     const address = { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: minted.shareId }
     expect(recoverShareKey(EPOCHS, address, req)).toEqual(minted.kShare)
+    // the copy opens under the scope's ONE key at its epoch: not under a key a rotation replaced (ADR 0115)
+    expect(() => recoverShareKey({ epoch: 1, key: v1.randomBytes(32) }, address, req)).toThrow(v1.OpenRefused)
     expect(req.sealedDropPublicKey).toBeUndefined()
     expect(JSON.stringify(req)).not.toContain('Taxes')
   })
@@ -84,7 +89,7 @@ describe("the note's acceptance switch (uc.sharing.share-note)", () => {
     const { req, address } = await minted({ texts: { en: 'v1' }, mustAccept: false })
     const update = vi.fn<SharingApi['updateShare']>().mockResolvedValue(undefined)
     fakeApi(sharesApi, { updateShare: update })
-    await updateShare(address, EPOCHS, req, { texts: { en: 'v2' }, mustAccept: true }, '', null)
+    await updateShare(address, EPOCHS, { ...req, enabled: true, expiresAt: null }, { texts: { en: 'v2' }, mustAccept: true }, '', null)
     const sealedNote = update.mock.calls[0][0].updateShareRequest.sealedNote!
     expect(readShareNote(EPOCHS, address, req, sealedNote)).toEqual({ texts: { en: 'v2' }, mustAccept: true })
 
@@ -151,7 +156,7 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
 
     const report = await resealShareNames(NODE_ID, 'Steuern 2026', EPOCHS)
 
-    expect(report).toEqual({ resealed: [own.row.shareId, theirs.row.shareId], skipped: [], failed: [] })
+    expect(report).toEqual({ resealed: [own.row.shareId, theirs.row.shareId], closed: [], skipped: [], failed: [] })
     expect(set).toHaveBeenCalledTimes(2)
     const sealedFor = (shareId: string) => set.mock.calls.find(([r]) => r.shareId === shareId)![0].setShareSealedNameRequest.sealedName
     for (const { row, kShare } of [own, theirs]) {
@@ -173,7 +178,7 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
 
     const report = await resealShareNames(NODE_ID, 'New', EPOCHS)
 
-    expect(report).toEqual({ resealed: [ok.row.shareId], skipped: [legacy.row.shareId], failed: [] })
+    expect(report).toEqual({ resealed: [ok.row.shareId], closed: [], skipped: [legacy.row.shareId], failed: [] })
     expect(set.mock.calls.map(([r]) => r.shareId)).toEqual([ok.row.shareId])
   })
 
@@ -192,14 +197,91 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
 
     const report = await resealShareNames(NODE_ID, 'New', EPOCHS)
 
-    expect(report).toEqual({ resealed: [ok.row.shareId], skipped: [], failed: [refused.row.shareId, broken.row.shareId] })
+    expect(report).toEqual({ resealed: [ok.row.shareId], closed: [], skipped: [], failed: [refused.row.shareId, broken.row.shareId] })
     expect(set.mock.calls.map(([r]) => r.shareId)).toEqual([refused.row.shareId, ok.row.shareId])
   })
 
   it('writes nothing for a node without shares', async () => {
     const set = vi.fn<SharingApi['setShareSealedName']>()
     fakeApi(sharesApi, { listShares: async () => [], setShareSealedName: set })
-    expect(await resealShareNames(NODE_ID, 'New', EPOCHS)).toEqual({ resealed: [], skipped: [], failed: [] })
+    expect(await resealShareNames(NODE_ID, 'New', EPOCHS)).toEqual({ resealed: [], closed: [], skipped: [], failed: [] })
     expect(set).not.toHaveBeenCalled()
+  })
+
+  // ADR 0114 decision 5: a re-key seals nothing new under a closed link, and neither does a rename — the reopen carries
+  // the root's current name. Closed is switched off or past its end date; an open sibling beside them is the control.
+  it('skips a closed link — switched off or past its end date — and re-seals the open sibling beside them', async () => {
+    const off = await mintedRow(true)
+    const expired = await mintedRow(false)
+    const open = await mintedRow(false)
+    const later = await mintedRow(true)
+    const set = vi.fn<SharingApi['setShareSealedName']>(async () => undefined)
+    fakeApi(sharesApi, {
+      listShares: async () => [
+        { ...off.row, enabled: false },
+        { ...expired.row, expiresAt: new Date(Date.now() - 60_000) },
+        open.row,
+        { ...later.row, expiresAt: new Date(Date.now() + 86_400_000) },
+      ],
+      setShareSealedName: set,
+    })
+
+    const report = await resealShareNames(NODE_ID, 'Steuern 2026', EPOCHS)
+
+    expect(report).toEqual({ resealed: [open.row.shareId, later.row.shareId], closed: [off.row.shareId, expired.row.shareId], skipped: [], failed: [] })
+    expect(set.mock.calls.map(([r]) => r.shareId)).toEqual([open.row.shareId, later.row.shareId])
+    const sealed = set.mock.calls[0][0].setShareSealedNameRequest.sealedName
+    expect(opened(open.kShare, sealed)).toBe('Steuern 2026')
+  })
+})
+
+describe('reactivateShare (ADR 0114 decision 7)', () => {
+  /** A READ link as the manage list serves it after its close: minted through the real `mintShare`, so its recovery
+   *  copy is the real one, and the root's key the close made the server forget. */
+  async function closedReadLink() {
+    const create = vi.fn<SharingApi['createShare']>(async ({ createShareRequest }) => ({ shareId: createShareRequest.shareId }))
+    fakeApi(sharesApi, { createShare: create })
+    const minted = await mintShare(SCOPE_ID, NODE_ID, { key: v1.randomBytes(32), epoch: 0 }, EPOCHS, 'Taxes', ShareRole.Read)
+    const req = create.mock.calls[0][0].createShareRequest
+    const share = {
+      scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: minted.shareId, role: ShareRole.Read,
+      sealedShareKey: req.sealedShareKey ?? null, sealedShareKeyEpoch: req.sealedShareKeyEpoch ?? null,
+    }
+    return { share, kShare: minted.kShare }
+  }
+
+  it("reopens a READ link with the root's CURRENT key and name under K_share, stating the root's own epoch", async () => {
+    const { share, kShare } = await closedReadLink()
+    const reactivate = vi.fn<SharingApi['reactivateShare']>(async () => undefined)
+    fakeApi(sharesApi, { reactivateShare: reactivate })
+    // the close re-keyed the subtree: the root now holds its next key, at its own epoch 1
+    const rootKey = v1.randomBytes(32)
+
+    await reactivateShare(share, { key: rootKey, epoch: 1 }, EPOCHS, 'Steuern 2026')
+
+    expect(reactivate).toHaveBeenCalledTimes(1)
+    const [{ shareId, reactivateShareRequest: body }] = reactivate.mock.calls[0]
+    expect(shareId).toBe(share.shareId)
+    expect(body.nodeEpoch).toBe(1)
+    expect(v1.open(SHARE_KEY, kShare, fromB64std(body.wrap!))).toEqual(rootKey)
+    expect(new TextDecoder().decode(v1.openField(SHARE_MEMORY_NAME, kShare, fromB64std(body.sealedName!)))).toBe('Steuern 2026')
+    expect(body.sealedDropPublicKey).toBeUndefined()
+    expect(JSON.stringify(body)).not.toContain('Steuern')
+  })
+
+  it('refuses a link without a recovery copy before any request — one with a copy is sent', async () => {
+    const { share } = await closedReadLink()
+    const reactivate = vi.fn<SharingApi['reactivateShare']>(async () => undefined)
+    fakeApi(sharesApi, { reactivateShare: reactivate })
+    const root = { key: v1.randomBytes(32), epoch: 1 }
+
+    await expect(reactivateShare({ ...share, sealedShareKey: null, sealedShareKeyEpoch: null }, root, EPOCHS, 'Taxes'))
+      .rejects.toThrow('share_key_not_recoverable')
+    // a copy left under a key a rotation replaced opens under no key: refused as well, nothing sent
+    await expect(reactivateShare(share, root, { epoch: 1, key: v1.randomBytes(32) }, 'Taxes')).rejects.toThrow(v1.OpenRefused)
+    expect(reactivate).not.toHaveBeenCalled()
+
+    await reactivateShare(share, root, EPOCHS, 'Taxes')
+    expect(reactivate).toHaveBeenCalledTimes(1)
   })
 })

@@ -242,12 +242,15 @@ describe('accept proof and join record (#join_record)', () => {
 })
 
 describe('an owner\'s endorsement of a join record (#join_endorsement)', () => {
-  const input: invite.JoinEndorsementInput = { ...e.context, sealedJoinRecord: unhex(e.sealed_join_record) }
+  // The vector's digest input is opaque bytes to the statement: since ADR 0115 decision 8 a reader passes the OPENED
+  // record (the vector's note, written when the envelope was signed, names the bytes it fed; the statement bytes, its
+  // digest and the signature over them are unchanged).
+  const input: invite.JoinEndorsementInput = { ...e.context, joinRecord: unhex(e.sealed_join_record) }
   const owner = unhex(k.owner.sign_public)
   const signature = unhex(e.signature)
 
-  it('statement bytes and the owner\'s signature, over SHA-256 of the sealed record as stored', () => {
-    expect(e.sealed_join_record).toBe(vectors.field_seal['member-join-record'].envelope)
+  it('statement bytes and the owner\'s signature, over SHA-256 of the record bytes', () => {
+    expect(hex(invite.joinRecordDigest(input.joinRecord))).toBe(e.record_digest)
     expect(hex(invite.joinEndorsementStatement(input).recordDigest)).toBe(e.record_digest)
     expect(hex(v1.encodeStatement(invite.joinEndorsementStatement(input)))).toBe(e.statement)
     expect(hex(invite.signJoinEndorsement(unhex(vectors.grant_signature.sign_seed), input))).toBe(e.signature)
@@ -261,7 +264,7 @@ describe('an owner\'s endorsement of a join record (#join_endorsement)', () => {
     ['another tenant', { ...input, tenantId: 'c0ffee00-0000-4000-8000-0000000000e0' }],
     ['another member', { ...input, userId: 'c0ffee00-0000-4000-8000-0000000000e0' }],
     ['another signer', { ...input, signerUserId: 'c0ffee00-0000-4000-8000-0000000000e0' }],
-    ['another sealed record — one the thief wrote', { ...input, sealedJoinRecord: flip(input.sealedJoinRecord, 40) }],
+    ['another record — one the thief wrote', { ...input, joinRecord: flip(input.joinRecord, 40) }],
   ] as const)('answers for nothing else: %s', (_name, moved) => {
     expect(invite.joinEndorsementVerifies(owner, moved, signature)).toBe(false)
   })
@@ -276,6 +279,19 @@ describe('an owner\'s endorsement of a join record (#join_endorsement)', () => {
     expect(invite.joinEndorsementVerifies(new Uint8Array(3), input, signature)).toBe(false)
     expect(invite.joinEndorsementVerifies(owner, input, new Uint8Array(2))).toBe(false)
     expect(invite.joinEndorsementVerifies(owner, { ...input, userId: 'not-a-uuid' }, signature)).toBe(false)
+  })
+
+  it('binds the opened record, not its envelope: two seals of one record carry one endorsement (ADR 0115 decision 8)', () => {
+    const address = { tenantId: e.context.tenantId, userId: e.context.userId }
+    const key = v1.randomBytes(32)
+    const record = invite.decodeJoinRecord(unhex(vectors.join_record.record))
+    const first = invite.sealJoinRecord(key, address, record)
+    const resealed = invite.sealJoinRecord(v1.randomBytes(32), address, record)
+    expect(hex(first)).not.toBe(hex(resealed)) // control: the envelopes differ
+    const opened = invite.encodeJoinRecord(invite.openJoinRecord(key, address, first))
+    const statement = (joinRecord: Uint8Array) => hex(v1.encodeStatement(invite.joinEndorsementStatement({ ...input, joinRecord })))
+    expect(statement(opened)).toBe(statement(invite.encodeJoinRecord(record)))
+    expect(statement(opened)).not.toBe(statement(first))
   })
 
   it('its label is a statement of its own, in no seal table', () => {

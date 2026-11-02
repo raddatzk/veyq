@@ -48,12 +48,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function echoCreate() {
   return vi.fn<ContentApi['createNode']>(async (p) => ({ nodeId: p.createNodeRequest.nodeId }))
 }
-const nameCtx = (nodeId: string, epoch = 0) => ({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch, placementRevision: 0 }) as const
+// The seals' binding field is named `epoch` and holds the node's `scopeEpoch` (ADR 0115 decision 4).
+const nameCtx = (nodeId: string, scopeEpoch = 0) => ({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: scopeEpoch, placementRevision: 0 }) as const
 const PARENT = '5c09e000-0000-4000-8000-000000000f09'
-const kNodeCtx = (nodeId: string, epoch = 0) => ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch, placementRevision: 0 }) as const
-const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array, epoch = 0) => b64std(v1.seal(kNodeCtx(nodeId, epoch), kek, k))
-const opened = (key: Uint8Array, nodeId: string, blob: string, epoch = 0) =>
-  new TextDecoder().decode(v1.openField(nameCtx(nodeId, epoch), key, fromB64(blob)))
+const kNodeCtx = (nodeId: string, scopeEpoch = 0) => ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: scopeEpoch, placementRevision: 0 }) as const
+const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array, scopeEpoch = 0) => b64std(v1.seal(kNodeCtx(nodeId, scopeEpoch), kek, k))
+const opened = (key: Uint8Array, nodeId: string, blob: string, scopeEpoch = 0) =>
+  new TextDecoder().decode(v1.openField(nameCtx(nodeId, scopeEpoch), key, fromB64(blob)))
 
 describe('nodeContentKey — resolve a chapter key down the chain', () => {
   const FOLD = '5c09e000-0000-4000-8000-000000000f01'
@@ -122,7 +123,7 @@ describe('sameKeyOr — the key of the node on screen stays the same object whil
 
 describe('treeFingerprint — a poll that changes only a drop key is not "nothing changed" (inbox #506)', () => {
   const row = (over: Partial<NodeSummary> = {}): NodeSummary => ({
-    id: PARENT, kind: 'DEPOT_DROPBOX', epoch: 0, encryptedName: 'bmFtZQ==', slugToken: 's', orderIndex: 0, wrappedContentKey: 'a2V5',
+    id: PARENT, kind: 'DEPOT_DROPBOX', epoch: 0, scopeEpoch: 0, encryptedName: 'bmFtZQ==', slugToken: 's', orderIndex: 0, wrappedContentKey: 'a2V5',
     metaRevision: 0, placementRevision: 0, createdAt: new Date(0), blockedByOperator: false, ...over,
   })
   it("differs when only a node's drop key, or an identity folder's wrapped K_up, does — and not for the same rows", () => {
@@ -130,6 +131,9 @@ describe('treeFingerprint — a poll that changes only a drop key is not "nothin
     expect(treeFingerprint([row({ sealedDropPrivateKey: 'ZHJvcA==' })]), "the first WRITE_ONLY link's drop key").not.toBe(treeFingerprint([row()]))
     expect(treeFingerprint([row({ shareIdentityId: 'id-1', wrappedIdentityKey: 'b3RoZXI=' })]))
       .not.toBe(treeFingerprint([row({ shareIdentityId: 'id-1', wrappedIdentityKey: 'a3Vw' })]))
+    // a node's re-key moves its own epoch and its scope epoch (ADR 0114 decision 3): each alone is a change
+    expect(treeFingerprint([row({ epoch: 1 })])).not.toBe(treeFingerprint([row()]))
+    expect(treeFingerprint([row({ scopeEpoch: 1 })])).not.toBe(treeFingerprint([row()]))
   })
 })
 
@@ -154,7 +158,7 @@ describe('createFolder', () => {
     const create = echoCreate()
     mockContent({ createNode: create })
     const parentKey = v1.randomBytes(32)
-    const id = await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey, epoch: 0 })
+    const id = await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey, epoch: 0, scopeEpoch: 0 })
     const req = create.mock.calls[0][0].createNodeRequest
     expect(req.parentId).toBe(PARENT)
     expect(v1.open(kNodeCtx(id), parentKey, fromB64(req.wrappedContentKey))).toHaveLength(32)
@@ -170,8 +174,8 @@ describe('createFolder', () => {
     const create = echoCreate()
     mockContent({ createNode: create })
     const parentKey = v1.randomBytes(32)
-    await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey, epoch: 0 })
-    await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day Trips', { id: PARENT, key: parentKey, epoch: 0 }) // folds to the same slug
+    await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey, epoch: 0, scopeEpoch: 0 })
+    await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day Trips', { id: PARENT, key: parentKey, epoch: 0, scopeEpoch: 0 }) // folds to the same slug
     const [a, b] = create.mock.calls.map((c) => c[0].createNodeRequest.slugToken)
     expect(a).toBe(b)
     expect(a).toBe(b64std(v1.slugToken(parentKey, PARENT, 'day-trips')))
@@ -179,12 +183,13 @@ describe('createFolder', () => {
   })
 })
 
-/** A listed row whose name is sealed under `entryKey` and whose key wraps `ownKey` under the same key. */
-function row(id: string, parentId: string | null, entryKey: Uint8Array, ownKey: Uint8Array, name: string, epoch = 0): NodeSummary {
+/** A listed row whose name is sealed under `entryKey` and whose key wraps `ownKey` under the same key, both bound to the
+ *  node's `scopeEpoch`. */
+function row(id: string, parentId: string | null, entryKey: Uint8Array, ownKey: Uint8Array, name: string, scopeEpoch = 0, epoch = 0): NodeSummary {
   return {
     blockedByOperator: false,
-    id, parentId, kind: 'FOLDER', epoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0),
-    encryptedName: sealUnder(entryKey, id, epoch, name), wrappedContentKey: wrap(entryKey, id, ownKey, epoch),
+    id, parentId, kind: 'FOLDER', epoch, scopeEpoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0),
+    encryptedName: sealUnder(entryKey, id, scopeEpoch, name), wrappedContentKey: wrap(entryKey, id, ownKey, scopeEpoch),
   }
 }
 
@@ -199,6 +204,27 @@ describe('listTree', () => {
     expect(tree).toHaveLength(1)
     expect(tree[0].name).toBe('Trips')
     expect(tree[0].parentId).toBeNull()
+  })
+
+  // ADR 0115 decisions 1 and 4: a scope-root entry opens under the ONE key the caller holds, bound to the scope epoch its
+  // node's key was minted under — not the epoch the caller holds.
+  it('opens a scope-root entry under the one key held, bound to its own scopeEpoch; one under a replaced key does not open', async () => {
+    const e1 = v1.randomBytes(32)
+    const e2 = v1.randomBytes(32)
+    const held = epochsOf(e2, 2)
+    const k1 = v1.randomBytes(32)
+    // a node minted at scope epoch 0, its entry re-sealed under E_2 by the rotations since (still bound to 0)
+    const resealed = row(F1, null, e2, k1, 'Trips', 0, 4)
+    mockContent({ listNodes: vi.fn<ContentApi['listNodes']>().mockResolvedValue([resealed]) })
+    const tree = await listTree(SCOPE_ID, held)
+    expect(tree[0]).toMatchObject({ name: 'Trips', epoch: 4, scopeEpoch: 0 })
+    expect(Array.from(nodeContentKey(SCOPE_ID, held, tree, F1)!)).toEqual(Array.from(k1))
+    // the same entry served as bound to the held epoch: the binding is the node's, so it does not open
+    mockContent({ listNodes: vi.fn<ContentApi['listNodes']>().mockResolvedValue([{ ...resealed, scopeEpoch: 2 }]) })
+    await expect(listTree(SCOPE_ID, held)).rejects.toBeInstanceOf(v1.OpenRefused)
+    // an entry still under the replaced E_1: nothing older than the held key is reachable from it
+    mockContent({ listNodes: vi.fn<ContentApi['listNodes']>().mockResolvedValue([row(F1, null, e1, k1, 'Trips', 0)]) })
+    await expect(listTree(SCOPE_ID, held)).rejects.toBeInstanceOf(v1.OpenRefused)
   })
 
   // uc.memory.browse:list-and-decrypt-tree, the read half: a nested name opens under its parent's content key, derived
@@ -243,35 +269,38 @@ function fromB64(s: string): Uint8Array {
 
 // --- the space node trash (uc.memory.delete-node, ADR 0061) ------------------
 
-/** A live folder `id` at the scope root (epoch 0) under `e0`, carrying `key` — a trashed root's live parent. */
-function liveParent(id: string, e0: Uint8Array, key: Uint8Array): TreeNode {
-  return treeNode({ id, parentId: null, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: 'Reisen', wrappedContentKey: wrap(e0, id, key), wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
+/** A live folder `id` at the scope root under the scope key `sk`, carrying `key` minted at `scopeEpoch` (its own epoch 0)
+ *  — a trashed root's live parent. */
+function liveParent(id: string, sk: Uint8Array, key: Uint8Array, scopeEpoch = 0): TreeNode {
+  return treeNode({ id, parentId: null, kind: 'FOLDER', orderIndex: 0, epoch: 0, scopeEpoch, name: 'Reisen', wrappedContentKey: wrap(sk, id, key, scopeEpoch), wrappedMeta: null, metaRevision: 0, placementRevision: 0 })
 }
 const F1 = '5c09e000-0000-4000-8000-0000000000f1'
 
 describe('listTrash', () => {
-  it('opens a root entry under ITS OWN epoch key and a nested one under its live parent\'s key; carries both dates', async () => {
+  it('opens a root entry under the one key held, bound to its scopeEpoch, and a nested one under its live parent\'s key; carries both dates', async () => {
     const e0 = v1.randomBytes(32)
     const e1 = v1.randomBytes(32)
-    const epochs = { current: 1, keys: new Map([[0, e0], [1, e1]]) }
+    const epochs = epochsOf(e1, 1)
     const folderKey = v1.randomBytes(32)
     const deletedAt = new Date('2026-08-17T10:15:30Z')
     const purgeAfter = new Date('2026-09-16T10:15:30Z')
     const OLD = '5c09e000-0000-4000-8000-0000000000a1'
     const NEW = '5c09e000-0000-4000-8000-0000000000a2'
-    mockContent({
-      listTrashedNodes: vi.fn<ContentApi['listTrashedNodes']>().mockResolvedValue([
-        { blockedByOperator: false, id: OLD, parentId: null, kind: 'MEMORY', epoch: 0, placementRevision: 0, encryptedName: sealUnder(e0, OLD, 0, 'Rom 2024'), deletedAt, purgeAfter, attached: false },
-        { blockedByOperator: false, id: NEW, parentId: F1, kind: 'FOLDER', epoch: 1, placementRevision: 0, encryptedName: sealUnder(folderKey, NEW, 1, 'Sommer'), deletedAt, purgeAfter, attached: false },
-      ]),
-    })
+    // OLD: trashed before the rotation, its key from scope epoch 0, its entry re-sealed under E_1 by the rotation's commit
+    const trashed = (over: { encryptedName: string }) => [
+      { blockedByOperator: false, id: OLD, parentId: null, kind: 'MEMORY', epoch: 0, scopeEpoch: 0, placementRevision: 0, deletedAt, purgeAfter, attached: false, ...over },
+      { blockedByOperator: false, id: NEW, parentId: F1, kind: 'FOLDER', epoch: 0, scopeEpoch: 1, placementRevision: 0, encryptedName: sealUnder(folderKey, NEW, 1, 'Sommer'), deletedAt, purgeAfter, attached: false },
+    ]
+    mockContent({ listTrashedNodes: vi.fn<ContentApi['listTrashedNodes']>().mockResolvedValue(trashed({ encryptedName: sealUnder(e1, OLD, 0, 'Rom 2024') })) })
 
-    const rows = await listTrash(SCOPE_ID, epochs, [liveParent(F1, e0, folderKey)])
-    // a trash spanning a rotation decrypts fully — the pre-rotation root opens under E_0, not the write key
+    const rows = await listTrash(SCOPE_ID, epochs, [liveParent(F1, e1, folderKey, 1)])
     expect(rows.map((r) => r.name)).toEqual(['Rom 2024', 'Sommer'])
-    expect(rows[0].parentId).toBeNull()
-    expect(rows[1].parentId).toBe(F1)
+    expect(rows[0]).toMatchObject({ parentId: null, epoch: 0, scopeEpoch: 0 })
+    expect(rows[1]).toMatchObject({ parentId: F1, scopeEpoch: 1 })
     expect(rows[0].purgeAfter).toEqual(purgeAfter)
+    // a root entry left under the replaced E_0 opens under nothing the caller holds: the trash refuses, never shows it
+    mockContent({ listTrashedNodes: vi.fn<ContentApi['listTrashedNodes']>().mockResolvedValue(trashed({ encryptedName: sealUnder(e0, OLD, 0, 'Rom 2024') })) })
+    await expect(listTrash(SCOPE_ID, epochs, [liveParent(F1, e1, folderKey, 1)])).rejects.toBeInstanceOf(v1.OpenRefused)
   })
 })
 
@@ -290,30 +319,30 @@ describe('purgeNode', () => {
 })
 
 describe('restoreNode', () => {
-  it('derives the slug token under the node\'s OWN epoch key at the root and sends no name when unchanged', async () => {
+  it('derives the slug token under the one scope key held at the root, states the node\'s own epoch, and sends no name when unchanged', async () => {
     const e0 = v1.randomBytes(32)
     const e1 = v1.randomBytes(32)
-    const epochs = { current: 1, keys: new Map([[0, e0], [1, e1]]) }
+    const epochs = epochsOf(e1, 1)
     const restore = vi.fn<ContentApi['restoreNode']>()
     mockContent({ restoreNode: restore })
 
-    // A node re-keyed to epoch 1: a restore does not re-tag it (as a rename does not), so its own epoch's key, E_1
-    await restoreNode(SCOPE_ID, epochs, [], { id: 'n1', parentId: null, kind: 'FOLDER', epoch: 1, placementRevision: 0, name: 'Rom 2026' })
+    // A node re-keyed under scope epoch 1 (its own epoch 3 after earlier replacements): its entry is under the one key, E_1
+    await restoreNode(SCOPE_ID, epochs, [], { id: 'n1', parentId: null, kind: 'FOLDER', epoch: 3, scopeEpoch: 1, placementRevision: 0, name: 'Rom 2026' })
 
     const req = restore.mock.calls[0][0].restoreNodeRequest
     expect(req.slugToken).toBe(b64std(v1.slugToken(e1, SCOPE_ID, 'rom-2026')))
     expect(req.slugToken).not.toBe(b64std(v1.slugToken(e0, SCOPE_ID, 'rom-2026')))
-    expect(req.parentEpoch, 'at the scope root the node\'s own epoch').toBe(1)
+    expect(req.parentEpoch, 'at the scope root the node\'s own epoch, not its scope epoch').toBe(3)
     // an ordinary restore leaves the stored name alone
     expect(req.encryptedName).toBeUndefined()
 
-    // one still at epoch 0 is behind the device floor (ADR 0109 point 6): refused before anything is sent. A member's
+    // one whose key is from scope epoch 0 is behind the device floor (ADR 0109 point 6): refused before anything is sent. A member's
     // restore then pulls the subtree forward and re-reads it (ADR 0111 decision 11) — here no scope opens, so neither
     // brings it current, and nothing is ever sent under the key from before
     restore.mockClear()
     vi.useFakeTimers()
     try {
-      const run = expect(restoreNode(SCOPE_ID, epochs, [], { id: 'n2', parentId: null, kind: 'FOLDER', epoch: 0, placementRevision: 0, name: 'Rom 2026' }))
+      const run = expect(restoreNode(SCOPE_ID, epochs, [], { id: 'n2', parentId: null, kind: 'FOLDER', epoch: 3, scopeEpoch: 0, placementRevision: 0, name: 'Rom 2026' }))
         .rejects.toBeInstanceOf(v1.OpenRefused)
       await vi.advanceTimersByTimeAsync(2_000) // the first wait, after the pull could not run
       await run
@@ -330,7 +359,7 @@ describe('restoreNode', () => {
     const folderKey = v1.randomBytes(32)
 
     const N1 = '5c09e000-0000-4000-8000-0000000000b1'
-    await restoreNode(SCOPE_ID, epochs, [liveParent(F1, scopeKey, folderKey)], { id: N1, parentId: F1, kind: 'FOLDER', epoch: 0, placementRevision: 0, name: 'Rom 2026' }, 'Rom 2026 (2)')
+    await restoreNode(SCOPE_ID, epochs, [liveParent(F1, scopeKey, folderKey)], { id: N1, parentId: F1, kind: 'FOLDER', epoch: 0, scopeEpoch: 0, placementRevision: 0, name: 'Rom 2026' }, 'Rom 2026 (2)')
 
     const req = restore.mock.calls[0][0].restoreNodeRequest
     if (req.encryptedName == null) throw new Error('the taken-name retry sent no name')
@@ -343,7 +372,7 @@ describe('restoreNode', () => {
   it('refuses to restore under a parent whose key it cannot derive, rather than sealing under K_SC', async () => {
     const restore = vi.fn<ContentApi['restoreNode']>()
     mockContent({ restoreNode: restore })
-    await expect(restoreNode(SCOPE_ID, epochsOf(scopeKey), [], { id: 'n1', parentId: F1, kind: 'FOLDER', epoch: 0, placementRevision: 0, name: 'x' })).rejects.toBeInstanceOf(v1.OpenRefused)
+    await expect(restoreNode(SCOPE_ID, epochsOf(scopeKey), [], { id: 'n1', parentId: F1, kind: 'FOLDER', epoch: 0, scopeEpoch: 0, placementRevision: 0, name: 'x' })).rejects.toBeInstanceOf(v1.OpenRefused)
     expect(restore).not.toHaveBeenCalled()
   })
 })
@@ -358,13 +387,19 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
   const e0 = v1.randomBytes(32)
   const e1 = v1.randomBytes(32)
   const keys = { A: v1.randomBytes(32), B: v1.randomBytes(32), M: v1.randomBytes(32), C: v1.randomBytes(32) }
-  const at = (nodeId: string, epoch: number, placementRevision: number) => ({ scopeId: SCOPE_ID, nodeId, epoch, placementRevision })
-  const wrapAt = (kek: Uint8Array, nodeId: string, k: Uint8Array, epoch = 0, revision = 0) =>
-    b64std(v1.seal({ purpose: 'content-key', ...at(nodeId, epoch, revision) }, kek, k))
-  const unwrapAt = (kek: Uint8Array, nodeId: string, blob: string, epoch = 0, revision = 0) =>
-    v1.open({ purpose: 'content-key', ...at(nodeId, epoch, revision) }, kek, fromB64(blob))
-  const treeRow = (id: string, parentId: string | null, kind: string, name: string, under: Uint8Array, own: Uint8Array, epoch = 0, revision = 0): TreeNode => treeNode({
-    id, parentId, kind, orderIndex: 0, epoch, name, wrappedContentKey: wrapAt(under, id, own, epoch, revision), wrappedMeta: null,
+  /** A node's address (`NodeAddress`), and the seal context it makes: the binding field `epoch` holds its scopeEpoch. */
+  const at = (nodeId: string, scopeEpoch: number, placementRevision: number) => ({ scopeId: SCOPE_ID, nodeId, scopeEpoch, placementRevision })
+  const sealCtx = (nodeId: string, scopeEpoch: number, placementRevision: number) => ({ scopeId: SCOPE_ID, nodeId, epoch: scopeEpoch, placementRevision })
+  const wrapAt = (kek: Uint8Array, nodeId: string, k: Uint8Array, scopeEpoch = 0, revision = 0) =>
+    b64std(v1.seal({ purpose: 'content-key', ...sealCtx(nodeId, scopeEpoch, revision) }, kek, k))
+  const unwrapAt = (kek: Uint8Array, nodeId: string, blob: string, scopeEpoch = 0, revision = 0) =>
+    v1.open({ purpose: 'content-key', ...sealCtx(nodeId, scopeEpoch, revision) }, kek, fromB64(blob))
+  /** A row whose key wraps `own` under `under`, minted at `scopeEpoch` and at its own `epoch`. */
+  const treeRow = (
+    id: string, parentId: string | null, kind: string, name: string, under: Uint8Array, own: Uint8Array, scopeEpoch = 0, revision = 0,
+    epoch = 0,
+  ): TreeNode => treeNode({
+    id, parentId, kind, orderIndex: 0, epoch, scopeEpoch, name, wrappedContentKey: wrapAt(under, id, own, scopeEpoch, revision), wrappedMeta: null,
     metaRevision: 0, placementRevision: revision,
   })
   /** Folders A and B at the root (epoch 0), the Memory M in A, its chapter C in M — every entry at revision 0. */
@@ -374,7 +409,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     treeRow(M, A, 'MEMORY', 'Italien', keys.A, keys.M),
     treeRow(C, M, 'CHAPTER', 'Tag 1', keys.M, keys.C),
   ]
-  const rotated = { current: 1, keys: new Map([[0, e0], [1, e1]]) }
+  const rotated = epochsOf(e1, 1)
   const sent = (update: Mock<ContentApi['updateNode']>, call = 0) => update.mock.calls[call][0].updateNodeRequest
 
   it('a rename is a placement to the same parent: re-wrapped key, re-sealed name and slug, all at revision + 1', async () => {
@@ -415,30 +450,33 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(e0), after, C)!)).toEqual(Array.from(keys.C))
   })
 
-  it('the epoch: always the node\'s own — a placement never changes it — and the destination\'s as parentEpoch (ADR 0109 point 6)', async () => {
+  it('the epoch: always the node\'s own — a placement never changes it — and the destination\'s as parentEpoch; the seals bind its scopeEpoch (ADR 0114 decision 3)', async () => {
     const update = vi.fn<ContentApi['updateNode']>()
     mockContent({ updateNode: update })
-    // The rotated scope after its re-key reached A, B and M (epoch 1, A's and B's entries under E_1), not yet C (epoch 0).
+    // The rotated scope after its re-key reached A, B and M (keys from scope epoch 1; A's and B's entries under E_1), not
+    // yet C (its key from scope epoch 0). Each own epoch differs from its scope epoch: M's key was replaced once more by a
+    // link's close (own 2), B's twice (own 3).
     const reKeyed = (): TreeNode[] => [
-      treeRow(A, null, 'FOLDER', 'Reisen', e1, keys.A, 1),
-      treeRow(B, null, 'FOLDER', 'Archiv', e1, keys.B, 1),
-      treeRow(M, A, 'MEMORY', 'Italien', keys.A, keys.M, 1),
+      treeRow(A, null, 'FOLDER', 'Reisen', e1, keys.A, 1, 0, 1),
+      treeRow(B, null, 'FOLDER', 'Archiv', e1, keys.B, 1, 0, 3),
+      treeRow(M, A, 'MEMORY', 'Italien', keys.A, keys.M, 1, 0, 2),
       treeRow(C, M, 'CHAPTER', 'Tag 1', keys.M, keys.C, 0),
     ]
 
-    await moveNode(SCOPE_ID, rotated, reKeyed(), M, null) // into the root: under K_SC at the node's own epoch (1)
-    expect(sent(update, 0).epoch).toBe(1)
+    await moveNode(SCOPE_ID, rotated, reKeyed(), M, null) // into the root: under the scope key, at the node's own epoch (2)
+    expect(sent(update, 0).epoch).toBe(2)
     expect(sent(update, 0).parentId).toBeUndefined()
     expect(sent(update, 0).parentEpoch).toBeUndefined()
     expect(Array.from(unwrapAt(e1, M, sent(update, 0).wrappedContentKey!, 1, 1))).toEqual(Array.from(keys.M))
+    expect(() => unwrapAt(e1, M, sent(update, 0).wrappedContentKey!, 2, 1), 'bound to its scope epoch, not its own').toThrow(v1.OpenRefused)
     expect(sent(update, 0).slugToken).toBe(b64std(v1.slugToken(e1, SCOPE_ID, 'italien')))
 
-    await moveNode(SCOPE_ID, rotated, reKeyed(), A, B) // out of the root: its own epoch, stored as sent
-    expect(sent(update, 1)).toMatchObject({ epoch: 1, parentEpoch: 1 })
+    await moveNode(SCOPE_ID, rotated, reKeyed(), A, B) // out of the root: its own epoch, stored as sent; B's own as parentEpoch
+    expect(sent(update, 1)).toMatchObject({ epoch: 1, parentEpoch: 3 })
     expect(Array.from(unwrapAt(keys.B, A, sent(update, 1).wrappedContentKey!, 1, 1))).toEqual(Array.from(keys.A))
 
     await moveNode(SCOPE_ID, rotated, reKeyed(), C, B) // between folders: the stored epoch (0), whatever the current one
-    expect(sent(update, 2)).toMatchObject({ epoch: 0, parentEpoch: 1 })
+    expect(sent(update, 2)).toMatchObject({ epoch: 0, parentEpoch: 3 })
     expect(Array.from(unwrapAt(keys.B, C, sent(update, 2).wrappedContentKey!, 0, 1))).toEqual(Array.from(keys.C))
   })
 
@@ -449,10 +487,10 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     // what a peer's rename left: M at revision 1, its name and wrap sealed there
     const listed = (): NodeSummary[] => tree().map((n) => ({
       blockedByOperator: false,
-      id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, createdAt: new Date(n.createdAt),
+      id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, scopeEpoch: n.scopeEpoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, createdAt: new Date(n.createdAt),
       placementRevision: n.id === M ? 1 : 0,
       encryptedName: b64std(v1.sealField(
-        { purpose: 'node-name', ...at(n.id, 0, n.id === M ? 1 : 0) }, n.parentId === null ? e0 : n.parentId === A ? keys.A : keys.M,
+        { purpose: 'node-name', ...sealCtx(n.id, 0, n.id === M ? 1 : 0) }, n.parentId === null ? e0 : n.parentId === A ? keys.A : keys.M,
         v1.utf8(n.id === M ? 'Rom' : n.name),
       )),
       wrappedContentKey: n.id === M ? wrapAt(keys.A, M, keys.M, 0, 1) : n.wrappedContentKey,
@@ -493,7 +531,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
   // opened at.
   it('a wrap or a name served at another placement revision, or on another node\'s row, does not open', () => {
     const moved = treeRow(M, B, 'MEMORY', 'Italien', keys.B, keys.M, 0, 1) // M after a move, at revision 1
-    const name = b64std(v1.sealField({ purpose: 'node-name', ...at(M, 0, 1) }, keys.B, v1.utf8('Italien')))
+    const name = b64std(v1.sealField({ purpose: 'node-name', ...sealCtx(M, 0, 1) }, keys.B, v1.utf8('Italien')))
     const base = [tree()[0], tree()[1], moved]
     expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(e0), base, M)!)).toEqual(Array.from(keys.M)) // control
     expect(openName(keys.B, at(M, 0, 1), name)).toBe('Italien') // control
@@ -518,9 +556,9 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     const entryKey = n.parentId === null ? e0 : n.parentId === A ? keys.A : n.parentId === B ? keys.B : keys.M
     return {
       blockedByOperator: false,
-      id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, createdAt: new Date(n.createdAt),
+      id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, scopeEpoch: n.scopeEpoch, slugToken: 'x', orderIndex: 0, metaRevision: 0, createdAt: new Date(n.createdAt),
       placementRevision: n.placementRevision, wrappedContentKey: n.wrappedContentKey,
-      encryptedName: b64std(v1.sealField({ purpose: 'node-name', ...at(n.id, n.epoch, n.placementRevision) }, entryKey, v1.utf8(n.name))),
+      encryptedName: b64std(v1.sealField({ purpose: 'node-name', ...sealCtx(n.id, n.scopeEpoch, n.placementRevision) }, entryKey, v1.utf8(n.name))),
     }
   }
 })
@@ -534,8 +572,9 @@ describe('directory_entry conformance vector', () => {
   const d = vectors.directory_entry
   const unhex = (h: string) => Uint8Array.from(h.match(/../g)!.map((b) => parseInt(b, 16)))
   const parentContentKey = unhex(d.parentContentKey)
+  // the vector's binding field `epoch` is the child's scopeEpoch (ADR 0115 decision 4)
   const child = {
-    scopeId: d.child.context.scopeId, nodeId: d.child.context.nodeId, epoch: d.child.context.epoch,
+    scopeId: d.child.context.scopeId, nodeId: d.child.context.nodeId, scopeEpoch: d.child.context.epoch,
     placementRevision: d.child.context.placementRevision,
   }
   const blob = b64std(unhex(d.child.envelope))
@@ -553,7 +592,7 @@ describe('directory_entry conformance vector', () => {
   })
 
   it('the child\'s field key is the vector\'s, derived from the parent\'s content key and the envelope\'s salt', () => {
-    const key = v1.fieldKeyOf({ purpose: 'node-name', ...child }, parentContentKey, unhex(d.child.envelope))
+    const key = v1.fieldKeyOf({ purpose: 'node-name', ...d.child.context }, parentContentKey, unhex(d.child.envelope))
     expect(Array.from(key)).toEqual(Array.from(unhex(d.child.field_key)))
   })
 
@@ -565,6 +604,6 @@ describe('directory_entry conformance vector', () => {
   })
 })
 
-function sealUnder(key: Uint8Array, nodeId: string, epoch: number, name: string): string {
-  return b64std(v1.sealField(nameCtx(nodeId, epoch), key, v1.utf8(name)))
+function sealUnder(key: Uint8Array, nodeId: string, scopeEpoch: number, name: string): string {
+  return b64std(v1.sealField(nameCtx(nodeId, scopeEpoch), key, v1.utf8(name)))
 }

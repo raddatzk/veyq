@@ -32,7 +32,7 @@ const stubs = {
 
 function mountDialog(extra: { readonly?: boolean } = {}) {
   return mount(DropBoxShareDialog, {
-    props: { scopeId: 's', nodeId: 'n', nodeKey: new Uint8Array(32), epochs: { current: 0, keys: new Map() }, nodeEpoch: 0, nodeName: 'Box', nodeKind: 'DEPOT_DROPBOX', ...extra },
+    props: { scopeId: 's', nodeId: 'n', nodeKey: new Uint8Array(32), epochs: { epoch: 0, key: new Uint8Array(32) }, nodeEpoch: 0, nodeName: 'Box', nodeKind: 'DEPOT_DROPBOX', ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -129,7 +129,7 @@ describe('DropBoxShareDialog — switch-off and delete only where the server all
     expect(confirmRequest.value?.message).toBe(t('depot.dropBox.shareRevokeConfirm'))
     settleConfirm(true)
     await flushPromises()
-    expect(vi.mocked(revokeShare)).toHaveBeenCalledWith('own')
+    expect(vi.mocked(revokeShare)).toHaveBeenCalledWith(expect.objectContaining({ shareId: 'own', role: 'WRITE_ONLY' }))
     // control: outside a pending deletion the same rows offer their changes and the form mints
     const live = mountDialog()
     await flushPromises()

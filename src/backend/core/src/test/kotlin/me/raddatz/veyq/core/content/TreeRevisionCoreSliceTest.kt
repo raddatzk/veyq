@@ -312,7 +312,7 @@ class TreeRevisionCoreSliceTest {
     private fun createWithSlug(userId: String, scopeId: String, slug: String, parent: String?, nodeId: String = UUID.randomUUID().toString()): ValidatableResponse {
         val parentJson = parent?.let { ""","parentId":"$it","parentEpoch":0,"parentEpoch":0""" } ?: ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$nodeId","kind":"FOLDER","encryptedName":"YQ==","slugToken":"$slug","orderIndex":0,"wrappedContentKey":"a21lbQ==","epoch":0$parentJson}""")
+            .body("""{"nodeId":"$nodeId","kind":"FOLDER","encryptedName":"YQ==","slugToken":"$slug","orderIndex":0,"wrappedContentKey":"a21lbQ==","scopeEpoch":0$parentJson}""")
             .`when`().post("/api/scopes/$scopeId/nodes").then()
     }
 

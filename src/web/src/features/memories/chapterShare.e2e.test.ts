@@ -74,10 +74,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('chapter share e2e (live, real crypto, th
     scopeKey = (await openPersonalScope())!
     const memory = await createMemory(scopeId, epochsOf(scopeKey), MEMORY_NAME)
     memoryId = memory.nodeId
-    const chapter = await createChapter(scopeId, epochsOf(scopeKey), memory.memoryKey, CHAPTER_NAME, memoryId, 0)
+    const chapter = await createChapter(scopeId, epochsOf(scopeKey), memory.memoryKey, CHAPTER_NAME, memoryId, { epoch: 0, scopeEpoch: 0 })
     chapterId = chapter.nodeId
     chapterKey = chapter.chapterKey
-    siblingId = (await createChapter(scopeId, epochsOf(scopeKey), memory.memoryKey, SIBLING_NAME, memoryId, 0)).nodeId
+    siblingId = (await createChapter(scopeId, epochsOf(scopeKey), memory.memoryKey, SIBLING_NAME, memoryId, { epoch: 0, scopeEpoch: 0 })).nodeId
     const onMemory = await addMedia(scopeId, memoryId, memory.memoryKey, photo(1))
     const inChapter = await addMedia(scopeId, chapterId, chapterKey, photo(2))
 

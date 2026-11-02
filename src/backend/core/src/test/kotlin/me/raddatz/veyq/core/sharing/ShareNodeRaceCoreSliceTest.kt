@@ -134,7 +134,7 @@ class ShareNodeRaceCoreSliceTest {
                             ScopeEntity.lockRow(t.scopeId)
                             scopeHeld.countDown()
                             val overlap = holdForOverlap() // the guest's create reaches the scope row meanwhile
-                            overlap to sharing.reactivate(t.userId, t.link.shareId)
+                            overlap to sharing.reactivate(t.userId, t.link.shareId, SharingHandler.ReopenRequest(0, ShareWriteProof.REOPEN_WRAP, null, ShareWriteProof.REOPEN_NAME))
                         }
                     },
                 )

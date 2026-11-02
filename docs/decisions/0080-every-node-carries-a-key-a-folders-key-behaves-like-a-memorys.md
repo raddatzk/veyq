@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-10-06
 - Model: [en.platform.node-tree](../features/platform/enablers/en.platform.node-tree.md)
-- Replaced in part: Decision 2, Decision 4, Decision 5 by ADR 0109 (built); Decision 11 by ADR 0111 (built)
+- Replaced in part: Decision 2, Decision 4, Decision 5 by ADR 0109 (built); Decision 11 by ADR 0111 (built); Decision 2's scope-root entries at their epoch by ADR 0115 (built); Decisions 4, 5 and 14 by ADR 0114 (built)
 
 ## Context
 

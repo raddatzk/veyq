@@ -79,7 +79,8 @@ class Holds(
                 }.persist()
             }
         snapshot.copy("veyq_share_identity", "id", snapshot.identityIds)
-        snapshot.copy("veyq_scope_epoch", "scope_id", listOf(target.scopeId))
+        // No scope key material is copied: a report hands over the held node's key and each field's own key, never a
+        // scope key, so the copies open as they were stored (ADR 0115 decision 8) — there is no chain to keep any more.
     }
 
     /** [caseId]'s hold alive at [now], or null. */

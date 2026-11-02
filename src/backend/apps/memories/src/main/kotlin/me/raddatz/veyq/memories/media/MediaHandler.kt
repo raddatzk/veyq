@@ -71,7 +71,7 @@ sealed interface MetaOutcome {
     data class Stale(val wrappedMeta: String?, val metaRevision: Long) : MetaOutcome, HttpFailure by Failures.staleRevision
     /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6) — nothing written; the caller re-reads. */
     object StaleEpoch : MetaOutcome, HttpFailure by Failures.staleEpoch
-    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written; it retries. */
+    /** The node is due for its re-key (ADR 0114 decision 3) — nothing written; it retries. */
     object RekeyPending : MetaOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
@@ -123,7 +123,7 @@ sealed interface CreateBucketOutcome {
     object IdTaken : CreateBucketOutcome, HttpFailure by Failures.idTaken
     /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6) — nothing written; the caller re-reads. */
     object StaleEpoch : CreateBucketOutcome, HttpFailure by Failures.staleEpoch
-    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written; it retries. */
+    /** The node is due for its re-key (ADR 0114 decision 3) — nothing written; it retries. */
     object RekeyPending : CreateBucketOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
@@ -137,7 +137,7 @@ sealed interface RenameBucketOutcome {
     object Forbidden : RenameBucketOutcome, HttpFailure by httpFailure("illegal_target", FORBIDDEN)
     /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6) — nothing written; the caller re-reads. */
     object StaleEpoch : RenameBucketOutcome, HttpFailure by Failures.staleEpoch
-    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written; it retries. */
+    /** The node is due for its re-key (ADR 0114 decision 3) — nothing written; it retries. */
     object RekeyPending : RenameBucketOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 

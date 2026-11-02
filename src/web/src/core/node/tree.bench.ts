@@ -9,13 +9,13 @@
 import { bench, describe, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import type { NodeSummary } from '../../api/generated/content'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import { openTree, sealName, wrapContentKey } from './tree'
 import { FOLDER_KIND } from './kind'
 
 const SCOPE = '00000000-0000-4000-8000-000000000001'
 const epochKey = v1.randomBytes(32)
-const epochs: EpochKeys = { current: 0, keys: new Map([[0, epochKey]]) }
+const epochs: ScopeKey = { epoch: 0, key: epochKey }
 
 // Every row is a FOLDER: `openTree` never reads a kind (it opens entries and keys along the parent chain), and core may not
 // name an application's kinds (`validate_web_core_imports_no_applications.py`). The SHAPE is the seeder's.
@@ -28,9 +28,9 @@ function rows(specs: Spec[]): NodeSummary[] {
   const keys = specs.map(() => v1.randomBytes(32))
   return specs.map((s, i) => {
     const entryKey = s.parent === null ? epochKey : keys[s.parent]
-    const node = { scopeId: SCOPE, nodeId: ids[i], epoch: 0, placementRevision: 0 }
+    const node = { scopeId: SCOPE, nodeId: ids[i], scopeEpoch: 0, placementRevision: 0 }
     return {
-      id: ids[i], parentId: s.parent === null ? null : ids[s.parent], kind: s.kind, orderIndex: 0, epoch: 0,
+      id: ids[i], parentId: s.parent === null ? null : ids[s.parent], kind: s.kind, orderIndex: 0, epoch: 0, scopeEpoch: 0,
       encryptedName: sealName(entryKey, node, s.name), slugToken: 'unused-by-openTree',
       wrappedContentKey: wrapContentKey(entryKey, node, keys[i]), wrappedMeta: null, metaRevision: 0, placementRevision: 0,
       createdAt: new Date(1_700_000_000_000 + i), blockedByOperator: false,

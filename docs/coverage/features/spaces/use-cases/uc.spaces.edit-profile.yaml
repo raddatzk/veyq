@@ -20,13 +20,14 @@ acceptanceCriteria:
       web:
         unit: [src/features/account/profile/profile.test.ts, src/features/account/profile/ProfilePanel.test.ts]
   - id: name-opens-across-a-rotation
-    text: A name saved under an earlier tenant epoch opens for every member holding that epoch (the directory, the members list, the profile form), the member is not asked to finish their profile, and a reader opens nothing under an epoch it does not hold. On entering the tenant the member's own client seals the name again under the current epoch, writing only while the stored blob is still the one it opened.
+    text: A tenant rotation re-seals every member's name under the tenant's new key (ADR 0115 decision 2), so after it the name opens for every member holding the new key (the directory, the members list, the profile form) and the member is not asked to finish their profile; a name left under the replaced key opens for nobody, and a reader holding only the old key opens none of the re-sealed names. A save states the tenant epoch it is sealed under and is sealed once more after a `409 stale_epoch`; entering the tenant writes no profile.
     coverage:
       web:
         unit:
           - src/core/people/profileAcrossRotation.test.ts
           - src/features/spaces/TenantMembersPanel.test.ts
-          - src/features/account/profile/carryProfileForward.test.ts
+          - src/features/account/profile/useNameAndPicture.test.ts
+          - src/features/spaces/scopeRekey.test.ts
           - src/app/activeSpace.test.ts
         e2e: [src/features/account/profile/profileAcrossRotation.e2e.test.ts]
   - id: no-grant-username-only

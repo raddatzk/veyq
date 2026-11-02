@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.moderation.hold.HoldSnapshotContributor
 import me.raddatz.veyq.core.moderation.report.ReportableItems
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import me.raddatz.veyq.core.node.rekey.NodeRekeyParticipant
+import me.raddatz.veyq.core.node.rekey.ScopeRekeyParticipant
 import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.quota.StorageQuota
 import me.raddatz.veyq.core.quota.UploadAdmission
@@ -101,6 +102,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var reportableItems: MutableList<ReportableItems>
     @Inject @All lateinit var holdContributors: MutableList<HoldSnapshotContributor>
     @Inject @All lateinit var rekeyParticipants: MutableList<NodeRekeyParticipant>
+    @Inject @All lateinit var scopeRekeyParticipants: MutableList<ScopeRekeyParticipant>
     @Inject @All lateinit var uploaderContent: MutableList<UploaderContent>
     @Inject @All lateinit var heldUploaders: MutableList<HeldUploaders>
     @Inject @All lateinit var applicationErasures: MutableList<ApplicationErasures>
@@ -129,6 +131,7 @@ class ModuleCompositionTest {
         ReportableItems::class.java to reportableItems,
         HoldSnapshotContributor::class.java to holdContributors,
         NodeRekeyParticipant::class.java to rekeyParticipants,
+        ScopeRekeyParticipant::class.java to scopeRekeyParticipants,
         UploaderContent::class.java to uploaderContent,
         HeldUploaders::class.java to heldUploaders,
         ApplicationErasures::class.java to applicationErasures,

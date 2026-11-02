@@ -3,6 +3,7 @@ package me.raddatz.veyq.memories.itemfavorites
 import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
+import java.util.UUID
 
 /**
  * One member's sealed item-mark blob for a node, as the read hands it out. [own] is the only identity that
@@ -32,10 +33,9 @@ class ItemFavoritesStore {
      */
     fun listOwn(userId: String): List<ItemFavoritesEntity> = ItemFavoritesEntity.list("userId = ?1", userId)
 
-    /** The scope row's lock, which every removal of a member holds while it deletes that member's rows. */
-    fun lockScope(scopeId: String) {
-        ScopeEntity.lockRow(scopeId)
-    }
+    /** The scope row's lock, which every removal of a member and every rotation's commit hold while they delete or
+     *  re-seal these rows; answers the scope's current epoch under it, or null for no scope. */
+    fun lockScope(scopeId: String): Int? = ScopeEntity.lockRow(scopeId)?.currentEpoch
 
     /** Last-write-wins upsert of the **caller's own** blob for the node. */
     @Transactional
@@ -46,6 +46,7 @@ class ItemFavoritesStore {
             this.userId = userId
             this.scopeId = scopeId
             this.nodeId = nodeId
+            markId = UUID.randomUUID().toString()
         }
         row.ciphertext = ciphertext
         row.persist()

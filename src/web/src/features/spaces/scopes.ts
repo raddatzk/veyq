@@ -8,7 +8,7 @@ import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { identityPrivate } from '../../app/vault'
 import { slugify } from '../../shared/naming'
-import { deriveEpochKeys, keyAt, writeKey, zeroEpochKeys, epochLinkContext, type EpochKeys } from './epochs'
+import { scopeKeyOf, zeroScopeKey, type ScopeKey } from './epochs'
 import { grantContext, recipientIdentityDigest, sealGrant, type GrantScope, type SignedGrant } from './grant'
 import * as invite from '@veyq/crypto/invite'
 import { me, verifyOwnGrant, GrantRefused, type Me } from './grantTrust'
@@ -17,7 +17,9 @@ import { loadTenantView, tenantViewOfScope, type TenantOpener } from '../account
 import { epochFloor, epochKeyCommitment, heldEpochKey, holdEpochKey } from '../account/trustMarks'
 import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
-import { rememberGroupName } from './groupNamesSeen'
+import { rememberGroupName, groupNameSeen } from './groupNamesSeen'
+import { stageScopeLevelRekey, isRestageable, REKEY_RESTAGES } from './scopeRekey'
+import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { ScopeKind, type CompromiseRotation, type ScopeSummary, type ScopeSummaryRoleEnum, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
 import type { OpenInvite, InviteGrantEntry } from '../../api/generated/scopes'
 import type { RotationPlanScope } from '../../api/generated/account'
@@ -28,11 +30,30 @@ export { grantContext } from './grant'
 
 /**
  * Turn off every link of a scope (ADR 0075 point 5) — a scope owner's switch-off: every enabled share, whoever made
- * it, goes off and is marked, so each comes back only by {@link reissueShare}. Resolves how many it turned off.
+ * it, goes off and is marked, so each comes back only by {@link reissueShare}. Resolves how many it turned off. Each is
+ * a close (ADR 0114 decision 1): the server marks what lies below every viewable one due, and this device starts the
+ * scope's re-key in the background ({@link rekeyClosedScopes}).
  */
 export async function revokeScopeShares(scopeId: string): Promise<number> {
   const { revoked } = await withRefresh(() => scopesApi().revokeScopeShares({ scopeId }))
+  if (revoked > 0) void rekeyClosedScopes([scopeId])
   return revoked
+}
+
+/**
+ * After a close the server ran in bulk — every link of a scope switched off, or a removed member's links in the scopes
+ * of their tenant — this device re-keys what it marked (ADR 0114 decision 9): [scopeIds], or without them every scope of
+ * the active tenant this member holds that is now re-keying, one after another, in the background — never awaited by
+ * the caller, so the dialog does not wait. The whole scope's re-key (`rekeyScope`): a bulk close marks the subtree of
+ * every link it closed, and only the due nodes are re-keyed. Any failure — a scope this device cannot open, an
+ * owner-only node a member leaves — is left to the members' workers, which resume any scope with a due node. Never
+ * rejects.
+ */
+export function rekeyClosedScopes(scopeIds?: readonly string[]): Promise<void> {
+  return (async () => {
+    const ids = scopeIds ?? (await listMyScopes()).filter((s) => s.rekeying === true).map((s) => s.id)
+    for (const id of ids) await rekeyScope(id).catch(() => undefined)
+  })().catch(() => undefined)
 }
 
 /** The caller's scopes in the active tenant (each with their own grant ciphertext). */
@@ -40,9 +61,13 @@ export async function listMyScopes(): Promise<ScopeSummary[]> {
   return withRefresh(() => scopesApi().listMyScopes())
 }
 
-/** A scope's epoch-chain links (ADR 0024, cr-0089) — so a member peels the chain to read older epochs. */
-export async function listScopeEpochs(scopeId: string): Promise<{ epoch: number; wrappedPrev: string }[]> {
-  return withRefresh(() => scopesApi().listScopeEpochs({ scopeId }))
+/** A scope's succession statements (ADR 0115 decision 5), decoded — so a member checks that a newer epoch's key succeeds
+ *  the one it held. They open nothing: a scope has one key at a time. */
+export async function listScopeSuccessions(scopeId: string): Promise<v1.SuccessionLink[]> {
+  const served = await withRefresh(() => scopesApi().listScopeEpochs({ scopeId }))
+  return served.map((s) => ({
+    epoch: s.epoch, successionPublicKey: fromB64std(s.successionPublicKey), successionSignature: fromB64std(s.successionSignature),
+  }))
 }
 
 /** Soft-delete a group (uc.spaces.delete-group, cr-0090) — enters the grace period (owner-gated). */
@@ -78,12 +103,6 @@ export async function scopeLifecycle(scopeId: string): Promise<{
 export async function requeueScopeRotation(scopeId: string): Promise<CompromiseRotation | null> {
   const r = await withRefresh(() => scopesApi().requeueScopeRotation({ scopeId }))
   return r.compromiseRotation ?? null
-}
-
-/** Peel the scope's epoch chain from the caller's grant key down to E_0 (ADR 0024). No fetch when unrotated. */
-async function epochKeysFor(scope: OwnGrantRow, grantKey: Uint8Array): Promise<EpochKeys> {
-  const links = scope.grantedEpoch > 0 ? await listScopeEpochs(scope.id) : []
-  return deriveEpochKeys(scope.id, grantKey, scope.grantedEpoch, links)
 }
 
 /** Every tenant the caller belongs to — the sidebar space switcher (Host-independent). */
@@ -150,12 +169,13 @@ export async function createGroup(name: string): Promise<string> {
   }
 }
 
-/** The group's display name from its epoch keys: derive `K_name` from the name-epoch key, open the canonical
- *  `encryptedName` under it (cr-0096/ADR 0027). Members read the same blob a pending invitee is handed the key for.
+/** The group's display name from its scope key: derive `K_name` from it, open the canonical `encryptedName` under it
+ *  (cr-0096/ADR 0027) — every rotation re-seals the name at its new epoch (ADR 0115 decision 2), so `nameEpoch` is the
+ *  key's own and a name under any other key does not open. Members read the same blob a pending invitee is handed the key for.
  *  Every name opened here is also remembered in memory for this page ({@link rememberGroupName}): the one label the
  *  security panel has for a group, whose plan serves no name (inbox #280). */
-function openGroupName(scopeId: string, epochs: EpochKeys, nameEpoch: number, encryptedName: string): string {
-  const nameKey = deriveGroupNameKey(keyAt(epochs, nameEpoch))
+function openGroupName(scopeId: string, epochs: ScopeKey, nameEpoch: number, encryptedName: string): string {
+  const nameKey = deriveGroupNameKey(epochs.key)
   try {
     const name = openGroupNameWith(nameKey, scopeId, nameEpoch, encryptedName)
     rememberGroupName(scopeId, name)
@@ -165,12 +185,11 @@ function openGroupName(scopeId: string, epochs: EpochKeys, nameEpoch: number, en
   }
 }
 
-/** A group's icon from its epoch keys (uc.spaces.set-space-icon): derive `K_icon` from the **icon-epoch** key —
- *  peeled from the chain, because a group's `iconEpoch` may sit below `currentEpoch` (it rotates on member-removal,
- *  ADR 0024, but a rotation never re-seals the icon) — then open + unpad the sealed icon. Null when unopenable →
- *  the caller renders the initial. Unlike {@link openMyTenantIcon}, this must peel the chain (a tenant never rotates). */
-function openGroupIconAt(scopeId: string, epochs: EpochKeys, iconEpoch: number, sealedIcon: string): Uint8Array | null {
-  const iconKey = deriveSpaceIconKey(keyAt(epochs, iconEpoch))
+/** A group's icon from its scope key (uc.spaces.set-space-icon): derive `K_icon` from the one key the caller holds —
+ *  every rotation re-seals the icon at its new epoch (ADR 0115 decision 2) — then open + unpad the sealed icon. Null when
+ *  unopenable → the caller renders the initial. */
+function openGroupIconAt(scopeId: string, epochs: ScopeKey, iconEpoch: number, sealedIcon: string): Uint8Array | null {
+  const iconKey = deriveSpaceIconKey(epochs.key)
   try {
     return openIcon(iconKey, { scopeId, iconEpoch }, sealedIcon)
   } catch {
@@ -187,13 +206,19 @@ export type GroupSpace = {
   scopeId: string; tenantId: string; name: string; icon: Uint8Array | null; role: string; deletedAt: Date | null; purgeAfter: Date | null
   /** Owner rows only: a compromise rotation queued here that needs an owner (`stalled`/`failed`), else null. */
   compromiseRotation: CompromiseRotation | null
+  /** The caller's grant is behind the group's current epoch (ADR 0115 decision 8): the group has a new key this
+   *  device does not hold yet, so nothing of it opens — its name is the one this page remembers, or empty, and its icon
+   *  the initial — until a member online re-grants it. */
+  awaitingKey: boolean
 }
 
 /**
  * The member's groups in the active tenant with their names decrypted on-device (en.spaces.group-scope). Each
  * group's name is sealed under **its own** `K_SC`, so we open every group's grant to decrypt its name — the
  * server only ever returned the ciphertext name + ciphertext grant. A group whose grant/name won't open (E2, a
- * rotated/foreign grant) is dropped from the switcher rather than crashing it.
+ * foreign grant) is dropped from the switcher rather than crashing it. A group whose grant is BEHIND its current epoch
+ * stays listed, marked {@link GroupSpace.awaitingKey}: a rotation replaced its key and re-sealed its name and icon under
+ * the new one, which this device does not hold yet (ADR 0115 decision 8) — it reads nothing of the group until then.
  */
 export async function listMyGroups(): Promise<GroupSpace[]> {
   const priv = identityPrivate()
@@ -203,21 +228,23 @@ export async function listMyGroups(): Promise<GroupSpace[]> {
     const self = await me(priv)
     const rows = await Promise.all(
       groups.map(async (g): Promise<GroupSpace | null> => {
-        let epochs: EpochKeys | null = null
+        const row = {
+          scopeId: g.id, tenantId: g.tenantId, role: g.role, deletedAt: g.deletedAt ?? null,
+          purgeAfter: g.purgeAfter ?? null, compromiseRotation: g.compromiseRotation ?? null,
+        }
+        // Behind: the key that would open the name is one this device does not hold (ADR 0115 decision 8).
+        if (g.grantedEpoch < g.currentEpoch) return { ...row, name: groupNameSeen(g.id) ?? '', icon: null, awaitingKey: true }
+        let epochs: ScopeKey | null = null
         try {
-          // The name is sealed under K_name (from the name-epoch key) — peel the chain so a rotated group still
-          // derives that epoch's key and decrypts its name.
-          epochs = await epochKeysFor(g, await openOwnGrant(g, priv, self))
+          epochs = scopeKeyOf(await openOwnGrant(g, priv, self), g.grantedEpoch)
           const name = g.encryptedName ? openGroupName(g.id, epochs, g.nameEpoch, g.encryptedName) : ''
           const icon = g.sealedIcon ? openGroupIconAt(g.id, epochs, g.iconEpoch, g.sealedIcon) : null
-          return {
-            scopeId: g.id, tenantId: g.tenantId, name, icon, role: g.role, deletedAt: g.deletedAt ?? null,
-            purgeAfter: g.purgeAfter ?? null, compromiseRotation: g.compromiseRotation ?? null,
-          }
-        } catch {
+          return { ...row, name, icon, awaitingKey: false }
+        } catch (e) {
+          if (e instanceof AwaitingCurrentKey) return { ...row, name: groupNameSeen(g.id) ?? '', icon: null, awaitingKey: true }
           return null
         } finally {
-          if (epochs) zeroEpochKeys(epochs)
+          if (epochs) zeroScopeKey(epochs)
         }
       }),
     )
@@ -227,10 +254,11 @@ export async function listMyGroups(): Promise<GroupSpace[]> {
   }
 }
 
-/** An opened scope: its opaque identity + the in-memory **epoch keys** (owned transiently by the caller; `key` is
- *  the write key = the current epoch) + the decrypted display `name` for a named scope (a GROUP; undefined else). */
+/** An opened scope: its opaque identity + the in-memory **scope key** (owned transiently by the caller; `key` is the
+ *  same bytes as `epochs.key`, the one key of the epoch the grant carries, ADR 0115 decision 1) + the decrypted display
+ *  `name` for a named scope (a GROUP; undefined else). */
 export type OpenedScope = {
-  scopeId: string; tenantId: string; kind: ScopeKind; key: Uint8Array; epochs: EpochKeys; nameEpoch: number; name?: string; deletedAt: Date | null; purgeAfter: Date | null
+  scopeId: string; tenantId: string; kind: ScopeKind; key: Uint8Array; epochs: ScopeKey; nameEpoch: number; name?: string; deletedAt: Date | null; purgeAfter: Date | null
   /** The caller's own role in the scope, as its row carries it (`OWNER` / `MEMBER`). */
   role?: ScopeSummaryRoleEnum
 }
@@ -249,10 +277,10 @@ const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: 
  * refused ({@link AwaitingCurrentKey}) on every path that opens one — a scope, the switcher's names and icons, a slug —
  * so no path decrypts under an epoch this device already knows to be superseded.
  *
- * A grant at or above the epoch this device holds must reach the key it holds (ADR 0111 decision 23,
- * {@link requireLinkToHeld}), else it is refused as `epoch_unlinked` before the key is used. A grant that opened is then
- * held: this device's epoch floor for the scope rises to its epoch (ADR 0024 Decision 6) — the epoch is authentic because
- * the grant is bound to it and signed — and its key becomes the one a later epoch must link down to.
+ * A grant at or above the epoch this device holds must succeed the key it holds (ADR 0115 decision 5,
+ * {@link requireSuccessionFromHeld}), else it is refused as `epoch_unlinked` before the key is used. A grant that opened
+ * is then held: this device's epoch floor for the scope rises to its epoch (ADR 0024 Decision 6) — the epoch is authentic
+ * because the grant is bound to it and signed — and its key becomes the one a later epoch's statements must start from.
  */
 async function openOwnGrant(
   scope: OwnGrantRow, priv: { kemSeed: Uint8Array; sign: Uint8Array }, self: Me,
@@ -261,7 +289,7 @@ async function openOwnGrant(
   await verifyOwnGrant({ scopeId: scope.id, kind: scope.kind, epoch: scope.grantedEpoch }, scope.wrappedGrant, scope, self, scope.tenantId)
   const key = v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), fromB64std(scope.wrappedGrant))
   try {
-    await requireLinkToHeld(scope, key)
+    await requireSuccessionFromHeld(scope, key)
   } catch (e) {
     key.fill(0)
     throw e
@@ -271,43 +299,49 @@ async function openOwnGrant(
 }
 
 /**
- * A new epoch counts only if it links down to the key this device held (ADR 0111 decision 23, inbox #650). The floor
- * refuses a lower epoch NUMBER; this refuses an unlinked KEY: an operator can bump a scope's epoch and serve a grant at
- * the new one around a key of its own choosing — sealed to this account's public key, signed by a granter it fabricated
- * and the pin meets for the first time — but it cannot make the link `E_held` sealed under its key, because it never
- * held `E_held`. So from the grant's key the served links must peel down to exactly the key this device holds (at the
- * same epoch: be that key). Throws {@link GrantRefused} `epoch_unlinked` otherwise — the scope then waits for a current
- * grant, the state every refused grant reads as, and a rotation declares it unreadable.
+ * A new epoch counts only if it succeeds the key this device held (ADR 0115 decision 5, ADR 0111 decision 23, inbox
+ * #650). The floor refuses a lower epoch NUMBER; this refuses an unproven KEY: an operator can bump a scope's epoch and
+ * serve a grant at the new one around a key of its own choosing — sealed to this account's public key, signed by a
+ * granter it fabricated and the pin meets for the first time — but it cannot sign the succession from `E_held`'s
+ * succession key, because it never held `E_held`. So the served statements must lead, one per epoch, from the succession
+ * public key this device kept for the key it held to exactly the one the grant's key derives (at the same epoch: be that
+ * key). Throws {@link GrantRefused} `epoch_unlinked` otherwise — the scope then waits for a current grant, the state
+ * every refused grant reads as, and a rotation declares it unreadable. Nothing in a statement opens anything.
  *
  * Passes with nothing held (a device's first grant of the scope: the invite's anchor vouched for a newcomer's, ADR 0111
  * decision 19) and for a grant below the held epoch, which is no new epoch: the floor is its check. A member pending
- * across several epochs peels through every link in between; an account's securing self-grants the very key it held.
+ * across several epochs checks every statement in between; an account's securing self-grants the very key it held.
  */
-async function requireLinkToHeld(scope: OwnGrantRow, key: Uint8Array): Promise<void> {
+async function requireSuccessionFromHeld(scope: OwnGrantRow, key: Uint8Array): Promise<void> {
   const held = await heldEpochKey(scope.id)
   if (!held || scope.grantedEpoch < held.epoch) return
   const unlinked = () => new GrantRefused(scope.id, 'epoch_unlinked')
-  let links: invite.ServedEpochLink[] = []
-  if (scope.grantedEpoch > held.epoch) {
-    let served: { epoch: number; wrappedPrev: string }[]
-    try {
-      served = await listScopeEpochs(scope.id)
-    } catch (e) {
-      // No links for a scope this account is not yet a member of (a pending proposal: 404) or holds no grant in (403):
-      // nothing can link. Any other failure says nothing about the key.
-      if (isHttpStatus(e, HttpStatus.notFound) || isHttpStatus(e, HttpStatus.forbidden)) throw unlinked()
-      throw e
-    }
-    links = served.map((l) => ({ epoch: l.epoch, wrappedPrev: fromB64std(l.wrappedPrev) }))
+  if (scope.grantedEpoch === held.epoch) {
+    if (epochKeyCommitment(key) !== held.commitment) throw unlinked()
+    return
   }
-  const peeled = invite.peelEpochKey(scope.id, key, scope.grantedEpoch, held.epoch, links)
-  const linked = peeled !== null && epochKeyCommitment(peeled) === held.commitment
-  peeled?.fill(0)
-  if (!linked) throw unlinked()
+  let statements: v1.SuccessionLink[]
+  try {
+    statements = await listScopeSuccessions(scope.id)
+  } catch (e) {
+    // No statements for a scope this account is not yet a member of (a pending proposal: 404) or holds no grant in (403):
+    // nothing can prove the key. Any other failure says nothing about it.
+    if (isHttpStatus(e, HttpStatus.notFound) || isHttpStatus(e, HttpStatus.forbidden)) throw unlinked()
+    throw e
+  }
+  const target = v1.successionKeyPair(key)
+  target.privateKey.fill(0)
+  const proven = v1.verifySuccessionPath({
+    scopeId: scope.id, heldEpoch: held.epoch, heldPublicKey: fromB64std(held.commitment), statements,
+    targetEpoch: scope.grantedEpoch, targetPublicKey: target.publicKey,
+  })
+  if (!proven) throw unlinked()
 }
 
 /** Our grant is older than the scope's current epoch (ADR 0024 Decision 6): a rotation skipped us, or its re-grant
- *  has not reached us yet. The scope reads as awaiting the current key — nothing is written into it. The same
+ *  has not reached us yet. The scope reads as awaiting the current key — nothing is written into it, and since the
+ *  rotation replaced the key and re-sealed everything under the new one, nothing of it opens either (ADR 0115
+ *  decision 8). The same
  *  state, with the same presentation, answers a grant below this device's own floor for the scope: an older epoch
  *  than one this device has held, whatever `currentEpoch` the server pairs it with. */
 class AwaitingCurrentKey extends Error {
@@ -329,8 +363,8 @@ async function orUnopened<T>(open: () => Promise<T | null>): Promise<T | null> {
   }
 }
 
-/** Open a scope summary → its epoch keys + (for a GROUP) its decrypted name. The name is sealed under `K_name`
- *  derived from its **name-epoch** key (cr-0096/ADR 0027), so it decrypts under that epoch of the peeled chain.
+/** Open a scope summary → its one key + (for a GROUP) its decrypted name, sealed under `K_name` derived from that key
+ *  (cr-0096/ADR 0027, ADR 0115 decision 1).
  *
  *  **No write under a known-stale epoch** (ADR 0024 Decision 6, layer 1): a grant older than the scope's current
  *  epoch holds a key every member removed since also holds, so content sealed under it would be readable by them.
@@ -348,7 +382,7 @@ async function toOpenedScope(
 ): Promise<OpenedScope> {
   if (staleGrant === 'refuse' && scope.grantedEpoch < scope.currentEpoch) throw new AwaitingCurrentKey(scope.id)
   const grantKey = await openOwnGrant(scope, priv, self)
-  const epochs = await epochKeysFor(scope, grantKey)
+  const epochs = scopeKeyOf(grantKey, scope.grantedEpoch)
   let name: string | undefined
   if (scope.kind === ScopeKind.Group && scope.encryptedName) {
     try {
@@ -358,7 +392,7 @@ async function toOpenedScope(
     }
   }
   return {
-    scopeId: scope.id, tenantId: scope.tenantId, kind: scope.kind, key: writeKey(epochs), epochs, nameEpoch: scope.nameEpoch ?? 0, name,
+    scopeId: scope.id, tenantId: scope.tenantId, kind: scope.kind, key: epochs.key, epochs, nameEpoch: scope.nameEpoch ?? 0, name,
     deletedAt: scope.deletedAt ?? null, purgeAfter: scope.purgeAfter ?? null, role: scope.role,
   }
 }
@@ -436,8 +470,8 @@ export class EpochMovedOn extends Error {
 }
 
 /**
- * Open the caller's scope of the given `kind` → its identity + in-memory epoch keys (open our **own** grant
- * with the vaulted identity, then peel the epoch chain), or null if there is no such scope / the vault is locked.
+ * Open the caller's scope of the given `kind` → its identity + in-memory scope key (open our **own** grant with the
+ * vaulted identity), or null if there is no such scope / the vault is locked.
  * This is **open-only** — it never mints a scope. The caller owns the returned keys transiently.
  */
 export async function openScope(kind: ScopeKind): Promise<OpenedScope | null> {
@@ -452,7 +486,7 @@ export async function openScope(kind: ScopeKind): Promise<OpenedScope | null> {
 }
 
 /**
- * Open a specific scope by its opaque id → its identity + in-memory epoch keys, or null if the caller holds no
+ * Open a specific scope by its opaque id → its identity + in-memory scope key, or null if the caller holds no
  * such scope / the vault is locked. Used to enter a group from the `#@<id>` fragment (en.spaces.group-scope).
  */
 export async function openScopeById(scopeId: string): Promise<OpenedScope | null> {
@@ -472,21 +506,21 @@ async function openById(scopeId: string, staleGrant: 'refuse' | 'open'): Promise
 }
 
 /** A group's readable URL slug — `slugify` of its decrypted name (cr-0120), or null when it has no openable name.
- *  Decrypts under the peeled name-epoch chain and zeroes those keys per call (the name stays operator-blind). */
+ *  Decrypts under the scope key and zeroes it per call (the name stays operator-blind). */
 async function groupSlug(
   g: ScopeSummary,
   priv: { kemSeed: Uint8Array; sign: Uint8Array },
   self: Me,
 ): Promise<string | null> {
   if (!g.encryptedName) return null
-  let epochs: EpochKeys | null = null
+  let epochs: ScopeKey | null = null
   try {
-    epochs = await epochKeysFor(g, await openOwnGrant(g, priv, self))
+    epochs = scopeKeyOf(await openOwnGrant(g, priv, self), g.grantedEpoch)
     return slugify(openGroupName(g.id, epochs, g.nameEpoch, g.encryptedName))
   } catch {
     return null
   } finally {
-    if (epochs) zeroEpochKeys(epochs)
+    if (epochs) zeroScopeKey(epochs)
   }
 }
 
@@ -524,11 +558,11 @@ export async function openPersonalScope(): Promise<Uint8Array | null> {
 }
 
 /**
- * Derive a group's current name-key `K_name` (from its name-epoch key) and wrap it to a pending invitee's identity
+ * Derive a group's current name-key `K_name` (from its scope key) and wrap it to a pending invitee's identity
  * (uc.spaces.consent-group-add, cr-0096/ADR 0027) → the `sealedNameKey` to post with the consent proposal. The
  * invitee unwraps it to open the **same canonical `encryptedName`** the members read — so a modified owner cannot
  * privately show a divergent name. Returns null if the caller can't open the scope (vault locked / no grant).
- * Requires an unlocked vault; the transient epoch keys + `K_name` are zeroed before returning.
+ * Requires an unlocked vault; the transient scope key + `K_name` are zeroed before returning.
  */
 export async function wrapGroupNameKeyForInvitee(
   scopeId: string,
@@ -543,18 +577,18 @@ export async function wrapGroupNameKeyForInvitee(
   const inviteeIdentityPublicKeyB64 = invitee.identityPublicKey
   const opened = await openScopeById(scopeId)
   if (!opened) return null
-  const nameKey = deriveGroupNameKey(keyAt(opened.epochs, opened.nameEpoch))
+  const nameKey = deriveGroupNameKey(opened.epochs.key)
   try {
     return wrapNameKeyToInvitee(nameKey, scopeId, opened.nameEpoch, inviteeIdentityPublicKeyB64)
   } finally {
     nameKey.fill(0)
-    zeroEpochKeys(opened.epochs)
+    zeroScopeKey(opened.epochs)
   }
 }
 
 /**
  * Rename a group (uc.spaces.rename-group, cr-0097/ADR 0027) — operator-blind: re-seal the new name under `K_name`
- * derived from the caller's **write key** (the highest epoch they hold) and POST `{ encryptedName, nameEpoch }`.
+ * derived from the caller's scope key and POST `{ encryptedName, nameEpoch }` at its epoch.
  * The server accepts it only when `nameEpoch == currentEpoch`, so a caller who holds the current epoch reseals the
  * name forward-secretly; a stale caller (a rotation moved the epoch under them) gets `409 stale_epoch`. We refetch
  * + retry **once** — grant-delivery may have re-granted us to the current epoch between the two attempts. Requires
@@ -564,8 +598,8 @@ export async function renameGroup(scopeId: string, newName: string): Promise<voi
   for (let attempt = 0; attempt < 2; attempt++) {
     const opened = await openScopeById(scopeId)
     if (!opened) throw new Error('cannot open group to rename')
-    const nameEpoch = opened.epochs.current // seal under the highest epoch we hold; the server gates it == current
-    const nameKey = deriveGroupNameKey(writeKey(opened.epochs))
+    const nameEpoch = opened.epochs.epoch // seal under the epoch we hold; the server gates it == current
+    const nameKey = deriveGroupNameKey(opened.epochs.key)
     try {
       const encryptedName = sealGroupName(nameKey, scopeId, nameEpoch, newName)
       await withRefresh(() => scopesApi().renameGroup({ scopeId, renameGroupRequest: { encryptedName, nameEpoch } }))
@@ -575,7 +609,7 @@ export async function renameGroup(scopeId: string, newName: string): Promise<voi
       throw e
     } finally {
       nameKey.fill(0)
-      zeroEpochKeys(opened.epochs)
+      zeroScopeKey(opened.epochs)
     }
   }
 }
@@ -593,12 +627,14 @@ export const ROTATION_REBUILDS = 1
 /** Whether a failed rotation is worth a rebuild: built on a superseded epoch, or on a member list or a list of open
  *  invites a concurrent join or invite changed (`409 rotation_incomplete`, ADR 0111 decisions 2 and 9). */
 async function isRebuildable(e: unknown): Promise<boolean> {
-  return (await isStaleEpoch(e)) || isCodedError(e, HttpStatus.conflict, 'rotation_incomplete')
+  return (await isStaleEpoch(e)) || (await isCodedError(e, HttpStatus.conflict, 'rotation_incomplete'))
+    // the scope-level re-seal's listing or stage, read with a grant that lags the scope (ADR 0115 decision 2)
+    || isCodedError(e, HttpStatus.forbidden, 'grant_behind')
 }
 
 /**
  * Set or replace a space's icon (uc.spaces.set-space-icon) — operator-blind: bake+encode is the caller's, here we
- * seal the encoded bytes under `K_icon` derived from the caller's **write key** (the highest epoch they hold) and
+ * seal the encoded bytes under `K_icon` derived from the caller's scope key at its epoch and
  * POST `{ sealedIcon, iconEpoch }`. The server accepts it only when `iconEpoch == currentEpoch`; a stale caller
  * (a concurrent rotation) gets `409 stale_epoch`, so we refetch + retry **once** — the same shape as
  * {@link renameGroup}. The padding to a constant length is intrinsic to {@link sealIcon}, so every stored icon is
@@ -608,8 +644,8 @@ export async function setSpaceIcon(scopeId: string, encoded: Uint8Array): Promis
   for (let attempt = 0; attempt < 2; attempt++) {
     const opened = await openScopeById(scopeId)
     if (!opened) throw new Error('cannot open space to set its icon')
-    const iconEpoch = opened.epochs.current // seal under the highest epoch we hold; the server gates it == current
-    const iconKey = deriveSpaceIconKey(writeKey(opened.epochs))
+    const iconEpoch = opened.epochs.epoch // seal under the epoch we hold; the server gates it == current
+    const iconKey = deriveSpaceIconKey(opened.epochs.key)
     try {
       const sealedIcon = sealIcon(iconKey, { scopeId, iconEpoch }, encoded)
       await withRefresh(() => scopesApi().setScopeIcon({ scopeId, setScopeIconRequest: { sealedIcon, iconEpoch } }))
@@ -619,7 +655,7 @@ export async function setSpaceIcon(scopeId: string, encoded: Uint8Array): Promis
       throw e
     } finally {
       iconKey.fill(0)
-      zeroEpochKeys(opened.epochs)
+      zeroScopeKey(opened.epochs)
     }
   }
 }
@@ -636,9 +672,9 @@ export async function clearSpaceIcon(scopeId: string): Promise<void> {
  * bytes, or **null** (no icon set, or it won't open → the caller renders the
  * initial). Zeroes the scope key + `K_icon` + the identity copy in `finally` (the {@link listMyGroups} posture).
  *
- * A tenant does not routinely re-key, so `iconEpoch == the grant's epoch == 0` (ADR 0025) and `K_icon` derives
- * directly from the grant key — the cross-tenant switcher read carries **no** epoch chain to peel, by design. If a
- * tenant ever re-keys and `iconEpoch < currentEpoch`, {@link openIcon} returns null → the initial (never a throw).
+ * Every rotation re-seals the icon at its new epoch (ADR 0115 decision 2), so `K_icon` derives directly from the grant
+ * key. A grant behind the tenant's current epoch holds a key nothing is sealed under any more: {@link openIcon} returns
+ * null → the initial (never a throw).
  */
 export async function openMyTenantIcon(tenant: MyTenant): Promise<Uint8Array | null> {
   if (!tenant.sealedIcon || !tenant.wrappedGrant || tenant.grantedEpoch == null) return null
@@ -668,25 +704,24 @@ export async function openMyTenantIcon(tenant: MyTenant): Promise<Uint8Array | n
 
 /**
  * Open a single group's icon for its settings-panel header (uc.spaces.set-space-icon) — unwrap the caller's own
- * grant on that group transiently, **peel the epoch chain** to `iconEpoch` (a group's icon may sit below the
- * current epoch, unlike a tenant), derive `K_icon`, and open + unpad the `sealedIcon` → the encoded image bytes,
- * or **null** (no icon / unopenable → the initial). Zeroes the epoch keys + the identity copy in `finally`. The
+ * grant on that group transiently, derive `K_icon` from its key, and open + unpad the `sealedIcon` → the encoded image
+ * bytes, or **null** (no icon / unopenable → the initial). Zeroes the scope key + the identity copy in `finally`. The
  * batched sidebar/hub read goes through {@link listMyGroups} (which opens every group's icon in one pass); this is
  * the single-scope read the owner's panel re-runs after a set/replace/remove.
  */
 export async function openGroupIcon(scopeId: string): Promise<Uint8Array | null> {
   const priv = identityPrivate()
   if (!priv) return null
-  let epochs: EpochKeys | null = null
+  let epochs: ScopeKey | null = null
   try {
     const g = (await listMyScopes()).find((s) => s.id === scopeId && s.kind === ScopeKind.Group)
     if (!g || !g.sealedIcon) return null
-    epochs = await epochKeysFor(g, await openOwnGrant(g, priv, await me(priv)))
+    epochs = scopeKeyOf(await openOwnGrant(g, priv, await me(priv)), g.grantedEpoch)
     return openGroupIconAt(g.id, epochs, g.iconEpoch, g.sealedIcon)
   } catch {
     return null
   } finally {
-    if (epochs) zeroEpochKeys(epochs)
+    if (epochs) zeroScopeKey(epochs)
     zero(priv)
   }
 }
@@ -789,21 +824,29 @@ async function inviteVouched(tenantId: string, open: OpenInvite, tenant: TenantS
 }
 
 /**
- * Commit a scope-key rotation (ADR 0024 §4) — the one path every rotation takes. Open the caller's own grant
- * (`E_n`), mint a fresh `E_{n+1}`, chain-link it (`E_n` sealed under `E_{n+1}`), re-grant the members — and, for a
- * TENANT, carry every open member invite ({@link carryOpenInvites}) — and commit **stating the epoch it creates**, `n+1`. `E_n` is our grant, not the scope's
- * epoch, so the server takes the commit only as the scope's current epoch + 1: a rotation that lost a race or rode a
- * lagging grant is `409 stale_epoch` with nothing stored, and would otherwise link the new epoch to a key that is not
- * its predecessor. On that answer — or on `409 rotation_incomplete`, a member who joined or an invite minted meanwhile —
- * the whole attempt runs **once** more ({@link ROTATION_REBUILDS}) from a re-opened grant, over the scope's members
- * **read again** (`listScopeMembers`) and its open invites read again: never the list the caller was handed, which is
- * what the server just found incomplete (inbox #661). One rebuild, never a loop, so a server that answers every attempt
- * with a conflict cannot keep this device minting keys.
+ * Commit a scope-key rotation (ADR 0115) — the one path every rotation takes. Open the caller's own grant (`E_n`), mint a
+ * fresh `E_{n+1}` that REPLACES it (decision 1: nothing seals `E_n` under it), re-grant the members — and, for a TENANT,
+ * carry every open member invite ({@link carryOpenInvites}) —, re-seal every scope-level row under the new key and stage
+ * it ({@link stageScopeLevelRekey}, decision 2), sign the succession from `E_n` (decision 5) and commit **stating the
+ * epoch it creates**, `n+1`. `E_n` is our grant, not the scope's epoch, so the server takes the commit only as the
+ * scope's current epoch + 1: a rotation that lost a race or rode a lagging grant is `409 stale_epoch` (or, at the stage,
+ * `403 grant_behind`) with nothing stored. On that answer — or on `409 rotation_incomplete`, a member who joined or an
+ * invite minted meanwhile — the whole attempt runs **once** more ({@link ROTATION_REBUILDS}) from a re-opened grant,
+ * over the scope's members **read again** (`listScopeMembers`) and its open invites read again: never the list the
+ * caller was handed, which is what the server just found incomplete (inbox #661). One rebuild, never a loop, so a server
+ * that answers every attempt with a conflict cannot keep this device minting keys.
+ *
+ * A row written while the rotation staged answers the stage or the commit `409 rekey_parts_stale` (or a row that appeared
+ * since, `rekey_parts_missing`): the rows are listed and staged again under the same key and re-key id and the same
+ * commit sent again, at most {@link REKEY_RESTAGES} times — the same grants to the same members, so no new recipient
+ * meets the key. After the commit nothing at scope level is under the old key, and every node of the scope is due for
+ * its own re-key, which the caller runs (`core/node/rekey/rekeyScope.ts`).
  *
  * Every member whose key is anchored ({@link anchorIdentity}: `firstUse`, `match` or `advanced`) is re-granted — a
- * pending consent proposal too, which holds a grant from its proposal on (ADR 0111 decision 4) — and the rotator itself
- * unconditionally, to the identity it holds; every other member (an `anomaly`) is named in `pendingUserIds`, so the
- * request covers every membership but the removed one (ADR 0111 decision 9, `409 rotation_incomplete`).
+ * pending consent proposal too, which holds a grant from its proposal on (ADR 0111 decision 4), and whose name key the
+ * re-seal wraps to the same key — and the rotator itself unconditionally, to the identity it holds; every other member
+ * (an `anomaly`) is named in `pendingUserIds`, so the request covers every membership but the removed one (ADR 0111
+ * decision 9, `409 rotation_incomplete`).
  *
  * The key is minted inside the attempt, never hoisted: the refused attempt's wraps already left the device, and one
  * may be addressed to a member removed in the meantime — reusing that key would give the server a grant it could
@@ -828,25 +871,27 @@ export async function commitRotation(
     // that sent it here may be a membership the caller's list lacks. The caller's exclusions hold for both.
     const listed = attempt === 0 ? members : await withRefresh(() => scopesApi().listScopeMembers({ scopeId }))
     const carry = listed.filter((m) => !leftOut(m))
-    // Our grant → the epoch keys we hold (E_n = the write key). Opened even when it lags the scope: the server
-    // refuses the epoch this rotation states unless it is the next one, which is the stale answer handled below.
+    // Our grant → the one key we hold (E_n). Opened even when it lags the scope: the server refuses the epoch this
+    // rotation states unless it is the next one, which is the stale answer handled below.
     const opened = await open(scopeId)
     if (!opened) throw new Error('cannot open scope to rotate')
     const newKey = v1.randomBytes(32)
     const who = await vaultRotator()
     try {
-      // The epoch this rotation creates binds the link and every grant (ADR 0072) — the one the server checks.
-      const epoch = opened.epochs.current + 1
-      const oldKey = writeKey(opened.epochs)
-      const wrappedPrev = b64std(v1.seal(epochLinkContext(scopeId, epoch), newKey, oldKey))
+      // The epoch this rotation creates binds the succession, every grant and every re-sealed row (ADR 0072) — the one
+      // the server checks.
+      const epoch = opened.epochs.epoch + 1
       const next: GrantScope = { scopeId, kind: opened.kind, epoch }
       const grants: RotationGrant[] = []
       const pendingUserIds: string[] = []
-      const grantTo = (userId: string, identityPublicKeyB64: string) =>
+      const anchoredKeys = new Map<string, string>()
+      const grantTo = (userId: string, identityPublicKeyB64: string) => {
+        anchoredKeys.set(userId, identityPublicKeyB64)
         grants.push({
           userId, ...sealGrant(newKey, next, { userId, identityPublicKeyB64 }, who.signPrivateKey),
           recipientIdentityDigest: recipientIdentityDigest(identityPublicKeyB64),
         })
+      }
       // Who is anchored is judged in the scope's tenant (ADR 0111 decisions 12 and 15): a member there without a join
       // record who is no owner — a membership the server made — is declared pending like any anomaly. A PERSONAL scope
       // has no other member to judge, so its tenant is not read.
@@ -866,13 +911,32 @@ export async function commitRotation(
       const invites = opened.kind === ScopeKind.Tenant && tenant
         ? await carryOpenInvites(scopeId, newKey, next, who.signPrivateKey, tenant)
         : { inviteGrants: [], pendingInviteIds: [] }
+      // The succession statement (ADR 0115 decision 5): the new key's succession public key, signed by the old key's.
+      // It opens nothing — no stored value makes either key readable from the other.
+      const succession = v1.successionKeyPair(newKey)
+      succession.privateKey.fill(0)
+      const successionSignature = v1.signSuccession(opened.epochs.key, { scopeId, epoch, successionPublicKey: succession.publicKey })
+      const rekeyId = crypto.randomUUID()
       const rotateScopeRequest = {
-        epoch, wrappedPrev, grants, pendingUserIds, ...invites, removesUserId: removes, revokeLinks: revokeLinks || undefined,
+        epoch, successionPublicKey: b64std(succession.publicKey), successionSignature: b64std(successionSignature), rekeyId,
+        grants, pendingUserIds, ...invites, removesUserId: removes, revokeLinks: revokeLinks || undefined,
       }
-      const rotated = await withRefresh(() => scopesApi().rotateScope({ scopeId, rotateScopeRequest }))
+      const run = { scopeId, rekeyId, oldKey: opened.epochs, newKey: { epoch, key: newKey }, anchoredKeys }
+      let rotated: { epoch: number }
+      for (let restage = 0; ; restage++) {
+        try {
+          await stageScopeLevelRekey(run)
+          rotated = await withRefresh(() => scopesApi().rotateScope({ scopeId, rotateScopeRequest }))
+          break
+        } catch (e) {
+          // a row written while this rotation staged: list it again and stage again, under the same key and id
+          if (restage < REKEY_RESTAGES && (await isRestageable(e))) continue
+          throw e
+        }
+      }
       // This device made the epoch, so it now holds it (ADR 0024 Decision 6) — the epoch it stated, which the
-      // server took as the next one; a server that later serves the older grant meets the floor, and a later epoch must
-      // link down to this key (ADR 0111 decision 23).
+      // server took as the next one; a server that later serves the older grant meets the floor, and a later epoch's
+      // succession statements must start from this key (ADR 0115 decision 5).
       await holdEpochKey(scopeId, epoch, newKey)
       return rotated.epoch
     } catch (e) {
@@ -881,7 +945,7 @@ export async function commitRotation(
       throw e
     } finally {
       newKey.fill(0)
-      zeroEpochKeys(opened.epochs)
+      zeroScopeKey(opened.epochs)
       who.signPrivateKey.fill(0)
     }
   }

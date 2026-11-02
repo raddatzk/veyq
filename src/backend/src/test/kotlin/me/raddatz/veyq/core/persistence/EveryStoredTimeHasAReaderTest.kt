@@ -98,6 +98,7 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_application_blob.kept_at" to "served: ApplicationBlob.keptAt; which release a keep undoes (a null one is released for good, ADR 0112 decision 2)",
             "veyq_application_blob.released_at" to "served: ApplicationBlob.releasedAt; ApplicationBlobPurge's clock for a released blob (ADR 0112 decision 2)",
             "veyq_node_rekey_stage.created_at" to "NodeRekeyStage.put deletes every stage older than a day (ADR 0109: an abandoned stage expires)",
+            "veyq_scope_rekey_stage.created_at" to "ScopeRekeyStage.put deletes every stage older than a day (ADR 0115: an abandoned rotation's stage expires)",
             "veyq_upload_session.last_window_at" to "BlobUploadStore purges a session with no window inside the retention",
             "veyq_store_setting.checked_at" to "InstanceResource serves it as the last check's checkedAt",
             "veyq_store_reclaim.created_at" to "StoreReclaimSweep takes the oldest due rows first",

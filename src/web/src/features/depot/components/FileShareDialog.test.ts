@@ -8,7 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('../../../core/sharing/shareLink', () => ({ buildShareLink: vi.fn(), recoverShareLink: vi.fn() }))
-vi.mock('../../../core/sharing/manageShares', () => ({
+vi.mock('../../../core/sharing/manageShares', async () => ({
+  rekeyingClosedLinks: (await import('vue')).shallowReactive(new Set<string>()),
   mintShare: vi.fn(), remintShare: vi.fn(), listSharesFor: vi.fn(), revokeShare: vi.fn(), reactivateShare: vi.fn(),
   deleteShare: vi.fn(), isReissueRequired: vi.fn(), isShareDeleted: vi.fn(), readShareName: vi.fn(), readShareNote: vi.fn(),
   hasLocaleText: vi.fn(),
@@ -28,7 +29,7 @@ const mintShare = vi.mocked(manage.mintShare)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000dd'
 const FILE_ID = '5c09e000-0000-4000-8000-0000000000f1'
-const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
+const EPOCHS = { epoch: 0, key: new Uint8Array(32) }
 const FILE_KEY = new Uint8Array(32).fill(9)
 
 const stubs = {

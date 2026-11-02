@@ -51,9 +51,9 @@ class ScopeEntity : PanacheEntityBase {
     @Column(name = "encrypted_name")
     var encryptedName: String? = null
 
-    /** For a GROUP: the content-key epoch the `encryptedName` was sealed under (cr-0096/ADR 0027) — 0 at birth,
-     *  bumped only by a rename (a plain rotation leaves the name on its epoch). Members peel the chain to this
-     *  epoch's key and derive `K_name` from it; a pending invitee is handed `K_name` directly. */
+    /** For a GROUP: the epoch the `encryptedName` was sealed under (cr-0096/ADR 0027) — 0 at birth, moved by a rename
+     *  and by every rotation, whose commit re-seals the name at its new epoch (ADR 0115 decision 2): the scope's current
+     *  epoch, whose key derives `K_name`; a pending invitee is handed `K_name` directly. */
     @Column(name = "name_epoch", nullable = false)
     var nameEpoch: Int = 0
 
@@ -63,9 +63,9 @@ class ScopeEntity : PanacheEntityBase {
     @Column(name = "sealed_icon")
     var sealedIcon: String? = null
 
-    /** The content-key epoch `sealedIcon` was sealed under (uc.spaces.set-space-icon, ADR 0027's per-field epoch) —
-     *  0 until an icon is set, bumped only by an icon-set (a plain rotation leaves it). Members peel the chain to
-     *  this epoch's key and derive `K_icon`. On a TENANT it is 0 in practice (no routine re-key, ADR 0025). */
+    /** The epoch `sealedIcon` was sealed under (uc.spaces.set-space-icon, ADR 0027's per-field epoch) — 0 until an
+     *  icon is set, moved by an icon-set and by every rotation, whose commit re-seals the icon (ADR 0115 decision 2):
+     *  the scope's current epoch, whose key derives `K_icon`. */
     @Column(name = "icon_epoch", nullable = false)
     var iconEpoch: Int = 0
 

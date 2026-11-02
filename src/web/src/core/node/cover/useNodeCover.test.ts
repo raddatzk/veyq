@@ -39,13 +39,13 @@ import { FILE_KIND } from '../../../features/depot/kinds'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { Access } from '../../access'
 import type { TreeNode } from '../tree'
-import type { EpochKeys } from '../../../features/spaces/epochs'
+import type { ScopeKey } from '../../../features/spaces/epochs'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../../test/models'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const KEY = v1.randomBytes(32)
-const EPOCHS = {} as EpochKeys
+const EPOCHS = {} as ScopeKey
 const crop: CoverCrop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }
 const FULL = { x: 0, y: 0, width: 1, height: 1 }
 

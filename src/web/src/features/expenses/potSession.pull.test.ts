@@ -28,7 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   pot = new PotServer(v1.randomBytes(32))
   vi.mocked(pullRekeyPath).mockReturnValue(pull)
-  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: pot.potKey, epoch: 1 }))
+  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: pot.potKey, epoch: 1, scopeEpoch: 1 }))
   vi.mocked(appendPotWrites).mockRejectedValueOnce(pending()).mockResolvedValue([])
   vi.mocked(readGuestPot).mockResolvedValue(null)
 })
@@ -39,7 +39,7 @@ function session(guest: boolean) {
     ? guestAccessOf('READ_WRITE', { requestGuest: async () => ({ identityId: 'g', contributorToken: 't' }) })
     : memberAccessOf({ scopeId: SCOPE })
   return effectScope().run(() =>
-    usePotSession({ access: () => access, scopeId: () => SCOPE, node: () => node, potKey: () => pot.potKey, epochs: () => ({ current: 1, keys: new Map() }), tree: () => memberTreeOf(() => [node], { scopeId: SCOPE }), live: false }),
+    usePotSession({ access: () => access, scopeId: () => SCOPE, node: () => node, potKey: () => pot.potKey, epochs: () => ({ epoch: 1, key: new Uint8Array(32) }), tree: () => memberTreeOf(() => [node], { scopeId: SCOPE }), live: false }),
   )!
 }
 

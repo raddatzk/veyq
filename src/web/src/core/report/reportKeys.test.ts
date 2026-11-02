@@ -1,6 +1,6 @@
 // What a report hands over for a node and a link (en.moderation.hold § What a report hands over), against real
 // seals: each key opens the
-// field it is tagged for and nothing else is handed over. A node's name is under its PARENT's key (`K_SC` at its epoch for
+// field it is tagged for and nothing else is handed over. A node's name is under its PARENT's key (the scope's one key `K_SC` for
 // a scope-root node), so the report carries the name's own K_field beside K_node; a guest's link root is named by the link.
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
@@ -18,12 +18,12 @@ const CHILD = '5c09e000-0000-4000-8000-0000000000b0'
 const K_SC = v1.randomBytes(32)
 const K_ROOT = v1.randomBytes(32)
 const K_CHILD = v1.randomBytes(32)
-const epochs = { current: 0, keys: new Map([[0, K_SC]]) }
+const epochs = { epoch: 0, key: K_SC }
 
 function node(id: string, parentId: string | null, entryKey: Uint8Array, key: Uint8Array, name: string, meta = false): TreeNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
+  const address = { scopeId: SCOPE, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
   return {
-    id, parentId, kind: FOLDER_KIND, orderIndex: 0, epoch: 0, name, createdAt: 0, metaRevision: 0, placementRevision: 0,
+    id, parentId, kind: FOLDER_KIND, orderIndex: 0, epoch: 0, scopeEpoch: 0, name, createdAt: 0, metaRevision: 0, placementRevision: 0,
     encryptedName: sealName(entryKey, address, name),
     wrappedContentKey: wrapContentKey(entryKey, address, key),
     wrappedMeta: meta ? sealNodeMeta(key, { scopeId: SCOPE, nodeId: id }, { v: 1, date: '2026' }) : null,
@@ -50,7 +50,7 @@ describe('nodeReportKeys', () => {
     expect(new TextDecoder().decode(meta)).toContain('2026')
   })
 
-  it('a scope-root node: its name under K_SC at the node\'s epoch; no meta, no key for it', () => {
+  it('a scope-root node: its name under the scope\'s one key K_SC; no meta, no key for it', () => {
     const keys = nodeReportKeys(access, tree, SCOPE, nodes[0])!
     expect(keys.map((k) => k.role)).toEqual(['NODE', 'NODE_NAME'])
     expect(nameOf(nodes[0], keys[1].key)).toBe('Familie')

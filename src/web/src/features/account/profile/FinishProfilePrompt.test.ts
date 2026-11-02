@@ -102,7 +102,7 @@ describe('FinishProfilePrompt', () => {
     // A name that opens only under the handed key: the read used the key before it was zeroed.
     vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'A', lastName: 'B' }) }))
     expect(prompt(await mountPrompt()).exists()).toBe(false)
-    expect([...handed!.epochs.keys.values()].every((k) => k.every((b) => b === 0))).toBe(true)
+    expect(handed!.epochs.key.every((b) => b === 0)).toBe(true)
   })
 
   it('zeroes the tenant keys even when the profile read fails before they arrive', async () => {
@@ -116,7 +116,7 @@ describe('FinishProfilePrompt', () => {
     arrive()
     await flushPromises()
     expect(prompt(w).exists()).toBe(false)
-    expect([...handed!.epochs.keys.values()].every((k) => k.every((b) => b === 0))).toBe(true)
+    expect(handed!.epochs.key.every((b) => b === 0)).toBe(true)
   })
 
   it('stores no image and no name - only the flag', async () => {

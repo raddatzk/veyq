@@ -15,13 +15,16 @@ import jakarta.enterprise.context.ApplicationScoped
 sealed interface RekeyOutcome {
     data class Nodes(val currentEpoch: Int, val rows: List<RekeyNodeRow>) : RekeyOutcome
     data class Parts(val parts: RekeyParts) : RekeyOutcome
+    /** One page of a rotation's scope-level rows ([ScopeRekeyHandler.parts]). */
+    data class ScopeParts(val page: ScopeRekeyPage) : RekeyOutcome
     object Staged : RekeyOutcome
     object Committed : RekeyOutcome
     object NotFound : RekeyOutcome, HttpFailure by Failures.nodeNotFound
     object InvalidRequest : RekeyOutcome, HttpFailure by Failures.invalidRequest
-    /** The node's epoch is not the one stated, it lags nothing (nothing left to re-key), or `epoch` is not current. */
+    /** The node's own epoch is not the one stated, it is not due (nothing left to re-key), or `scopeEpoch` is not
+     *  current. */
     object Stale : RekeyOutcome, HttpFailure by Failures.staleEpoch
-    /** The parent is not re-keyed yet — top-down. */
+    /** The parent is still due — top-down. */
     object Pending : RekeyOutcome, HttpFailure by Failures.nodeRekeyPending
     object StalePlacement : RekeyOutcome, HttpFailure by Failures.stalePlacement
     data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : RekeyOutcome, HttpFailure by Failures.staleRevision
@@ -63,8 +66,8 @@ class RekeyHandler(private val rights: RekeyAccess, private val store: RekeyStor
 
     /**
      * Stage [values] of [part] (core's, or an application's — its participant's [NodeRekeyParticipant.part]) for
-     * [nodeId] under [rekeyId], after the re-key rights and a check that the node still lags at [fromEpoch]: a node
-     * another member re-keyed meanwhile has nothing left to stage ([RekeyStageOutcome.Stale]).
+     * [nodeId] under [rekeyId], after the re-key rights and a check that the node is still due at its own epoch
+     * [fromEpoch]: a node another member re-keyed meanwhile has nothing left to stage ([RekeyOutcome.Stale]).
      */
     fun stagePart(
         userId: String, scopeId: String, nodeId: String, rekeyId: String, fromEpoch: Int, part: String,
@@ -72,8 +75,7 @@ class RekeyHandler(private val rights: RekeyAccess, private val store: RekeyStor
     ): RekeyOutcome {
         refusal(userId, scopeId, WRITE, nodeId)?.let { return it }
         val node = store.node(scopeId, nodeId) ?: return RekeyOutcome.NotFound
-        val current = ScopeEntity.findById(scopeId)?.currentEpoch ?: return RekeyRight.NoScope
-        if (node.epoch != fromEpoch || node.epoch >= current) return RekeyOutcome.Stale
+        if (node.epoch != fromEpoch || !node.rekeyDue) return RekeyOutcome.Stale
         stage.put(rekeyId, scopeId, nodeId, part, values)
         return RekeyOutcome.Staged
     }

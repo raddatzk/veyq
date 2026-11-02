@@ -18,7 +18,6 @@ import {
   resolveGroupMember, revokeMemberInvite,
 } from './members'
 import { createGroup, listMyScopes, openScope, openScopeById, wrapGroupNameKeyForInvitee } from './scopes'
-import { keyAt } from './epochs'
 import { InviteCodeWrong, forgetMemberInvite, openMemberInvite, previewInvite, registerAndAccept } from '../tenant/tenantInvite'
 import { updateMyProfile } from '../account/profile/profile'
 import { createFolder, listTree } from '../../core/node/tree'
@@ -82,7 +81,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('a member invite is a placeholder member 
     // Control on the same call: the right code opens it and the invite's checks pass.
     const opened = await openMemberInvite(tenantId, preview.invite!, sealed!, code)
     expect(opened.grantedEpoch, 'the invite holds the tenant\'s current epoch').toBe(0)
-    expect(b64std(opened.epochKey), 'the invite\'s grant carries the tenant key A holds').toBe(b64std(keyAt(openedA!.epochs, 0)))
+    expect(b64std(opened.epochKey), 'the invite\'s grant carries the tenant key A holds').toBe(b64std(openedA!.epochs.key))
     forgetMemberInvite(opened)
 
     // --- B registers through the real accept with its join: the self-grant, the invite key's proof, the join record --
@@ -107,7 +106,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('a member invite is a placeholder member 
     const rowOfB = (await listScopeMembers(tenantId)).find((m) => m.userId === B.userId)
     expect(rowOfB?.sealedJoinRecord, 'the listing serves B\'s sealed join record').toBeTruthy()
     const envelope = fromB64std(rowOfB!.sealedJoinRecord!)
-    const tenantKey = keyAt((await openScope(ScopeKind.Tenant))!.epochs, 0)
+    const tenantKey = (await openScope(ScopeKind.Tenant))!.epochs.key // the tenant's one key (ADR 0115 decision 1)
     const record = invite.openJoinRecord(tenantKey, { tenantId, userId: B.userId! }, envelope)
     expect(invite.joinRecordVerifies({ tenantId, userId: B.userId! }, record), 'both signatures and A\'s invite-key signature verify').toBe(true)
     expect(b64std(record.identityPublicKey), 'it names B\'s identity').toBe(b64std(v1.serializeIdentityPublic(B.built.identity.pub)))

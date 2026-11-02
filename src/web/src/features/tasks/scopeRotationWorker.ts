@@ -3,7 +3,7 @@
 // the owner doesn't hold, the backend queues a SCOPE_ROTATION job (it can't rotate — it holds no key there).
 // A secured account queues none: it finishes its own scopes first in every pass (`finishRotation`,
 // ADR 0111 decision 8). The next online **owner** of the scope completes it
-// on-device: mint E_{n+1}, chain-link E_n, re-grant the surviving members (reusing `commitRotation`, cr-0089), then
+// on-device: mint E_{n+1} replacing E_n, re-seal the scope-level rows, re-grant the surviving members (reusing `commitRotation`, cr-0089), then
 // complete. The backend offers the job to owners only (the only members who may commit a rotation), so this worker
 // is never handed one it could not finish — except by a race it declines (below). Claimed **globally across every
 // held scope** — an owner sitting anywhere (even their own personal scope) drains queued rotations WITHOUT opening

@@ -2,12 +2,12 @@
 
 - **ID:** uc.sharing.share-note
 - **Primary actor:** The **curator** (the person who owns/shares the Memory), signed in with the Memory open in
-  their scope — so they hold the scope's epoch keys (**`K_SC`**) and the Memory's **`K_node`**.
+  their scope — so they hold the scope key (**`K_SC`**) and the Memory's **`K_node`**.
 - **Goal:** Attach an **optional short note** to a share link (a greeting / instruction), **set when creating the
   share and editable in place afterward**, shown E2EE on the share page to whoever opens the link. One-way
   (curator → viewer).
 - **Preconditions:** A node the curator can share (a Memory or a folder, in any scope the curator is a member of); for an edit, an existing share of theirs.
-  The curator holds the scope's epoch keys (the Memory is open) — the note seals under a field key derived from **`K_share`**, and `K_share`
+  The curator holds the scope key (the Memory is open) — the note seals under a field key derived from **`K_share`**, and `K_share`
   is recovered through `K_SC` for a later edit ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 - **Postconditions (success):** the share carries a **`sealed_note`** (sealed under a field key derived from `K_share`) + a
   **`sealed_share_key`** (`K_share` under `K_SC` at the scope's current epoch, stored with that epoch); the
@@ -22,7 +22,8 @@ that link's holders read it (mirrors the Memory-name seal `sealedName`). Because
 never stored in the clear, the share also carries a **recoverable copy** — **`sealed_share_key`**, `K_share`
 sealed under the scope key **`K_SC` at the scope's current epoch** (AAD `share-key-recovery` bound to scope,
 Memory, share and epoch — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), with the epoch stored
-beside it — so every scope member can recover `K_share` **anytime** to re-seal (edit) the note without minting a
+beside it; every rotation re-seals it under the new key, keeping the epoch the link was minted at beside it for the
+re-issue rule ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2) — so every scope member can recover `K_share` **anytime** to re-seal (edit) the note without minting a
 new link ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 **The recovery copy is for the Memory's members only.** It is deliberately *not* under `K_node`: every READ or
 READ_WRITE link carries `K_node`, so such a copy would let one link plus a database dump open every other share of
@@ -45,8 +46,8 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
    after the password and the tenant's terms and before anything of the share is drawn, for every role: the note and
    **Accept**. Accepting is remembered on this device for this share and this note's text, so an edited note asks
    again; where the device cannot remember (storage refused), it asks every time. Nothing is sent to the server.
-3. Later, the curator **edits** the note: in the Memory's share dialog (which holds the scope's epoch keys) they
-   pick the share, the client **recovers `K_share`** from `sealed_share_key` at its epoch, re-seals the new note,
+3. Later, the curator **edits** the note: in the Memory's share dialog (which holds the scope key) they
+   pick the share, the client **recovers `K_share`** from `sealed_share_key` under the current scope key, re-seals the new note,
    and calls the owner-gated
    **`updateShare`** — the same link now shows the new note.
 
@@ -71,8 +72,9 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
   rebuilds no other link (ADR 0036 point 4).
 - **A member removed from a group scope** keeps the `K_share` of every share they ever opened — it does not change
   for the life of the link — so with a dump they keep reading that share, including later edits of its note, label
-  or password, and can still use its link. Shares minted after the removal are out of their reach; cutting them off
-  an existing link means re-issuing it (ADR 0036 point 4).
+  or password, and can still use its link while it is open. Shares minted after the removal are out of their reach;
+  cutting them off an existing link means re-issuing it (ADR 0036 point 4), which closes it and re-keys the subtree
+  below its root.
 - **A share minted before the recovery copy moved to `K_SC`** (an un-reset development instance) → its copy does not
   open; the manage list shows no label, note or password for it and cannot re-copy its link. Its guests are
   unaffected.

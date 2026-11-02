@@ -47,8 +47,8 @@ const keys = { root: v1.randomBytes(32), sub: v1.randomBytes(32), memory: v1.ran
 const HASH = `#k=${b64url(K_SHARE)}`
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE_ID, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 function head(role: ShareRole): PublicShareHead {
   return {
@@ -56,7 +56,7 @@ function head(role: ShareRole): PublicShareHead {
     share: {
       role, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
       nodes: [
-        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
         child(SUB, ROOT, keys.root, keys.sub, 'Briefe', FOLDER_KIND),
         child(MEMORY, ROOT, keys.root, keys.memory, 'Rom 2026', MEMORY_KIND),
         child(FILE, ROOT, keys.root, keys.file, 'rezept.pdf', FILE_KIND),

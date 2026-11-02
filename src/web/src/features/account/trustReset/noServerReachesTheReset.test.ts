@@ -131,7 +131,7 @@ beforeEach(() => {
   })
   vi.mocked(openScopeById).mockImplementation(async () => {
     const key = v1.randomBytes(32)
-    return { scopeId: S1, tenantId: S1, kind: ScopeKind.Tenant, key, epochs: { current: 0, keys: new Map([[0, key]]) }, nameEpoch: 0, deletedAt: null, purgeAfter: null }
+    return { scopeId: S1, tenantId: S1, kind: ScopeKind.Tenant, key, epochs: { epoch: 0, key }, nameEpoch: 0, deletedAt: null, purgeAfter: null }
   })
   vi.mocked(listScopeMembers).mockImplementation(async () => [
     { userId: TARGET_ID, username: 'target', avatarRevision: 0, role: 'OWNER', ...target(), pending: false },

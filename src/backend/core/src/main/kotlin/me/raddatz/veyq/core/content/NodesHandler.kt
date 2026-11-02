@@ -27,11 +27,11 @@ sealed interface CreateNodeOutcome {
     object IllegalStructure : CreateNodeOutcome, HttpFailure by Failures.illegalStructure
     object SlugTaken : CreateNodeOutcome, HttpFailure by Failures.slugTaken
     object IdTaken : CreateNodeOutcome, HttpFailure by Failures.idTaken
-    /** The node is tagged with an epoch that is not the scope's current one (ADR 0024 Decision 6, ADR 0109 point 6: a
-     *  key is minted at the current epoch, a guest's included), or the parent's stated epoch is not its stored one —
+    /** The node's key is minted under a `scopeEpoch` that is not the scope's current one (ADR 0114 decision 3: a key is
+     *  minted at the current epoch, a guest's included), or the parent's stated own epoch is not its stored one —
      *  nothing stored. */
     object StaleEpoch : CreateNodeOutcome, HttpFailure by Failures.staleEpoch
-    /** The parent is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing stored. */
+    /** The parent is due for its re-key (ADR 0114 decision 3) — nothing stored. */
     object RekeyPending : CreateNodeOutcome, HttpFailure by Failures.nodeRekeyPending
     /** A create under a node that states no `parentEpoch`. */
     object InvalidRequest : CreateNodeOutcome, HttpFailure by Failures.invalidRequest
@@ -64,11 +64,11 @@ sealed interface UpdateNodeOutcome {
     object IncompletePlacement : UpdateNodeOutcome, HttpFailure by Failures.invalidRequest
     /** The node was moved or renamed past the stated `placementRevision`; nothing was written (ADR 0080 Decision 3). */
     object StalePlacement : UpdateNodeOutcome, HttpFailure by Failures.stalePlacement
-    /** A placement stating an epoch that is not the node's, or a `nodeEpoch` / `parentEpoch` not the stored one (ADR
-     *  0109 point 6). */
+    /** A placement stating an epoch that is not the node's own, or a `nodeEpoch` / `parentEpoch` not the stored one
+     *  (ADR 0114 decision 3). */
     object StaleEpoch : UpdateNodeOutcome, HttpFailure by Failures.staleEpoch
-    /** The node at the scope root, the destination parent or the node a meta seals under is not re-keyed yet (ADR 0109
-     *  point 6). */
+    /** The node a placement re-wraps or a meta seals under, or the destination parent, is due for its re-key (ADR 0114
+     *  decision 3). */
     object RekeyPending : UpdateNodeOutcome, HttpFailure by Failures.nodeRekeyPending
     /** The node's `wrappedMeta` moved past the stated revision; nothing was written (ADR 0077). Carries the current
      *  blob and revision for the loser to re-apply its own change on. */
@@ -135,7 +135,7 @@ class NodesHandler(
 
     fun create(
         userId: String, scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
-        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
+        encryptedName: String, slugToken: String, orderIndex: Int, scopeEpoch: Int, wrappedContentKey: String, wrappedMeta: String?,
         parentEpoch: Int?,
     ): CreateNodeOutcome {
         // The request's own shape first, as the boundary's validation is: a parent node without its `parentEpoch`, or the
@@ -146,7 +146,7 @@ class NodesHandler(
         // The member's create opens its own transaction: the loser of a concurrent create answers as its replay does.
         return createOrConflict(conflict = createReplay(scopeId, parentSlotId, slugToken, nodeId)) {
             createInScope(
-                scopeId, nodeId, parentSlotId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta,
+                scopeId, nodeId, parentSlotId, kind, encryptedName, slugToken, orderIndex, scopeEpoch, wrappedContentKey, wrappedMeta,
                 parentEpoch, editor = PrincipalKey.User(userId),
             )
         }
@@ -189,7 +189,7 @@ class NodesHandler(
      */
     internal fun createInScope(
         scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
-        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
+        encryptedName: String, slugToken: String, orderIndex: Int, scopeEpoch: Int, wrappedContentKey: String, wrappedMeta: String?,
         parentEpoch: Int?, editor: PrincipalKey, boundary: SubtreeBoundary? = null, identityWriter: String? = null,
     ): CreateNodeOutcome {
         check(QuarkusTransaction.getStatus() != Status.STATUS_NO_TRANSACTION) { "createInScope joins its caller's transaction; open one with createOrConflict" }
@@ -201,15 +201,16 @@ class NodesHandler(
         // create landed outside with the reads before the lock). A caller that took the lock already — a guest's
         // create — re-takes it here at no cost: the row is this transaction's.
         store.lockScope(scopeId)
-        // ADR 0024 Decision 6, ADR 0109 point 6, layer 1: a node's epoch is the epoch its key was minted at, and a key
-        // is minted at the current one — at the root, where the entry is under K_SC, and below it, member and guest
-        // alike (this narrows ADR 0080 Decision 6's "at or below": a writer told to re-read never leaves a name
-        // unopenable). Under the lock a rotation takes, so a rotation that committed first is seen.
-        // One exception, answered below instead: a guest knows no scope epoch and states its parent's served one as the
-        // node's (`guestTree.ts`), so under a parent not re-keyed yet its create is the parent's `node_rekey_pending`
-        // — the guest waits for a member's device (ADR 0111 decision 11) — not a `stale_epoch` no re-read could cure.
+        // ADR 0114 decision 3, layer 1: a key is minted under the scope's CURRENT epoch — at the root, where the entry is
+        // under the scope key, and below it, member and guest alike (this narrows ADR 0080 Decision 6's "at or below":
+        // a writer told to re-read never leaves a name unopenable). The node keeps it as its `scopeEpoch`; its own epoch
+        // starts at 0. Under the lock a rotation takes, so a rotation that committed first is seen.
+        // Under a node it is answered after the parent's gate instead: a guest knows no scope epoch and states its
+        // parent's served `scopeEpoch` (`PublicShare.rootScopeEpoch` for the root), so under a parent still due its
+        // create is the parent's `node_rekey_pending` — the guest waits for a member's device (ADR 0111 decision 11) —
+        // not a `stale_epoch` no re-read could cure.
         val current = store.currentEpoch(scopeId)
-        if (epoch != current && (parentSlotId == null || epoch != parentEpoch)) return CreateNodeOutcome.StaleEpoch
+        if (scopeEpoch != current && parentSlotId == null) return CreateNodeOutcome.StaleEpoch
         // null/absent → the scope root (slot = scope id); a member's create never names the slot itself (parentShapeFault)
         val slot = parentSlotId ?: scopeId
         val parent = store.parentSlot(scopeId, slot)
@@ -225,8 +226,8 @@ class NodesHandler(
         // import are creates too, so they stop here as well.
         if (!applications.isKindWritable(kind, scopeId)) return CreateNodeOutcome.CapabilityDisabled
         store.identityFolderOwner(scopeId, slot)?.let { owner -> if (owner != identityWriter) return CreateNodeOutcome.IllegalStructure }
-        // The entry is sealed under the parent's key: the parent's epoch as the writer read it, under the parent's row
-        // lock (ADR 0109 point 6) — after the scope lock, as every writer and the re-key's commit take them.
+        // The entry is sealed under the parent's key: the parent's own epoch as the writer read it, under the parent's
+        // row lock (ADR 0114 decision 3) — after the scope lock, as every writer and the re-key's commit take them.
         if (parent is ParentSlot.Node) {
             when (gate.check(scopeId, slot, parentEpoch ?: return CreateNodeOutcome.InvalidRequest)) {
                 NodeEpochGate.Verdict.OK -> Unit
@@ -235,12 +236,13 @@ class NodesHandler(
                 NodeEpochGate.Verdict.PENDING -> return CreateNodeOutcome.RekeyPending
             }
         }
-        // The deferred case's end: a parent the gate let through is current, so a node epoch still below it is stale.
-        if (epoch != current) return CreateNodeOutcome.StaleEpoch
+        // The deferred case's end: a parent the gate let through is not due, so it carries the current epoch, and a
+        // `scopeEpoch` that is not that one is stale.
+        if (scopeEpoch != current) return CreateNodeOutcome.StaleEpoch
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
         // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is
         // stored verbatim or not at all.
-        val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta, editor)
+        val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, scopeEpoch, wrappedContentKey, wrappedMeta, editor)
         return if (created) CreateNodeOutcome.Created(nodeId) else createReplay(scopeId, parentSlotId, slugToken, nodeId)() ?: CreateNodeOutcome.IdTaken
     }
 
@@ -261,7 +263,7 @@ class NodesHandler(
     /**
      * What a placement write (a move or a rename — one request shape, ADR 0080 Decision 3) carries: the destination
      * ([parentId], null = the scope root; a rename names the current parent), the node's content key re-wrapped under
-     * the destination's key, the name and slug re-sealed under it, the [epoch] they were sealed at and the
+     * the destination's key, the name and slug re-sealed under it, the node's own [epoch] as read and the
      * [placementRevision] they were built on. Every field but the parent is required once any of them is sent.
      */
     data class PlacementRequest(
@@ -271,7 +273,7 @@ class NodesHandler(
         val wrappedContentKey: String?,
         val epoch: Int?,
         val placementRevision: Long?,
-        /** The destination parent's epoch as read, with a placement to a parent node (ADR 0109 point 6). */
+        /** The destination parent's own epoch as read, with a placement to a parent node (ADR 0114 decision 3). */
         val parentEpoch: Int? = null,
     ) {
         /** Whether the request asks for a placement at all — any of its fields, the destination included. */
@@ -285,8 +287,8 @@ class NodesHandler(
         val complete: Boolean
             get() = completeWithoutEpoch && epoch != null
 
-        /** [complete] but for the [epoch] — what a bounded placement needs ([updateInScope]): it never touches the
-         *  scope root, so it keeps the node's stored epoch and states none. */
+        /** [complete] but for the [epoch] — what a bounded placement needs ([updateInScope]): a guest's, which states no
+         *  epoch of the node; a key replaced since it read the node moved its `placementRevision` too. */
         val completeWithoutEpoch: Boolean
             get() = !encryptedName.isNullOrBlank() && !slugToken.isNullOrBlank() && !wrappedContentKey.isNullOrBlank() &&
                 placementRevision != null
@@ -365,7 +367,7 @@ class NodesHandler(
 
         var write: NodesStore.Placement? = null
         val claims = mutableListOf<NodesStore.EpochClaim>()
-        // The meta is sealed under the node's own key (ADR 0109 point 6).
+        // The meta is sealed under the node's own key (ADR 0114 decision 3).
         if (wrappedMeta != null) claims += NodesStore.EpochClaim(nodeId, nodeEpoch!!)
         if (placement.present) {
             val slot = placement.parentId ?: scopeId // null/absent → the scope root (slot = scope id)
@@ -381,17 +383,17 @@ class NodesHandler(
             // enters an identity folder, so no concurrent write can turn a destination outside into one inside.
             if (store.identityFolderOwner(scopeId, slot) != null) return UpdateNodeOutcome.IllegalStructure
             if (slot == nodeId || store.wouldCycle(scopeId, nodeId, slot)) return UpdateNodeOutcome.IllegalStructure
-            // ADR 0109 point 6: a placement never changes the node's epoch — the epoch its key was minted at, which the
-            // entry's seals bind. So a stated epoch is the node's own (the gate under the lock says STALE otherwise); at
-            // the scope root the entry is under K_SC at it, so a node the last rotation's re-key has not reached may not
-            // go there (or be renamed there) yet. Below the root the entry is under the destination parent's key: its
-            // epoch, stated as read, under the parent's row lock. A bounded placement (a guest's) states no epoch of its
-            // own — it keeps the stored one and never touches the root, which is outside every boundary.
+            // ADR 0114 decision 3: a placement re-wraps the node's own key and keeps it, so a stated epoch is the node's
+            // own (the gate under the lock says STALE otherwise), and a node due for its re-key waits — its key is about
+            // to be replaced. Below the root the entry is under the destination parent's key: its own epoch, stated as
+            // read, under the parent's row lock. A bounded placement (a guest's) states no epoch of its node — a key
+            // replaced since moved the node's placement revision too — and never touches the root, which is outside
+            // every boundary.
             val epoch = placement.epoch
             if (epoch == null) {
                 if (parent is ParentSlot.Root) return UpdateNodeOutcome.IllegalStructure
             } else {
-                claims += NodesStore.EpochClaim(nodeId, epoch, pendingRefuses = parent is ParentSlot.Root)
+                claims += NodesStore.EpochClaim(nodeId, epoch)
             }
             if (parent is ParentSlot.Node) {
                 claims += NodesStore.EpochClaim(slot, placement.parentEpoch ?: return UpdateNodeOutcome.IncompletePlacement)

@@ -63,6 +63,8 @@ MEDIUMTEXT_BACKED: dict[tuple[str, str, str], str] = {
     ("memories/item-favorites.openapi.yaml", "ItemFavoritesEntry", "ciphertext"): "ciphertext",
     ("memories/item-favorites.openapi.yaml", "PutItemFavoritesRequest", "ciphertext"): "ciphertext",
     ("memories/item-favorites.openapi.yaml", "OwnItemFavoritesEntry", "ciphertext"): "ciphertext",
+    ("memories/item-favorites.openapi.yaml", "ItemFavoritesRekeyRow", "ciphertext"): "ciphertext",
+    ("memories/item-favorites.openapi.yaml", "ItemFavoritesRekeySeal", "ciphertext"): "ciphertext",
     ("tasks.openapi.yaml", "ClaimedJob", "sealedBody"): "sealed_body",
     ("tasks.openapi.yaml", "EnqueueRequest", "sealedBody"): "sealed_body",
     ("tasks.openapi.yaml", "CompleteRequest", "sealedResult"): "sealed_result",

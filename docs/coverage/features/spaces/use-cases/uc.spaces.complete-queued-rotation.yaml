@@ -59,7 +59,7 @@ acceptanceCriteria:
   - id: done-only-once-rekeyed
     text: >
       After committing the epoch the owner's worker re-keys every node of the scope (uc.spaces.rekey-after-rotation)
-      and completes the job only then: a completion while a live or trashed node lags the current epoch is 409
+      and completes the job only then: a completion while a live or trashed node is still due for its re-key is 409
       rekey_incomplete with the job kept leased, and a re-key that does not finish leaves the job leased and
       uncompleted (ADR 0109 point 7).
     coverage:

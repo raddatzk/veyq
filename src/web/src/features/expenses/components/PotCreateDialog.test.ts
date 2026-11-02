@@ -17,7 +17,7 @@ vi.mock('../../../core/node/tree', async (orig) => ({
   createContentNode: vi.fn(async (scopeId: string, _e: unknown, _p: unknown, kind: string, _n: string, sealer: (k: Uint8Array, n: { scopeId: string; nodeId: string }) => string) => {
     state.kinds.push(kind)
     state.meta = sealer(state.server.potKey, { scopeId, nodeId: state.server.nodeId })
-    return { nodeId: state.server.nodeId, contentKey: state.server.potKey, epoch: 0 }
+    return { nodeId: state.server.nodeId, contentKey: state.server.potKey, epoch: 0, scopeEpoch: 0 }
   }),
 }))
 vi.mock('../domain/potApi', async (orig) => ({ ...(await orig<object>()), appendPotWrites: vi.fn() }))
@@ -90,7 +90,7 @@ async function submit() {
 
 async function open() {
   const w = mount(PotCreateDialog, {
-    props: { kind: POT_KIND, scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), parentId: null, parentKey: null, parentEpoch: null },
+    props: { kind: POT_KIND, scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null },
     global: { plugins: [realI18n()] },
     attachTo: document.body,
   })

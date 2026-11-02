@@ -13,7 +13,7 @@ import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { identityPrivate } from '../../app/vault'
 import { me } from './grantTrust'
 import { listMyTenants, openScopeById } from './scopes'
-import { writeKey, zeroEpochKeys } from './epochs'
+import { zeroScopeKey } from './epochs'
 import { recipientIdentityDigest, sealGrant } from './grant'
 import { myChainHead } from '../account/tenantTrust'
 import type { MemberInviteRequest } from '../../api/generated/tenants'
@@ -90,12 +90,12 @@ export async function buildMemberInvite(tenantId: string, email: string, secret:
     const self = await me(priv)
     return await sealMemberInvite(
       tenantId, email, secret, { userId: self.userId, pub: self.pub, head: fromB64std(head), signPrivateKey: priv.sign },
-      { epoch: opened.epochs.current, key: writeKey(opened.epochs) }, ttl,
+      { epoch: opened.epochs.epoch, key: opened.epochs.key }, ttl,
     )
   } finally {
     priv?.kemSeed.fill(0)
     priv?.sign.fill(0)
-    zeroEpochKeys(opened.epochs)
+    zeroScopeKey(opened.epochs)
   }
 }
 

@@ -51,10 +51,10 @@ acceptanceCriteria:
       backend:
         integration: [ScopesSliceTest.listEpochsSeparatesTheMembershipBoundaryFromTheKeyHolderCheck, ScopesSliceTest.addGroupMemberByANonMemberOfTheGroupIs404, OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate]
   - id: remove-rotates-forward
-    text: Removal rotates the scope content key forward into a new epoch, re-granted only to the remaining members; new content seals under it, so the removed member reads pre-removal content but never post-removal content (even against a malicious operator). The client mints the epoch, chain-links the old one, and re-grants the survivors (cr-0089).
+    text: Removal rotates the scope content key forward into a new epoch, re-granted only to the remaining members; new content seals under it, so the removed member never reads post-removal content (even against a malicious operator). The client mints the epoch, which replaces the old key (no chain, ADR 0115 decision 1), re-seals every scope-level row under it, proves it by a succession statement, and re-grants the survivors.
     coverage:
       backend: { integration: [ScopesSliceTest.rotateBumpsEpochAndReGrantsRemaining] }
-      web: { unit: [src/features/spaces/scopes.test.ts, src/features/spaces/epochs.test.ts] }
+      web: { unit: [src/features/spaces/scopes.test.ts, src/features/spaces/scopeRekey.test.ts, src/features/spaces/epochs.replaced.probe.test.ts] }
   - id: queued-rotation-backstop
     text: >
       A2 (the remover holds no key): when a tenant owner's removal cuts a co-shared group they do not hold
@@ -71,7 +71,7 @@ acceptanceCriteria:
     text: >
       A rotation states the epoch it creates and commits only as the scope's current epoch + 1; anything else (it
       lost a race, or rode a grant a previous rotation skipped) is refused as 409 stale_epoch with nothing stored,
-      so no chain-link can name a key that is not its predecessor. The device re-opens its grant and retries once
+      so a succession statement is always signed by the epoch it succeeds. The device re-opens its grant and retries once
       from a fresh key; a queued rotation job that stays stale is declined for a current owner (ADR 0024 §4).
     coverage:
       backend:
@@ -79,7 +79,7 @@ acceptanceCriteria:
         integration: [ScopesSliceTest.aRotationBuiltOnASupersededEpochIs409AndLeavesTheChainIntact, ScopesSliceTest.twoConcurrentRotationsStatingTheSameEpochCommitOnce]
       web: { unit: [src/features/spaces/scopes.test.ts, src/features/tasks/scopeRotationWorker.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
   - id: operator-blind-rotation
-    text: The server sees only role/membership metadata + opaque epoch-chain links, per-member grants, and per-node epoch indices — never a key or a name. The client posts only ciphertext (the chain-link + per-member grants).
+    text: The server sees only role/membership metadata, the succession statement (a public key and a signature), per-member grants, re-sealed ciphertext and per-node epoch counters — never a key or a name. The client posts only ciphertext and public values (the succession statement, the per-member grants, the re-sealed rows).
     coverage:
       backend: { integration: [ScopesSliceTest.rotateBumpsEpochAndReGrantsRemaining] }
       web: { unit: [src/features/spaces/scopes.test.ts] }
@@ -94,21 +94,19 @@ acceptanceCriteria:
       web:
         unit: [src/features/spaces/scopes.test.ts, src/features/account/trustMarks.test.ts, src/features/account/rotation/rotateKeys.test.ts]
   - id: a-new-epoch-links-to-the-held-key
-    # ADR 0111 decision 23 (inbox #650): beside the floor, the device keeps a commitment to the newest epoch key it held
-    # per scope, and a grant at or above that epoch opens only if its links peel down to exactly that key. Measured red
-    # on the untouched tree: a TENANT grant at epoch 1 under an operator's key and a fabricated, first-seen granter
-    # opened and took the next write; so did one at the held epoch with the links withheld, one whose operator-made link
-    # peels to another key, and a removed member's epoch-1 key linking to the E_0 it held after this device's own
-    # removal-rotation. Eleven bites (the check dropped, the same epoch skipped, the peel not compared, no hold at open or
-    # at commit, a floor without the key, a 404 rethrown, any epoch replacing the held key, the record dropping it,
-    # the carry without it, pairing carrying it) each turned a test red.
+    # ADR 0111 decision 23, ADR 0115 decision 5: beside the floor, the device keeps per scope the succession public key
+    # of the newest epoch key it held, and a grant at or above that epoch opens only if the served succession
+    # statements lead from it to exactly the key the grant carries (verifySuccessionPath). The threat is a TENANT grant
+    # under an operator's key and a fabricated, first-seen granter, which the operator cannot back with a statement
+    # signed from a key it never held.
     # Inbox #750 measured the first grant of a GROUP on real keys (groupFirstGrant.test.ts): it opens from any granter
     # the tenant anchors, in the group or not - the residual ADR 0111 § What stays open names; a granter the tenant does
     # not anchor and a plant on a device that held the key stay refused (each turned red by dropping its check), and a
     # device-local refusal of a first group grant turned every honest control red.
     text: >
       A grant for an epoch at or above the newest one whose key this device holds for a scope opens only if the served
-      epoch links peel down from it to exactly that key; otherwise it is refused (epoch_unlinked), nothing is written
+      succession statements lead from that key's succession public key to exactly the key the grant carries; otherwise
+      it is refused (epoch_unlinked), nothing is written
       under it, and a securing's plan declares the scope unreadable. A first grant, a member pending across several
       epochs, a securing's self-grant and an epoch the device committed itself all open; a group's first grant opens from
       any granter the tenant anchors.

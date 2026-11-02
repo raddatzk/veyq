@@ -4,7 +4,7 @@
 // (Node/tsx) can seal identically without pulling in the app graph.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { openUnderHeldEpochs, type EpochKeys } from '../../spaces/epochs'
+import { type ScopeKey } from '../../spaces/epochs'
 
 /** Whose name it is: the tenant scope it is sealed in and the member it names (ADR 0072). */
 export type MemberNameAddress = { scopeId: string; userId: string }
@@ -42,14 +42,20 @@ export function unsealName(
 }
 
 /**
- * A member's sealed name as every reader opens it: under the tenant epoch it was sealed under, which the profile row does not
- * record (the epoch current when its member saved it), so every held epoch key is tried, newest first
- * ({@link openUnderHeldEpochs}). The name with the epoch it opened under, or null when none opens.
+ * A member's sealed name as every reader opens it: under the tenant's one key (ADR 0115 decision 1) — every rotation
+ * re-seals every profile under the new key, so a name under any other key is one this reader cannot read. Null when it
+ * does not open.
  */
-export function unsealNameUnderEpochs(
-  epochs: EpochKeys, address: MemberNameAddress, sealedName: string | null | undefined,
-): { name: MemberName; epoch: number } | null {
-  if (!sealedName) return null
-  const opened = openUnderHeldEpochs(epochs, (key) => unsealName(key, address, sealedName))
-  return opened && { name: opened.value, epoch: opened.epoch }
+export function openMemberName(
+  epochs: ScopeKey, address: MemberNameAddress, sealedName: string | null | undefined,
+): MemberName | null {
+  return unsealName(epochs.key, address, sealedName)
+}
+
+/**
+ * A rotation's re-seal of a member's name (ADR 0115 decision 2): the field's plaintext opened under the old tenant key and
+ * sealed under the new one as it is, byte for byte. Throws when it does not open under the old key.
+ */
+export function resealMemberName(oldKey: Uint8Array, newKey: Uint8Array, address: MemberNameAddress, sealedName: string): string {
+  return b64std(v1.sealField(context(address), newKey, v1.openField(context(address), oldKey, fromB64std(sealedName))))
 }

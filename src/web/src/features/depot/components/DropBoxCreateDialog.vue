@@ -38,7 +38,9 @@ async function submit() {
   loading.value = true
   try {
     const parent =
-      props.parentId && props.parentKey && props.parentEpoch != null ? { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch } : null
+      props.parentId && props.parentKey && props.parentEpoch != null && props.parentScopeEpoch != null
+        ? { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch, scopeEpoch: props.parentScopeEpoch }
+        : null
     await createDropBox(props.scopeId, props.epochs, parent, name.value.trim(), memberCreateOptions(props.scopeId, parent))
     emit('done')
     emit('close')

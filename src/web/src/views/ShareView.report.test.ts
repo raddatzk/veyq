@@ -48,7 +48,7 @@ const CHILD_KEY = v1.randomBytes(32)
 const M = v1.generateModerationKey()
 
 function head(role: ShareRole): PublicShareHead {
-  const address = { scopeId: SCOPE_ID, nodeId: CHILD, epoch: 0, placementRevision: 0 }
+  const address = { scopeId: SCOPE_ID, nodeId: CHILD, scopeEpoch: 0, placementRevision: 0 }
   const sealedName = b64std(v1.sealField({ purpose: 'share-memory-name' }, K_SHARE, v1.utf8('Familie')))
   // An upload link is a Memory's drop box (Memories claims its page); its guest holds the drop PUBLIC key only.
   const sealedDropPublicKey = b64std(v1.seal({ purpose: 'drop-public-key' }, K_SHARE, v1.serializeHybridPublic(v1.dropKeyPublic(v1.generateDropKey()))))
@@ -57,9 +57,9 @@ function head(role: ShareRole): PublicShareHead {
     : {
         role, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, sealedName, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, ROOT_KEY)),
         nodes: [
-          { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+          { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
           {
-            id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, placementRevision: 0,
+            id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0, placementRevision: 0,
             encryptedName: sealName(ROOT_KEY, address, 'Sommer'), wrappedContentKey: wrapContentKey(ROOT_KEY, address, CHILD_KEY),
           },
         ],

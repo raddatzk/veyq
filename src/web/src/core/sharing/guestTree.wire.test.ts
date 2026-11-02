@@ -1,8 +1,10 @@
 // A guest's tree operations on the wire (uc.sharing.share-contributor:folder-guest-tree-operations, ADR 0080 decisions
 // 2, 3, 6 and 10): recorded at `fetch` — the JSON and headers the real generated client sends, no mock of the API
-// client. A create seals under the PARENT's key (never the root's when the parent is below it, never `K_SC`) at the
-// parent's served epoch and revision 0; a placement re-wraps under the DESTINATION's key at served+1 and states no
-// epoch; one `stale_placement` retry; a readable sibling's name refuses before sending; every refusal maps by its code.
+// client. A create seals under the PARENT's key (never the root's when the parent is below it, never `K_SC`) bound to
+// the parent's served `scopeEpoch` and revision 0, and states that scope epoch and the parent's own epoch (ADR 0114
+// decision 3); a placement re-wraps under the DESTINATION's key at served+1, bound to the node's own `scopeEpoch`, and
+// states only the destination's epoch; one `stale_placement` retry; a readable sibling's name refuses before sending;
+// every refusal maps by its code.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -47,19 +49,28 @@ const kLeft = v1.randomBytes(32)
 const kRight = v1.randomBytes(32)
 const kItem = v1.randomBytes(32)
 
-/** A served child row: its name and key wrap sealed under its parent's key, at its epoch and placement revision. */
-function row(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, epoch: number, placementRevision: number, kind = FOLDER_KIND): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch, placementRevision }
-  return { blockedByOperator: false, id, parentId, kind, epoch, placementRevision, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+/** A served child row: its name and key wrap sealed under its parent's key, bound to its scope epoch and placement
+ *  revision; `epoch` is its own key's. */
+function row(
+  id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string,
+  { epoch, scopeEpoch }: { epoch: number; scopeEpoch: number }, placementRevision: number, kind = FOLDER_KIND,
+): ShareNode {
+  const address = { scopeId: SCOPE_ID, nodeId: id, scopeEpoch, placementRevision }
+  return {
+    blockedByOperator: false, id, parentId, kind, epoch, scopeEpoch, placementRevision,
+    encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key),
+  }
 }
 
-// The root at epoch 5, its two subfolders at epochs 3 and 1, an item in the left one (served at revision 2).
+// Every node's own epoch and scope epoch differ from each other and from every other node's, so each assertion names
+// which number it reads: the root (own 5, scope 2), its subfolders LEFT (3, 1) and RIGHT (7, 2), an item in LEFT
+// (4, 1; served at revision 2).
 function servedNodes(itemRevision = 2): ShareNode[] {
   return [
-    { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 5, placementRevision: 0 },
-    row(LEFT, ROOT, kRoot, kLeft, 'Briefe', 3, 1),
-    row(RIGHT, ROOT, kRoot, kRight, 'Fotos', 1, 0),
-    row(ITEM, LEFT, kLeft, kItem, 'Tagebuch', 4, itemRevision, ITEM_KIND),
+    { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 5, scopeEpoch: 2, placementRevision: 0 },
+    row(LEFT, ROOT, kRoot, kLeft, 'Briefe', { epoch: 3, scopeEpoch: 1 }, 1),
+    row(RIGHT, ROOT, kRoot, kRight, 'Fotos', { epoch: 7, scopeEpoch: 2 }, 0),
+    row(ITEM, LEFT, kLeft, kItem, 'Tagebuch', { epoch: 4, scopeEpoch: 1 }, itemRevision, ITEM_KIND),
   ]
 }
 
@@ -93,10 +104,11 @@ const refused = (status: number, code: string) => () => new Response(JSON.string
 const bytes = (k: Uint8Array) => Array.from(k)
 
 describe('a guest creates a node', () => {
-  it('seals the new key, name and slug under the PARENT\'s key at the parent\'s served epoch and revision 0', async () => {
+  it('seals the new key, name and slug under the PARENT\'s key at the parent\'s served scope epoch and revision 0', async () => {
     const sent = recordFetch(created)
     const ctx = context()
-    const { nodeId, contentKey } = await createShareNodeAsGuest(ctx, { parentId: LEFT, kind: FOLDER_KIND, name: 'Urlaub 1998' })
+    const minted = await createShareNodeAsGuest(ctx, { parentId: LEFT, kind: FOLDER_KIND, name: 'Urlaub 1998' })
+    const { nodeId, contentKey } = minted
 
     expect(sent).toHaveLength(1)
     const { url, method, headers, json } = sent[0]
@@ -104,24 +116,28 @@ describe('a guest creates a node', () => {
     expect(url).toContain(`/api/shares/${SHARE_ID}/nodes`)
     expect(headers.get('X-Contributor-Token')).toBe(TOKEN)
     expect(headers.get('X-Share-Password')).toBe(PW)
-    expect(Object.keys(json).sort()).toEqual(['encryptedName', 'epoch', 'kind', 'nodeId', 'parentEpoch', 'parentId', 'slugToken', 'wrappedContentKey'])
-    expect(json).toMatchObject({ nodeId, parentId: LEFT, kind: FOLDER_KIND, epoch: 3, parentEpoch: 3 }) // the parent's served epoch, not the root's 5
+    expect(Object.keys(json).sort(), 'no own epoch on the wire: a new key starts at 0').toEqual(
+      ['encryptedName', 'kind', 'nodeId', 'parentEpoch', 'parentId', 'scopeEpoch', 'slugToken', 'wrappedContentKey'])
+    // the parent's served scope epoch and its own epoch — not the root's (2 / 5), not each other
+    expect(json).toMatchObject({ nodeId, parentId: LEFT, kind: FOLDER_KIND, scopeEpoch: 1, parentEpoch: 3 })
+    expect(minted, 'the new node is at its own epoch 0, minted under the parent\'s scope epoch').toMatchObject({ epoch: 0, scopeEpoch: 1 })
     expect(JSON.stringify(json)).not.toContain('Urlaub')
 
-    const wrap = { id: nodeId, epoch: 3, placementRevision: 0, wrappedContentKey: json.wrappedContentKey as string }
+    const wrap = { id: nodeId, scopeEpoch: 1, placementRevision: 0, wrappedContentKey: json.wrappedContentKey as string }
     expect(bytes(openContentKey(SCOPE_ID, kLeft, wrap)), 'the wrap opens under the parent key to the new key').toEqual(bytes(contentKey))
     for (const other of [kRoot, kSC]) expect(() => openContentKey(SCOPE_ID, other, wrap), 'not under the root key or K_SC').toThrow(v1.OpenRefused)
     expect(() => openContentKey(SCOPE_ID, kLeft, { ...wrap, placementRevision: 1 }), 'bound to revision 0').toThrow(v1.OpenRefused)
-    const address = { scopeId: SCOPE_ID, nodeId, epoch: 3, placementRevision: 0 }
+    expect(() => openContentKey(SCOPE_ID, kLeft, { ...wrap, scopeEpoch: 3 }), 'bound to the scope epoch, not the parent\'s own').toThrow(v1.OpenRefused)
+    const address = { scopeId: SCOPE_ID, nodeId, scopeEpoch: 1, placementRevision: 0 }
     expect(openName(kLeft, address, json.encryptedName as string), 'the name opens under the parent key').toBe('Urlaub 1998')
     expect(json.slugToken, 'the slug token is keyed by the parent key in the parent\'s slot').toBe(b64std(v1.slugToken(kLeft, LEFT, slugify('Urlaub 1998'))))
   })
 
-  it('a create in the root seals under the root key at the root\'s served epoch', async () => {
+  it('a create in the root seals under the root key at the root\'s served scope epoch, stating the root\'s own', async () => {
     const sent = recordFetch(created)
     const { nodeId } = await createShareNodeAsGuest(context(), { parentId: ROOT, kind: FOLDER_KIND, name: 'Neu' })
-    expect(sent[0].json.epoch).toBe(5)
-    expect(openName(kRoot, { scopeId: SCOPE_ID, nodeId, epoch: 5, placementRevision: 0 }, sent[0].json.encryptedName as string)).toBe('Neu')
+    expect(sent[0].json).toMatchObject({ scopeEpoch: 2, parentEpoch: 5 })
+    expect(openName(kRoot, { scopeId: SCOPE_ID, nodeId, scopeEpoch: 2, placementRevision: 0 }, sent[0].json.encryptedName as string)).toBe('Neu')
   })
 
   // ADR 0080 decision 16: the guest's pre-check and token agree with the member's — a node of a kind
@@ -173,13 +189,17 @@ describe('a guest places a node', () => {
     expect(url).toContain(`/api/shares/${SHARE_ID}/nodes/${ITEM}`)
     expect(headers.get('X-Contributor-Token')).toBe(TOKEN)
     expect(Object.keys(json).sort(), 'no node epoch on the wire').toEqual(['encryptedName', 'parentEpoch', 'parentId', 'placementRevision', 'slugToken', 'wrappedContentKey'])
-    expect(json).toMatchObject({ parentId: RIGHT, parentEpoch: 1, placementRevision: 2 }) // the revision it was built on; RIGHT's served epoch
+    expect(json).toMatchObject({ parentId: RIGHT, parentEpoch: 7, placementRevision: 2 }) // the revision it was built on; RIGHT's own epoch
 
-    const wrap = { id: ITEM, epoch: 4, placementRevision: 3, wrappedContentKey: json.wrappedContentKey as string }
+    // bound to the moved node's own scope epoch (1) — the node keeps its key, so not the destination's (2) nor its own epoch (4)
+    const wrap = { id: ITEM, scopeEpoch: 1, placementRevision: 3, wrappedContentKey: json.wrappedContentKey as string }
     expect(bytes(openContentKey(SCOPE_ID, kRight, wrap)), 'opens under the destination key at served+1').toEqual(bytes(kItem))
     expect(() => openContentKey(SCOPE_ID, kRight, { ...wrap, placementRevision: 2 }), 'not at the served revision').toThrow(v1.OpenRefused)
     expect(() => openContentKey(SCOPE_ID, kLeft, wrap), 'not under the source parent').toThrow(v1.OpenRefused)
-    const address = { scopeId: SCOPE_ID, nodeId: ITEM, epoch: 4, placementRevision: 3 }
+    for (const scopeEpoch of [2, 4]) {
+      expect(() => openContentKey(SCOPE_ID, kRight, { ...wrap, scopeEpoch }), `not bound to ${scopeEpoch}`).toThrow(v1.OpenRefused)
+    }
+    const address = { scopeId: SCOPE_ID, nodeId: ITEM, scopeEpoch: 1, placementRevision: 3 }
     expect(openName(kRight, address, json.encryptedName as string), 'the existing name, under the destination key').toBe('Tagebuch')
     expect(json.slugToken).toBe(b64std(v1.slugToken(kRight, RIGHT, slugify('Tagebuch'))))
   })
@@ -187,9 +207,10 @@ describe('a guest places a node', () => {
   it('a rename is a placement to the same parent under the new name; the root is a destination', async () => {
     const sent = recordFetch(noContent, noContent)
     await placeShareNodeAsGuest(context(), { nodeId: ITEM, newParentId: LEFT, newName: 'Tagebuch 2' })
-    expect(openName(kLeft, { scopeId: SCOPE_ID, nodeId: ITEM, epoch: 4, placementRevision: 3 }, sent[0].json.encryptedName as string)).toBe('Tagebuch 2')
+    expect(openName(kLeft, { scopeId: SCOPE_ID, nodeId: ITEM, scopeEpoch: 1, placementRevision: 3 }, sent[0].json.encryptedName as string)).toBe('Tagebuch 2')
     await placeShareNodeAsGuest(context(), { nodeId: ITEM, newParentId: ROOT })
-    expect(bytes(openContentKey(SCOPE_ID, kRoot, { id: ITEM, epoch: 4, placementRevision: 3, wrappedContentKey: sent[1].json.wrappedContentKey as string }))).toEqual(bytes(kItem))
+    expect(sent[1].json.parentEpoch).toBe(5)
+    expect(bytes(openContentKey(SCOPE_ID, kRoot, { id: ITEM, scopeEpoch: 1, placementRevision: 3, wrappedContentKey: sent[1].json.wrappedContentKey as string }))).toEqual(bytes(kItem))
   })
 
   it('never places the share root, and refuses a node served without its placement revision', async () => {
@@ -212,7 +233,8 @@ describe('a guest places a node', () => {
     const FILE = '6e5a0000-0000-4000-8000-0000000000b2'
     const byKind = () => {
       const ctx = context()
-      const extra = [row(DIR, LEFT, kLeft, v1.randomBytes(32), 'Day1 md', 3, 0), row(FILE, LEFT, kLeft, v1.randomBytes(32), 'foto.jpg', 3, 0, LEAF)]
+      const at = { epoch: 3, scopeEpoch: 1 }
+      const extra = [row(DIR, LEFT, kLeft, v1.randomBytes(32), 'Day1 md', at, 0), row(FILE, LEFT, kLeft, v1.randomBytes(32), 'foto.jpg', at, 0, LEAF)]
       for (const n of extra) {
         ctx.nodes.set(n.id, n)
         ctx.names.set(n.id, n.id === DIR ? 'Day1 md' : 'foto.jpg')
@@ -264,7 +286,7 @@ describe('a guest places a node', () => {
     expect(ctx.reresolve).toHaveBeenCalledTimes(1)
     expect(sent).toHaveLength(2)
     expect(sent[1].json.placementRevision).toBe(7)
-    expect(bytes(openContentKey(SCOPE_ID, kRight, { id: ITEM, epoch: 4, placementRevision: 8, wrappedContentKey: sent[1].json.wrappedContentKey as string }))).toEqual(bytes(kItem))
+    expect(bytes(openContentKey(SCOPE_ID, kRight, { id: ITEM, scopeEpoch: 1, placementRevision: 8, wrappedContentKey: sent[1].json.wrappedContentKey as string }))).toEqual(bytes(kItem))
   })
 
   it('two stale_placement answers end in PlacementConflictError', async () => {

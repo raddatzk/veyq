@@ -18,7 +18,7 @@
   live and trashed node of it
   re-keyed under that epoch ([uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md)). The job is `done`,
   which the server accepts only because this owner committed that epoch while holding the job's lease and no node
-  of the scope lags it. The server saw job, decline
+  of the scope is still due for its re-key. The server saw job, decline
   and membership rows and the rotation's ciphertext — never a key.
 
 ## Main flow
@@ -40,7 +40,7 @@
 5. **It re-keys the scope's nodes** ([uc.spaces.rekey-after-rotation](uc.spaces.rekey-after-rotation.md)), top-down,
    before it completes.
 6. **It completes the job.** The completion lands in one guarded statement: the job is still leased to this caller
-   **and**, for a rotation, carries this caller's commit mark, **and** no node of the scope lags the current epoch
+   **and**, for a rotation, carries this caller's commit mark, **and** no node of the scope is still due for its re-key
    (`409 rekey_incomplete` otherwise; the job stays leased). A completion that lost its lease writes nothing.
 
 ## Alternate / exception flows

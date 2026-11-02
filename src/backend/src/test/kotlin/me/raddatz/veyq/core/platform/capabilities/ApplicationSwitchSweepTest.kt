@@ -70,11 +70,14 @@ class ApplicationSwitchSweepTest {
         "deleteMedia" to { c -> Call("DELETE", "/api/scopes/${c.s.scopeId}/media/${c.s.mediaId}") },
         "restoreMedia" to { c -> Call("POST", "/api/scopes/${c.s.scopeId}/media/${c.s.mediaId}/restore") },
         "purgeMedia" to { c -> Call("POST", "/api/scopes/${c.s.scopeId}/media/${c.s.mediaId}/purge") },
+        "stageScopeItemFavoritesRekey" to { c ->
+            Call("POST", "/api/scopes/${c.s.scopeId}/item-favorites-rekey/${UUID.randomUUID()}", """{"fromEpoch":0}""")
+        },
         "stageMediaRekey" to { c ->
             Call("POST", "/api/scopes/${c.s.scopeId}/nodes/${c.s.nodeId}/media-rekey/${UUID.randomUUID()}", """{"fromEpoch":0}""")
         },
         "putItemFavorites" to { c ->
-            Call("PUT", "/api/scopes/${c.s.scopeId}/nodes/${c.s.nodeId}/item-favorites", """{"ciphertext":"$B64"}""")
+            Call("PUT", "/api/scopes/${c.s.scopeId}/nodes/${c.s.nodeId}/item-favorites", """{"ciphertext":"$B64","epoch":0}""")
         },
         "setMemoryBanner" to { c ->
             Call(
@@ -134,7 +137,7 @@ class ApplicationSwitchSweepTest {
         "ensureShareDropFolder" to { c ->
             Call(
                 "POST", "/api/shares/${c.writeOnly.shareId}/files/drop-folder",
-                """{"contributorToken":"${c.writeOnly.token}","nodeId":"${UUID.randomUUID()}","encryptedName":"$B64","slugToken":"$slug","epoch":0,"wrappedContentKey":"$B64"}""",
+                """{"contributorToken":"${c.writeOnly.token}","nodeId":"${UUID.randomUUID()}","encryptedName":"$B64","slugToken":"$slug","scopeEpoch":0,"wrappedContentKey":"$B64"}""",
                 guest = true,
             )
         },
@@ -160,7 +163,7 @@ class ApplicationSwitchSweepTest {
                 "write and the server cannot tell from a new mark (E5, ADR 0068)",
             "putItemFavorites",
         )
-        reason("a rotation's re-key: the security of what exists (E1, ADR 0109)", "stageMediaRekey", "stagePotRekey")
+        reason("a rotation's re-key: the security of what exists (E1, ADR 0109)", "stageMediaRekey", "stagePotRekey", "stageScopeItemFavoritesRekey")
     }
 
     private fun applicationOperations(): Map<String, List<GeneratedApiOperations.Operation>> =

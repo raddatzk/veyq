@@ -23,13 +23,14 @@
 // is again the no-mark case; a write that does not land leaves the mark lower, which is only ever safer for the
 // server and never locks anything. The refusals are the other half: they are decided here, and never degrade.
 //
-// **Beside each floor, the key it stands for** (ADR 0111 decision 23). A floor is a number, and a number does not tell a
-// later epoch that links to the key this device held from one an operator planted. So the device also keeps, per scope, a
-// commitment to the newest epoch key it held ({@link holdEpochKey}), and a grant for a later epoch opens only if its chain
-// peels down to that key (`spaces/scopes.ts`). A commitment is a labelled one-way derivation of a random 32-byte key: it
-// says nothing about the key, so it is no secret either. It is never carried by pairing ({@link readMarks} leaves it
-// out): the envelope that carries the marks is capped, and a linked device starts without commitments - the named
-// no-mark case of a device unlocked afresh.
+// **Beside each floor, the key it stands for** (ADR 0111 decision 23, ADR 0115 decision 5). A floor is a number, and a
+// number does not tell a later epoch that succeeds the key this device held from one an operator planted. So the device
+// also keeps, per scope, a commitment to the newest epoch key it held ({@link holdEpochKey}): that key's succession public
+// key (`v1.successionKeyPair`), and a grant for a later epoch opens only if the served succession statements lead from it
+// to the key the grant carries (`spaces/scopes.ts`). A public key derived one-way from a random 32-byte key says nothing
+// about the key, so it is no secret either. It is never carried by pairing ({@link readMarks} leaves it out): the envelope
+// that carries the marks is capped, and a linked device starts without commitments - the named no-mark case of a device
+// unlocked afresh.
 //
 // **Marks only rise, with one exception, and it is a person's.** A refused document's way back is the reset the
 // user confirms (ADR 0028 Decision 7): it writes the empty document and SETS the mark to the revision it wrote
@@ -49,7 +50,8 @@ export type AccountDocument = 'pins' | 'register'
 /** Everything this device remembers for one account. `epochs` is keyed by scope id. */
 export type TrustMarks = { pins: number; register: number; epochs: Record<string, number> }
 
-/** The newest epoch key this device held of one scope, as a commitment ({@link epochKeyCommitment}) at its epoch. */
+/** The newest epoch key this device held of one scope, as a commitment ({@link epochKeyCommitment}: its succession
+ *  public key, base64) at its epoch. */
 export type HeldEpochKey = { epoch: number; commitment: string }
 
 /** A partial raise — each value is merged as a maximum, never as an assignment; a held key by its epoch. */
@@ -75,8 +77,9 @@ export class TrustStateRefused extends Error {
 }
 
 const EMPTY = (): StoredMarks => ({ pins: 0, register: 0, epochs: {}, held: {} })
-const COMMITMENT_INFO = v1.utf8('veyq/v1/epoch-key-commitment')
-const COMMITMENT = /^[A-Za-z0-9+/]{22}==$/
+// 32 bytes of an Ed25519 public key, standard base64 (ADR 0115 decision 5). A record of the earlier 16-byte HKDF
+// commitment does not match and reads as no held key: the no-mark case.
+const COMMITMENT = /^[A-Za-z0-9+/]{43}=$/
 
 /** The account's slot: a one-way, labelled derivation of its Master Key (see file header). */
 function slotOf(mk: Uint8Array): string {
@@ -294,9 +297,12 @@ export function raiseEpochFloor(scopeId: string, epoch: number): Promise<void> {
   return withVaultKey((mk) => raiseMarks(mk, { epochs: { [scopeId]: epoch } }), undefined)
 }
 
-/** The commitment to an epoch key a device keeps (file header): 16 bytes of a labelled HKDF of the key, base64. */
+/** The commitment to an epoch key a device keeps (file header): the key's succession public key, base64 — what a later
+ *  epoch's succession statements must start from (ADR 0115 decision 5). */
 export function epochKeyCommitment(key: Uint8Array): string {
-  return b64std(v1.hkdfSha256(key, new Uint8Array(0), COMMITMENT_INFO, 16))
+  const pair = v1.successionKeyPair(key)
+  pair.privateKey.fill(0)
+  return b64std(pair.publicKey)
 }
 
 /** The newest epoch key this device held of `scopeId`, as a commitment — null when it held none (or is locked). */
@@ -306,7 +312,7 @@ export function heldEpochKey(scopeId: string): Promise<HeldEpochKey | null> {
 
 /** This device now holds `key`, epoch `epoch` of `scopeId` — a grant it opened, a rotation it made, or the tenant key an
  *  accept checked or born (`views/TenantJoinView.vue`): the floor rises to it and, when it is newer than the held one, it
- *  becomes the key a later epoch must link down to. One transaction. Under the vault's Master Key, or under
+ *  becomes the key a later epoch's succession statements must start from. One transaction. Under the vault's Master Key, or under
  *  `accountKey` where the vault holds none yet — a new account's, at the accept that registers it; the caller owns it. */
 export function holdEpochKey(scopeId: string, epoch: number, key: Uint8Array, accountKey?: Uint8Array): Promise<void> {
   const raise: MarksRaise = { epochs: { [scopeId]: epoch }, held: { [scopeId]: { epoch, commitment: epochKeyCommitment(key) } } }

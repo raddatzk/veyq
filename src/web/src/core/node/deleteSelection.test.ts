@@ -8,7 +8,7 @@ const calls = vi.hoisted(() => ({ deleteNode: vi.fn(async () => {}), restoreNode
 vi.mock('./tree', async (o) => ({ ...(await o<typeof import('./tree')>()), deleteNode: calls.deleteNode, restoreNode: calls.restoreNode }))
 
 import { deleteRefusalOf, deleteSelection, restoreSelection } from './deleteSelection'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import { treeNode } from '../../test/models'
 
 const SCOPE = 'scope-1'
@@ -46,7 +46,7 @@ describe('deleteSelection', () => {
 
 describe('restoreSelection (the Undo)', () => {
   it('restores exactly the nodes it is handed, against the tree as it is then, and re-reads once; a failure stops nothing', async () => {
-    const epochs: EpochKeys = { current: 0, keys: new Map() }
+    const epochs: ScopeKey = { epoch: 0, key: new Uint8Array(32) }
     const now = [treeNode({ id: 'parent' })]
     const boom = new Error('slug taken')
     calls.restoreNode.mockRejectedValueOnce(boom)

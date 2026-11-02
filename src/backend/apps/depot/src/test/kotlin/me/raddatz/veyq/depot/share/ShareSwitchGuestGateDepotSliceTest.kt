@@ -63,7 +63,7 @@ class ShareSwitchGuestGateDepotSliceTest {
             given().contentType(ContentType.JSON)
                 .body(
                     """{"contributorToken":"$token","nodeId":"${UUID.randomUUID()}","encryptedName":"bmFtZQ==",""" +
-                        """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA=="}""",
+                        """"slugToken":"${GuestTreeShare.slug()}","scopeEpoch":0,"wrappedContentKey":"d3JhcA=="}""",
                 )
                 .`when`().post("/api/shares/$id/files/drop-folder")
         },

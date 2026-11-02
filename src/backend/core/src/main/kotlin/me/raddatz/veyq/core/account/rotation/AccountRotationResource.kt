@@ -155,7 +155,7 @@ class AccountRotationResource(
 
     override fun putRotationStageJoinEndorsements(stageId: UUID, rotationStageJoinEndorsements: RotationStageJoinEndorsements): Response {
         val entries = rotationStageJoinEndorsements.endorsements.map {
-            StagedEndorsementInput(it.tenantId.toString(), it.userId.toString(), it.endorsement)
+            StagedEndorsementInput(it.tenantId.toString(), it.userId.toString(), it.endorsement, it.recordDigest)
         }
         return when (val outcome = handler.stageEndorsements(identity.principal.name, stageId.toString(), entries)) {
             StageEndorsementsOutcome.Staged -> Response.noContent().build()

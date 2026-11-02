@@ -125,21 +125,32 @@ describe.skipIf(!process.env.VEYQ_E2E)('any member re-keys (ADR 0111 decision 11
     // --- B adds a photo to the Memory right away: the device floor refuses the old key, the pull re-keys the Memory's
     //     path on B's device, and the photo is sealed again under the Memory's key now ----------------------------------
     const openedB = (await openScopeById(gG))!
-    const oldKey = nodeContentKey(gG, openedB.epochs, await listTree(gG, openedB.epochs), memory.nodeId)!
+    // B's tree as last read: the device floor judges the key a write states by the scope epoch the tree lists it minted
+    // under (ADR 0115 decision 6) — as `assertActiveScopeFloor` does for the active scope — and a re-read reads it again.
+    let rowsB = await listTree(gG, openedB.epochs)
+    const atFloorOf = (nodeId: string) => (epoch: number) => {
+      const row = rowsB.find((n) => n.id === nodeId)
+      if (row && row.epoch === epoch) assertNodeKeyAtFloor(row, openedB.epochs)
+    }
+    const rereadOf = (nodeId: string) => async () => {
+      rowsB = await listTree(gG, openedB.epochs)
+      const at = nodeKeyForWrite(gG, openedB.epochs, rowsB, nodeId)!
+      return { key: at.key, epoch: at.epoch }
+    }
+    const oldKey = nodeContentKey(gG, openedB.epochs, rowsB, memory.nodeId)!
+    expect(rowsB.find((n) => n.id === memory.nodeId)?.scopeEpoch, 'the Memory\'s key was minted under epoch 0').toBe(0)
     enqueueUploads({
       scopeId: gG, nodeId: memory.nodeId, memoryKey: oldKey, nodeEpoch: 0,
-      atFloor: (epoch) => assertNodeKeyAtFloor({ id: memory.nodeId, epoch }, openedB.epochs),
+      atFloor: atFloorOf(memory.nodeId),
       pull: pullRekeyPath(gG, [memory.nodeId]),
-      reread: async () => {
-        const at = nodeKeyForWrite(gG, openedB.epochs, await listTree(gG, openedB.epochs), memory.nodeId)!
-        return { key: at.key, epoch: at.epoch }
-      },
+      reread: rereadOf(memory.nodeId),
     }, [{ file: new File([bytes(3) as BlobPart], 'gipfel.jpg', { lastModified: 1 }), mediaType: '' }], { label: '1' })
     const file = batches.value.at(-1)!.files[0]
     await vi.waitFor(() => expect(['done', 'failed']).toContain(file.status), { timeout: 60_000, interval: 250 })
     expect(file.status, `the photo landed (${file.error ?? ''})`).toBe('done')
     const afterPull = await listTree(gG, openedB.epochs)
     expect(afterPull.find((n) => n.id === memory.nodeId)?.epoch, 'the Memory was re-keyed by the member').toBe(1)
+    expect(afterPull.find((n) => n.id === memory.nodeId)?.scopeEpoch, '…its new key minted under the scope\'s epoch 1').toBe(1)
     expect(afterPull.find((n) => n.id === folderId)?.epoch, 'only the written path: the folder still lags').toBe(0)
     expect(await listMedia(gG, memory.nodeId)).toHaveLength(1)
     expect(afterPull.find((n) => n.id === memory2.nodeId)?.epoch, 'the second Memory still lags').toBe(0)
@@ -149,13 +160,11 @@ describe.skipIf(!process.env.VEYQ_E2E)('any member re-keys (ADR 0111 decision 11
     //     re-sealed, whose revision it raised (`409 stale_revision`) ----------------------------------------------------
     const key2B = nodeContentKey(gG, openedB.epochs, afterPull, memory2.nodeId)!
     const [listedB] = await listMedia(gG, memory2.nodeId)
+    rowsB = afterPull
     const edited = await setMediaMeta(gG, listedB, key2B, 0, Date.UTC(2024, 6, 2), {
-      atFloor: (epoch) => assertNodeKeyAtFloor({ id: memory2.nodeId, epoch }, openedB.epochs),
+      atFloor: atFloorOf(memory2.nodeId),
       pull: pullRekeyPath(gG, [memory2.nodeId]),
-      reread: async () => {
-        const at = nodeKeyForWrite(gG, openedB.epochs, await listTree(gG, openedB.epochs), memory2.nodeId)!
-        return { key: at.key, epoch: at.epoch }
-      },
+      reread: rereadOf(memory2.nodeId),
     })
     expect(edited.wrote, 'the edit landed').toBe(true)
     expect(edited.metaRevision, 'A\'s write, the re-key\'s re-seal, then B\'s').toBe((listedB.metaRevision ?? 0) + 2)

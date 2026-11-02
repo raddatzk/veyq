@@ -57,15 +57,15 @@ const ROOT_KEY = v1.randomBytes(32)
 const HASH = `#k=${b64url(K_SHARE)}`
 
 function file(id: string, name: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { blockedByOperator: false, id, parentId: ROOT, kind: FILE_KIND, epoch: 0, placementRevision: 0, encryptedName: sealName(ROOT_KEY, address, name), wrappedContentKey: wrapContentKey(ROOT_KEY, address, v1.randomBytes(32)) }
+  const address = { scopeId: SCOPE, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+  return { blockedByOperator: false, id, parentId: ROOT, kind: FILE_KIND, epoch: 0, scopeEpoch: 0, placementRevision: 0, encryptedName: sealName(ROOT_KEY, address, name), wrappedContentKey: wrapContentKey(ROOT_KEY, address, v1.randomBytes(32)) }
 }
 // Stable ciphertext per file, as the server serves it: the same rows twice must fingerprint equal.
 const fileCache = new Map<string, ShareNode>()
 const fileOf = (id: string, name: string) => fileCache.get(id) ?? (fileCache.set(id, file(id, name)), fileCache.get(id)!)
 /** A READ_WRITE link rooted at the folder "Fotos" holding `files`. */
 function head(files: ShareNode[]): PublicShareHead {
-  const nodes = [{ id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 }, ...files]
+  const nodes = [{ id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 }, ...files]
   const share = { role: ShareRole.ReadWrite, scopeId: SCOPE, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, ROOT_KEY)), nodes } as PublicShare
   return { shareId: SHARE, kShare: K_SHARE, scopeId: SCOPE, name: 'Fotos', noteByLocale: {}, role: ShareRole.ReadWrite, rootKind: FOLDER_KIND, share }
 }
@@ -236,8 +236,8 @@ describe("a share guest's drop-box page, live", () => {
   const { sealedDropPrivateKey } = dropKeysForShare(SCOPE, DROP, DROP_KEY, v1.randomBytes(32), null)
   const dropPublic = v1.dropKeyPublic(openDropKey(SCOPE, DROP, DROP_KEY, sealedDropPrivateKey!))
   const child = (id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string, extra: Partial<ShareNode> = {}): ShareNode => {
-    const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-    return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, orderIndex: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key), ...extra }
+    const address = { scopeId: SCOPE, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+    return { blockedByOperator: false, id, parentId, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0, orderIndex: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key), ...extra }
   }
   const dropBox = child(DROP, ROOT, ROOT_KEY, DROP_KEY, 'Postfach', 'DEPOT_DROPBOX', { sealedDropPrivateKey })
   /** A guest's identity folder in the drop box and one file in it, as the link serves them. */
@@ -251,7 +251,7 @@ describe("a share guest's drop-box page, live", () => {
   }
   /** A READ link rooted at the folder "Fotos" holding the drop box and `below` it. */
   function readHead(below: ShareNode[]): PublicShareHead {
-    const nodes = [{ id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 }, dropBox, ...below]
+    const nodes = [{ id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 }, dropBox, ...below]
     const share = { role: ShareRole.Read, scopeId: SCOPE, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, ROOT_KEY)), nodes } as PublicShare
     return { shareId: SHARE, kShare: K_SHARE, scopeId: SCOPE, name: 'Fotos', noteByLocale: {}, role: ShareRole.Read, rootKind: FOLDER_KIND, share }
   }

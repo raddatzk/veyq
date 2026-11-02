@@ -136,7 +136,7 @@ async function submit() {
       scopeId: a.scopeId,
       epochs: a.epochs,
       tree: treeStore.nodes,
-      parent: to === null ? null : { id: to, key: parentKey!, epoch: parentNode!.epoch },
+      parent: to === null ? null : { id: to, key: parentKey!, epoch: parentNode!.epoch, scopeEpoch: parentNode!.scopeEpoch },
       signal: control.signal,
       onProgress: (p) => (progress.value = { nodesDone: p.nodesDone, nodesTotal: p.nodesTotal }),
     })

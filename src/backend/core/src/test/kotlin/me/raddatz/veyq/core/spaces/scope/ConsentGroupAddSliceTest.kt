@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.spaces.scope
 
 import me.raddatz.veyq.core.membership.TestGrants
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
@@ -212,7 +213,7 @@ class ConsentGroupAddSliceTest {
         // The owner rotates and — as a full-directory re-grant would — lists both themselves and the pending partner.
         given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"},{"userId":"$partner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(partner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(groupId)},"grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"},{"userId":"$partner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(partner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
 
@@ -272,7 +273,7 @@ class ConsentGroupAddSliceTest {
 
         setRole(owner, groupId, owner, "MEMBER").then().statusCode(409).body("code", equalTo("last_owner"))
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[],"pendingUserIds":["$partner"],"removesUserId":"$owner"}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(groupId)},"grants":[],"pendingUserIds":["$partner"],"removesUserId":"$owner"}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(409).body("code", equalTo("last_owner"))
         QuarkusTransaction.requiringNew().run {
@@ -305,7 +306,7 @@ class ConsentGroupAddSliceTest {
         // A rotation that declares them pending leaves them behind — the one case grant delivery still serves.
         given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],"pendingUserIds":["$partner"]}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(groupId)},"grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],"pendingUserIds":["$partner"]}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
         val created = QuarkusTransaction.requiringNew().call { tasks.reconcileGrantDelivery(setOf(groupId), 5) }

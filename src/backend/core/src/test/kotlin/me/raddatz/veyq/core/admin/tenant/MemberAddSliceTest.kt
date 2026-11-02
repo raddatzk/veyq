@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.membership.TestInviteKey
+import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.tasks.CapabilityTags
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.TenantProfileEntity
@@ -79,10 +80,11 @@ class MemberAddSliceTest {
     }
 
     @Test
-    fun aNewcomerOfAPendingInviteJoinsBehindAndIsDelivered() {
-        // A rotation that could not verify an invite declares it pending (ADR 0111 decision 2): it keeps its E_0 grant,
-        // its newcomer self-grants E_0 — accepted below the current epoch — and the narrow grant delivery brings the
-        // behind membership current.
+    fun aNewcomerOfAPendingInviteSealsNoJoinRecordUnderAReplacedKey() {
+        // A rotation that could not verify an invite declares it pending (ADR 0111 decision 2): it keeps its E_0 grant.
+        // Its newcomer would seal the join record under E_0 — a key the rotation replaced, under which no member reads
+        // and no later rotation could re-seal it (ADR 0115 decisions 1 and 3): `stale_epoch`, nothing born, the invite
+        // still live. It joins once the invite carries the current epoch (decision 8: "reads nothing until re-granted").
         val (tenantId, owner) = seedActiveTenant("pending-join.example.com", "owner@pending-join.example.com")
         val secret = "member-secret-pending"
         val key = seedMemberInvite(tenantId, owner, "member@pending-join.example.com", secret)
@@ -91,17 +93,15 @@ class MemberAddSliceTest {
         val newUserId = UUID.randomUUID().toString()
         given().contentType(ContentType.JSON).body(registerBody(secret, newUserId, join(key, newUserId, epoch = 0)))
             .`when`().post("/api/tenants/accept/register")
-            .then().statusCode(201)
-        assertEquals(TestGrants.WRAPPED to 0, grantOf(newUserId, tenantId), "joined behind, at the epoch it could open")
+            .then().statusCode(409).body("code", equalTo("stale_epoch"))
+        assertEquals(null, grantOf(newUserId, tenantId), "nothing born")
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { VeyqUser.count("id", newUserId) })
 
-        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"capabilityTags":["${CapabilityTags.GRANT_DELIVERY}"],"scopeId":"$tenantId"}""")
-            .`when`().post("/api/tasks/claim")
-            .then().statusCode(200)
-            .body("capabilityTag", equalTo(CapabilityTags.GRANT_DELIVERY))
-            .body("scopeId", equalTo(tenantId))
-            .body("grantDelivery.targetUserId", equalTo(newUserId))
-            .body("grantDelivery.identityPublicKey", equalTo(MEMBER_IDENTITY))
+        // Control: re-granted to the current epoch, the same newcomer joins at it.
+        given().contentType(ContentType.JSON).body(registerBody(secret, newUserId, join(key, newUserId, epoch = 1)))
+            .`when`().post("/api/tenants/accept/register")
+            .then().statusCode(201)
+        assertEquals(TestGrants.WRAPPED to 1, grantOf(newUserId, tenantId), "joined at the current epoch")
     }
 
     @Test

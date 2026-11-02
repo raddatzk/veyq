@@ -6,7 +6,7 @@ import { IDBFactory } from 'fake-indexeddb'
 // ADR 0111 § What stays open). A device that holds no key of a group yet - a newcomer's after a consent accept, which
 // opens no grant, or a new or linked device - takes that grant from any member the tenant anchors, and nothing ties
 // that member to the group: who is in a group is the server's word. This file measures it end to end on real keys - the
-// open path (`openScopeById` -> `verifyOwnGrant` -> `requireLinkToHeld`), the pin store, the key-chain walk and this
+// open path (`openScopeById` -> `verifyOwnGrant` -> `requireSuccessionFromHeld`), the pin store, the key-chain walk and this
 // device's held keys are all REAL; only the server and the tenant's standings (which `tenantTrust.test.ts` derives from
 // the join records) are driven here. The residual tests are green on purpose: they pin the boundary the docs name, so a
 // change that closes it turns them red and must move ADR 0111 and security-model.md with it.
@@ -19,8 +19,6 @@ vi.mock('../account/tenantTrust', () => ({ loadTenantView: vi.fn(), cachedTenant
 
 import { openScopeById } from './scopes'
 import { acceptGroupInvitation } from './members'
-import { keyAt } from './epochs'
-import { epochLinkContext } from './epochs'
 import { signGrant } from './grant'
 import { createFolder } from '../../core/node/tree'
 import { heldEpochKey } from '../account/trustMarks'
@@ -32,7 +30,7 @@ import { fakeApi, stubApi } from '../../test/apiMock'
 import { accountKeyMaterial } from '../../test/models'
 import { fakePinServer } from '../../test/pinStore'
 import { chainKeys, fakeKeyChains, type ChainKeys } from '../../test/keyChain'
-import type { ScopeEpochLink, ScopesApi, ScopeSummary } from '../../api/generated/scopes'
+import type { ScopeSuccession, ScopesApi, ScopeSummary } from '../../api/generated/scopes'
 import type { ContentApi } from '../../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
@@ -94,7 +92,7 @@ beforeEach(() => {
 })
 
 /** Serve the victim's grant on `scopeId` at `epoch`, wrapping `key`, signed by `granter`, beside `links`. */
-function serve(scopeId: string, key: Uint8Array, epoch: number, granter: Actor, links: ScopeEpochLink[] = [], extra: Partial<ScopesApi> = {}) {
+function serve(scopeId: string, key: Uint8Array, epoch: number, granter: Actor, links: ScopeSuccession[] = [], extra: Partial<ScopesApi> = {}) {
   const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId, epoch }, v1.hybridPublic(ID.priv), key))
   const row: ScopeSummary = {
     id: scopeId, kind: 'GROUP', tenantId: TENANT, role: 'MEMBER', nameEpoch: 0, iconEpoch: 0, grantedEpoch: epoch, currentEpoch: epoch,
@@ -109,9 +107,14 @@ function serve(scopeId: string, key: Uint8Array, epoch: number, granter: Actor, 
   })
 }
 
-/** The link stored at `epoch`: `prev` sealed under `key`. */
-const linkUnder = (scopeId: string, epoch: number, key: Uint8Array, prev: Uint8Array): ScopeEpochLink =>
-  ({ epoch, wrappedPrev: b64std(v1.seal(epochLinkContext(scopeId, epoch), key, prev)) })
+/** The succession statement stored for `epoch` (ADR 0115 decision 5): `key`'s succession public key, signed by `prev`'s. */
+function linkUnder(scopeId: string, epoch: number, key: Uint8Array, prev: Uint8Array): ScopeSuccession {
+  const successionPublicKey = v1.successionKeyPair(key).publicKey
+  return {
+    epoch, successionPublicKey: b64std(successionPublicKey),
+    successionSignature: b64std(v1.signSuccession(prev, { scopeId, epoch, successionPublicKey })),
+  }
+}
 
 /** Open the group as the app does and write a folder into it under the write key it opened. */
 async function openAndWrite(scopeId: string) {
@@ -128,16 +131,18 @@ describe('residual (ADR 0111 § What stays open): a device that holds no key of 
     serve(G, planted, 3, MALLORY)
     const opened = await openAndWrite(G)
     expect(opened && same(opened.key, planted)).toBe(true)
-    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ epoch: 3 })
+    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ scopeEpoch: 3 })
   })
 
-  it('a member removed from G links the planted epoch down to the E_0 it held: the fresh device also reads the group\'s history, and writes under the planted key', async () => {
+  it('a member removed from G signs the planted epoch from the E_0 it held: the fresh device writes under the planted key, but reads no history through it (ADR 0115 decision 1)', async () => {
     const e0 = v1.randomBytes(32) // what M held before its removal
     const planted = v1.randomBytes(32)
     serve(G, planted, 1, MALLORY, [linkUnder(G, 1, planted, e0)])
     const opened = await openAndWrite(G)
-    expect(opened && same(keyAt(opened.epochs, 0), e0)).toBe(true)
-    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ epoch: 1 })
+    expect(opened && same(opened.epochs.key, planted)).toBe(true)
+    expect(opened && same(opened.epochs.key, e0)).toBe(false) // with the chain this device held E_0 too
+    expect(opened && Object.keys(opened.epochs).sort()).toEqual(['epoch', 'key'])
+    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ scopeEpoch: 1 })
   })
 
   it('a consent accept holds nothing, so the first open after it takes the plant - unlike a tenant accept (inbox #740)', async () => {
@@ -160,7 +165,7 @@ describe('residual (ADR 0111 § What stays open): a device that holds no key of 
     serve(G_OWN, k, 0, MALLORY)
     const own = await openAndWrite(G_OWN)
     expect(plant && own && same(plant.key, own.key)).toBe(true)
-    expect([plant?.kind, plant?.epochs.current]).toEqual([own?.kind, own?.epochs.current])
+    expect([plant?.kind, plant?.epochs.epoch]).toEqual([own?.kind, own?.epochs.epoch])
     expect(createNode).toHaveBeenCalledTimes(2)
   })
 })
@@ -172,7 +177,7 @@ describe('what holds (ADR 0111 decisions 15 and 23)', () => {
     expect(createNode).not.toHaveBeenCalled()
   })
 
-  it('a device that held G\'s key refuses M\'s plant, the removed member\'s link to the older E_0 included (epoch_unlinked)', async () => {
+  it('a device that held G\'s key refuses M\'s plant, the removed member\'s statement from the older E_0 included (epoch_unlinked)', async () => {
     const e0 = v1.randomBytes(32)
     const e1 = v1.randomBytes(32)
     serve(G, e1, 1, ALICE, [linkUnder(G, 1, e1, e0)])
@@ -198,8 +203,8 @@ describe('honest controls: every legitimate first and later grant of a group ope
     const e1 = v1.randomBytes(32)
     serve(G, e1, 1, BOB, [linkUnder(G, 1, e1, e0)])
     const opened = await openAndWrite(G)
-    expect(opened && same(keyAt(opened.epochs, 0), e0)).toBe(true)
-    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ epoch: 1 })
+    expect(opened && same(opened.epochs.key, e1)).toBe(true) // the one key it is granted; E_0 is not reachable from it
+    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ scopeEpoch: 1 })
   })
 
   it('a consent add by the owner, opened first after the accept', async () => {
@@ -210,13 +215,13 @@ describe('honest controls: every legitimate first and later grant of a group ope
     expect(opened && same(opened.key, e0)).toBe(true)
   })
 
-  it('a re-key by any member after this device held the group: linked down to the held key, it opens', async () => {
+  it('a re-key by any member after this device held the group: its succession signed by the held key, it opens', async () => {
     const e0 = v1.randomBytes(32)
     serve(G, e0, 0, ALICE)
     await openAndWrite(G)
     const e1 = v1.randomBytes(32)
     serve(G, e1, 1, BOB, [linkUnder(G, 1, e1, e0)])
     const opened = await openAndWrite(G)
-    expect(opened?.epochs.current).toBe(1)
+    expect(opened?.epochs.epoch).toBe(1)
   })
 })

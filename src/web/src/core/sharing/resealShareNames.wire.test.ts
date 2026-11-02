@@ -9,11 +9,11 @@ import { fromB64std } from '@veyq/crypto/base64'
 import { mintShare, resealShareNames } from './manageShares'
 import { SHARE_MEMORY_NAME } from './resolvePublicShare'
 import { ShareRole } from '../../api/generated/sharing'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 
 const SCOPE_ID = '22222222-2222-4222-8222-222222222222'
 const NODE_ID = '5c09e000-0000-4000-8000-0000000000b1'
-const EPOCHS: EpochKeys = { current: 0, keys: new Map([[0, v1.randomBytes(32)]]) }
+const EPOCHS: ScopeKey = { epoch: 0, key: v1.randomBytes(32) }
 
 afterEach(() => vi.unstubAllGlobals())
 

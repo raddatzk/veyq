@@ -2,7 +2,7 @@
 // archive and creates the nodes; a kind only says what its CONTENT is. The kind's descriptor carries these two hooks
 // (`KindDescriptor.exportContent` / `importContent`), beside `createEntry`, so core reaches an application only through
 // the registry (ADR 0079).
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import type { BlobSource } from '../blob/types'
 import type { Access, TreeSource } from '../access'
 import type { CreateNodeOptions, NodeParent, TreeNode } from '../node/tree'
@@ -69,7 +69,7 @@ export type ImportNodeContext = {
   scopeId: string
   /** The scope's epochs as this device held them when the hook was called; `createOptions` re-reads them at each attempt,
    *  since a rotation met mid-run re-opens the scope (inbox #670). */
-  epochs: EpochKeys
+  epochs: ScopeKey
   /** Where to create the node (null: the scope root). */
   parent: NodeParent
   /** What the create under `parent` passes `createContentNode` (`CreateNodeOptions`): an import or a copy is a member's

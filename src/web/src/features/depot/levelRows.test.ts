@@ -317,7 +317,7 @@ describe('Depot rows', () => {
       vi.mocked(createContentNode).mockReset().mockImplementation(async (_s, _e, parent, kind, name) => {
         made.push({ parent: parent?.id ?? null, kind, name })
         const nodeId = `new-${++n}`
-        return { nodeId, contentKey: keyFor(nodeId), epoch: 0 }
+        return { nodeId, contentKey: keyFor(nodeId), epoch: 0, scopeEpoch: 0 }
       })
       vi.mocked(tenantStorageFits).mockReset().mockResolvedValue(true)
       activeSpace.tenantId = 'tenant-1'
@@ -348,7 +348,7 @@ describe('Depot rows', () => {
       // the top folder numbered among the level's siblings, a case clash numbered before the extension
       expect(made).toEqual([{ parent: D, kind: FOLDER_KIND, name: 'Holiday (2)' }, { parent: 'new-1', kind: FOLDER_KIND, name: 'Day 1' }])
       expect(targets().map((x) => [x.target.parent?.id, x.name])).toEqual([['new-1', 'a.txt'], ['new-2', 'b.jpg'], ['new-2', 'B (2).JPG']])
-      expect(targets()[0].target.parent).toEqual({ id: 'new-1', key: keyFor('new-1'), epoch: 0 })
+      expect(targets()[0].target.parent).toEqual({ id: 'new-1', key: keyFor('new-1'), epoch: 0, scopeEpoch: 0 })
       expect(tenantStorageFits).toHaveBeenCalledWith('tenant-1', 'Holiday/a.txt'.length + 'Holiday/Day 1/b.jpg'.length + 'Holiday/Day 1/B.JPG'.length)
       expect(loadTree).toHaveBeenCalled()
     })
@@ -396,7 +396,7 @@ describe('Depot rows', () => {
       vi.mocked(createContentNode).mockImplementation(async (_s, _e, parent, kind, name) => {
         if (name === 'broken') throw new Error('network')
         made.push({ parent: parent?.id ?? null, kind, name })
-        return { nodeId: `id-${name}`, contentKey: keyFor(`id-${name}`), epoch: 0 }
+        return { nodeId: `id-${name}`, contentKey: keyFor(`id-${name}`), epoch: 0, scopeEpoch: 0 }
       })
       const h = mountSection({ nodes: [] })
       await flushPromises()

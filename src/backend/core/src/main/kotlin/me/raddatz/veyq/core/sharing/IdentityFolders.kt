@@ -12,13 +12,15 @@ import jakarta.enterprise.context.ApplicationScoped
 /** What [IdentityFolders.ensure] answers. */
 sealed interface IdentityFolderOutcome {
     /** The identity's folder: [created] when this call made it, else the one it already had (its stored wrap). */
-    data class Folder(val nodeId: String, val epoch: Int, val placementRevision: Long, val wrappedContentKey: String, val created: Boolean) :
-        IdentityFolderOutcome
+    data class Folder(
+        val nodeId: String, val epoch: Int, val scopeEpoch: Int, val placementRevision: Long, val wrappedContentKey: String,
+        val created: Boolean,
+    ) : IdentityFolderOutcome
     /** The link is gone under its lock (revoked, deleted) — as the gate's 404. */
     object NotFound : IdentityFolderOutcome
     /** The root is trashed or gone, or the identity's folder is in the trash (a member removed it). */
     object NotContributable : IdentityFolderOutcome
-    /** The epoch is above the scope's current one; nothing stored. */
+    /** The `scopeEpoch` is not the scope's current one; nothing stored. */
     object StaleEpoch : IdentityFolderOutcome
     /** The client-minted node id is taken (in any scope); nothing stored. */
     object IdTaken : IdentityFolderOutcome
@@ -61,7 +63,7 @@ class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecor
      * wrote nothing and records nothing.
      */
     fun ensure(
-        gated: ShareWriteGate.Admitted, nodeId: String, encryptedName: String, slugToken: String, epoch: Int,
+        gated: ShareWriteGate.Admitted, nodeId: String, encryptedName: String, slugToken: String, scopeEpoch: Int,
         wrappedContentKey: String, seen: ClientSeen?,
     ): IdentityFolderOutcome {
         require(gated.role == ShareEntity.WRITE_ONLY) { "an identity folder is a WRITE_ONLY guest's" }
@@ -72,18 +74,18 @@ class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecor
             if (!gated.admitted()) return@createOrConflict IdentityFolderOutcome.NotFound
             if (nodes.findInScope(scopeId, root) == null) return@createOrConflict IdentityFolderOutcome.NotContributable
             existing(root, gated.identityId)?.let { return@createOrConflict it }
-            // The folder's key is minted at the scope's CURRENT epoch, as every node's (ADR 0109 point 6, narrowing ADR
-            // 0080 decision 6's "at or below"): a guest whose page lags a rotation is told to re-resolve the link.
-            if (epoch != nodes.currentEpoch(scopeId)) return@createOrConflict IdentityFolderOutcome.StaleEpoch
+            // The folder's key is minted under the scope's CURRENT epoch, as every node's (ADR 0114 decision 3, narrowing
+            // ADR 0080 decision 6's "at or below"): a guest whose page lags a rotation is told to re-resolve the link.
+            if (scopeEpoch != nodes.currentEpoch(scopeId)) return@createOrConflict IdentityFolderOutcome.StaleEpoch
             if (nodes.idTaken(nodeId)) return@createOrConflict IdentityFolderOutcome.IdTaken
             if (nodes.slugTaken(root, slugToken)) return@createOrConflict IdentityFolderOutcome.SlugTaken
             nodes.createIdentityFolder(
-                nodeId, scopeId, root, gated.identityId, encryptedName, slugToken, epoch, wrappedContentKey,
+                nodeId, scopeId, root, gated.identityId, encryptedName, slugToken, scopeEpoch, wrappedContentKey,
                 editor = PrincipalKey.Share(gated.identityId),
             )
             NodeEntity.flush() // the unique index decides here, inside the retry's reach, not at commit
             guestWriteRecords.record(seen, gated.identityId, GuestWriteObject.NODE, nodeId, GuestWriteRecords.NAME)
-            IdentityFolderOutcome.Folder(nodeId, epoch, 0, wrappedContentKey, created = true)
+            IdentityFolderOutcome.Folder(nodeId, 0, scopeEpoch, 0, wrappedContentKey, created = true)
         }
     }
 
@@ -92,7 +94,9 @@ class IdentityFolders(private val nodes: NodesStore, private val guestWriteRecor
     private fun existing(root: String, identityId: String): IdentityFolderOutcome? {
         val folder = nodes.identityFolder(root, identityId) ?: return null
         if (folder.deletedAt != null) return IdentityFolderOutcome.NotContributable
-        return IdentityFolderOutcome.Folder(folder.id, folder.epoch, folder.placementRevision, folder.wrappedContentKey, created = false)
+        return IdentityFolderOutcome.Folder(
+            folder.id, folder.epoch, folder.scopeEpoch, folder.placementRevision, folder.wrappedContentKey, created = false,
+        )
     }
 
     /** A create that died on a unique index other than this identity's own: the slug token in the root's slot, or the id

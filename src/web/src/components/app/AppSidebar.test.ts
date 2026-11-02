@@ -114,6 +114,7 @@ describe('AppSidebar space list', () => {
     const awaiting = wrapper.find('.sidebar-tenant-awaiting')
     expect(awaiting.exists()).toBe(true)
     expect(awaiting.text()).toContain(t('members.awaitingCurrentKey'))
+    expect(awaiting.attributes('title')).toBe(t('members.awaitingCurrentKeyBody'))
   })
 
   it('shows the domain (no waiting mark) once the grant is current', async () => {
@@ -382,13 +383,36 @@ describe('AppSidebar favorites — the cover of a pinned node', () => {
 describe('AppSidebar — a space whose compromise rotation needs an owner is marked (uc.spaces.complete-queued-rotation)', () => {
   it('marks a group on stalled and on failed, and no other', async () => {
     const group = (scopeId: string, compromiseRotation: CompromiseRotation | null): GroupSpace =>
-      ({ scopeId, tenantId: 't-1', name: scopeId, icon: null, role: 'OWNER', deletedAt: null, purgeAfter: null, compromiseRotation })
+      ({ scopeId, tenantId: 't-1', name: scopeId, icon: null, role: 'OWNER', deletedAt: null, purgeAfter: null, compromiseRotation, awaitingKey: false })
     vi.mocked(listMyGroups).mockResolvedValueOnce([group('g-failed', 'failed'), group('g-stalled', 'stalled'), group('g-fine', null)])
     const wrapper = await mountAt('')
     const link = (name: string) => wrapper.findAll('.desktop-group-link').find((a) => a.text().includes(name))!
     expect(link('g-failed').text()).toContain(t('members.compromiseRotationMark'))
     expect(link('g-stalled').text()).toContain(t('members.compromiseRotationMark'))
     expect(link('g-fine').text()).not.toContain(t('members.compromiseRotationMark'))
+  })
+
+  it('a group whose key a rotation replaced and this device does not hold yet is marked as waiting, with the reason as its title (ADR 0115 decision 8)', async () => {
+    const group = (scopeId: string, awaitingKey: boolean): GroupSpace =>
+      ({ scopeId, tenantId: 't-1', name: scopeId, icon: null, role: 'MEMBER', deletedAt: null, purgeAfter: null, compromiseRotation: null, awaitingKey })
+    // The waiting mark wins over an owner's mark: nothing of a group whose key is behind opens.
+    const behind: GroupSpace = { ...group('g-behind', true), compromiseRotation: 'failed' }
+    vi.mocked(listMyGroups).mockResolvedValueOnce([behind, group('g-current', false)])
+    const wrapper = await mountAt('')
+    const link = (name: string) => wrapper.findAll('.desktop-group-link').find((a) => a.text().includes(name))!
+    const mark = link('g-behind').get('.sidebar-tenant-awaiting')
+    expect(mark.text()).toBe(t('members.awaitingCurrentKey'))
+    expect(mark.attributes('title')).toBe(t('members.awaitingCurrentKeyBody'))
+    expect(link('g-behind').text()).not.toContain(t('members.compromiseRotationMark'))
+    expect(link('g-current').find('.sidebar-tenant-awaiting').exists(), 'control: a group at its current key shows no mark').toBe(false)
+
+    // The mobile sheet lists the group with the same mark.
+    await wrapper.get('.mobile-navigation-button').trigger('click')
+    await flushPromises()
+    const row = (name: string) => wrapper.findAll('.mobile-nav-item').find((i) => i.text().includes(name))!
+    expect(row('g-behind').get('.sidebar-tenant-awaiting').attributes('title')).toBe(t('members.awaitingCurrentKeyBody'))
+    expect(row('g-behind').text()).toContain(t('members.awaitingCurrentKey'))
+    expect(row('g-current').text()).not.toContain(t('members.awaitingCurrentKey'))
   })
 
   it('marks the active tenant row when its root needs an owner', async () => {

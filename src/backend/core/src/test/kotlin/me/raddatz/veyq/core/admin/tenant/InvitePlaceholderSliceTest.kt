@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import org.junit.jupiter.api.Assertions.assertTrue
 import me.raddatz.veyq.core.crypto.InviteAcceptProof
 import me.raddatz.veyq.core.identity.TenantProfileEntity
@@ -380,7 +381,7 @@ class InvitePlaceholderSliceTest {
         digestOf: (TestInviteKey) -> String = { TestGrants.digest(it.bundle) },
     ) = given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
         .body(
-            """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$owner","wrappedGrant":"${REGRANT.wrappedGrant}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
+            """{"epoch":1,${TestScopeRekey.rotationJson(tenantId)},"grants":[{"userId":"$owner","wrappedGrant":"${REGRANT.wrappedGrant}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],""" +
                 """"inviteGrants":[${inviteGrants.joinToString(",") {
                     """{"inviteId":"${it.inviteId}","wrappedGrant":"${REGRANT.wrappedGrant}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${digestOf(it)}"}"""
                 }}],""" +

@@ -183,7 +183,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
           description: >
-            The batch's `nodeEpoch` is below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6). Nothing was attached; the uploads stay open.
+            The batch's `nodeEpoch` is not the node's stored epoch (`stale_epoch` — re-read) or a node due for its re-key (`node_rekey_pending` — retry; ADR 0114 decision 3). Nothing was attached; the uploads stay open.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_rekey_pending } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -511,8 +511,8 @@ components:
             The epoch of the target node (`nodeId`, the share's root when absent) as the guest read it (`ShareNode.epoch`,
             `PublicShare.rootEpoch`): every item's wraps are under that node's key, or for a `WRITE_ONLY` link under the
             guest's own `K_up`, sealed to the root's drop key — stated either way.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -621,7 +621,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`upload_not_found`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists, `stale_epoch` / `node_rekey_pending` = the target node was re-keyed since, or is being re-keyed, mid-batch — ADR 0109 point 6, the item stored nothing and its uploads stay open); null on success.
+          description: Per-item error code (`upload_not_found`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists, `stale_epoch` / `node_rekey_pending` = the target node was re-keyed since, or is being re-keyed, mid-batch — ADR 0114 decision 3, the item stored nothing and its uploads stay open); null on success.
           maxLength: 64
           example: null
     ErrorResponse:

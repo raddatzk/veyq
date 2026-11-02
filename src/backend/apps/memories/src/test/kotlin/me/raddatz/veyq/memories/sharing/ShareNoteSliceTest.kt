@@ -231,6 +231,10 @@ class ShareNoteSliceTest {
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"expiresAt":null}""")
+            .`when`().patch("/api/shares/$shareId").then().statusCode(422).body("code", equalTo("link_key_required"))
+        // A reopen carries the root's key and name (ADR 0114 decision 7); no sweep closed it yet, so the root is at epoch 0.
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"expiresAt":null,${ShareWriteProof.reopen(0)}}""")
             .`when`().patch("/api/shares/$shareId").then().statusCode(204)
 
         given().`when`().get("/api/shares/$shareId").then().statusCode(200) // live again

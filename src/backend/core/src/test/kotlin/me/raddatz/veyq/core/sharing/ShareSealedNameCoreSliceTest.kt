@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.testing.TestNodeRekey
 import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.membership.MembershipEntity
@@ -138,14 +139,20 @@ class ShareSealedNameCoreSliceTest {
         assertEquals(null, row(shareId).sealedName, "the re-seal wrote onto the tombstone")
     }
 
+    /**
+     * ADR 0114 decisions 5 and 7: a renaming client re-seals under open links only, and a reopen carries the root's
+     * current name — so the name a re-activation shows is the one it brought. The server still takes a re-seal of a
+     * switched-off share (the client decides which links are open); the reopen's name replaces it.
+     */
     @Test
-    fun aRevokedShareIsRenamedSoAReactivationShowsTheCurrentName() {
+    fun aRevokedShareTakesAReSealAndItsReactivationShowsTheNameItCarries() {
         val w = world()
         val shareId = createShare(w.owner, w.folder)
         given().header("Authorization", bearer(w.owner)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
         setName(w.member, shareId, newName).then().statusCode(204)
-        given().header("Authorization", bearer(w.member)).`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
-        resolvedName(shareId, newName)
+        assertEquals(newName, row(shareId).sealedName) // control: the re-seal landed on the switched-off share
+        given().header("Authorization", bearer(w.member)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(shareId)).`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
+        resolvedName(shareId, ShareWriteProof.REOPEN_NAME)
     }
 
     @Test
@@ -208,6 +215,8 @@ class ShareSealedNameCoreSliceTest {
         raceRounds { round ->
             val shareId = createShare(w.owner, w.folder)
             given().header("Authorization", bearer(w.owner)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
+            TestNodeRekey.finish(w.scopeId) // the revoke marked the folder due (ADR 0114 decision 1)
+            val epoch = TestNodeRekey.epochOf(w.folder)
 
             val scopeLocked = CountDownLatch(1)
             val reSealRef = AtomicReference<Future<*>>()
@@ -221,7 +230,7 @@ class ShareSealedNameCoreSliceTest {
                             // The re-seal now runs, and takes what it takes: the share row alone ends inside the hold, a
                             // reach for the scope row is seen waiting on it — either is the order this round means.
                             val overlap = holdForOverlap { reSealRef.get()?.isDone == true }
-                            overlap to handler.reactivate(w.member, shareId) // joins: the scope row again, then the share row
+                            overlap to handler.reactivate(w.member, shareId, SharingHandler.ReopenRequest(epoch, ShareWriteProof.REOPEN_WRAP, null, ShareWriteProof.REOPEN_NAME)) // joins: the scope row again, then the share row
                         }
                     },
                 )
@@ -248,7 +257,8 @@ class ShareSealedNameCoreSliceTest {
             val r = row(shareId)
             assertTrue(r.enabled, "round $round")
             assertEquals(w.member, r.ownerAccount, "round $round")
-            assertEquals(newName, r.sealedName, "round $round")
+            // The re-activation came second and carries the root's name back (ADR 0114 decision 7): its name stands.
+            assertEquals(ShareWriteProof.REOPEN_NAME, r.sealedName, "round $round")
         }
     }
 
@@ -262,10 +272,12 @@ class ShareSealedNameCoreSliceTest {
         given().`when`().get("/api/shares/$shareId").then().statusCode(200).body("sealedName", equalTo(expected))
     }
 
+    /** A link on [nodeId], minted at the node's own epoch once an earlier round's revoke of a link there is re-keyed
+     *  (a close marks the node due, ADR 0114 decision 1). */
     private fun createShare(userId: String, nodeId: String): String {
         val shareId = TestIds.shareId()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"READ","wrap":"d3JhcA==","sealedName":"$oldName",${ShareWriteProof.recovery()}}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"READ","wrap":"d3JhcA==","sealedName":"$oldName",${ShareWriteProof.recovery(nodeEpoch = TestNodeRekey.settled(nodeId))}}""")
             .`when`().post("/api/shares").then().statusCode(201)
         return shareId
     }

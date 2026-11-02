@@ -103,8 +103,8 @@ const LISTING: ShareFileListing = {
 const GUEST: GuestIdentity = { identityId: 'id-1', contributorToken: 'tok-1' }
 
 function child(id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key) }
 }
 // A drop box below the link with one guest's identity folder (ADR 0080 decision 11): nobody but that guest places there.
 const { sealedDropPrivateKey } = dropKeysForShare(SCOPE, DROP, keys.drop, v1.randomBytes(32), null)
@@ -116,7 +116,7 @@ function head(role: ShareRole): PublicShareHead {
     share: {
       role, scopeId: SCOPE, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
       nodes: [
-        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
         child(R, ROOT, keys.root, keys.report, 'Report.pdf', FILE_KIND),
         child(P, ROOT, keys.root, keys.pending, 'aaa.bin', FILE_KIND),
         child(SUB, ROOT, keys.root, keys.sub, 'Sub', FOLDER_KIND),
@@ -321,7 +321,7 @@ describe('a contributor uploads a folder', () => {
   })
   beforeEach(() => {
     let n = 0
-    vi.mocked(createShareNodeAsGuest).mockReset().mockImplementation(async () => ({ nodeId: `g-${++n}`, contentKey: v1.randomBytes(32), epoch: 0 }))
+    vi.mocked(createShareNodeAsGuest).mockReset().mockImplementation(async () => ({ nodeId: `g-${++n}`, contentKey: v1.randomBytes(32), epoch: 0, scopeEpoch: 0 }))
     vi.mocked(abandonShareNodeAsGuest).mockReset().mockResolvedValue(undefined)
     vi.mocked(tenantStorageFits).mockClear()
   })

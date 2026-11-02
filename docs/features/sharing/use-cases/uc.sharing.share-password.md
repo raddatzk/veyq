@@ -7,7 +7,7 @@
   before the server serves anything. Set / change / remove / reveal it in place, without minting a new link;
   operator-blind.
 - **Preconditions:** an authenticated, unlocked curator with a share they own (any role). The curator holds the
-  scope's epoch keys, so recovers `K_share` for the reveal from its copy under `K_SC`
+  scope key, so recovers `K_share` for the reveal from its copy under `K_SC`
   ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md) point 4).
 - **Postconditions (success):** the share carries `password_required` + `pw_salt` + `pw_verifier`
   (`SHA-256(Argon2id(pw, salt))`) + `sealed_password` (the plaintext sealed under `K_share`). A guest reaches the

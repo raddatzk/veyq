@@ -1,0 +1,85 @@
+useCase: uc.sharing.close-link-rekeys-subtree
+feature: sharing
+title: A closed link's subtree gets new keys
+# ADR 0114. The property has several triggers (a revoke, a delete, a re-issue, a bulk or a removal's switch-off, an
+# end date), so it owns its criteria rather than any one trigger's use case. Each backend criterion carries a positive
+# control on the same predicate (an open sibling link whose wrap opens the new key, or a pause that marks nothing). The
+# phase-1 probes (LinkCloseRekeyProbeCoreSliceTest) were red on the tree before the build and are enabled with it; the
+# race tests take the close's lock order on the real database (scripts/run_backend_races_on_mariadb.py runs them on
+# MariaDB too). The web refs run the close, the reopen and the re-key through the real crypto against an in-memory
+# server.
+acceptanceCriteria:
+  - id: every-close-rekeys-the-subtree
+    text: Each close of an open READ or READ_WRITE link - its owner's switch-off, a delete of an open link, a re-issue's old link, a bulk switch-off of the scope's links, a removed member's switch-off, an end date carried out by the sweep or set into the past by an edit - marks every live and trashed node of the root's subtree due in the close's own transaction and clears the link's wrap; the scope reads re-keying until every node is re-keyed; a pause and a link already closed mark nothing.
+    coverage:
+      backend:
+        integration:
+          - LinkCloseRekeyCoreSliceTest.aRevokeMarksTheSubtreeDue
+          - LinkCloseRekeyCoreSliceTest.aDeleteMarksTheSubtreeDue
+          - LinkCloseRekeyCoreSliceTest.aReissueMarksTheSubtreeDueAndTheNewLinkFollowsTheNewKey
+          - LinkCloseRekeyCoreSliceTest.aBulkSwitchOffMarksTheSubtreeDue
+          - LinkCloseRekeyCoreSliceTest.aRemovedMembersSwitchOffMarksTheSubtreeDue
+          - LinkCloseRekeyCoreSliceTest.theEndDateSweepMarksTheSubtreeDue
+          - LinkCloseRekeyCoreSliceTest.anEditSettingAPassedEndDateClosesTheLinkAtOnce
+          - LinkCloseRekeyProbeCoreSliceTest.aRevokedLinkPutsItsScopeIntoReKeying
+      web: { unit: [src/core/sharing/closeRekey.test.ts, src/features/spaces/members.test.ts] }
+  - id: a-write-only-close-marks-nothing
+    text: A WRITE_ONLY link's close marks no node and clears its sealed drop public key; the closing device starts no re-key for it.
+    coverage:
+      backend: { integration: [LinkCloseRekeyCoreSliceTest.aWriteOnlyLinksCloseMarksNothingAndClearsItsDropKey] }
+      web: { unit: [src/core/sharing/closeRekey.test.ts] }
+  - id: writes-wait-and-the-old-key-is-stale
+    text: A write into a due node is 409 node_rekey_pending, a member's write racing the close included; after the node's re-key a writer stating its epoch from before the close is 409 stale_epoch; a node re-keyed takes writes at once.
+    coverage:
+      backend:
+        integration:
+          - LinkCloseRekeyCoreSliceTest.aWriteIntoADueNodeWaitsAndThePreCloseEpochIsStaleAfterTheReKey
+          - LinkCloseRekeyProbeCoreSliceTest.aRevokedLinksRootTakesNoWriteUntilItIsReKeyed
+          - LinkCloseRaceCoreSliceTest.aMemberWriteIntoTheSubtreeWhileTheCloseCommitsWaitsForTheReKey
+      web: { unit: [src/core/node/rekey/rekeyScope.test.ts, src/shared/rekeyRetry.test.ts] }
+  - id: nothing-new-under-a-closed-link
+    text: A node's re-key - after a close or a rotation - wraps the new key under open links only and re-seals the guest identities of every link on the node, a closed or deleted one's included; a commit missing a closed link's identity is refused; a rename re-seals the root's name under open links only.
+    coverage:
+      backend:
+        integration:
+          - LinkCloseRekeyCoreSliceTest.aCloseReWrapsNoClosedLinkAndReSealsEveryIdentity
+          - LinkCloseRekeyCoreSliceTest.aCommitMissingAClosedLinksIdentityIsRefused
+          - LinkCloseRekeyProbeCoreSliceTest.aRotationReWrapsNoSwitchedOffLink
+          - LinkCloseRekeyProbeCoreSliceTest.aRotationReSealsTheIdentitiesOfADeletedLink
+      web: { unit: [src/core/sharing/manageShares.test.ts, src/core/node/rekey/rekeyScope.test.ts] }
+  - id: the-sweep-closes-an-expired-link-once
+    text: The end-date sweep closes every enabled link whose end date passed and whose close it has not carried out, once, and leaves an open link alone.
+    coverage:
+      backend: { integration: [LinkCloseRekeyCoreSliceTest.theSweepClosesAnExpiredLinkOnceAndLeavesAnOpenOne] }
+      web: { unit: [src/core/sharing/closeRekey.test.ts] }
+    gaps:
+      - surface: web
+        reason: The sweep is the server's; the web ref covers only the edit that sets an end date into the past and the reopen that moves one forward.
+  - id: a-reopen-carries-the-key
+    text: A re-activation, and an edit moving a passed end date into the future or clearing it, carry the root's current key and name under the link's K_share at the root's own epoch; without them the reopen is refused 422 link_key_required and writes nothing; a due root makes the member's device pull it forward first.
+    coverage:
+      backend:
+        integration:
+          - LinkCloseRekeyCoreSliceTest.aReactivationWithoutTheKeyIsRefusedAndWithItOpensTheLink
+          - LinkCloseRekeyCoreSliceTest.anEditMovingAPassedEndDateIntoTheFutureCarriesTheKey
+      web: { unit: [src/core/sharing/closeRekey.test.ts, src/core/sharing/manageShares.test.ts] }
+  - id: a-key-staged-before-the-close-does-not-land
+    text: A re-key commit carrying a wrap staged under a link that has closed since - before the close or racing it - is 409 rekey_parts_stale and writes nothing; the same commit for an open sibling lands.
+    coverage:
+      backend:
+        integration:
+          - LinkCloseRekeyCoreSliceTest.aWrapStagedBeforeARevokeIsRefusedAndAnOpenSiblingsLands
+          - LinkCloseRekeyProbeCoreSliceTest.aKeyStagedUnderALinkClosedSinceDoesNotLand
+          - LinkCloseRaceCoreSliceTest.aReKeyCommitCarryingTheLinksWrapWhileTheCloseCommitsIsStale
+      web: { unit: [src/core/node/rekey/rekeyScope.test.ts] }
+    gaps:
+      - surface: web
+        reason: The refusal is the server's; the web ref covers only the re-keyer reading its parts again after a stale commit.
+  - id: the-closing-device-starts-the-rekey
+    text: Right after the server answers a close of a viewable link, the closing device starts the subtree's re-key in the background without the dialog waiting, the link's row saying that what lies below it gets a new lock; a refused close starts nothing; a re-key that fails is left to the members' workers.
+    coverage:
+      web:
+        unit:
+          - src/core/sharing/closeRekey.test.ts
+          - src/features/memories/components/ShareDialog.test.ts
+          - src/core/sharing/FolderShareDialog.test.ts

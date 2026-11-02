@@ -127,7 +127,7 @@ class NodeParentEpochShapeCoreSliceTest {
         val parent = parentId?.let { "\"parentId\":\"$it\"," } ?: ""
         val epoch = parentEpoch?.let { "\"parentEpoch\":$it," } ?: ""
         return given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
-            .body("""{$parent$epoch"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"bg==","slugToken":"${slug()}","orderIndex":0,"wrappedContentKey":"a21lbQ==","epoch":0}""")
+            .body("""{$parent$epoch"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"bg==","slugToken":"${slug()}","orderIndex":0,"wrappedContentKey":"a21lbQ==","scopeEpoch":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes").then()
     }
 

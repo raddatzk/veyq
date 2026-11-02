@@ -438,9 +438,10 @@ class DepotContentSliceTest {
             .`when`().post("/api/scopes/$scopeId/files/$node/content").then()
     }
 
-    /** The file node's stored epoch and the scope's current one, as a rotation and a re-key leave them (ADR 0109). */
+    /** The file node's own epoch and the scope's current one, as a rotation and a re-key leave them (ADR 0114 decisions
+     *  3-4): a node below the scope's epoch is due, its key minted under the epoch before. */
     private fun epochs(scopeId: String, node: String, stored: Int, current: Int) = QuarkusTransaction.requiringNew().run {
-        NodeEntity.findById(node)!!.epoch = stored
+        NodeEntity.findById(node)!!.apply { epoch = stored; scopeEpoch = minOf(stored, current); rekeyDue = stored < current }
         ScopeEntity.findById(scopeId)!!.currentEpoch = current
     }
 

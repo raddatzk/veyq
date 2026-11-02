@@ -71,7 +71,7 @@ class ShareFilesSliceTest {
         val before = blobOf(t.file)
         val upload = guestStartStaged(link, t.file)
         tx {
-            NodeEntity.findById(t.file)!!.epoch = 1
+            NodeEntity.findById(t.file)!!.apply { epoch = 1; scopeEpoch = 1; rekeyDue = true } // due for its re-key
             ScopeEntity.findById(t.scopeId)!!.currentEpoch = 2
         }
 
@@ -80,7 +80,7 @@ class ShareFilesSliceTest {
         assertEquals(before, blobOf(t.file), "a refused completion replaces nothing")
         sessionKey(upload) // still open
 
-        tx { NodeEntity.findById(t.file)!!.epoch = 2 }
+        tx { NodeEntity.findById(t.file)!!.apply { epoch = 2; scopeEpoch = 2; rekeyDue = false } }
         completeShare(link, t.file, upload, expected = before, nodeEpoch = 2).statusCode(200)
         assertEquals(attachmentIdentity(t.file), identityOf(link))
     }

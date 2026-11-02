@@ -59,7 +59,7 @@ describe('MemoryNodeDialog names the sibling a name collides with (inbox #389)',
   // ADR 0080 decision 16: a name is unique within its route group only — a folder is a plain name, a
   // Memory is behind `memories/` in the URL and in its token input, so the two never meet.
   it('a Memory of a folder\'s name at the root is sent: the folder is another route group', async () => {
-    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await typeAndClickSubmit(w, 'italien')
 
     expect(createMemory).toHaveBeenCalledOnce()
@@ -67,7 +67,7 @@ describe('MemoryNodeDialog names the sibling a name collides with (inbox #389)',
   })
 
   it('a Memory onto a sibling Memory in a folder names the Memory', async () => {
-    const w = mountDialog({ kind: MEMORY_KIND, parentId: 'f1', parentKey: KEY, parentEpoch: 0 })
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: 'f1', parentKey: KEY, parentEpoch: 0, parentScopeEpoch: 0 })
     await typeAndClickSubmit(w, 'ROM!')
 
     expect(createMemory).not.toHaveBeenCalled()
@@ -75,18 +75,18 @@ describe('MemoryNodeDialog names the sibling a name collides with (inbox #389)',
   })
 
   it('a chapter onto a sibling chapter names the chapter; another name is sent', async () => {
-    const w = mountDialog({ kind: CHAPTER_KIND, parentId: 'm1', parentKey: KEY, parentEpoch: 0 })
+    const w = mountDialog({ kind: CHAPTER_KIND, parentId: 'm1', parentKey: KEY, parentEpoch: 0, parentScopeEpoch: 0 })
     await typeAndClickSubmit(w, 'tag-1')
     expect(createChapter).not.toHaveBeenCalled()
     expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('memory.aChapter'), name: 'Tag 1' }))
 
     await typeAndClickSubmit(w, 'Tag 2')
-    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, KEY, 'Tag 2', 'm1', 0, { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
+    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, KEY, 'Tag 2', 'm1', expect.objectContaining({ epoch: 0, scopeEpoch: 0 }), { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
   })
 
   it('a collision the loaded tree cannot see still ends on the server\'s 409', async () => {
     vi.mocked(createMemory).mockRejectedValueOnce(httpError(409))
-    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await typeAndClickSubmit(w, 'Neu')
 
     expect(createMemory).toHaveBeenCalledOnce()

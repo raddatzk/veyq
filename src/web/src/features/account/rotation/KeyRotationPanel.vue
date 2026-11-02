@@ -52,6 +52,7 @@ import EmailAddressSection from '../email/EmailAddressSection.vue'
 import TrustResetLink from '../trustReset/TrustResetLink.vue'
 import EmergencyKitSave from '../emergencyKit/EmergencyKitSave.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import { resealingScopes } from '../../spaces/scopeRekey'
 
 const { t } = useI18n()
 
@@ -379,6 +380,8 @@ async function renewClosed() {
       <!-- The result: the account is published; how each space stands is the server's word, below. -->
       <template v-else>
         <VeyqMessage tone="info" data-testid="rotation-done">{{ t('rotation.doneOldKit') }} {{ t('rotation.doneSpaces') }}</VeyqMessage>
+        <!-- each space's new lock: its scope-level rows are sealed again on this device before it commits (ADR 0115) -->
+        <VeyqMessage v-if="resealingScopes.size > 0" tone="info" data-testid="rotation-resealing">{{ t('spaceLock.resealing') }}</VeyqMessage>
       </template>
 
       <!-- Every space of this account's last rotation, as the server reads it now — on every visit, not only right after

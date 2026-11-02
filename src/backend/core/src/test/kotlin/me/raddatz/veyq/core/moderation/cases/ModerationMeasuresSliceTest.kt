@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.moderation.cases
 
+import me.raddatz.veyq.core.testing.TestNodeRekey
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.content.NodeCover
 import me.raddatz.veyq.core.moderation.ModerationTestKit
@@ -112,7 +113,7 @@ class ModerationMeasuresSliceTest {
         // The creator's list says why; the owner can neither reactivate nor re-issue it.
         given().header("Authorization", bearer(w.ownerId)).`when`().get("/api/shares?nodeId=${w.root}")
             .then().statusCode(200).body("find { it.shareId == '${link.shareId}' }.guestStops.reason", hasItem("operatorBlocked"))
-        given().header("Authorization", bearer(w.ownerId)).`when`().post("/api/shares/${link.shareId}/reactivate")
+        given().header("Authorization", bearer(w.ownerId)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(link.shareId)).`when`().post("/api/shares/${link.shareId}/reactivate")
             .then().statusCode(409).body("code", equalTo("share_blocked_by_operator"))
         assertEquals(ReissueShareOutcome.Blocked, reissue(w.ownerId, link.shareId).first)
         // Lifted, the same link serves again — nothing was written onto it.
@@ -141,10 +142,13 @@ class ModerationMeasuresSliceTest {
         // The creator may re-issue it (decision 4): the new link is a member's new decision, and a new guest writes.
         val (outcome, newId) = reissue(w.ownerId, link.shareId)
         assertTrue(outcome is ReissueShareOutcome.Created, "$outcome")
+        // The re-issue closed the old link and marked the root due (ADR 0114 decision 1); a member's worker re-keys it,
+        // and the new link's guest writes under the root's new key.
+        val rootEpoch = TestNodeRekey.settled(w.root)
         val token = given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(newId))
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ==","nodeEpoch":0}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ==","nodeEpoch":$rootEpoch}""")
             .`when`().post("/api/shares/$newId/identities").then().statusCode(201).extract().path<String>("contributorToken")
-        GuestTreeShare.create(GuestTreeShare.Link(newId, token), w.root, NodeEntity.FOLDER).statusCode(201)
+        GuestTreeShare.create(GuestTreeShare.Link(newId, token), w.root, NodeEntity.FOLDER, parentEpoch = rootEpoch).statusCode(201)
     }
 
     /** The identity check on its own (decision 4): a block naming the identity alone refuses its token, its link still served. */

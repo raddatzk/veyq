@@ -49,7 +49,10 @@ class ShareNodesCoreSliceTest {
         val b = seedNode(scopeId, NodeEntity.FOLDER, parentId = root, wrappedContentKey = CONTENT_KEY)
         QuarkusTransaction.requiringNew().run {
             ScopeEntity.findById(scopeId)!!.currentEpoch = epoch
-            NodeEntity.update("epoch = ?1 where scopeId = ?2", nodesAt, scopeId)
+            // Every node's own key at [nodesAt]; below the scope's epoch it is due, its key minted under the epoch before.
+            NodeEntity.update(
+                "epoch = ?1, scopeEpoch = ?2, rekeyDue = ?3 where scopeId = ?4", nodesAt, minOf(nodesAt, epoch), nodesAt < epoch, scopeId,
+            )
         }
         return Tree(userId, scopeId, outer, root, outside, a, b, GuestTreeShare.seed(userId, scopeId, root, role))
     }
@@ -61,9 +64,9 @@ class ShareNodesCoreSliceTest {
         val t = tree(epoch = 2)
         val f1 = UUID.randomUUID().toString()
         val f2 = UUID.randomUUID().toString()
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = f1, encryptedName = "ZjEtbmFtZQ==", wrappedContentKey = "ZjEtd3JhcA==", epoch = 2, parentEpoch = 2)
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = f1, encryptedName = "ZjEtbmFtZQ==", wrappedContentKey = "ZjEtd3JhcA==", scopeEpoch = 2, parentEpoch = 2)
             .statusCode(201).body("nodeId", equalTo(f1))
-        create(t.link, f1, NodeEntity.FOLDER, nodeId = f2, encryptedName = "ZjItbmFtZQ==", wrappedContentKey = "ZjItd3JhcA==", epoch = 2, parentEpoch = 2)
+        create(t.link, f1, NodeEntity.FOLDER, nodeId = f2, encryptedName = "ZjItbmFtZQ==", wrappedContentKey = "ZjItd3JhcA==", scopeEpoch = 2, parentEpoch = 0) // f1's own key: 0 at its mint
             .statusCode(201).body("nodeId", equalTo(f2))
 
         // A member lists them as stored — the names and wraps the guest sealed, under the parents it named, at the
@@ -72,11 +75,13 @@ class ShareNodesCoreSliceTest {
             .body("find { it.id == '$f1' }.parentId", equalTo(t.a))
             .body("find { it.id == '$f1' }.encryptedName", equalTo("ZjEtbmFtZQ=="))
             .body("find { it.id == '$f1' }.wrappedContentKey", equalTo("ZjEtd3JhcA=="))
-            .body("find { it.id == '$f1' }.epoch", equalTo(2))
+            .body("find { it.id == '$f1' }.epoch", equalTo(0))
+            .body("find { it.id == '$f1' }.scopeEpoch", equalTo(2))
             .body("find { it.id == '$f1' }.placementRevision", equalTo(0))
             .body("find { it.id == '$f2' }.parentId", equalTo(f1))
             .body("find { it.id == '$f2' }.encryptedName", equalTo("ZjItbmFtZQ=="))
-            .body("find { it.id == '$f2' }.epoch", equalTo(2))
+            .body("find { it.id == '$f2' }.epoch", equalTo(0))
+            .body("find { it.id == '$f2' }.scopeEpoch", equalTo(2))
         // …and the guest's own resolve serves them with their names and wraps, down the chain from the root's key.
         given().`when`().get("/api/shares/${t.link.shareId}").then().statusCode(200)
             .body("nodes.find { it.id == '$f2' }.encryptedName", equalTo("ZjItbmFtZQ=="))
@@ -94,12 +99,12 @@ class ShareNodesCoreSliceTest {
     fun anEpochBelowTheCurrentIsStaleAndTheCurrentOneIsStoredWithNoPayload() {
         val t = tree(epoch = 3)
         val id = UUID.randomUUID().toString()
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 1, parentEpoch = 3).statusCode(409).body("code", equalTo("stale_epoch"))
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, scopeEpoch = 1, parentEpoch = 3).statusCode(409).body("code", equalTo("stale_epoch"))
         assertNull(QuarkusTransaction.requiringNew().call { NodeEntity.findById(id) }, "nothing stored")
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 3, parentEpoch = 3, extra = ""","wrappedMeta":"bWV0YQ=="""")
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, scopeEpoch = 3, parentEpoch = 3, extra = ""","wrappedMeta":"bWV0YQ=="""")
             .statusCode(201)
-        val row = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.let { it.epoch to it.wrappedMeta } }
-        assertEquals(3 to null, row, "stored at the current epoch the guest sealed with, with no payload")
+        val row = QuarkusTransaction.requiringNew().call { NodeEntity.findById(id)!!.let { Triple(it.epoch, it.scopeEpoch, it.wrappedMeta) } }
+        assertEquals(Triple(0, 3, null), row, "its own key's epoch 0, minted under the current scope epoch, with no payload")
     }
 
     /** The entry is sealed under the parent's key: a `parentEpoch` below the parent's stored one is `stale_epoch`, a
@@ -110,21 +115,21 @@ class ShareNodesCoreSliceTest {
     fun aParentEpochBelowTheStoredIsStaleAndALaggingParentIsPending() {
         val t = tree(epoch = 2, nodesAt = 1) // a rotation to 2 the re-key has not brought to the tree yet
         val id = UUID.randomUUID().toString()
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 2, parentEpoch = 0).statusCode(409).body("code", equalTo("stale_epoch"))
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 2, parentEpoch = 1).statusCode(409).body("code", equalTo("node_rekey_pending"))
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, scopeEpoch = 2, parentEpoch = 0).statusCode(409).body("code", equalTo("stale_epoch"))
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, scopeEpoch = 2, parentEpoch = 1).statusCode(409).body("code", equalTo("node_rekey_pending"))
         assertNull(QuarkusTransaction.requiringNew().call { NodeEntity.findById(id) }, "nothing stored")
 
-        QuarkusTransaction.requiringNew().run { NodeEntity.findById(t.a)!!.epoch = 2 } // the re-key reached the parent
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 2, parentEpoch = 2).statusCode(201)
+        QuarkusTransaction.requiringNew().run { NodeEntity.findById(t.a)!!.apply { epoch = 2; scopeEpoch = 2; rekeyDue = false } } // the re-key reached the parent
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, scopeEpoch = 2, parentEpoch = 2).statusCode(201)
     }
 
     @Test
     fun anEpochAboveTheCurrentIsStaleAndStoresNothing() {
         val t = tree(epoch = 3)
         val id = UUID.randomUUID().toString()
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 4, parentEpoch = 3).statusCode(409).body("code", equalTo("stale_epoch"))
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, scopeEpoch = 4, parentEpoch = 3).statusCode(409).body("code", equalTo("stale_epoch"))
         assertNull(QuarkusTransaction.requiringNew().call { NodeEntity.findById(id) }, "nothing stored")
-        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, epoch = 3, parentEpoch = 3).statusCode(201) // control: the current one
+        create(t.link, t.a, NodeEntity.FOLDER, nodeId = id, scopeEpoch = 3, parentEpoch = 3).statusCode(201) // control: the current one
     }
 
     /** A required integer is a presence check, not a silent 0 (src/backend/CLAUDE.md). */

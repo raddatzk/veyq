@@ -67,7 +67,7 @@ sealed interface ShareMediaCompleteOutcome {
     object RateLimited : ShareMediaCompleteOutcome, HttpFailure by Failures.rateLimited
     /** The batch's `nodeEpoch` is not the target node's stored epoch (ADR 0109 point 6) — nothing attached; re-read. */
     object StaleEpoch : ShareMediaCompleteOutcome, HttpFailure by Failures.staleEpoch
-    /** The target node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing attached; retry. */
+    /** The target node is due for its re-key (ADR 0114 decision 3) — nothing attached; retry. */
     object RekeyPending : ShareMediaCompleteOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 

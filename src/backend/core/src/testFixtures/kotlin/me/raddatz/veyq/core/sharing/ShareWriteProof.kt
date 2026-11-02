@@ -38,6 +38,21 @@ object ShareWriteProof {
     fun recovery(epoch: Int = 0, nodeEpoch: Int = 0): String =
         """"sealedShareKey":"cmVjb3Zlcnk=","sealedShareKeyEpoch":$epoch,"nodeEpoch":$nodeEpoch"""
 
+    /** The root's key a reopen of a READ or READ_WRITE link carries back under its `K_share`. */
+    const val REOPEN_WRAP = "cmVvcGVuLXdyYXA="
+
+    /** The root's sealed drop public key a reopen of a WRITE_ONLY link carries back. */
+    const val REOPEN_DROP = "cmVvcGVuLWRyb3A="
+
+    /** The root's name a reopen carries back under `K_share`. */
+    const val REOPEN_NAME = "cmVvcGVuLW5hbWU="
+
+    /** A reopen's members (ADR 0114 decision 7) — the root's own [nodeEpoch], its key for the link's role and its name —
+     *  for splicing into a re-activation's or an edit's body. A link's close marks its root due, so a test re-keys it
+     *  (`TestNodeRekey.finish`) and states the epoch it then has (`TestNodeRekey.epochOf`). */
+    fun reopen(nodeEpoch: Int, writeOnly: Boolean = false): String =
+        """"nodeEpoch":$nodeEpoch,${if (writeOnly) """"sealedDropPublicKey":"$REOPEN_DROP"""" else """"wrap":"$REOPEN_WRAP""""},"sealedName":"$REOPEN_NAME""""
+
     private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
     private fun b64(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
 }

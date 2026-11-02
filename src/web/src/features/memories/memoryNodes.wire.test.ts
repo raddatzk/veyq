@@ -24,14 +24,17 @@ describe('createChapter on the wire (ADR 0080 Decision 2)', () => {
     const scopeKey = v1.randomBytes(32)
     const memoryKey = v1.randomBytes(32) // the parent Memory's K_node
 
-    const { nodeId } = await createChapter(SCOPE_ID, epochsOf(scopeKey), memoryKey, 'Tag 1', MEMORY_ID, 0)
+    // the parent Memory's own epoch (2) and the scope epoch its key was minted under (0) differ, so a swap is told apart
+    const { nodeId } = await createChapter(SCOPE_ID, epochsOf(scopeKey), memoryKey, 'Tag 1', MEMORY_ID, { epoch: 2, scopeEpoch: 0 })
 
     expect(bodies).toHaveLength(1)
     const { url, method, json } = bodies[0]
     expect(method).toBe('POST')
     expect(url).toContain(`/api/scopes/${SCOPE_ID}/nodes`)
     expect(json.parentId).toBe(MEMORY_ID)
-    expect(json.parentEpoch).toBe(0) // the parent Memory's epoch as read (ADR 0109 point 6)
+    expect(json.parentEpoch).toBe(2) // the parent Memory's own epoch as read (ADR 0114 decision 3)
+    expect(json.scopeEpoch).toBe(0) // the scope epoch the chapter's key is minted under: the one held (ADR 0115 decision 4)
+    expect('epoch' in json, 'a create states no own epoch').toBe(false)
     const name = fromB64std(json.encryptedName as string)
     const ctx = { purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 } as const
     expect(new TextDecoder().decode(v1.openField(ctx, memoryKey, name))).toBe('Tag 1')

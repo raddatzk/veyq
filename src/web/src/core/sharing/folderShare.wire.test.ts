@@ -13,7 +13,7 @@ import { mintShare, recoverShareKey } from './manageShares'
 import { SHARE_KEY } from './shareTree'
 import { SHARE_MEMORY_NAME } from './resolvePublicShare'
 import { ShareRole } from '../../api/generated/sharing'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import { treeNode } from '../../test/models'
 
 const SCOPE_ID = '22222222-2222-4222-8222-222222222222'
@@ -24,15 +24,17 @@ afterEach(() => vi.unstubAllGlobals())
 
 const k0 = v1.randomBytes(32)
 const k1 = v1.randomBytes(32)
-// A rotated scope whose nodes are re-keyed to epoch 1 (a node below the current epoch is behind the device floor and
-// mints nothing, ADR 0109 point 6): the copy seals under the WRITE key (epoch 1), never the old epoch's key.
-const EPOCHS: EpochKeys = { current: 1, keys: new Map([[0, k0], [1, k1]]) }
+// A scope rotated once, its ONE key now k1 at epoch 1 (ADR 0115) — k0 is the key the rotation replaced, held by no
+// one. Its nodes are re-keyed by that rotation (a node minted below the current epoch is behind the device floor and
+// mints nothing, ADR 0109 point 6): each at its own epoch 1, minted under scope epoch 1, which its seals bind. The copy
+// seals under the scope's one key at epoch 1.
+const EPOCHS: ScopeKey = { epoch: 1, key: k1 }
 const keyTop = v1.randomBytes(32)
 const keySub = v1.randomBytes(32)
 const wrapUnder = (kek: Uint8Array, id: string, k: Uint8Array) =>
   b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 1, placementRevision: 0 }, kek, k))
 const folder = (id: string, parentId: string | null, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
-  id, parentId, kind: FOLDER_KIND, orderIndex: 0, epoch: 1, name, wrappedContentKey: wrapUnder(kek, id, k),
+  id, parentId, kind: FOLDER_KIND, orderIndex: 0, epoch: 1, scopeEpoch: 1, name, wrappedContentKey: wrapUnder(kek, id, k),
   wrappedMeta: null, metaRevision: 0, placementRevision: 0,
 })
 const TREE: TreeNode[] = [folder(TOP, null, k1, keyTop, 'Reisen'), folder(SUB, TOP, keyTop, keySub, 'Archiv 2026')]
@@ -63,7 +65,7 @@ describe('a folder share on the wire', () => {
     expect(json).toMatchObject({ shareId: minted.shareId, nodeId: SUB, role, nodeEpoch: 1, sealedShareKeyEpoch: 1 })
     expect(typeof json.sealedShareKey).toBe('string')
 
-    // The wrap opens under K_share to the folder's key — not the scope key of either epoch, not the parent's.
+    // The wrap opens under K_share to the folder's key — not the scope key, nor the one it replaced, nor the parent's.
     const wrapped = v1.open(SHARE_KEY, minted.kShare, fromB64std(json.wrap as string))
     expect(Array.from(wrapped)).toEqual(Array.from(keySub))
     for (const other of [k0, k1, keyTop]) expect(Array.from(wrapped)).not.toEqual(Array.from(other))
@@ -74,9 +76,12 @@ describe('a folder share on the wire', () => {
     expect(new TextDecoder().decode(name)).toBe('Archiv 2026')
     expect(JSON.stringify(json)).not.toContain('Archiv')
 
-    // The recovery copy opens under the scope's write key, bound to this folder and share.
+    // The recovery copy opens under the scope's one key at its epoch, bound to this folder and share — not under the
+    // key the rotation replaced.
     const copy = { sealedShareKey: json.sealedShareKey as string, sealedShareKeyEpoch: json.sealedShareKeyEpoch as number }
-    expect(recoverShareKey(EPOCHS, { scopeId: SCOPE_ID, nodeId: SUB, shareId: minted.shareId }, copy)).toEqual(minted.kShare)
+    const address = { scopeId: SCOPE_ID, nodeId: SUB, shareId: minted.shareId }
+    expect(recoverShareKey(EPOCHS, address, copy)).toEqual(minted.kShare)
+    expect(() => recoverShareKey({ epoch: 1, key: k0 }, address, copy)).toThrow(v1.OpenRefused)
     expect(json.sealedDropPublicKey).toBeUndefined()
   })
 })

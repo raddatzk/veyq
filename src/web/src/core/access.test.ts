@@ -33,12 +33,12 @@ import type { TreeNode } from './node/tree'
 import type { GuestIdentity } from './sharing/guestIdentity'
 import type { PublicShareHead } from './sharing/resolvePublicShare'
 import type { ShareRole } from '../api/generated/sharing'
-import type { EpochKeys } from '../features/spaces/epochs'
+import type { ScopeKey } from '../features/spaces/epochs'
 import { treeNode, memberAccessOf, guestAccessOf } from '../test/models'
 import { nothingOfItsOwnToRekey } from './node/rekey/hooks'
 import { testKind } from '../test/testApplication'
 
-const EPOCHS: EpochKeys = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) } as unknown as EpochKeys
+const EPOCHS: ScopeKey = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) } as unknown as ScopeKey
 const n = (id: string, kind: string, parentId: string | null, over: Partial<TreeNode> = {}): TreeNode =>
   treeNode({ id, kind, name: id, parentId, ...over })
 
@@ -53,7 +53,7 @@ describe('Access: the two shapes', () => {
     expect(a).toEqual({ mode: 'member', scopeId: 's', epochs: EPOCHS, readonly: true, publicShares: true, publicSharesContribute: false, publicSharesDropBox: true, applicationsOff: off })
     // One boolean per register leaf (ADR 0088), each from one manifest id: no field is an AND of two.
     expectTypeOf<MemberAccess>().toEqualTypeOf<{
-      readonly mode: 'member'; readonly scopeId: string; readonly epochs: EpochKeys | null; readonly readonly: boolean
+      readonly mode: 'member'; readonly scopeId: string; readonly epochs: ScopeKey | null; readonly readonly: boolean
       readonly publicShares: boolean; readonly publicSharesContribute: boolean; readonly publicSharesDropBox: boolean
       readonly applicationsOff: ReadonlySet<string>
     }>()
@@ -93,7 +93,7 @@ describe('memberTreeSource: the member\'s tree', () => {
     n('trips', FOLDER_KIND, null),
   ]
   let scope = '~me'
-  let epochs: EpochKeys | null = EPOCHS
+  let epochs: ScopeKey | null = EPOCHS
   const tree = memberTreeSource({ nodes: () => nodes, scopeId: () => 'scope-1', epochs: () => epochs, scope: () => scope })
 
   it('is rooted at the scope root (no node) and finds a node by id, none for an id it does not hold', () => {

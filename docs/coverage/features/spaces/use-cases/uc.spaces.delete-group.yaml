@@ -20,7 +20,7 @@ acceptanceCriteria:
       backend: { integration: [ScopesSliceTest.deleteGroupSoftThenRestoreWithReadOnlyGrace, ScopesSliceTest.deleteRestoreGuards] }
       web: { unit: [src/features/spaces/scopes.test.ts] }
   - id: hard-purge-erases
-    text: At purgeAfter the scheduled job hard-erases the scope — every table reachable by FK from veyq_scope, including its nodes, blob objects, the staged objects of any upload still open in it (recorded for reclaim with every declared chunk), memberships, epoch links, background jobs and their declines, shares and their contributor identities, and the scope row; a not-yet-expired pending scope, and any upload open in it, is left untouched.
+    text: At purgeAfter the scheduled job hard-erases the scope — every table reachable by FK from veyq_scope, including its nodes, blob objects, the staged objects of any upload still open in it (recorded for reclaim with every declared chunk), memberships, succession statements, background jobs and their declines, shares and their contributor identities, and the scope row; a not-yet-expired pending scope, and any upload open in it, is left untouched.
     coverage:
       backend: { integration: [ScopesSliceTest.purgeErasesExpiredScopeAndContentButKeepsFreshOnes, ScopesSliceTest.purgeErasesAGroupThatEverEnqueuedAJob, ScopesSliceTest.purgeErasesAGroupThatCarriesAShare, ScopesSliceTest.purgeReclaimsTheStagedObjectsOfAnUploadStillOpenInTheScope] }
   - id: purge-isolates-a-stuck-scope

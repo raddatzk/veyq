@@ -58,13 +58,19 @@ export function inviteGrant(
 export const signedInviteGrant = (f: MemberInviteFixture, epoch: number, wrappedGrant: string, signer: v1.Identity): string =>
   signGrant(signer.priv.sign, { scopeId: f.tenantId, kind: 'TENANT', epoch }, { userId: f.served.inviteId, identityPublicKeyB64: f.served.invitePublicKey }, wrappedGrant)
 
-/** The link epoch [epoch] of the tenant scope stores: `E_{epoch-1}` sealed under `E_epoch` (ADR 0024), base64. */
-export const epochLink = (tenantId: string, epoch: number, keys: Uint8Array[]): { epoch: number; wrappedPrev: string } => ({
-  epoch, wrappedPrev: b64std(v1.seal({ purpose: 'scope-epoch', scopeId: tenantId, epoch }, keys[epoch], keys[epoch - 1])),
-})
+/** The succession statement the tenant scope stores for [epoch] (ADR 0115 decision 5): `E_epoch`'s succession public key
+ *  signed by `E_{epoch-1}`'s, base64 — what a rotation from `keys[epoch - 1]` to `keys[epoch]` publishes. */
+export const succession = (scopeId: string, epoch: number, keys: Uint8Array[]): { epoch: number; successionPublicKey: string; successionSignature: string } => {
+  const successionPublicKey = v1.successionKeyPair(keys[epoch]).publicKey
+  return {
+    epoch,
+    successionPublicKey: b64std(successionPublicKey),
+    successionSignature: b64std(v1.signSuccession(keys[epoch - 1], { scopeId, epoch, successionPublicKey })),
+  }
+}
 
 /** A genuine member invite by a fresh owner into [tenantId] at [epoch], sealed under a fresh code: its grant is its
- *  anchor, no epoch links. */
+ *  anchor, no succession statements. */
 export function memberInviteFixture(o: { tenantId?: string; epoch?: number } = {}): MemberInviteFixture {
   const tenantId = o.tenantId ?? '7e000000-0000-4000-8000-0000000000f1'
   const epoch = o.epoch ?? 0
@@ -98,29 +104,30 @@ export function memberInviteFixture(o: { tenantId?: string; epoch?: number } = {
     granterUserId: ownerId,
     granterIdentityPublicKey: bundleOf(owner),
     granterKeyChainHead: headOf(ownerChain),
-    epochLinks: [],
+    successions: [],
   }
   return { tenantId, served, sealedPart, code, tenantKey: keys[epoch], keys, inviteKey, owner, ownerId, ownerChain }
 }
 
 /**
  * [f]'s invite as a rotation by [granter] (another member by default) carried it to epoch [to]: fresh tenant keys up to
- * there, the scope's links from the anchor up, and the carried grant at [to] signed by the granter — the anchor stays.
+ * there, the scope's succession statements from the anchor up, and the carried grant at [to] signed by the granter — the
+ * anchor stays.
  */
 export function carriedTo(
   f: MemberInviteFixture, to: number, granter: { userId: string; identity: v1.Identity; head: string } = foreignGranter(),
 ): MemberInviteFixture {
   const keys = [...f.keys]
   for (let e = keys.length; e <= to; e++) keys.push(v1.randomBytes(32))
-  const epochLinks = []
-  for (let e = f.served.anchorEpoch + 1; e <= to; e++) epochLinks.push(epochLink(f.tenantId, e, keys))
+  const successions = []
+  for (let e = f.served.anchorEpoch + 1; e <= to; e++) successions.push(succession(f.tenantId, e, keys))
   const served: ServedMemberInvite = {
     ...f.served,
     ...inviteGrant(f.tenantId, to, keys[to], f.served.inviteId, f.inviteKey, granter.identity),
     granterUserId: granter.userId,
     granterIdentityPublicKey: bundleOf(granter.identity),
     granterKeyChainHead: granter.head,
-    epochLinks,
+    successions,
   }
   return { ...f, served, keys, tenantKey: keys[to] }
 }

@@ -35,10 +35,11 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
 - [en.spaces.member-identity](enablers/en.spaces.member-identity.md) — **built** (per-tenant `username`
   unique-in-tenant + `firstName`/`lastName` **sealed** under `K_tenant`; email the only global key, owner-only in
   the directory; [ADR 0023](../../decisions/0023-per-tenant-member-identity.md))
-- [en.spaces.scope-key-rotation](enablers/en.spaces.scope-key-rotation.md) — **built** (rotate a scope's content
-  key **forward into a new epoch**, granting it only to the remaining members, so a removed member reads
-  pre-removal content but never post-removal — no re-encryption; the substrate member-removal builds on;
-  [ADR 0024](../../decisions/0024-scope-key-rotation.md))
+- [en.spaces.scope-key-rotation](enablers/en.spaces.scope-key-rotation.md) — **built** (**replace** a scope's key
+  with a fresh one at the next epoch, granted only to the remaining members, everything scope-level re-sealed under
+  it, so a removed member reads pre-removal content but never post-removal — no re-encryption; the substrate
+  member-removal builds on; [ADR 0024](../../decisions/0024-scope-key-rotation.md),
+  [ADR 0115](../../decisions/0115-a-scope-key-is-replaced-never-chained.md))
 
 ## Use-cases
 

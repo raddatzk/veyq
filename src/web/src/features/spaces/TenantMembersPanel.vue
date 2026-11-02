@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { resealingScopes } from './scopeRekey'
 // uc.spaces.add-member (web, cr-0077) — the "Members" rubric of the tenant settings. Lists the active tenant's
 // members (name/email + role) and, for the tenant OWNER, opens the invite-by-email dialog. Markup + classes mirror the
 // create-tenant admin panel (settings-section-header + veyq-list-row + veyq-badge). Operator-blind: only operational
@@ -34,10 +35,10 @@ import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeSc
 import { formatInviteCode } from '@veyq/crypto/invite'
 import { bumpSpaceIcon } from './spaceIconSignal'
 import { activeSpace, activeEpochKeys, refreshActiveScope } from '../../app/activeSpace'
-import { rekeyScope } from '../../core/node/rekey/rekeyScope'
-import { copyEpochKeys, zeroEpochKeys } from './epochs'
+import { rekeyScope, rekeyingCause } from '../../core/node/rekey/rekeyScope'
+import { copyScopeKey, zeroScopeKey } from './epochs'
 import { ScopeKind } from '../../api/generated/scopes'
-import { unsealNameUnderEpochs, type MemberName } from '../account/profile/profile'
+import { openMemberName, type MemberName } from '../account/profile/profile'
 import { isUnauthorized, isCodedError, HttpStatus } from '../../shared/httpError'
 import { useMemberDirectory } from './useMemberDirectory'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
@@ -67,6 +68,10 @@ const tenantName = ref('')
 const stuckRotation = ref<CompromiseRotation | null>(null)
 /** Owner-only: the tenant's last rotation is still fitting the new lock (ADR 0109). */
 const rekeying = ref(false)
+/** Owner-only: what re-keys is only what lies below closed links (ADR 0114) — the hint then names the link, not the space. */
+const closeRekeying = ref(false)
+// this device is re-sealing the space's scope-level rows for a rotation it runs (ADR 0115 decision 2)
+const resealing = computed(() => { const id = activeSpace.scopeId; return id !== null && id !== undefined && resealingScopes.has(id) })
 const tenantIcon = useObjectUrl() // an owned object URL for the decrypted icon (revoked on replace/unmount)
 const iconDialogOpen = ref(false)
 const iconBusy = ref(false)
@@ -94,18 +99,17 @@ const { members, isOwner, trust, trustRefusal, loading, loadError, reload, on401
     // A member who set no name has no sealed name → null (the row shows only the @username).
     // Each name is bound to (this tenant scope, that member) — the scope we addressed and the row's member id — so a
     // server that moves one member's sealed name onto another's row shows no name there, not the wrong one. A name opens
-    // under the tenant epoch its member saved it under, tried across every held epoch key: one saved before a rotation
-    // still reads (the row records no epoch).
+    // under the tenant's one key: every rotation re-seals every profile under its new key (ADR 0115 decision 2).
     const epochs = activeEpochKeys()
     const scopeId = activeSpace.scopeId
     names.value = epochs
-      ? Object.fromEntries(rows.map((m) => [m.userId, unsealNameUnderEpochs(epochs, { scopeId, userId: m.userId }, m.sealedName)?.name ?? null]))
+      ? Object.fromEntries(rows.map((m) => [m.userId, openMemberName(epochs, { scopeId, userId: m.userId }, m.sealedName) ?? null]))
       : {}
     // The members' pictures follow the roster (ADR 0084): the version integers it carries decide what is fetched. Not awaited -
     // the rows draw their letters at once; the keys' copy is zeroed when the fetches settle.
     if (epochs) {
-      const copy = copyEpochKeys(epochs)
-      void syncAvatars({ tenantId: activeSpace.tenantId, scopeId, epochs: copy }, rows).finally(() => zeroEpochKeys(copy))
+      const copy = copyScopeKey(epochs)
+      void syncAvatars({ tenantId: activeSpace.tenantId, scopeId, epochs: copy }, rows).finally(() => zeroScopeKey(copy))
     }
     const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
     const owner = mine?.role === 'OWNER'
@@ -114,6 +118,10 @@ const { members, isOwner, trust, trustRefusal, loading, loadError, reload, on401
     tenantName.value = mine?.name ?? ''
     stuckRotation.value = mine?.compromiseRotation ?? null
     rekeying.value = owner && activeSpace.scopeId ? ((await scopeLifecycle(activeSpace.scopeId).catch(() => null))?.rekeying ?? false) : false
+    // Only closed links re-keying claims their subtrees, not the space (ADR 0114 decision 9); unknown reads as a rotation's.
+    closeRekeying.value = rekeying.value && activeSpace.scopeId
+      ? (await rekeyingCause(activeSpace.scopeId).catch(() => 'rotation')) === 'close'
+      : false
     const iconBytes = mine ? await openMyTenantIcon(mine) : null
     if (iconBytes) tenantIcon.set(new Blob([iconBytes as BlobPart], { type: 'image/webp' }))
     else tenantIcon.clear()
@@ -406,7 +414,9 @@ async function revoke(invite: PendingMemberInvite) {
         :state="stuckRotation"
         @requeued="stuckRotation = $event"
       />
-      <VeyqMessage v-if="isOwner && rekeying" tone="info">{{ t('rotation.statusHint.rekeying') }}</VeyqMessage>
+      <!-- the scope-level rows are sealed again under the new key before the rotation commits (ADR 0115 decision 2) -->
+      <VeyqMessage v-if="resealing" tone="info">{{ t('spaceLock.resealing') }}</VeyqMessage>
+      <VeyqMessage v-else-if="isOwner && rekeying" tone="info">{{ closeRekeying ? t('share.closedRekeying') : t('rotation.statusHint.rekeying') }}</VeyqMessage>
 
       <div class="settings-section-header">
         <div>

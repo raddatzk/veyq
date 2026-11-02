@@ -22,6 +22,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.sharing.SharingStore
+import me.raddatz.veyq.core.sharing.ShareKeys
+import java.time.Instant
 
 /**
  * A share write that read the link before its delete committed (ADR 0029 §7). Every write but a re-issue loads the
@@ -45,10 +47,11 @@ class ShareDeleteRaceSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         raceRounds { round ->
-            val shareId = createShare(userId, memory)
+            // A fresh Memory a round: the delete marks the one below it due (ADR 0114 decision 1).
+            val shareId = createShare(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
             val outcome = whileUncommitted(
                 change = { assertTrue(sharing.delete(shareId), "round $round") },
-                overlapping = { sharing.updateShare(userId, shareId, note, null, null, null, null, null, null, null) },
+                overlapping = { sharing.updateShare(userId, shareId, note, null, null, null, null, null, null, null, null, Instant.now()) },
             )
             assertEquals(SharingStore.UpdateResult.NOT_FOUND, outcome, "round $round")
             QuarkusTransaction.requiringNew().run {
@@ -59,7 +62,7 @@ class ShareDeleteRaceSliceTest {
         }
         // Control: the same edit on a link nobody deletes lands.
         val kept = createShare(userId, memory)
-        assertEquals(SharingStore.UpdateResult.DONE, sharing.updateShare(userId, kept, note, null, null, null, null, null, null, null))
+        assertEquals(SharingStore.UpdateResult.DONE, sharing.updateShare(userId, kept, note, null, null, null, null, null, null, null, null, Instant.now()))
         assertEquals(note, QuarkusTransaction.requiringNew().call { ShareEntity.findById(kept)!!.sealedNote })
     }
 
@@ -68,11 +71,12 @@ class ShareDeleteRaceSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         raceRounds { round ->
-            val shareId = createShare(userId, memory)
+            // A fresh Memory a round: the delete marks the one below it due (ADR 0114 decision 1).
+            val shareId = createShare(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
             assertTrue(sharing.revoke(userId, shareId), "round $round")
             val outcome = whileUncommitted(
                 change = { assertTrue(sharing.delete(shareId), "round $round") },
-                overlapping = { sharing.reactivate(userId, shareId) },
+                overlapping = { sharing.reactivate(userId, shareId, reopen(userId), Instant.now()) },
             )
             assertFalse(outcome, "round $round")
             QuarkusTransaction.requiringNew().run {
@@ -84,9 +88,12 @@ class ShareDeleteRaceSliceTest {
         // Control: a revoked link nobody deletes re-activates.
         val kept = createShare(userId, memory)
         assertTrue(sharing.revoke(userId, kept))
-        assertTrue(sharing.reactivate(userId, kept))
+        assertTrue(sharing.reactivate(userId, kept, reopen(userId), Instant.now()))
         assertTrue(QuarkusTransaction.requiringNew().call { ShareEntity.findById(kept)!!.enabled })
     }
+
+    /** What a re-activation stores back (ADR 0114 decision 7) — the store takes it as the handler judged it. */
+    private fun reopen(userId: String) = SharingStore.Reopen(ShareKeys.MemoryWrap(wrap), sealedName, userId)
 
     private fun createShare(userId: String, nodeId: String): String {
         val shareId = TestIds.shareId()

@@ -7,7 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('./shareLink', () => ({ buildShareLink: vi.fn(), recoverShareLink: vi.fn() }))
-vi.mock('./manageShares', () => ({
+vi.mock('./manageShares', async () => ({
+  rekeyingClosedLinks: (await import('vue')).shallowReactive(new Set<string>()),
   mintShare: vi.fn(),
   remintShare: vi.fn(),
   listSharesFor: vi.fn(),
@@ -38,7 +39,9 @@ const deleteShare = vi.mocked(manage.deleteShare)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000dd'
 const FOLDER_ID = '5c09e000-0000-4000-8000-0000000000f0'
-const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
+// The scope's one key (ADR 0115) at epoch 3; the folder's own key is at its epoch 2 (ADR 0114 decision 4).
+const EPOCHS = { epoch: 3, key: new Uint8Array(32) }
+const FOLDER_EPOCH = 2
 const FOLDER_KEY = new Uint8Array(32).fill(4)
 
 const stubs = {
@@ -66,7 +69,7 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
 
 function mountDialog(extra: { contribute?: boolean; readonly?: boolean } = { contribute: true }) {
   return mount(FolderShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
+    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeEpoch: FOLDER_EPOCH, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -132,7 +135,7 @@ describe('FolderShareDialog — a new link', () => {
     expect(mintShare).toHaveBeenCalledTimes(1)
     const [scopeId, nodeId, key, epochs, name, mintedRole] = mintShare.mock.calls[0]
     expect({ scopeId, nodeId, name, mintedRole }).toEqual({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, name: 'Trips', mintedRole: role })
-    expect(key).toEqual({ key: FOLDER_KEY, epoch: 0 }) // the folder's key with the epoch it was minted at (ADR 0109 point 6)
+    expect(key).toEqual({ key: FOLDER_KEY, epoch: FOLDER_EPOCH }) // the folder's key with its own epoch, as read (ADR 0114 decision 4)
     expect(key.key).toBe(FOLDER_KEY)
     expect(epochs).toEqual(EPOCHS)
     expect(w.text()).toContain(t('share.linkReady'))
@@ -214,7 +217,8 @@ describe('FolderShareDialog — the folder\'s links', () => {
 
     await byLabel(w, t('share.revoke')).trigger('click')
     await flushPromises()
-    expect(revokeShare).toHaveBeenCalledWith('mine')
+    // the close names the link where this dialog lists it and its role: its subtree re-key starts from it (ADR 0114)
+    expect(revokeShare).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, shareId: 'mine', role: ShareRole.Read })
     expect(listSharesFor).toHaveBeenCalledTimes(2)
 
     listSharesFor.mockResolvedValue([row({ shareId: 'theirs', mine: false })])
@@ -243,7 +247,7 @@ describe('FolderShareDialog — the folder\'s links', () => {
     expect(w.findAll(`button[aria-label="${t('share.revoke')}"]`), 'the one live link of mine, and only it').toHaveLength(1)
     await byLabel(w, t('share.revoke')).trigger('click')
     await flushPromises()
-    expect(revokeShare).toHaveBeenCalledWith('live')
+    expect(revokeShare).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, shareId: 'live', role: ShareRole.Read })
     // control: the same list outside a pending deletion offers them
     const live = mountDialog({ contribute: true })
     await flushPromises()
@@ -253,6 +257,28 @@ describe('FolderShareDialog — the folder\'s links', () => {
       expect(byLabel(live, t(label)).exists(), label).toBe(true)
     }
     expect(live.text()).not.toContain(t('share.pendingDeletion'))
+  })
+
+  // ADR 0114 decision 7: the close cleared the link's key, so its reopen carries the folder's current key and name.
+  it("switches a link back on with the folder's own key at its epoch, the scope key and its name, and re-reads the list", async () => {
+    const off = row({ shareId: 'off', enabled: false })
+    listSharesFor.mockResolvedValueOnce([off]).mockResolvedValueOnce([{ ...off, enabled: true }])
+    const w = mountDialog()
+    await flushPromises()
+    await w.find('.folder-share-fold').trigger('click')
+
+    await byLabel(w, t('share.reactivate')).trigger('click')
+    await flushPromises()
+
+    const reactivate = vi.mocked(manage.reactivateShare)
+    expect(reactivate).toHaveBeenCalledTimes(1)
+    const [share, root, epochs, name] = reactivate.mock.calls[0]
+    expect(share).toMatchObject({ shareId: 'off', scopeId: SCOPE_ID, nodeId: FOLDER_ID, role: ShareRole.Read, sealedShareKey: 'k', sealedShareKeyEpoch: 0 })
+    expect(root).toEqual({ key: FOLDER_KEY, epoch: FOLDER_EPOCH })
+    expect(root.key).toBe(FOLDER_KEY)
+    expect(epochs).toEqual(EPOCHS)
+    expect(name).toBe('Trips')
+    expect(listSharesFor).toHaveBeenCalledTimes(2)
   })
 
   it('deletes a switched-off link after the folder-worded confirm', async () => {
@@ -266,8 +292,31 @@ describe('FolderShareDialog — the folder\'s links', () => {
     settleConfirm(true)
     await flushPromises()
 
-    expect(deleteShare).toHaveBeenCalledWith('off')
+    expect(deleteShare).toHaveBeenCalledWith(expect.objectContaining({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, shareId: 'off', role: ShareRole.Read, enabled: false }))
     expect(w.findAll('.folder-share-row')).toHaveLength(0)
+  })
+
+  // ADR 0114 decision 9: a switch-off re-keys what lies below the folder in the background; the link's row says so while
+  // it runs, its fold opened so the row is in view. Control: a switched-off link not re-keying here says nothing.
+  it("after a switch-off the fold opens and the link's row says what lies below it gets a new lock, while that runs", async () => {
+    listSharesFor.mockResolvedValueOnce([row({ shareId: 'mine' }), row({ shareId: 'old', enabled: false })])
+      .mockResolvedValue([row({ shareId: 'mine', enabled: false }), row({ shareId: 'old', enabled: false })])
+    revokeShare.mockImplementation(async (link) => { manage.rekeyingClosedLinks.add(link.shareId) })
+    const w = mountDialog()
+    await flushPromises()
+    expect(w.findAll('.folder-share-row')).toHaveLength(1) // the switched-off one folded
+
+    await byLabel(w, t('share.revoke')).trigger('click')
+    await flushPromises()
+    const rows = w.findAll('.folder-share-row')
+    expect(rows).toHaveLength(2)
+    const said = (r: (typeof rows)[number]) => r.find('.folder-share-rekeying').exists()
+    expect(rows.map(said)).toEqual([true, false])
+    expect(rows[0].text()).toContain(t('share.closedRekeying'))
+
+    manage.rekeyingClosedLinks.delete('mine') // the re-key ended
+    await flushPromises()
+    expect(w.find('.folder-share-rekeying').exists()).toBe(false)
   })
 
   // inbox #385 (c): an unnamed link is titled by its role, so its role badge would repeat it ("View only" twice).

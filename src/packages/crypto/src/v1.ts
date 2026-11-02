@@ -833,6 +833,105 @@ const u64be = (n: number): Uint8Array => {
   return b
 }
 
+// ── Scope succession (ADR 0115 decision 5) ───────────────────────────────────────────────────────────────
+// A scope key is replaced at each rotation, never chained: no stored value lets a newer epoch's key open an older one,
+// as the `scope-epoch` link it replaces did. What proves a new key instead is a statement. Each epoch's key K derives an
+// Ed25519 key under a label no other derivation from K uses —
+// `seed = HKDF-SHA256(ikm = K, salt = "", info = "veyq/v1/scope-succession", 32)` — and the rotation signs the
+// `scope-succession` statement (scopeId, n + 1, pk_{n+1}) with sk_n. The statement opens nothing, a public key and a
+// signature, so the old key is not readable from the new one nor the new from the old. No key is published at a scope's
+// birth: a holder of epoch n derives pk_n from the key it holds, walks the statements up to the epoch a grant carries,
+// and requires the last public key to be the one the granted key derives (`verifySuccessionPath`). What stays open is
+// ADR 0115's: whoever held epoch n can sign a successor of its own; the device that minted or held the newer epoch
+// refuses it. Conformance: v1.json#scope_succession.
+
+/** An epoch's succession key: the Ed25519 public key a rotation publishes, and its private half (the 32-byte seed). */
+export type SuccessionKeyPair = { publicKey: Uint8Array; privateKey: Uint8Array }
+
+const successionSeed = (scopeKey: Uint8Array): Uint8Array => {
+  if (!(scopeKey instanceof Uint8Array) || scopeKey.length !== 32) throw new TypeError('scope key: not 32 bytes')
+  return hkdf(sha256, scopeKey, new Uint8Array(0), utf8('veyq/v1/scope-succession'), 32)
+}
+
+/** The succession key an epoch's 32-byte scope key derives. */
+export function successionKeyPair(scopeKey: Uint8Array): SuccessionKeyPair {
+  const privateKey = successionSeed(scopeKey)
+  return { publicKey: ed25519.getPublicKey(privateKey), privateKey }
+}
+
+export type ScopeSuccessionStatement = Extract<StatementContext, { purpose: 'scope-succession' }>
+
+/** One succession as its statement sees it: the scope, the NEW epoch (1 or more) and that epoch's succession public key. */
+export type SuccessionInput = { scopeId: string; epoch: number; successionPublicKey: Uint8Array }
+
+/** The typed `scope-succession` statement. Epoch 0 has none — a scope's birth succeeds nothing — and the key is an
+ *  Ed25519 public key, 32 bytes. */
+export function scopeSuccessionStatement(s: SuccessionInput): ScopeSuccessionStatement {
+  if (!Number.isSafeInteger(s.epoch) || s.epoch < 1) throw new SealContextInvalid('scope-succession epoch is not 1 or more')
+  if (!(s.successionPublicKey instanceof Uint8Array) || s.successionPublicKey.length !== 32) {
+    throw new SealContextInvalid('scope-succession successionPublicKey is not 32 bytes')
+  }
+  return { purpose: 'scope-succession', scopeId: s.scopeId, epoch: s.epoch, successionPublicKey: s.successionPublicKey }
+}
+
+/** Sign the succession to `s.epoch` with the key of the epoch before it (`prevScopeKey`). Deterministic. */
+export const signSuccession = (prevScopeKey: Uint8Array, s: SuccessionInput): Uint8Array =>
+  ed25519.sign(encodeStatement(scopeSuccessionStatement(s)), successionSeed(prevScopeKey))
+
+/** Verify a succession under the previous epoch's succession public key. False — never a throw — for a malformed key,
+ *  signature or statement: all three come from the server, and a refusal is the answer either way. */
+export function verifySuccession(prevPublicKey: Uint8Array, s: SuccessionInput, signature: Uint8Array): boolean {
+  try {
+    return ed25519.verify(signature, encodeStatement(scopeSuccessionStatement(s)), prevPublicKey)
+  } catch {
+    return false
+  }
+}
+
+/** One served succession, decoded: the epoch it proves, that epoch's public key, and the previous epoch's signature. */
+export type SuccessionLink = { epoch: number; successionPublicKey: Uint8Array; successionSignature: Uint8Array }
+
+const isEpoch = (n: number): boolean => Number.isSafeInteger(n) && n >= 0
+
+/**
+ * Whether `statements` prove `targetPublicKey` as the succession key of `targetEpoch` to a holder of `heldEpoch`, whose
+ * key derives `heldPublicKey`. It needs exactly one statement for each epoch `heldEpoch + 1 … targetEpoch`, in any
+ * order — a missing one is a gap, and two for one epoch are refused rather than chosen between — each verifying under
+ * the key before it, the held one first, and the last key byte-equal to `targetPublicKey`. Statements outside that range
+ * are not read; one whose epoch is no unsigned integer refuses the whole set. The same epoch proves only the held key; an
+ * older target is refused — the device floor (ADR 0115 decision 6) opens nothing below what it held. Never a throw.
+ */
+export function verifySuccessionPath(p: {
+  scopeId: string
+  heldEpoch: number
+  heldPublicKey: Uint8Array
+  statements: readonly SuccessionLink[]
+  targetEpoch: number
+  targetPublicKey: Uint8Array
+}): boolean {
+  const { scopeId, heldEpoch, targetEpoch } = p
+  if (!isEpoch(heldEpoch) || !isEpoch(targetEpoch) || targetEpoch < heldEpoch) return false
+  if (!(p.heldPublicKey instanceof Uint8Array) || p.heldPublicKey.length !== 32) return false
+  if (!(p.targetPublicKey instanceof Uint8Array) || p.targetPublicKey.length !== 32) return false
+  const byEpoch = new Map<number, SuccessionLink>()
+  for (const s of p.statements) {
+    if (!isEpoch(s.epoch)) return false
+    if (s.epoch <= heldEpoch || s.epoch > targetEpoch) continue
+    if (byEpoch.has(s.epoch)) return false
+    byEpoch.set(s.epoch, s)
+  }
+  let key = p.heldPublicKey
+  for (let epoch = heldEpoch + 1; epoch <= targetEpoch; epoch++) {
+    const s = byEpoch.get(epoch)
+    if (s === undefined) return false
+    if (!verifySuccession(key, { scopeId, epoch, successionPublicKey: s.successionPublicKey }, s.successionSignature)) {
+      return false
+    }
+    key = s.successionPublicKey
+  }
+  return bytesEqual(key, p.targetPublicKey)
+}
+
 // ── The instance moderation key (ADR 0099 § 2) ─────────────────────────────────────────────────────────
 // One key per epoch for the whole instance: a 32-byte random M_n, drawn by admin-web (or veyq-admin) and never held by
 // the server. From it, under labels of their own, an X-Wing key — reports seal to its public half — and an Ed25519 key,

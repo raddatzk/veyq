@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-06-28
 - Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
-- Replaced in part: Decision 1, Decision 2 by ADR 0080 (built)
+- Replaced in part: Decision 1, Decision 2 by ADR 0080 (built); § Rotation / revocation by ADR 0114 (built)
 
 ## Context
 

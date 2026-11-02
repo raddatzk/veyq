@@ -110,7 +110,7 @@ class ShareSwitchGuestGateCoreSliceTest {
             given().contentType(ContentType.JSON).header("X-Contributor-Token", token)
                 .body(
                     """{"nodeId":"${UUID.randomUUID()}","parentId":"${w.root}","kind":"${NodeEntity.FOLDER}","encryptedName":"bmFtZQ==",""" +
-                        """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA==","parentEpoch":0}""",
+                        """"slugToken":"${GuestTreeShare.slug()}","scopeEpoch":0,"wrappedContentKey":"d3JhcA==","parentEpoch":0}""",
                 )
                 .`when`().post("/api/shares/$id/nodes")
         },

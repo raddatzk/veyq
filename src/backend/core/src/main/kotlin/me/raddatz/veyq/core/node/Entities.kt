@@ -14,8 +14,8 @@ import org.hibernate.annotations.DynamicUpdate
 /**
  * A node in a scope's encrypted tree (en.platform.node-tree). FOLDER organizes only and is core's; every other
  * `kind` belongs to an application, which places it through `NodeKindRules` (ADR 0079). Every node, FOLDER included,
- * carries its own content key (`wrappedContentKey`, wrapped under its parent's content key, or under `K_SC` at the
- * node's epoch at the scope root — ADR 0080 Decision 1), and every node may carry one versioned sealed payload (`wrappedMeta`/`metaRevision`) whose format is its kind's application's.
+ * carries its own content key (`wrappedContentKey`, wrapped under its parent's content key, or under the scope key
+ * `K_SC` at the scope root — ADR 0080 Decision 1), and every node may carry one versioned sealed payload (`wrappedMeta`/`metaRevision`) whose format is its kind's application's.
  * Operator-blind: `encryptedName` / `wrappedContentKey` / `wrappedMeta` are opaque ciphertext, `slugToken` a blinded
  * keyed MAC. `parentId`
  * is the **parent slot** — the parent node id, or the scope id for a root-level node (so slug uniqueness per
@@ -47,10 +47,25 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "order_index", nullable = false)
     var orderIndex: Int = 0
 
-    /** The scope content-key **epoch** this node's name/slug/content-key wrap are sealed under (ADR 0024, cr-0088);
-     *  0 = the pre-rotation baseline. A member reads it iff they hold an epoch ≥ this. */
+    /** The node's own key's **epoch** (ADR 0114 decision 3, ADR 0115 decision 4): 0 when its key is minted (a create, a
+     *  copy, an import), one more with every replacement of that key — a rotation's re-key or a link close's. Every
+     *  write sealing under the node's key states it (`nodeEpoch`, `parentEpoch`, a placement's `epoch`), and only the
+     *  re-key's commit (`RekeyStore.commit`) moves it. */
     @Column(name = "epoch", nullable = false)
     var epoch: Int = 0
+
+    /** The scope's epoch when the node's current key was minted (ADR 0115 decision 4): what the `content-key` and
+     *  `node-name` seals of its entry bind and the device floor reads. A create states it as the scope's current one;
+     *  the re-key's commit sets it to the scope's current one again. */
+    @Column(name = "scope_epoch", nullable = false)
+    var scopeEpoch: Int = 0
+
+    /** The node is **due** for its re-key (ADR 0114 decision 4): a rotation's commit marked every node of the scope, or
+     *  a link's close every node of its root's subtree. While due it takes no write sealing under its key
+     *  (`NodeEpochGate`, `409 node_rekey_pending`); its re-key commit clears it. A scope is re-keying while any node is
+     *  due (`ScopeRekeying`). */
+    @Column(name = "rekey_due", nullable = false)
+    var rekeyDue: Boolean = false
 
     /** The node's content key wrapped under its parent's (ADR 0080 Decision 1): every node has one, `NOT NULL`. */
     @Column(name = "wrapped_content_key", nullable = false)

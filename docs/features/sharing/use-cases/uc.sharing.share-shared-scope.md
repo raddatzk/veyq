@@ -26,31 +26,33 @@ scope adds is governance: removal, re-activation, renew and delete below. The re
    and a member could already reach an outsider by other means.
 2. **Hand off / open / view.** As in a personal scope — the key rides the fragment, the server stays blind.
 3. **Follows new content automatically.** Between rotations `K_node` stays, so photos a member adds to the shared
-   Memory seal under the key the link already opens. A scope rotation re-keys every node and **re-wraps each share's
-   root key** under the share's unchanged `K_share`, opened from its recovery copy
+   Memory seal under the key the link already opens. A scope rotation re-keys every node and **re-wraps each open
+   share's root key** under the share's unchanged `K_share`, opened from its recovery copy
    ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 4,
    [uc.spaces.rekey-after-rotation](../../spaces/use-cases/uc.spaces.rekey-after-rotation.md)) — so the existing
-   share shows what is added after it too, and the URL never changes. The recovery copy stays at its epoch, so the
-   link is marked `reissueRequired` (A2): whoever held an older epoch rebuilds the same `K_share` and, with a dump,
-   reads through it what is added below its root until it is renewed (A4).
+   share shows what is added after it too, and the URL never changes. The link keeps the epoch it was minted at, so
+   it is marked `reissueRequired` (A2): every member of the time could have rebuilt the same `K_share` from its
+   recovery copy and, with a dump, reads through it what is added below its root while it is open, until it is
+   renewed (A4).
 
 ## Alternate / exception flows
 
-- **A1 — member removed → their shares deactivate.** Removing a member from the scope **soft-revokes every share
-  that member created there** (`enabled = false`): the resolve + gated blob endpoint `404`. This is the
-  **honest-server forward-secrecy layer** for a public link — a rotation re-wraps every link to the new node key
-  (main flow 3), so the server-side deactivation, and then a renew (A4), *is* the revocation. It runs alongside (and independently of) the group scope-key rotation the
-  removal also triggers ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)); for a **tenant** (ACL-revoke,
-  no rotation — [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md)) it is the *only* forward
-  layer for the link.
+- **A1 — member removed → their shares deactivate.** Removing a member from the scope **switches off every share
+  that member created there** (`enabled = false`): the resolve + gated blob endpoint `404`, and each switch-off is a
+  **close**, which re-keys the subtree below the link's root, so those links open nothing added after it even with a
+  dump ([en.sharing.public-link § Lifecycle](../enablers/en.sharing.public-link.md#lifecycle)). It runs alongside (and independently of) the group scope-key
+  rotation the removal also triggers ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)); for a **tenant**
+  (ACL-revoke, no rotation — [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md)) it is the *only*
+  forward layer for the link, and the removed member keeps the tenant key until an owner re-keys the tenant.
 - **A2 — re-activate a deactivated share → ownership transfers, unless a departed member may hold its link.** Any
   **remaining member** may re-enable a deactivated share; doing so **transfers its ownership** (`owner_account`) to
   the re-activating member, and the **same** link works again. So re-activation is refused (`409
   reissue_required`, nothing written) for a link a departed member may hold
   ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4): a bulk
   switch-off turned it off (A5); the share's owner is no longer a member of the scope (in a tenant too: a removed
-  tenant member's own links); or it carries a recovery copy that predates the scope's current epoch **or its last
-  member removal** — every member could rebuild every link from its copy, one since removed included. The removal
+  tenant member's own links); or it carries a recovery copy and was minted below the scope's current epoch **or
+  before its last member removal** — every member of the time could rebuild the link from its copy, one since removed
+  included. The removal
   count is what carries this on a tenant, whose epoch never moves on a removal, and on a group whose rotation a
   tenant removal only queued. A share with no copy is judged by the switch-off and its owner alone. The server
   serves its verdict on every row of the manage list (`reissueRequired`), from the same predicate the refusal runs;
@@ -59,7 +61,11 @@ scope adds is governance: removal, re-activation, renew and delete below. The re
   passes the same checks: a current member (not an unaccepted invitee, not during the group's deletion grace,
   [uc.spaces.scope-access](../../spaces/use-cases/uc.spaces.scope-access.md)) **and** the instance's sharing
   capability for the share's role — `422 capability_disabled` when the operator has switched that kind of link
-  off ([ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md)).
+  off ([ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md)). A re-activation **reopens** the
+  link, so it carries what the close's re-key left out: the member's device opens `K_share` from the recovery copy and
+  sends the root's current key and name sealed under it, and the link reads again everything added while it was
+  closed; a link with no recovery copy comes back only by renew
+  ([ADR 0114](../../../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 7).
 - **A3 — a creator who has left the scope** keeps nothing: editing or revoking their former share answers them
   as a non-member (404). Ownership is a claim of a *current* member; the share's `owner_account` alone never
   authorizes. A current one still revokes their link while the group waits for its deletion — the one link write
@@ -72,7 +78,8 @@ scope adds is governance: removal, re-activation, renew and delete below. The re
   from the old share; an uploader link keeps the Memory's drop key, since every upload so far is sealed to it. The
   owner renews their own share, live or off; any member renews a share that is off, and owns the new one. The old
   link `404`s exactly as a revoked one — no redirect, which would hand the new link to the person it is meant to cut
-  off — can never come back, and the curator hands out the new one. Guests keep the photos they added; a returning guest names themself
+  off — can never come back, and the curator hands out the new one. Renewing closes the old link, so the subtree below
+  its root is re-keyed and the new link follows the new key. Guests keep the photos they added; a returning guest names themself
   again on the new link and can no longer delete their earlier uploads (a guest's session is per link), and the new
   link's storage budget starts at zero. A link is renewed **at most once**: of two members renewing the same link at
   the same moment, exactly one gets a new link; the other — like anyone renewing a link already renewed or deleted —
@@ -82,8 +89,8 @@ scope adds is governance: removal, re-activation, renew and delete below. The re
   back only by renew (A4), never re-activate: a group removal's opt-in
   ([uc.spaces.manage-group-members](../../spaces/use-cases/uc.spaces.manage-group-members.md)), a tenant removal's
   ([uc.spaces.remove-tenant-member](../../spaces/use-cases/uc.spaces.remove-tenant-member.md) A5), and a scope
-  owner's switch-off with no removal (A6 there, and in the group panel). Each share's owner renews the ones still
-  wanted. The mark is what makes it stick: without it, a link with no recovery copy whose owner is still a member
+  owner's switch-off with no removal (A6 there, and in the group panel). Each switch-off is a close and re-keys the
+  subtree below the link's root (A1). Each share's owner renews the ones still wanted. The mark is what makes it stick: without it, a link with no recovery copy whose owner is still a member
   would come back with one click from any member. Forcing a switch-off on every removal would break every guest's
   link even when someone leaves on good terms; a group owner already holds the stronger power of deleting the group.
 - **A7 — delete a link.** A switched-off link stays in the manage panel — folded under a count — until someone
@@ -93,12 +100,12 @@ scope adds is governance: removal, re-activation, renew and delete below. The re
   is in no listing; its id is never minted again. The photos its guests added **stay** in the Memory, readable as
   before — an uploader guest's photos open only through their identity's wrapped key, which goes only once nothing
   of theirs remains. The share's **owner** deletes it at any time (an enabled one is switched off in the same
-  transaction; the panel offers delete on switched-off links only); **another member** only once the owner is no
+  transaction, a close that re-keys its subtree as A1's does; the panel offers delete on switched-off links only); **another member** only once the owner is no
   longer a member of the scope — a co-member's parked link is theirs, note and password copy included. The server
   serves its verdict on every row (`deletable`) from the predicate the delete runs. Erasing a Memory deletes its
   links (`uc.memory.delete-node` E4); erasing a whole space removes its links and **retires** their ids.
-- **A8 — a link no guest is served.** A link can be on and still serve no guest: its end date passed, its space is
-  paused or being deleted, the Server Owner or the space's owner switched its kind of link off, or it misses a
+- **A8 — a link no guest is served.** A link can be on and still serve no guest: its end date passed (which also
+  closes it: a server sweep re-keys its subtree as A1's close does), its space is paused or being deleted, the Server Owner or the space's owner switched its kind of link off, or it misses a
   requirement in effect (a password, an end date within N days of when it was made). Every guest then gets the `404` an
   unknown link gets ([ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
   decision 5), and the manage panel says so on the row, with every reason: the server serves them on every row

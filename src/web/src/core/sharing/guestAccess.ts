@@ -44,6 +44,7 @@ function asTreeNode(n: ShareNode, rootId: string, name: string): TreeNode {
     kind: n.kind,
     orderIndex: n.orderIndex ?? 0,
     epoch: n.epoch,
+    scopeEpoch: n.scopeEpoch,
     name,
     encryptedName: n.encryptedName,
     wrappedContentKey: n.wrappedContentKey ?? '',

@@ -26,7 +26,7 @@ vi.mock('../app/activeSpace', async () => {
       deletedAt: null, purgeAfter: null, trustRefusal: null,
     }),
     enterScope: vi.fn(async () => {}),
-    activeEpochKeys: () => ({ current: 0, keys: new Map([[0, new Uint8Array(32).fill(7)]]) }),
+    activeEpochKeys: () => ({ epoch: 0, key: new Uint8Array(32).fill(7) }),
   }
 })
 vi.mock('../api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api/client')>()), contentApi: vi.fn() }))
@@ -66,7 +66,7 @@ const sealed = (nodeId: string, name: string) => ({
 const FOLDER_ID = '5c09e000-0000-4000-8000-0000000000f1'
 const FILE_ID = '5c09e000-0000-4000-8000-0000000000a1'
 function row(id: string, kind: string, name: string): NodeSummary {
-  return { blockedByOperator: false, id, parentId: null, kind, epoch: 0, slugToken: 'x', orderIndex: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0), ...sealed(id, name) }
+  return { blockedByOperator: false, id, parentId: null, kind, epoch: 0, scopeEpoch: 0, slugToken: 'x', orderIndex: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0), ...sealed(id, name) }
 }
 // Stable ciphertext per (id, name): the same row twice must fingerprint equal, as the server serves it.
 const cache = new Map<string, NodeSummary>()
@@ -302,12 +302,12 @@ describe("the drop box's page, live", () => {
   const BOX = '22222222-2222-4222-8222-222222222222'
   const ANNA = '33333333-3333-4333-8333-0000000000a1'
   const BERT = '33333333-3333-4333-8333-0000000000b1'
-  const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 })
+  const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE_ID, nodeId, scopeEpoch: 0, placementRevision: 0 })
   const sealedRow = (
     id: string, parentId: string | null, kind: string, entryKey: Uint8Array, key: Uint8Array, name: string, extra: Partial<NodeSummary> = {},
   ): NodeSummary => ({
     blockedByOperator: false,
-    id, parentId: parentId ?? undefined, kind, orderIndex: 0, epoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0),
+    id, parentId: parentId ?? undefined, kind, orderIndex: 0, epoch: 0, scopeEpoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0),
     encryptedName: sealName(entryKey, at(id), name), slugToken: 'c2x1Zw==', wrappedContentKey: wrapContentKey(entryKey, at(id), key), ...extra,
   })
   /** A drop box at the root with its drop key, and the rows a guest's first call and its files add, as the server serves them. */
@@ -385,11 +385,11 @@ describe("an opened node's page, live", () => {
   const REPORT = '5c09e000-0000-4000-8000-0000000000a2'
   const tripsKey = v1.randomBytes(32)
   const FILE_KEY = v1.randomBytes(32)
-  const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision: 0 })
+  const at = (nodeId: string): NodeAddress => ({ scopeId: SCOPE_ID, nodeId, scopeEpoch: 0, placementRevision: 0 })
   /** A folder at the root and a file in it, as the server serves them: sealed once per name, so a block — which changes no
    *  ciphertext — is the only difference between two worlds (`treeFingerprint` must see it). `blocked` marks both, as the
    *  server marks every node below a blocked one (`NodeSummary.blockedByOperator`). */
-  const base = { orderIndex: 0, epoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0), blockedByOperator: false, slugToken: 'c2x1Zw==' }
+  const base = { orderIndex: 0, epoch: 0, scopeEpoch: 0, metaRevision: 0, placementRevision: 0, createdAt: new Date(0), blockedByOperator: false, slugToken: 'c2x1Zw==' }
   const tripsRow: NodeSummary = {
     ...base, id: TRIPS, kind: 'FOLDER', encryptedName: sealName(SCOPE_KEY, at(TRIPS), 'Trips'), wrappedContentKey: wrapContentKey(SCOPE_KEY, at(TRIPS), tripsKey),
   }

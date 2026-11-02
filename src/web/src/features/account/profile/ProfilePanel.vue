@@ -47,11 +47,12 @@ const { run: runSave, pending: saving } = useAsyncAction(
     // Seal whatever the fields hold whenever we hold K_tenant — an EMPTY name included: that is how a member
     // removes their real name (an omitted field would leave the old one on the server, per the contract). Without
     // the key only the username is updated; the name inputs are disabled then, so nothing typed is dropped.
-    await updateMyProfile({
+    // The name states the tenant epoch it is sealed under, and is sealed once more after a rotation's `stale_epoch`.
+    await identity.saveName((name) => updateMyProfile({
       username: username.value.trim().toLowerCase(),
-      sealedName: identity.sealedName(),
+      ...name,
       requireGroupAddConsent: requireGroupAddConsent.value,
-    })
+    }))
     // The picture is its own request after the profile: a failure there leaves the saved profile saved and says so.
     try {
       await identity.savePicture()

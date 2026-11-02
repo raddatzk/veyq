@@ -100,25 +100,26 @@ const create = () =>
 
 /** Delete a link for good, after the member said so — the same confirmation core's folder share dialog asks (inbox #385).
  *  What its guests sent stays in the drop box. */
-async function remove(shareId: string) {
+async function remove(share: ManagedShare) {
   const confirmed = await ask({
     header: t('depot.dropBox.shareDelete'),
     message: t('depot.dropBox.shareDeleteConfirm'),
     acceptLabel: t('depot.dropBox.shareDelete'),
     acceptIcon: 'trash',
   })
-  if (confirmed) await run(() => deleteShare(shareId))
+  // A drop box's links are WRITE_ONLY: closing one re-keys nothing (ADR 0114 decision 2), so core starts nothing.
+  if (confirmed) await run(() => deleteShare({ ...share, scopeId: props.scopeId, nodeId: props.nodeId }))
 }
 
 /** Switch a link off, after the member said so; it can be switched on again (below). */
-async function switchOff(shareId: string) {
+async function switchOff(share: ManagedShare) {
   const confirmed = await ask({
     header: t('depot.dropBox.shareRevoke'),
     message: t('depot.dropBox.shareRevokeConfirm'),
     acceptLabel: t('depot.dropBox.shareRevoke'),
     acceptIcon: 'power-off',
   })
-  if (confirmed) await run(() => revokeShare(shareId))
+  if (confirmed) await run(() => revokeShare({ ...share, scopeId: props.scopeId, nodeId: props.nodeId }))
 }
 
 /** Switch a link back on (core's `reactivateShare`, which also hands it to the caller). Refused `reissue_required` for
@@ -127,8 +128,10 @@ const reissueRefused = ref(false)
 const switchOn = (shareId: string) =>
   run(async () => {
     reissueRefused.value = false
+    const share = shares.value.find((s) => s.shareId === shareId)
+    if (!share) return
     try {
-      await reactivateShare(shareId)
+      await reactivateShare(share, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName)
     } catch (e) {
       if (!(await isReissueRequired(e))) throw e
       reissueRefused.value = true
@@ -170,7 +173,11 @@ const saveFix = () =>
     const note = readShareNote(props.epochs, address, s, s.sealedNote)
     const name = readShareName(props.epochs, address, s, s.sealedShareName)
     const expiry = fixNeedsExpiry.value && fixExpiresAt.value ? endOfDay(fixExpiresAt.value) : s.expiresAt
-    await updateShare(address, props.epochs, s, note, name, expiry, undefined, fixNeedsPassword.value ? { set: fixPassword.value } : undefined)
+    // A new end date for a link whose one has passed reopens it (ADR 0114 decision 7): the drop box's key goes with it.
+    await updateShare(
+      address, props.epochs, s, note, name, expiry, undefined, fixNeedsPassword.value ? { set: fixPassword.value } : undefined,
+      { root: { key: props.nodeKey, epoch: props.nodeEpoch }, rootName: props.nodeName },
+    )
     fixing.value = null
     fixPassword.value = ''
   })
@@ -242,7 +249,7 @@ async function copy(text: string, id: string) {
               appearance="outlined"
               size="small"
               :disabled="busy"
-              @click="switchOff(row.share.shareId)"
+              @click="switchOff(row.share)"
             />
             <VeyqButton
               v-else-if="changes && !row.share.enabled && !row.share.reissueRequired"
@@ -264,7 +271,7 @@ async function copy(text: string, id: string) {
               appearance="outlined"
               size="small"
               :disabled="busy"
-              @click="remove(row.share.shareId)"
+              @click="remove(row.share)"
             />
           </span>
         </li>

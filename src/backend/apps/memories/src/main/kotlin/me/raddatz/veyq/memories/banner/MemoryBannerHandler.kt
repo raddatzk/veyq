@@ -72,7 +72,7 @@ sealed interface MemoryBannerOutcome {
     /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6); NOTHING was written, the uploads are still open. */
     object StaleEpoch : MemoryBannerOutcome, HttpFailure by Failures.staleEpoch
 
-    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6); NOTHING was written. */
+    /** The node is due for its re-key (ADR 0114 decision 3); NOTHING was written. */
     object RekeyPending : MemoryBannerOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 

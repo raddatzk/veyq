@@ -78,7 +78,9 @@ sequenceDiagram
 - **A1 — reload:** the own-view is session-only; a reload / new tab shows a **dedicated empty-state** (“your earlier
   uploads aren’t shown here, they arrived safely, you can add more”), never a blank/broken gallery.
 - **A2 — revoked / expired:** `enabled = false` / a passed `expiresAt` → resolve + upload + delete `404`/`403`;
-  an upload in flight stops at its next window or its complete. While `core.public-shares.drop-box` (or its parent)
+  an upload in flight stops at its next window or its complete. Unlike a viewable link's, an uploader link's close
+  re-keys nothing — its key opens only the drop public key and its guest's own upload key — but it clears the link's
+  wrap and sealed drop public key ([en.sharing.public-link § Lifecycle](../enablers/en.sharing.public-link.md#lifecycle)). While `core.public-shares.drop-box` (or its parent)
   is switched off on the instance, an existing WRITE_ONLY link answers every guest endpoint as an unknown link does,
   a `404`, and serves again unchanged once it is back on; a drop box node stays ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md) A3, ADR 0088 decision 5).
 - **A3 — the instance records guest writes** ([en.moderation.guest-write-record](../../moderation/enablers/en.moderation.guest-write-record.md),

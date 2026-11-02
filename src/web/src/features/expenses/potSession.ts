@@ -23,7 +23,7 @@
 import { computed, onScopeDispose, ref, shallowRef, type ComputedRef, type Ref } from 'vue'
 import type { Access, TreeSource } from '../../core/access'
 import type { TreeNode } from '../../core/node/tree'
-import type { EpochKeys } from '../spaces/epochs'
+import type { ScopeKey } from '../spaces/epochs'
 import { nodeKeyForWrite } from '../../core/node/rekey/floor'
 import { pullRekeyPath } from '../../core/node/rekey/rekeyScope'
 import { loadTree, noteScopeGone, treeStore } from '../../core/node/treeStore'
@@ -51,7 +51,7 @@ export interface PotSessionInput {
   node: () => TreeNode
   /** The Pot's key as the session's key chain opens it (null while the keys are not ready). */
   potKey: () => Uint8Array | null
-  epochs: () => EpochKeys | null
+  epochs: () => ScopeKey | null
   tree: () => TreeSource<TreeNode>
   /** Start the live poll (default true; a test turns it off). */
   live?: boolean

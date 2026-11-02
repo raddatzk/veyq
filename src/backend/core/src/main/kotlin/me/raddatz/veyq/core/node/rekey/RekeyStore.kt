@@ -9,11 +9,13 @@ import me.raddatz.veyq.core.node.rekey.NodeRekeyStage.Value
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
+import me.raddatz.veyq.core.sharing.SharingStore
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
+import java.time.Instant
 
 /** One node as the re-key reads it: live or trashed, with the identity key its entry opens through, if any, and whether
  *  only an owner re-keys it ([OwnerOnlyRekey]). */
@@ -36,7 +38,9 @@ data class RekeyParts(
 /** What a node's commit carries besides its staged parts ([RekeyStore.commit]). */
 data class RekeyCommit(
     val nodeEpoch: Int,
-    val epoch: Int,
+    /** The scope's current epoch as the re-keyer read it: the node's `scopeEpoch` after the commit, which its new seals
+     *  bind (ADR 0114 decision 4). */
+    val scopeEpoch: Int,
     val parentId: String?,
     val parentEpoch: Int?,
     val placementRevision: Long,
@@ -49,9 +53,10 @@ data class RekeyCommit(
 )
 
 /**
- * The scope re-key's persistence (ADR 0109, uc.spaces.rekey-after-rotation): every node with its epoch, a node's core
- * parts, and the commit of one node in one transaction. Operator-blind: it rewrites ciphertext in rows it already holds
- * and moves a node's epoch to the scope's current one; no key, no name, no store object.
+ * The scope re-key's persistence (ADR 0109, uc.spaces.rekey-after-rotation; ADR 0114 decision 4): every node with its
+ * own epoch and its due mark, a node's core parts, and the commit of one due node in one transaction. Operator-blind: it
+ * rewrites ciphertext in rows it already holds, raises the node's own epoch and clears its mark; no key, no name, no
+ * store object.
  */
 @ApplicationScoped
 class RekeyStore(
@@ -90,8 +95,8 @@ class RekeyStore(
         val blobs = attachments.mapNotNull { (blobId, role) ->
             BlobEntity.findById(blobId)?.let { RekeyParts.Blob(it.id, role, it.wrappedBlobKey) }
         }
-        val shares = rekeyedShares(nodeId)
-        val identities = identitiesOf(shares.map { it.id })
+        val shares = rekeyedShares(nodeId, Instant.now())
+        val identities = identitiesOf(nodeId)
         return RekeyParts(
             blobs,
             shares.map {
@@ -103,12 +108,25 @@ class RekeyStore(
         )
     }
 
-    /** The shares rooted on [nodeId] that carry the node's key (`wrap`, READ and READ_WRITE) or its drop public key
-     *  (WRITE_ONLY): every link not deleted — a revoked one may be re-activated, so it is re-keyed too. A deleted or
-     *  tombstoned link serves nothing. */
-    private fun rekeyedShares(nodeId: String): List<ShareEntity> =
-        ShareEntity.find("nodeId = ?1 and deleted = false and (wrap is not null or sealedDropPublicKey is not null)", nodeId).list()
-            .filter { it.sealedShareKey != null }
+    /** The shares rooted on [nodeId] that a re-key wraps the node's new key under (`wrap`, READ and READ_WRITE) or
+     *  re-seals its drop public key under (WRITE_ONLY): the **open** links only (ADR 0114 decision 5,
+     *  [SharingStore.OPEN]) — after a rotation too. Nothing new is sealed under a closed link: its close cleared its keys,
+     *  and its reopen brings the root's current one. */
+    private fun rekeyedShares(nodeId: String, now: Instant): List<ShareEntity> =
+        ShareEntity.find(
+            "nodeId = :node and ${SharingStore.OPEN} and (wrap is not null or sealedDropPublicKey is not null)",
+            mapOf("node" to nodeId, "now" to now),
+        ).list().filter { it.sealedShareKey != null }
+
+    /** The guest identities of **every** link rooted on [nodeId], whatever its state, a tombstone included (ADR 0114
+     *  decision 5): a contributor's name and a guest's `K_up` are the node's fields, not the link's, and stay readable to
+     *  the members after the link is gone. */
+    private fun identitiesOf(nodeId: String): List<ShareIdentityEntity> {
+        val shareIds = ShareEntity.getEntityManager()
+            .createQuery("select s.id from ShareEntity s where s.nodeId = :node", String::class.java)
+            .setParameter("node", nodeId).resultList
+        return if (shareIds.isEmpty()) emptyList() else ShareIdentityEntity.find("shareId in ?1", shareIds).list()
+    }
 
     /** `SELECT … FOR UPDATE` on every link rooted on [nodeId], in id order (the order two lockers of several share rows
      *  agree on). */
@@ -118,14 +136,13 @@ class RekeyStore(
             .setParameter("node", nodeId).setLockMode(LockModeType.PESSIMISTIC_WRITE).resultList
     }
 
-    private fun identitiesOf(shareIds: List<String>): List<ShareIdentityEntity> =
-        if (shareIds.isEmpty()) emptyList() else ShareIdentityEntity.find("shareId in ?1", shareIds).list()
-
     /**
      * Commit one node's re-key (ADR 0109 point 2) in ONE transaction: the node gets the key the client minted — its
      * entry under its parent's current key, its meta and drop key re-sealed — and every value staged under [rekeyId]
      * is swapped in: each child's entry, each attachment blob's wrap, each share's wrap and drop public key, each guest
-     * identity's key and name, and every participant's rows. The node's epoch becomes the scope's current one.
+     * identity's key and name, and every participant's rows. The node's own epoch goes up by one, its `scopeEpoch`
+     * becomes the scope's current one, and its due mark is cleared (ADR 0114 decision 4) — the one commit both a
+     * rotation's and a link close's re-key run.
      *
      * **Lock order: the scope row, the links rooted on the node, each participant's own rows
      * ([NodeRekeyParticipant.lockRows], the applications' before the blob service's), the node row, then the rows it
@@ -148,14 +165,18 @@ class RekeyStore(
         for (p in participants) p.lockRows(scopeId, nodeId)
         val node = NodeEpochGate.lockNode(nodeId)?.takeIf { it.scopeId == scopeId } ?: return RekeyOutcome.NotFound
         val current = scope.currentEpoch
-        if (c.epoch != current || c.nodeEpoch != node.epoch || node.epoch >= current) return RekeyOutcome.Stale
-        // Top-down (ADR 0109 point 2): the entry goes under the parent's CURRENT key, so the parent comes first.
+        // A node is re-keyed only while due (ADR 0114 decision 4): one that is not has nothing left to re-key — another
+        // member's commit cleared it — and is a stale read, as a node whose own epoch moved since.
+        if (c.scopeEpoch != current || c.nodeEpoch != node.epoch || !node.rekeyDue) return RekeyOutcome.Stale
+        // Top-down (ADR 0109 point 2): the entry goes under the parent's CURRENT key, so the parent comes first — a
+        // parent still due is pending. The scope root's parent is the scope, whose key the rotation's commit replaced
+        // before it marked anything: never due.
         val atRoot = node.parentId == scopeId
         if (atRoot != (c.parentId == null) || (!atRoot && c.parentId != node.parentId)) return RekeyOutcome.InvalidRequest
         if (!atRoot) {
             val parent = NodeEntity.findById(node.parentId) ?: return RekeyOutcome.NotFound
             val stated = c.parentEpoch ?: return RekeyOutcome.InvalidRequest
-            when (NodeEpochGate.verdict(stated, parent.epoch, current)) {
+            when (NodeEpochGate.verdict(stated, parent.epoch, parent.rekeyDue)) {
                 NodeEpochGate.Verdict.STALE -> return RekeyOutcome.Stale
                 NodeEpochGate.Verdict.PENDING -> return RekeyOutcome.Pending
                 else -> Unit
@@ -172,7 +193,8 @@ class RekeyStore(
         if (!freedSlug && nodes.slugTaken(node.parentId, c.slugToken, exceptNodeId = nodeId)) return RekeyOutcome.SlugTaken
 
         val core = stage.read(rekeyId, nodeId, NodeRekeyStage.CORE)
-        val plan = CorePlan.of(scopeId, nodeId, node, core, rekeyedShares(nodeId)) ?: return RekeyOutcome.PartsMissing
+        val plan = CorePlan.of(scopeId, nodeId, node, core, rekeyedShares(nodeId, Instant.now()), identitiesOf(nodeId))
+            ?: return RekeyOutcome.PartsMissing
         if (plan.stale) return RekeyOutcome.PartsStale
         // Core's parts first: a participant may copy what they re-sealed (a contributor's name, `MediaNodeRekeyParticipant`).
         // A participant's refusal rolls the whole transaction back, core's writes included.
@@ -186,10 +208,13 @@ class RekeyStore(
         }
         // The node's own row in ONE statement, every column the commit changes; the copy loaded under the lock is not
         // written back (nothing on it is dirty).
-        val sets = mutableListOf("wrappedContentKey = :wrap", "encryptedName = :name", "placementRevision = :placement", "epoch = :epoch")
+        val sets = mutableListOf(
+            "wrappedContentKey = :wrap", "encryptedName = :name", "placementRevision = :placement", "epoch = :epoch",
+            "scopeEpoch = :scopeEpoch", "rekeyDue = false",
+        )
         val params = mutableMapOf<String, Any>(
             "id" to nodeId, "wrap" to c.wrappedContentKey, "name" to c.encryptedName,
-            "placement" to c.placementRevision + 1, "epoch" to current,
+            "placement" to c.placementRevision + 1, "epoch" to node.epoch + 1, "scopeEpoch" to current,
         )
         if (!freedSlug) { sets += "slugToken = :slug"; params["slug"] = c.slugToken }
         c.wrappedMeta?.let { sets += listOf("wrappedMeta = :meta", "metaRevision = :metaRevision"); params["meta"] = it; params["metaRevision"] = c.metaRevision + 1 }
@@ -204,7 +229,9 @@ class RekeyStore(
      * Core's staged parts checked against the rows they are for, before anything is written: every child's entry
      * (a guest's identity folder excepted — its entry is under the guest's `K_up`, which the re-key keeps), every
      * attachment blob's wrap, every share's wrap (and its drop public key where it carries one), every identity's key
-     * or name. Null when a row has no staged value; [stale] when a staged child is no child any more or moved since.
+     * or name. Null when a row has no staged value; [stale] when a staged child is no child any more or moved since, or
+     * a key is staged for a link that is no longer open (ADR 0114 decision 8): a wrap staged before its link closed
+     * would hand the closed link the new key — the re-keyer reads the parts again and mints afresh.
      */
     private class CorePlan(
         private val children: List<Pair<NodeEntity, Map<String, String>>>,
@@ -231,10 +258,15 @@ class RekeyStore(
         }
 
         companion object {
-            fun of(scopeId: String, nodeId: String, node: NodeEntity, staged: Map<Key, Value>, shareRows: List<ShareEntity>): CorePlan? {
+            fun of(
+                scopeId: String, nodeId: String, node: NodeEntity, staged: Map<Key, Value>, shareRows: List<ShareEntity>,
+                identityRows: List<ShareIdentityEntity>,
+            ): CorePlan? {
                 val childRows = NodeEntity.find("scopeId = ?1 and parentId = ?2 and shareIdentityId is null", scopeId, nodeId).list()
                 val childIds = childRows.mapTo(HashSet()) { it.id }
-                var stale = staged.keys.any { it.field.startsWith("child.") && it.itemId !in childIds }
+                val openIds = shareRows.mapTo(HashSet()) { it.id }
+                var stale = staged.keys.any { it.field.startsWith("child.") && it.itemId !in childIds } ||
+                    staged.keys.any { (it.field == SHARE_WRAP || it.field == SHARE_DROP) && it.itemId !in openIds }
                 val children = childRows.map { child ->
                     val entry = listOf(CHILD_NAME, CHILD_SLUG, CHILD_WRAP).associateWith { f -> staged[Key(child.id, f)] ?: return null }
                     if (entry.values.any { it.revision != child.placementRevision }) stale = true
@@ -250,8 +282,6 @@ class RekeyStore(
                     val dropPublic = if (dropKeyed && s.sealedDropPublicKey != null) staged[Key(s.id, SHARE_DROP)]?.value ?: return null else null
                     Triple(s, wrap, dropPublic)
                 }
-                val identityRows = if (shareRows.isEmpty()) emptyList()
-                else ShareIdentityEntity.find("shareId in ?1", shareRows.map { it.id }).list()
                 val identities = identityRows.map { i ->
                     val field = if (i.wrappedIdentityKey != null) IDENTITY_KEY else IDENTITY_NAME
                     i to (staged[Key(i.id, field)]?.value ?: return null)

@@ -978,6 +978,17 @@ interface VeyqConfig {
          *  deliberately much tighter than [upload] and still far above honest traffic. */
         fun identity(): Identity
 
+        /** `veyq.share.expiry-close.*` — the end-date sweep (ADR 0114 decision 6, `ShareExpiryCloseSweep`). */
+        fun expiryClose(): ExpiryClose
+
+        interface ExpiryClose {
+            /** How often the sweep closes the links whose end date has passed; read by its `@Scheduled`. A write into
+             *  the subtree between an end date and the next run still lands under the old key — the interval is that
+             *  exposure (the decision's stated residual), so it is short by default. */
+            @WithDefault("1m")
+            fun every(): Duration
+        }
+
         interface Upload {
             fun rate(): Rate
 

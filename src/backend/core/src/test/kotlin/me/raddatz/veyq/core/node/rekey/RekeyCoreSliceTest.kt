@@ -187,11 +187,12 @@ class RekeyCoreSliceTest {
             assertEquals("c2hhcmUtd3JhcA==", ShareEntity.findById(w.shareId)!!.wrap)
             assertEquals("bmV3LW5hbWU=", ShareIdentityEntity.findById(w.identityId)!!.sealedDisplayName)
             assertEquals(0L, NodeRekeyStageEntity.count("rekeyId", rekeyId.toString()), "the commit took its stage")
-            // ADR 0109 point 4: only the node key's wrap moved; the recovery copy stays at its epoch
+            // ADR 0109 point 4: only the node key's wrap moved; the node's re-key leaves the recovery copy as it is —
+            // a rotation's scope commit is what re-seals it (ADR 0115 decision 2), and here none ran
             val share = ShareEntity.findById(w.shareId)!!
             assertEquals(listOf("cmVjb3Zlcnk=", 0), listOf(share.sealedShareKey, share.sealedShareKeyEpoch))
         }
-        // ...so the link keeps showing what is added and stays marked for renewal
+        // ...so the link keeps showing what is added, and stays marked for renewal: it was minted before the epoch
         given().header("Authorization", bearer(w.owner)).`when`().get("/api/shares?nodeId=${w.root}")
             .then().statusCode(200).body("find { it.shareId == '${w.shareId}' }.reissueRequired", equalTo(true))
         // the child, its parent now current
@@ -310,7 +311,7 @@ class RekeyCoreSliceTest {
         restore(w, w.trashed, parentEpoch = 1).statusCode(409).body("code", equalTo("node_rekey_pending"))
         assertTrue(row(w.trashed).deletedAt != null)
 
-        QuarkusTransaction.requiringNew().run { NodeEntity.findById(w.trashed)!!.epoch = 1 } // the re-key reached it
+        QuarkusTransaction.requiringNew().run { NodeEntity.findById(w.trashed)!!.apply { epoch = 1; scopeEpoch = 1; rekeyDue = false } } // the re-key reached it
         restore(w, w.trashed, parentEpoch = 0).statusCode(409).body("code", equalTo("stale_epoch"))
         restore(w, w.trashed, parentEpoch = 1).statusCode(204) // control
         assertTrue(row(w.trashed).deletedAt == null)
@@ -331,7 +332,7 @@ class RekeyCoreSliceTest {
         }
         complete(w, jobId).statusCode(409).body("code", equalTo("rekey_incomplete"))
         assertTrue(ScopeRekeying.lags(w.scopeId))
-        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1 where scopeId = ?1", w.scopeId) }
+        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1, scopeEpoch = 1, rekeyDue = false where scopeId = ?1", w.scopeId) }
         assertFalse(ScopeRekeying.lags(w.scopeId))
         complete(w, jobId).statusCode(204) // control
     }
@@ -363,7 +364,7 @@ class RekeyCoreSliceTest {
         val rekeyId = UUID.randomUUID()
         fun commit() = post(
             w, "/rekey/nodes/$box/$rekeyId",
-            """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Ym94","slugToken":"${slug()}","wrappedContentKey":"Ym94LXdyYXA=","sealedDropPrivateKey":"bmV3LWRyb3AtcHJpdg=="}""",
+            """{"nodeEpoch":0,"scopeEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Ym94","slugToken":"${slug()}","wrappedContentKey":"Ym94LXdyYXA=","sealedDropPrivateKey":"bmV3LWRyb3AtcHJpdg=="}""",
         )
         // the identity's key staged, the link's new public half not: refused, nothing written
         post(w, "/rekey/nodes/$box/$rekeyId/parts", """{"fromEpoch":0,"identities":[{"identityId":"$identityId","wrappedIdentityKey":"bmV3LWstdXA="}]}""").statusCode(204)
@@ -389,7 +390,7 @@ class RekeyCoreSliceTest {
         assertEquals(false, rowRekeying(owner, tenantId, scopeId), "control: nothing rotated")
         rotate(scopeId, to = 1, grantFollows = true, owner = owner)
         assertEquals(true, rowRekeying(owner, tenantId, scopeId))
-        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1 where scopeId = ?1", scopeId) }
+        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1, scopeEpoch = 1, rekeyDue = false where scopeId = ?1", scopeId) }
         assertEquals(false, rowRekeying(owner, tenantId, scopeId))
     }
 
@@ -404,7 +405,7 @@ class RekeyCoreSliceTest {
         rotate(scopeId, to = 1, grantFollows = true, owner = owner)
         grantAt(scopeId, member, 1)
         assertEquals(true, rowRekeying(member, tenantId, scopeId))
-        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1 where scopeId = ?1", scopeId) }
+        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1, scopeEpoch = 1, rekeyDue = false where scopeId = ?1", scopeId) }
         assertEquals(false, rowRekeying(member, tenantId, scopeId))
     }
 
@@ -445,7 +446,7 @@ class RekeyCoreSliceTest {
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 id = shareId; ownerAccount = owner; this.scopeId = scopeId; nodeId = root; role = "READ_WRITE"
-                wrap = "b2xkLXNoYXJlLXdyYXA="; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
+                wrap = "b2xkLXNoYXJlLXdyYXA="; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0; mintedEpoch = 0; createdAt = Instant.now()
                 sealedName = "bGluaw==" // a listed share is never a tombstone
             }.persist()
             ShareIdentityEntity().apply {
@@ -456,8 +457,13 @@ class RekeyCoreSliceTest {
         return World(owner, scopeId, root, child, trashed, cover.blobId, shareId, identityId)
     }
 
+    /** The scope moves to [to] and every node of it is due, as a rotation's commit leaves them (ADR 0114 decision 4);
+     *  the scope-level re-seal is `ScopeRekeySliceTest`'s. */
     private fun rotate(scopeId: String, to: Int, grantFollows: Boolean, owner: String? = null) {
-        QuarkusTransaction.requiringNew().run { ScopeEntity.findById(scopeId)!!.currentEpoch = to }
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity.findById(scopeId)!!.currentEpoch = to
+            NodeEntity.update("rekeyDue = true where scopeId = ?1", scopeId)
+        }
         if (grantFollows) grantAt(scopeId, owner!!, to)
     }
 
@@ -494,7 +500,7 @@ class RekeyCoreSliceTest {
     private fun rootCommit(parentId: String? = null, parentEpoch: Int? = null, nodeEpoch: Int = 0, wrap: String = "bmV3LXJvb3Qtd3JhcA=="): String {
         val parent = parentId?.let { "\"parentId\":\"$it\"," } ?: ""
         val epoch = parentEpoch?.let { "\"parentEpoch\":$it," } ?: ""
-        return """{$parent$epoch"nodeEpoch":$nodeEpoch,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXJvb3Q=","slugToken":"${slug()}","wrappedContentKey":"$wrap"}"""
+        return """{$parent$epoch"nodeEpoch":$nodeEpoch,"scopeEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXJvb3Q=","slugToken":"${slug()}","wrappedContentKey":"$wrap"}"""
     }
 
     /**
@@ -540,19 +546,19 @@ class RekeyCoreSliceTest {
 
         fun commitBox(rekeyId: UUID, caller: String = w.owner): ValidatableResponse = post(
             w, "/rekey/nodes/$box/$rekeyId",
-            """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Ym94","slugToken":"${slug()}","wrappedContentKey":"Ym94LXdyYXA=","sealedDropPrivateKey":"bmV3LWRyb3AtcHJpdg=="}""",
+            """{"nodeEpoch":0,"scopeEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Ym94","slugToken":"${slug()}","wrappedContentKey":"Ym94LXdyYXA=","sealedDropPrivateKey":"bmV3LWRyb3AtcHJpdg=="}""",
             caller,
         )
 
         fun commitFolder(rekeyId: UUID, caller: String = w.owner): ValidatableResponse = post(
             w, "/rekey/nodes/$folder/$rekeyId",
-            """{"nodeEpoch":0,"epoch":1,"parentId":"$box","parentEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Zm9sZGVy","slugToken":"${slug()}","wrappedContentKey":"Zm9sZGVyLXdyYXA="}""",
+            """{"nodeEpoch":0,"scopeEpoch":1,"parentId":"$box","parentEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Zm9sZGVy","slugToken":"${slug()}","wrappedContentKey":"Zm9sZGVyLXdyYXA="}""",
             caller,
         )
 
         fun commitInner(placementRevision: Long = 0, caller: String = w.owner): ValidatableResponse = post(
             w, "/rekey/nodes/$inner/${UUID.randomUUID()}",
-            """{"nodeEpoch":0,"epoch":1,"parentId":"$folder","parentEpoch":1,"placementRevision":$placementRevision,"metaRevision":0,"encryptedName":"aW5uZXI=","slugToken":"${slug()}","wrappedContentKey":"aW5uZXItd3JhcA=="}""",
+            """{"nodeEpoch":0,"scopeEpoch":1,"parentId":"$folder","parentEpoch":1,"placementRevision":$placementRevision,"metaRevision":0,"encryptedName":"aW5uZXI=","slugToken":"${slug()}","wrappedContentKey":"aW5uZXItd3JhcA=="}""",
             caller,
         )
     }
@@ -562,12 +568,12 @@ class RekeyCoreSliceTest {
     /** The child's commit body under the root; [parentEpoch] null leaves it out. */
     private fun childCommit(w: World, parentEpoch: Int?, placementRevision: Long = 0, nodeEpoch: Int = 0): String {
         val epoch = parentEpoch?.let { "\"parentEpoch\":$it," } ?: ""
-        return """{"nodeEpoch":$nodeEpoch,"epoch":1,"parentId":"${w.root}",$epoch"placementRevision":$placementRevision,"metaRevision":0,"encryptedName":"bmV3LWM=","slugToken":"${slug()}","wrappedContentKey":"bmV3LWMtd3JhcA=="}"""
+        return """{"nodeEpoch":$nodeEpoch,"scopeEpoch":1,"parentId":"${w.root}",$epoch"placementRevision":$placementRevision,"metaRevision":0,"encryptedName":"bmV3LWM=","slugToken":"${slug()}","wrappedContentKey":"bmV3LWMtd3JhcA=="}"""
     }
 
     private fun create(w: World, parent: String, parentEpoch: Int): ValidatableResponse = post(
         w, "/nodes",
-        """{"nodeId":"${UUID.randomUUID()}","parentId":"$parent","parentEpoch":$parentEpoch,"kind":"FOLDER","encryptedName":"bmV3","slugToken":"${slug()}","orderIndex":0,"epoch":1,"wrappedContentKey":"d3JhcA=="}""",
+        """{"nodeId":"${UUID.randomUUID()}","parentId":"$parent","parentEpoch":$parentEpoch,"kind":"FOLDER","encryptedName":"bmV3","slugToken":"${slug()}","orderIndex":0,"scopeEpoch":1,"wrappedContentKey":"d3JhcA=="}""",
     )
 
     private fun meta(w: World, node: String, nodeEpoch: Int, revision: Long = 0): ValidatableResponse =

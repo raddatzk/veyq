@@ -41,7 +41,7 @@ const n = (id: string, kind: string, parentId: string | null, name: string, over
 const NODES = [
   n('reisen', FOLDER_KIND, null, 'Reisen'), n('rom', FOLDER_KIND, 'reisen', 'Rom'), n('file', FILE_KIND, 'reisen', 'bericht.pdf'),
   n('lissabon', MEMORY_KIND, 'reisen', 'Lissabon'),
-  n('archiv', FOLDER_KIND, null, 'Archiv'),
+  n('archiv', FOLDER_KIND, null, 'Archiv', { epoch: 2 }), // its key replaced twice under scope epoch 0
   n('box', DROPBOX_KIND, null, 'Postfach'), n('anna', FOLDER_KIND, 'box', 'Anna', { shareIdentityId: 'id-anna' }),
 ]
 const byId = (id: string) => NODES.find((x) => x.id === id)!
@@ -161,7 +161,7 @@ describe('CopyNodesDialog: the copy', () => {
     const w = await mountDialog([byId('reisen')])
     await goTo('Archiv')
     await click(submit())
-    expect(p.run).toHaveBeenCalledWith(expect.objectContaining({ scopeId: 'scope-1', epochs, parent: { id: 'archiv', key: expect.any(Uint8Array), epoch: 0 } }))
+    expect(p.run).toHaveBeenCalledWith(expect.objectContaining({ scopeId: 'scope-1', epochs, parent: { id: 'archiv', key: expect.any(Uint8Array), epoch: 2, scopeEpoch: 0 } }))
     expect(toast.success).toHaveBeenCalledWith(t('node.copy.copied', { name: 'Reisen', to: 'Archiv' }))
     expect(w.emitted('copied')).toEqual([[{ nodeIds: ['new1'], to: 'archiv' }]])
     expect(w.emitted('close')).toBeTruthy()

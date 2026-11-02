@@ -49,7 +49,7 @@ import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favori
 import { decodeHttpError, HttpStatus, isCodedError, isHttpStatus } from '../../../shared/httpError'
 import { me } from '../../spaces/grantTrust'
 import { grantSignatureVerifies, recipientIdentityDigest, sealGrant, signGrant } from '../../spaces/grant'
-import { openUnderHeldEpochs, zeroEpochKeys, type EpochKeys } from '../../spaces/epochs'
+import { zeroScopeKey, type ScopeKey } from '../../spaces/epochs'
 import { isUnreadableGrant, openPlanGrantKey, planOpener } from '../../spaces/scopes'
 import { collectMyVerifications, resignVerifications, type CarriedVerification } from '../tenantTrust'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
@@ -507,10 +507,11 @@ type RootedPlan = { invites: RotationPlanInvite[]; records: RotationPlanJoinReco
  *  - an **open invite** is re-signed — its `invite-key` statement and its anchor grant's `grant` statement — only when
  *    both its current signatures verify under the outgoing identity; any other is declared (both `null`), and the
  *    publish ends it rather than leave it signed by a retired key;
- *  - a **join record** it rooted is endorsed only when it opens under the tenant's epoch keys (the plan opener),
- *    verifies, names this account as its signer, and either names the outgoing key or carries an endorsement that
- *    verifies under it; any other — one this device cannot open, one a retired key signed without endorsement — is
- *    declared (`endorsement: null`).
+ *  - a **join record** it rooted is endorsed only when it opens under the tenant's key (the plan opener), verifies,
+ *    names this account as its signer, and either names the outgoing key or carries an endorsement that verifies under
+ *    it; any other — one this device cannot open, one a retired key signed without endorsement — is declared
+ *    (`endorsement: null`). The endorsement signs the digest of the OPENED record, which the stage sends beside it
+ *    (`recordDigest`, ADR 0115 decision 8): every rotation re-seals the envelope, never the record.
  * Each list mirrors what the server's stage holds (by a mark of the plan entry it was judged from), so a re-read after
  * `409 rotation_plan_changed` puts up only what moved; a stage the self-grants re-opened starts both over.
  */
@@ -597,30 +598,34 @@ class RootedStage {
       const opened = row ? await planOpener(row, async () => row)(tenantId).catch(() => null) : null
       try {
         for (const r of records.filter((x) => x.tenantId === tenantId)) {
-          out.set(recordKey(r), { tenantId, userId: r.userId, endorsement: opened ? this.endorsement(r, opened.epochs) : null })
+          const endorsed = opened ? this.endorsement(r, opened.epochs) : null
+          out.set(recordKey(r), { tenantId, userId: r.userId, endorsement: endorsed?.endorsement ?? null, recordDigest: endorsed?.recordDigest ?? null })
         }
       } finally {
-        if (opened) zeroEpochKeys(opened.epochs)
+        if (opened) zeroScopeKey(opened.epochs)
       }
     }
     return records.map((r) => out.get(recordKey(r))!)
   }
 
-  /** The NEW identity's endorsement of [r], or null to declare it. */
-  private endorsement(r: RotationPlanJoinRecord, epochs: EpochKeys): string | null {
+  /** The NEW identity's endorsement of [r] with the digest of the opened record it signs, or null to declare it. */
+  private endorsement(r: RotationPlanJoinRecord, epochs: ScopeKey): { endorsement: string; recordDigest: string } | null {
     const address = { tenantId: r.tenantId, userId: r.userId }
-    let sealed: Uint8Array
+    let record: invite.JoinRecord
     try {
-      sealed = fromB64std(r.sealedJoinRecord)
+      record = invite.openJoinRecord(epochs.key, address, fromB64std(r.sealedJoinRecord))
     } catch {
       return null
     }
-    const record = openUnderHeldEpochs(epochs, (key) => invite.openJoinRecord(key, address, sealed))?.value
-    if (!record || !invite.joinRecordVerifies(address, record) || record.signerUserId !== this.self.userId) return null
-    const statement = { ...address, signerUserId: this.self.userId, sealedJoinRecord: sealed }
+    if (!invite.joinRecordVerifies(address, record) || record.signerUserId !== this.self.userId) return null
+    const joinRecord = invite.encodeJoinRecord(record)
+    const statement = { ...address, signerUserId: this.self.userId, joinRecord }
     const namesOutgoing = sameBytes(record.signerIdentityPublicKey, v1.serializeIdentityPublic(this.self.pub))
     if (!namesOutgoing && !endorsedUnder(this.self.pub.sign, statement, r.joinEndorsement)) return null
-    return b64std(invite.signJoinEndorsement(this.next.priv.sign, statement))
+    return {
+      endorsement: b64std(invite.signJoinEndorsement(this.next.priv.sign, statement)),
+      recordDigest: b64std(invite.joinRecordDigest(joinRecord)),
+    }
   }
 }
 

@@ -2,7 +2,7 @@ useCase: uc.account.rotate-keys
 feature: account
 title: Secure my account after a compromise
 # ADR 0060 in the form ADR 0111 decisions 6-10, 20 and 21 gave it. What the flow DRIVES stays covered under its own use-cases:
-# the epoch chain + POST /api/scopes/{scopeId}/epochs (ADR 0024, en.spaces.scope-key-rotation), the node re-key
+# the scope rotation + POST /api/scopes/{scopeId}/epochs (ADR 0115, en.spaces.scope-key-rotation), the node re-key
 # (uc.spaces.rekey-after-rotation) and how other members follow the new key through the key chain
 # (uc.spaces.verify-identity). What is covered here is the account-side operation: its gate, the new Secret Key and
 # kit, the key-chain step, the stage and the publish that applies it, the next epochs the account mints itself, and
@@ -74,7 +74,7 @@ acceptanceCriteria:
     text: >
       The caller's item marks carry a self-tag whose key derives from the Master Key, so the rotation re-tags them:
       it reads the caller's own rows across every scope the gate still lets them read (GET /api/item-favorites —
-      never a co-member's row, never a left, proposed-only or suspended scope's), opens each with that scope's E_0,
+      never a co-member's row, never a left, proposed-only or suspended scope's), opens each with that scope's current key,
       and re-seals under the new key only a row whose tag verifies under the OLD one, so a co-member's blob slipped
       into the listing stays not-mine. Best-effort per Memory, like the other Master-Key riders, and it runs before
       the vault swaps to the new keys. (ADR 0068 §9.)

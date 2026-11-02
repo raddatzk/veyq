@@ -58,7 +58,7 @@ const stubs = {
 }
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cc'
-const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
+const EPOCHS = { epoch: 0, key: new Uint8Array(32) }
 
 function mountDialog(props: Record<string, unknown>) {
   return mount(ShareCreateDialog, {

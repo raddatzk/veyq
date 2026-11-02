@@ -5,6 +5,7 @@ import me.raddatz.veyq.memories.generated.model.ItemFavoritesEntry
 import me.raddatz.veyq.memories.generated.model.PutItemFavoritesRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -52,6 +53,7 @@ class ItemFavoritesResource(
                 scopeId.toString(),
                 nodeId.toString(),
                 putItemFavoritesRequest.ciphertext,
+                putItemFavoritesRequest.epoch.validated(),
             )
         ) {
             PutItemFavoritesOutcome.Stored -> Response.noContent().build()

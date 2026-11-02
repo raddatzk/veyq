@@ -28,7 +28,7 @@ vi.mock('../../../core/people/directory', async (orig) => ({
   ...(await orig<typeof import('../../../core/people/directory')>()), loadScopePeople: vi.fn(),
 }))
 // The member's epoch keys, for the chain to a guest's name sealed above this node; none unless a test sets them.
-const space = vi.hoisted(() => ({ epochs: null as null | import('../../spaces/epochs').EpochKeys }))
+const space = vi.hoisted(() => ({ epochs: null as null | import('../../spaces/epochs').ScopeKey }))
 vi.mock('../../../app/activeSpace', () => ({ activeEpochKeys: () => space.epochs }))
 
 // The undo affordance is now a global toast (cr-0157): stub the shared composable so the test can capture the

@@ -118,7 +118,15 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
   so a move re-seals one node, not its subtree
   ([ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md)
   Decision 4).
-- Each node's **kind** (concession 3) and its content-key **epoch index**.
+- Each node's **kind** (concession 3), its own key's **epoch** (how often that key was replaced) beside the scope
+  epoch it was minted at, and whether it is **due** for a re-key.
+- **Key replacement:** per scope epoch a **succession public key and signature**, the statement by which the old key
+  vouches for the new one — no link from one key to another, and nothing in it opens anything; per link the scope
+  epoch it was minted at and whether the end-date sweep closed it. At a rotation the server sees which scope-level
+  rows are rewritten, and at a link's close that the link closed and which nodes lie below it — rows and a tree it
+  serves anyway. No key, and no new correlation
+  ([ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 9,
+  [ADR 0114](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 10).
 - Per-parent blinded name tokens.
 - A medium's **uploader attribution and bucket structure**: an opaque owner key per medium (`user:{id}` or
   `share:{id}`), its bucket, and the buckets' shape and counts; a Depot file's uploader attribution, served to

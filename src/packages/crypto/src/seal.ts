@@ -60,12 +60,14 @@ export const SEAL_PURPOSES = {
   // A node's key wrap binds the placement revision the wire stores it at (ADR 0080 Decision 3): 0 at birth, `n + 1`
   // for a move or rename built on `n`, so a wrap served at another revision — one a move superseded — does not open.
   // Added before V1 (ADR 0072: a stored-format change, so a code change and a reset, not a suite v2); the parent stays
-  // unbound (ADR 0072 Decision 4) — the parent's key is the binding.
+  // unbound (ADR 0072 Decision 4) — the parent's key is the binding. `epoch` is the node's `scopeEpoch`, the scope epoch
+  // its key was minted under (ADR 0115 decision 4), not the node's own epoch; the field keeps its name because a context
+  // is encoded by position, never by name, so no byte of a seal or a vector moved with the meaning.
   'content-key': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
   // ownerId is the media id for a media's blobs, the node id for a cover or a file's content; the role names which.
   'blob-key': [['scopeId', 'id'], ['ownerId', 'id'], ['blobId', 'id'], ['role', 'role']],
-  // A share's K_share, recoverable by the Memory's scope members only: sealed under K_SC at the epoch stored beside
-  // it — a key no share link carries (ADR 0036 point 4), where K_node is one every viewer/contributor link does.
+  // A share's K_share, recoverable by the Memory's scope members only: sealed under the scope key at the epoch stored
+  // beside it, re-sealed at every rotation (ADR 0115 decision 2) — a key no share link carries (ADR 0036 point 4), where K_node is one every viewer/contributor link does.
   'share-key-recovery': [['scopeId', 'id'], ['nodeId', 'id'], ['shareId', 'shareId'], ['epoch', 'uint']],
   // A Memory's drop PRIVATE key (ADR 0031 point 7), under that Memory's K_node — a node field of its own, never
   // inside node-meta, so a date or location edit never carries it.
@@ -75,7 +77,6 @@ export const SEAL_PURPOSES = {
   // WHOSE an entry is rides inside the plaintext instead, as the `item-mark-self` statement's tag below (ADR 0068 §9).
   'item-favorites': [['scopeId', 'id'], ['nodeId', 'id']],
   favorites: [['scopeId', 'id']],
-  'scope-epoch': [['scopeId', 'id'], ['epoch', 'uint']],
   'group-name': [['scopeId', 'id'], ['nameEpoch', 'uint']],
   'space-icon': [['scopeId', 'id'], ['iconEpoch', 'uint']],
   // The pin store's HEAD (ADR 0104): its version, entry count and the digest of the whole entry set, at its revision.
@@ -132,7 +133,8 @@ export const SEAL_PURPOSES = {
  */
 export const FIELD_PURPOSES = {
   // The directory entry binds the placement revision the wire stores it at (ADR 0080 Decision 3), as the key wrap
-  // beside it does; its K_parent is the entry key — the parent's K_node, K_SC at the node's epoch for a scope root.
+  // beside it does; its K_parent is the entry key — the parent's K_node, the scope's one key for a scope root. `epoch`
+  // is the node's `scopeEpoch`, as for `content-key` (ADR 0115 decision 4).
   'node-name': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementRevision', 'uint']],
   'node-meta': [['scopeId', 'id'], ['nodeId', 'id']],
   'media-meta': [['scopeId', 'id'], ['mediaId', 'id']],
@@ -147,8 +149,8 @@ export const FIELD_PURPOSES = {
   'member-join-record': [['scopeId', 'id'], ['userId', 'id']],
   // A member's verification of another member (ADR 0111 decision 12, ./verification.ts): one row per (tenant, verifier,
   // subject), written only by the verifier, beside the name and the join record. It binds the tenant epoch it is sealed
-  // under, so a reader takes that epoch's key from its chain and a row served at another epoch does not open; and the
-  // subject, so a row moved to another subject's slot does not open. Not `verification`, which is the statement inside.
+  // under, so a row served at another epoch does not open (a rotation re-seals it at its new one, ADR 0115 decision 2);
+  // and the subject, so a row moved to another subject's slot does not open. Not `verification`, which is the statement inside.
   'member-verification': [['scopeId', 'id'], ['userId', 'id'], ['subjectUserId', 'id'], ['epoch', 'uint']],
   // One revision of an Expenses entry (ADR 0108 decision 4), padded to its size class (./pad.ts): its K_parent is that
   // revision's own K_rev (`expense-entry-key`), never the Pot's key, so a re-key re-wraps K_rev and never re-seals the
@@ -349,7 +351,7 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  * Statements a key MACs or signs rather than seals — in the same canonical encoding, so their label domain-separates
  * them from each other and from every seal purpose. Pinned by `contracts/crypto/vectors/v1.json` (`#grant_signature`,
  * `#item_mark_self`, `#pairing_channel`, `#moderation_proof`, `#invite_key`, `#join_record`, `#join_endorsement`,
- * `#key_chain`, `#verification`).
+ * `#key_chain`, `#verification`, `#scope_succession`).
  *   - `grant` (ADR 0028 Decision 6): what a granter's identity key signs over a grant it posts. The scope KIND is
  *     signed so a group's genuine grant cannot be presented as the recipient's personal scope; the two digests are
  *     SHA-256 over the DECODED recipient identity public bundle and the DECODED grant ciphertext. A grant to an open
@@ -387,6 +389,10 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  *     in this tenant, this verifier at this head of their own chain confirmed this subject at this head of theirs. It
  *     counts only while it names the subject's current head and is signed by the verifier's current key; a rotation
  *     re-signs the outgoing key's verifications with the new one (./verification.ts).
+ *   - `scope-succession` (ADR 0115 decision 5): what epoch `n`'s scope key, through the signing key it derives
+ *     (v1.ts `successionKeyPair`), signs to prove epoch `n + 1` — the scope, the NEW epoch and that epoch's succession
+ *     public key in full. It replaced the chain link (`scope-epoch`, gone): the statement opens nothing, so neither key is readable from the
+ *     other, and a holder of epoch `n` walks the statements to the epoch a grant carries (`verifySuccessionPath`).
  */
 export const STATEMENT_PURPOSES = {
   grant: [
@@ -434,6 +440,7 @@ export const STATEMENT_PURPOSES = {
     ['identityPublicKey', 'bytes'],
     ['secretKeyProofPublicKey', 'bytes'],
   ],
+  'scope-succession': [['scopeId', 'id'], ['epoch', 'uint'], ['successionPublicKey', 'bytes']],
 } as const satisfies Schema
 
 /** A statement's context: its label and exactly its fields. */

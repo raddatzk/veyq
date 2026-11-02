@@ -17,6 +17,7 @@ import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.MembershipStore
+import me.raddatz.veyq.core.node.rekey.ScopeRekeyCommit
 import me.raddatz.veyq.core.node.rekey.ScopeRekeying
 import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.arc.All
@@ -41,7 +42,7 @@ data class ScopeRow(
     val nameEpoch: Int,
     /** The scope's icon sealed under `K_icon` (uc.spaces.set-space-icon), or null; the client opens + unpads it. */
     val sealedIcon: String?,
-    /** The epoch `sealedIcon` was sealed under — the client peels the chain to it and derives `K_icon`. */
+    /** The epoch `sealedIcon` was sealed under — the current one, since every rotation re-seals it (ADR 0115). */
     val iconEpoch: Int,
     /** When a GROUP is in pending-deletion (cr-0090); null = active. The client marks + (for owners) restores it. */
     val deletedAt: Instant?,
@@ -116,9 +117,11 @@ data class ResolvedCandidateRow(
 )
 
 /** A pending consent proposal from the invitee's point of view (cr-0096): the group + who proposed + the wrapped
- *  name-key `K_name` (`sealedNameKey`) + the scope's canonical `encryptedName` the key opens (ADR 0027). */
+ *  name-key `K_name` (`sealedNameKey`) + the scope's canonical `encryptedName` the key opens (ADR 0027). The name key
+ *  is null when a rotation cleared it (`ScopeRekeyCommit.CLEARED`, ADR 0111 decision 9): the proposal is shown
+ *  without the group's name. */
 data class GroupInvitationRow(
-    val scopeId: String, val addedByUsername: String, val sealedNameKey: String, val encryptedName: String,
+    val scopeId: String, val addedByUsername: String, val sealedNameKey: String?, val encryptedName: String,
     /** The name epoch both seals are bound to (ADR 0072) — the invitee opens them at exactly this epoch. */
     val nameEpoch: Int,
 )
@@ -138,6 +141,7 @@ class ScopesStore(
     private val shares: SharingStore,
     private val tasks: TasksStore,
     private val keyChain: KeyChainStore,
+    private val scopeRekey: ScopeRekeyCommit,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge). What goes with one member's access
     // to one scope, owned by the package whose rows they are (today item favorites, ADR 0068).
     @param:All private val membershipErasers: MutableList<MembershipEraser>,
@@ -262,7 +266,7 @@ class ScopesStore(
                     ScopeRow(
                         it.id, it.kind, it.tenantId, m.role, it.currentEpoch, m.grantedEpoch, grant, it.encryptedName,
                         it.nameEpoch, it.sealedIcon, it.iconEpoch, it.deletedAt, granterOf(m), stuck[it.id],
-                        rekeying = ScopeRekeying.lagsBelow(it.id, it.currentEpoch),
+                        rekeying = ScopeRekeying.lags(it.id),
                     )
                 }
             }
@@ -382,20 +386,29 @@ class ScopesStore(
     /** The scope row, or null — read-only: its epoch and removal count for the sharing feature's re-issue rule. */
     fun find(scopeId: String): ScopeEntity? = ScopeEntity.findById(scopeId)
 
-    /** Turn off and mark every share of the scope (ADR 0075 point 5) — a scope owner's standalone switch-off. */
-    fun turnOffAllShares(scopeId: String): Int = shares.turnOffAllInScope(scopeId)
+    /** Turn off and mark every share of the scope (ADR 0075 point 5) — a scope owner's standalone switch-off. Under the
+     *  scope row's lock, taken first: each link it turns off is a close, which locks its share row and then the nodes
+     *  below it (ADR 0114 decision 8). */
+    @Transactional
+    fun turnOffAllShares(scopeId: String): Int {
+        ScopeEntity.lockRow(scopeId) ?: return 0
+        return shares.turnOffAllInScope(scopeId)
+    }
 
     /** The scope's current content-key epoch, or null if there's no such scope. */
     fun currentEpoch(scopeId: String): Int? = ScopeEntity.findById(scopeId)?.currentEpoch
 
-    /** The epoch-chain links of a scope (ascending), each `epoch → wrappedPrev` (ADR 0024). */
-    fun epochLinks(scopeId: String): List<Pair<Int, String>> =
-        ScopeEpochEntity.find("scopeId", scopeId).list().sortedBy { it.epoch }.map { it.epoch to it.wrappedPrev }
+    /** The succession statements of a scope (ascending by epoch, ADR 0115 decision 5). */
+    fun successions(scopeId: String): List<ScopeSuccession> =
+        ScopeSuccessionEntity.find("scopeId", scopeId).list().sortedBy { it.epoch }
+            .map { ScopeSuccession(it.epoch, it.successionPublicKey, it.successionSignature) }
 
-    /** Commit a rotation (ADR 0024 §4): if [epoch] is the scope's next one and — for a TENANT — the rotation re-grants
-     *  or declares pending every open member invite, advance to it, store the chain-link and apply the re-grants (each
-     *  to the new epoch, signed by [granterId]) to the members and the invites; otherwise store nothing. Client-minted;
-     *  the server stores only ciphertext.
+    /** Commit a rotation (ADR 0024 §4, ADR 0115): if [epoch] is the scope's next one and — for a TENANT — the rotation
+     *  re-grants or declares pending every open member invite, advance to it, store its [succession] statement, apply the
+     *  re-grants (each to the new epoch, signed by [granterId]) to the members and the invites, and swap in every
+     *  scope-level value staged under [rekeyId] ([ScopeRekeyCommit.commit]: the old key is replaced, never chained — a
+     *  row sealed under it with no staged value refuses the whole rotation, nothing stored); otherwise store nothing.
+     *  Client-minted; the server stores only ciphertext and public values.
      *
      *  Dumb by design (ADR 0045 §2): the decision — only the next epoch commits, and no open invite is left behind
      *  silently (ADR 0111 decision 2) — lives in the pure [RotationPolicy], where it is unit-tested and
@@ -404,8 +417,7 @@ class ScopesStore(
      *
      *  The scope row is read under `PESSIMISTIC_WRITE`, so two in-flight commits stating the same epoch serialize:
      *  the loser reads the winner's epoch and is a clean stale. Without the lock both read the old epoch, both pass
-     *  the policy, and the loser dies on `ux_scope_epoch` — the chain still holds, but as an error the client does
-     *  not retry. Every grant written at a stated epoch takes the same lock ([addMember], the tenant's member invite and
+     *  the policy, and the loser dies on `pk_scope_succession` — as an error the client does not retry. Every grant written at a stated epoch takes the same lock ([addMember], the tenant's member invite and
      *  its accept), so no grant can land at an epoch a concurrent rotation is leaving.
      *
      *  The same lock is what makes the two facts about the caller exact (ADR 0060 Decision 4): every scope-rotation
@@ -414,7 +426,7 @@ class ScopesStore(
      *  the committer ([TasksStore.markRotated]) — the only thing that lets such a job complete. */
     @Transactional
     fun rotate(
-        scopeId: String, epoch: Int, wrappedPrev: String, granterId: String,
+        scopeId: String, epoch: Int, succession: ScopeSuccession, rekeyId: String, granterId: String,
         grants: List<RotationGrant>, inviteGrants: List<InviteGrant> = emptyList(), pendingInviteIds: Set<String> = emptySet(),
         removes: String? = null, revokeLinks: Boolean = false, pendingUserIds: Set<String> = emptySet(),
         regranted: Boolean = false,
@@ -460,11 +472,13 @@ class ScopesStore(
         scope.currentEpoch = plan.newEpoch
         scope.persist()
         val granterKey = identityKeyOf(granterId)
-        ScopeEpochEntity().apply {
-            id = UUID.randomUUID().toString()
+        // ADR 0115 decision 5: the new epoch's key is proven by a statement the previous one signed, not by a link that
+        // seals the old key under it. Stored as sent; a member's device verifies it.
+        ScopeSuccessionEntity().apply {
             this.scopeId = scopeId
             this.epoch = plan.newEpoch
-            this.wrappedPrev = wrappedPrev
+            successionPublicKey = succession.successionPublicKey
+            successionSignature = succession.successionSignature
         }.persist()
         plan.grants.forEach { g ->
             rows.firstOrNull { it.userId == g.userId }?.let {
@@ -478,7 +492,15 @@ class ScopesStore(
         }
         tenants.carryInvites(plan.inviteGrants.map { InviteRegrant(it.inviteId, it.grant) }, plan.newEpoch, granterId)
         tasks.markRotated(scopeId, granterId, plan.newEpoch)
-        return decision
+        // ADR 0115 decision 2, last: every scope-level row sealed under the old key takes its staged value — or the
+        // whole rotation, a removal's deletes included, rolls back (the commit marks the transaction). After the removal,
+        // so a removed member's rows are neither required nor written; its node writes end in the tree revision, a leaf.
+        return when (scopeRekey.commit(scope, rekeyId, plan.newEpoch)) {
+            ScopeRekeyCommit.Verdict.APPLIED -> decision
+            ScopeRekeyCommit.Verdict.MISSING -> RotationDecision.PartsMissing
+            ScopeRekeyCommit.Verdict.STALE -> RotationDecision.PartsStale
+            ScopeRekeyCommit.Verdict.RECIPIENT_KEY_NOT_CURRENT -> RotationDecision.RecipientKeyNotCurrent
+        }
     }
 
     /** The epoch [userId]'s pending re-key row on [scopeId] names (ADR 0111 decision 8), or null when it has none. */
@@ -646,13 +668,15 @@ class ScopesStore(
         MembershipEntity.delete("userId = ?1 and scopeId = ?2 and pendingConsent = true", userId, scopeId).toInt()
 
     /** The caller's pending group invitations in a tenant (cr-0096): each with the wrapped name-key `K_name`, the
-     *  scope's canonical `encryptedName` the key opens, and the proposer's per-tenant username. Skips rows missing a
-     *  wrapped name-key or a scope name (never happens for a proposal, defensive). */
+     *  scope's canonical `encryptedName` the key opens, and the proposer's per-tenant username. A proposal whose name
+     *  key a rotation cleared — the rotating device could not anchor the invitee's key (ADR 0111 decision 9) — is
+     *  listed without it, so the invitee still sees and answers it. Skips a row missing a scope name (never happens
+     *  for a group, defensive). */
     fun listInvitations(userId: String, tenantId: String): List<GroupInvitationRow> {
         val profileByUser = profiles.byUserInTenant(tenantId)
         return MembershipEntity.find("userId = ?1 and tenantId = ?2 and pendingConsent = true", userId, tenantId).list()
             .mapNotNull { m ->
-                val sealedNameKey = m.sealedNameKey ?: return@mapNotNull null
+                val sealedNameKey = m.sealedNameKey
                 val scope = ScopeEntity.findById(m.scopeId) ?: return@mapNotNull null
                 val encryptedName = scope.encryptedName ?: return@mapNotNull null
                 GroupInvitationRow(

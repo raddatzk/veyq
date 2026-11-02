@@ -55,8 +55,8 @@ const keys = {
 const HASH = `#k=${b64url(K_SHARE)}`
 
 function child(id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key) }
+  const address = { scopeId: SCOPE_ID, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0, encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key) }
 }
 
 // The drop box as the server serves it to a guest of a link above: its drop private key under its own key, and a
@@ -71,7 +71,7 @@ function head(role: ShareRole): PublicShareHead {
     share: {
       role, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
       nodes: [
-        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
         child(LETTERS, ROOT, keys.root, keys.letters, 'Briefe', FOLDER_KIND),
         { ...child(DROP, ROOT, keys.root, keys.drop, 'Postfach', DROPBOX_KIND), sealedDropPrivateKey },
         { ...child(ANNA, DROP, anna.identityKey, keys.anna, 'Anna', FOLDER_KIND), shareIdentityId: IDENTITY, wrappedIdentityKey: anna.wrappedIdentityKey },

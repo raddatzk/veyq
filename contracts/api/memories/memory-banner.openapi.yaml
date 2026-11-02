@@ -174,7 +174,7 @@ components:
       description: >
         The node's `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current meta and
         revision); a banner slot holds another blob than stated (`banner_stale`, with what both slots hold now); or
-        the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4); `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6). Nothing
+        the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4); `nodeEpoch` not the node's stored epoch (`stale_epoch` — re-read) or a node due for its re-key (`node_rekey_pending` — retry; ADR 0114 decision 3). Nothing
         was written in any case, and the uploads of a refused set are still open.
       content:
         application/json:
@@ -230,8 +230,8 @@ components:
           type: [integer, "null"]
           description: >
             The Memory's epoch as the client read it: the banner wraps and the meta are sealed under its key.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -305,8 +305,8 @@ components:
           type: [integer, "null"]
           description: >
             The Memory's epoch as the client read it: the banner wraps and the meta are sealed under its key.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'

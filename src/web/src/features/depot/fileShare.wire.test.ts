@@ -15,7 +15,7 @@ import { SHARE_MEMORY_NAME, type PublicShareHead } from '../../core/sharing/reso
 import { guestTreeSource } from '../../core/sharing/guestAccess'
 import { planBlob } from '../../core/blob/transport'
 import { ShareRole, type PublicShare } from '../../api/generated/sharing'
-import type { EpochKeys } from '../spaces/epochs'
+import type { ScopeKey } from '../spaces/epochs'
 import { treeNode } from '../../test/models'
 import { fileFacts } from './download'
 import { FILE_KIND } from './kinds'
@@ -28,7 +28,7 @@ const OTHER = '5c09e000-0000-4000-8000-0000000000a3'
 afterEach(() => vi.unstubAllGlobals())
 
 const k0 = v1.randomBytes(32)
-const EPOCHS: EpochKeys = { current: 0, keys: new Map([[0, k0]]) }
+const EPOCHS: ScopeKey = { epoch: 0, key: k0 }
 const keyTop = v1.randomBytes(32)
 const keyFile = v1.randomBytes(32)
 const keyOther = v1.randomBytes(32)
@@ -78,7 +78,7 @@ describe('a single-file share on the wire', () => {
     })
     const head: PublicShareHead = {
       shareId: minted.shareId, kShare: minted.kShare, scopeId: SCOPE_ID, name: new TextDecoder().decode(name), noteByLocale: {}, role, rootKind: FILE_KIND,
-      share: { role, scopeId: SCOPE_ID, rootKind: FILE_KIND, wrap: json.wrap as string, nodes: [{ id: FILE, parentId: null, kind: FILE_KIND, epoch: 0 }] } as unknown as PublicShare,
+      share: { role, scopeId: SCOPE_ID, rootKind: FILE_KIND, wrap: json.wrap as string, nodes: [{ id: FILE, parentId: null, kind: FILE_KIND, epoch: 0, scopeEpoch: 0 }] } as unknown as PublicShare,
     }
     const tree = guestTreeSource(head, { hash: '#k=x' })
     expect(tree.nodes.map((n) => n.id)).toEqual([FILE])

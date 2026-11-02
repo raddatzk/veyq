@@ -8,11 +8,11 @@ import { openScope } from '../../spaces/scopes'
 import { ScopeKind } from '../../../api/generated/scopes'
 import type { MemberProfile } from '../../../api/generated/account'
 import type { MemberNameAddress } from './memberName'
-import { zeroEpochKeys, type EpochKeys } from '../../spaces/epochs'
+import { zeroScopeKey, type ScopeKey } from '../../spaces/epochs'
 
 export type { MemberProfile } from '../../../api/generated/account'
-export { sealName, unsealName, unsealNameUnderEpochs, type MemberName } from './memberName'
-export { sealAvatar, openAvatarUnderEpochs } from './memberAvatar'
+export { sealName, unsealName, openMemberName, type MemberName } from './memberName'
+export { sealAvatar, openMemberAvatar } from './memberAvatar'
 
 /** The caller's profile in the active tenant (Host-resolved): the plaintext handle + the sealed name blob. */
 export function getMyProfile(): Promise<MemberProfile> {
@@ -20,19 +20,22 @@ export function getMyProfile(): Promise<MemberProfile> {
 }
 
 /** Update the caller's username, sealed name, and/or the account-global group-add consent preference (cr-0094) —
- *  each may be omitted to leave it unchanged. */
+ *  each may be omitted to leave it unchanged. A sealed name states the tenant epoch it is sealed under (`epoch`, ADR 0115
+ *  decision 3): another than the tenant's current one is `409 stale_epoch`. */
 export function updateMyProfile(update: {
   username?: string
   sealedName?: string
+  epoch?: number
   requireGroupAddConsent?: boolean
 }): Promise<MemberProfile> {
   return withRefresh(() => accountProfileApi().updateMyProfile({ profileUpdateRequest: update }))
 }
 
 /** Set the caller's profile picture in the Host tenant (ADR 0084): the picture already sealed under `K_tenant`
- *  ({@link sealAvatar}); the server stores it verbatim and bumps `avatarRevision`. */
-export function setMyAvatar(sealedAvatar: string): Promise<void> {
-  return withRefresh(() => accountProfileApi().setMyAvatar({ setAvatarRequest: { sealedAvatar } }))
+ *  ({@link sealAvatar}) at the tenant epoch `epoch` (ADR 0115 decision 3: another than the current one is `409
+ *  stale_epoch`); the server stores it verbatim and bumps `avatarRevision`. */
+export function setMyAvatar(sealedAvatar: string, epoch: number): Promise<void> {
+  return withRefresh(() => accountProfileApi().setMyAvatar({ setAvatarRequest: { sealedAvatar, epoch } }))
 }
 
 /** Clear the caller's profile picture (idempotent `204`); everyone falls back to the letter. */
@@ -45,12 +48,12 @@ export async function myUserId(): Promise<string> {
   return (await withRefresh(() => accountApi().getAccountKeyMaterial())).userId
 }
 
-/** What the caller's own name and picture are sealed and opened with: `key` (the tenant's write key, the current epoch's,
- *  which a save seals under), `epochs` (every tenant epoch key held, which a read tries — the profile row records no
- *  epoch, `memberName.ts` § `unsealNameUnderEpochs`), the tenant's id and the address (tenant scope, own user id). */
+/** What the caller's own name and picture are sealed and opened with: `key` (the tenant's one key, which a save seals
+ *  under and a read opens with), `epochs` (the same key with its epoch, which a save states — ADR 0115 decisions 1 and
+ *  3), the tenant's id and the address (tenant scope, own user id). */
 export interface OwnNameKey {
   key: Uint8Array
-  epochs: EpochKeys
+  epochs: ScopeKey
   tenantId: string
   address: MemberNameAddress
 }
@@ -68,7 +71,7 @@ export async function openOwnNameKey(): Promise<OwnNameKey | null> {
     withRefresh(() => accountApi().getAccountKeyMaterial()),
   ])
   if (material.status === 'rejected') {
-    if (tenant.status === 'fulfilled' && tenant.value) zeroEpochKeys(tenant.value.epochs)
+    if (tenant.status === 'fulfilled' && tenant.value) zeroScopeKey(tenant.value.epochs)
     throw material.reason
   }
   if (tenant.status === 'rejected') throw tenant.reason
@@ -77,8 +80,8 @@ export async function openOwnNameKey(): Promise<OwnNameKey | null> {
   return { key: t.key, epochs: t.epochs, tenantId: t.tenantId, address: { scopeId: t.scopeId, userId: material.value.userId } }
 }
 
-/** Zero what {@link openOwnNameKey} opened: every tenant epoch key, the write key among them. */
+/** Zero what {@link openOwnNameKey} opened: the tenant key. */
 export function zeroOwnNameKey(own: OwnNameKey): void {
-  zeroEpochKeys(own.epochs)
+  zeroScopeKey(own.epochs)
   own.key.fill(0)
 }

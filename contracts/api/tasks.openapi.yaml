@@ -40,7 +40,7 @@ info:
     `E_{n+1}` + re-grants the surviving members on-device via the rotation-commit
     (`POST /api/scopes/{scopeId}/epochs`, cr-0089), then completes — closing the job with no `sealedResult`
     (the rotation is already committed). The claimed job carries only the cleartext envelope (no `grantDelivery`
-    target); the worker reads the member directory + epoch links it already has endpoints for, **after** its
+    target); the worker reads the member directory + the scope-level rows it re-seals (`listScopeRekeyParts`) it already has endpoints for, **after** its
     claim. First-online-wins. An event **joins** a job only while it is `pending`, so many removals before anyone
     is online still cost one rotation; an event that arrives once a job is claimed gets a job of its own, because
     the claimed job's worker may already have read the directory the event changed. A job completes only once its
@@ -240,7 +240,7 @@ paths:
         reclaimed meanwhile writes nothing, the grant included, and gets `not_lease_holder`. A `scope-rotation` job
         completes only once its lease holder has committed an epoch of the scope while holding the lease;
         otherwise `409 rotation_not_committed`, nothing written and the lease kept — and only once no live or
-        trashed node of the scope lags the current epoch (its re-key is done, ADR 0109 point 7); otherwise `409
+        trashed node of the scope is due for its re-key (its re-key is done, ADR 0109 point 7, ADR 0114 decision 4); otherwise `409
         rekey_incomplete`, nothing written and the lease kept.
       security:
         - bearerAuth: []
@@ -284,7 +284,7 @@ paths:
             not the scope's current one (`stale_epoch` — nothing written, the lease released, the job re-runs) or
             names a key that is not the target's current one (`recipient_key_not_current` — the same), or
             the holder of a `scope-rotation` job committed no epoch during its lease (`rotation_not_committed` —
-            nothing written, the lease kept), or a node of its scope is not re-keyed yet (`rekey_incomplete` —
+            nothing written, the lease kept), or a node of its scope is still due for its re-key (`rekey_incomplete` —
             nothing written, the lease kept; ADR 0109 point 7).
           content:
             application/json:

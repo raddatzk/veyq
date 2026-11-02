@@ -6,9 +6,8 @@ title: Space icon
 # Owner-gated on the root scope (isScopeOwner, ADR 0007; a GROUP co-owner is an OWNER too), the server rejects a stale
 # iconEpoch (409) and stores only sealed_icon (opaque, constant length) + icon_epoch. The GROUP slice lifted the kind
 # guard (only PERSONAL is now rejected — it never has an icon) and adds the group settings-panel icon header + the
-# sidebar group avatar. Its only real difference is behavioral: a GROUP rotates its content key on member-removal
-# (ADR 0024), so its iconEpoch may sit BELOW the current epoch and the read PEELS the epoch chain down to iconEpoch —
-# openMyTenantIcon shortcuts to epoch 0 (a tenant never rotates) and is deliberately not reused for groups.
+# sidebar group avatar. Every rotation re-seals the icon under the new key and sets iconEpoch to the new epoch
+# (ADR 0115), so a reader of either kind opens it with the one scope key its grant carries.
 #
 # THREE claims are structurally invisible to the hermetic suites (ADR 0040 — a test no CI run executes makes no
 # coverage claim), so their refs below prove the CI-provable PART and the DoD live smoke on veyq.localhost:8081
@@ -53,7 +52,7 @@ acceptanceCriteria:
         unit:
           - src/features/spaces/spaceIcon.test.ts
   - id: icon-sealed-under-current-epoch
-    text: The icon is sealed under K_icon_e = HKDF(E_e, "veyq/v1/space-icon-key") for e = the scope's CURRENT epoch, and iconEpoch records e. A write whose iconEpoch is not the current epoch is refused with 409 stale_epoch, checked in the write itself so a rotation that commits after the server read the epoch refuses it too; the client refetches, re-seals and retries once. A plain rotation leaves sealed_icon and icon_epoch untouched, and a member holding a later epoch still reads the icon by peeling the chain down to iconEpoch. A member removed before a replacement cannot derive the new K_icon_e.
+    text: The icon is sealed under K_icon_e = HKDF(E_e, "veyq/v1/space-icon-key") for e = the scope's CURRENT epoch, and iconEpoch records e. A write whose iconEpoch is not the current epoch is refused with 409 stale_epoch, checked in the write itself so a rotation that commits after the server read the epoch refuses it too; the client refetches, re-seals and retries once. Every rotation re-seals the icon under the new key and sets icon_epoch to the new epoch in its commit (ADR 0115), so a member reads it with the one key its grant carries, and a member removed by a rotation cannot derive the K_icon_e of any icon stored after it.
     coverage:
       backend:
         integration:

@@ -70,7 +70,7 @@ class MemoriesSwitchedOffSliceTest {
             member(w).`when`().get("/api/scopes/${w.scopeId}/nodes/${w.memory}/media")
                 .then().statusCode(200).body("media.find { it.mediaId == '$mediaId' }.mediaId", equalTo(mediaId))
             downloadOff = download(w, blobId)
-            member(w).contentType(ContentType.JSON).body("""{"ciphertext":"aGVhcnQ="}""")
+            member(w).contentType(ContentType.JSON).body("""{"ciphertext":"aGVhcnQ=","epoch":0}""")
                 .`when`().put("/api/scopes/${w.scopeId}/nodes/${w.memory}/item-favorites").then().statusCode(204)
             given().`when`().get("/api/shares/${w.shareId}").then().statusCode(200)
 

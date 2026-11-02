@@ -43,7 +43,7 @@ function expectRefused(fn: () => unknown, purpose: string): void {
   expect((thrown as v1.OpenRefused).purpose).toBe(purpose)
 }
 
-const epochsOf = (key: Uint8Array) => ({ current: 0, keys: new Map([[0, key]]) })
+const epochsOf = (key: Uint8Array) => ({ epoch: 0, key })
 const kNodeWrap = (scopeKey: Uint8Array, nodeId: string, kNode: Uint8Array) =>
   b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 }, scopeKey, kNode))
 const memoryRow = (id: string, wrappedContentKey: string): TreeNode => treeNode({

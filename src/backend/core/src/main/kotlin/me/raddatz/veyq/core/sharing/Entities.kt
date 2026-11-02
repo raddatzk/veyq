@@ -15,9 +15,11 @@ import org.hibernate.annotations.DynamicUpdate
  * opaque 256-bit `id`, the wrap `symWrap(K_share, content key)`, the plaintext `role`, the `K_share`-sealed name,
  * and the shared `nodeId` — never `K_share`, a content key, a name, or the viewer. `K_share` rides the URL fragment
  * (ADR 0015) and never reaches the server. Soft (L1) revoke: `enabled = false` / a passed `expiresAt` makes the
- * guest resolve + blob GET `404` (ADR 0029 §7 — already-downloaded ciphertext is not retractable). A deleted share is
- * a tombstone ([deleted], `SharingStore.tombstone`): its ciphertext columns are null, and every reader goes through
- * `SharingStore`'s lookups, which never return one.
+ * guest resolve + blob GET `404` (ADR 0029 §7 — already-downloaded ciphertext is not retractable). A link is **open**
+ * while enabled, not deleted and before its end date, else **closed** (ADR 0114 decision 1): every transition from open
+ * to closed goes through `SharingStore.close`, which clears [wrap] and [sealedDropPublicKey] and marks a viewable link's
+ * subtree due for its re-key. A deleted share is a tombstone ([deleted], `SharingStore.tombstone`): its ciphertext
+ * columns are null, and every reader goes through `SharingStore`'s lookups, which never return one.
  */
 @Entity
 @Table(name = "veyq_share")
@@ -44,11 +46,13 @@ class ShareEntity : PanacheEntityBase {
     lateinit var role: String
 
     /** `symWrap(K_share, content key)` — the shared node's content key sealed under the fresh per-share key (opaque
-     *  base64). Null for a WRITE_ONLY share: its guest never holds that key (ADR 0031 point 7). */
+     *  base64). Null for a WRITE_ONLY share: its guest never holds that key (ADR 0031 point 7); null on a closed link,
+     *  whose close cleared it and whose reopen brings the root's current one (ADR 0114 decisions 5 and 7). */
     @Column(name = "wrap")
     var wrap: String? = null
 
-    /** WRITE_ONLY only: the node's drop public key sealed under `K_share` (opaque base64) — served instead of [wrap]. */
+    /** WRITE_ONLY only: the node's drop public key sealed under `K_share` (opaque base64) — served instead of [wrap].
+     *  Null on a closed link, as [wrap]. */
     @Column(name = "sealed_drop_public_key")
     var sealedDropPublicKey: String? = null
 
@@ -83,9 +87,16 @@ class ShareEntity : PanacheEntityBase {
     var sealedShareKey: String? = null
 
     /** The scope epoch [sealedShareKey] is sealed under — non-null exactly when it is; the scope's current epoch at
-     *  create (a stale one is refused `stale_epoch`, ADR 0024 Decision 6). */
+     *  create (a stale one is refused `stale_epoch`), and moved to every new epoch by the rotation that re-seals the
+     *  copy (ADR 0115 decision 2), so it is the scope's current epoch. */
     @Column(name = "sealed_share_key_epoch")
     var sealedShareKeyEpoch: Int? = null
+
+    /** The scope's epoch when this link was minted with its recovery copy (ADR 0115 decision 2), null for one minted
+     *  without: what the re-issue rule compares with the scope's current epoch (ADR 0075 point 4) now that a rotation
+     *  moves [sealedShareKeyEpoch] along. Stamped in the mint's transaction (`SharingStore.persistShare`), never changed. */
+    @Column(name = "minted_epoch")
+    var mintedEpoch: Int? = null
 
     /** The scope's removal counter when this share was minted (ADR 0075 point 4): below the scope's current count, a
      *  member has left since — one who could have rebuilt this link from its recovery copy. Stamped in the mint's
@@ -147,6 +158,13 @@ class ShareEntity : PanacheEntityBase {
      *  reader asks only *whether* a link is deleted, so *when* is not stored. */
     @Column(name = "deleted", nullable = false)
     var deleted: Boolean = false
+
+    /** True once the end-date sweep closed this link (ADR 0114 decision 6, `ShareExpiryCloseSweep`): its end date passed,
+     *  its root's subtree was marked due and its keys cleared, so the sweep marks it once. Set too by an edit that sets a
+     *  passed end date, which closes the link at once; cleared by a reopen (`SharingStore.reopen`). Only
+     *  `SharingStore.close` sets it. */
+    @Column(name = "expiry_closed", nullable = false)
+    var expiryClosed: Boolean = false
 
     companion object : PanacheCompanionBase<ShareEntity, String> {
         const val READ = "READ"

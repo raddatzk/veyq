@@ -12,7 +12,7 @@ vi.mock('../node/tree', async (orig) => ({
 import { registry } from '../applications/registry'
 import { createContentNode, deleteNode, type TreeNode } from '../node/tree'
 import type { ByteSink } from '../blob/stream'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import { exportSubtree, prepareExport } from './exportSubtree'
 import { ImportFailed, importSubtree, openExport, planImport } from './importSubtree'
 import type { PayloadFile } from './hooks'
@@ -30,7 +30,7 @@ const FILE = 'T_FILE'
 const COLLECTION = 'T_COLLECTION'
 const ODD = 'T_ODD'
 const BOX = 'T_BOX'
-const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
+const epochs: ScopeKey = { epoch: 1, key: new Uint8Array(32) }
 const text = (s: string) => new TextEncoder().encode(s)
 /** A payload's bytes as text, read the way the upload pump reads (`slice(...).arrayBuffer()`). */
 const textOf = async (f: PayloadFile) => new TextDecoder().decode(await f.slice(0, f.size).arrayBuffer())
@@ -48,7 +48,7 @@ function memorySink() {
   return { sink, state, blob: () => new Blob(parts as BlobPart[]) }
 }
 const node = (id: string, parentId: string | null, kind: string, name: string, orderIndex = 0): TreeNode =>
-  ({ id, parentId, kind, name, orderIndex, epoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt: new Date(0) }) as unknown as TreeNode
+  ({ id, parentId, kind, name, orderIndex, epoch: 1, scopeEpoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt: new Date(0) }) as unknown as TreeNode
 /** A tree as a session reads it, every key open. */
 const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
   rootId: null,
@@ -74,7 +74,7 @@ beforeEach(() => {
   let n = 0
   vi.mocked(createContentNode).mockImplementation(async (_s, _e, parent, kind, name) => {
     imported.push({ name, parent: parent?.id ?? null, bytes: '', kind })
-    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 1 }
+    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 0, scopeEpoch: 1 }
   })
   if (!registry.kind(FILE).supported) {
     testKind(registry, { rekeyContent: nothingOfItsOwnToRekey,

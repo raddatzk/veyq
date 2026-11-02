@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../features/spaces/members', () => ({ listScopeMembers: vi.fn() }))
 vi.mock('../../features/spaces/scopes', () => ({ openScope: vi.fn() }))
-vi.mock('../../features/account/profile/memberName', () => ({ unsealNameUnderEpochs: vi.fn() }))
+vi.mock('../../features/account/profile/memberName', () => ({ openMemberName: vi.fn() }))
 vi.mock('./avatarCache', () => ({ syncAvatars: vi.fn(() => Promise.resolve()), resetAvatars: vi.fn(), avatarUrlOf: vi.fn() }))
 
 import { listScopeMembers as listScopeMembersFn } from '../../features/spaces/members'
 import { openScope as openScopeFn } from '../../features/spaces/scopes'
-import { unsealNameUnderEpochs as unsealNameFn } from '../../features/account/profile/memberName'
+import { openMemberName as unsealNameFn } from '../../features/account/profile/memberName'
 import { activeSpace } from '../../app/activeSpace'
 import { displayNameOf, loadScopePeople, loadTenantPeople, personNow, resetPeopleDirectory, refreshPeopleDirectory } from './directory'
 import { syncAvatars as syncAvatarsFn, resetAvatars as resetAvatarsFn } from './avatarCache'
@@ -26,7 +26,7 @@ beforeEach(() => {
   resetPeopleDirectory()
   activeSpace.kind = ScopeKind.Group
   activeSpace.scopeId = 'group-scope'
-  unsealName.mockImplementation((_e, addr: { userId: string }) => (addr.userId === 'u1' ? { name: { firstName: 'Anna', lastName: 'Meyer' }, epoch: 0 } : null))
+  unsealName.mockImplementation((_e, addr: { userId: string }) => (addr.userId === 'u1' ? { firstName: 'Anna', lastName: 'Meyer' } : null))
   openScope.mockResolvedValue(openedScope({ scopeId: 'tenant-scope' }))
 })
 
@@ -98,7 +98,8 @@ describe('the profile pictures follow the roster (ADR 0084)', () => {
     const [source, rows] = syncAvatars.mock.calls[0]
     expect(source.tenantId).toBe('tenant-9')
     expect(source.scopeId).toBe('tenant-scope')
-    expect(source.epochs!.keys.get(0)).not.toBe(tenantKey) // the scope's own keys may be zeroed under it; the cache holds a copy
+    expect(source.epochs!.key).not.toBe(tenantKey) // the scope's own key may be zeroed under it; the cache holds a copy
+    expect([source.epochs!.epoch, Array.from(source.epochs!.key)]).toEqual([0, Array.from(tenantKey)]) // …of the same key
     expect(rows.map((r) => [r.userId, r.avatarRevision])).toEqual([['u1', 3], ['u2', 0]])
   })
 
@@ -107,7 +108,7 @@ describe('the profile pictures follow the roster (ADR 0084)', () => {
     await loadTenantPeople()
     await Promise.resolve()
     await Promise.resolve()
-    expect([...syncAvatars.mock.calls[0][0].epochs!.keys.values()].every((k) => k.every((b) => b === 0))).toBe(true)
+    expect(syncAvatars.mock.calls[0][0].epochs!.key.every((b) => b === 0)).toBe(true)
   })
 
   it('syncs once per roster read (the minute cache), and refreshPeopleDirectory re-reads at once', async () => {

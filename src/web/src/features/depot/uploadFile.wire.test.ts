@@ -15,6 +15,21 @@
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import type { ScopeKey } from '../spaces/epochs'
+
+// The device floor reads the ACTIVE scope's key and tree (`assertActiveScopeFloor`): no scope is active unless a test
+// says so, and the floor's pull and re-read are the real ones unless a test replaces them.
+const held = vi.hoisted(() => ({ epochs: null as ScopeKey | null }))
+vi.mock('../../app/activeSpace', async (orig) => ({ ...(await orig<object>()), activeEpochKeys: () => held.epochs }))
+vi.mock('../../core/node/rekey/rekeyScope', async (orig) => {
+  const real = await orig<typeof import('../../core/node/rekey/rekeyScope')>()
+  return { ...real, pullRekeyPath: vi.fn(real.pullRekeyPath) }
+})
+vi.mock('../../core/node/rereadNode', async (orig) => {
+  const real = await orig<typeof import('../../core/node/rereadNode')>()
+  return { ...real, rereadMemberKey: vi.fn(real.rereadMemberKey) }
+})
+
 import { fileUploadJob, StaleFileError, type FileUploadTarget } from './uploadFile'
 import { FILE_KIND } from './kinds'
 import { CHUNK_SIZE } from '../../core/blob/transport'
@@ -23,8 +38,13 @@ import { registry } from '../../core/applications/registry'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { session } from '../../app/session'
+import { activeSpace } from '../../app/activeSpace'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
+import { pullRekeyPath } from '../../core/node/rekey/rekeyScope'
+import { rereadMemberKey } from '../../core/node/rereadNode'
+import { treeStore } from '../../core/node/treeStore'
 import { testKind } from '../../test/testApplication'
+import { treeNode } from '../../test/models'
 
 const SCOPE = '33333333-3333-4333-8333-333333333333'
 const FOLDER = '5c09e000-0000-4000-8000-0000000000f0'
@@ -45,7 +65,12 @@ beforeAll(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   clearUploads()
+  activeSpace.scopeId = null
+  held.epochs = null
+  treeStore.nodes = []
 })
+/** The scope's epoch: rotated twice, so a key's scope epoch and its own are told apart. */
+const SCOPE_EPOCH = 2
 
 const bytesOf = (n: number, salt: number) => new Uint8Array(n).map((_, i) => (i * 31 + salt) % 251)
 const fileOf = (n: number, salt = 1) => new File([bytesOf(n, salt)], NAME, { type: 'application/pdf', lastModified: MODIFIED })
@@ -119,7 +144,10 @@ const ctx = () => ({ onProgress: vi.fn(), signal: new AbortController().signal }
 const shape = (rs: Req[]) => rs.map((r) => `${r.method} ${r.path.replace(/\/b\/[^/]+\/\d+$/, '/b/…')}`)
 const blobKeyCtx = (ownerId: string, blobId: string) =>
   ({ purpose: 'blob-key', scopeId: SCOPE, ownerId, blobId, role: 'FILE_CONTENT' }) as const
-const newTarget = (): FileUploadTarget => ({ scopeId: SCOPE, epochs: epochsOf(scopeKey), parent: { id: FOLDER, key: folderKey, epoch: 0 } })
+// the folder was re-keyed once by the last rotation: its own epoch 1, its key minted under the scope's epoch 2
+const newTarget = (): FileUploadTarget => ({
+  scopeId: SCOPE, epochs: epochsOf(scopeKey, SCOPE_EPOCH), parent: { id: FOLDER, key: folderKey, epoch: 1, scopeEpoch: SCOPE_EPOCH },
+})
 const replaceTarget = (expectedBlobId: string | null): FileUploadTarget => ({
   ...newTarget(), replace: { nodeId: EXISTING, nodeKey: existingKey, nodeEpoch: 0, expectedBlobId },
 })
@@ -155,12 +183,19 @@ describe('a new file on the wire', () => {
     expect(Math.max(...putAt)).toBeLessThan(shape(requests).indexOf(control[3]))
     expect(result).toEqual({ nodeId: result.nodeId })
 
-    // the node: kind FILE under the folder, its key wrap and name under the PARENT's key at version 0, the FILE folding
+    // the node: kind FILE under the folder, its key wrap and name under the PARENT's key at version 0, the FILE folding;
+    // minted under the scope's current epoch, stating the folder's own epoch it is sealed under (ADR 0114 decision 3)
     const create = requests[0].json!
-    expect(create).toMatchObject({ nodeId: result.nodeId, parentId: FOLDER, kind: FILE_KIND, epoch: 0 })
-    const address = { scopeId: SCOPE, nodeId: result.nodeId, epoch: 0, placementRevision: 0 }
+    expect(create).toMatchObject({ nodeId: result.nodeId, parentId: FOLDER, kind: FILE_KIND, scopeEpoch: SCOPE_EPOCH, parentEpoch: 1 })
+    expect(create).not.toHaveProperty('epoch')
+    // the seals' `epoch` field binds the node's scope epoch (ADR 0115 decision 4)
+    const address = { scopeId: SCOPE, nodeId: result.nodeId, epoch: SCOPE_EPOCH, placementRevision: 0 }
     const nodeKey = v1.open({ purpose: 'content-key', ...address }, folderKey, fromB64std(create.wrappedContentKey as string))
     expect(() => v1.open({ purpose: 'content-key', ...address }, scopeKey, fromB64std(create.wrappedContentKey as string))).toThrow(v1.OpenRefused)
+    for (const other of [0, 1]) {
+      expect(() => v1.open({ purpose: 'content-key', ...address, epoch: other }, folderKey, fromB64std(create.wrappedContentKey as string)), `bound to ${other}`)
+        .toThrow(v1.OpenRefused)
+    }
     expect(new TextDecoder().decode(v1.openField({ purpose: 'node-name', ...address }, folderKey, fromB64std(create.encryptedName as string)))).toBe(NAME)
     expect(create.slugToken).toBe(b64std(v1.slugToken(folderKey, FOLDER, fileNameSlug(NAME))))
     expect(create.slugToken).not.toBe(b64std(v1.slugToken(folderKey, FOLDER, slugify(NAME))))
@@ -181,19 +216,23 @@ describe('a new file on the wire', () => {
     expect(v1.openBlobMeta(blobKey, sealedMeta)).toEqual({ v: 1, type: 'application/pdf', name: NAME, modifiedAt: MODIFIED })
     expect(() => v1.openBlobMeta(nodeKey, sealedMeta)).toThrow(v1.OpenRefused)
 
-    // the completion: the started upload and the node's epoch (ADR 0109 point 6), no expectedBlobId at all (an empty slot)
+    // the completion: the started upload and the node's own epoch (0 at its mint, ADR 0114 decision 3 — not the scope's),
+    // no expectedBlobId at all (an empty slot)
     expect(requests.find((r) => r.path.endsWith('/content'))!.json).toEqual({ nodeEpoch: 0, uploadId: '00000000-0000-4000-8000-000000000001' })
     expect(requests.some((r) => r.method === 'PATCH'), 'no node-meta write').toBe(false)
     expectNoPlaintextName(requests)
   })
 
-  it('at the scope root the node wraps under the write key E_current', async () => {
+  it("at the scope root the node wraps under the scope's one key, bound to its epoch", async () => {
     const requests = fakeServer()
-    const { nodeId } = await fileUploadJob({ scopeId: SCOPE, epochs: epochsOf(scopeKey), parent: null }, fileOf(10)).run(ctx())
+    const { nodeId } = await fileUploadJob({ scopeId: SCOPE, epochs: epochsOf(scopeKey, SCOPE_EPOCH), parent: null }, fileOf(10)).run(ctx())
     const create = requests[0].json!
     expect(create.parentId).toBeUndefined()
-    const address = { scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 }
+    expect(create.parentEpoch, 'the root states no parent epoch').toBeUndefined()
+    expect(create.scopeEpoch).toBe(SCOPE_EPOCH)
+    const address = { scopeId: SCOPE, nodeId, epoch: SCOPE_EPOCH, placementRevision: 0 }
     expect(() => v1.open({ purpose: 'content-key', ...address }, scopeKey, fromB64std(create.wrappedContentKey as string))).not.toThrow()
+    expect(() => v1.open({ purpose: 'content-key', ...address, epoch: 0 }, scopeKey, fromB64std(create.wrappedContentKey as string))).toThrow(v1.OpenRefused)
     expect(create.slugToken).toBe(b64std(v1.slugToken(scopeKey, SCOPE, fileNameSlug(NAME))))
   })
 })
@@ -246,6 +285,67 @@ describe('a replace on the wire', () => {
     const { batches } = useUploadQueue()
     await vi.waitFor(() => expect(batches.value[0].finishedAt).not.toBeNull())
     expect(batches.value[0].files[0]).toMatchObject({ status: 'failed', error: 'stale_file', attempts: 1, final: true })
+  })
+})
+
+// The device floor (ADR 0109 point 6 layer 2, ADR 0115 decision 6): before the content is sealed under the file's key,
+// the active tree's row for that key says which scope epoch it was minted under (`assertActiveScopeFloor`); one minted
+// under an epoch below the scope's is not sealed under — the path is pulled forward, the key re-read, and the content
+// sealed under the new key.
+describe("a replace under a file's key, at the device floor", () => {
+  const fileRow = (epoch: number, scopeEpoch: number) =>
+    treeNode({ id: EXISTING, kind: FILE_KIND, parentId: FOLDER, name: NAME, epoch, scopeEpoch })
+  const activate = (row: ReturnType<typeof fileRow>) => {
+    vi.mocked(pullRekeyPath).mockClear()
+    vi.mocked(rereadMemberKey).mockClear()
+    activeSpace.scopeId = SCOPE
+    held.epochs = { epoch: SCOPE_EPOCH, key: scopeKey }
+    treeStore.nodes = [row]
+  }
+  const blobKeyOpens = (r: Req, key: Uint8Array) => {
+    const [start] = r.json!.items as { blobId: string; wrappedBlobKey: string }[]
+    try {
+      v1.open(blobKeyCtx(EXISTING, start.blobId), key, fromB64std(start.wrappedBlobKey))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  it('a key minted under an older scope epoch is not sealed under: pulled forward, re-read, sealed under the new key', async () => {
+    const requests = fakeServer()
+    activate(fileRow(0, SCOPE_EPOCH - 1))
+    const newKey = v1.randomBytes(32)
+    let sentBeforePull = -1
+    vi.mocked(pullRekeyPath).mockReturnValueOnce(async () => {
+      sentBeforePull = requests.length
+      treeStore.nodes = [fileRow(1, SCOPE_EPOCH)] // the re-key: its own epoch +1, minted under the scope's current one
+      return true
+    })
+    vi.mocked(rereadMemberKey).mockReturnValueOnce(async () => ({ key: newKey, epoch: 1 }))
+
+    await fileUploadJob(replaceTarget(null), fileOf(100)).run(ctx())
+
+    expect(sentBeforePull, 'nothing left the device under the key below the floor').toBe(0)
+    expect(pullRekeyPath).toHaveBeenCalledWith(SCOPE, [EXISTING])
+    expect(shape(requests)).toEqual([`POST /api/scopes/${SCOPE}/blob-uploads-batch`, 'PUT /b/…', `POST /api/scopes/${SCOPE}/files/${EXISTING}/content`])
+    expect(blobKeyOpens(requests[0], newKey)).toBe(true)
+    expect(blobKeyOpens(requests[0], existingKey), 'never under the key the re-key replaced').toBe(false)
+    expect(requests[2].json).toEqual({ nodeEpoch: 1, uploadId: '00000000-0000-4000-8000-000000000001' })
+  })
+
+  it('control: a key minted under the scope\'s current epoch is sealed under at once, with nothing pulled', async () => {
+    const requests = fakeServer()
+    activate(fileRow(0, SCOPE_EPOCH))
+    const pull = vi.fn(async () => true)
+    vi.mocked(pullRekeyPath).mockReturnValueOnce(pull)
+
+    await fileUploadJob(replaceTarget(null), fileOf(100)).run(ctx())
+
+    expect(pull).not.toHaveBeenCalled()
+    expect(rereadMemberKey).not.toHaveBeenCalled()
+    expect(blobKeyOpens(requests[0], existingKey)).toBe(true)
+    expect(requests[2].json).toEqual({ nodeEpoch: 0, uploadId: '00000000-0000-4000-8000-000000000001' })
   })
 })
 

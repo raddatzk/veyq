@@ -72,7 +72,7 @@ class GuestWriteRecordDepotSliceTest {
         given().contentType(ContentType.JSON).header("X-Forwarded-For", xff)
             .body(
                 """{"contributorToken":"${link.token}","nodeId":"${UUID.randomUUID()}","encryptedName":"bmFtZQ==",""" +
-                    """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA=="}""",
+                    """"slugToken":"${GuestTreeShare.slug()}","scopeEpoch":0,"wrappedContentKey":"d3JhcA=="}""",
             )
             .`when`().post("/api/shares/${link.shareId}/files/drop-folder").then().statusCode(200)
 

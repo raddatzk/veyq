@@ -131,7 +131,7 @@ class ScopePurge(
         UploadSessionEntity.delete("scopeId", scopeId)
         // Phases above it: favorites, item favorites, nodes, the group's links (ADR 0029 §6/§7).
         afterBlobRows.forEach { it.eraseScope(scopeId) }
-        ScopeEpochEntity.delete("scopeId", scopeId)
+        ScopeSuccessionEntity.delete("scopeId", scopeId)
         MembershipEntity.delete("scopeId", scopeId)
 
         // `veyq_job_decline` references `veyq_job`, so declines go first, by job id.

@@ -6,7 +6,10 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('../shareLink', () => ({ recoverShareLink: vi.fn() }))
+// The links whose subtree this device re-keys after their close: reactive, as core's own set is.
+const { closing } = await vi.hoisted(async () => ({ closing: (await import('vue')).shallowReactive(new Set<string>()) }))
 vi.mock('../share', () => ({
+  rekeyingClosedLinks: closing,
   isReissueRequired: vi.fn(),
   listSharesFor: vi.fn(),
   revokeShare: vi.fn(),
@@ -32,7 +35,7 @@ vi.mocked(shareModule.readShareNote).mockReturnValue({ texts: {}, mustAccept: fa
 vi.mocked(shareModule.hasLocaleText).mockReturnValue(false)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cd'
-const EPOCHS = { current: 1, keys: new Map([[0, new Uint8Array(32)], [1, new Uint8Array(32)]]) }
+const EPOCHS = { epoch: 1, key: new Uint8Array(32) }
 
 const share = (over: Record<string, unknown>) => ({
   shareId: 's', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Read, enabled: true, mine: true,
@@ -250,7 +253,7 @@ describe('ShareDialog — a pending deletion (`readonly`)', () => {
       vi.mocked(shareModule.revokeShare).mockClear()
       await button(w, t('share.revoke')).trigger('click')
       await flushPromises()
-      expect(vi.mocked(shareModule.revokeShare)).toHaveBeenCalledWith('live')
+      expect(vi.mocked(shareModule.revokeShare)).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: 'n1', shareId: 'live', role })
     }
 
     listSharesFor.mockResolvedValue([share({ shareId: 'live' }), share({ shareId: 'off', enabled: false })])
@@ -293,7 +296,7 @@ describe('ShareDialog — delete a link (ADR 0029 §7, W1)', () => {
     settleConfirm(true)
     await flushPromises()
 
-    expect(deleteShare).toHaveBeenCalledWith('off')
+    expect(deleteShare).toHaveBeenCalledWith(expect.objectContaining({ scopeId: SCOPE_ID, nodeId: 'n1', shareId: 'off', role: ShareRole.Read, enabled: false }))
     expect(w.findAll('.share-list-item')).toHaveLength(1)
     expect(w.find('.share-fold-toggle').exists()).toBe(false) // nothing switched off is left to fold
   })
@@ -359,5 +362,29 @@ describe('ShareDialog — a link that serves no guest says why (#457)', () => {
     expect(rows[1]!.find('.share-guest-stops-fix').exists()).toBe(false)
     await rows[0]!.find('.share-guest-stops-renew').trigger('click')
     expect(w.findComponent({ name: 'ShareCreateDialog' }).props('reissueFrom')).toMatchObject({ shareId: 'old' })
+  })
+})
+
+// ADR 0114 decision 9: a switch-off re-keys what lies below the Memory in the background; the link's row says so while
+// that runs, its fold opened so the row is in view. Control: a switched-off link not re-keying here says nothing.
+describe('ShareDialog — a switched-off link while what lies below it is re-keyed', () => {
+  it("opens the fold after a switch-off and says on the link's row that what lies below it gets a new lock", async () => {
+    listSharesFor.mockResolvedValueOnce([share({ shareId: 'mine' }), share({ shareId: 'old', enabled: false })])
+      .mockResolvedValue([share({ shareId: 'mine', enabled: false }), share({ shareId: 'old', enabled: false })])
+    vi.mocked(shareModule.revokeShare).mockImplementation(async (link) => { shareModule.rekeyingClosedLinks.add(link.shareId) })
+    const w = mountList()
+    await flushPromises()
+    expect(w.findAll('.share-list-item')).toHaveLength(1) // the switched-off one folded
+
+    await button(w, t('share.revoke')).trigger('click')
+    await flushPromises()
+    const rows = w.findAll('.share-list-item')
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.find('.share-list-rekeying').exists())).toEqual([true, false])
+    expect(rows[0]!.text()).toContain(t('share.closedRekeying'))
+
+    shareModule.rekeyingClosedLinks.delete('mine') // the re-key ended
+    await flushPromises()
+    expect(w.find('.share-list-rekeying').exists()).toBe(false)
   })
 })

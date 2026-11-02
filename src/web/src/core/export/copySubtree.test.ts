@@ -19,7 +19,7 @@ vi.mock('../node/tree', async (orig) => ({
 import { registry } from '../applications/registry'
 import { createContentNode, deleteNode, type TreeNode } from '../node/tree'
 import { FOLDER_KIND } from '../node/kind'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import type { TreeSource } from '../access'
 import { memberAccessOf } from '../../test/models'
 import { prepareCopy, type CopyTarget } from './copySubtree'
@@ -34,12 +34,12 @@ const COLLECTION = 'C_COLLECTION' // a Memory-like kind: both hooks, but its imp
 const BOX = 'C_BOX' // a drop-box-like container: copied as a plain folder
 const RAW = 'C_RAW' // takes a payload by frame, but its export cannot be read by frame
 const FRAME = 4
-const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
+const epochs: ScopeKey = { epoch: 1, key: new Uint8Array(32) }
 const access = memberAccessOf({ scopeId: 's', epochs })
 const enc = (s: string) => new TextEncoder().encode(s)
 
 const node = (id: string, parentId: string | null, kind: string, name: string, orderIndex = 0): TreeNode =>
-  ({ id, parentId, kind, name, orderIndex, epoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt: new Date(0) }) as unknown as TreeNode
+  ({ id, parentId, kind, name, orderIndex, epoch: 1, scopeEpoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt: new Date(0) }) as unknown as TreeNode
 const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
   rootId: null,
   node: (id) => nodes.find((n) => n.id === id) ?? null,
@@ -139,7 +139,7 @@ beforeEach(() => {
   let n = 0
   vi.mocked(createContentNode).mockReset().mockImplementation(async (_s, _e, parent, kind, name) => {
     created.push({ name, parent: parent?.id ?? null, kind })
-    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 1 }
+    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 0, scopeEpoch: 1 }
   })
   vi.mocked(deleteNode).mockReset().mockResolvedValue(undefined)
 })
@@ -196,7 +196,7 @@ describe('run: the replay under the destination', () => {
 
   it('reads each original by frame - every frame once, every slice at most a frame - never the file whole', async () => {
     const prepared = await prepareCopy({ access, tree, rootIds: ['doc'], appVersion: 'test' })
-    await prepared.run(target({ id: 'archiv', key: new Uint8Array(32), epoch: 1 }))
+    await prepared.run(target({ id: 'archiv', key: new Uint8Array(32), epoch: 1, scopeEpoch: 1 }))
     expect(created).toEqual([{ name: 'doc.txt', parent: 'archiv', kind: FILE, bytes: 'a document of eleven' }])
     expect(frameReads).toEqual(['doc:0', 'doc:1', 'doc:2', 'doc:3', 'doc:4'])
     expect(Math.max(...sliceSizes)).toBe(FRAME)
@@ -206,7 +206,7 @@ describe('run: the replay under the destination', () => {
     const prepared = await prepareCopy({ access, tree, rootIds: ['doc', 'empty', 'collection'], appVersion: 'test' })
     expect(prepared.nodes).toBe(2)
     expect(prepared.leftOut).toEqual([{ name: 'Lissabon', kind: COLLECTION, reason: 'not_copyable' }])
-    const result = await prepared.run(target({ id: 'reisen', key: new Uint8Array(32), epoch: 1 }))
+    const result = await prepared.run(target({ id: 'reisen', key: new Uint8Array(32), epoch: 1, scopeEpoch: 1 }))
     expect(result.nodeIds).toEqual(['new1', 'new2'])
     expect(created.map((c) => [c.name, c.parent])).toEqual([['doc.txt (2)', 'reisen'], ['leer.txt (2)', 'reisen']])
   })
@@ -214,7 +214,7 @@ describe('run: the replay under the destination', () => {
   it('a stop part-way trashes every top node it created and says N of M; nothing else is undone', async () => {
     const prepared = await prepareCopy({ access, tree, rootIds: ['doc', 'box'], appVersion: 'test' })
     failOn = 'drop.txt'
-    const error = await prepared.run(target({ id: 'archiv', key: new Uint8Array(32), epoch: 1 })).catch((e: unknown) => e)
+    const error = await prepared.run(target({ id: 'archiv', key: new Uint8Array(32), epoch: 1, scopeEpoch: 1 })).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ImportFailed)
     expect(error).toMatchObject({ done: 3, total: 4, rolledBack: true, leftover: null })
     expect(vi.mocked(deleteNode).mock.calls.map(([, id]) => id)).toEqual(['new1', 'new2'])

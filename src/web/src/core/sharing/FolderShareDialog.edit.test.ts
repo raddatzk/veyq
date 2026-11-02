@@ -37,7 +37,7 @@ const listSharesFor = vi.mocked(manage.listSharesFor)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000dd'
 const FOLDER_ID = '5c09e000-0000-4000-8000-0000000000f0'
-const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
+const EPOCHS = { epoch: 0, key: new Uint8Array(32) } // the scope's one key (ADR 0115)
 const EXPIRES = new Date('2027-03-01T22:59:59.999Z')
 
 const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
@@ -129,8 +129,10 @@ describe('FolderShareDialog — edit a link in place (#364)', () => {
     await flushPromises()
 
     expect(updateShare).toHaveBeenCalledTimes(1)
-    const [address, epochs, copy, note, name, expiresAt, role, passwordChange] = updateShare.mock.calls[0]
+    const [address, epochs, copy, note, name, expiresAt, role, passwordChange, root] = updateShare.mock.calls[0]
     expect(address, 'the link and the folder this dialog was opened for').toEqual({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, shareId: 's-own' })
+    // what a reopen by its end date seals (ADR 0114 decision 7): the folder's own key at its epoch, and its name
+    expect(root).toEqual({ root: { key: new Uint8Array(32), epoch: 0 }, rootName: 'Trips' })
     expect(epochs).toEqual(EPOCHS)
     expect(copy, 'its recovery copy re-opens K_share').toEqual(share)
     expect(note, 'the note is re-sent').toEqual({ texts: { en: 'Hello' }, mustAccept: false })

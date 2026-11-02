@@ -26,7 +26,7 @@ import { treeNode } from '../../../test/models'
 import { realI18n, t } from '../../../test/i18n'
 
 const SCOPE = 'scope-1'
-const EPOCHS = { current: 0, keys: new Map() }
+const EPOCHS = { epoch: 0, key: new Uint8Array(32) }
 const folder = treeNode({ id: 'f', kind: FOLDER_KIND, name: 'Rom' })
 const folder2 = treeNode({ id: 'g', kind: FOLDER_KIND, name: 'Neapel' })
 const memory = treeNode({ id: 'm', kind: MEMORY_KIND, name: 'Lissabon' })

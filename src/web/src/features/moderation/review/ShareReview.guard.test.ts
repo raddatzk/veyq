@@ -71,9 +71,9 @@ const EPOCH = 3
 const keys = { root: v1.randomBytes(32), sub: v1.randomBytes(32), memory: v1.randomBytes(32), file: v1.randomBytes(32) }
 
 function child(id: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
+  const address = { scopeId: SCOPE_ID, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
   return {
-    blockedByOperator: false, id, parentId: ROOT, kind, epoch: 0, placementRevision: 0,
+    blockedByOperator: false, id, parentId: ROOT, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0,
     encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key),
   }
 }
@@ -96,7 +96,7 @@ function review(): CaseReview {
     share: {
       role: ShareRole.Read, passwordRequired: false, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, nodeId: ROOT,
       nodes: [
-        { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, placementRevision: 0 },
+        { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0, placementRevision: 0 },
         child(SUB, keys.root, keys.sub, 'Briefe', FOLDER_KIND),
         child(MEMORY, keys.root, keys.memory, 'Rom 2026', MEMORY_KIND),
         child(FILE, keys.root, keys.file, 'rezept.pdf', FILE_KIND),

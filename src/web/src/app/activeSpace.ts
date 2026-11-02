@@ -8,7 +8,7 @@ import { ensurePersonalScope, openScope, openScopeById, openGroupByToken, type O
 import { getTenantTerms } from '../features/tenant/tenantTerms'
 import { getTenantCapabilities } from '../features/tenant/tenantCapabilities'
 import { setTenantCapabilities } from '../shared/state/useCapabilities'
-import { copyEpochKeys, zeroEpochKeys, type EpochKeys } from '../features/spaces/epochs'
+import { zeroScopeKey, type ScopeKey } from '../features/spaces/epochs'
 import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../core/node/location'
 import { isHttpStatus, HttpStatus } from '../shared/httpError'
@@ -23,8 +23,6 @@ import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/inv
 import { isUnlocked } from './vault'
 import { handleTenantSuspended } from './tenantSuspension'
 import { TrustStateRefused, refusalMessageKey } from '../features/account/trustMarks'
-import { carryProfileForward } from '../features/account/profile/carryProfileForward'
-import { account } from './account'
 
 export type SpaceStatus = 'idle' | 'loading' | 'ready' | 'no-tenant' | 'error'
 
@@ -36,7 +34,7 @@ export const activeSpace = reactive({
   kind: null as ScopeKind | null,
   // The active scope's decrypted display name — a GROUP's name (cr-0032); null for the anonymous tenant/personal.
   name: null as string | null,
-  // The write epoch (ADR 0024): a **reactive** mirror of `activeEpochKeys().current`. The key bytes stay outside
+  // The scope key's epoch (ADR 0115): a **reactive** mirror of `activeEpochKeys().epoch`. The key bytes stay outside
   // reactivity, but views need a reactive signal to re-read the keys after a rotation (`refreshActiveScope`) that
   // doesn't flip `status` — a `computed` over `activeEpochKeys()` must depend on THIS so it recomputes on rotate.
   epoch: 0,
@@ -70,26 +68,28 @@ export function markTermsAccepted(): void {
   activeSpace.termsAccepted = true
 }
 
-// The scope's epoch keys are held outside the reactive proxy on purpose — key material must not flow through Vue
-// reactivity. `scopeKey` is the **write key** (E_current); `epochKeys` carries the full peeled chain for reads.
+// The scope's key is held outside the reactive proxy on purpose — key material must not flow through Vue reactivity.
+// `scopeKey` is its bytes; `epochKeys` the same key with its epoch — a scope has one key at a time (ADR 0115).
 let scopeKey: Uint8Array | null = null
-let epochKeys: EpochKeys | null = null
+let epochKeys: ScopeKey | null = null
 // Counts scope entries; `clearActiveSpace` bumps it too. Only the latest entry may install what it opened.
 let entry = 0
 
-/** The active scope's **write key** `E_current` (seals new content), or null when no space is open. Don't mutate. */
+/** The active scope's key (seals new content and opens what is sealed under the scope key), or null when no space is
+ *  open. Don't mutate. */
 export function activeScopeKey(): Uint8Array | null {
   return scopeKey
 }
 
-/** The active scope's write key together with the epoch it is — what a grant sealed with it is bound to (ADR 0072). */
+/** The active scope's key together with the epoch it is — what a grant sealed with it is bound to (ADR 0072). */
 export function activeWriteKey(): { key: Uint8Array; epoch: number } | null {
-  return scopeKey && epochKeys ? { key: scopeKey, epoch: epochKeys.current } : null
+  return scopeKey && epochKeys ? { key: scopeKey, epoch: epochKeys.epoch } : null
 }
 
-/** The active scope's full **epoch key set** (ADR 0024) — a per-epoch lookup so a read opens a node under its own
- *  epoch key. Null when no space is open. The caller must not mutate or zero it (activeSpace owns its lifetime). */
-export function activeEpochKeys(): EpochKeys | null {
+/** The active scope's key with its epoch (ADR 0115: one key at a time — every read and every write of what is sealed
+ *  under the scope key uses it). Null when no space is open. The caller must not mutate or zero it (activeSpace owns
+ *  its lifetime). */
+export function activeEpochKeys(): ScopeKey | null {
   return epochKeys
 }
 
@@ -129,7 +129,7 @@ export async function enterScope(token: string): Promise<void> {
     // A later entry (the shell's and the home's can overlap) or a clear (logout / re-lock) superseded this one while
     // it was opening: its keys are dropped, never installed over the newer state.
     if (mine !== entry) {
-      if (opened) zeroEpochKeys(opened.epochs)
+      if (opened) zeroScopeKey(opened.epochs)
       return
     }
     activeSpace.tenantUnavailable = tenantUnavailable
@@ -137,10 +137,10 @@ export async function enterScope(token: string): Promise<void> {
       activeSpace.status = 'error'
       return
     }
-    if (epochKeys) zeroEpochKeys(epochKeys) // zero every epoch key we held for the scope we're leaving (incl. the write key)
+    if (epochKeys) zeroScopeKey(epochKeys) // zero the key we held for the scope we're leaving
     epochKeys = opened.epochs
-    scopeKey = opened.key // the write key = E_current, a reference into `epochKeys` (zeroed together above)
-    activeSpace.epoch = opened.epochs.current // reactive signal so key-reading computeds re-run for the new scope
+    scopeKey = opened.key // the same bytes as `epochKeys.key` (zeroed together above)
+    activeSpace.epoch = opened.epochs.epoch // reactive signal so key-reading computeds re-run for the new scope
     activeSpace.deletedAt = opened.deletedAt
     activeSpace.purgeAfter = opened.purgeAfter
     activeSpace.scopeId = opened.scopeId
@@ -173,7 +173,6 @@ export async function enterScope(token: string): Promise<void> {
     // every member's device continues an unfinished re-key of any scope it holds (ADR 0111 decision 11). Session-level
     // (restarted on each entry, stopped on logout/re-lock in clearActiveSpace), gated on an unlocked vault.
     startScopeRotationPolling(isUnlocked)
-    carryOwnProfile(opened)
   } catch (err) {
     if (mine !== entry) return // superseded: the newer entry (or the clear) owns the status
     // A suspended tenant (uc.spaces.scope-access A7): on this domain's own tenant the router takes over with the
@@ -188,41 +187,31 @@ export async function enterScope(token: string): Promise<void> {
 }
 
 /**
- * Re-open the **currently active** scope's grant to pick up a fresh epoch (ADR 0024, cr-0089). Call after a
- * rotation of the active scope (e.g. the owner removed a member): the caller's grant now carries `E_{n+1}`, so
- * this swaps in the new epoch keys — new content then seals under `E_{n+1}`, not the stale `E_n` — and reloads the
- * tree + favorites. No-op when no scope is open or the re-open fails (the stale keys are kept rather than dropped).
+ * Re-open the **currently active** scope's grant to pick up a fresh epoch (ADR 0115). Call after a rotation of the
+ * active scope (e.g. the owner removed a member): the caller's grant now carries `E_{n+1}`, which replaced `E_n` — every
+ * scope-level row is re-sealed under it — so this swaps in the new key and reloads the tree + favorites. No-op when no
+ * scope is open or the re-open fails (the stale key is kept rather than dropped).
  */
 export async function refreshActiveScope(): Promise<void> {
   if (!activeSpace.scopeId) return
   const opened = await openScopeById(activeSpace.scopeId)
   if (!opened) return
-  if (epochKeys) zeroEpochKeys(epochKeys)
+  if (epochKeys) zeroScopeKey(epochKeys)
   epochKeys = opened.epochs
   scopeKey = opened.key
-  activeSpace.epoch = opened.epochs.current // bump the reactive signal → key-reading computeds re-run under E_{n+1}
+  activeSpace.epoch = opened.epochs.epoch // bump the reactive signal → key-reading computeds re-run under E_{n+1}
   activeSpace.deletedAt = opened.deletedAt
   activeSpace.purgeAfter = opened.purgeAfter
   activeSpace.name = opened.name ?? null
   resetTree()
   clearFavorites()
-  resetCovers() // the covers were decrypted under the old epoch keys (core's, inbox #411)
-  registry.scopeReset() // a rotation swaps the epoch keys: every held cover was decrypted under the old ones
+  resetCovers() // the covers were decrypted under the old key (core's, inbox #411)
+  registry.scopeReset() // a rotation swaps the key: every held cover was decrypted under the old one
   await loadTree()
   // The pin set (core's) and an application's per-scope state survive a rotation untouched (the pins seal under the
   // member's master key, not an epoch key — ADR 0068) but are re-read here, because the reset above dropped them.
   if (!favoritesStore.loaded) await loadFavoritesFor(activeSpace.scopeId) // once per reset
   await registry.scopeEntered(activeSpace.scopeId)
-  carryOwnProfile(opened)
-}
-
-/** On entering the TENANT scope (and after its rotation), move the caller's own name and picture forward to its current
- *  epoch when a rotation left them under an older one (`carryProfileForward`, ADR 0023). Not awaited: the shell never
- *  waits for it. It runs on a copy of the keys, zeroed when it settles, since the active ones may be zeroed by a switch. */
-function carryOwnProfile(opened: OpenedScope): void {
-  if (opened.kind !== ScopeKind.Tenant || opened.epochs.current === 0) return
-  const epochs = copyEpochKeys(opened.epochs)
-  void carryProfileForward({ tenantId: opened.tenantId, scopeId: opened.scopeId, epochs }, account.userId).finally(() => zeroEpochKeys(epochs))
 }
 
 /** Drop the active space + zero the held key (logout / re-lock). */
@@ -244,7 +233,7 @@ export function clearActiveSpace(): void {
   activeSpace.termsRevision = 0
   activeSpace.termsAccepted = false
   setTenantCapabilities(null)
-  if (epochKeys) zeroEpochKeys(epochKeys)
+  if (epochKeys) zeroScopeKey(epochKeys)
   epochKeys = null
   scopeKey = null
   clearFavorites() // sign-out / re-lock: the decrypted pin set must not outlive the keys

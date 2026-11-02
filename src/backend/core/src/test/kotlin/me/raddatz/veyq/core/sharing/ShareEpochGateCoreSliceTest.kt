@@ -21,19 +21,20 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 /**
- * ADR 0109 point 6 on the sharing writes, with core alone: a share wraps its node's key (`createShare`,
+ * ADR 0114 decision 3 on the sharing writes, with core alone: a share wraps its node's key (`createShare`,
  * `reissueShare`), a guest's name is sealed under its root's key or its `K_up` to the root's drop key
- * (`createShareIdentity`) — each states that node's epoch and is refused `409 stale_epoch` below the stored one and
- * `409 node_rekey_pending` while the node lags the scope's current epoch, with nothing written; the positive control is
- * the same request once the node is re-keyed. And the guest resolve serves the root's epoch (`PublicShare.rootEpoch`),
- * in the body its tag digests, so an open page sees a re-key.
+ * (`createShareIdentity`) — each states that node's own epoch and is refused `409 stale_epoch` for another than the
+ * stored one and `409 node_rekey_pending` while the node is due for its re-key, with nothing written; the positive
+ * control is the same request once the node is re-keyed. And the guest resolve serves the root's own epoch and its
+ * scope epoch (`PublicShare.rootEpoch`, `rootScopeEpoch`), in the body its tag digests, so an open page sees a re-key.
  */
 @QuarkusTest
 class ShareEpochGateCoreSliceTest {
 
     private data class World(val owner: String, val scopeId: String, val folder: String)
 
-    /** A member's scope at epoch 2 whose folder still lags at 1: a rotation the re-key has not brought to it yet. */
+    /** A member's scope at epoch 2 whose folder is due, its own key at epoch 1, minted under scope epoch 1: a rotation
+     *  the re-key has not brought to it yet. */
     private fun lagging(): World {
         val (owner, scopeId) = seedMemberScope()
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
@@ -41,12 +42,17 @@ class ShareEpochGateCoreSliceTest {
         return World(owner, scopeId, folder)
     }
 
+    /** The node's own epoch [stored] and the scope's [current]; a node below it is due, its key minted under the epoch
+     *  before (ADR 0114 decision 4: the mark, not the comparison, is what the gate reads). */
     private fun epochs(scopeId: String, node: String, stored: Int, current: Int) = QuarkusTransaction.requiringNew().run {
-        NodeEntity.findById(node)!!.epoch = stored
+        NodeEntity.findById(node)!!.apply { epoch = stored; scopeEpoch = minOf(stored, current); rekeyDue = stored < current }
         ScopeEntity.findById(scopeId)!!.currentEpoch = current
     }
 
-    private fun rekeyed(node: String, to: Int) = QuarkusTransaction.requiringNew().run { NodeEntity.findById(node)!!.epoch = to }
+    /** The node's own commit: its own epoch [to], its scope epoch the current one, no longer due. */
+    private fun rekeyed(node: String, to: Int) = QuarkusTransaction.requiringNew().run {
+        NodeEntity.findById(node)!!.apply { epoch = to; scopeEpoch = ScopeEntity.findById(this.scopeId)!!.currentEpoch; rekeyDue = false }
+    }
 
     // --- createShare ------------------------------------------------------------------------------------------------
 
@@ -107,23 +113,29 @@ class ShareEpochGateCoreSliceTest {
     // --- createShareNode -------------------------------------------------------------------------------------------
 
     /**
-     * A guest knows no scope epoch: it states its parent's served one as the new node's (`guestTree.ts`). Under a parent
-     * not re-keyed yet that is the parent's `node_rekey_pending` — the guest waits until a member's device re-keyed it
-     * (ADR 0111 decision 11) — never `stale_epoch`, which a re-read cannot cure while the parent lags. A node epoch
-     * below the parent's is still stale, and once the parent is re-keyed the epoch from before is stale and the current
-     * one lands (the controls).
+     * A guest knows no scope epoch: it mints a new node's key under its parent's served `scopeEpoch` (`guestTree.ts`).
+     * Under a parent still due that is the parent's `node_rekey_pending` — the guest waits until a member's device
+     * re-keyed it (ADR 0111 decision 11) — never `stale_epoch`, which a re-read cannot cure while the parent is due. A
+     * parent epoch other than the parent's own is still stale, and once the parent is re-keyed a scope epoch from before
+     * is stale and the current one lands (the controls).
      */
     @Test
     fun aGuestsCreateUnderAParentNotReKeyedYetWaitsForIt() {
         val w = lagging()
         val link = GuestTreeShare.seed(w.owner, w.scopeId, w.folder, ShareEntity.READ_WRITE)
-        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, epoch = 1, parentEpoch = 1).statusCode(409).body("code", equalTo("node_rekey_pending"))
-        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, epoch = 0, parentEpoch = 1).statusCode(409).body("code", equalTo("stale_epoch"))
+        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, scopeEpoch = 1, parentEpoch = 1).statusCode(409).body("code", equalTo("node_rekey_pending"))
+        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, scopeEpoch = 1, parentEpoch = 0).statusCode(409).body("code", equalTo("stale_epoch"))
         assertEquals(0L, QuarkusTransaction.requiringNew().call { NodeEntity.count("parentId", w.folder) }, "nothing written")
 
         rekeyed(w.folder, 2)
-        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, epoch = 1, parentEpoch = 1).statusCode(409).body("code", equalTo("stale_epoch"))
-        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, epoch = 2, parentEpoch = 2).statusCode(201)
+        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, scopeEpoch = 1, parentEpoch = 2).statusCode(409).body("code", equalTo("stale_epoch"))
+        GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, scopeEpoch = 2, parentEpoch = 1).statusCode(409).body("code", equalTo("stale_epoch"))
+        val created = GuestTreeShare.create(link, w.folder, NodeEntity.FOLDER, scopeEpoch = 2, parentEpoch = 2).statusCode(201)
+            .extract().path<String>("nodeId")
+        QuarkusTransaction.requiringNew().run {
+            val node = NodeEntity.findById(created)!!
+            assertEquals(0, node.epoch, "a new key's own epoch starts at 0"); assertEquals(2, node.scopeEpoch)
+        }
     }
 
     // --- PublicShare.rootEpoch --------------------------------------------------------------------------------------
@@ -136,6 +148,7 @@ class ShareEpochGateCoreSliceTest {
         for (role in listOf(ShareEntity.READ, ShareEntity.READ_WRITE, ShareEntity.WRITE_ONLY)) {
             val link = GuestTreeShare.seed(owner, scopeId, folder, role)
             given().`when`().get("/api/shares/${link.shareId}").then().statusCode(200).body("rootEpoch", equalTo(3))
+                .body("rootScopeEpoch", equalTo(3))
         }
 
         // The conditional resolve's tag digests the body: a re-key of the root moves it, and the page re-reads.

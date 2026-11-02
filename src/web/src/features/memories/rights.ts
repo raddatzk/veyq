@@ -9,7 +9,7 @@
 // kind's share dialog - and Memories only narrows them (a guest moves a Memory, never a chapter); `rights.test.ts` asserts
 // that no answer here is wider than core's. The cover is core's action with core's right (`coverRights`).
 //
-// Member-only by construction (rule 2 of #401): item marks (`K_SC` at `E_0`), the
+// Member-only by construction (rule 2 of #401): item marks (under the scope key, `K_SC`), the
 // node's sealed meta (date, place, banner), the media trash and the contributions organizer (`MemoryBuckets`, member
 // globals) — no guest role grants them, whatever a source implements.
 import { FOLDER_KIND } from '../../core/node/kind'
@@ -35,7 +35,7 @@ export interface MemoryRights extends NodeRights {
   editMeta: boolean
   /** Set, re-frame or remove the node's banner (uc.memory.banner): who may choose its cover (ADR 0102 decision 5). */
   setBanner: boolean
-  /** Mark media and filter by marks (shared with the scope, sealed under `K_SC` at `E_0`, ADR 0068). */
+  /** Mark media and filter by marks (shared with the scope, sealed under the scope key `K_SC`, ADR 0068, ADR 0115). */
   mark: boolean
   /** Show who was there on a Memory (opaque ids in the node's sealed meta, ADR 0083) and the profile link of each. A MEMBER's,
    *  read-only ones included; NO share role has it - the interface shows a guest no participants. Editing the list is

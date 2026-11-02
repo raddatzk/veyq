@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.spaces.scope
 
 import me.raddatz.veyq.core.blob.BlobUploadStore
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.UploadSessionEntity
@@ -83,7 +84,10 @@ class ScopesSliceTest {
 
     private val groupName = "c2VhbGVkLWdyb3VwLW5hbWU=" // "sealed-group-name"
 
-    private val rotPrev = "cm90LXByZXY=" // "rot-prev" (symWrap(E1, E0))
+    /** A rotation's succession statement with its own public key [publicKey], and every scope-level row staged
+     *  (ADR 0115): what tells two rotations' statements apart in the epochs read. */
+    private fun succession(scopeId: String, publicKey: String): String =
+        """"successionPublicKey":"$publicKey","successionSignature":"${TestGrants.SIGNATURE}","rekeyId":"${TestScopeRekey.stageAll(scopeId)}""""
 
     private val newGrant = "bmV3LWVwb2NoLWdyYW50" // "new-epoch-grant"
 
@@ -143,7 +147,7 @@ class ScopesSliceTest {
     private fun removeRotating(caller: String, scopeId: String, removes: String, grantees: List<String>) =
         given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":${TestGrants.epochOf(scopeId) + 1},"wrappedPrev":"$rotPrev","grants":[""" +
+                """{"epoch":${TestGrants.epochOf(scopeId) + 1},${TestScopeRekey.rotationJson(scopeId)},"grants":[""" +
                     grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(it)}"}""" } +
                     """],${TestGrants.openInvitesJson(scopeId)},"removesUserId":"$removes"}""",
             )
@@ -177,8 +181,8 @@ class ScopesSliceTest {
 
     @Test
     fun aRemovalRotationThatFailsAtCommitLeavesTheMemberInPlace() {
-        // Atomicity. The lever: a chain link already stored at the epoch this rotation creates, so the rotation passes
-        // every check and dies on `ux_scope_epoch` when the transaction flushes — after the membership was deleted
+        // Atomicity. The lever: a succession statement already stored at the epoch this rotation creates, so the
+        // rotation passes every check and dies on `pk_scope_succession` when the transaction flushes — after the membership was deleted
         // in it. One transaction rolls both back; a removal committed on its own would leave the member gone and
         // the group unrotated, the defect a closed tab produced.
         val (owner, domain) = seedMember()
@@ -186,8 +190,8 @@ class ScopesSliceTest {
         val partner = seedTenantMember(tenantIdOf(domain), "partner")
         addToGroup(owner, domain, groupId, "partner")
         QuarkusTransaction.requiringNew().run {
-            ScopeEpochEntity().apply {
-                id = UUID.randomUUID().toString(); scopeId = groupId; epoch = 1; wrappedPrev = rotPrev
+            ScopeSuccessionEntity().apply {
+                scopeId = groupId; epoch = 1; successionPublicKey = TestScopeRekey.SUCCESSION_PUBLIC_KEY; successionSignature = TestGrants.SIGNATURE
             }.persist()
         }
 
@@ -260,7 +264,7 @@ class ScopesSliceTest {
 
         // The owner's rotation commits the next epoch and re-grants them.
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(personal)}}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(personal)},"grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(personal)}}""")
             .`when`().post("/api/scopes/$personal/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
@@ -280,7 +284,7 @@ class ScopesSliceTest {
         addToGroup(owner, domain, groupId, "partner")
         // Key the partner: a rotation that re-grants them.
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"},{"userId":"$partner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(partner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(groupId)},"grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"},{"userId":"$partner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(partner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201)
 
         given().header("Authorization", bearer(owner))
@@ -312,7 +316,7 @@ class ScopesSliceTest {
         rotate(owner, groupId).then().statusCode(201)
         val create = { epoch: Int ->
             given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-                .body(nodeBody("stale-$epoch").dropLast(1) + ""","epoch":$epoch}""")
+                .body(nodeBody("stale-$epoch").dropLast(1) + ""","scopeEpoch":$epoch}""")
                 .`when`().post("/api/scopes/$groupId/nodes")
         }
         create(0).then().statusCode(409).body("code", equalTo("stale_epoch"))
@@ -332,9 +336,9 @@ class ScopesSliceTest {
             .body("find { it.id == '$groupId' }.currentEpoch", equalTo(0))
             .body("find { it.id == '$groupId' }.grantedEpoch", equalTo(0))
 
-        // Rotate: owner mints E1 (chain-link) + re-grants self to the new epoch.
+        // Rotate: owner mints E1 (its succession statement) + re-grants self to the new epoch.
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(groupId)},"grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
 
@@ -346,12 +350,14 @@ class ScopesSliceTest {
             .body("find { it.id == '$groupId' }.grantedEpoch", equalTo(1))
             .body("find { it.id == '$groupId' }.wrappedGrant", equalTo(newGrant))
 
-        // The epoch-chain link is readable (opaque ciphertext, verbatim).
+        // The succession statement is readable (public values, verbatim, ADR 0115 decision 5).
         given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/$groupId/epochs")
             .then().statusCode(200)
             .body("[0].epoch", equalTo(1))
-            .body("[0].wrappedPrev", equalTo(rotPrev))
+            .body("[0].successionPublicKey", equalTo(TestScopeRekey.SUCCESSION_PUBLIC_KEY))
+            .body("[0].successionSignature", equalTo(TestGrants.SIGNATURE))
+            .body("[0].wrappedPrev", nullValue())
     }
 
     @Test
@@ -393,7 +399,7 @@ class ScopesSliceTest {
         addToGroup(owner, domain, groupId, "partner") // partner is a MEMBER, not owner
 
         given().header("Authorization", bearer(partner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[],${TestGrants.openInvitesJson(groupId)},${TestGrants.othersPendingJson(groupId)}}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(groupId)},"grants":[],${TestGrants.openInvitesJson(groupId)},${TestGrants.othersPendingJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(403).body("code", equalTo("not_scope_owner"))
     }
@@ -411,14 +417,14 @@ class ScopesSliceTest {
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"role":"OWNER"}""")
             .`when`().patch("/api/scopes/$groupId/members/$coOwner").then().statusCode(200)
-        val linkByOwner = "bGluay1ieS1vd25lcg==" // "link-by-owner" (symWrap(E_1, E_0))
-        val linkByCoOwner = "bGluay1ieS1jby1vd25lcg==" // "link-by-co-owner" (symWrap(E_x, E_0), built on 0)
+        val linkByOwner = "bGluay1ieS1vd25lcg==" // "link-by-owner": the owner's epoch-1 succession key
+        val linkByCoOwner = "bGluay1ieS1jby1vd25lcg==" // "link-by-co-owner": the co-owner's, built on 0
         val coOwnerGrantFromOwner = "Y28tb3duZXItZ3JhbnQ=" // "co-owner-grant"
 
         // Control on the same predicate: a rotation stating the next epoch commits.
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":1,"wrappedPrev":"$linkByOwner","grants":[""" +
+                """{"epoch":1,${succession(groupId, linkByOwner)},"grants":[""" +
                     """{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"},{"userId":"$coOwner","wrappedGrant":"$coOwnerGrantFromOwner",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(coOwner)}"}],${TestGrants.openInvitesJson(groupId)}}""",
             )
             .`when`().post("/api/scopes/$groupId/epochs")
@@ -426,16 +432,16 @@ class ScopesSliceTest {
 
         // The co-owner's rotation, built on epoch 0, arrives second. It must not commit.
         given().header("Authorization", bearer(coOwner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$linkByCoOwner","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,${succession(groupId, linkByCoOwner)},"grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(409).body("code", equalTo("stale_epoch"))
 
-        // Nothing it carried landed: one link, the owner's; the owner's re-grants stand.
+        // Nothing it carried landed: one statement, the owner's; the owner's re-grants stand.
         given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/$groupId/epochs")
             .then().statusCode(200)
             .body("size()", equalTo(1))
-            .body("[0].wrappedPrev", equalTo(linkByOwner))
+            .body("[0].successionPublicKey", equalTo(linkByOwner))
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
@@ -450,7 +456,7 @@ class ScopesSliceTest {
         // Re-opened at epoch 1 (the grant the owner's rotation gave it), the co-owner's retry commits epoch 2.
         // Without this, a scope that refused every second rotation would pass the refusal above.
         given().header("Authorization", bearer(coOwner)).contentType(ContentType.JSON)
-            .body("""{"epoch":2,"wrappedPrev":"$linkByCoOwner","grants":[],${TestGrants.openInvitesJson(groupId)},${TestGrants.othersPendingJson(groupId)}}""")
+            .body("""{"epoch":2,${TestScopeRekey.rotationJson(groupId)},"grants":[],${TestGrants.openInvitesJson(groupId)},${TestGrants.othersPendingJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(2))
     }
@@ -459,17 +465,17 @@ class ScopesSliceTest {
     fun twoConcurrentRotationsStatingTheSameEpochCommitOnce() {
         // The same race as above, but in flight together: both commits read the scope before either writes. The
         // row lock serializes them, so the loser reads the winner's epoch and is a clean `409 stale_epoch` — the
-        // answer the client retries. Without the lock both pass the policy and the loser dies on `ux_scope_epoch`.
+        // answer the client retries. Without the lock both pass the policy and the loser dies on `pk_scope_succession`.
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         val barrier = java.util.concurrent.CyclicBarrier(2)
         val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
         try {
             val answers = pool.invokeAll(
-                listOf(rotPrev, newGrant).map { link ->
+                (1..2).map {
                     java.util.concurrent.Callable {
                         val request = given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-                            .body("""{"epoch":1,"wrappedPrev":"$link","grants":[],${TestGrants.openInvitesJson(groupId)},${TestGrants.othersPendingJson(groupId)}}""")
+                            .body("""{"epoch":1,${TestScopeRekey.rotationJson(groupId)},"grants":[],${TestGrants.openInvitesJson(groupId)},${TestGrants.othersPendingJson(groupId)}}""")
                         barrier.await() // release both commits as tightly together as possible
                         request.`when`().post("/api/scopes/$groupId/epochs").then().extract()
                             .let { it.statusCode() to it.path<String?>("code") }
@@ -529,7 +535,7 @@ class ScopesSliceTest {
     /** A rotation of [scopeId] to epoch 1 that re-grants nobody and declares every open invite pending (a TENANT's). */
     private fun rotate(owner: String, scopeId: String) =
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[],${TestGrants.openInvitesJson(scopeId)},${TestGrants.othersPendingJson(scopeId)}}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(scopeId)},"grants":[],${TestGrants.openInvitesJson(scopeId)},${TestGrants.othersPendingJson(scopeId)}}""")
             .`when`().post("/api/scopes/$scopeId/epochs")
 
     // --- rename a group (uc.spaces.rename-group, cr-0097) ---
@@ -624,7 +630,7 @@ class ScopesSliceTest {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(groupId)},"grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
 
         // A rename at the OLD epoch 0 is now stale.
@@ -687,7 +693,8 @@ class ScopesSliceTest {
     /** The real rotation commit (ADR 0024 §4) of a group whose only member is its owner, from epoch 0 to 1. */
     private fun rotateToEpochOne(owner: String, scopeId: String, round: Int) {
         val decision = scopes.rotate(
-            scopeId, 1, rotPrev, owner, listOf(RotationGrant(owner, SignedGrant(newGrant, TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
+            scopeId, 1, ScopeSuccession(1, TestScopeRekey.SUCCESSION_PUBLIC_KEY, TestGrants.SIGNATURE), TestScopeRekey.stageAll(scopeId), owner,
+            listOf(RotationGrant(owner, SignedGrant(newGrant, TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
             emptyList(), emptySet(),
         )
         assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
@@ -915,7 +922,7 @@ class ScopesSliceTest {
 
         // Rotate 0 → 1 (owner mints E1 + re-grants self).
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(groupId)},"grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(owner)}"}],${TestGrants.openInvitesJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
 
         // A set at the OLD epoch 0 is now stale → 409; the icon stays unset.

@@ -52,7 +52,6 @@ import { nothingOfItsOwnToRekey } from '../src/core/node/rekey/hooks'
 import { createChapter, createMemory } from '../src/features/memories/memoryNodes'
 import { addCopiedMedia, listMedia, type CopiedMediaSource } from '../src/features/memories/media'
 import { ItemMarksTooMany, loadItemFavorites, saveItemFavorites } from '../src/features/memories/itemFavorites'
-import { keyAt } from '../src/features/spaces/epochs'
 import { openOwnNameKey, sealAvatar, sealName, setMyAvatar, updateMyProfile } from '../src/features/account/profile/profile'
 import { httpStatus } from '../src/shared/httpError'
 import { backingOff } from './backingOff.mts'
@@ -136,7 +135,7 @@ async function ensureMemoryAndChapter(scope: OpenedScope, memoryName: string, ch
   let chapter = childNamed(tree, memory.id, CHAPTER_KIND, chapterName)
   if (!chapter) {
     const memoryKey = nodeContentKey(scope.scopeId, scope.epochs, tree, memory.id)!
-    await createChapter(scope.scopeId, scope.epochs, memoryKey, chapterName, memory.id, memory.epoch)
+    await createChapter(scope.scopeId, scope.epochs, memoryKey, chapterName, memory.id, memory)
     tree = await listTree(scope.scopeId, scope.epochs)
     chapter = childNamed(tree, memory.id, CHAPTER_KIND, chapterName)!
   }
@@ -277,8 +276,8 @@ async function tree(target: number, shape: 'realistic' | 'wide'): Promise<void> 
   const rows = await listTree(group.scopeId, group.epochs)
   console.log(`tree: '${shape}' group holds ${rows.length} nodes, target ${target}`)
   // name -> (id, content key) of every node already there; names are unique by construction.
-  const byName = new Map<string, { id: string; key: Uint8Array; epoch: number }>()
-  for (const n of rows) byName.set(n.name, { id: n.id, key: nodeContentKey(group.scopeId, group.epochs, rows, n.id)!, epoch: n.epoch })
+  const byName = new Map<string, { id: string; key: Uint8Array; epoch: number; scopeEpoch: number }>()
+  for (const n of rows) byName.set(n.name, { id: n.id, key: nodeContentKey(group.scopeId, group.epochs, rows, n.id)!, epoch: n.epoch, scopeEpoch: n.scopeEpoch })
   let count = rows.length
   const p = progress('tree', 'nodes')
   for (const spec of shape === 'wide' ? wide() : realistic()) {
@@ -286,9 +285,9 @@ async function tree(target: number, shape: 'realistic' | 'wide'): Promise<void> 
     if (byName.has(spec.name)) continue
     const parentRef = spec.parent === null ? null : byName.get(spec.parent)
     if (spec.parent !== null && !parentRef) die(`parent '${spec.parent}' of '${spec.name}' is missing — the group was not filled by this seeder`)
-    const parent: NodeParent = parentRef ? { id: parentRef.id, key: parentRef.key, epoch: parentRef.epoch } : null
+    const parent: NodeParent = parentRef ? { id: parentRef.id, key: parentRef.key, epoch: parentRef.epoch, scopeEpoch: parentRef.scopeEpoch } : null
     const made = await createContentNode(group.scopeId, group.epochs, parent, spec.kind as typeof FOLDER_KIND, spec.name)
-    byName.set(spec.name, { id: made.nodeId, key: made.contentKey, epoch: made.epoch })
+    byName.set(spec.name, { id: made.nodeId, key: made.contentKey, epoch: made.epoch, scopeEpoch: made.scopeEpoch })
     count++
     p.tick()
   }
@@ -327,7 +326,7 @@ async function members(target: number): Promise<void> {
   // The owner is a row of the directory too: named like every member, so "every row named" holds for the whole list.
   const ownName = await openOwnNameKey()
   if (!ownName) die('the owner holds no tenant grant')
-  await updateMyProfile({ sealedName: sealName(ownName.key, ownName.address, { firstName: 'Volume', lastName: 'Owner' }) })
+  await updateMyProfile({ sealedName: sealName(ownName.key, ownName.address, { firstName: 'Volume', lastName: 'Owner' }), epoch: ownName.epochs.epoch })
   const salt = fromB64std((await setupApi().getSetupStatus()).instanceSalt)
   const listed = await listScopeMembers(tenant.scopeId)
   const inTenant = new Set(listed.map((m) => m.username))
@@ -383,8 +382,8 @@ async function members(target: number): Promise<void> {
       const own = await openOwnNameKey()
       if (!own) die(`${m.email} holds no tenant grant after the delivery`)
       const name = { firstName: FIRST_NAMES[index % 10], lastName: `${LAST_NAMES[Math.floor(index / 10) % 10]} ${index}` }
-      await updateMyProfile({ sealedName: sealName(own.key, own.address, name) })
-      if (index % 5 === 0) await setMyAvatar(sealAvatar(own.key, own.address, avatars[(index / 5) % 5]))
+      await updateMyProfile({ sealedName: sealName(own.key, own.address, name), epoch: own.epochs.epoch })
+      if (index % 5 === 0) await setMyAvatar(sealAvatar(own.key, own.address, avatars[(index / 5) % 5]), own.epochs.epoch)
     })
     saveMember({ ...m, stage: 'profiled' })
     profileRate.tick()
@@ -459,10 +458,10 @@ async function marks(cap: number, width: number): Promise<void> {
   await signIn(a.owner)
   const scope = await tenantScope()
   const { memoryId, key, epoch, hash } = await ensureMemory(scope, MARKS_MEMORY)
-  // The key the gallery's heart seals under: the scope's base epoch (MemoryDetailHost.vue, itemFavorites.ts' header).
-  const scopeKey = keyAt(scope.epochs, 0)
+  // The key the gallery's heart seals under: the scope's one key (MemoryDetailHost.vue, itemFavorites.ts' header).
+  const scopeKey = scope.epochs
   const ids = async () => (await listMedia(scope.scopeId, memoryId)).map((m) => m.mediaId)
-  const own = async () => (await loadItemFavorites(scope.scopeId, memoryId, scopeKey)).find((m) => m.own)?.ids ?? new Set<string>()
+  const own = async () => (await loadItemFavorites(scope.scopeId, memoryId, scopeKey.key)).find((m) => m.own)?.ids ?? new Set<string>()
   const recorded = manifest().marks?.nodeId === memoryId ? manifest().marks : undefined
   let pastCap = recorded?.pastCap ?? null
 

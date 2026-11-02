@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.node.rekey
 
+import me.raddatz.veyq.core.account.rotation.RotationRegrantEntity
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
 import me.raddatz.veyq.core.http.HttpFailure
@@ -55,6 +56,28 @@ class RekeyAccess(private val access: ScopeAccess, private val ownerOnly: OwnerO
         val current = ScopeEntity.findById(scopeId)?.currentEpoch ?: return RekeyRight.NoScope
         if (membership.wrappedGrant == null || membership.grantedEpoch < current) return RekeyRight.GrantBehind
         if (membership.role != MembershipEntity.OWNER && nodeId != null && ownerOnly.at(scopeId, nodeId)) return RekeyRight.NotOwner
+        return RekeyRight.Granted
+    }
+
+    /**
+     * The right to read and stage a rotation's scope-level re-seal (ADR 0115 decisions 2 and 7): only the rotating client
+     * holds the old key and the new one, so only a caller who may commit the scope's rotation — an owner, or a member
+     * whose account securing left a pending re-key row for the scope (`rotateScope`'s Who may commit, ADR 0111
+     * decision 8) — and who holds its current grant. The scope-access gate first, as everywhere (ADR 0042).
+     */
+    fun checkRotator(userId: String, scopeId: String, mode: AccessMode): RekeyRight {
+        when (access.check(userId, scopeId, mode)) {
+            Access.NotMember -> return RekeyRight.NoScope
+            Access.Suspended -> return RekeyRight.Suspended
+            Access.Deleting -> return RekeyRight.Deleting
+            Access.Ok -> Unit
+        }
+        val membership = MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scopeId).firstResult()
+            ?: return RekeyRight.NoScope
+        val owner = membership.role == MembershipEntity.OWNER && !membership.pendingConsent
+        if (!owner && RotationRegrantEntity.count("userId = ?1 and scopeId = ?2", userId, scopeId) == 0L) return RekeyRight.NotOwner
+        val current = ScopeEntity.findById(scopeId)?.currentEpoch ?: return RekeyRight.NoScope
+        if (membership.wrappedGrant == null || membership.grantedEpoch < current) return RekeyRight.GrantBehind
         return RekeyRight.Granted
     }
 }

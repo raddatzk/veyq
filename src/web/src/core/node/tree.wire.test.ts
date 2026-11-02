@@ -83,7 +83,7 @@ describe('a placement write on the wire (ADR 0080 Decision 3)', () => {
 
 // ADR 0080 Decision 8: a restore's slug token — and, on the taken-name retry, its re-sealed name — is derived under the
 // LIVE parent's key, opened from the tree as it is now. Here the parent A was moved under B while M sat in the trash, so
-// A's own key is reached through B; neither B's key nor K_SC (the node's epoch key) may stand in for it. A restore is
+// A's own key is reached through B; neither B's key nor K_SC (the scope's one key) may stand in for it. A restore is
 // not a placement: the name binds the revision M already has (3), and its key wrap is not sent at all. It states the
 // live parent's epoch (`parentEpoch`, ADR 0109 point 6).
 describe('a restore on the wire (ADR 0080 Decision 8)', () => {
@@ -94,7 +94,7 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
     // A moved under B: its key is now wrapped under B's, at the revision the move took it to
     { ...row(A, B, keyB, keyA, 'Reisen'), kind: 'FOLDER', placementRevision: 5, wrappedContentKey: sealAt(keyB, A, keyA, 5) },
   ]
-  const trashed = { id: M, parentId: A, kind: 'MEMORY', epoch: 0, placementRevision: 3, name: 'Italien' }
+  const trashed = { id: M, parentId: A, kind: 'MEMORY', epoch: 0, scopeEpoch: 0, placementRevision: 3, name: 'Italien' }
 
   it('an ordinary restore sends only the slug token, derived under the live parent\'s key', async () => {
     const bodies = recordFetch()
@@ -150,8 +150,8 @@ describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
 
   it('a create folds with the created kind; a folder of the same name keeps slugify', async () => {
     const bodies = recordCreate()
-    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA, epoch: 0 }, LEAF, NAME)
-    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA, epoch: 0 }, 'FOLDER', NAME)
+    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA, epoch: 0, scopeEpoch: 0 }, LEAF, NAME)
+    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA, epoch: 0, scopeEpoch: 0 }, 'FOLDER', NAME)
     expect(bodies[0].slugToken).toBe(leafToken(keyA, A))
     expect(bodies[1].slugToken).toBe(folderToken(keyA, A))
     expect(bodies[0].slugToken).not.toBe(bodies[1].slugToken)
@@ -169,7 +169,7 @@ describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
 
   it('a restore folds with the trashed node\'s kind, on the plain restore and the taken-name retry', async () => {
     const bodies = recordFetch()
-    const trashed = { id: M, parentId: A, kind: LEAF, epoch: 0, placementRevision: 3, name: NAME }
+    const trashed = { id: M, parentId: A, kind: LEAF, epoch: 0, scopeEpoch: 0, placementRevision: 3, name: NAME }
     await restoreNode(SCOPE_ID, epochsOf(scopeKey), tree(), trashed)
     await restoreNode(SCOPE_ID, epochsOf(scopeKey), tree(), trashed, 'FOTO.jpg')
     expect(bodies[0].json.slugToken).toBe(leafToken(keyA, A))
@@ -191,7 +191,7 @@ describe('a create sends its name as a field envelope (ADR 0093 § 9)', () => {
       return new Response(JSON.stringify({ nodeId: json.nodeId }), { status: 201, headers: { 'Content-Type': 'application/json' } })
     }))
 
-    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA, epoch: 0 }, 'FOLDER', 'Neapel')
+    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA, epoch: 0, scopeEpoch: 0 }, 'FOLDER', 'Neapel')
 
     const name = fromB64std(bodies[0].encryptedName as string)
     const node = { scopeId: SCOPE_ID, nodeId: bodies[0].nodeId as string, epoch: 0, placementRevision: 0 }
@@ -210,7 +210,7 @@ describe('a listing on the wire', () => {
   it('carries each node\'s server-observed createdAt to the millisecond', async () => {
     const name = b64std(v1.sealField({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId: A, epoch: 0, placementRevision: 3 }, scopeKey, v1.utf8('Reisen')))
     const summary = {
-      id: A, kind: 'FOLDER', encryptedName: name, slugToken: 'c2x1Zw==', orderIndex: 0, epoch: 0,
+      id: A, kind: 'FOLDER', encryptedName: name, slugToken: 'c2x1Zw==', orderIndex: 0, epoch: 0, scopeEpoch: 0,
       wrappedContentKey: sealWrap(scopeKey, A, keyA), metaRevision: 0, placementRevision: 3, createdAt: '2026-10-08T10:15:30.123Z',
     }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([summary]), { status: 200, headers: { 'Content-Type': 'application/json' } })))

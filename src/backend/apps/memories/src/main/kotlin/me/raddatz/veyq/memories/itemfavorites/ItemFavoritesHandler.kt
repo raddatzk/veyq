@@ -21,6 +21,8 @@ data class OwnItemFavorites(val scopeId: String, val nodeId: String, val ciphert
 
 sealed interface PutItemFavoritesOutcome {
     object Stored : PutItemFavoritesOutcome
+    /** Sealed under a scope epoch that is not the current one (ADR 0115 decision 3) — nothing written. */
+    object StaleEpoch : PutItemFavoritesOutcome, HttpFailure by Failures.staleEpoch
     object Suspended : PutItemFavoritesOutcome, HttpFailure by Failures.tenantSuspended
     object Deleting : PutItemFavoritesOutcome, HttpFailure by Failures.scopeDeleting
     object NoScope : PutItemFavoritesOutcome, HttpFailure by Failures.scopeNotFound
@@ -62,12 +64,16 @@ class ItemFavoritesHandler(private val store: ItemFavoritesStore, private val ac
      * The gate runs twice: first as the fast path, then under the scope row's lock, taken first, in the write's own
      * transaction. Every removal holds that lock while it deletes the removed member's rows (developer-styleguide §12),
      * so checked only before it, a member being removed wrote a row the removal never saw, into a group they had left.
+     * The stated [epoch] is judged under the same lock (ADR 0115 decision 3): the blob is sealed under the scope key,
+     * which a rotation's commit replaces while it holds that lock and re-seals every row, so a row lands only at the
+     * scope's current epoch — one under the old key after the commit is `stale_epoch`.
      */
-    fun put(userId: String, scopeId: String, nodeId: String, ciphertext: String): PutItemFavoritesOutcome {
+    fun put(userId: String, scopeId: String, nodeId: String, ciphertext: String, epoch: Int): PutItemFavoritesOutcome {
         refusal(userId, scopeId)?.let { return it }
         return QuarkusTransaction.requiringNew().call {
-            store.lockScope(scopeId)
+            val current = store.lockScope(scopeId)
             refusal(userId, scopeId)?.let { return@call it }
+            if (current != epoch) return@call PutItemFavoritesOutcome.StaleEpoch
             store.upsert(userId, scopeId, nodeId, ciphertext)
             PutItemFavoritesOutcome.Stored
         }

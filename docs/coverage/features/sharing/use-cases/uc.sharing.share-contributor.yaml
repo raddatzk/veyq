@@ -169,9 +169,9 @@ acceptanceCriteria:
     text: >-
       A READ_WRITE folder link's guest creates folders (and, through Depot, files) inside the shared subtree and moves or renames
       a node between folders of it, as one placement write re-wrapped under the destination's key and stated against
-      the node's placementRevision (409 stale_placement, nothing written). A create states the epoch the guest sealed
-      with: any but the scope's current one is 409 stale_epoch, and a parent the last rotation's re-key has not reached
-      is 409 node_rekey_pending (ADR 0109 point 6). Never the share root,
+      the node's placementRevision (409 stale_placement, nothing written). A create states the scope epoch the guest
+      sealed with and the parent's own epoch: any but the scope's current one, or a parent epoch not the stored one, is
+      409 stale_epoch, and a parent due for its re-key is 409 node_rekey_pending (ADR 0114 decision 3). Never the share root,
       never out of the subtree, never into a cycle; a taken slug is 409 on create and on move; a trashed root takes
       no tree operation. Each is decided under the scope lock, then the share row's.
     coverage:

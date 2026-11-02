@@ -97,7 +97,8 @@ sequenceDiagram
   mandatory for a contribution (ADR 0030) and asked at the first one (inbox #401 S5 — it used to be a pre-screen in
   front of the Memory).
 - **A2 — revoked / expired:** `enabled = false` or a passed `expiresAt` → the resolve **and** the upload
-  endpoints `404`/`403`. An upload in flight stops at its next window or at its complete, whichever comes first
+  endpoints `404`/`403`, and the close re-keys the subtree below the root, as for the viewer
+  ([en.sharing.public-link § Lifecycle](../enablers/en.sharing.public-link.md#lifecycle)). An upload in flight stops at its next window or at its complete, whichever comes first
   (every window is authorized again, [ADR 0013 §2](../../../decisions/0013-blob-storage-presigned-direct-to-store.md));
   already-uploaded photos remain (no retraction — see Quality notes). While `core.public-shares.contribute` (or
   its parent) is switched off on the instance, an existing READ_WRITE link answers every guest endpoint as an unknown
@@ -157,8 +158,9 @@ sequenceDiagram
   spam is visible until the curator deletes it or revokes the link. Review-before-publish is a deferred slice.
 - **Attribution is self-asserted.** Anyone with the link can name themselves anything; the contributor token binds
   *their* subsequent uploads to *that* identity but does not authenticate the person (accountless, operator-blind).
-- **Revocation is soft (L1); already-uploaded is not retractable.** Revoke/expiry stop *new* views and every
-  upload not yet completed; photos already contributed stay in the Memory (the curator deletes them
+- **Revocation closes the link; already-uploaded is not retractable.** Revoke/expiry stop *new* views and every
+  upload not yet completed, and re-key the subtree, so the link's key opens nothing added after; photos already
+  contributed stay in the Memory (the curator deletes them
   individually if unwanted; a contributor deletes its own only through the live link, on the device it uploaded from).
 - **Client-integrity trust tier ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Same as the viewer:
   the no-install page is passive-operator-safe, not operator-proof against an active foreign operator; surfaced by

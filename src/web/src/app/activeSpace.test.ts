@@ -15,11 +15,14 @@ vi.mock('../core/people/directory', async (orig) => ({ ...(await orig<object>())
 vi.mock('../core/favorites/favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 vi.mock('../features/tenant/tenantCapabilities', () => ({ getTenantCapabilities: vi.fn() }))
-vi.mock('../features/account/profile/carryProfileForward', () => ({ carryProfileForward: vi.fn() }))
+// The profile client, recorded: entering or refreshing the tenant writes no name and no picture (ADR 0115 — a rotation
+// re-seals every profile, so nothing is carried forward on entry). Every other client stays real.
+vi.mock('../api/client', async (orig) => ({ ...(await orig<object>()), accountProfileApi: vi.fn() }))
 
 import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActiveScope, clearActiveSpace } from './activeSpace'
 import { resetPeopleDirectory } from '../core/people/directory'
-import { ensurePersonalScope, openScope, openScopeById, openGroupByToken } from '../features/spaces/scopes'
+import { ensurePersonalScope, openScope, openScopeById, openGroupByToken, type OpenedScope } from '../features/spaces/scopes'
+import { epochsOf } from '../features/spaces/epochsTestUtil'
 import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../core/node/location'
 import { TrustStateRefused } from '../features/account/trustMarks'
@@ -35,16 +38,17 @@ import type { TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { getTenantCapabilities } from '../features/tenant/tenantCapabilities'
 import { capabilityState } from '../shared/state/capabilities'
-import { carryProfileForward } from '../features/account/profile/carryProfileForward'
-import { account } from './account'
+import { accountProfileApi } from '../api/client'
+import { fakeApi, type ApiMocks } from '../test/apiMock'
+import type { AccountProfileApi } from '../api/generated/account'
 
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'
 const TENANT_SCOPE_ID = 'tn-1'
 const PERSONAL_SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 
-// An unrotated OpenedScope: the write key IS E_0, so `key` is the same buffer the epoch map holds (zeroed together).
-const epochsOf = (key: Uint8Array) => ({ current: 0, keys: new Map([[0, key]]) })
-const opened = (scopeId: string, kind: ScopeKind, key: Uint8Array) => ({ scopeId, tenantId: TENANT_ID, kind, key, epochs: epochsOf(key), nameEpoch: 0, deletedAt: null, purgeAfter: null })
+// An OpenedScope at `epoch`: `key` is the same buffer its ScopeKey holds (zeroed together) — a scope has one key.
+const opened = (scopeId: string, kind: ScopeKind, key: Uint8Array, epoch = 0): OpenedScope =>
+  ({ scopeId, tenantId: TENANT_ID, kind, key, epochs: epochsOf(key, epoch), nameEpoch: 0, deletedAt: null, purgeAfter: null })
 
 // A node-environment file: src/test/setup.ts registers no application here. The REAL Memories hooks go into the
 // REAL registry, so the scope tests below prove activeSpace resets/loads application state THROUGH the registry.
@@ -52,7 +56,6 @@ beforeAll(() => registerMemoriesLifecycle())
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(carryProfileForward).mockResolvedValue({ name: false, picture: false })
   clearActiveSpace()
   resetTree()
   clearFavorites()
@@ -164,7 +167,7 @@ describe('enterScope — personal', () => {
 describe('enterScope — group', () => {
   it('opens a group by fragment token (@<slug|id>) → ready, holding its decrypted name on activeSpace', async () => {
     const key = new Uint8Array(32).fill(3)
-    vi.mocked(openGroupByToken).mockResolvedValue({ scopeId: 'g-1', tenantId: TENANT_ID, kind: ScopeKind.Group, key, epochs: epochsOf(key), nameEpoch: 0, name: 'Familie Raddatz', deletedAt: null, purgeAfter: null })
+    vi.mocked(openGroupByToken).mockResolvedValue({ ...opened('g-1', ScopeKind.Group, key), name: 'Familie Raddatz' })
 
     await enterScope('@familie-raddatz')
 
@@ -215,24 +218,27 @@ describe('enterScope — re-entry resets per-scope state', () => {
 })
 
 describe('refreshActiveScope — reactive epoch swap after a rotation (cr-0089)', () => {
-  it('re-opens the scope, swaps in the new epoch keys, and bumps the reactive epoch so key-reading views re-run', async () => {
+  it('re-opens the scope, swaps in the new key, and bumps the reactive epoch so key-reading views re-run', async () => {
     // Enter a group at epoch 0 (via its fragment token → openGroupByToken).
     const e0 = new Uint8Array(32).fill(4)
     vi.mocked(openGroupByToken).mockResolvedValue(opened('g-1', ScopeKind.Group, e0))
     await enterScope('@g-1')
     expect(activeSpace.epoch).toBe(0)
 
-    // A rotation bumped the scope to epoch 2 — the re-opened grant now carries E_2 (+ the peeled chain E_1/E_0).
+    // A rotation bumped the scope to epoch 2 — the re-opened grant carries E_2, which REPLACED E_0 (ADR 0115: one key
+    // per scope, no chain to peel).
     const e2 = new Uint8Array(32).fill(8)
-    const peeled = { current: 2, keys: new Map([[2, e2], [1, new Uint8Array(32).fill(7)], [0, new Uint8Array(32).fill(4)]]) }
-    vi.mocked(openScopeById).mockResolvedValue({ scopeId: 'g-1', tenantId: TENANT_ID, kind: ScopeKind.Group, key: e2, epochs: peeled, nameEpoch: 0, deletedAt: null, purgeAfter: null })
+    vi.mocked(openScopeById).mockResolvedValue(opened('g-1', ScopeKind.Group, e2, 2))
     await refreshActiveScope()
 
-    // The reactive signal moved forward (view computeds depend on it) AND the write key is now E_2, so the owner's
-    // next new content seals under E_2 — not the stale/zeroed E_0 (the bug the live smoke caught).
+    // The reactive signal moved forward (view computeds depend on it) AND the key is now E_2, so the owner's next new
+    // content seals under E_2 — not the stale/zeroed E_0 (the bug the live smoke caught).
     expect(activeSpace.epoch).toBe(2)
-    expect(activeEpochKeys()?.current).toBe(2)
+    expect(activeEpochKeys()?.epoch).toBe(2)
+    expect(activeEpochKeys()?.key).toBe(e2)
     expect(activeScopeKey()).toBe(e2)
+    // …and the replaced key is not kept beside it: E_0 is zeroed in place.
+    expect(Array.from(e0)).toEqual(Array(32).fill(0))
   })
 
   it('drops the state of the old epoch and re-loads the core pin set (and each application per-scope state)', async () => {
@@ -256,7 +262,7 @@ describe('enterScope — a superseded entry installs nothing', () => {
   it('an earlier entry that resolves last is dropped and its keys zeroed; the later one stays', async () => {
     const tenantKey = new Uint8Array(32).fill(3)
     const personalKey = new Uint8Array(32).fill(4)
-    let resolveTenant!: (v: ReturnType<typeof opened>) => void
+    let resolveTenant!: (v: OpenedScope | null) => void
     vi.mocked(openScope).mockImplementation((kind) =>
       kind === ScopeKind.Tenant
         ? new Promise((r) => { resolveTenant = r })
@@ -278,7 +284,7 @@ describe('enterScope — a superseded entry installs nothing', () => {
 
   it('an entry still opening when the space is cleared (logout / re-lock) installs nothing', async () => {
     const key = new Uint8Array(32).fill(5)
-    let resolveTenant!: (v: ReturnType<typeof opened>) => void
+    let resolveTenant!: (v: OpenedScope | null) => void
     vi.mocked(openScope).mockImplementation(() => new Promise((r) => { resolveTenant = r }))
 
     const entering = enterScope(TENANT_SCOPE)
@@ -369,41 +375,42 @@ describe('enterScope — a suspended tenant (uc.spaces.scope-access A7)', () => 
   })
 })
 
-describe('the own profile moves forward on entering the tenant (ADR 0023 § The epoch of a sealed name, inbox #573)', () => {
-  const rotated = (scopeId: string, kind: ScopeKind) => {
-    const e1 = new Uint8Array(32).fill(8)
-    return { scopeId, tenantId: TENANT_ID, kind, key: e1, epochs: { current: 1, keys: new Map([[1, e1], [0, new Uint8Array(32).fill(4)]]) }, nameEpoch: 0, deletedAt: null, purgeAfter: null }
+describe('entering the tenant writes no profile (ADR 0115: a rotation re-seals every profile, nothing is carried on entry)', () => {
+  // Every write the shell could have made of the own name or picture goes through the profile client.
+  const settle = () => new Promise((r) => setTimeout(r, 0))
+  let profileWrites: ApiMocks<AccountProfileApi, 'updateMyProfile' | 'setMyAvatar'>
+  beforeEach(() => {
+    profileWrites = fakeApi(accountProfileApi, {
+      updateMyProfile: vi.fn<AccountProfileApi['updateMyProfile']>(),
+      setMyAvatar: vi.fn<AccountProfileApi['setMyAvatar']>(),
+    })
+    vi.mocked(accountProfileApi).mockClear() // installing the fake is no call of it
+  })
+  const noProfileWrite = () => {
+    expect(accountProfileApi).not.toHaveBeenCalled()
+    expect(profileWrites.updateMyProfile).not.toHaveBeenCalled()
+    expect(profileWrites.setMyAvatar).not.toHaveBeenCalled()
   }
 
-  it('entering a rotated tenant hands the step the tenant, its scope, a COPY of every epoch key and the own account id; the copy is zeroed after', async () => {
-    account.userId = 'me-1'
-    const scope = rotated(TENANT_SCOPE_ID, ScopeKind.Tenant)
-    vi.mocked(openScope).mockResolvedValue(scope)
+  it('entering a rotated tenant opens it at its current epoch (control) and sends no name and no picture', async () => {
+    const e1 = new Uint8Array(32).fill(8)
+    vi.mocked(openScope).mockResolvedValue(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, e1, 1))
     await enterScope(TENANT_SCOPE)
-    expect(carryProfileForward).toHaveBeenCalledTimes(1)
-    const [held, userId] = vi.mocked(carryProfileForward).mock.calls[0]
-    expect(userId).toBe('me-1')
-    expect([held.tenantId, held.scopeId, held.epochs.current]).toEqual([TENANT_ID, TENANT_SCOPE_ID, 1])
-    expect(held.epochs.keys.get(1)).not.toBe(scope.epochs.keys.get(1)) // a switch zeroes the active keys; the step holds its own
-    await Promise.resolve()
-    await Promise.resolve()
-    expect([...held.epochs.keys.values()].every((k) => k.every((b) => b === 0)), 'the copy is zeroed once the step settled').toBe(true)
-    expect(activeEpochKeys()?.keys.get(1)?.[0], 'the active keys are untouched').toBe(8)
+    await settle() // nothing left in flight that could still write
+    expect([activeSpace.status, activeSpace.kind, activeSpace.epoch]).toEqual(['ready', ScopeKind.Tenant, 1])
+    expect(activeScopeKey()).toBe(e1)
+    noProfileWrite()
   })
 
-  it('not at epoch 0, and not for a group or the personal space (the profile lives in the tenant)', async () => {
+  it('refreshing the active tenant after its rotation swaps in the new key (control) and sends no name and no picture', async () => {
     vi.mocked(openScope).mockResolvedValue(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, new Uint8Array(32).fill(9)))
     await enterScope(TENANT_SCOPE)
-    vi.mocked(openGroupByToken).mockResolvedValue(rotated('g-1', ScopeKind.Group))
-    await enterScope('@g-1')
-    expect(carryProfileForward).not.toHaveBeenCalled()
-  })
-
-  it('after a rotation of the active tenant, the re-opened keys go to the step too', async () => {
-    vi.mocked(openScope).mockResolvedValue(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, new Uint8Array(32).fill(9)))
-    await enterScope(TENANT_SCOPE)
-    vi.mocked(openScopeById).mockResolvedValue(rotated(TENANT_SCOPE_ID, ScopeKind.Tenant))
+    const e1 = new Uint8Array(32).fill(8)
+    vi.mocked(openScopeById).mockResolvedValue(opened(TENANT_SCOPE_ID, ScopeKind.Tenant, e1, 1))
     await refreshActiveScope()
-    expect(vi.mocked(carryProfileForward).mock.calls.map(([h]) => h.epochs.current)).toEqual([1])
+    await settle()
+    expect(activeSpace.epoch).toBe(1)
+    expect(activeEpochKeys()?.key).toBe(e1)
+    noProfileWrite()
   })
 })

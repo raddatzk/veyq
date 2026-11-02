@@ -24,7 +24,7 @@
 //
 // Core imports no application here (`validate_web_core_imports_no_applications.py`).
 import type { RouteLocationRaw } from 'vue-router'
-import type { EpochKeys } from '../features/spaces/epochs'
+import type { ScopeKey } from '../features/spaces/epochs'
 import type { ShareRole } from '../api/generated/sharing'
 import type { TreeNode } from './node/tree'
 import { FOLDER_KIND, type NodeKind } from './node/kind'
@@ -42,7 +42,7 @@ export interface MemberAccess {
   readonly scopeId: string
   /** The scope's epoch key set (ADR 0024): reads open each node under its own epoch, writes seal under the current one.
    *  Null while the scope is not unlocked — every write right that needs a key is then the view's to disable. */
-  readonly epochs: EpochKeys | null
+  readonly epochs: ScopeKey | null
   /** The scope is pending deletion (cr-0090, uc.spaces.scope-access): the server refuses every write during the grace
    *  window, so no write is offered. Reads, downloads, pins and the listing of links stay, and so does revoking a link
    *  (A1: it only closes exposure). */
@@ -171,7 +171,7 @@ export function memberAccess(fields: Omit<MemberAccess, 'mode'>): MemberAccess {
 export function memberTreeSource(from: {
   nodes: () => TreeNode[]
   scopeId: () => string | null
-  epochs: () => EpochKeys | null
+  epochs: () => ScopeKey | null
   /** The URL's scope token (`''` tenant, `~me` personal, a group's token), which a fragment link carries. */
   scope: () => string
 }): TreeSource<TreeNode> {

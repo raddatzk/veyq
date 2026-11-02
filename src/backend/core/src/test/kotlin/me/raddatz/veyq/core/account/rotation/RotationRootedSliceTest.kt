@@ -86,7 +86,7 @@ class RotationRootedSliceTest {
         val stageId = stageGrants(w)
         stageInvites(w, stageId, resigned(w, w.invite), declaredEntry(declared)).then().statusCode(204)
         val endorsement = endorse(w, w.member)
-        stageEndorsements(w, stageId, """{"tenantId":"${w.tenantId}","userId":"${w.member}","endorsement":"$endorsement"}""").then().statusCode(204)
+        stageEndorsements(w, stageId, """{"tenantId":"${w.tenantId}","userId":"${w.member}","endorsement":"$endorsement","recordDigest":"${recordDigest(w, w.member)}"}""").then().statusCode(204)
 
         w.rotation.send(w.rotation.publish(stageId, w.grants)).then().statusCode(200)
 
@@ -171,7 +171,7 @@ class RotationRootedSliceTest {
         assertNothingWritten(w)
 
         // Control: the delta staged (the spent invite needs nothing), the same publish goes through.
-        stageEndorsements(w, stageId, """{"tenantId":"${w.tenantId}","userId":"$newcomer","endorsement":"${endorse(w, newcomer)}"}""")
+        stageEndorsements(w, stageId, """{"tenantId":"${w.tenantId}","userId":"$newcomer","endorsement":"${endorse(w, newcomer)}","recordDigest":"${recordDigest(w, newcomer)}"}""")
             .then().statusCode(204)
         w.rotation.send(publish).then().statusCode(200)
     }
@@ -300,7 +300,7 @@ class RotationRootedSliceTest {
         val byRetired = endorse(w, w.member, signer = w.rotation.current.identity)
         val otherRecord = endorse(w, w.member, record = "b3RoZXItcmVjb3Jk")
         for (bad in listOf(byRetired, otherRecord)) {
-            stageEndorsements(w, stageId, """{"tenantId":"${w.tenantId}","userId":"${w.member}","endorsement":"$bad"}""")
+            stageEndorsements(w, stageId, """{"tenantId":"${w.tenantId}","userId":"${w.member}","endorsement":"$bad","recordDigest":"${recordDigest(w, w.member)}"}""")
                 .then().statusCode(422).body("code", equalTo("join_endorsement_invalid"))
         }
         assertEquals(0L, tx { RotationStageEndorsementEntity.count("stageId", stageId) }, "nothing staged")
@@ -415,12 +415,20 @@ class RotationRootedSliceTest {
     private fun anchorStatement(inv: TenantInviteEntity, epoch: Int = inv.anchorEpoch ?: 0): ByteArray? =
         GrantSignature.statement(inv.tenantId, ScopeEntity.TENANT, epoch.toLong(), inv.id, inv.invitePublicKey!!, inv.anchorWrappedGrant ?: TestGrants.WRAPPED)
 
-    /** The endorsement of [member]'s record as stored (or of [record]) by [signer] (the new identity). */
+    /** The endorsement of [member]'s record as stored (or of [record]) by [signer] (the new identity) — over the record's
+     *  digest, which stands in for the opened record's here: the server cannot open the record and never compares the
+     *  two (ADR 0115 decision 8). */
     private fun endorse(w: World, member: String, signer: TestEd25519 = w.rotation.next.identity, record: String? = null): String =
-        signer.signB64(JoinEndorsement.statement(w.tenantId, member, w.rotation.userId, record ?: tx { profile(member, w.tenantId).sealedJoinRecord }))
+        signer.signB64(JoinEndorsement.statement(w.tenantId, member, w.rotation.userId, digestOf(record ?: tx { profile(member, w.tenantId).sealedJoinRecord!! })))
+
+    /** The `recordDigest` an endorsement of [member]'s stored record names. */
+    private fun recordDigest(w: World, member: String): String = digestOf(tx { profile(member, w.tenantId).sealedJoinRecord!! })
+
+    private fun digestOf(record: String): String =
+        java.util.Base64.getEncoder().encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(java.util.Base64.getDecoder().decode(record)))
 
     private fun endorsed(w: World): String =
-        """{"tenantId":"${w.tenantId}","userId":"${w.member}","endorsement":"${endorse(w, w.member)}"}"""
+        """{"tenantId":"${w.tenantId}","userId":"${w.member}","endorsement":"${endorse(w, w.member)}","recordDigest":"${recordDigest(w, w.member)}"}"""
 
     private fun stageInvites(w: World, stageId: String, vararg entries: String): Response =
         given().header("Authorization", w.rotation.bearer()).contentType(ContentType.JSON)

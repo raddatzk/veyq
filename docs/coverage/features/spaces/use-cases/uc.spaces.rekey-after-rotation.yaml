@@ -1,13 +1,95 @@
 useCase: uc.spaces.rekey-after-rotation
 feature: spaces
-title: Re-key a space's nodes after a rotation
+title: Re-key a space after a rotation
 # Refined 2026-10-23 (inbox #518, ADR 0109), built the same day (cr-scope-rotation-rekeys-nodes). The property has
 # several triggers (a group removal, a queued rotation, a secured account's own scopes), so it owns its criteria
 # rather than any one trigger's use-case. The web refs run the re-key through the real crypto (no mocked seal)
 # against an in-memory server; the backend refs prove the commit, the gates and the derived state on the real one. The
 # any-member re-key (ADR 0111 decision 11) also runs live: anyMemberRekeys.e2e.test.ts in the web-e2e job, and a member's
 # import and copy into its active group meeting two rotations each: importMeetsRotation.e2e.test.ts.
+# ADR 0115's criteria (scope-level-rows-replaced .. pending-reads-nothing) are the scope key's replacement: the rotation's
+# commit re-seals every scope-level row and stores a succession statement, no chain link. Their phase-1 probes
+# (ScopeKeyReplacedProbeSliceTest, epochs.replaced.probe.test.ts) were red on the chained tree and are enabled with the
+# build. The succession statement's bytes and verifySuccessionPath are pinned by the crypto package's
+# scopeSuccession.conformance.test.ts and inviteCheck.test.ts, on a surface no CI run has admitted yet; the web refs
+# below run the same checks through the real crypto.
 acceptanceCriteria:
+  - id: scope-level-rows-replaced
+    text: A rotation's commit swaps in, in one transaction, the re-seal under the new key of every scope-level row - each scope-root node's entry live and trashed, a group's name and a space's icon, each pending invitee's name key, each link's recovery copy (its minted-at epoch kept), a tenant's member names, pictures, join records and verifications, and a Memory's item marks through the application's participant - and marks every node of the scope due; afterwards none of them opens under the old key and each opens under the new one.
+    coverage:
+      backend:
+        integration:
+          - ScopeRekeySliceTest.everyStagedGroupRowIsSwappedInAndEveryNodeIsDue
+          - ScopeRekeySliceTest.everyStagedTenantProfileAndVerificationIsSwappedIn
+          - ItemFavoritesScopeRekeySliceTest.everyMembersMarksAreReSealedThroughTheParticipant
+      web:
+        unit:
+          - src/features/spaces/scopeRekey.test.ts
+          - src/features/memories/itemFavorites.test.ts
+          - src/features/spaces/epochs.replaced.probe.test.ts
+          - src/core/node/rekey/rekeyScope.test.ts
+  - id: a-missing-row-refuses-the-rotation
+    text: A rotation missing one scope-level row's staged value - core's or an application's - is refused 409 rekey_parts_missing and writes nothing, a removal rotation's member included; a rotation that leaves a scope-root entry under the old key is refused.
+    coverage:
+      backend:
+        integration:
+          - ScopeRekeySliceTest.aRotationMissingOneRowsStagedValueIsRefusedAndWritesNothing
+          - ScopeRekeySliceTest.aRemovalRotationRefusedForAMissingRowLeavesTheMemberInPlace
+          - ScopeKeyReplacedProbeSliceTest.aRotationThatLeavesAScopeRootEntryUnderTheOldKeyIsRefused
+          - ItemFavoritesScopeRekeySliceTest.aMarkWithNoStagedValueRefusesTheRotation
+      web: { unit: [src/features/spaces/scopeRekey.test.ts] }
+  - id: a-row-changed-since-is-stale
+    text: Each staged value names the SHA-256 of the ciphertext it replaces, per item and per member field; a row written between the read and the stage is refused at the stage, one written between the stage and the commit makes the commit 409 rekey_parts_stale and writes nothing, a profile write racing the commit included; a member field staged without its digest is malformed.
+    coverage:
+      backend:
+        integration:
+          - ScopeRekeySliceTest.aRowChangedSinceItWasStagedIsStale
+          - ScopeRekeySliceTest.aRowWrittenBetweenTheReadAndTheStageIsRefusedAtTheStage
+          - ScopeRekeySliceTest.aMemberFieldWithoutItsDigestIsMalformed
+          - ScopeRekeyRaceSliceTest.aRotationThatWaitsOnAProfileWriteFindsItsStageStaleAndRotatesNothing
+          - ItemFavoritesScopeRekeySliceTest.aMarkRewrittenSinceItWasStagedIsStale
+          - ItemFavoritesScopeRekeySliceTest.aMarkRewrittenBetweenTheReadAndTheStageIsRefusedAtTheStage
+      web: { unit: [src/features/spaces/scopeRekey.test.ts] }
+  - id: a-scope-level-write-at-the-old-epoch-is-stale
+    text: A scope-level write stating the epoch from before the rotation - a profile name or picture, a verification, an item mark, a group rename, an icon - is 409 stale_epoch and writes nothing, a profile write that waited on the commit included; the writer re-reads and seals under the new key.
+    coverage:
+      backend:
+        integration:
+          - ScopeRekeySliceTest.aScopeLevelWriteSealedUnderTheOldEpochIsStale
+          - ScopeRekeyRaceSliceTest.aProfileWriteThatWaitsOnTheCommitIsStaleAndWritesNothing
+      web: { unit: [src/features/account/profile/useNameAndPicture.test.ts, src/core/people/profileAcrossRotation.test.ts] }
+  - id: only-the-rotator-stages
+    text: Only a caller who may commit the rotation - an owner, or a member with its own securing's pending re-key row - and who holds the current grant reads and stages the scope-level rows; anyone else is refused and nothing is staged.
+    coverage:
+      backend:
+        integration:
+          - ScopeRekeySliceTest.onlyTheRotatorHoldingTheCurrentGrantReadsAndStagesTheScopeLevelRows
+          - ItemFavoritesScopeRekeySliceTest.onlyTheRotatorReadsAndStagesTheMarks
+      web: { unit: [src/features/spaces/scopeRekey.test.ts] }
+    gaps:
+      - surface: web
+        reason: The refusal is the server's; the web ref covers only that the rotating client is the one that stages.
+  - id: what-cannot-be-resealed-stops-no-rotation
+    text: A pending group invitee the rotator cannot anchor gets its name key cleared - never sealed to an anomaly - and the rotation commits, the invitee reading the proposal unnamed; a name key sealed to another identity than the anchored one is refused; a profile field, a verification or an item-mark set that does not open under the old key is staged as one that reads the same.
+    coverage:
+      backend:
+        integration:
+          - ScopeRekeySliceTest.aPendingInviteeTheRotatorCannotAnchorIsClearedAndTheRotationCommits
+          - ScopeRekeySliceTest.aPendingInviteesNameKeySealedToAnotherIdentityIsRefused
+      web: { unit: [src/features/spaces/scopeRekey.test.ts, src/features/spaces/inviteName.test.ts, src/features/memories/itemFavorites.test.ts] }
+  - id: a-successor-is-proven-by-succession
+    text: No chain link is stored and no held key opens another epoch's; a grant at a later epoch opens only if the served succession statements lead from the key this device held to the granted key, a newcomer's carried grant only if they lead from the invite's anchor - an operator's key, or a successor signed by a former key-holder after a rotation this device made, is refused epoch_unlinked, the same grant through genuine statements opens.
+    coverage:
+      backend: { integration: [ScopeKeyReplacedProbeSliceTest.aRotationStoresNoChainLink] }
+      web:
+        unit:
+          - src/features/spaces/scopes.test.ts
+          - src/features/spaces/epochs.replaced.probe.test.ts
+          - src/features/tenant/tenantInvite.test.ts
+  - id: pending-reads-nothing
+    text: A member the rotation declared pending, or a device whose grant is behind, reads nothing of the scope - no name, no icon, no node - and reads as awaiting the current key until a grant reaches them; once re-granted it reads everything under the one key.
+    coverage:
+      web: { unit: [src/features/spaces/scopes.test.ts, src/app/activeSpace.test.ts] }
   - id: every-node-rekeyed
     text: After a rotation every live and trashed node of the scope carries the new epoch, a fresh key, and every field that was sealed under its old key re-sealed under the new one; a medium added afterwards to a folder or Memory that existed before opens with no key from before the rotation.
     coverage:
@@ -40,7 +122,7 @@ acceptanceCriteria:
     text: A write sealed under a node's key is refused 409 node_rekey_pending while that node is not yet re-keyed and 409 stale_epoch when it states the node's key from before; a guest's create under a parent not re-keyed yet, stating the parent's epoch as its own, is the parent's node_rekey_pending; a re-keyed node takes writes at once.
     coverage:
       backend:
-        unit: [NodeEpochGateTest.theStatedEpochMustBeTheStoredOneAndTheStoredOneCurrent]
+        unit: [NodeEpochGateTest.theStatedEpochMustBeTheNodesOwnAndTheNodeNotDue]
         integration:
           - RekeyCoreSliceTest.writesWaitPerNodeAndRefuseAKeyFromBefore
           - ShareEpochGateCoreSliceTest.aShareStatesItsNodesEpoch

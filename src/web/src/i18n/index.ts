@@ -128,6 +128,8 @@ const en = {
     statusActive: 'Active',
     statusPendingConsent: 'Awaiting consent',
     awaitingCurrentKey: 'Waiting for the current key',
+    // ADR 0115 decision 8: a member behind the current key reads nothing of the space until re-granted
+    awaitingCurrentKeyBody: 'This space has a new lock. As soon as someone with access is online, you’ll get the new key — until then its contents stay locked.',
     compromiseRotation: {
       stalled:
         'Someone left this space, and it needs a new lock — but no owner is left who can fit it. Make someone else an owner. Until then, the person who left can still read what’s new here.',
@@ -188,6 +190,9 @@ const en = {
     subGroup: 'If a member’s device was lost, give the space a new lock. Removing a member already does this by itself. What is added from now on is closed to the old key. What was already seen stays seen.',
     confirmGroup:
       'Every member gets the new key from this device. Whoever holds only the old key, such as a lost device, can’t read what is added from now on. What they already saw stays seen, and links made before keep working until they are renewed or turned off.',
+
+    // ADR 0115 decision 2: shown to the rotating person while the scope-level rows are sealed again
+    resealing: 'Fitting the new lock: names and profiles are being sealed again. With many members this can take a moment — keep this page open.',
   },
   spaceIcon: {
     change: 'Change icon',
@@ -1951,6 +1956,9 @@ const en = {
     },
     roleNeedsReissue: 'This link was made before guests had to prove they hold the whole link, so with photos added it would take no guests at all. Renew it first — the new link can then be switched to “View + add photos”.',
     disabled: 'Switched off',
+    // ADR 0114 decision 9 (the owner's words): a closed link's subtree gets new keys — on the link's row while this
+    // device re-keys it, and as the space's re-keying hint when only closed links re-key there
+    closedRekeying: 'The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.',
     byMember: 'By another member',
     loadFailed: 'Your links could not be loaded.',
     pendingDeletion: 'This space is being deleted: its links can be seen and copied, and your own can still be revoked — nothing else is made or changed.',
@@ -2184,6 +2192,7 @@ const de: typeof en = {
     statusActive: 'Aktiv',
     statusPendingConsent: 'Wartet auf Zustimmung',
     awaitingCurrentKey: 'Wartet auf den aktuellen Schlüssel',
+    awaitingCurrentKeyBody: 'Dieser Bereich hat ein neues Schloss. Sobald jemand mit Zugang online ist, bekommst du den neuen Schlüssel – bis dahin bleibt der Inhalt verschlossen.',
     compromiseRotation: {
       stalled:
         'Jemand hat diesen Bereich verlassen, und er braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann die Person, die gegangen ist, Neues hier noch lesen.',
@@ -2240,6 +2249,8 @@ const de: typeof en = {
     subGroup: 'Ist das Gerät eines Mitglieds verloren gegangen, gib dem Bereich ein neues Schloss. Das Entfernen eines Mitglieds baut von selbst eins ein. Was ab jetzt dazukommt, ist für den alten Schlüssel zu. Was schon gesehen wurde, bleibt gesehen.',
     confirmGroup:
       'Jedes Mitglied bekommt den neuen Schlüssel von diesem Gerät. Wer nur den alten Schlüssel hat, etwa ein verlorenes Gerät, kann nicht lesen, was ab jetzt dazukommt. Was schon gesehen wurde, bleibt gesehen, und vorher erstellte Links funktionieren weiter, bis sie erneuert oder abgeschaltet werden.',
+
+    resealing: 'Das neue Schloss wird eingebaut: Namen und Profile werden neu versiegelt. Bei vielen Mitgliedern kann das einen Moment dauern – lass diese Seite so lange offen.',
   },
   spaceIcon: {
     change: 'Icon ändern',
@@ -3908,6 +3919,7 @@ const de: typeof en = {
     },
     roleNeedsReissue: 'Dieser Link wurde erstellt, bevor Gäste nachweisen mussten, dass sie den ganzen Link haben — mit Fotos hinzufügen nähme er deshalb gar keine Gäste auf. Erneuere ihn zuerst; den neuen Link kannst du dann auf „Ansehen + Fotos hinzufügen“ umstellen.',
     disabled: 'Abgeschaltet',
+    closedRekeying: 'Der Link ist abgeschaltet. Was darunter liegt, bekommt ein neues Schloss, damit der alte Link auch künftig nichts mehr öffnet.',
     byMember: 'Von einem anderen Mitglied',
     loadFailed: 'Deine Links konnten nicht geladen werden.',
     pendingDeletion: 'Dieser Bereich wird gelöscht: Seine Links lassen sich ansehen und kopieren, und deine eigenen kannst du noch widerrufen — sonst wird nichts neu erstellt oder geändert.',

@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.tasks
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.scope.ScopeEntity
@@ -446,7 +447,7 @@ class QueuedRotationSliceTest {
     private fun commit(userId: String, scopeId: String, grantees: List<String>) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":${TestGrants.epochOf(scopeId) + 1},"wrappedPrev":"cHJldg==","grants":[${
+                """{"epoch":${TestGrants.epochOf(scopeId) + 1},${TestScopeRekey.rotationJson(scopeId)},"grants":[${
                     grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(it)}"}""" }
                 }],${TestGrants.openInvitesJson(scopeId)},${TestGrants.othersPendingJson(scopeId, *grantees.toTypedArray())}}""",
             )

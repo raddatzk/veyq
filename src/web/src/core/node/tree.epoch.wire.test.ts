@@ -1,16 +1,18 @@
-// Every write that seals under a node's key states that node's epoch (ADR 0109 point 6), recorded at `fetch` — the JSON
-// the real generated client serializes, so a field it drops or renames fails here. The scope is rotated (current epoch
-// 2) and the nodes carry DIFFERENT epochs, so a write that states the wrong one (the scope's, the node's for the
-// parent's) is told apart: a create states its parent's epoch (`parentEpoch`); a placement keeps the node's own epoch and
-// states the destination's. And the device floor (layer 2): a member never seals under a key from before the last
-// rotation it holds — such a write is refused before anything is sent.
+// Every write that seals under a node's key states that node's own epoch (ADR 0114 decision 3), recorded at `fetch` —
+// the JSON the real generated client serializes, so a field it drops or renames fails here. The scope is rotated
+// (current epoch 2, its one key K_2; K_1 replaced) and every node's own epoch differs from its scope epoch and from the
+// scope's, so a write that states the wrong one (the scope's, the node's scope epoch, the node's for the parent's) is
+// told apart: a create states the scope epoch its key is minted under (`scopeEpoch`) and its parent's own epoch
+// (`parentEpoch`); a placement keeps the node's own epoch and states the destination's; every seal binds the node's
+// `scopeEpoch`. And the device floor (layer 2): a member never seals under a key minted before the last rotation it holds
+// — such a write is refused before anything is sent.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { createContentNode, moveNode, type TreeNode } from './tree'
+import { createContentNode, moveNode, openName, type TreeNode } from './tree'
 import { NodeKeyBelowFloorError } from './rekey/floor'
 import { treeNode } from '../../test/models'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const A = '5c09e000-0000-4000-8000-0000000000a0'
@@ -21,21 +23,25 @@ afterEach(() => vi.unstubAllGlobals())
 
 const k1 = v1.randomBytes(32)
 const k2 = v1.randomBytes(32)
-const epochs = (): EpochKeys => ({ current: 2, keys: new Map([[1, k1], [2, k2]]) })
+const epochs = (): ScopeKey => ({ epoch: 2, key: k2 })
 const keyA = v1.randomBytes(32)
 const keyB = v1.randomBytes(32)
 const keyM = v1.randomBytes(32)
 const REV = 3
 let reads = 0
-const wrap = (kek: Uint8Array, id: string, epoch: number, k: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch, placementRevision: REV }, kek, k))
-const row = (id: string, parentId: string | null, epoch: number, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
-  id, parentId, kind: 'FOLDER', orderIndex: 0, epoch, name, wrappedContentKey: wrap(kek, id, epoch, k),
-  wrappedMeta: null, metaRevision: 0, placementRevision: REV,
-})
-/** A and B re-keyed to the current epoch 2 at the root; M below A still at epoch 1 (its key minted before the rotation). */
-const tree = (mEpoch = 1): TreeNode[] => [
-  row(A, null, 2, k2, keyA, 'Reisen'), row(B, null, 2, k2, keyB, 'Archiv'), row(M, A, mEpoch, keyA, keyM, 'Italien'),
+/** The `content-key` seal context: its binding field `epoch` holds the node's scopeEpoch. */
+const keyCtx = (id: string, scopeEpoch: number, placementRevision = REV) =>
+  ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: scopeEpoch, placementRevision }) as const
+const wrap = (kek: Uint8Array, id: string, scopeEpoch: number, k: Uint8Array) => b64std(v1.seal(keyCtx(id, scopeEpoch), kek, k))
+const row = (id: string, parentId: string | null, epoch: number, scopeEpoch: number, kek: Uint8Array, k: Uint8Array, name: string): TreeNode =>
+  treeNode({
+    id, parentId, kind: 'FOLDER', orderIndex: 0, epoch, scopeEpoch, name, wrappedContentKey: wrap(kek, id, scopeEpoch, k),
+    wrappedMeta: null, metaRevision: 0, placementRevision: REV,
+  })
+/** A (own epoch 3) and B (own 4) re-keyed under scope epoch 2 at the root, under K_2; M (own 5) below A, its key minted
+ *  under scope epoch [mScopeEpoch] (1: before the rotation). */
+const tree = (mScopeEpoch = 1): TreeNode[] => [
+  row(A, null, 3, 2, k2, keyA, 'Reisen'), row(B, null, 4, 2, k2, keyB, 'Archiv'), row(M, A, 5, mScopeEpoch, keyA, keyM, 'Italien'),
 ]
 
 /** Records every write's body; a read (the tree re-read a retry does) is counted in `reads` and answered 503. */
@@ -56,21 +62,33 @@ function recordFetch(status = 204) {
   return bodies
 }
 
-describe('a write states the epoch of the key it seals under (ADR 0109 point 6)', () => {
-  it('a create under a parent states the parent\'s epoch as parentEpoch, and returns the epoch its key is minted at', async () => {
+describe('a write states the epoch of the key it seals under (ADR 0114 decision 3, ADR 0115 decision 4)', () => {
+  it('a create under a parent states the scope epoch its key is minted under and the parent\'s own epoch; it returns own epoch 0', async () => {
     const bodies = recordFetch(201)
 
-    const made = await createContentNode(SCOPE_ID, epochs(), { id: A, key: keyA, epoch: 2 }, 'FOLDER', 'Neapel')
+    const made = await createContentNode(SCOPE_ID, epochs(), { id: A, key: keyA, epoch: 3, scopeEpoch: 2 }, 'FOLDER', 'Neapel')
 
-    expect(bodies[0]).toMatchObject({ parentId: A, parentEpoch: 2, epoch: 2 })
-    expect(made.epoch).toBe(2)
+    expect(bodies[0]).toMatchObject({ parentId: A, parentEpoch: 3, scopeEpoch: 2 })
+    expect('epoch' in bodies[0], 'a create states no own epoch: a new key is at 0').toBe(false)
+    expect(made).toMatchObject({ epoch: 0, scopeEpoch: 2 })
+    // its seals bind the scope epoch it is minted under, at placement revision 0 — not its own epoch 0
+    const sealed = fromB64std(bodies[0].wrappedContentKey as string)
+    expect(Array.from(v1.open(keyCtx(made.nodeId, 2, 0), keyA, sealed))).toEqual(Array.from(made.contentKey))
+    expect(() => v1.open(keyCtx(made.nodeId, 0, 0), keyA, sealed)).toThrow(v1.OpenRefused)
+    const address = { scopeId: SCOPE_ID, nodeId: made.nodeId, scopeEpoch: 2, placementRevision: 0 }
+    expect(openName(keyA, address, bodies[0].encryptedName as string)).toBe('Neapel')
   })
 
-  it('a create at the scope root states no parentEpoch', async () => {
+  it('a create at the scope root states no parentEpoch, its scope epoch, and seals under the one key held', async () => {
     const bodies = recordFetch(201)
-    await createContentNode(SCOPE_ID, epochs(), null, 'FOLDER', 'Neapel')
+    const made = await createContentNode(SCOPE_ID, epochs(), null, 'FOLDER', 'Neapel')
     expect('parentEpoch' in bodies[0]).toBe(false)
-    expect(bodies[0].epoch).toBe(2)
+    expect('epoch' in bodies[0]).toBe(false)
+    expect(bodies[0].scopeEpoch).toBe(2)
+    expect(made).toMatchObject({ epoch: 0, scopeEpoch: 2 })
+    const sealed = fromB64std(bodies[0].wrappedContentKey as string)
+    expect(Array.from(v1.open(keyCtx(made.nodeId, 2, 0), k2, sealed))).toEqual(Array.from(made.contentKey))
+    expect(() => v1.open(keyCtx(made.nodeId, 2, 0), k1, sealed), 'never under the replaced key').toThrow(v1.OpenRefused)
   })
 
   it('a move between folders keeps the node\'s own epoch and states the destination\'s as parentEpoch', async () => {
@@ -78,42 +96,44 @@ describe('a write states the epoch of the key it seals under (ADR 0109 point 6)'
 
     await moveNode(SCOPE_ID, epochs(), tree(), M, B)
 
-    expect(bodies[0]).toMatchObject({ parentId: B, epoch: 1, parentEpoch: 2, placementRevision: REV })
-    // sealed at the node's own epoch (1), under the destination's key — never at the scope's current one
+    expect(bodies[0]).toMatchObject({ parentId: B, epoch: 5, parentEpoch: 4, placementRevision: REV })
+    // bound to the node's scope epoch (1), under the destination's key — never the scope's current one, nor its own epoch
     const sealed = fromB64std(bodies[0].wrappedContentKey as string)
-    const at = (epoch: number) => ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: M, epoch, placementRevision: REV + 1 }) as const
-    expect(Array.from(v1.open(at(1), keyB, sealed))).toEqual(Array.from(keyM))
-    expect(() => v1.open(at(2), keyB, sealed)).toThrow(v1.OpenRefused)
+    expect(Array.from(v1.open(keyCtx(M, 1, REV + 1), keyB, sealed))).toEqual(Array.from(keyM))
+    expect(() => v1.open(keyCtx(M, 2, REV + 1), keyB, sealed)).toThrow(v1.OpenRefused)
+    expect(() => v1.open(keyCtx(M, 5, REV + 1), keyB, sealed)).toThrow(v1.OpenRefused)
   })
 
-  it('a move into the scope root of a re-keyed node seals under K_SC at its epoch and states no parentEpoch', async () => {
+  it('a move into the scope root of a re-keyed node seals under the scope key bound to its scope epoch and states no parentEpoch', async () => {
     const bodies = recordFetch()
 
     await moveNode(SCOPE_ID, epochs(), tree(2), M, null)
 
-    expect(bodies[0].epoch).toBe(2)
+    expect(bodies[0].epoch).toBe(5)
     expect('parentEpoch' in bodies[0]).toBe(false)
     const sealed = fromB64std(bodies[0].wrappedContentKey as string)
-    const at = { purpose: 'content-key', scopeId: SCOPE_ID, nodeId: M, epoch: 2, placementRevision: REV + 1 } as const
-    expect(Array.from(v1.open(at, k2, sealed))).toEqual(Array.from(keyM))
+    expect(Array.from(v1.open(keyCtx(M, 2, REV + 1), k2, sealed))).toEqual(Array.from(keyM))
   })
 })
 
 describe('the device floor (ADR 0109 point 6, layer 2): no seal under a key from before the last rotation', () => {
-  it('a create under a parent below the current epoch is refused before anything is sent; at the current epoch it seals', async () => {
+  it('a create under a parent whose key is from a scope epoch below the held one is refused before anything is sent; at the held epoch it seals', async () => {
     const bodies = recordFetch(201)
 
-    await expect(createContentNode(SCOPE_ID, epochs(), { id: A, key: keyA, epoch: 1 }, 'FOLDER', 'Neapel'))
+    // the parent's own epoch is high (replaced often), but its key was minted under scope epoch 1: the floor reads that
+    await expect(createContentNode(SCOPE_ID, epochs(), { id: A, key: keyA, epoch: 7, scopeEpoch: 1 }, 'FOLDER', 'Neapel'))
       .rejects.toBeInstanceOf(NodeKeyBelowFloorError)
     expect(bodies, 'nothing sealed under the old key left the device').toHaveLength(0)
 
-    await createContentNode(SCOPE_ID, epochs(), { id: A, key: keyA, epoch: 2 }, 'FOLDER', 'Neapel')
+    // control: a parent at own epoch 0 whose key is from the held scope epoch
+    await createContentNode(SCOPE_ID, epochs(), { id: A, key: keyA, epoch: 0, scopeEpoch: 2 }, 'FOLDER', 'Neapel')
     expect(bodies).toHaveLength(1)
   })
 
-  it('a move into a destination below the current epoch is refused before sending, and waited on like a pending re-key', async () => {
+  it('a move into a destination below the held scope epoch is refused before sending, and waited on like a pending re-key', async () => {
     const bodies = recordFetch()
-    const lagging = [row(A, null, 2, k2, keyA, 'Reisen'), row(B, null, 1, k1, keyB, 'Archiv'), row(M, A, 2, keyA, keyM, 'Italien')]
+    // B's entry the rotation re-sealed under K_2, its key still from scope epoch 1
+    const lagging = [row(A, null, 3, 2, k2, keyA, 'Reisen'), row(B, null, 4, 1, k2, keyB, 'Archiv'), row(M, A, 5, 2, keyA, keyM, 'Italien')]
 
     vi.useFakeTimers() // the wait before the re-read
     try {
@@ -127,7 +147,7 @@ describe('the device floor (ADR 0109 point 6, layer 2): no seal under a key from
     expect(reads, 'the refusal was waited on and the tree re-read, as for node_rekey_pending').toBe(1)
   })
 
-  it('a move into the scope root of a node below the current epoch is refused before sending', async () => {
+  it('a move into the scope root of a node below the held scope epoch is refused before sending', async () => {
     const bodies = recordFetch()
     vi.useFakeTimers()
     try {

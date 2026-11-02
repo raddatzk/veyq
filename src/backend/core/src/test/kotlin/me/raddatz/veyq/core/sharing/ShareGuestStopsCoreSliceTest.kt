@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.testing.TestNodeRekey
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
@@ -217,7 +218,7 @@ class ShareGuestStopsCoreSliceTest {
         val l = link(w, ShareEntity.READ) { enabled = false }
         CapabilityRequirementFixtures.with(instance = mapOf(LINK_PASSWORD to 1)) {
             assertEquals(listOf("revoked", "linkPassword"), stopsOnNode(w).getValue(l))
-            given().header("Authorization", bearer(w.space.userId)).`when`().post("/api/shares/$l/reactivate").then().statusCode(204)
+            given().header("Authorization", bearer(w.space.userId)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(l)).`when`().post("/api/shares/$l/reactivate").then().statusCode(204)
             assertEquals(listOf("linkPassword"), stopsOnNode(w).getValue(l))
             edit(w, l, PASSWORD_EDIT).then().statusCode(204)
             assertEquals(emptyList<String>(), stopsOnNode(w).getValue(l))

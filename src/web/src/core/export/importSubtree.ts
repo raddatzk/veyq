@@ -19,7 +19,7 @@ import { registry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
 import { createContentNode, deleteNode, type NodeParent, type TreeNode } from '../node/tree'
 import { heldScopeEpochs, memberCreateOptions } from '../node/rereadNode'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import { ZipError } from './zip'
 import { isArchivePath } from './archiveName'
 import { sourceOf, type ImportInput, type ImportSource } from './importSource'
@@ -218,7 +218,7 @@ export class ImportFailed extends Error {
 
 export type ImportSubtreeParams = {
   scopeId: string
-  epochs: EpochKeys
+  epochs: ScopeKey
   /** The decrypted tree of the scope: the target's existing siblings, for the name collisions. */
   tree: TreeNode[]
   parent: NodeParent
@@ -362,7 +362,7 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
   // The scope's epochs as this device holds them now: a rotation another member makes while the run is under way is met by
   // a pull, which re-opens the scope here (and zeroes the epochs the run was started with, `refreshActiveScope`) — every
   // node created and every write from then on is at the new epoch (inbox #670).
-  const held = (): EpochKeys => heldScopeEpochs(scopeId) ?? epochs
+  const held = (): ScopeKey => heldScopeEpochs(scopeId) ?? epochs
 
   async function create(n: ManifestNode, at: NodeParent, item: ReplayItem): Promise<{ nodeId: string; nodeKey: Uint8Array; epoch?: number }> {
     const parentId = at?.id ?? null
@@ -417,7 +417,8 @@ export async function replaySubtrees(params: ReplayParams): Promise<ReplayResult
     report()
     // the node as its last write left it: minted at the epoch the device held, or re-keyed since by its kind's own content
     // writes pulling it forward (a hook that names no epoch: the epoch held now); its children's creates state that one
-    const here: NodeParent = { id: made.nodeId, key: made.nodeKey, epoch: made.epoch ?? held().current }
+    // (its own epoch: 0 at its mint, ADR 0114 decision 3; its key minted, or re-keyed, under the scope epoch held now)
+    const here: NodeParent = { id: made.nodeId, key: made.nodeKey, epoch: made.epoch ?? 0, scopeEpoch: held().epoch }
     for (const c of n.children ?? []) {
       if (leftOut.has(c)) continue // listed in the plan, named in the result
       await walk(c, here, item, leftOut, false)

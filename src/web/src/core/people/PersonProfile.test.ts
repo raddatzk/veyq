@@ -38,6 +38,8 @@ import { realI18n, t } from '../../test/i18n'
 import { account } from '../../app/account'
 import { getMyProfile, updateMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName } from '../../features/account/profile/profile'
 import { openAvatar } from '../../features/account/profile/memberAvatar'
+import { openMemberName } from '../../features/account/profile/memberName'
+import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import NamePictureFields from '../../features/account/profile/NamePictureFields.vue'
 import * as v1 from '@veyq/crypto/v1'
 import { memberProfile, ownNameKey } from '../../test/models'
@@ -169,8 +171,13 @@ describe('PersonProfile - editing one\'s own name and picture (ADR 0084 decision
     await w.get('form').trigger('submit')
     await flushPromises()
     expect(updateMyProfile).toHaveBeenCalledTimes(1)
-    expect(Object.keys(vi.mocked(updateMyProfile).mock.calls[0][0])).toEqual(['sealedName']) // only the name rides along
+    // Only the name rides along, with the tenant epoch it is sealed under (ADR 0115 decision 3).
+    const sent = vi.mocked(updateMyProfile).mock.calls[0][0]
+    expect(Object.keys(sent)).toEqual(['sealedName', 'epoch'])
+    expect(sent.epoch).toBe(0)
+    expect(openMemberName(epochsOf(K), ADDRESS, sent.sealedName)?.firstName).toBe('Kevin')
     expect([...openAvatar(K, ADDRESS, vi.mocked(setMyAvatar).mock.calls[0][0])!]).toEqual([8, 8])
+    expect(vi.mocked(setMyAvatar).mock.calls[0][1], 'the picture states the epoch too').toBe(0)
     expect(clearMyAvatar).not.toHaveBeenCalled()
     expect(w.find('[data-testid="person-edit-form"]').exists()).toBe(false)
     expect(load).toHaveBeenCalledTimes(3) // the page, the editor's cache warm-up, and the re-read after the save

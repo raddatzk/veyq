@@ -55,7 +55,7 @@ class ContentResource(
         val outcome = handler.create(
             identity.principal.name, scopeId.toString(), createNodeRequest.nodeId.toString(), createNodeRequest.parentId?.toString(),
             createNodeRequest.kind, createNodeRequest.encryptedName, createNodeRequest.slugToken,
-            createNodeRequest.orderIndex ?: 0, createNodeRequest.epoch ?: 0,
+            createNodeRequest.orderIndex ?: 0, createNodeRequest.scopeEpoch ?: 0,
             createNodeRequest.wrappedContentKey, createNodeRequest.wrappedMeta, createNodeRequest.parentEpoch,
         )
         return when (outcome) {
@@ -162,6 +162,7 @@ class ContentResource(
         kind = kind,
         encryptedName = encryptedName,
         epoch = epoch,
+        scopeEpoch = scopeEpoch,
         placementRevision = placementRevision,
         deletedAt = OffsetDateTime.ofInstant(deletedAt, ZoneOffset.UTC),
         purgeAfter = OffsetDateTime.ofInstant(deletedAt.plus(trashRetention), ZoneOffset.UTC),
@@ -184,6 +185,7 @@ class ContentResource(
         slugToken = slugToken,
         orderIndex = orderIndex,
         epoch = epoch,
+        scopeEpoch = scopeEpoch,
         parentId = if (parentId == scopeId) null else UUID.fromString(parentId),
         wrappedContentKey = wrappedContentKey,
         wrappedMeta = wrappedMeta,

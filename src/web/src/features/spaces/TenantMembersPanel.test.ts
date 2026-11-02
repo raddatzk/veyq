@@ -34,9 +34,11 @@ vi.mock('../account/tenantTrust', async (orig) => ({ ...(await orig<typeof impor
 const { confirmAsk, confirmAskWithOptions } = vi.hoisted(() => ({ confirmAsk: vi.fn(), confirmAskWithOptions: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk, askWithOptions: confirmAskWithOptions }) }))
 // The node re-key after a rotation is rekeyScope.test.ts's; here only that it runs, and after what.
-vi.mock('../../core/node/rekey/rekeyScope', async (orig) => ({ ...(await orig<typeof import('../../core/node/rekey/rekeyScope')>()), rekeyScope: vi.fn() }))
+vi.mock('../../core/node/rekey/rekeyScope', async (orig) => ({
+  ...(await orig<typeof import('../../core/node/rekey/rekeyScope')>()), rekeyScope: vi.fn(), rekeyingCause: vi.fn(),
+}))
 // The tenant keys the active space holds: none unless a test hands it some (then the names open on the device).
-const held = vi.hoisted(() => ({ write: null as Uint8Array | null, epochs: null as EpochKeys | null }))
+const held = vi.hoisted(() => ({ write: null as Uint8Array | null, epochs: null as ScopeKey | null }))
 vi.mock('../../app/activeSpace', async (orig) => ({
   ...(await orig<typeof import('../../app/activeSpace')>()),
   activeScopeKey: () => held.write,
@@ -46,7 +48,7 @@ vi.mock('../../app/activeSpace', async (orig) => ({
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
 import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, rekeySpace, setTenantMemberRole, memberError, prepareInviteCode, type InvitePhase } from './members'
-import { rekeyScope } from '../../core/node/rekey/rekeyScope'
+import { rekeyScope, rekeyingCause } from '../../core/node/rekey/rekeyScope'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { tenantBadges } from '../account/tenantTrust'
 import { account } from '../../app/account'
@@ -58,9 +60,9 @@ import { i18n } from '../../i18n'
 import { myTenant } from '../../test/models'
 import { formatInviteCode, generateInviteCode, normalizeInviteCode } from '@veyq/crypto/invite'
 import * as v1 from '@veyq/crypto/v1'
-import { b64std } from '@veyq/crypto/base64'
-import { deriveEpochKeys, epochLinkContext, type EpochKeys } from './epochs'
-import { sealName } from '../account/profile/memberName'
+import { type ScopeKey } from './epochs'
+import { epochsOf } from './epochsTestUtil'
+import { resealMemberName, sealName } from '../account/profile/memberName'
 
 const stubs = {
   VeyqButton: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
@@ -119,6 +121,20 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     // One status badge per row, and it is "Active": there is no awaiting-access state to show any more.
     for (const row of rows) expect(row.findAll('.veyq-badge').map((b) => b.text())).toEqual([t('members.statusActive')])
     expect(rows.some((r) => r.find('.veyq-badge.warning').exists())).toBe(false)
+  })
+
+  // ADR 0114 decision 9: a re-key only closed links started is worded for what lies below them, never the whole space;
+  // the control on the same panel is a rotation's re-key, worded for the space.
+  it.each([
+    ['close', 'share.closedRekeying', 'rotation.statusHint.rekeying'],
+    ['rotation', 'rotation.statusHint.rekeying', 'share.closedRekeying'],
+  ] as const)("the owner's re-keying hint after a %s says what re-keys", async (cause, shown, absent) => {
+    vi.mocked(scopeLifecycle).mockResolvedValue({ deletedAt: null, purgeAfter: null, compromiseRotation: null, rekeying: true })
+    vi.mocked(rekeyingCause).mockResolvedValue(cause)
+    const wrapper = await mountPanel('OWNER')
+    expect(rekeyingCause).toHaveBeenCalledWith('t-1')
+    expect(wrapper.text()).toContain(t(shown))
+    expect(wrapper.text()).not.toContain(t(absent))
   })
 
   it('shows the invite button to the owner', async () => {
@@ -450,20 +466,24 @@ describe('TenantMembersPanel - names across a tenant rotation (inbox #573)', () 
     activeSpace.tenantId = T
   })
 
-  it('shows the real name a member saved under the epoch before the rotation, opened with the key peeled from the chain', async () => {
+  // ADR 0115 decisions 1-2: the rotation re-sealed every name under the new key, so the one key the active space holds
+  // opens them all; a name left under the replaced key does not open, and the row falls back to the username.
+  it('shows the real name a member saved before the rotation, which the rotation re-sealed under the new key; one left under the old key shows the username', async () => {
     const e0 = v1.randomBytes(32)
     const e1 = v1.randomBytes(32)
-    const epochs = deriveEpochKeys(T, e1, 1, [{ epoch: 1, wrappedPrev: b64std(v1.seal(epochLinkContext(T, 1), e1, e0)) }])
-    held.write = epochs.keys.get(1)!
-    held.epochs = epochs
+    held.write = e1
+    held.epochs = epochsOf(e1, 1)
     try {
-      const members: ScopeMember[] = [
-        { ...MEMBERS[0], userId: OLGA, sealedName: sealName(e0, { scopeId: T, userId: OLGA }, { firstName: 'Olga', lastName: 'Owner' }) },
+      const olga = { scopeId: T, userId: OLGA }
+      const underE0 = sealName(e0, olga, { firstName: 'Olga', lastName: 'Owner' })
+      const members = (olgaName: string): ScopeMember[] => [
+        { ...MEMBERS[0], userId: OLGA, sealedName: olgaName },
         { ...MEMBERS[1], userId: PAUL, sealedName: sealName(e1, { scopeId: T, userId: PAUL }, { firstName: 'Paul', lastName: 'Partner' }) },
       ]
-      const wrapper = await mountPanel('MEMBER', [], members)
-      const titles = wrapper.findAll('.member-row .veyq-row-title').map((x) => x.text())
-      expect(titles).toEqual(['Olga Owner', 'Paul Partner'])
+      const titles = async (olgaName: string) =>
+        (await mountPanel('MEMBER', [], members(olgaName))).findAll('.member-row .veyq-row-title').map((x) => x.text())
+      expect(await titles(resealMemberName(e0, e1, olga, underE0))).toEqual(['Olga Owner', 'Paul Partner'])
+      expect(await titles(underE0)).toEqual([`@${MEMBERS[0].username}`, 'Paul Partner'])
     } finally {
       held.write = null
       held.epochs = null

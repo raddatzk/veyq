@@ -15,13 +15,15 @@
 //     (`E_a`), beside whatever grant a later rotation carried the invite with (ADR 0111 decision 19).
 //   - **The invitee checks before it trusts** (`checkInvite`): the bundle it derives from the seed must be the one the
 //     server serves; the owner's served chain must pass through the head inside the seal and end at the served owner
-//     key, which signed the invite key and the anchor; and the tenant key must be the anchor's `E_a` or peel down to it
-//     through the tenant's epoch links. Nothing it relies on comes from the server unchecked.
+//     key, which signed the invite key and the anchor; and the tenant key must be the anchor's `E_a` or one the tenant's
+//     succession statements lead to from `E_a`'s succession key (ADR 0115 decision 5). Nothing it relies on comes from
+//     the server unchecked.
 //   - **It grants itself and writes a join record**: the `invite-accept` proof (signed by the invite key, checked by the
 //     server) and the join record — signed by the invite key AND the new identity over the `join-record` statement,
 //     sealed under the tenant key as the field `member-join-record`.
 //   - **An owner's securing endorses the join records it rooted** (`join-endorsement`): the new key signs SHA-256 of each
-//     sealed record, so a record the retired key signed still counts — and one a thief signs with that key after does not.
+//     OPENED record (ADR 0115 decision 8, so a rotation's re-seal of the envelope leaves it valid), so a record the
+//     retired key signed still counts — and one a thief signs with that key after does not.
 //
 // Pinned by `contracts/crypto/vectors/v1.json` (`#invite_key`, `#invite_link`, `#join_record`, `#join_endorsement`,
 // `seal.sym['invite-link']`, `field_seal['member-join-record']`).
@@ -41,10 +43,13 @@ import {
   identityVerify,
   randomBytes,
   serializeIdentityPublic,
+  successionKeyPair,
   verifyKeyChain,
+  verifySuccessionPath,
   type ArgonParams,
   type Identity,
   type KeyChainLink,
+  type SuccessionLink,
 } from './v1'
 import { b64url, fromB64url } from './base64'
 
@@ -225,16 +230,12 @@ export function parseInviteFragment(fragment: string): { token: string; sealed: 
 
 // ── The invitee's checks ──────────────────────────────────────────────────────────────────────────────
 
-/** One link of the tenant scope's epoch chain as served (ADR 0024): `E_{epoch-1}` sealed under `E_epoch` (purpose
- *  `scope-epoch`, bound to the scope and the epoch it is stored at), `wrappedPrev` DECODED. */
-export type ServedEpochLink = { epoch: number; wrappedPrev: Uint8Array }
-
 /**
  * What the server serves about an invite (the preview) — every byte of it unchecked until `checkInvite` ran. Byte
  * strings are DECODED; `expiresAt` is Unix seconds. `signerKeyChain` is the inviting owner's whole key chain, genesis
  * first. The anchor is the owner's own grant of the tenant key at `anchorEpoch`; the grant is the one the invite carries
  * now, at `grantedEpoch` — the anchor itself, or one a later rotation re-wrapped, with its granter's key beside it; the
- * epoch links are the tenant scope's for every epoch in `(anchorEpoch, grantedEpoch]`.
+ * succession statements are the tenant scope's for every epoch in `(anchorEpoch, grantedEpoch]` (ADR 0115 decision 5).
  */
 export type ServedInvite = InviteAddress & {
   invitePublicKey: Uint8Array
@@ -250,7 +251,7 @@ export type ServedInvite = InviteAddress & {
   grantedEpoch: number
   grantSignature: Uint8Array
   granterIdentityPublicKey: Uint8Array
-  epochLinks: readonly ServedEpochLink[]
+  successions: readonly SuccessionLink[]
 }
 
 /** Which check refused an invite. One refusal for the user ("ask for a new one"), one reason each for the tests. */
@@ -291,11 +292,12 @@ export type CheckedInvite = {
  *     never;
  *   - `bad_signature`: the `invite-key` signature does not verify under that newest key;
  *   - `anchor_invalid`: neither does the anchor grant's `grant` signature;
- *   - `epoch_unlinked`: the tenant key is neither the anchor's `E_a` nor one whose epoch links peel down to it — the
- *     anchor does not open; or the carried grant sits below the anchor; or, at the anchor's epoch, it is not the anchor
- *     byte for byte; or, above it, its signature does not verify under the served granter key, it does not open, or
- *     peeling the served links from it down to the anchor's epoch does not yield exactly `E_a`. The operator holds no
- *     `E_a`, so no link it makes ends there: the granter's key needs no anchor of its own.
+ *   - `epoch_unlinked`: the tenant key is neither the anchor's `E_a` nor one the succession statements lead to from it —
+ *     the anchor does not open; or the carried grant sits below the anchor; or, at the anchor's epoch, it is not the
+ *     anchor byte for byte; or, above it, its signature does not verify under the served granter key, it does not open,
+ *     or the served statements do not walk from `E_a`'s succession public key to exactly the one the carried key derives
+ *     (`verifySuccessionPath`, ADR 0115 decision 5). The operator holds no `E_a`, so it signs no statement that starts
+ *     there: the granter's key needs no anchor of its own.
  */
 export function checkInvite(payload: InviteLinkPayload, served: ServedInvite): CheckedInvite {
   const inviteKey = inviteKeyFromSeed(payload.seed)
@@ -333,8 +335,8 @@ export function checkInvite(payload: InviteLinkPayload, served: ServedInvite): C
     if (!bytesEqual(served.wrappedGrant, served.anchorWrappedGrant)) throw unlinked(anchorKey)
     return checked(anchorKey)
   }
-  // A carried grant below the anchor needs no test of its own: the peel refuses to go up, and the key it carries is not
-  // E_a either way (bite-tested 2026-10-28: an explicit refusal here was no load-bearing check).
+  // A carried grant below the anchor needs no test of its own: the succession path refuses a target below the held
+  // epoch, and the key it carries is not E_a either way.
   let granterSign: Uint8Array
   try {
     granterSign = deserializeIdentityPublic(served.granterIdentityPublicKey).sign
@@ -344,9 +346,18 @@ export function checkInvite(payload: InviteLinkPayload, served: ServedInvite): C
   if (!identityVerify(granterSign, grantOf(served.grantedEpoch, served.wrappedGrant), served.grantSignature)) throw unlinked(anchorKey)
   const epochKey = openGrant(served.tenantId, served.grantedEpoch, inviteKey, served.wrappedGrant)
   if (epochKey === null) throw unlinked(anchorKey)
-  const peeled = peelEpochKey(served.tenantId, epochKey, served.grantedEpoch, served.anchorEpoch, served.epochLinks)
-  const linked = peeled !== null && bytesEqual(peeled, anchorKey)
-  peeled?.fill(0)
+  const anchorSuccession = successionKeyPair(anchorKey)
+  const carriedSuccession = successionKeyPair(epochKey)
+  const linked = verifySuccessionPath({
+    scopeId: served.tenantId,
+    heldEpoch: served.anchorEpoch,
+    heldPublicKey: anchorSuccession.publicKey,
+    statements: served.successions,
+    targetEpoch: served.grantedEpoch,
+    targetPublicKey: carriedSuccession.publicKey,
+  })
+  anchorSuccession.privateKey.fill(0)
+  carriedSuccession.privateKey.fill(0)
   if (!linked) {
     epochKey.fill(0)
     throw unlinked(anchorKey)
@@ -368,40 +379,6 @@ function openGrant(tenantId: string, epoch: number, inviteKey: Identity, wrapped
 function unlinked(anchorKey: Uint8Array): InviteCheckFailed {
   anchorKey.fill(0)
   return new InviteCheckFailed('epoch_unlinked')
-}
-
-/**
- * Peel a scope's epoch chain (ADR 0024) from `key` — the scope key at `fromEpoch` — down to `toEpoch`, through the served
- * `links` (each `E_{n-1}` sealed under `E_n`, purpose `scope-epoch`, bound to the scope and `n`). Returns the key at
- * `toEpoch` (a copy of `key` when the two are one epoch), or null when it cannot: `toEpoch` above `fromEpoch`, a link in
- * between missing, an epoch served twice, or a link that does not open under the key above it. Never a throw: every link
- * is the server's. The keys in between are zeroed; the caller owns the result.
- */
-export function peelEpochKey(
-  scopeId: string, key: Uint8Array, fromEpoch: number, toEpoch: number, links: readonly ServedEpochLink[],
-): Uint8Array | null {
-  if (!Number.isSafeInteger(fromEpoch) || !Number.isSafeInteger(toEpoch) || toEpoch < 0 || toEpoch > fromEpoch) return null
-  const byEpoch = new Map<number, Uint8Array>()
-  for (const l of links) {
-    if (byEpoch.has(l.epoch)) return null
-    byEpoch.set(l.epoch, l.wrappedPrev)
-  }
-  let current: Uint8Array = key.slice()
-  for (let e = fromEpoch; e > toEpoch; e--) {
-    const wrappedPrev = byEpoch.get(e)
-    let prev: Uint8Array | null = null
-    if (wrappedPrev !== undefined) {
-      try {
-        prev = open({ purpose: 'scope-epoch', scopeId, epoch: e }, current, wrappedPrev)
-      } catch {
-        prev = null
-      }
-    }
-    current.fill(0)
-    if (prev === null) return null
-    current = prev
-  }
-  return current
 }
 
 // ── The join record ───────────────────────────────────────────────────────────────────────────────────
@@ -528,9 +505,15 @@ export function decodeJoinRecord(b: Uint8Array): JoinRecord {
 
 // ── An owner's endorsement of a join record (ADR 0111 decision 21) ────────────────────────
 
-/** What an endorsement covers: the record's address, the owner who rooted it, and the member's SEALED join record
- *  exactly as stored — the bytes the server serves as `sealedJoinRecord`. */
-export type JoinEndorsementInput = JoinRecordAddress & { signerUserId: string; sealedJoinRecord: Uint8Array }
+/** What an endorsement covers: the record's address, the owner who rooted it, and the member's OPENED join record —
+ *  the plaintext {@link openJoinRecord} decodes, as {@link encodeJoinRecord} writes it (ADR 0115 decision 8). Never the
+ *  envelope: every rotation re-seals the record under the tenant's new key, and an endorsement over the envelope would
+ *  be void after it, with only the owner able to sign again. The server cannot open the record, so it is sent the
+ *  digest beside the signature and checks the signature over it; a reader that opens the record checks the digest. */
+export type JoinEndorsementInput = JoinRecordAddress & { signerUserId: string; joinRecord: Uint8Array }
+
+/** The digest an endorsement signs: SHA-256 of the opened record's bytes — what the stage sends as `recordDigest`. */
+export const joinRecordDigest = (joinRecord: Uint8Array): Uint8Array => sha256(joinRecord)
 
 export const joinEndorsementStatement = (e: JoinEndorsementInput) =>
   ({
@@ -538,14 +521,14 @@ export const joinEndorsementStatement = (e: JoinEndorsementInput) =>
     tenantId: e.tenantId,
     userId: e.userId,
     signerUserId: e.signerUserId,
-    recordDigest: sha256(e.sealedJoinRecord),
+    recordDigest: joinRecordDigest(e.joinRecord),
   }) as const
 
-/** The owner's identity (`Identity['priv'].sign`) endorses one sealed join record. Deterministic, so the vectors pin it. */
+/** The owner's identity (`Identity['priv'].sign`) endorses one opened join record. Deterministic, so the vectors pin it. */
 export const signJoinEndorsement = (ownerSignPrivateKey: Uint8Array, e: JoinEndorsementInput): Uint8Array =>
   identitySign(ownerSignPrivateKey, joinEndorsementStatement(e))
 
-/** Whether `signature` is the owner's (`ownerSignPublicKey`) over this sealed record at this address. False — never a
+/** Whether `signature` is the owner's (`ownerSignPublicKey`) over this opened record at this address. False — never a
  *  throw — for any malformed part: every byte here came from the server. */
 export function joinEndorsementVerifies(ownerSignPublicKey: Uint8Array, e: JoinEndorsementInput, signature: Uint8Array): boolean {
   try {

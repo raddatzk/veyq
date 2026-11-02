@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs'
 import { registry } from '../applications/registry'
 import { createContentNode, deleteNode, type TreeNode } from '../node/tree'
 import type { ByteSink } from '../blob/stream'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import type { TreeSource } from '../access'
 import { memberAccessOf } from '../../test/models'
 import { exportSubtree } from './exportSubtree'
@@ -36,7 +36,7 @@ import { testKind } from '../../test/testApplication'
 const FILE = 'H_FILE'
 const COLLECTION = 'H_COLLECTION'
 const SERIES = 'H_SERIES'
-const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
+const epochs: ScopeKey = { epoch: 1, key: new Uint8Array(32) }
 const text = (s: string) => new TextEncoder().encode(s)
 /** A payload's bytes as text, read the way the upload pump reads (`slice(...).arrayBuffer()`). */
 const textOf = async (f: PayloadFile) => new TextDecoder().decode(await f.slice(0, f.size).arrayBuffer())
@@ -85,7 +85,7 @@ function fresh(): void {
   let n = 0
   vi.mocked(createContentNode).mockReset().mockImplementation(async (_s, _e, parent, kind, name) => {
     created.push({ kind, name, parent: parent?.id ?? null, bytes: '' })
-    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 1 }
+    return { nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(9), epoch: 0, scopeEpoch: 1 }
   })
 }
 beforeEach(() => {
@@ -105,7 +105,7 @@ async function zipBytes(write: (w: ZipWriter) => Promise<unknown>, zip64At?: num
 }
 const zipOf = (bytes: Uint8Array | Blob): ImportInput => ({ kind: 'zip', file: new File([bytes as BlobPart], 'download.zip') })
 const node = (id: string, parentId: string | null, kind: string, name: string, orderIndex = 0) =>
-  ({ id, parentId, kind, name, orderIndex, epoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt: new Date(0) }) as unknown as TreeNode
+  ({ id, parentId, kind, name, orderIndex, epoch: 1, scopeEpoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt: new Date(0) }) as unknown as TreeNode
 const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
   rootId: null,
   node: (id) => nodes.find((n) => n.id === id) ?? null,

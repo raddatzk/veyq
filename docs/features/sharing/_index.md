@@ -43,6 +43,9 @@ do there is each application's role matrix ([Memories](../../apps/memories.md#wh
 - [uc.sharing.share-accept](use-cases/uc.sharing.share-accept.md) — **built** (an accountless visitor accepts the
   space's terms before viewing or contributing, recorded on the device only;
   [ADR 0035](../../decisions/0035-server-terms-of-service.md) §3)
+- [uc.sharing.close-link-rekeys-subtree](use-cases/uc.sharing.close-link-rekeys-subtree.md) — **built** (closing a
+  viewable link — switch-off, delete, re-issue, bulk or removal switch-off, end date — re-keys everything below it;
+  [ADR 0114](../../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md))
 
 ## Deferred
 

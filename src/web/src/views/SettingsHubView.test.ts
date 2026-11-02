@@ -153,8 +153,8 @@ describe('SettingsHubView — a section the caller may not see leads back to /se
   // offers is the panel's own owner answer (GroupMembersPanel.test.ts). Only a group the caller is no member of leads back.
   it('a group page opens for a group the caller owns and for one it only belongs to; a group it is no member of leads back', async () => {
     vi.mocked(listMyGroups).mockResolvedValue([
-      { scopeId: 'g-1', tenantId: 't-1', name: 'Mine', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
-      { scopeId: 'g-2', tenantId: 't-1', name: 'Theirs', role: 'MEMBER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+      { scopeId: 'g-1', tenantId: 't-1', name: 'Mine', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null, awaitingKey: false },
+      { scopeId: 'g-2', tenantId: 't-1', name: 'Theirs', role: 'MEMBER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null, awaitingKey: false },
     ])
     const owned = await mountHub('/settings/group-g-1')
     expect(pathOf(owned)).toBe('/settings/group-g-1')
@@ -231,8 +231,8 @@ describe('SettingsHubView — section filtering by scope × role', () => {
 
   it('a Group scope: entering the hub opens that group’s detail page, and the Gruppen collection lists owned groups by name', async () => {
     vi.mocked(listMyGroups).mockResolvedValue([
-      { scopeId: 'g-1', tenantId: 't-1', name: 'Familie Raddatz', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
-      { scopeId: 'g-2', tenantId: 't-1', name: 'Reise-Crew', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+      { scopeId: 'g-1', tenantId: 't-1', name: 'Familie Raddatz', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null, awaitingKey: false },
+      { scopeId: 'g-2', tenantId: 't-1', name: 'Reise-Crew', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null, awaitingKey: false },
     ])
     activeSpace.tenantId = 't-1'
     activeSpace.kind = ScopeKind.Group
@@ -246,8 +246,8 @@ describe('SettingsHubView — section filtering by scope × role', () => {
 
   it('in a group the caller belongs to but does not own, entering the hub opens that group’s page (decision 1)', async () => {
     vi.mocked(listMyGroups).mockResolvedValue([
-      { scopeId: 'g-1', tenantId: 't-1', name: 'Familie Raddatz', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
-      { scopeId: 'g-2', tenantId: 't-1', name: 'Reise-Crew', role: 'MEMBER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+      { scopeId: 'g-1', tenantId: 't-1', name: 'Familie Raddatz', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null, awaitingKey: false },
+      { scopeId: 'g-2', tenantId: 't-1', name: 'Reise-Crew', role: 'MEMBER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null, awaitingKey: false },
     ])
     activeSpace.tenantId = 't-1'
     activeSpace.kind = ScopeKind.Group
@@ -272,8 +272,8 @@ describe('SettingsHubView — section filtering by scope × role', () => {
 
   it('clicking a group in the collection routes to its per-entity detail page', async () => {
     vi.mocked(listMyGroups).mockResolvedValue([
-      { scopeId: 'g-1', tenantId: 't-1', name: 'Familie Raddatz', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
-      { scopeId: 'g-9', tenantId: 't-1', name: 'Reise-Crew', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+      { scopeId: 'g-1', tenantId: 't-1', name: 'Familie Raddatz', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null, awaitingKey: false },
+      { scopeId: 'g-9', tenantId: 't-1', name: 'Reise-Crew', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null, awaitingKey: false },
     ])
     activeSpace.tenantId = 't-1'
     activeSpace.kind = ScopeKind.Group
@@ -327,7 +327,7 @@ describe('SettingsHubView — the default section and the hidden redirect settle
 
   it('in a group the caller belongs to but does not own, /settings settles on that group\'s page', async () => {
     vi.mocked(listMyGroups).mockResolvedValue([
-      { scopeId: 'g-9', tenantId: 't-1', name: 'Reise-Crew', role: 'MEMBER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+      { scopeId: 'g-9', tenantId: 't-1', name: 'Reise-Crew', role: 'MEMBER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null, awaitingKey: false },
     ])
     const { router, seen } = await mountCounting('/settings')
     expect(seen).toEqual(['/settings/group-g-9'])

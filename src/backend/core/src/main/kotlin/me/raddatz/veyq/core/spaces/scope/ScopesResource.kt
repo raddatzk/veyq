@@ -14,7 +14,7 @@ import me.raddatz.veyq.core.generated.model.RenameGroupRequest
 import me.raddatz.veyq.core.generated.model.RotateScopeRequest
 import me.raddatz.veyq.core.generated.model.ScopeCreated
 import me.raddatz.veyq.core.generated.model.TenantStatus
-import me.raddatz.veyq.core.generated.model.ScopeEpochLink
+import me.raddatz.veyq.core.generated.model.ScopeSuccession as ScopeSuccessionWire
 import me.raddatz.veyq.core.generated.model.ScopeKind
 import me.raddatz.veyq.core.generated.model.ScopeMember
 import me.raddatz.veyq.core.generated.model.ScopeRotated
@@ -172,7 +172,9 @@ class ScopesResource(
 
     override fun rotateScope(scopeId: UUID, rotateScopeRequest: RotateScopeRequest): Response =
         when (val outcome = handler.rotateScope(
-            identity.principal.name, scopeId.toString(), rotateScopeRequest.epoch, rotateScopeRequest.wrappedPrev,
+            identity.principal.name, scopeId.toString(), rotateScopeRequest.epoch,
+            ScopeSuccession(rotateScopeRequest.epoch, rotateScopeRequest.successionPublicKey, rotateScopeRequest.successionSignature),
+            rotateScopeRequest.rekeyId.toString(),
             rotateScopeRequest.grants.map {
                 RotationGrant(it.userId.toString(), SignedGrant(it.wrappedGrant, it.grantSignature), it.recipientIdentityDigest)
             },
@@ -206,7 +208,7 @@ class ScopesResource(
 
     override fun listScopeEpochs(scopeId: UUID): Response =
         when (val outcome = handler.listEpochs(identity.principal.name, scopeId.toString())) {
-            is EpochsOutcome.Links -> Response.ok(outcome.links.map { ScopeEpochLink(epoch = it.first, wrappedPrev = it.second) }).build()
+            is EpochsOutcome.Successions -> Response.ok(outcome.successions.map { it.toWire() }).build()
             is HttpFailure -> httpError(outcome)
         }
 
@@ -298,3 +300,6 @@ class ScopesResource(
             is HttpFailure -> httpError(o)
         }
 }
+
+/** A succession statement as the wire carries it (ADR 0115 decision 5); the invite preview serves the same shape. */
+internal fun ScopeSuccession.toWire() = ScopeSuccessionWire(epoch, successionPublicKey, successionSignature)

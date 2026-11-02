@@ -41,6 +41,7 @@ const ROW: TrashedNode = {
   parentId: null,
   kind: 'MEMORY',
   epoch: 0,
+  scopeEpoch: 0,
   placementRevision: 0,
   name: 'Rom 2026',
   deletedAt: new Date('2026-08-17T10:15:30Z'),

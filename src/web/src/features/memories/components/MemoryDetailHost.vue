@@ -25,11 +25,11 @@ import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import { injectCoreNodeActions } from '../../../core/node/coreNodeActions'
 import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
 import { patchNodeMeta } from '../../../core/node/treeStore'
-import { keyAt } from '../../spaces/epochs'
 import { memoryRights } from '../rights'
 import { targetOf } from '../../../core/access'
 import { guestMemorySource, memberMemorySource } from '../source'
 import MemoryDetail from './MemoryDetail.vue'
+import type { ScopeKey } from '../../spaces/epochs'
 
 const props = defineProps<NodeDetailProps>()
 const host = injectNodeHost()
@@ -47,15 +47,14 @@ const source = guest
   ? guestMemorySource(() => (props.access.mode === 'guest' ? props.access : guest), props.tree)
   : memberMemorySource({ scopeId: () => props.scopeId })
 
-// Item marks seal under `K_SC` at the **base epoch `E_0`** (ADR 0068), never under `activeScopeKey()`, which is
-// the *write* key `E_current`: the marked set is re-sealed whole on every toggle, so a rotation would strand it.
-// `activeSpace.epoch` is the reactive signal that a rotation happened — without reading it this would not
-// recompute after `refreshActiveScope`. A member's only.
-const itemMarkKey = computed<Uint8Array | null>(() => {
+// Item marks seal under the scope's one key at its epoch (ADR 0115 decisions 1 and 3) — every rotation re-seals them
+// under the new key, through Memories' scope re-key participant. `activeSpace.epoch` is the reactive signal that a
+// rotation happened — without reading it this would not recompute after `refreshActiveScope`. A member's only.
+const itemMarkKey = computed<ScopeKey | null>(() => {
   if (guest) return null
   void activeSpace.epoch
   const eks = activeEpochKeys()
-  return eks ? keyAt(eks, 0) : null
+  return eks ? { epoch: eks.epoch, key: eks.key } : null
 })
 const personalScope = computed(() => !guest && activeSpace.kind === 'PERSONAL')
 // Core's own actions (the heart, the cover, "Copy to…", the download, Report) come with core's header for this node

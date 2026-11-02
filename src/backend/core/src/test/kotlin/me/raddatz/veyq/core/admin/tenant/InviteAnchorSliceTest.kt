@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
@@ -109,22 +110,25 @@ class InviteAnchorSliceTest {
             .body("invite.anchorEpoch", equalTo(0))
             .body("invite.anchorGrantSignature", equalTo(TestGrants.SIGNATURE))
             .body("invite.grantedEpoch", equalTo(0))
-            .body("invite.epochLinks.size()", equalTo(0))
+            .body("invite.successions.size()", equalTo(0))
             .body("invite.signerKeyChainHead", nullValue())
 
-        // Two rotations by another owner: the grant at 2, the anchor at 0, the links of epochs 1 and 2 — and only those.
-        rotate(other, tenantId, epoch = 1, wrapped = REGRANT_1, invite = key, wrappedPrev = PREV_1).then().statusCode(201)
-        rotate(other, tenantId, epoch = 2, wrapped = REGRANT_2, invite = key, wrappedPrev = PREV_2).then().statusCode(201)
+        // Two rotations by another owner: the grant at 2, the anchor at 0, the succession statements of epochs 1 and 2 —
+        // and only those (ADR 0115 decision 5).
+        rotate(other, tenantId, epoch = 1, wrapped = REGRANT_1, invite = key, successionPublicKey = PREV_1).then().statusCode(201)
+        rotate(other, tenantId, epoch = 2, wrapped = REGRANT_2, invite = key, successionPublicKey = PREV_2).then().statusCode(201)
         preview(secret)
             .body("invite.inviteId", equalTo(key.inviteId))
             .body("invite.anchorEpoch", equalTo(0))
             .body("invite.grantedEpoch", equalTo(2))
             .body("invite.wrappedGrant", equalTo(REGRANT_2))
-            .body("invite.epochLinks.size()", equalTo(2))
-            .body("invite.epochLinks[0].epoch", equalTo(1))
-            .body("invite.epochLinks[0].wrappedPrev", equalTo(PREV_1))
-            .body("invite.epochLinks[1].epoch", equalTo(2))
-            .body("invite.epochLinks[1].wrappedPrev", equalTo(PREV_2))
+            .body("invite.successions.size()", equalTo(2))
+            .body("invite.successions[0].epoch", equalTo(1))
+            .body("invite.successions[0].successionPublicKey", equalTo(PREV_1))
+            .body("invite.successions[0].successionSignature", equalTo(TestGrants.SIGNATURE))
+            .body("invite.successions[1].epoch", equalTo(2))
+            .body("invite.successions[1].successionPublicKey", equalTo(PREV_2))
+            .body("invite.epochLinks", nullValue())
     }
 
     // --- the accept (ADR 0111 decisions 20 and 21) ---
@@ -261,10 +265,14 @@ class InviteAnchorSliceTest {
     }
 
     /** [caller]'s commit of [epoch] on the tenant scope: re-grants every member and carries [invite], each with [wrapped]. */
-    private fun rotate(caller: String, tenantId: String, epoch: Int, wrapped: String, invite: TestInviteKey, wrappedPrev: String = "cHJldg==") =
+    private fun rotate(
+        caller: String, tenantId: String, epoch: Int, wrapped: String, invite: TestInviteKey,
+        successionPublicKey: String = TestScopeRekey.SUCCESSION_PUBLIC_KEY,
+    ) =
         given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":$epoch,"wrappedPrev":"$wrappedPrev","grants":[${
+                """{"epoch":$epoch,"successionPublicKey":"$successionPublicKey","successionSignature":"${TestGrants.SIGNATURE}",""" +
+                    """"rekeyId":"${TestScopeRekey.stageAll(tenantId)}","grants":[${
                     tx { MembershipEntity.find("scopeId", tenantId).list().map { it.userId } }.joinToString(",") { u ->
                         """{"userId":"$u","wrappedGrant":"$wrapped",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(u)}"}"""
                     }

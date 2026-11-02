@@ -49,7 +49,7 @@ single **re-wrap, never a data re-encrypt** — the *decision + rationale* (why 
 parent's key") is ADR 0012.
 
 A node's **directory entry** — its name, sealed under a field key derived from it, and its slug token — lives under
-the **same parent key** its content key wraps under (`K_SC` at the node's epoch for a scope-root entry, the parent node's key below it — [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+the **same parent key** its content key wraps under (the scope key `K_SC` for a scope-root entry, the parent node's key below it — [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
 Decision 2). A member, holding `K_SC`, decrypts the whole tree top-down in one pass (each node's key opens the
 names below it); whoever holds one node's key — a share guest — reads every name below that node and nothing
 above it. Dedup keys off `K_SC`; a Memory's *content* needs its `K_node` ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)).
@@ -80,8 +80,8 @@ sequenceDiagram
   U->>C: new Memory "Italien 2026"
   C->>C: nodeId = random UUID #59; K_node = random(32)
   C->>C: K_parent = K_SC at the root, else the parent's content key
-  C->>C: wrappedContentKey = seal(K_parent, content-key of scope, nodeId, epoch, placementRevision 0, K_node)
-  C->>C: encryptedName = seal(K_parent, node-name of scope, nodeId, epoch, placementRevision 0, name) #59; slugToken = HMAC(K_parent, parentId‖slug)
+  C->>C: wrappedContentKey = seal(K_parent, content-key of scope, nodeId, scopeEpoch, placementRevision 0, K_node)
+  C->>C: encryptedName = seal(K_parent, node-name of scope, nodeId, scopeEpoch, placementRevision 0, name) #59; slugToken = HMAC(K_parent, parentId‖slug)
   C->>S: POST node { id:nodeId, kind:MEMORY, parentId, encryptedName, slugToken, wrappedContentKey }
   S->>S: refuse a taken id, enforce UNIQUE(parentId, slugToken) + structural rules
   S-->>C: created
@@ -96,10 +96,10 @@ sequenceDiagram
   `placementRevision`, which the request states it was built on. The server compare-and-sets it
   (`409 stale_placement`: the client re-reads and rebuilds once) and checks structure only — a live destination in
   the same scope, the kind's placement rule, no cycle, a free slug — under the tree's scope lock. A placement never changes the
-  node's epoch: it states the node's own (`409 stale_epoch` otherwise, at any destination); an entry at the scope root
-  lives under `K_SC` at that epoch, so a node the last rotation's re-key has not reached may not go to the root, and a
-  destination parent not yet re-keyed refuses too (both `409 node_rekey_pending`,
-  [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 6). `placeNode` in
+  node's epoch (its own key's counter) or the `scopeEpoch` its seals bind: it states the node's own epoch and the
+  destination parent's (`409 stale_epoch` otherwise, at any destination); a node due for its re-key moves nowhere, and a
+  due destination parent refuses too (both `409 node_rekey_pending`,
+  [ADR 0114](../../../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 3). `placeNode` in
   `src/web/src/core/node/tree.ts` is the one client function. **No
   cross-scope move** — that is a copy + re-encrypt under the target scope's `K_SC`/`K_node` (a separate use-case),
   never a tree move.

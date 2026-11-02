@@ -21,7 +21,7 @@ import { NO_NOTE, type ShareNote } from '../../../core/sharing/shareNote'
 import ShareNoteAcceptField from '../../../core/sharing/ShareNoteAcceptField.vue'
 import { buildShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
-import type { EpochKeys } from '../../spaces/epochs'
+import type { ScopeKey } from '../../spaces/epochs'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { lastExpiryDay, linkRules } from '../../../core/sharing/linkRules'
 import { decodeHttpError } from '../../../shared/httpError'
@@ -39,7 +39,7 @@ const props = defineProps<{
   memoryEpoch: number
   /** The scope's epoch keys: a new share's recovery copy seals under the current one, an edited share's opens at its
    *  own epoch (ADR 0036 point 4). */
-  epochs: EpochKeys
+  epochs: ScopeKey
   memoryName: string
   /** When set, the dialog edits this share's name + note in place instead of creating a new one. */
   editShare?: ManagedShare | null
@@ -186,9 +186,11 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
           ? undefined
           : ({ set: password.value } as const)
       // cr-0119: a normal-flow edit may re-grade the role (READ ↔ READ_WRITE); the uploader variant never sends one.
+      // An end date moved past a passed one reopens the link (ADR 0114 decision 7): the Memory's key and name go with it.
       await updateShare(
         addressOf(props.editShare), props.epochs, props.editShare,
         effectiveNote, name.value, expiry, props.uploader ? undefined : role.value, passwordChange,
+        { root: { key: props.memoryKey, epoch: props.memoryEpoch }, rootName: props.memoryName },
       )
       emit('saved')
       emit('close')

@@ -125,14 +125,16 @@ class VerificationSliceTest {
         put(t, t.a, t.b, sealed = S1).then().statusCode(204) // control: a member is accepted
     }
 
+    /** ADR 0115 decision 3: the tenant has one key at a time, and a rotation re-seals every verification under it — so
+     *  a statement sealed under any other epoch, an earlier one as much as one ahead, is `409 stale_epoch`. */
     @Test
-    fun anEpochBeyondTheTenantScopesCurrentOneIs400() {
+    fun anEpochOtherThanTheTenantScopesCurrentOneIsStale() {
         val t = world()
         bumpEpoch(t.tenantId, 2)
-        put(t, t.a, t.b, sealed = S1, epoch = 3).then().statusCode(400).body("code", equalTo("invalid_request"))
+        put(t, t.a, t.b, sealed = S1, epoch = 3).then().statusCode(409).body("code", equalTo("stale_epoch"))
+        put(t, t.a, t.c, sealed = S1, epoch = 0).then().statusCode(409).body("code", equalTo("stale_epoch"))
         assertEquals(emptyList<Row>(), rows(t.tenantId))
         put(t, t.a, t.b, sealed = S1, epoch = 2).then().statusCode(204) // control: the current epoch is accepted
-        put(t, t.a, t.c, sealed = S1, epoch = 0).then().statusCode(204) // and an earlier one
         // a body outside the contract: the shape's 400
         putRaw(t, t.a, t.b, """{"epoch":-1,"sealedStatement":"$S1"}""").then().statusCode(400).body("code", equalTo("invalid_request"))
         putRaw(t, t.a, t.b, """{"epoch":0,"sealedStatement":"not base64!!"}""").then().statusCode(400).body("code", equalTo("invalid_request"))
