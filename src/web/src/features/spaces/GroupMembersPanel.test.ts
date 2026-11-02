@@ -292,7 +292,7 @@ describe('GroupMembersPanel — a new lock for the group (ADR 0025 § 1)', () =>
   it('the group\'s copy names what it protects and what it does not, in EN and DE', () => {
     const de = (i18n.global.getLocaleMessage('de') as { spaceLock: { confirmGroup: string; subGroup: string } }).spaceLock
     for (const copy of [t('spaceLock.confirmGroup'), de.confirmGroup]) {
-      expect(copy).toMatch(/from now on|ab jetzt/)
+      expect(copy).toMatch(/neither what is added nor what is already here|weder was dazukommt noch was schon da ist/)
       expect(copy).toMatch(/stays seen|bleibt gesehen/)
     }
     for (const sub of [t('spaceLock.subGroup'), de.subGroup]) expect(sub).toMatch(/Removing a member|Entfernen eines Mitglieds/)
