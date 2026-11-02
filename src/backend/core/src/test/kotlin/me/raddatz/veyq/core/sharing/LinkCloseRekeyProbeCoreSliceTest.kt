@@ -21,31 +21,26 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 
 /**
- * ADR 0114's probes, written against the tree before it is built (its phase 1): each case states what closing a link
- * must do and fails on today's code, with a positive control on the same predicate that passes today. Core alone, every
- * node a `FOLDER`.
+ * ADR 0114's probes, written against the tree before it was built (its phase 1) and red there: each case states what
+ * closing a link must do, with a positive control on the same predicate. Core alone, every node a `FOLDER`. The rest of
+ * the decision's acceptance criteria are `LinkCloseRekeyCoreSliceTest`'s.
  *
  * - [aRevokedLinksRootTakesNoWriteUntilItIsReKeyed] — decision 4: a revoke marks the root's subtree due, so a write
- *   into it waits (`node_rekey_pending`). Today the revoke writes `enabled = false` and nothing else, and the write
- *   lands under the key the link's holder has.
+ *   into it waits (`node_rekey_pending`). Before, the revoke wrote `enabled = false` and nothing else, and the write
+ *   landed under the key the link's holder has.
  * - [aRevokedLinkPutsItsScopeIntoReKeying] — decisions 4 and 9: the due mark makes the scope *re-keying*, which is what
  *   every member's worker resumes from.
- * - [aRotationReWrapsNoSwitchedOffLink] — decision 5: a re-key lists only the open links for a new wrap. Today it lists
- *   every link not deleted (`RekeyStore.rekeyedShares`), so a rotation hands a revoked link's holder the new key.
+ * - [aRotationReWrapsNoSwitchedOffLink] — decision 5: a re-key lists only the open links for a new wrap. Before, it
+ *   listed every link not deleted (`RekeyStore.rekeyedShares`), so a rotation handed a revoked link's holder the new key.
  * - [aRotationReSealsTheIdentitiesOfADeletedLink] — decision 5: a contributor's name is the node's field, re-sealed
- *   whatever its link's state. Today the parts serve only the identities of links not deleted, so a contributor of a
- *   re-issued or deleted link keeps a name under the old key.
+ *   whatever its link's state. Before, the parts served only the identities of links not deleted, so a contributor of a
+ *   re-issued or deleted link kept a name under the old key.
  * - [aKeyStagedUnderALinkClosedSinceDoesNotLand] — decision 8: a wrap staged before the link closed is refused at the
- *   commit (`rekey_parts_stale`). Today it is swapped into the switched-off row.
- *
- * Disabled until ADR 0114's backend phase enables it: the branch stays green between the phases, and the red run of
- * each case on the untouched tree is quoted in that ADR's phase-1 report.
+ *   commit (`rekey_parts_stale`). Before, it was swapped into the switched-off row.
  */
-@Disabled("ADR 0114 phase 1 probes: red on the untouched tree by design; its backend phase enables them")
 @QuarkusTest
 class LinkCloseRekeyProbeCoreSliceTest {
 
@@ -157,10 +152,12 @@ class LinkCloseRekeyProbeCoreSliceTest {
     private fun revoke(w: World, shareId: String): ValidatableResponse =
         given().header("Authorization", bearer(w.owner)).`when`().post("/api/shares/$shareId/revoke").then()
 
-    /** The scope moves to epoch 1 and the owner's grant follows; the root still carries its key from epoch 0. */
+    /** The scope moves to epoch 1 and the owner's grant follows; the root still carries its key from epoch 0, and the
+     *  rotation's commit marked every node of the scope due (ADR 0115 decision 2). */
     private fun rotate(w: World) = QuarkusTransaction.requiringNew().run {
         ScopeEntity.findById(w.scopeId)!!.currentEpoch = 1
         MembershipEntity.update("grantedEpoch = 1 where scopeId = ?1 and userId = ?2", w.scopeId, w.owner)
+        NodeEntity.update("rekeyDue = true where scopeId = ?1", w.scopeId)
     }
 
     private fun meta(w: World, revision: Long): ValidatableResponse =

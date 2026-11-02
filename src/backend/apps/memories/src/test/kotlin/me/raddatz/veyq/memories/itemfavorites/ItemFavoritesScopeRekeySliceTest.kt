@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.itemfavorites
 
+import me.raddatz.veyq.core.node.rekey.ScopeRekeyStage
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.node.rekey.ScopeRekeyCommit
 import me.raddatz.veyq.core.node.rekey.ScopeRekeyField
@@ -25,7 +26,9 @@ import java.util.UUID
  * Memories' item marks re-sealed through its scope re-key participant (ADR 0115 decision 2): the marks are sealed under
  * the scope key itself, so a rotation's commit swaps in every member's row the rotator staged by its opaque `markId`, or
  * refuses — a row with no staged value `409 rekey_parts_missing`, one written since it was staged `409
- * rekey_parts_stale` — and a mark written under the old epoch after it is `409 stale_epoch` (decision 3).
+ * rekey_parts_stale` — and a mark written under the old epoch after it is `409 stale_epoch` (decision 3). Each staged
+ * value names the digest of the ciphertext it was opened from, so a mark rewritten between the rotator's read and its
+ * stage is refused at the stage (`409 rekey_parts_stale`), never replaced by a re-seal of what it replaced.
  */
 @QuarkusTest
 class ItemFavoritesScopeRekeySliceTest {
@@ -76,6 +79,23 @@ class ItemFavoritesScopeRekeySliceTest {
     }
 
     @Test
+    fun aMarkRewrittenBetweenTheReadAndTheStageIsRefusedAtTheStage() {
+        val w = world()
+        val rekeyId = coreStaged(w.scopeId)
+        val read = list(w.owner, w.scopeId).extract()
+        val opened = read.path<List<String>>("marks.markId").zip(read.path<List<String>>("marks.ciphertext")).toMap()
+        // A member rewrites their mark after the rotator read the page, before it stages its re-seal.
+        put(w.member, w.scopeId, w.node, epoch = 0, ciphertext = "Y2hhbmdlZA==").statusCode(204)
+        stage(w.owner, w.scopeId, rekeyId, opened.keys.map { it to SEALED }, opened.mapValues { ScopeRekeyStage.digest(it.value)!! })
+            .statusCode(409).body("code", equalTo("rekey_parts_stale"))
+        assertEquals("Y2hhbmdlZA==", tx { ItemFavoritesEntity.findById(ItemFavoritesEntity.key(w.member, w.scopeId, w.node))!!.ciphertext })
+        rotate(w.owner, w.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_missing")) // nothing was staged
+        // Control: read again, the same stage lands, and the rotation commits.
+        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to SEALED }).statusCode(204)
+        rotate(w.owner, w.scopeId, rekeyId).statusCode(201)
+    }
+
+    @Test
     fun onlyTheRotatorReadsAndStagesTheMarks() {
         val w = world()
         list(w.member, w.scopeId).statusCode(403).body("code", equalTo("not_scope_owner"))
@@ -115,10 +135,22 @@ class ItemFavoritesScopeRekeySliceTest {
     private fun list(caller: String, scopeId: String): ValidatableResponse =
         given().header("Authorization", bearer(caller)).`when`().get("/api/scopes/$scopeId/item-favorites-rekey").then()
 
-    private fun stage(caller: String, scopeId: String, rekeyId: String, marks: List<Pair<String, String>>): ValidatableResponse =
+    /** Stage [marks] (`markId` to its re-sealed ciphertext), each naming the digest of the ciphertext it was opened from:
+     *  [opened]'s, or by default what the row holds as the rotator reads it now. */
+    private fun stage(
+        caller: String, scopeId: String, rekeyId: String, marks: List<Pair<String, String>>,
+        opened: Map<String, String> = currentDigests(scopeId),
+    ): ValidatableResponse =
         given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
-            .body("""{"fromEpoch":0,"marks":[${marks.joinToString(",") { (id, c) -> """{"markId":"$id","ciphertext":"$c"}""" }}]}""")
+            .body(
+                """{"fromEpoch":0,"marks":[${marks.joinToString(",") { (id, c) ->
+                    """{"markId":"$id","ciphertext":"$c","replacedDigest":"${opened[id] ?: ScopeRekeyStage.digest("absent")}"}"""
+                }}]}""",
+            )
             .`when`().post("/api/scopes/$scopeId/item-favorites-rekey/$rekeyId").then()
+
+    private fun currentDigests(scopeId: String): Map<String, String> =
+        tx { ItemFavoritesEntity.list("scopeId", scopeId).associate { it.markId to ScopeRekeyStage.digest(it.ciphertext)!! } }
 
     private fun rotate(owner: String, scopeId: String, rekeyId: String): ValidatableResponse =
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)

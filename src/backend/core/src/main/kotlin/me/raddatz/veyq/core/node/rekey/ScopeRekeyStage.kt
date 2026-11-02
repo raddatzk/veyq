@@ -70,11 +70,12 @@ class ScopeRekeyStageEntity : PanacheEntityBase {
  * re-key id it then names in `rotateScope`. Core's own rows and each application's ([ScopeRekeyParticipant.part]) share
  * the table. A row staged twice is replaced — and takes the digest of what the row holds at that later stage.
  *
- * **What the digest covers, and what not.** It is taken when the value is staged, from the row as stored then, so the
- * commit refuses a row written between the stage and the commit — the long window, a tenant's whole profile directory
- * staged page by page. A write between the rotator's read of a page and its stage of it is not seen: the stage
- * carries no digest of what the client read (the contract's `ScopeRekeyStage` has none), so such a write is replaced by
- * the re-seal of the value read before it.
+ * **What the digest covers.** Each staged value names the digest of the ciphertext the rotator opened it from (the
+ * contract's `replacedDigest`, ADR 0115 decision 2), and the stage refuses a value whose row holds another by then
+ * (`ScopeRekeyCommit.stage`, Memories' item-mark stage) — a write between the rotator's read and its stage. The digest
+ * kept here is that same one, so the commit refuses a row written between the stage and the commit — the long window, a
+ * tenant's whole profile directory staged page by page. A scope-root's name and slug are held by the placement revision
+ * the rotator states instead ([Value.revision]), which every rename, move and re-key moves.
  */
 @ApplicationScoped
 class ScopeRekeyStage {

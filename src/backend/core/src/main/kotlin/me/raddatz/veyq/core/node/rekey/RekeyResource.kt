@@ -132,30 +132,48 @@ class RekeyResource(
     override fun stageScopeRekey(scopeId: UUID, rekeyId: UUID, scopeRekeyStage: ScopeRekeyStageRequest): Response {
         val r = scopeRekeyStage
         val sid = scopeId.toString()
+        // A member's field and its digest come together (the contract's rule); one without the other is malformed.
+        if (r.members.orEmpty().any {
+                (it.sealedName == null) != (it.replacedNameDigest == null) ||
+                    (it.sealedAvatar == null) != (it.replacedAvatarDigest == null) ||
+                    (it.sealedJoinRecord == null) != (it.replacedJoinRecordDigest == null)
+            }
+        ) {
+            return refused(RekeyOutcome.InvalidRequest)
+        }
+        // Each value beside the digest of the ciphertext it was opened from (ADR 0115 decision 2); a root's name and slug
+        // are held by its placement revision instead, an invitee's recipient digest is no ciphertext of the row's.
         val fields = buildList {
-            r.groupName?.let { add(ScopeRekeyField(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME, it.encryptedName)) }
-            r.icon?.let { add(ScopeRekeyField(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON, it.sealedIcon)) }
+            r.groupName?.let { add(ScopeRekeyField(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME, it.encryptedName, replacedDigest = it.replacedDigest)) }
+            r.icon?.let { add(ScopeRekeyField(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON, it.sealedIcon, replacedDigest = it.replacedDigest)) }
             r.rootNodes.orEmpty().forEach { n ->
                 val id = n.nodeId.toString()
                 val revision = n.placementRevision.validated()
-                add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_WRAP, n.wrappedContentKey, revision))
+                add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_WRAP, n.wrappedContentKey, revision, n.replacedDigest))
                 add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_NAME, n.encryptedName, revision))
                 n.slugToken?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_SLUG, it, revision)) }
             }
             r.groupInvitees.orEmpty().forEach { i ->
                 val id = i.userId.toString()
-                add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_KEY, i.sealedNameKey))
+                add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_KEY, i.sealedNameKey, replacedDigest = i.replacedDigest))
                 add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_RECIPIENT, i.recipientIdentityDigest))
             }
-            r.shares.orEmpty().forEach { add(ScopeRekeyField(it.shareId, ScopeRekeyCommit.SHARE_KEY, it.sealedShareKey)) }
+            r.shares.orEmpty().forEach {
+                add(ScopeRekeyField(it.shareId, ScopeRekeyCommit.SHARE_KEY, it.sealedShareKey, replacedDigest = it.replacedDigest))
+            }
             r.members.orEmpty().forEach { m ->
                 val id = m.userId.toString()
-                m.sealedName?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_NAME, it)) }
-                m.sealedAvatar?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_AVATAR, it)) }
-                m.sealedJoinRecord?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_JOIN, it)) }
+                m.sealedName?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_NAME, it, replacedDigest = m.replacedNameDigest)) }
+                m.sealedAvatar?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_AVATAR, it, replacedDigest = m.replacedAvatarDigest)) }
+                m.sealedJoinRecord?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_JOIN, it, replacedDigest = m.replacedJoinRecordDigest)) }
             }
             r.verifications.orEmpty().forEach { v ->
-                add(ScopeRekeyField("${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION, v.sealedStatement))
+                add(
+                    ScopeRekeyField(
+                        "${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION, v.sealedStatement,
+                        replacedDigest = v.replacedDigest,
+                    ),
+                )
             }
         }
         return when (val o = scopeRekey.stage(identity.principal.name, sid, rekeyId.toString(), r.fromEpoch.validated(), fields)) {

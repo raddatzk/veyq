@@ -36,9 +36,13 @@ data class ScopeRekeyPage(
     val cursor: String?,
 )
 
-/** One core value a rotator stages ([ScopeRekeyCommit.stage]): the row it is for, the column, the ciphertext, and a
- *  scope-root node's placement revision as read. */
-data class ScopeRekeyField(val itemId: String, val field: String, val value: String, val revision: Long? = null)
+/** One core value a rotator stages ([ScopeRekeyCommit.stage]): the row it is for, the column, the ciphertext, a
+ *  scope-root node's placement revision as read, and the digest of the ciphertext the rotator opened it from
+ *  ([ScopeRekeyStage.digest]; null for a value held by [revision] instead — a root's name and slug — or one that is no
+ *  stored ciphertext of its own, an invitee's recipient digest). */
+data class ScopeRekeyField(
+    val itemId: String, val field: String, val value: String, val revision: Long? = null, val replacedDigest: String? = null,
+)
 
 /**
  * A rotation's scope-level re-seal (ADR 0115 decisions 1–2): every row core stores sealed under the scope key — its
@@ -177,10 +181,20 @@ class ScopeRekeyCommit(
 
     // --- the stage -----------------------------------------------------------------------------------------------
 
-    /** Stage core's [fields] for [scope] under [rekeyId], each beside the digest of what its row holds now. */
-    fun stage(rekeyId: String, scope: ScopeEntity, fields: List<ScopeRekeyField>) {
-        val values = fields.associate { f -> Key(f.itemId, f.field) to Value(f.value, ScopeRekeyStage.digest(stored(scope, f.itemId, f.field)), f.revision) }
+    /**
+     * Stage core's [fields] for [scope] under [rekeyId], each beside the digest of what its row holds now — or nothing,
+     * answering false, when a field's [ScopeRekeyField.replacedDigest] is not that digest (ADR 0115 decision 2): the row
+     * was written between the rotator's read and this stage, and a re-seal of the value read before it would replace
+     * that write. The commit compares the same digest again ([ScopeRekeyStage.current]).
+     */
+    fun stage(rekeyId: String, scope: ScopeEntity, fields: List<ScopeRekeyField>): Boolean {
+        val values = fields.associate { f ->
+            val now = ScopeRekeyStage.digest(stored(scope, f.itemId, f.field))
+            if (f.replacedDigest != null && f.replacedDigest != now) return false
+            Key(f.itemId, f.field) to Value(f.value, now, f.revision)
+        }
         stage.put(rekeyId, scope.id, ScopeRekeyStage.CORE, values)
+        return true
     }
 
     /** What the row [itemId] of [scope] holds in [field] now, or null (no such row, or nothing in that column). */

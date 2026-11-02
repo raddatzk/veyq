@@ -101,7 +101,7 @@ class ScopeRekeySliceTest {
         rotate(g.owner, g.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_missing"))
         g.assertUntouched()
         // Control: the missing copy staged under the same id, the same rotation commits.
-        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"shares":[{"shareId":"${g.shareId}","sealedShareKey":"$NEW_COPY"}]}""").statusCode(204)
+        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"shares":[{"shareId":"${g.shareId}","sealedShareKey":"$NEW_COPY","replacedDigest":"${d(COPY)}"}]}""").statusCode(204)
         rotate(g.owner, g.scopeId, rekeyId).statusCode(201)
     }
 
@@ -114,7 +114,7 @@ class ScopeRekeySliceTest {
         rotate(g.owner, g.scopeId, rekeyId, removes = member).statusCode(409).body("code", equalTo("rekey_parts_missing"))
         assertEquals(1L, tx { MembershipEntity.count("userId = ?1 and scopeId = ?2", member, g.scopeId) }, "the removal rolled back with it")
         g.assertUntouched()
-        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"icon":{"sealedIcon":"$NEW_ICON"}}""").statusCode(204)
+        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"icon":{"sealedIcon":"$NEW_ICON","replacedDigest":"${d(ICON)}"}}""").statusCode(204)
         rotate(g.owner, g.scopeId, rekeyId, removes = member).statusCode(201)
         assertEquals(0L, tx { MembershipEntity.count("userId = ?1 and scopeId = ?2", member, g.scopeId) }, "control: the removal landed")
     }
@@ -132,8 +132,40 @@ class ScopeRekeySliceTest {
         assertEquals(0, TestGrants.epochOf(g.scopeId), "nothing written")
         assertEquals("cmVuYW1lZA==", tx { ScopeEntity.findById(g.scopeId)!!.encryptedName }, "the rename stands")
         // Control: the name re-staged against what the row holds now, the rotation commits.
-        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"groupName":{"encryptedName":"$NEW_NAME"}}""").statusCode(204)
+        stage(g.owner, g.scopeId, rekeyId, """{"fromEpoch":0,"groupName":{"encryptedName":"$NEW_NAME","replacedDigest":"${d("cmVuYW1lZA==")}"}}""").statusCode(204)
         rotate(g.owner, g.scopeId, rekeyId).statusCode(201)
+    }
+
+    /** ADR 0115 decision 2: each staged value names the digest of the ciphertext it was opened from, so a write between
+     *  the rotator's read and its stage is refused at the stage — never replaced by a re-seal of what it replaced. */
+    @Test
+    fun aRowWrittenBetweenTheReadAndTheStageIsRefusedAtTheStage() {
+        val g = groupWorld()
+        parts(g.owner, g.scopeId).statusCode(200).body("groupName.encryptedName", equalTo(NAME)) // the rotator reads
+        given().header("Authorization", bearer(g.owner)).contentType(ContentType.JSON)
+            .body("""{"encryptedName":"cmVuYW1lZA==","nameEpoch":0}""")
+            .`when`().post("/api/scopes/${g.scopeId}/name").then().statusCode(204)
+        val rekeyId = UUID.randomUUID()
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage()).statusCode(409).body("code", equalTo("rekey_parts_stale"))
+        assertEquals(0L, tx { ScopeRekeyStageEntity.count("rekeyId", rekeyId.toString()) }, "nothing of the batch is staged")
+        // Control: re-read, the same batch against the renamed row stages, and the rotation commits.
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage(nameDigest = d("cmVuYW1lZA=="))).statusCode(204)
+        rotate(g.owner, g.scopeId, rekeyId).statusCode(201)
+        assertEquals(NEW_NAME, tx { ScopeEntity.findById(g.scopeId)!!.encryptedName })
+    }
+
+    @Test
+    fun aMemberFieldWithoutItsDigestIsMalformed() {
+        val owner = seedUser()
+        val tenantId = seedTenant(owner = owner)
+        tx { profile(owner, tenantId, name = "b3duZXI=", avatar = null, join = null) }
+        stage(owner, tenantId, UUID.randomUUID(), """{"fromEpoch":0,"members":[{"userId":"$owner","sealedName":"bmV3"}]}""")
+            .statusCode(400).body("code", equalTo("invalid_request"))
+        stage(owner, tenantId, UUID.randomUUID(), """{"fromEpoch":0,"members":[{"userId":"$owner","replacedNameDigest":"${d("b3duZXI=")}"}]}""")
+            .statusCode(400).body("code", equalTo("invalid_request"))
+        // Control: the field with its digest stages.
+        stage(owner, tenantId, UUID.randomUUID(), """{"fromEpoch":0,"members":[{"userId":"$owner","sealedName":"bmV3","replacedNameDigest":"${d("b3duZXI=")}"}]}""")
+            .statusCode(204)
     }
 
     @Test
@@ -164,9 +196,10 @@ class ScopeRekeySliceTest {
         parts(owner, tenantId).statusCode(200).body("members.size()", equalTo(2)).body("verifications.size()", equalTo(1))
             .body("verifications[0].epoch", equalTo(0))
         val rekeyId = UUID.randomUUID()
-        // A field staged where the row holds none is stale: the owner has no picture.
-        stage(owner, tenantId, rekeyId, tenantStage(owner, member, ownerAvatar = true)).statusCode(204)
-        rotate(owner, tenantId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_stale"))
+        // A field staged where the row holds none is stale: the owner has no picture — refused at the stage now, which
+        // compares the digest it names with the row's (ADR 0115 decision 2), and the rotation has nothing of the batch.
+        stage(owner, tenantId, rekeyId, tenantStage(owner, member, ownerAvatar = true)).statusCode(409).body("code", equalTo("rekey_parts_stale"))
+        rotate(owner, tenantId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_missing"))
         assertEquals("bWVtYmVy", tx { TenantProfileEntity.find("userId", member).firstResult()!!.sealedName }, "nothing written")
         stage(owner, tenantId, rekeyId, tenantStage(owner, member)).statusCode(204)
         rotate(owner, tenantId, rekeyId).statusCode(201)
@@ -231,14 +264,18 @@ class ScopeRekeySliceTest {
         val owner: String, val scopeId: String, val liveRoot: String, val trashedRoot: String, val child: String,
         val invitee: String, val shareId: String,
     ) {
-        fun fullStage(shares: Boolean = true, icon: Boolean = true, inviteeDigest: String = TestGrants.digestOf(invitee)): String =
-            """{"fromEpoch":0,"groupName":{"encryptedName":"$NEW_NAME"},""" +
-                (if (icon) """"icon":{"sealedIcon":"$NEW_ICON"},""" else "") +
+        /** Every row re-sealed, each naming the digest of what the rotator opened (ADR 0115 decision 2). */
+        fun fullStage(
+            shares: Boolean = true, icon: Boolean = true, inviteeDigest: String = TestGrants.digestOf(invitee),
+            nameDigest: String = d(NAME),
+        ): String =
+            """{"fromEpoch":0,"groupName":{"encryptedName":"$NEW_NAME","replacedDigest":"$nameDigest"},""" +
+                (if (icon) """"icon":{"sealedIcon":"$NEW_ICON","replacedDigest":"${d(ICON)}"},""" else "") +
                 """"rootNodes":[""" +
-                """{"nodeId":"$liveRoot","placementRevision":0,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","slugToken":"$NEW_SLUG","wrappedContentKey":"$NEW_WRAP"},""" +
-                """{"nodeId":"$trashedRoot","placementRevision":0,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","wrappedContentKey":"$NEW_WRAP"}],""" +
-                """"groupInvitees":[{"userId":"$invitee","sealedNameKey":"$NEW_NAME_KEY","recipientIdentityDigest":"$inviteeDigest"}]""" +
-                (if (shares) ""","shares":[{"shareId":"$shareId","sealedShareKey":"$NEW_COPY"}]""" else "") + "}"
+                """{"nodeId":"$liveRoot","placementRevision":0,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","slugToken":"$NEW_SLUG","wrappedContentKey":"$NEW_WRAP","replacedDigest":"${d(CONTENT_KEY)}"},""" +
+                """{"nodeId":"$trashedRoot","placementRevision":0,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","wrappedContentKey":"$NEW_WRAP","replacedDigest":"${d(CONTENT_KEY)}"}],""" +
+                """"groupInvitees":[{"userId":"$invitee","sealedNameKey":"$NEW_NAME_KEY","recipientIdentityDigest":"$inviteeDigest","replacedDigest":"${d(NAME_KEY)}"}]""" +
+                (if (shares) ""","shares":[{"shareId":"$shareId","sealedShareKey":"$NEW_COPY","replacedDigest":"${d(COPY)}"}]""" else "") + "}"
 
         /** Nothing a refused rotation could have written: the epoch, the rows, the marks, the statement. */
         fun assertUntouched() = tx {
@@ -292,9 +329,15 @@ class ScopeRekeySliceTest {
 
     private fun tenantStage(owner: String, member: String, ownerAvatar: Boolean = false): String =
         """{"fromEpoch":0,"members":[""" +
-            """{"userId":"$owner","sealedName":"bmV3LW93bmVy"${if (ownerAvatar) ""","sealedAvatar":"bmV3LWF2YXRhcg=="""" else ""}},""" +
-            """{"userId":"$member","sealedName":"bmV3LW1lbWJlcg==","sealedAvatar":"bmV3LWF2YXRhcg==","sealedJoinRecord":"bmV3LWpvaW4="}],""" +
-            """"verifications":[{"verifierUserId":"$owner","subjectUserId":"$member","sealedStatement":"bmV3LXZlcmlmaWVk"}]}"""
+            """{"userId":"$owner","sealedName":"bmV3LW93bmVy","replacedNameDigest":"${d("b3duZXI=")}"""" +
+            (if (ownerAvatar) ""","sealedAvatar":"bmV3LWF2YXRhcg==","replacedAvatarDigest":"${d("YXZhdGFy")}"""" else "") + "}," +
+            """{"userId":"$member","sealedName":"bmV3LW1lbWJlcg==","replacedNameDigest":"${d("bWVtYmVy")}",""" +
+            """"sealedAvatar":"bmV3LWF2YXRhcg==","replacedAvatarDigest":"${d("YXZhdGFy")}",""" +
+            """"sealedJoinRecord":"bmV3LWpvaW4=","replacedJoinRecordDigest":"${d("am9pbg==")}"}],""" +
+            """"verifications":[{"verifierUserId":"$owner","subjectUserId":"$member","sealedStatement":"bmV3LXZlcmlmaWVk","replacedDigest":"${d("dmVyaWZpZWQ=")}"}]}"""
+
+    /** The digest a rotator names of the ciphertext it opened ([ScopeRekeyStage.digest], the server's own rule). */
+    private fun d(opened: String): String = ScopeRekeyStage.digest(opened)!!
 
     private fun domainOf(tenantId: String): String = tx { me.raddatz.veyq.core.tenant.TenantEntity.findById(tenantId)!!.domain }
 
@@ -323,6 +366,8 @@ class ScopeRekeySliceTest {
     private fun <T> tx(block: () -> T): T = QuarkusTransaction.requiringNew().call(block)
 
     private companion object {
+        const val COPY = "cmVjb3Zlcnk="
+        const val NAME_KEY = "bmFtZS1rZXk="
         const val NAME = "Z3JvdXAtbmFtZQ=="
         const val ICON = "aWNvbg=="
         const val NEW_NAME = "bmV3LWdyb3VwLW5hbWU="

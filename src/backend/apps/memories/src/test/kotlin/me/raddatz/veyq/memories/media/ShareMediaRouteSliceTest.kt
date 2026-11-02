@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.testing.TestNodeRekey
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.testing.TestBlob
@@ -71,7 +72,7 @@ class ShareMediaRouteSliceTest {
             authed(w).`when`().post("/api/shares/${w.unknown}/revoke").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
         "reactivateShare" to Probe("POST", "/api/shares/{shareId}/reactivate") { w ->
-            authed(w).contentType(ContentType.JSON).body("""{"nodeEpoch":0}""").`when`().post("/api/shares/${w.unknown}/reactivate").then().statusCode(404).body("code", equalTo("share_not_found"))
+            authed(w).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(w.unknown)).`when`().post("/api/shares/${w.unknown}/reactivate").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
         "reissueShare" to Probe("POST", "/api/shares/{shareId}/reissue") { w ->
             val id = TestIds.shareId()

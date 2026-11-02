@@ -129,7 +129,7 @@ acceptanceCriteria:
       as one notice, never as a failed rename.
     coverage:
       backend:
-        integration: [ShareSealedNameCoreSliceTest.theOwnerAndAnotherWritingMemberSetItAndResolveServesTheNewName, ShareSealedNameCoreSliceTest.aReaderIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.aStrangerIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.everyOtherColumnOfTheShareStaysUntouched, ShareSealedNameCoreSliceTest.aDeletedShareAndAnUnknownIdAre404, ShareSealedNameCoreSliceTest.aRevokedShareIsRenamedSoAReactivationShowsTheCurrentName, ShareSealedNameCoreSliceTest.aReSealOverlappingAReactivationEndsConsistentWithoutADeadlock]
+        integration: [ShareSealedNameCoreSliceTest.theOwnerAndAnotherWritingMemberSetItAndResolveServesTheNewName, ShareSealedNameCoreSliceTest.aReaderIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.aStrangerIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.everyOtherColumnOfTheShareStaysUntouched, ShareSealedNameCoreSliceTest.aDeletedShareAndAnUnknownIdAre404, ShareSealedNameCoreSliceTest.aRevokedShareTakesAReSealAndItsReactivationShowsTheNameItCarries, ShareSealedNameCoreSliceTest.aReSealOverlappingAReactivationEndsConsistentWithoutADeadlock]
       web:
         unit: [src/core/sharing/manageShares.test.ts, src/core/sharing/resealShareNames.wire.test.ts, src/core/node/FolderNameDialog.test.ts]
   - id: a-link-blocked-by-the-operator

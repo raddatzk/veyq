@@ -384,8 +384,14 @@ class ScopesStore(
     /** The scope row, or null — read-only: its epoch and removal count for the sharing feature's re-issue rule. */
     fun find(scopeId: String): ScopeEntity? = ScopeEntity.findById(scopeId)
 
-    /** Turn off and mark every share of the scope (ADR 0075 point 5) — a scope owner's standalone switch-off. */
-    fun turnOffAllShares(scopeId: String): Int = shares.turnOffAllInScope(scopeId)
+    /** Turn off and mark every share of the scope (ADR 0075 point 5) — a scope owner's standalone switch-off. Under the
+     *  scope row's lock, taken first: each link it turns off is a close, which locks its share row and then the nodes
+     *  below it (ADR 0114 decision 8). */
+    @Transactional
+    fun turnOffAllShares(scopeId: String): Int {
+        ScopeEntity.lockRow(scopeId) ?: return 0
+        return shares.turnOffAllInScope(scopeId)
+    }
 
     /** The scope's current content-key epoch, or null if there's no such scope. */
     fun currentEpoch(scopeId: String): Int? = ScopeEntity.findById(scopeId)?.currentEpoch

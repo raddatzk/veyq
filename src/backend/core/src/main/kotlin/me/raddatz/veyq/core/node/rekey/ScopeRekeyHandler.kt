@@ -33,14 +33,16 @@ class ScopeRekeyHandler(private val rights: RekeyAccess, private val rows: Scope
         refusal(userId, scopeId, WRITE)?.let { return it }
         val scope = ScopeEntity.findById(scopeId) ?: return RekeyRight.NoScope
         if (scope.currentEpoch != fromEpoch) return RekeyOutcome.Stale
-        rows.stage(rekeyId, scope, fields)
+        // A row written since the rotator read it (ADR 0115 decision 2): nothing of the batch is staged.
+        if (!rows.stage(rekeyId, scope, fields)) return RekeyOutcome.PartsStale
         return RekeyOutcome.Staged
     }
 
     /**
      * An application's re-sealed rows ([ScopeRekeyParticipant.part]), each beside the digest of what its row holds now
-     * (the application reads its own rows; [ScopeRekeyStage.digest]), staged under [rekeyId] while the scope is still at
-     * [fromEpoch]: a rotation committed since is [RekeyOutcome.Stale] — the rotator rebuilds from a fresh key.
+     * (the application reads its own rows, [ScopeRekeyStage.digest], and refuses a value whose stated digest is not that
+     * one before it calls this — ADR 0115 decision 2), staged under [rekeyId] while the scope is still at [fromEpoch]: a
+     * rotation committed since is [RekeyOutcome.Stale] — the rotator rebuilds from a fresh key.
      */
     fun stagePart(
         userId: String, scopeId: String, rekeyId: String, fromEpoch: Int, part: String,

@@ -9,11 +9,13 @@ import me.raddatz.veyq.core.node.rekey.NodeRekeyStage.Value
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
+import me.raddatz.veyq.core.sharing.SharingStore
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
+import java.time.Instant
 
 /** One node as the re-key reads it: live or trashed, with the identity key its entry opens through, if any, and whether
  *  only an owner re-keys it ([OwnerOnlyRekey]). */
@@ -93,8 +95,8 @@ class RekeyStore(
         val blobs = attachments.mapNotNull { (blobId, role) ->
             BlobEntity.findById(blobId)?.let { RekeyParts.Blob(it.id, role, it.wrappedBlobKey) }
         }
-        val shares = rekeyedShares(nodeId)
-        val identities = identitiesOf(shares.map { it.id })
+        val shares = rekeyedShares(nodeId, Instant.now())
+        val identities = identitiesOf(nodeId)
         return RekeyParts(
             blobs,
             shares.map {
@@ -106,12 +108,25 @@ class RekeyStore(
         )
     }
 
-    /** The shares rooted on [nodeId] that carry the node's key (`wrap`, READ and READ_WRITE) or its drop public key
-     *  (WRITE_ONLY): every link not deleted — a revoked one may be re-activated, so it is re-keyed too. A deleted or
-     *  tombstoned link serves nothing. */
-    private fun rekeyedShares(nodeId: String): List<ShareEntity> =
-        ShareEntity.find("nodeId = ?1 and deleted = false and (wrap is not null or sealedDropPublicKey is not null)", nodeId).list()
-            .filter { it.sealedShareKey != null }
+    /** The shares rooted on [nodeId] that a re-key wraps the node's new key under (`wrap`, READ and READ_WRITE) or
+     *  re-seals its drop public key under (WRITE_ONLY): the **open** links only (ADR 0114 decision 5,
+     *  [SharingStore.OPEN]) — after a rotation too. Nothing new is sealed under a closed link: its close cleared its keys,
+     *  and its reopen brings the root's current one. */
+    private fun rekeyedShares(nodeId: String, now: Instant): List<ShareEntity> =
+        ShareEntity.find(
+            "nodeId = :node and ${SharingStore.OPEN} and (wrap is not null or sealedDropPublicKey is not null)",
+            mapOf("node" to nodeId, "now" to now),
+        ).list().filter { it.sealedShareKey != null }
+
+    /** The guest identities of **every** link rooted on [nodeId], whatever its state, a tombstone included (ADR 0114
+     *  decision 5): a contributor's name and a guest's `K_up` are the node's fields, not the link's, and stay readable to
+     *  the members after the link is gone. */
+    private fun identitiesOf(nodeId: String): List<ShareIdentityEntity> {
+        val shareIds = ShareEntity.getEntityManager()
+            .createQuery("select s.id from ShareEntity s where s.nodeId = :node", String::class.java)
+            .setParameter("node", nodeId).resultList
+        return if (shareIds.isEmpty()) emptyList() else ShareIdentityEntity.find("shareId in ?1", shareIds).list()
+    }
 
     /** `SELECT … FOR UPDATE` on every link rooted on [nodeId], in id order (the order two lockers of several share rows
      *  agree on). */
@@ -120,9 +135,6 @@ class RekeyStore(
             .createQuery("select s from ShareEntity s where s.nodeId = :node order by s.id", ShareEntity::class.java)
             .setParameter("node", nodeId).setLockMode(LockModeType.PESSIMISTIC_WRITE).resultList
     }
-
-    private fun identitiesOf(shareIds: List<String>): List<ShareIdentityEntity> =
-        if (shareIds.isEmpty()) emptyList() else ShareIdentityEntity.find("shareId in ?1", shareIds).list()
 
     /**
      * Commit one node's re-key (ADR 0109 point 2) in ONE transaction: the node gets the key the client minted — its
@@ -181,7 +193,8 @@ class RekeyStore(
         if (!freedSlug && nodes.slugTaken(node.parentId, c.slugToken, exceptNodeId = nodeId)) return RekeyOutcome.SlugTaken
 
         val core = stage.read(rekeyId, nodeId, NodeRekeyStage.CORE)
-        val plan = CorePlan.of(scopeId, nodeId, node, core, rekeyedShares(nodeId)) ?: return RekeyOutcome.PartsMissing
+        val plan = CorePlan.of(scopeId, nodeId, node, core, rekeyedShares(nodeId, Instant.now()), identitiesOf(nodeId))
+            ?: return RekeyOutcome.PartsMissing
         if (plan.stale) return RekeyOutcome.PartsStale
         // Core's parts first: a participant may copy what they re-sealed (a contributor's name, `MediaNodeRekeyParticipant`).
         // A participant's refusal rolls the whole transaction back, core's writes included.
@@ -216,7 +229,9 @@ class RekeyStore(
      * Core's staged parts checked against the rows they are for, before anything is written: every child's entry
      * (a guest's identity folder excepted — its entry is under the guest's `K_up`, which the re-key keeps), every
      * attachment blob's wrap, every share's wrap (and its drop public key where it carries one), every identity's key
-     * or name. Null when a row has no staged value; [stale] when a staged child is no child any more or moved since.
+     * or name. Null when a row has no staged value; [stale] when a staged child is no child any more or moved since, or
+     * a key is staged for a link that is no longer open (ADR 0114 decision 8): a wrap staged before its link closed
+     * would hand the closed link the new key — the re-keyer reads the parts again and mints afresh.
      */
     private class CorePlan(
         private val children: List<Pair<NodeEntity, Map<String, String>>>,
@@ -243,10 +258,15 @@ class RekeyStore(
         }
 
         companion object {
-            fun of(scopeId: String, nodeId: String, node: NodeEntity, staged: Map<Key, Value>, shareRows: List<ShareEntity>): CorePlan? {
+            fun of(
+                scopeId: String, nodeId: String, node: NodeEntity, staged: Map<Key, Value>, shareRows: List<ShareEntity>,
+                identityRows: List<ShareIdentityEntity>,
+            ): CorePlan? {
                 val childRows = NodeEntity.find("scopeId = ?1 and parentId = ?2 and shareIdentityId is null", scopeId, nodeId).list()
                 val childIds = childRows.mapTo(HashSet()) { it.id }
-                var stale = staged.keys.any { it.field.startsWith("child.") && it.itemId !in childIds }
+                val openIds = shareRows.mapTo(HashSet()) { it.id }
+                var stale = staged.keys.any { it.field.startsWith("child.") && it.itemId !in childIds } ||
+                    staged.keys.any { (it.field == SHARE_WRAP || it.field == SHARE_DROP) && it.itemId !in openIds }
                 val children = childRows.map { child ->
                     val entry = listOf(CHILD_NAME, CHILD_SLUG, CHILD_WRAP).associateWith { f -> staged[Key(child.id, f)] ?: return null }
                     if (entry.values.any { it.revision != child.placementRevision }) stale = true
@@ -262,8 +282,6 @@ class RekeyStore(
                     val dropPublic = if (dropKeyed && s.sealedDropPublicKey != null) staged[Key(s.id, SHARE_DROP)]?.value ?: return null else null
                     Triple(s, wrap, dropPublic)
                 }
-                val identityRows = if (shareRows.isEmpty()) emptyList()
-                else ShareIdentityEntity.find("shareId in ?1", shareRows.map { it.id }).list()
                 val identities = identityRows.map { i ->
                     val field = if (i.wrappedIdentityKey != null) IDENTITY_KEY else IDENTITY_NAME
                     i to (staged[Key(i.id, field)]?.value ?: return null)

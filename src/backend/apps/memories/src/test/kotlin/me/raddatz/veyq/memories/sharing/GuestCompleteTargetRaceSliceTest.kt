@@ -43,7 +43,9 @@ import me.raddatz.veyq.core.sharing.SharingStore
  *  1. A member trashes the target Memory: the item is `upload_not_found`, no medium in the trash.
  *  2. A member moves the target Memory out of the shared folder: the item is `upload_not_found`, no medium outside the
  *     subtree.
- *  3. The link's owner revokes it: the item is `upload_not_found`, nothing lands on a revoked link.
+ *  3. The link's owner revokes it: nothing lands on a revoked link. The revoke is a close (ADR 0114 decision 1): it
+ *     marks the Memory below the link due in its own transaction, so the batch's epoch check — which waits on the
+ *     Memory's row the close holds — answers `node_rekey_pending` before any item is tried.
  *
  * Each round has a control: the same completion with nothing overlapping lands on the target.
  */
@@ -81,16 +83,16 @@ class GuestCompleteTargetRaceSliceTest {
     }
 
     @Test
-    fun aCompletionOnALinkRevokedMeanwhileIsRefused() = raceAgainst("revoke") { t ->
+    fun aCompletionOnALinkRevokedMeanwhileIsRefused() = raceAgainst("revoke", refusal = "node_rekey_pending") { t ->
         assertEquals(true, store.revoke(t.userId, t.link.shareId))
     }
 
-    private fun raceAgainst(what: String, change: (Tree) -> Unit) {
+    private fun raceAgainst(what: String, refusal: String = "upload_not_found", change: (Tree) -> Unit) {
         raceRounds { round ->
             val t = tree()
             val uploadId = startStaged(t)
             val answer = whileUncommitted(change = { change(t) }, overlapping = { complete(t, uploadId) })
-            assertEquals("upload_not_found", answer, "round $round: a completion while the $what commits")
+            assertEquals(refusal, answer, "round $round: a completion while the $what commits")
             assertEquals(0L, tx { MediaEntity.count("scopeId", t.scopeId) }, "round $round: nothing landed after the $what")
 
             val kept = tree() // control: the same completion with nothing overlapping lands on the target
@@ -110,11 +112,14 @@ class GuestCompleteTargetRaceSliceTest {
         return uploadId
     }
 
-    /** The guest's completion into the Memory, as the item's error (null = landed). */
+    /** The guest's completion into the Memory, as the item's error (null = landed) — or the batch's own refusal. */
     private fun complete(t: Tree, uploadId: String): String? {
         val item = ShareMediaItem(TestBlob.ownerOf(uploadId), uploadId, emptyList(), null, null)
-        val o = media.complete(t.link.shareId, null, t.link.token, listOf(item), t.memory, seen = null, nodeEpoch = 0)
-        return (o as ShareMediaCompleteOutcome.Results).items.single().error
+        return when (val o = media.complete(t.link.shareId, null, t.link.token, listOf(item), t.memory, seen = null, nodeEpoch = 0)) {
+            is ShareMediaCompleteOutcome.Results -> o.items.single().error
+            ShareMediaCompleteOutcome.RekeyPending -> "node_rekey_pending"
+            else -> "unexpected: $o"
+        }
     }
 
     private fun <T> tx(body: () -> T): T = QuarkusTransaction.requiringNew().call(body)

@@ -135,15 +135,16 @@ class SharingStore(
      *  node and role, everything else from the request — and delete the old one ([tombstone], ADR 0029 §7), in
      *  **one** transaction: a replaced link has nothing left to come back for.
      *
-     *  A share is re-issued **at most once** (inbox #252), spent by a checked compare-and-set (developer-styleguide
-     *  §12): the first write is `deleted` set where it is still false, and its row count decides. Of two concurrent
-     *  re-issues the second's update waits on the first's row lock, then matches nothing — `DELETED`, nothing
-     *  written, exactly what a later re-issue of it gets. The old row is read only **after** the spend, under the
-     *  row lock that update holds, so a concurrent edit cannot slip a role change between the read and the
-     *  tombstone. `ID_TAKEN`, nothing written, when [newId] was ever used — checked before the spend on purpose: a
-     *  re-issue that deleted the old link and then failed would leave the curator with no link at all, believing
-     *  they had a new one. Never touches the shared node's drop key — a WRITE_ONLY re-issue seals to the one it already
-     *  has. */
+     *  A share is re-issued **at most once** (inbox #252), spent under the old row's lock (developer-styleguide §12):
+     *  the row is read locked and refreshed, and only a row not deleted yet is closed ([close], a delete — ADR 0114
+     *  decision 1: an open READ or READ_WRITE link marks its root's subtree due in this transaction, and the new link
+     *  follows the root's next key like any open link). Of two concurrent re-issues the second's read waits on the
+     *  first's row lock, then finds a tombstone — `DELETED`, nothing written, exactly what a later re-issue of it gets.
+     *  A concurrent edit cannot slip a role change between the read and the tombstone: it waits on the same lock.
+     *  `ID_TAKEN`, nothing written, when [newId] was ever used — checked before the spend on purpose: a re-issue that
+     *  deleted the old link and then failed would leave the curator with no link at all, believing they had a new one.
+     *  Never touches the shared node's drop key — a WRITE_ONLY re-issue seals to the one it already has. The caller
+     *  holds the scope row's lock (lock order: the scope row, the share rows, the node rows). */
     @Transactional
     fun reissue(
         oldId: String, newId: String, ownerAccount: String, keys: ShareKeys, sealedName: String, expiresAt: Instant?,
@@ -151,10 +152,9 @@ class SharingStore(
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): ReissueResult {
         if (idTaken(newId)) return ReissueResult.ID_TAKEN
-        val spent = ShareEntity.update("deleted = true where id = ?1 and deleted = false", oldId)
-        if (spent != 1) return if (ShareEntity.findById(oldId) == null) ReissueResult.NOT_FOUND else ReissueResult.DELETED
-        val old = ShareEntity.findById(oldId)!! // the spent row, read under the update's lock
-        tombstone(old)
+        val old = lockedRow(oldId) ?: return ReissueResult.NOT_FOUND
+        if (old.deleted) return ReissueResult.DELETED
+        close(old, CloseKind.DELETE)
         persistShare(
             newId, ownerAccount, old.scopeId, old.nodeId, old.role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
             sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
@@ -206,18 +206,30 @@ class SharingStore(
     /** The 3-way result of an in-place share edit (cr-0119): applied, no such owned share, or an illegal role change. */
     enum class UpdateResult { DONE, NOT_FOUND, INVALID_ROLE }
 
+    /** What a reopen stores back on a link (ADR 0114 decision 7): the root's current key under its `K_share` — [keys]
+     *  of its role — and the root's current name under it, sealed by [editor]. */
+    data class Reopen(val keys: ShareKeys, val sealedName: String, val editor: String)
+
     /** Edit a share the caller owns in place (cr-0115/cr-0116/cr-0119/cr-0118; idempotent). Full-replaces the two
      *  editable, `K_share`-sealed fields (note + name — a null value clears that field); a non-null `role` changes
      *  the grant **in place** (READ ↔ READ_WRITE only — a role of, or a share currently in, WRITE_ONLY is
      *  `INVALID_ROLE`); a non-null `passwordRequired` is the tri-state password patch (true sets/changes it with the
      *  fields, false removes + clears them; null leaves it untouched). Ownership is checked first, so a share not
-     *  owned by the caller is `NOT_FOUND` regardless of the role (non-enumerable, mirroring `revoke`). */
+     *  owned by the caller is `NOT_FOUND` regardless of the role (non-enumerable, mirroring `revoke`).
+     *
+     *  The end date decides whether the link is open (ADR 0114 decisions 6 and 7): [reopen] — which the caller passes
+     *  exactly when [reopensByDate] holds, having judged the root's epoch — stores the root's key and name back and
+     *  clears the sweep's mark; an end date the edit leaves passed on a link whose close was not carried out yet closes
+     *  it now ([close], as the sweep would). Joins the caller's transaction, which holds the scope row's lock and then
+     *  this share row's. */
     @Transactional
     fun updateShare(
         ownerAccount: String, shareId: String, sealedNote: String?, sealedShareName: String?, role: String?,
         expiresAt: Instant?, passwordRequired: Boolean?, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+        reopen: Reopen?, now: Instant,
     ): UpdateResult {
         val share = liveForUpdate(shareId)?.takeIf { it.ownerAccount == ownerAccount } ?: return UpdateResult.NOT_FOUND
+        check((reopen != null) == reopensByDate(share, expiresAt, now)) { "a reopen is the caller's to decide, under the lock" }
         if (role != null) {
             if (role == ShareEntity.WRITE_ONLY || share.role == ShareEntity.WRITE_ONLY) return UpdateResult.INVALID_ROLE
             share.role = role
@@ -235,15 +247,25 @@ class SharingStore(
         share.sealedShareName = sealedShareName
         share.shareNameEditorUserId = ownerAccount.takeIf { sealedShareName != null }
         share.expiresAt = expiresAt // full replace (cr-share-link-expiry-edit) — the manage UI re-sends the current value
+        if (reopen != null) {
+            storeKeys(share, reopen)
+        } else if (share.enabled && !share.expiryClosed && expiresAt != null && !expiresAt.isAfter(now)) {
+            close(share, CloseKind.EXPIRY)
+        }
         return UpdateResult.DONE
     }
+
+    /** Whether an edit setting [expiresAt] reopens [share] (ADR 0114 decision 7): an enabled link whose end date has
+     *  passed, the date moved into the future or cleared. A switched-off link stays closed whatever its date. */
+    fun reopensByDate(share: ShareEntity, expiresAt: Instant?, now: Instant): Boolean =
+        share.enabled && !share.deleted && share.expiresAt?.isAfter(now) == false && expiresAt?.isAfter(now) != false
 
     /** Replace a live share's `sealed_name` (ADR 0080 decision 14) — that column and no other, so a re-seal can never
      *  revert a concurrent edit, revoke or re-activation (`@DynamicUpdate` writes only what changed). False when there
      *  is no such share, or it is deleted: the row lock ([liveForUpdate]) makes a delete that committed first win.
      *
-     *  **Lock order: the share row only** — never the scope row. `updateShare` and `revoke` take the same single lock;
-     *  `reactivate` takes the scope row, then this row. Holding one lock, this write can wait for a re-activation but
+     *  **Lock order: the share row only** — never the scope row. `updateShare`, `revoke`, `delete` and
+     *  `reactivate` take the scope row, then this row. Holding one lock, this write can wait for any of them but
      *  never hold what one waits for while it waits itself, so no order of the two deadlocks
      *  (`ShareSealedNameCoreSliceTest`). Taking the scope row after this one would be the inversion. */
     @Transactional
@@ -263,18 +285,23 @@ class SharingStore(
      *  caller gates scope membership first, so a non-member still cannot tell the two apart. */
     fun findIncludingDeleted(shareId: String): ShareEntity? = ShareEntity.findById(shareId)
 
-    /** Whether a share is enabled, and who owns it, tombstones included — by a scalar read that loads no entity, for
-     *  a re-issue that re-checks them under the scope lock before [reissue] spends the row: a row loaded first would
-     *  stay in the transaction's context, and the spend's own read would hand back that pre-spend copy. */
-    fun enabledAndOwnerOf(shareId: String): Pair<Boolean, String>? =
+    /** A share's state as a re-issue re-checks it under the scope lock before [reissue] spends the row. */
+    data class LinkState(val enabled: Boolean, val owner: String, val deleted: Boolean)
+
+    /** Whether a share is enabled, who owns it and whether it is deleted, tombstones included — by a scalar read that
+     *  loads no entity, for a re-issue that re-checks them under the scope lock before [reissue] spends the row: a row
+     *  loaded first would stay in the transaction's context, and the spend's own read would hand back that pre-spend
+     *  copy. A concurrent re-issue that spent the row first is seen here, before the root's epoch gate, whose answer its
+     *  close changed (the root is due now). */
+    fun stateOf(shareId: String): LinkState? =
         ShareEntity.getEntityManager()
-            .createQuery("select s.enabled, s.ownerAccount from ShareEntity s where s.id = :id", Array<Any>::class.java)
+            .createQuery("select s.enabled, s.ownerAccount, s.deleted from ShareEntity s where s.id = :id", Array<Any>::class.java)
             .setParameter("id", shareId).resultList.firstOrNull()
-            ?.let { (it[0] as Boolean) to (it[1] as String) }
+            ?.let { LinkState(it[0] as Boolean, it[1] as String, it[2] as Boolean) }
 
     /** The share row's lock, and no copy of the row left in the transaction's context: a re-issue takes it before the
      *  shared node's (scope → share → node, every guest write's order, ADR 0109 point 6), and its spend's own read must
-     *  still load the row after the spend ([enabledAndOwnerOf]'s reason) — so the locked copy is detached at once. */
+     *  still load the row after the spend ([stateOf]'s reason) — so the locked copy is detached at once. */
     fun lockShareRow(shareId: String) {
         ShareEntity.find("id", shareId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
             ?.let { ShareEntity.getEntityManager().detach(it) }
@@ -315,37 +342,158 @@ class SharingStore(
     fun listByNode(nodeId: String): List<ShareEntity> =
         ShareEntity.find("nodeId = ?1 and deleted = false", nodeId).list()
 
-    /** Soft-revoke a share the caller owns (idempotent). Returns false when no such share is owned by the caller. */
+    /** Soft-revoke a share the caller owns (idempotent) — a close ([close], ADR 0114 decision 1); a switched-off one is
+     *  left as it is. Lock order: the scope row (the share's scope from a scalar read, so the share's first load is the
+     *  locked one), then the share row, then the subtree's node rows. False when no such share is owned by the caller. */
     @Transactional
     fun revoke(ownerAccount: String, shareId: String): Boolean {
+        ScopeEntity.lockRow(liveScopeOf(shareId) ?: return false)
         val share = liveForUpdate(shareId)?.takeIf { it.ownerAccount == ownerAccount } ?: return false
-        share.enabled = false
+        if (share.enabled) close(share, CloseKind.REVOKE)
         return true
     }
 
     /** Re-activate a soft-revoked share and adopt its ownership (cr-0104): flip `enabled` back on and take
-     *  `ownerAccount`. The handler has already let the caller through the scope-access gate, in this transaction and
-     *  under the scope's lock ([SharingHandler.reactivate]). False when there is no such share. */
+     *  `ownerAccount`, storing back what its close cleared ([reopen], ADR 0114 decision 7) — null only for a share that
+     *  is enabled already, which keeps its keys. A link whose end date has passed stays closed by its date: it takes
+     *  none of the keys (nothing new is sealed under a closed link, decision 5) and counts as closed by the sweep, whose
+     *  marks its switch-off already made. The handler has already let the caller through the scope-access gate and the
+     *  root's epoch gate, in this transaction and under the scope's lock ([SharingHandler.reactivate]). False when there
+     *  is no such share. */
     @Transactional
-    fun reactivate(callerAccount: String, shareId: String): Boolean {
+    fun reactivate(callerAccount: String, shareId: String, reopen: Reopen?, now: Instant): Boolean {
         val share = liveForUpdate(shareId) ?: return false
+        check(share.enabled == (reopen == null)) { "a switched-off share is reopened with its keys" }
+        // Still switched off here, so the end date's close marks nothing again: the switch-off carried it out.
+        if (reopen != null && share.expiresAt?.isAfter(now) == false) close(share, CloseKind.EXPIRY)
+        else if (reopen != null) storeKeys(share, reopen)
         share.enabled = true
         share.ownerAccount = callerAccount
         return true
     }
 
-    /** Delete a share (ADR 0029 §7) — [tombstone] it. The handler has already decided the caller may. False when
-     *  there is no such share, or it is deleted already. */
+    /** A reopen's writes: the root's key of the link's role and its name, and no sweep mark. */
+    private fun storeKeys(share: ShareEntity, reopen: Reopen) {
+        share.wrap = (reopen.keys as? ShareKeys.MemoryWrap)?.wrap
+        share.sealedDropPublicKey = (reopen.keys as? ShareKeys.Drop)?.sealedPublicKey
+        share.sealedName = reopen.sealedName
+        share.nameEditorUserId = reopen.editor // ADR 0093 § 8: the member who sealed it
+        share.expiryClosed = false
+    }
+
+    /** Delete a share (ADR 0029 §7) — a close ([close]) that [tombstone]s it. The handler has already decided the caller
+     *  may. Lock order as [revoke]'s. False when there is no such share, or it is deleted already. */
     @Transactional
     fun delete(shareId: String): Boolean {
+        ScopeEntity.lockRow(liveScopeOf(shareId) ?: return false)
         val share = liveForUpdate(shareId) ?: return false
-        tombstone(share)
+        close(share, CloseKind.DELETE)
         return true
     }
 
+    /** How a link closes (ADR 0114 decision 1) — what [close] writes beside clearing its keys. */
+    enum class CloseKind {
+        /** Switched off: a revoke, a bulk switch-off, a removed member's links. */
+        REVOKE,
+        /** Deleted: a delete, a re-issue's old link — [tombstone]. */
+        DELETE,
+        /** Its end date passed, carried out by the sweep or by an edit that sets a passed date. */
+        EXPIRY,
+    }
+
     /**
-     * The ONE body of every share deletion (ADR 0029 §7) — a delete, a re-issue's old link, the purge of the node
-     * it is on. Off, `deleted` set, and every ciphertext column and the expiry cleared: what stays is the id (so
+     * The ONE body of every close of a link (ADR 0114 decisions 1, 2, 5 and 8): every write that turns a link off,
+     * deletes it or carries out its end date goes through here (`scripts/validate_link_close_arity.py`) — but the
+     * purge's [tombstoneAllOn], whose links have no node left below them. In the caller's transaction, which holds the
+     * scope row's lock and then the share row's: the close and every mark land together (decision 8).
+     *
+     * - [kind]'s write: `enabled` off, the tombstone, or the sweep's mark.
+     * - The link's keys go — its `wrap` and its sealed drop public key (decision 5): nothing new is sealed under a closed
+     *   link, and its reopen brings the root's current key (decision 7). A tombstone clears them anyway.
+     * - A READ or READ_WRITE link whose close was not carried out yet ([unclosed]: enabled, not deleted, not swept)
+     *   marks every node of its root's subtree, live and trashed, the root included, **due** for its re-key
+     *   ([markSubtreeDue]): from here on nothing is written there under a key the link's holder has
+     *   (`node_rekey_pending`), and any member's worker re-keys it. A `WRITE_ONLY` link marks nothing (decision 2): its
+     *   `K_share` opens only the drop public key and its guest's own `K_up`. A link closed already marks nothing again.
+     */
+    fun close(share: ShareEntity, kind: CloseKind) {
+        val marks = unclosed(share) && share.role != ShareEntity.WRITE_ONLY
+        when (kind) {
+            CloseKind.REVOKE -> share.enabled = false
+            CloseKind.DELETE -> tombstone(share)
+            CloseKind.EXPIRY -> share.expiryClosed = true
+        }
+        share.wrap = null
+        share.sealedDropPublicKey = null
+        if (marks) markSubtreeDue(share.scopeId, share.nodeId)
+    }
+
+    /** Whether [share]'s close has not been carried out: enabled, not deleted, not swept. An enabled link whose end
+     *  date passed before the sweep reached it counts — closed by its date, but still keyed and its subtree unmarked. */
+    private fun unclosed(share: ShareEntity): Boolean = share.enabled && !share.deleted && !share.expiryClosed
+
+    /**
+     * Mark every node of [rootNodeId]'s subtree due (ADR 0114 decision 4): one recursive read of the parent ids, live and
+     * trashed nodes alike, and the marks in pages — after the scope's and the share's locks, the order every writer
+     * takes; then the tree revision, a leaf, under the scope lock held (ADR 0081: the re-key listing serves the mark).
+     */
+    private fun markSubtreeDue(scopeId: String, rootNodeId: String) {
+        val ids = subtreeIdsAll(scopeId, rootNodeId)
+        if (ids.isEmpty()) return
+        ids.chunked(MARK_PAGE).forEach { NodeEntity.update("rekeyDue = true where id in ?1", it) }
+        tree.bumpTree(scopeId)
+    }
+
+    /** The ids of [rootNodeId] and every node below it in [scopeId], live and trashed, by one recursive query on the
+     *  parent ids (H2 in its MariaDB mode and MariaDB both run it); empty when there is no such node. */
+    fun subtreeIdsAll(scopeId: String, rootNodeId: String): List<String> =
+        NodeEntity.getEntityManager().createNativeQuery(
+            """
+            WITH RECURSIVE sub (id) AS (
+                SELECT n.id FROM veyq_node n WHERE n.id = :root AND n.scope_id = :scope
+                UNION ALL
+                SELECT c.id FROM veyq_node c JOIN sub ON c.parent_id = sub.id WHERE c.scope_id = :scope
+            )
+            SELECT CAST(sub.id AS CHAR(36)) FROM sub
+            """.trimIndent(),
+        ).setParameter("root", rootNodeId).setParameter("scope", scopeId).resultList.map { it.toString() }
+
+    /** A share row under its lock, refreshed — a copy this transaction already loaded would carry its state from
+     *  before the lock. A tombstone included. */
+    private fun lockedRow(shareId: String): ShareEntity? =
+        ShareEntity.find("id", shareId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
+            ?.also { ShareEntity.getEntityManager().refresh(it) }
+
+    /** Every share of [scopeId] matching [where] (JPQL on `s`), locked in id order — the order two lockers of several
+     *  share rows agree on — and refreshed. */
+    private fun lockedShares(scopeId: String, where: String, params: Map<String, Any> = emptyMap()): List<ShareEntity> {
+        val q = ShareEntity.getEntityManager()
+            .createQuery("select s from ShareEntity s where s.scopeId = :scope and $where order by s.id", ShareEntity::class.java)
+            .setParameter("scope", scopeId)
+        params.forEach { (k, v) -> q.setParameter(k, v) }
+        return q.setLockMode(LockModeType.PESSIMISTIC_WRITE).resultList.onEach { ShareEntity.getEntityManager().refresh(it) }
+    }
+
+    /** The scopes holding an enabled, not deleted link whose end date has passed and whose close the sweep has not
+     *  carried out — the end-date sweep's work list (ADR 0114 decision 6). */
+    fun scopesWithExpiredUnclosedLinks(now: Instant): List<String> =
+        ShareEntity.getEntityManager()
+            .createQuery("select distinct s.scopeId from ShareEntity s where $EXPIRED_UNCLOSED", String::class.java)
+            .setParameter("now", now).resultList
+
+    /** Close every link of [scopeId] whose end date has passed and whose close was not carried out ([close], an end
+     *  date's), under the scope row's lock and then the share rows', each re-read there. Returns how many it closed. */
+    @Transactional
+    fun closeExpiredIn(scopeId: String, now: Instant): Int {
+        ScopeEntity.lockRow(scopeId) ?: return 0
+        val due = lockedShares(scopeId, EXPIRED_UNCLOSED, mapOf("now" to now))
+        due.forEach { close(it, CloseKind.EXPIRY) }
+        return due.size
+    }
+
+    /**
+     * The ONE body of every share deletion (ADR 0029 §7) — a delete and a re-issue's old link through [close],
+     * the purge of the node it is on directly (its links have nothing left below them to re-key, ADR 0114 decision 1). Off, `deleted` set, and every ciphertext column and the expiry cleared: what stays is the id (so
      * nothing is ever minted under it again), the scope, node, role and creation time, and the foreign key the link's guest
      * identities hang off. Never touches the identities' wrapped keys, the application rows under the node (Memories' media and
      * buckets), or its drop key: an uploader guest's uploads open only through them, and they belong to the node, not to the link — an
@@ -411,13 +559,15 @@ class SharingStore(
     }
 
     /** Soft-revoke every enabled share a removed member created in a scope (cr-0104) — their links then 404 on
-     *  the next resolve/blob GET. Idempotent; other members' shares + the record shape are untouched. */
+     *  the next resolve/blob GET; each is a close ([close], ADR 0114 decision 1). Idempotent; other members' shares +
+     *  the record shape are untouched. Runs inside its caller's transaction, which holds the scope row's lock (a
+     *  removal's: `ScopesStore.rotate`, the tenant cascade). */
     @Transactional
-    fun deactivateSharesByOwnerInScope(ownerAccount: String, scopeId: String): Int =
-        ShareEntity.update(
-            "enabled = false where ownerAccount = ?1 and scopeId = ?2 and enabled = true",
-            ownerAccount, scopeId,
-        )
+    fun deactivateSharesByOwnerInScope(ownerAccount: String, scopeId: String): Int {
+        val owned = lockedShares(scopeId, "s.ownerAccount = :owner and s.enabled = true", mapOf("owner" to ownerAccount))
+        owned.forEach { close(it, CloseKind.REVOKE) }
+        return owned.size
+    }
 
     /** Turn off **every** enabled share of a scope, whoever created it, and mark **every** share of it `reissue_only`
      *  — the one body of every bulk switch-off (ADR 0075 point 5): a group removal's and a tenant removal's
@@ -425,13 +575,17 @@ class SharingStore(
      *  have leaked whoever made it; each owner re-issues what they still want, and the mark keeps re-activation from
      *  reviving one. A link its owner had already switched off is marked too (inbox #258): it may have leaked as
      *  well, and unmarked, one with no recovery copy came back with one click right after the switch-off. A deleted
-     *  link is left alone — it never comes back anyway. Returns how many it turned off. Runs inside its caller's
-     *  transaction. */
+     *  link is left alone — it never comes back anyway. Each link it turns off is a close ([close], ADR 0114 decision
+     *  1). Returns how many it turned off. Runs inside its caller's transaction, which holds the scope row's lock. */
     @Transactional
     fun turnOffAllInScope(scopeId: String): Int {
-        val turnedOff = ShareEntity.update("enabled = false, reissueOnly = true where scopeId = ?1 and enabled = true", scopeId)
+        val enabled = lockedShares(scopeId, "s.enabled = true")
+        enabled.forEach {
+            it.reissueOnly = true
+            close(it, CloseKind.REVOKE)
+        }
         ShareEntity.update("reissueOnly = true where scopeId = ?1 and reissueOnly = false and deleted = false", scopeId)
-        return turnedOff
+        return enabled.size
     }
 
     // --- contributor identities (cr-0101) --------------------------------------
@@ -556,5 +710,19 @@ class SharingStore(
             byParent[cur]?.forEach { stack.addLast(it.id) }
         }
         return out.toList()
+    }
+
+    companion object {
+        /** How many node ids one due-mark statement names. */
+        private const val MARK_PAGE = 500
+
+        /** An enabled, not deleted link whose end date is at or before `:now` and whose close the sweep has not carried
+         *  out — JPQL on `ShareEntity s`. */
+        private const val EXPIRED_UNCLOSED =
+            "s.enabled = true and s.deleted = false and s.expiryClosed = false and s.expiresAt is not null and s.expiresAt <= :now"
+
+        /** A link that is **open** (ADR 0114 decision 1) — enabled, not deleted, before its end date — as JPQL on
+         *  `ShareEntity` bound to `:now`: the links a re-key wraps the root's new key under (decision 5). */
+        const val OPEN = "enabled = true and deleted = false and (expiresAt is null or expiresAt > :now)"
     }
 }

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.sharing
 
+import me.raddatz.veyq.core.testing.TestNodeRekey
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.admin.tenant.TenantTermsAcceptanceEntity
@@ -285,10 +286,11 @@ class ShareSliceTest {
         given().`when`().get("/api/shares/$shareId/terms")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
 
-        // expired
+        // expired — on the Memory the revoke marked due and its re-key then replaced (ADR 0114 decision 1)
+        TestNodeRekey.finish(scopeId)
         val past = Instant.now().minusSeconds(3600).toString()
         val expiredId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()},"expiresAt":"$past"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery(nodeEpoch = TestNodeRekey.epochOf(memory))},"expiresAt":"$past"}""")
             .`when`().post("/api/shares").then().statusCode(201).extract().path<String>("shareId")
         given().`when`().get("/api/shares/$expiredId/terms")
             .then().statusCode(404).body("code", equalTo("share_not_found"))

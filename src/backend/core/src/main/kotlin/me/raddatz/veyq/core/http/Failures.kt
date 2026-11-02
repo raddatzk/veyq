@@ -127,6 +127,9 @@ object Failures {
     /** A link with no end date, or one beyond its tenant's `linkMaxDays` after it was made (requirement `linkMaxDays`). */
     val linkExpiryRequired: HttpFailure = httpFailure("link_expiry_required", UNPROCESSABLE)
 
+    /** A reopen of a closed link without the root's key or name for its role (ADR 0114 decision 7). */
+    val linkKeyRequired: HttpFailure = httpFailure("link_key_required", UNPROCESSABLE)
+
     /** Request violates the node tree's structural rules → 422. */
     val illegalStructure: HttpFailure = httpFailure("illegal_structure", UNPROCESSABLE)
 

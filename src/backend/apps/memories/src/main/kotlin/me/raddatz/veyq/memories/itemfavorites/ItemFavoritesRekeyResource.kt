@@ -7,6 +7,7 @@ import me.raddatz.veyq.memories.generated.model.ScopeItemFavoritesRekeyStage
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.membership.AccessMode.READ
+import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.node.rekey.RekeyOutcome
 import me.raddatz.veyq.core.node.rekey.RekeyRight
 import me.raddatz.veyq.core.node.rekey.ScopeRekeyHandler
@@ -63,14 +64,20 @@ class ItemFavoritesRekeyResource(
     override fun stageScopeItemFavoritesRekey(scopeId: UUID, rekeyId: UUID, scopeItemFavoritesRekeyStage: ScopeItemFavoritesRekeyStage): Response {
         val sid = scopeId.toString()
         val marks = scopeItemFavoritesRekeyStage.marks.orEmpty()
-        // Each value beside the digest of what its row holds now — the commit's compare-and-set. A mark of another scope
-        // has no row here and stages as one that holds nothing: the commit never reads it.
+        // The rights first: what a row holds is answered to the rotator only.
+        scopeRekey.refusal(identity.principal.name, sid, WRITE)?.let { return refused(it) }
+        // Each value names the digest of the ciphertext it was opened from (ADR 0115 decision 2): a row that holds another
+        // by now — replaced since the read, or gone, a mark of another scope among them — refuses the batch, so a write
+        // between the read and this stage is never replaced by a re-seal of what it replaced. The digest kept beside the
+        // value is the commit's compare-and-set for a write after it.
         val stored = if (marks.isEmpty()) emptyMap()
         else ItemFavoritesEntity.list("scopeId = ?1 and markId in ?2", sid, marks.map { it.markId.toString() })
             .associate { it.markId to it.ciphertext }
         val values = marks.associate { m ->
             val id = m.markId.toString()
-            ScopeRekeyStage.Key(id, ItemFavoritesScopeRekeyParticipant.FIELD) to ScopeRekeyStage.Value(m.ciphertext, ScopeRekeyStage.digest(stored[id]))
+            val now = ScopeRekeyStage.digest(stored[id])
+            if (now != m.replacedDigest) return refused(RekeyOutcome.PartsStale)
+            ScopeRekeyStage.Key(id, ItemFavoritesScopeRekeyParticipant.FIELD) to ScopeRekeyStage.Value(m.ciphertext, now)
         }
         return when (val o = scopeRekey.stagePart(
             identity.principal.name, sid, rekeyId.toString(), scopeItemFavoritesRekeyStage.fromEpoch.validated(),

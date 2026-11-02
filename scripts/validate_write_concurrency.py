@@ -23,10 +23,11 @@ with a `mode` of one of two values:
   - `node-epoch` — a write whose only guard is the node epoch it states (below), with no revision and no reason to
     give: a create, a restore, a guest's write, a batch completion.
 
-**Node epochs (ADR 0109 point 6).** A write that seals anything under a node's key states that node's epoch as it read
-it — `nodeEpoch` (the node's own key) or `parentEpoch` (an entry under its parent's key) — so the server can refuse a
-key from before a rotation (`409 stale_epoch`) and a node the rotation's re-key has not reached (`409
-node_rekey_pending`). The declaration lists them under `epochs` beside any mode: each names an epoch-shaped request
+**Node epochs (ADR 0109 point 6, ADR 0114 decision 3).** A write that seals anything under a node's key states the
+epoch of that node key itself as it read it — `nodeEpoch` (the node's own key) or `parentEpoch` (an entry under its
+parent's key); a node key's epoch is 0 at its mint and one more with every replacement, a rotation's re-key or a link
+close's — so the server can refuse a key replaced since (`409 stale_epoch`) and a node marked due whose re-key has not
+reached it (`409 node_rekey_pending`). The declaration lists them under `epochs` beside any mode: each names an epoch-shaped request
 property — top-level, or one level into a batch's items as `<array>.<name>` (`items.nodeEpoch`) — an integer, required
 or `requiredWith` another property, and the operation's `409` names both refusals. An epoch-shaped property makes its
 write a subject whatever its verb, and every one must be declared (the reverse angle). The bite cases are
@@ -84,8 +85,8 @@ API = contract_specs.API
 EDIT_VERB = re.compile(r"^(rename|set|update|change|commit|move|put)[A-Z]")
 COUNTER_SHAPED = re.compile(r"^(revision|version|[a-z][A-Za-z0-9]*(Revision|Version))$")
 MODES = ("revision", "last-writer-wins", "node-epoch")
-# A write that seals under a node's key states that node's epoch as it read it (ADR 0109 point 6): the node's own
-# (`nodeEpoch`) or, for an entry sealed under a parent's key, the parent's (`parentEpoch`). Not a counter: it is
+# A write that seals under a node's key states that node key's own epoch as it read it (ADR 0114 decision 3): the
+# node's (`nodeEpoch`) or, for an entry sealed under a parent's key, the parent's (`parentEpoch`). Not a counter: it is
 # compared, never compare-and-set, and it has two refusals of its own.
 EPOCH_SHAPED = re.compile(r"^(node|parent)Epoch$")
 EPOCH_CONFLICTS = ("stale_epoch", "node_rekey_pending")

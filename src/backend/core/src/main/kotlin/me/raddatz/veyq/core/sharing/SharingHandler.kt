@@ -190,6 +190,15 @@ sealed interface UpdateShareOutcome {
     /** The link misses a requirement in effect for its tenant (ADR 0088 decision 8, [LinkRequirements]) — a 422. */
     object LinkPasswordRequired : UpdateShareOutcome, HttpFailure by Failures.linkPasswordRequired
     object LinkExpiryRequired : UpdateShareOutcome, HttpFailure by Failures.linkExpiryRequired
+    /** The edit reopens a link whose end date has passed and lacks the root's key or name for its role (ADR 0114
+     *  decision 7) — a 422, nothing written. */
+    object LinkKeyRequired : UpdateShareOutcome, HttpFailure by Failures.linkKeyRequired
+    /** A key the link's role does not take, or a reopen's key on an edit that reopens nothing — a 400. */
+    object InvalidRequest : UpdateShareOutcome, HttpFailure by Failures.invalidRequest
+    /** A reopen's `nodeEpoch` is not the root's own stored epoch (ADR 0114 decision 3) — a 409, nothing written. */
+    object StaleEpoch : UpdateShareOutcome, HttpFailure by Failures.staleEpoch
+    /** A reopen of a root due for its re-key — a 409, nothing written. */
+    object RekeyPending : UpdateShareOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
 sealed interface SetShareSealedNameOutcome {
@@ -212,6 +221,14 @@ sealed interface ReactivateShareOutcome {
     object ReissueRequired : ReactivateShareOutcome, HttpFailure by httpFailure("reissue_required", CONFLICT)
     /** A moderator blocked the link or a guest uploader who came through it (uc.moderation.take-a-measure) — a 409. */
     object Blocked : ReactivateShareOutcome, HttpFailure by Failures.shareBlockedByOperator
+    /** The reopen lacks the root's key or name for the link's role (ADR 0114 decision 7) — a 422, nothing written. */
+    object LinkKeyRequired : ReactivateShareOutcome, HttpFailure by Failures.linkKeyRequired
+    /** A key the link's role does not take — a 400. */
+    object InvalidRequest : ReactivateShareOutcome, HttpFailure by Failures.invalidRequest
+    /** `nodeEpoch` is not the root's own stored epoch (ADR 0114 decision 3) — a 409, nothing written. */
+    object StaleEpoch : ReactivateShareOutcome, HttpFailure by Failures.staleEpoch
+    /** The root is due for its re-key — a 409, nothing written. */
+    object RekeyPending : ReactivateShareOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 
 sealed interface ReissueShareOutcome {
@@ -479,10 +496,19 @@ class SharingHandler(
      *  a non-null `role` changes the grant in place (READ ↔ READ_WRITE only — WRITE_ONLY, either as the target or
      *  as the share's current role, is `InvalidRole` → 422, and so is a role the shared node's kind may not be the
      *  root of, [ShareRoots] as on create). Role change is a plaintext authz change: no re-crypto, the
-     *  wrap/`K_share`/link are untouched. */
+     *  wrap/`K_share`/link are untouched.
+     *
+     *  **An end date is a close, and moving it back a reopen** (ADR 0114 decisions 6 and 7): an edit of an enabled link
+     *  whose end date has passed that moves the date into the future or clears it carries [reopen] — the root's key and
+     *  name for the link's role, stating the root's own epoch — else `LinkKeyRequired`; the epoch is judged under the
+     *  root's row lock, after the scope's and the share's (`StaleEpoch`, `RekeyPending`). An edit that reopens nothing
+     *  carries none of it (`InvalidRequest`). An end date set in the past closes an open link at once
+     *  ([SharingStore.updateShare]). Whether it reopens is decided under the share row's lock, so a sweep or a second
+     *  device in between is seen. */
     fun updateShare(
         userId: String, shareId: String, sealedNote: String?, sealedShareName: String?, role: String?,
         expiresAt: Instant?, passwordRequired: Boolean?, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+        reopen: ReopenRequest = ReopenRequest.NONE,
     ): UpdateShareOutcome {
         val share = store.find(shareId) ?: return UpdateShareOutcome.NotFound
         access.check(userId, share.scopeId, WRITE)
@@ -516,11 +542,69 @@ class SharingHandler(
         linkRefusal(share.scopeId, keepsPassword, share.createdAt, expiresAt)?.let {
             return if (it === Failures.linkPasswordRequired) UpdateShareOutcome.LinkPasswordRequired else UpdateShareOutcome.LinkExpiryRequired
         }
-        return when (store.updateShare(userId, shareId, sealedNote, sealedShareName, role, expiresAt, passwordRequired, pwSalt, pwVerifier, sealedPassword)) {
-            SharingStore.UpdateResult.DONE -> UpdateShareOutcome.Done
-            SharingStore.UpdateResult.NOT_FOUND -> UpdateShareOutcome.NotFound
-            SharingStore.UpdateResult.INVALID_ROLE -> UpdateShareOutcome.InvalidRole
+        return QuarkusTransaction.requiringNew().call {
+            // Lock order: the scope row (a close marks the nodes below the link), the share row, then the root's.
+            scopes.lockScope(share.scopeId)
+            val locked = store.liveForUpdate(shareId)?.takeIf { it.ownerAccount == userId } ?: return@call UpdateShareOutcome.NotFound
+            val now = Instant.now()
+            val reopening = if (store.reopensByDate(locked, expiresAt, now)) {
+                val keys = when (val k = reopenKeys(locked.role, reopen, userId)) {
+                    ReopenKeys.Invalid -> return@call UpdateShareOutcome.InvalidRequest
+                    ReopenKeys.Missing -> return@call UpdateShareOutcome.LinkKeyRequired
+                    is ReopenKeys.Given -> k.reopen
+                }
+                epochRefusal(
+                    locked.scopeId, locked.nodeId, checkNotNull(reopen.nodeEpoch), UpdateShareOutcome.NotFound,
+                    UpdateShareOutcome.StaleEpoch, UpdateShareOutcome.RekeyPending,
+                )?.let { return@call it }
+                keys
+            } else {
+                if (reopen.any) return@call UpdateShareOutcome.InvalidRequest
+                null
+            }
+            when (
+                store.updateShare(
+                    userId, shareId, sealedNote, sealedShareName, role, expiresAt, passwordRequired, pwSalt, pwVerifier,
+                    sealedPassword, reopening, now,
+                )
+            ) {
+                SharingStore.UpdateResult.DONE -> UpdateShareOutcome.Done
+                SharingStore.UpdateResult.NOT_FOUND -> UpdateShareOutcome.NotFound
+                SharingStore.UpdateResult.INVALID_ROLE -> UpdateShareOutcome.InvalidRole // refused before any write
+            }
         }
+    }
+
+    /** What a reopen of a closed link carries (ADR 0114 decision 7): the root's own epoch as read, its current key under
+     *  the link's `K_share` — [wrap] (READ / READ_WRITE) or [sealedDropPublicKey] (WRITE_ONLY) — and its name under it. */
+    data class ReopenRequest(val nodeEpoch: Int?, val wrap: String?, val sealedDropPublicKey: String?, val sealedName: String?) {
+        /** Whether the request carries any of it. */
+        val any: Boolean get() = nodeEpoch != null || wrap != null || sealedDropPublicKey != null || sealedName != null
+
+        companion object {
+            val NONE = ReopenRequest(null, null, null, null)
+        }
+    }
+
+    /** [reopenKeys]' answer. */
+    private sealed interface ReopenKeys {
+        /** A key the role does not take, or a key without its `nodeEpoch` — a 400. */
+        object Invalid : ReopenKeys
+        /** The role's key or the name is missing (or empty) — `422 link_key_required`. */
+        object Missing : ReopenKeys
+        data class Given(val reopen: SharingStore.Reopen) : ReopenKeys
+    }
+
+    /** The reopen [r] carries for a link of [role], sealed by [editor]. The role is the share's own, so the request's
+     *  schema cannot say which key it needs: a key of the other role is malformed, a missing one is the 422. */
+    private fun reopenKeys(role: String, r: ReopenRequest, editor: String): ReopenKeys {
+        val viewable = role != ShareEntity.WRITE_ONLY
+        if ((viewable && r.sealedDropPublicKey != null) || (!viewable && r.wrap != null)) return ReopenKeys.Invalid
+        val key = if (viewable) r.wrap else r.sealedDropPublicKey
+        if (key.isNullOrEmpty() || r.sealedName.isNullOrEmpty()) return ReopenKeys.Missing
+        if (r.nodeEpoch == null) return ReopenKeys.Invalid
+        val keys = if (viewable) ShareKeys.MemoryWrap(key) else ShareKeys.Drop(key, sealedPrivateKey = null)
+        return ReopenKeys.Given(SharingStore.Reopen(keys, r.sealedName, editor))
     }
 
     /**
@@ -528,8 +612,11 @@ class SharingHandler(
      * the root re-seals the name of every share on it through each one's recovery copy. **Any** member who may write
      * in the share's space may — the gate's WRITE answer, as a node rename asks it (`NodesHandler.update`) — not only
      * the share's owner: `updateShare` stays owner-gated (ADR 0036 point 3) and replaces all its fields, so it cannot
-     * carry this write. A revoked share is renamed too (a later re-activation shows the current name); a deleted one
-     * is the 404. Last writer wins: the value is always the root's current name. The server never opens it.
+     * carry this write. The renaming client re-seals the name under open links only (ADR 0114 decision 5) — nothing
+     * new under a closed one's `K_share`, whose reopen carries the current name — but the server takes the write for a
+     * switched-off share too: which links are open is the client's to read, and it is the share's own ciphertext either
+     * way. A deleted one is the 404. Last writer wins: the value is always the root's current name. The server never
+     * opens it.
      *
      * The gate is read before the store's transaction, as `updateShare` reads it. Sound by the serial-order rule
      * (developer-styleguide §12): the write changes an existing row's one column, which no removal enumerates or
@@ -554,9 +641,15 @@ class SharingHandler(
      *  `TenantHandler.removeMember`), so a removal that committed before this is seen — the caller is no member, or
      *  the link is marked for re-issue — and one that comes after finds this link on and turns it off with the rest.
      *  Checked before the lock, a member being removed re-activated a link and kept it live in a group it had left.
-     *  The scope id comes from a scalar read, so the share's first load is the locked one, never a stale copy. */
+     *  The scope id comes from a scalar read, so the share's first load is the locked one, never a stale copy.
+     *
+     *  **The reopen carries the key** (ADR 0114 decision 7): the close cleared the link's wrap (or drop public key) and
+     *  its re-key sealed nothing new under it, so a switched-off link comes back only with [reopen] — the root's current
+     *  key and name under its `K_share`, else `LinkKeyRequired` — and its `nodeEpoch` is judged under the root's row
+     *  lock, after the scope's and the share's (`StaleEpoch`, `RekeyPending`). An enabled link is adopted as it is and
+     *  keeps its keys. A key the role does not take is `InvalidRequest` either way. */
     @Transactional
-    fun reactivate(userId: String, shareId: String): ReactivateShareOutcome {
+    fun reactivate(userId: String, shareId: String, reopen: ReopenRequest): ReactivateShareOutcome {
         val scopeId = store.liveScopeOf(shareId) ?: return ReactivateShareOutcome.NotFound
         scopes.lockScope(scopeId)
         val share = store.liveForUpdate(shareId) ?: return ReactivateShareOutcome.NotFound
@@ -570,7 +663,19 @@ class SharingHandler(
         val scope = scopes.find(share.scopeId) ?: return ReactivateShareOutcome.NotFound
         if (reissueRequired(share, scope)) return ReactivateShareOutcome.ReissueRequired
         if (blocks.shareBlocked(share.id)) return ReactivateShareOutcome.Blocked
-        store.reactivate(userId, shareId)
+        val keys = reopenKeys(share.role, reopen, userId)
+        if (keys == ReopenKeys.Invalid) return ReactivateShareOutcome.InvalidRequest
+        val now = Instant.now()
+        if (share.enabled) {
+            store.reactivate(userId, shareId, null, now)
+            return ReactivateShareOutcome.Done
+        }
+        val given = keys as? ReopenKeys.Given ?: return ReactivateShareOutcome.LinkKeyRequired
+        epochRefusal(
+            share.scopeId, share.nodeId, checkNotNull(reopen.nodeEpoch), ReactivateShareOutcome.NotFound,
+            ReactivateShareOutcome.StaleEpoch, ReactivateShareOutcome.RekeyPending,
+        )?.let { return it }
+        store.reactivate(userId, shareId, given.reopen, now)
         return ReactivateShareOutcome.Done
     }
 
@@ -637,8 +742,8 @@ class SharingHandler(
             // §12). Checked only before it, a member being removed re-issued a live link that removal never saw. The
             // share's state is read by a scalar query, so the row the store spends is first loaded after the spend.
             scopes.lockScope(old.scopeId)
-            val (enabled, owner) = store.enabledAndOwnerOf(shareId) ?: return@call ReissueShareOutcome.NotFound
-            reissueRefusal(userId, old.scopeId, false, enabled, owner)?.let { return@call it }
+            val state = store.stateOf(shareId) ?: return@call ReissueShareOutcome.NotFound
+            reissueRefusal(userId, old.scopeId, state.deleted, state.enabled, state.owner)?.let { return@call it }
             if (sealedShareKeyEpoch != scopes.currentEpoch(old.scopeId)) return@call ReissueShareOutcome.StaleEpoch
             // The new link wraps the node's key (ADR 0109 point 6): its epoch, judged under the node's row lock — taken
             // after the share row's (scope → share → node, every guest write's order), so the share row is locked here
