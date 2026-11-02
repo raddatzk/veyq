@@ -32,9 +32,9 @@ import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.memories.media.BucketEntity
-import me.raddatz.veyq.memories.media.MediaDerivativeEntity
 import me.raddatz.veyq.memories.media.MediaEntity
 import me.raddatz.veyq.memories.media.ShareMediaRead
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -302,11 +302,12 @@ class ModerationMemoriesSliceTest {
                     id = UUID.randomUUID().toString(); scopeId = w.scopeId; nodeId = w.memory; ownerKey = "share:${w.identityId}"
                     sealedName = "Z3Vlc3Q="; isPrimary = true; createdAt = Instant.now()
                 }.also { it.persist() }
-            MediaEntity().apply {
-                id = mediaId; scopeId = w.scopeId; nodeId = w.memory; blobId = original; shareIdentityId = w.identityId
+            val row = MediaEntity().apply {
+                id = mediaId; scopeId = w.scopeId; nodeId = w.memory; shareIdentityId = w.identityId
                 createdBy = bucket.ownerKey; bucketId = bucket.id; updatedAt = Instant.now(); wrappedMeta = "bWV0YQ=="
-            }.persist()
-            MediaDerivativeEntity().apply { id = UUID.randomUUID().toString(); this.mediaId = mediaId; kind = "THUMBNAIL"; blobId = thumbnail }.persist()
+            }.also { it.persist() }
+            MediaBlobRows.holdFor(row, original)
+            MediaBlobRows.holdFor(row, thumbnail, "THUMBNAIL")
         }
         return Medium(mediaId, key, derivKey, original, thumbnail)
     }

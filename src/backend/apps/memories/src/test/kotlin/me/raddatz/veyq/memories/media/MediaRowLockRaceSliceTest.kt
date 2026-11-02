@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * A member's write to a media row reads that row under its lock (developer-styleguide §12), as every delete of it
@@ -136,9 +137,11 @@ class MediaRowLockRaceSliceTest {
                 ownerKey = PrincipalKey.Share(identityId).format(); isPrimary = true; createdAt = Instant.now()
             }.also { it.persist() }
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId
                 shareIdentityId = identityId; createdBy = bucket.ownerKey; bucketId = bucket.id; updatedAt = Instant.now()
-            }.persist()
+            }.also { it.persist() }
+            // its blob as core's blob service holds it; the identity is no row here, so the blob's writer is a member's
+            MediaBlobRows.hold(scopeId, nodeId, mediaId, MediaBlobRows.ORIGINAL, blobId)
         }
         return GuestUpload(userId, scopeId, nodeId, identityId, mediaId)
     }

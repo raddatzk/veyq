@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.applicationblob.ApplicationBlobs
 import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.moderation.hold.HeldRow
 import me.raddatz.veyq.core.moderation.report.ReportableItem
@@ -16,14 +17,15 @@ import java.time.Instant
  * one (uc.moderation.take-a-measure): its blobs, and the live-list nudge a block or a lift owes an open gallery.
  */
 @ApplicationScoped
-class MediaReportableItems(private val revisions: NodeItemsRevisions) : ReportableItems {
+class MediaReportableItems(private val revisions: NodeItemsRevisions, private val service: ApplicationBlobs) : ReportableItems {
     override fun locate(itemId: String): ReportableItem? =
         MediaEntity.find("id = ?1 and deletedAt is null", itemId).firstResult()?.let { ReportableItem(it.scopeId, it.nodeId) }
 
-    /** A medium's original and every derivative, trashed or not (a content block refuses them all). */
+    /** A medium's original and every derivative, trashed or not (a content block refuses them all): the blobs core's
+     *  blob service holds for it (ADR 0113). */
     override fun blobIdsOf(itemId: String): Set<String> {
-        val medium = MediaEntity.findById(itemId) ?: return emptySet()
-        return setOf(medium.blobId) + MediaDerivativeEntity.find("mediaId = ?1", medium.id).list().map { it.blobId }
+        if (MediaEntity.findById(itemId) == null) return emptySet()
+        return service.blobIdsOfOwner(itemId)
     }
 
     /**
@@ -42,11 +44,7 @@ class MediaReportableItems(private val revisions: NodeItemsRevisions) : Reportab
     override fun lockExisting(itemId: String): Boolean =
         MediaEntity.find("id", itemId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() != null
 
-    /** The held medium's original and every held derivative, through their held blob rows (`MediaHoldSnapshot`). */
-    override fun heldObjectsOf(itemId: String, held: List<HeldRow>): Set<String> {
-        val blobIds = held.filter { it.table == "veyq_media" && it.sourceId == itemId }.mapNotNull { it["blob_id"] } +
-            held.filter { it.table == "veyq_media_derivative" && it["media_id"] == itemId }.mapNotNull { it["blob_id"] }
-        if (blobIds.isEmpty()) return emptySet()
-        return held.filter { it.table == "veyq_blob" && it.sourceId in blobIds }.mapNotNullTo(LinkedHashSet()) { it["storage_key"] }
-    }
+    /** The held medium's original and every held derivative: the service's held rows it owns, through their held blob
+     *  rows (the service's hold copies them with the medium, ADR 0113). */
+    override fun heldObjectsOf(itemId: String, held: List<HeldRow>): Set<String> = service.heldObjectsOfOwner(itemId, held)
 }

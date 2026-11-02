@@ -37,7 +37,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.depot.DepotNodeKinds
 import me.raddatz.veyq.expenses.ExpensesNodeKinds
-import me.raddatz.veyq.memories.media.MediaDerivativeEntity
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 import me.raddatz.veyq.memories.media.MediaEntity
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -126,7 +126,7 @@ class ApplicationErasureSweepTest {
         read {
             w.erased.forEach { assertNull(NodeEntity.findById(it), "node $it is erased") }
             assertNull(MediaEntity.findById(w.medium))
-            assertEquals(0L, MediaDerivativeEntity.count("mediaId", w.medium), "its derivatives go with it")
+            assertEquals(0L, MediaBlobRows.countOf(w.medium), "its blobs go with it (core's blob service, ADR 0113)")
             assertEquals(0L, NodeAttachmentEntity.count("nodeId", w.memory), "the cover's attachment goes")
             assertEquals(0L, GuestWriteRecordEntity.count("objectId", w.medium), "the guest-write record goes")
             assertTrue(ShareEntity.findById(w.link)!!.deleted, "the link is a tombstone")
@@ -334,7 +334,7 @@ class ApplicationErasureSweepTest {
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue()).extract().path<String>("results[0].mediaId")
         val keys = read {
-            val blobIds = listOf(MediaEntity.findById(mediaId)!!.blobId) + MediaDerivativeEntity.list("mediaId", mediaId).map { it.blobId }
+            val blobIds = MediaBlobRows.blobsOf(mediaId)
             blobIds.map { BlobEntity.findById(it)!! }.flatMap { BlobStore.chunkKeys(it.storageKey, it.chunkCount) }
         }
         return mediaId to keys
@@ -388,14 +388,15 @@ class ApplicationErasureSweepTest {
         val cols = columns()
         val tables = cols.map { it.table }.toSet()
         // Derived from the applications' migrations: every table they create, and no later one drops, is among the ones
-        // this reads (Expenses' receipts moved to core's blob service, ADR 0112, and their table was dropped).
+        // this reads (Expenses' receipts and Memories' derivatives moved to core's blob service, ADR 0112 and 0113, and
+        // their tables were dropped).
         fun named(statement: String) = File("apps").listFiles()!!.flatMap { app ->
             File(app, "src/main/resources/db/migration").listFiles().orEmpty().flatMap { f ->
                 Regex("""$statement (\w+)""", RegexOption.IGNORE_CASE).findAll(f.readText()).map { it.groupValues[1].lowercase() }
             }
         }.toSet()
         val appTables = named("CREATE TABLE") - named("DROP TABLE")
-        assertTrue(appTables.size >= 5, "read the applications' migrations ($appTables)")
+        assertTrue(appTables.containsAll(setOf("veyq_media", "veyq_bucket", "veyq_expenses_revision")), "read the applications' migrations ($appTables)")
         assertEquals(emptySet<String>(), appTables - tables, "an application table the sweep does not read")
         val ids = nodeIds.toMutableSet()
         var grew = true

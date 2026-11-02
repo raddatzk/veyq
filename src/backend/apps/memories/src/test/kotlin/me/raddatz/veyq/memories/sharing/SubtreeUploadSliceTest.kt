@@ -37,6 +37,7 @@ import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * A link's role applies to every node below its root as the application allows it (ADR 0080 decision 6;
@@ -272,8 +273,8 @@ class SubtreeUploadSliceTest {
                 chunkCount = s.chunkCount; byteSize = s.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId; updatedAt = Instant.now()
-            }.persist()
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; updatedAt = Instant.now()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
         return mediaId
     }

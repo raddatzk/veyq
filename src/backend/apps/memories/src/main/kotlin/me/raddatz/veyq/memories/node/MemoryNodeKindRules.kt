@@ -17,8 +17,8 @@ object MemoriesNodeKinds {
 
     /**
      * The kinds a share of Memories is rooted at, with every role, and so the kinds Memories runs a guest's media writes
-     * under: [MemoryShareRoots], `MediaShareGuestWrites` and `MediaUploadAdmission` all answer from this one set, so the
-     * role a link was created with, its writer and its usage measure cannot disagree about a kind.
+     * under: [MemoryShareRoots] and `MediaShareGuestWrites` answer from this one set, so the role a link was created with
+     * and its writer cannot disagree about a kind (a link's usage is core's blob service's, ADR 0113).
      */
     val SHARE_ROOTS: Set<String> = setOf(MEMORY, CHAPTER)
 }

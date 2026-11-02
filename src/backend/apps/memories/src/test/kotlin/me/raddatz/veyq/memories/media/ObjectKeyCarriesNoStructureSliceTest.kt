@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.newUser
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -78,8 +79,7 @@ class ObjectKeyCarriesNoStructureSliceTest {
             .extract().path<String>("results[0].mediaId")
 
         val blobKey = QuarkusTransaction.requiringNew().call<String> {
-            val media = MediaEntity.findById(mediaId)!!
-            BlobEntity.findById(media.blobId)!!.storageKey
+            BlobEntity.findById(MediaBlobRows.blobOf(mediaId)!!)!!.storageKey
         }
         assertBareAndOpaque(blobKey, seed, "veyq_blob.storage_key")
         assertEquals(sessionKey, blobKey, "attach must inherit the session's key, never re-derive one")

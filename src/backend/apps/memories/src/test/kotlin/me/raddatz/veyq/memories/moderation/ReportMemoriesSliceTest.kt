@@ -17,8 +17,8 @@ import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
-import me.raddatz.veyq.memories.media.MediaDerivativeEntity
 import me.raddatz.veyq.memories.media.MediaEntity
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -109,12 +109,11 @@ class ReportMemoriesSliceTest {
                     chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
                 }.persist()
             }
-            MediaEntity().apply {
-                id = medium.mediaId; this.scopeId = scopeId; this.nodeId = nodeId; blobId = medium.blobId; updatedAt = Instant.now()
-            }.persist()
-            MediaDerivativeEntity().apply {
-                id = UUID.randomUUID().toString(); mediaId = medium.mediaId; kind = "THUMBNAIL"; blobId = medium.derivativeBlobId
-            }.persist()
+            val row = MediaEntity().apply {
+                id = medium.mediaId; this.scopeId = scopeId; this.nodeId = nodeId; updatedAt = Instant.now()
+            }.also { it.persist() }
+            MediaBlobRows.holdFor(row, medium.blobId)
+            MediaBlobRows.holdFor(row, medium.derivativeBlobId, "THUMBNAIL")
         }
         return medium
     }

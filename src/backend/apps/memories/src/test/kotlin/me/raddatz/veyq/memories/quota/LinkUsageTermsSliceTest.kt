@@ -19,6 +19,7 @@ import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.quota.StorageQuota
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * A Memory link's usage with both blob terms at once (cr-files-application P3-S5): Memories' `MediaUploadAdmission`
@@ -73,9 +74,9 @@ class LinkUsageTermsSliceTest {
                 ownerKey = "share:$identityId"; sealedName = "Z3Vlc3Q="; isPrimary = true; createdAt = Instant.now()
             }.also { it.persist() }
             MediaEntity().apply {
-                id = UUID.randomUUID().toString(); this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
+                id = UUID.randomUUID().toString(); this.scopeId = scopeId; this.nodeId = nodeId
                 shareIdentityId = identityId; createdBy = bucket.ownerKey; bucketId = bucket.id; updatedAt = Instant.now()
-            }.persist()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
     }
 }

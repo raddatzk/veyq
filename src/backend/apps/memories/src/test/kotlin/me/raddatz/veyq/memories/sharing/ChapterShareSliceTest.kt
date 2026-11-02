@@ -39,6 +39,7 @@ import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.sharing.GuestNodeRules
 import me.raddatz.veyq.core.sharing.GuestTreeShare
 import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * A `CHAPTER` as a share root (ADR 0080 decisions 9 and 13; uc.sharing.share-public-viewer:chapter-share-root): a
@@ -290,8 +291,8 @@ class ChapterShareSliceTest {
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId; updatedAt = Instant.now()
-            }.persist()
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; updatedAt = Instant.now()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
         return mediaId to blobId
     }

@@ -11,9 +11,10 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * A media (cr-0028): links a blob to a node (MEMORY/CHAPTER). The share grain stays the Memory's `K_node`;
- * this row is only the blob→node link. `blobId` is the **original** (pristine) blob; role-tagged derivative
- * tiers link via [MediaDerivativeEntity] (cr-0045).
+ * A medium (cr-0028) of a node (MEMORY/CHAPTER): Memories' record — its sealed meta and EXIF, its bucket, its place in
+ * the list and its trash. Its bytes are blobs of core's blob service held by it as their owner (ADR 0113): the original
+ * in `ORIGINAL`, each derivative tier (cr-0045) in its kind ([MemoryBlobRoles]), each its own blob under its own
+ * `K_blob` wrap bound to (scope, medium, blob, role) — never a key shared across tiers.
  */
 @Entity
 @Table(name = "veyq_media")
@@ -28,9 +29,6 @@ class MediaEntity : PanacheEntityBase {
 
     @Column(name = "node_id", nullable = false, columnDefinition = "uuid")
     lateinit var nodeId: String
-
-    @Column(name = "blob_id", nullable = false, columnDefinition = "uuid")
-    lateinit var blobId: String
 
     /** The original's `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,gpsLat,gpsLng}` listed-metadata tier sealed under `K_node` (opaque base64); always listed, for grid layout + date sorting + the place medoid (cr-0068, consolidates cr-0059/cr-0064 layout + cr-0066 capturedAt). */
     @Column(name = "wrapped_meta")
@@ -109,30 +107,6 @@ class MediaEntity : PanacheEntityBase {
     companion object : PanacheCompanionBase<MediaEntity, String>
 }
 
-/**
- * A media derivative (en.memory.derivatives, cr-0045): a role-tagged (THUMBNAIL/PREVIEW) blob of a media,
- * generated + sealed client-side. Each derivative is its **own** blob with its own `K_blob` wrap — never a
- * key shared with the original or the other tier. Operator-blind: only the opaque role tag + a blob link.
- */
-@Entity
-@Table(name = "veyq_media_derivative")
-@DynamicUpdate
-class MediaDerivativeEntity : PanacheEntityBase {
-    @Id
-    @Column(name = "id", columnDefinition = "uuid")
-    lateinit var id: String
-
-    @Column(name = "media_id", nullable = false, columnDefinition = "uuid")
-    lateinit var mediaId: String
-
-    @Column(name = "kind", nullable = false, length = 16)
-    lateinit var kind: String
-
-    @Column(name = "blob_id", nullable = false, columnDefinition = "uuid")
-    lateinit var blobId: String
-
-    companion object : PanacheCompanionBase<MediaDerivativeEntity, String>
-}
 
 /**
  * A per-uploader **bucket** in a Memory node (en.memory.buckets, cr-0113): the attribution axis (who contributed

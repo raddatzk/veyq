@@ -258,7 +258,9 @@ class ModuleCompositionTest {
      * The upload partition across core and every application (cr-files-application F1a, F2): each kind that takes
      * uploads has exactly one completion, one link admission and one guest writer, the right application's — or core's
      * blob service's for a kind whose application stores its blobs through it (ADR 0112: a Pot's receipts), with exactly
-     * one application answering for the kind's blobs; a `FOLDER` has none of them. Two acceptors
+     * one application answering for the kind's blobs. A kind whose blobs are all its owners' content (ADR 0113: a
+     * Memory's media) keeps its application's completion and guest writer, and its link's usage is the service's. A
+     * `FOLDER` has none of them. Two acceptors
      * of a kind make core's dispatcher refuse it (`illegal_target`) and two admissions refuse its links — only here,
      * where both applications run, would an application claiming another's kind show.
      */
@@ -268,7 +270,10 @@ class ModuleCompositionTest {
             "MEMORY" to "me.raddatz.veyq.memories.", "CHAPTER" to "me.raddatz.veyq.memories.", "FILE" to "me.raddatz.veyq.depot.",
             "EXPENSES_POT" to "me.raddatz.veyq.core.applicationblob.", // its receipts, core's blob service (ADR 0112)
         )
-        val stored = mapOf("EXPENSES_POT" to "me.raddatz.veyq.expenses.")
+        val stored = mapOf(
+            "EXPENSES_POT" to "me.raddatz.veyq.expenses.",
+            "MEMORY" to "me.raddatz.veyq.memories.", "CHAPTER" to "me.raddatz.veyq.memories.", // its media (ADR 0113)
+        )
         for (kind in owners.keys + NodeEntity.FOLDER) {
             val answering = blobOwners.filter { it.accepts(kind) }.map(::beanClass)
             val expected = stored[kind]
@@ -284,8 +289,9 @@ class ModuleCompositionTest {
             assertEquals(1, accepting.size, "an upload into a $kind must have exactly one completion: $accepting")
             assertTrue(accepting.single().startsWith(owner), "$kind's completion is $owner's: $accepting")
             val measuring = admissions.filter { it.supports(kind) }.map(::beanClass)
+            val measurer = if (kind in stored) "me.raddatz.veyq.core.applicationblob." else owner // the service counts its blobs
             assertEquals(1, measuring.size, "a $kind link must have exactly one admission: $measuring")
-            assertTrue(measuring.single().startsWith(owner), "$kind's admission is $owner's: $measuring")
+            assertTrue(measuring.single().startsWith(measurer), "$kind's admission is $measurer's: $measuring")
             val writing = guestWrites.filter { it.supports(kind) }.map(::beanClass)
             assertEquals(1, writing.size, "a guest's upload into a $kind must have exactly one writer: $writing")
             assertTrue(writing.single().startsWith(owner), "$kind's guest writer is $owner's: $writing")

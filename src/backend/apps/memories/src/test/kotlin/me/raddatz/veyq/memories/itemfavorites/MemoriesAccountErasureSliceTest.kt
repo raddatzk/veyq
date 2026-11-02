@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.util.UUID
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * What of the Memories application an account erasure takes (ADR 0101 decisions 4-5, [MemoriesAccountEraser]): the
@@ -62,8 +63,8 @@ class MemoriesAccountErasureSliceTest {
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             MediaEntity().apply {
-                id = mediaId; scopeId = shared; nodeId = memory; this.blobId = blobId; createdBy = "user:$u"; updatedAt = Instant.now()
-            }.persist()
+                id = mediaId; scopeId = shared; nodeId = memory; createdBy = "user:$u"; updatedAt = Instant.now()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
             // A favorite in a scope the person is no member of: only the account erasure reaches it, not a removal.
             favorite(u, elsewhere, memory)
             favorite(owner, elsewhere, memory)

@@ -40,6 +40,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.sharing.SharingStore
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * Slice tests for the **WRITE_ONLY** write-only drop-box share (uc.sharing.share-uploader, cr-0102, ADR 0031)
@@ -255,7 +256,7 @@ class ShareUploaderSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val mediaId = seedMedia(scopeId, memory, identityId = null) // a curator photo — its blob IS in the subtree
-        val blobId = QuarkusTransaction.requiringNew().call { MediaEntity.findById(mediaId)!!.blobId }
+        val blobId = QuarkusTransaction.requiringNew().call { MediaBlobRows.blobOf(mediaId)!! }
 
         // a WRITE_ONLY share is role-gated at the blob endpoint too — even an in-subtree blob id is a 404 (write-only
         // is a real capability, not just id-secrecy). Contrast: a READ share of the same memory passes the role
@@ -312,7 +313,7 @@ class ShareUploaderSliceTest {
 
         // the key the delete-own must not lose — read while the rows that hold it still exist
         val storageKey = QuarkusTransaction.requiringNew().call {
-            BlobEntity.findById(MediaEntity.findById(mediaId)!!.blobId)!!.storageKey
+            BlobEntity.findById(MediaBlobRows.blobOf(mediaId)!!)!!.storageKey
         }
 
         // delete-own — the token rides the X-Contributor-Token header; the media + its blob are reclaimed
@@ -432,8 +433,8 @@ class ShareUploaderSliceTest {
             }.persist()
             if (identityId == null) {
                 MediaEntity().apply {
-                    id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId; updatedAt = Instant.now()
-                }.persist()
+                    id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; updatedAt = Instant.now()
+                }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
                 return@run
             }
             // as `MediaStore.attach` does: a guest's upload lands in their primary bucket, named by their identity
@@ -443,9 +444,9 @@ class ShareUploaderSliceTest {
                 isPrimary = true; createdAt = Instant.now()
             }.also { it.persist() }
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId
                 shareIdentityId = identityId; createdBy = bucket.ownerKey; bucketId = bucket.id; updatedAt = Instant.now()
-            }.persist()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
         return mediaId
     }

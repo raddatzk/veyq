@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * Memories' kind of the erasure ledger (ADR 0056 decision 8): a medium hard-deleted — here a guest's delete of its own
@@ -57,8 +58,8 @@ class MemoriesErasuresSliceTest {
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "bGVkZ2Vy"
             }.persist()
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId; updatedAt = Instant.now()
-            }.persist()
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; updatedAt = Instant.now()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
             if (NodeItemsRevisionEntity.findById(nodeId) == null) NodeItemsRevisionEntity().apply { this.nodeId = nodeId; revision = 1 }.persist()
         }
         return Seeded(scopeId, nodeId, mediaId, blobId, key)

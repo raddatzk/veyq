@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.util.UUID
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * Everything from one uploader (ADR 0093 §§ 1, 4, 6; uc.moderation.take-a-measure A8, cr-report-a-name-and-an-uploader):
@@ -183,9 +184,9 @@ class UploaderContentMemoriesSliceTest {
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             MediaEntity().apply {
-                this.id = id; scopeId = w.scopeId; nodeId = w.memory; this.blobId = blobId; shareIdentityId = identity
+                this.id = id; scopeId = w.scopeId; nodeId = w.memory; shareIdentityId = identity
                 createdBy = identity?.let { "share:$it" } ?: "user:${w.owner}"; updatedAt = Instant.now(); wrappedMeta = "bWV0YQ=="
-            }.persist()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
         return id
     }

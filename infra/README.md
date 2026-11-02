@@ -287,6 +287,27 @@ Then start the new code. A start that already refused left a failed run in Flywa
 empty table. Never delete the rows in SQL instead — that would leave their blob rows with no arm and their objects in
 the store, found only by the bucket reconcile (ADR 0112 decision 5). `ReceiptsResetMigrationSliceTest` holds the refusal.
 
+## Memories' media moved to core (once per dev instance)
+
+A medium's original and derivatives are blobs of core's blob service since ADR 0113, and the media from before the move
+are **discarded, not migrated** (decision 9: no instance is live). The migration that drops `veyq_media.blob_id` and
+`veyq_media_derivative`, `V202611020620__memories_media_move_to_core.sql`, **deletes no row and refuses to run while a
+medium, a derivative or a hold's copy of either is left**: such a dev instance does not start, and its log names
+`ck_media_reset_first`, `ck_media_derivative_reset_first` or `ck_hold_row_media_reset_first`. Reset it first, on the
+code from before the move (the commit before the move is the last that runs on such a database), one of two ways:
+
+- **Every medium gone**: in each Memory, delete every medium and empty it from the Memory's trash (`deleteMedia`, then
+  `purgeMedia`), or delete each Memory and purge it from its space's trash (`deleteNode`, `purgeNode`) — today's erasure
+  of a medium, its blob rows (their store objects on the reclaim list) and the measures on it. Then check
+  `SELECT COUNT(*) FROM veyq_media` and `SELECT COUNT(*) FROM veyq_media_derivative` both answer `0`.
+- **The whole dev instance**: `./gradlew infra:wipe infra:up`, then seed again (§ Seeding the local dev principal). The
+  only way when `SELECT COUNT(*) FROM veyq_hold_row WHERE source_table IN ('veyq_media', 'veyq_media_derivative')` is not
+  `0`: a hold keeps its copy, and after the move no code reads a medium's blob from that shape.
+
+Then start the new code; a start that refused clears its failed run at the next dev start, as above. Never delete the
+rows in SQL instead — that would leave their blob rows with no arm and their objects in the store.
+`MediaResetMigrationSliceTest` holds the refusal.
+
 ## Running in production
 
 The operator's procedures — verifying a release, setting up a new instance on Docker Compose or Kubernetes,

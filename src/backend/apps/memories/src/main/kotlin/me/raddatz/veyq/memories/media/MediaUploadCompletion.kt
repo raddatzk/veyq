@@ -15,7 +15,8 @@ import jakarta.enterprise.context.ApplicationScoped
 
 /**
  * The Memories half of an upload's completion (en.memory.media, cr-0028): a verified original plus its role-tagged
- * derivatives become one medium of a MEMORY or CHAPTER — media, derivative and bucket rows, attributed to its
+ * derivatives become one medium of a MEMORY or CHAPTER — its media and bucket rows, and its blobs as core's blob
+ * service's held by it (ADR 0113 decision 4: an owner's content is completed in its owner's write), attributed to its
  * [UploadOpener]: a member's `owner_key` (cr-0113), or a **contributor `shareIdentityId`** (the READ_WRITE share
  * upload path, cr-0101). Core resolved the live target node and picked this implementation by its kind
  * (`UploadCompletions`); the member path and the guest path reach it alike.
@@ -113,6 +114,7 @@ class MediaUploadCompletion(
             is AttachResult.Attached -> CompleteItemResult(r.blobId, r.mediaId, null)
             AttachResult.NotAdmitted -> CompleteItemResult(null, null, "upload_not_found") // sessions spent concurrently, or no longer admitted
             AttachResult.SharedSourceInvalid -> CompleteItemResult(null, null, SHARED_SOURCE_INVALID)
+            is AttachResult.Refused -> CompleteItemResult(null, null, r.code) // core's blob service refused a blob (ADR 0113)
             // ADR 0109 point 6: nothing stored, the item's uploads stay open for a retry under the node's current key.
             is AttachResult.EpochRefused -> CompleteItemResult(null, null, r.code)
             // A primary is never deleted apart from its node, so a run that found it locked it first: twice is a defect.

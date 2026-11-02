@@ -28,6 +28,7 @@ import me.raddatz.veyq.core.content.NodeSubtreePurge
 import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.content.UpdateNodeOutcome
+import me.raddatz.veyq.memories.testing.MediaBlobRows
 
 /**
  * The scope row serializes a scope's node tree (developer-styleguide §12): a create, a move, a trash, a restore and
@@ -126,9 +127,9 @@ class NodeTreeRaceSliceTest {
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId
                 updatedAt = Instant.now(); deletedAt = Instant.now()
-            }.persist()
+            }.also { it.persist(); MediaBlobRows.holdFor(it, blobId) }
         }
         return mediaId
     }
