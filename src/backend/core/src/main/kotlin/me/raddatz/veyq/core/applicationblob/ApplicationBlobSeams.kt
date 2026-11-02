@@ -40,7 +40,8 @@ import jakarta.persistence.LockModeType
 /**
  * The service's half of an upload's completion (ADR 0112 decision 1): a verified upload becomes one application blob —
  * its blob row and its service row, in [ApplicationBlobs.attach]'s one transaction. Core's dispatcher
- * (`UploadCompletions`) picked this implementation by the node's kind: every kind an [ApplicationBlobOwners] accepts.
+ * (`UploadCompletions`) picked this implementation by the node's kind: every kind an [ApplicationBlobOwners] accepts
+ * that stores an item of its own (an owner's content is completed in its owner's write, [ApplicationBlobs.attachIn]).
  * The member path ([ApplicationBlobsHandler.complete]) and a guest's ([ApplicationBlobsHandler.completeShared]) reach it
  * the same way.
  *
@@ -56,7 +57,9 @@ class ApplicationBlobUploadCompletion(
     private val service: ApplicationBlobs,
 ) : UploadCompletion {
 
-    override fun accepts(nodeKind: String): Boolean = service.stores(nodeKind)
+    // A kind whose roles are all its owners' content completes them in its own write (ADR 0113 decision 4): its
+    // application's completion accepts the kind, and two acceptors would make core's dispatcher refuse it.
+    override fun accepts(nodeKind: String): Boolean = service.storesItems(nodeKind)
 
     override fun complete(
         scopeId: String, node: NodeEntity, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean,
@@ -70,8 +73,9 @@ class ApplicationBlobUploadCompletion(
         val owner = checkNotNull(item.payloads[OWNER]) { "the service's item() always names the owner" }
         val role = checkNotNull(item.payloads[ROLE]) { "the service's item() always names the role" }
         val nodeEpoch = checkNotNull(item.payloads[NODE_EPOCH]?.toIntOrNull()) { "the service's item() always states the node's epoch" }
-        // A role the node's application does not store through the service would land a blob nothing reads.
-        if (service.roleOf(node.kind, role) == null) return failed("upload_mismatch")
+        // A role the node's application does not store through the service would land a blob nothing reads; an owner's
+        // content is completed only in its owner's write (ADR 0113 decision 4).
+        if (!service.isOwnItem(node.kind, role)) return failed("upload_mismatch")
         val session = blobs.findSession(scopeId, uploadId, opener) ?: return failed("upload_not_found")
         // The wrap is sealed bound to (blob, owner, role): a session started for another node or in another role would
         // land a blob nobody can open here.
@@ -134,7 +138,8 @@ class ApplicationBlobUploadCompletion(
 @ApplicationScoped
 class ApplicationBlobShareGuestWrites(private val uploads: BlobUploadHandler, private val service: ApplicationBlobs) : ShareGuestWrites {
 
-    override fun supports(nodeKind: String): Boolean = service.ownersOf(nodeKind)?.roles()?.values?.any { it.guestMayAdd } == true
+    override fun supports(nodeKind: String): Boolean =
+        service.ownersOf(nodeKind)?.roles()?.values?.any { it.guestMayAdd && it.ownItem } == true
 
     /** Some application storing through the service lets a guest add [role]; the completion asks again for the node's own. */
     override fun admitsGuestRole(role: String): Boolean = service.anyGuestRole(role)
@@ -182,20 +187,27 @@ class ApplicationBlobUploadAdmission(private val em: EntityManager, private val 
  * owner).
  */
 @ApplicationScoped
-class ApplicationBlobSharedSubtreeContributor : SharedSubtreeContributor {
+class ApplicationBlobSharedSubtreeContributor(private val service: ApplicationBlobs) : SharedSubtreeContributor {
 
+    /** An item of its own, released or not; an owner's content only while it is not released — one released with its
+     *  owner's end (a trashed medium) is in no share's reach (ADR 0113 decision 6, [ApplicationBlobs.reachesGuests]). */
     override fun authorizedBlobIds(scopeId: String, liveNodeIds: List<String>): Set<String> {
         if (liveNodeIds.isEmpty()) return emptySet()
+        val kinds = service.kindsOf(liveNodeIds)
         val ids = HashSet<String>()
         liveNodeIds.chunked(ApplicationBlobs.CHUNK).forEach { chunk ->
-            ApplicationBlobEntity.list("scopeId = ?1 and nodeId in ?2", scopeId, chunk).forEach { row -> ids.add(row.blobId) }
+            ApplicationBlobEntity.list("scopeId = ?1 and nodeId in ?2", scopeId, chunk)
+                .filter { service.reachesGuests(it, kinds[it.nodeId]) }.forEach { row -> ids.add(row.blobId) }
         }
         return ids
     }
 
-    /** The set's predicate for one blob: a row of that node names it. */
-    override fun holds(scopeId: String, liveNodeId: String, blobId: String): Boolean =
-        ApplicationBlobEntity.count("scopeId = ?1 and nodeId = ?2 and blobId = ?3", scopeId, liveNodeId, blobId) > 0
+    /** The set's predicate for one blob: a row of that node names it, and reaches a guest. */
+    override fun holds(scopeId: String, liveNodeId: String, blobId: String): Boolean {
+        val kind = NodeEntity.findById(liveNodeId)?.kind
+        return ApplicationBlobEntity.list("scopeId = ?1 and nodeId = ?2 and blobId = ?3", scopeId, liveNodeId, blobId)
+            .any { service.reachesGuests(it, kind) }
+    }
 }
 
 /** A link identity is still in use while an application blob names it as its writer — the link its bytes count against
@@ -281,15 +293,17 @@ class ApplicationBlobScopeEraser(private val measures: MeasureTargets) : ScopeEr
 
 /**
  * The service's part of a node's re-key (ADR 0109 decision 3, ADR 0112 decision 1): every application blob's `K_blob`
- * wrap — its blob row's — is re-wrapped, never re-encrypted. Its wraps are core's blob wraps: listed by core's parts read
- * with the node's attachments (`RekeyStore.parts`) and staged by `stageNodeRekey` as [RekeyStore.BLOB_WRAP] under core's
+ * wrap — its blob row's — is re-wrapped, never re-encrypted. Its wraps are core's blob wraps: listed page by page by the
+ * service's `listApplicationBlobRekey` ([ApplicationBlobs.rekeyPage], each with the id it is bound to) and staged by
+ * `stageNodeRekey` as [RekeyStore.BLOB_WRAP] under core's
  * part, which is why [part] is [NodeRekeyStage.CORE] — it reads what core's stage holds. Core's commit runs it after
  * every application's participant ([RekeyStore.commit]: core's own last), so its [lockRows] takes the service's rows
  * after an application's own rows and before the node's — the order every writer takes ([ApplicationBlobs]). [commit]
  * **decides before it writes**:
  *
- * - every blob of the node has its wrap staged ([NodeRekeyParticipant.Verdict.MISSING] if not) — one completed since the
- *   parts read included, which the re-keyer then stages and commits again;
+ * - every blob of the node whose wrap is under its key has it staged ([NodeRekeyParticipant.Verdict.MISSING] if not) —
+ *   one completed since the read included, which the re-keyer then stages and commits again; a `WRITE_ONLY` guest's,
+ *   under its own `K_up`, is left as it is (ADR 0109 point 5, ADR 0113 decision 7);
  * - every staged blob wrap is a blob of the node, an attachment's or the service's ([NodeRekeyParticipant.Verdict.STALE]
  *   if not): a blob purged since.
  *
@@ -297,7 +311,7 @@ class ApplicationBlobScopeEraser(private val measures: MeasureTargets) : ScopeEr
  * node's item revision once, so an open list re-reads them (their digest changed with the wraps).
  */
 @ApplicationScoped
-class ApplicationBlobRekeyParticipant(private val items: NodeItemsRevisions) : NodeRekeyParticipant {
+class ApplicationBlobRekeyParticipant(private val items: NodeItemsRevisions, private val service: ApplicationBlobs) : NodeRekeyParticipant {
 
     override val part: String = NodeRekeyStage.CORE
 
@@ -323,11 +337,8 @@ class ApplicationBlobRekeyParticipant(private val items: NodeItemsRevisions) : N
         return NodeRekeyParticipant.Verdict.APPLIED
     }
 
+    /** The rows whose wrap is under the node's key — not a `WRITE_ONLY` guest's, under its `K_up`, which the re-key keeps
+     *  ([ApplicationBlobs.underNodeKey], the rule `listApplicationBlobRekey` lists by). */
     private fun rows(scopeId: String, nodeId: String, lock: Boolean = false): List<ApplicationBlobEntity> =
-        ApplicationBlobEntity.find("scopeId = ?1 and nodeId = ?2 order by id", scopeId, nodeId)
-            .let { if (lock) it.withLock(LockModeType.PESSIMISTIC_WRITE) else it }.list()
+        service.underNodeKey(scopeId, nodeId, lock)
 }
-
-/** A node's application blobs as core's re-key parts read lists them: (blob id, role) for each row of the node. */
-fun applicationBlobRekeyParts(scopeId: String, nodeId: String): List<Pair<String, String>> =
-    ApplicationBlobEntity.find("scopeId = ?1 and nodeId = ?2 order by id", scopeId, nodeId).list().map { it.blobId to it.role }

@@ -14,6 +14,7 @@ import me.raddatz.veyq.core.http.FailureStatus.UNPROCESSABLE
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.items.ItemsPage
 import me.raddatz.veyq.core.membership.AccessMode.READ
 import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
@@ -23,6 +24,8 @@ import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteObject
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.node.rekey.RekeyHandler
+import me.raddatz.veyq.core.node.rekey.RekeyOutcome
 import me.raddatz.veyq.core.platform.capabilities.ApplicationSwitch
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestGate
@@ -60,6 +63,12 @@ sealed interface CompleteBlobOutcome {
     object Blocked : CompleteBlobOutcome, HttpFailure by Failures.blockedByOperator
 }
 
+/** What `listApplicationBlobRekey` answers: one page of a node's blob wraps, or core's re-key refusal. */
+sealed interface RekeyBlobsOutcome {
+    data class Page(val page: ItemsPage<ApplicationBlobRekeyRow>) : RekeyBlobsOutcome
+    data class Refused(val failure: HttpFailure) : RekeyBlobsOutcome
+}
+
 /** What a read of a node's application blobs answers: every blob as it is served (the resource pages and tags them), or a refusal. */
 sealed interface ListBlobsOutcome {
     data class Listed(val blobs: List<ApplicationBlobRow>) : ListBlobsOutcome
@@ -90,15 +99,29 @@ class ApplicationBlobsHandler(
     private val applications: ApplicationSwitch,
     private val gate: ShareGuestGate,
     private val guestWriteRecords: GuestWriteRecords,
+    private val rekey: RekeyHandler,
     config: VeyqConfig,
 ) {
     private val retention: Duration = config.node().trash().retention()
 
-    /** A member's read: every blob of the node, live or trashed (an application's trash view reads it too). */
+    /** A member's read: every blob of the node that is an item of its own, live or trashed node (an application's trash
+     *  view reads it too). An owner's content is its application's record reads' to serve (ADR 0113 decision 2). */
     fun list(userId: String, scopeId: String, nodeId: String): ListBlobsOutcome {
         access.check(userId, scopeId, READ).refusal(ListBlobsOutcome.NoScope, ListBlobsOutcome.Suspended)?.let { return it }
-        NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && service.stores(it.kind) } ?: return ListBlobsOutcome.NoNode
-        return ListBlobsOutcome.Listed(service.served(service.allOf(nodeId), retention, blocks.contentView(scopeId)))
+        val node = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && service.storesItems(it.kind) } ?: return ListBlobsOutcome.NoNode
+        return ListBlobsOutcome.Listed(service.served(service.itemsOf(nodeId, node.kind), retention, blocks.contentView(scopeId)))
+    }
+
+    /**
+     * `listApplicationBlobRekey`: one page of the node's blob wraps a re-key re-wraps (ADR 0113 decision 7), in either
+     * form, each with the id its wrap is bound to — under core's re-key rights ([RekeyHandler.refusal], as
+     * `getNodeRekeyParts`). The node may be trashed.
+     */
+    fun rekeyPage(userId: String, scopeId: String, nodeId: String, after: String?, limit: Int): RekeyBlobsOutcome {
+        rekey.refusal(userId, scopeId, READ, nodeId)?.let { return RekeyBlobsOutcome.Refused(it as HttpFailure) }
+        val node = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId } ?: return RekeyBlobsOutcome.Refused(RekeyOutcome.NotFound)
+        if (!service.stores(node.kind)) return RekeyBlobsOutcome.Page(ItemsPage(emptyList(), false))
+        return RekeyBlobsOutcome.Page(service.rekeyPage(scopeId, nodeId, node.kind, after, limit))
     }
 
     /** A guest's read: every blob of the live node [nodeId] inside the share's live subtree. */
@@ -110,8 +133,8 @@ class ApplicationBlobsHandler(
             ShareViewGate.RateLimited -> return ListBlobsOutcome.RateLimited
         }
         if (nodeId !in viewable.liveNodeIds) return ListBlobsOutcome.ShareNotFound
-        NodeEntity.findById(nodeId)?.takeIf { service.stores(it.kind) } ?: return ListBlobsOutcome.ShareNotFound
-        return ListBlobsOutcome.Listed(service.served(service.allOf(nodeId), retention, blocks.contentView(viewable.scopeId)))
+        val node = NodeEntity.findById(nodeId)?.takeIf { service.storesItems(it.kind) } ?: return ListBlobsOutcome.ShareNotFound
+        return ListBlobsOutcome.Listed(service.served(service.itemsOf(nodeId, node.kind), retention, blocks.contentView(viewable.scopeId)))
     }
 
     /** `completeApplicationBlob`: the member's upload [uploadId] becomes the blob [id] in [role] held by [ownerId]. */
@@ -120,9 +143,9 @@ class ApplicationBlobsHandler(
     ): CompleteBlobOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CompleteBlobOutcome.NoScope, CompleteBlobOutcome.Suspended, CompleteBlobOutcome.Deleting)?.let { return it }
-        val node = nodes.findInScope(scopeId, nodeId)?.takeIf { service.stores(it.kind) } ?: return CompleteBlobOutcome.NoNode
+        val node = nodes.findInScope(scopeId, nodeId)?.takeIf { service.storesItems(it.kind) } ?: return CompleteBlobOutcome.NoNode
         applications.requireKindWritable(node.kind, scopeId) // switched off, read-only (uc.platform.switch-application-off)
-        if (service.roleOf(node.kind, role) == null) return CompleteBlobOutcome.UploadMismatch
+        if (!service.isOwnItem(node.kind, role)) return CompleteBlobOutcome.UploadMismatch
         if (refuses(blocks.contentView(scopeId), node.id, ownerId)) return CompleteBlobOutcome.Blocked
         val item = ApplicationBlobUploadCompletion.item(node.id, uploadId, id, ownerId, role, nodeEpoch)
         return outcome(scopeId, completions.complete(scopeId, listOf(item), UploadOpener.Member(userId)).single())
@@ -151,7 +174,7 @@ class ApplicationBlobsHandler(
             ShareWriteTarget.NotFound -> return CompleteBlobOutcome.NoNode
             ShareWriteTarget.NotContributable -> return CompleteBlobOutcome.NotContributable
         }
-        if (!service.stores(target.kind)) return CompleteBlobOutcome.NoNode
+        if (!service.storesItems(target.kind)) return CompleteBlobOutcome.NoNode
         applications.requireKindWritable(target.kind, gated.scopeId) // switched off, read-only (uc.platform.switch-application-off)
         if (!service.guestMayAdd(target.kind, role)) return CompleteBlobOutcome.UploadMismatch
         if (refuses(blocks.contentView(gated.scopeId), target.nodeId, ownerId)) return CompleteBlobOutcome.Blocked
