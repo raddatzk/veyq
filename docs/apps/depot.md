@@ -96,10 +96,10 @@ reads).
   sealed meta (`download.ts` `fileFacts`; the only modified time Depot has is that sealed one - `FileBlobRef` carries no server-observed `updatedAt`; a blob without meta, or one whose meta does not open under this node's key,
   shows its size alone; a file listed without a blob says "not uploaded yet" — none of it reads the node's own payload).
   Its **primary click opens** the file's own page (`FileDetail`); **download is its one first-class action** (a button on
-  the row, beside core's own favorite heart, which every kind's row has - `core/favorites`, ADR 0068 §10), and **rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**
-  (into core's trash, restored from core's trash dialog — or at once from the "moved to the trash" toast's Undo, core's
-  `trashUndo.ts`, inbox #385 (c)) sit in the row's one "more" menu, each `shown` by `depotRights` narrowed to the
-  doors the session's source carries (fail closed: a guest gets the same row with fewer actions). **A row has no
+  the row, beside core's own favorite heart, which every kind's row has - `core/favorites`, ADR 0068 §10), and **rename**,
+  **move** and **delete** are core's default row actions (`core/node/standardRowActions.ts`: core's name and move dialogs,
+  and core's delete question with the kind's `depot.deleteConfirm` and its Undo, inbox #385 (c)), in the row's one "more"
+  menu, each granted by `depotRights` (the row's `standard`) narrowed to the doors the session's source carries (fail closed: a guest gets the same row with fewer actions). **A row has no
   replace action** (owner decision 2026-10-14): in a folder, a file's content is replaced by uploading a file of the
   same name, which asks first (below), for a member and a contributor guest alike; an upload of that name also fills a
   file that holds no content. **The opened file keeps its replace** — the one way a `READ_WRITE` link on a single file
@@ -359,8 +359,7 @@ core's (`core/node/MoveNodeDialog.vue`, the host's): the row's "Move to…" asks
 here") lists only places that take what `DepotNodeKindRules` takes — a file or a drop box at the root or in a folder
 (the kinds' `placement`), never into a drop box or a guest's folder. A level's selection (core's Select mode, inbox #421)
 reads the same answers per node (`LevelRow.selection`): a file moves with it where its `move` says yes and is deleted with
-it where its `delete` does - through the source's own delete (`deleteFile(id, { reload: false })`: the selection re-reads
-the tree once, after the last) -, a drop box where its `move` / `delete` do (core's delete); a guest's selection
+it where its `delete` does, a drop box where its `move` / `delete` do - both through core's delete; a guest's selection
 deletes nothing. A copy is core's too (`core/export/CopyNodesDialog.vue`, a member's only): core's own row and header
 action beside "Move to…" and the selection's "Copy to…" - not a right of this matrix - over the same browser, "Copy here"
 allowed where the nodes are; a file copies through `exportFile` / `importFile`, its original read by frame

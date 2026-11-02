@@ -281,8 +281,8 @@ point 8).
   (`core/node/standardRowActions.ts`) and in its header (`standardNodeActions`) - through core's dialogs (the name
   dialog, the move dialog, the delete question with its Undo, the same for a row's node and a page's own). The application decides only WHETHER: its rights
   function answers each for the node (a row's `standard`, the header's flags), and no answer is no action. An
-  application that needs its own implementation supplies an action of the same id, which replaces core's: Depot's file
-  does for all three (its delete asks, writes through its session's source and offers its own Undo). A share guest's
+  application that needs its own implementation supplies an action of the same id, which replaces core's; none does
+  today (Depot's file and drop box use core's three, with their kinds' own delete sentence). A share guest's
   page hands on core's move door alone (a `READ` link's not even that); no guest renames or deletes a node core's way.
 - **One view per kind, for a member and a share guest alike.** A kind's `detail` and its row factory receive `access`
   (a member of the unlocked scope, or a guest of a link) and `tree` (the member's decrypted scope tree or the guest's

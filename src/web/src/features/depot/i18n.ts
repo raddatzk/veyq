@@ -29,9 +29,6 @@ const en = {
     replace: 'Replace the content of {name} — the name stays',
     // A file that holds no content (an upload that never finished, inbox #384): its page's header uploads into it.
     uploadInto: 'Upload {name} again',
-    rename: 'Rename {name}',
-    move: 'Move {name} to…',
-    delete: 'Delete {name}',
     replaceTitle: 'Replace file',
     // Every replace of content asks (inbox #383): a same-name upload (a member's and a contributor's), and an opened file's
     // replace with the picked file named.
@@ -217,9 +214,6 @@ const de: typeof en = {
     download: '{name} herunterladen',
     replace: 'Inhalt von {name} ersetzen — der Name bleibt',
     uploadInto: '{name} erneut hochladen',
-    rename: '{name} umbenennen',
-    move: '{name} verschieben nach …',
-    delete: '{name} löschen',
     replaceTitle: 'Datei ersetzen',
     replaceConfirm: '„{name}“ ersetzen? Eine Datei mit diesem Namen liegt schon hier: Ihr Inhalt wird durch die gewählte Datei ersetzt. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
     replaceRowConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Der Name bleibt. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',

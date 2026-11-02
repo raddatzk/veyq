@@ -19,8 +19,8 @@
 // build them; it answers its rights for THIS node in {@link LevelRow.standard} and core adds the granted ones through
 // the page's doors (`nodeHost.ts`: core's name dialog, move dialog and delete question with its Undo). No answer is none
 // (fail closed), and so is an absent door. **An application that implements one itself** supplies an action of that id (`rename`, `move`, `delete`) in
-// its `actions`, which REPLACES core's default whatever `standard` says - its own `shown` decides then (Depot's file:
-// its delete asks and offers its own Undo, its rename and move go through its source).
+// its `actions`, which REPLACES core's default whatever `standard` says - its own `shown` decides then (no kind does
+// today).
 //
 // **Visible and overflow.** At most {@link MAX_FIRST_ACTIONS} actions the kind marks `first` are real buttons on the row;
 // every other shown action sits in ONE "more" menu (a `VeyqMenu`), so a row stays readable at every width and no
@@ -112,7 +112,7 @@ export interface LevelRowSelection {
   move: boolean
   /** It is deleted with the selection, into the scope's trash. */
   delete: boolean
-  /** The kind's own delete write where its single delete has one (Depot's source for a file); it re-reads nothing - the
+  /** The kind's own delete write where its single delete has one (none today); it re-reads nothing - the
    *  selection's delete re-reads the tree once, after the last node. Omitted: core's `deleteNode`. */
   remove?: (nodeId: string) => Promise<void>
 }
@@ -135,7 +135,7 @@ export interface LevelRowsContext {
 
 /** What the level lets a row source do: the page's doors (`nodeHost.ts` - the very doors a `detail` injects, each of
  *  which may be absent, and an absent door is an action not offered: `open`, and `rename` / `move` as the doors of an
- *  application's OWN rename or move, Depot's file; core's defaults take them themselves), plus what only a level has. */
+ *  application's OWN rename or move; core's defaults take them themselves), plus what only a level has. */
 export interface LevelRowsHost extends NodeHost {
   /** Register the handler of a level action (a "New" menu entry that is no create dialog) for the level's life. */
   registerAction(id: string, handler: LevelActionHandler): void

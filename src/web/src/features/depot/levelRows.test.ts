@@ -426,17 +426,14 @@ describe('Depot rows', () => {
 
   // Inbox #391: a guest's identity folder takes no write, but a member removes what a guest sent - file by file, a
   // content-less one too (a guest's upload that never finished: 'not uploaded yet', nothing to download). Through the
-  // delete confirmation (trash semantics); still no upload, replace or rename there.
+  // delete (core's, trash semantics); still no upload, replace or rename there.
   it('a guest\'s identity folder: delete per file, a content-less one too, move out, and nothing else', async () => {
     const h = mountSection({ nodes: [NOTES, PENDING], identityFolder: true })
     await flushPromises()
     expect(metaOf(h, 'pending.bin')).toBe(fileMeta(t('depot.notUploaded')))
     expect(await actionIdsOf(h.w, 'pending.bin')).toEqual(['download', 'move', 'delete'])
     await clickAction(h.w, 'pending.bin', 'delete')
-    expect(confirmRequest.value).toMatchObject({ header: t('depot.deleteTitle'), message: t('depot.deleteConfirm', { name: 'pending.bin' }) })
-    settleConfirm(true)
-    await flushPromises()
-    expect(deleteNode).toHaveBeenCalledWith(SCOPE, P)
+    expect(h.events.remove).toEqual([{ node: PENDING }])
     // …and moves it out (a move out of a drop box is a member's, inbox #358, #377 (a))
     expect(await actionIdsOf(h.w, 'notes.txt')).toContain('move')
   })
@@ -625,60 +622,27 @@ describe('Depot rows', () => {
     expect(await outcome(new Error('chunk_get_failed:500'))).toEqual([t('depot.downloadFailed')])
   })
 
-  it('delete asks, then moves the node to the trash through core and reloads the tree; declined, nothing happens', async () => {
+  // Owner 2026-11-02: a file's delete is core's default (`standardRowActions.ts`) - the page's door asks the kind's question
+  // (`register.ts`' deleteTitle / deleteCopy, `deleteQuestion.ts`) and offers its Undo; Depot asks nothing and writes nothing.
+  it('delete is core\'s: the row hands the node to the page\'s delete door, and Depot neither asks nor deletes', async () => {
     const h = mountSection({ nodes: [NOTES] })
     await flushPromises()
+    expect(h.source().row(NOTES)!.standard).toEqual({ rename: true, move: true, delete: true })
     await clickAction(h.w, 'notes.txt', 'delete')
-    expect(confirmRequest.value).toMatchObject({ header: t('depot.deleteTitle'), acceptLabel: t('depot.deleteAccept') })
-    settleConfirm(false)
-    await flushPromises()
+    expect(h.events.remove).toEqual([{ node: NOTES }])
+    expect(confirmRequest.value, 'no question of Depot\'s own').toBeNull()
     expect(deleteNode).not.toHaveBeenCalled()
-    expect(showUndo).not.toHaveBeenCalled()
-    await clickAction(h.w, 'notes.txt', 'delete')
-    settleConfirm(true)
-    await flushPromises()
-    expect(deleteNode).toHaveBeenCalledWith(SCOPE, N)
-    expect(loadTree).toHaveBeenCalled()
-    // Depot's own delete REPLACES core's default of that id (`standardRowActions.ts`): the level's delete door is never asked
-    expect(h.events.remove, 'core\'s default delete never runs for a file').toEqual([])
-    // inbox #385 (c): said, with an undo (core's `trashUndo`, its toast clicked in `trashUndo.test.ts`) that restores the
-    // node through core's trash restore and reloads the tree
-    expect(showUndo).toHaveBeenCalledOnce()
-    const { summary, onUndo } = showUndo.mock.calls[0][0]
-    expect(summary).toBe(t('node.trash.moved', { name: 'notes.txt' }))
-    vi.mocked(loadTree).mockClear()
-    onUndo()
-    await flushPromises()
-    expect(vi.mocked(restoreNode).mock.calls.map((c) => [c[0], c[3]])).toEqual([[SCOPE, NOTES]])
-    expect(loadTree).toHaveBeenCalled()
   })
 
-  // inbox #421: what a selection of the level may do with a file - the row's own answers, and the row's delete door
-  // (Depot's source) without its re-read: the selection re-reads the tree once, after the last node.
-  it('a file\'s part in a selection: moves and is deleted through Depot\'s source, which re-reads nothing; read-only: neither', async () => {
+  // inbox #421: what a selection of the level may do with a file - the row's own answers; core's door deletes it.
+  it('a file\'s part in a selection: the row\'s answers, no write of Depot\'s own; read-only: neither', async () => {
     const h = mountSection({ nodes: [NOTES] })
     await flushPromises()
-    const part = h.source().row(NOTES)!.selection!
-    expect(part).toMatchObject({ move: true, delete: true })
-    vi.mocked(loadTree).mockClear()
-    await part.remove!(N)
-    expect(deleteNode).toHaveBeenCalledWith(SCOPE, N)
-    expect(loadTree, 'the selection re-reads once, not this door').not.toHaveBeenCalled()
+    expect(h.source().row(NOTES)!.selection).toEqual({ move: true, delete: true })
     harness?.w.unmount()
     const readOnly = mountSection({ nodes: [NOTES], pending: true })
     await flushPromises()
-    expect(readOnly.source().row(NOTES)!.selection).toMatchObject({ move: false, delete: false })
-  })
-
-  it('a failed delete says so and offers no undo', async () => {
-    vi.mocked(deleteNode).mockRejectedValueOnce(new Error('boom'))
-    const h = mountSection({ nodes: [NOTES] })
-    await flushPromises()
-    await clickAction(h.w, 'notes.txt', 'delete')
-    settleConfirm(true)
-    await flushPromises()
-    expect(toastError).toHaveBeenCalledWith(t('depot.deleteFailed'))
-    expect(showUndo).not.toHaveBeenCalled()
+    expect(readOnly.source().row(NOTES)!.selection).toEqual({ move: false, delete: false })
   })
 
   it('says why a file of this folder was not uploaded; after a peer\'s replace it offers replace anyway, on the CURRENT blob', async () => {
@@ -820,10 +784,9 @@ describe('Drop box rows', () => {
     await clickAction(h.w, 'Inbox', 'move')
     expect(h.events.move).toEqual([BOX])
     await clickAction(h.w, 'Inbox', 'delete')
-    expect(confirmRequest.value).toMatchObject({ header: t('depot.dropBox.delete'), message: t('depot.dropBox.deleteConfirm', { name: 'Inbox' }) })
-    settleConfirm(true)
-    await flushPromises()
-    expect(deleteNode).toHaveBeenCalledWith(SCOPE, BOX.id)
+    expect(h.events.remove).toEqual([{ node: BOX }])
+    // never renamed here, whatever the matrix says of the node
+    expect(h.source().row(BOX)!.standard).toEqual({ rename: false, move: true, delete: true })
     harness?.w.unmount()
     const readOnly = mountBoxes({ pending: true })
     await flushPromises()
