@@ -20,7 +20,8 @@ import java.security.MessageDigest
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
-/** Hands the task one module's POM; the build script resolves it through the build's own, checksum-verified resolution. */
+/** Hands the task one module's POM; the build script resolves it through the build's own, checksum-verified resolution
+ *  online, and under `--offline` out of Gradle's file store against the same pin ([CachedPoms]). */
 fun interface PomResolver {
     fun pom(group: String, name: String, version: String): File
 }
