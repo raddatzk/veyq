@@ -140,7 +140,16 @@ a seal's AAD encodes its binding fields by position, never by name (`sed -n 327,
      ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md) point 8). A re-seal writes new ciphertext; the
      snapshot and its keys are untouched.
    - **Signed records keep their signatures.** A join record, a verification and a grant statement are signed over
-     their plaintext; a re-seal changes the envelope, not what was signed.
+     their plaintext; a re-seal changes the envelope, not what was signed. **A join endorsement binds the record, not
+     its envelope:** it signs SHA-256 of the sealed record as stored today
+     ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
+     decision 21), so every re-seal would void it, and only the owner could sign again. It signs SHA-256 of the
+     opened record instead — the same statement shape, another digest. The reader, which opens the record anyway,
+     checks it; a securing's publish pairs each endorsement with a record the account rooted by its member, where it
+     compared the stored ciphertext's digest before.
+   - **An accept that races a rotation re-reads its invite.** The rotation carries every open invite to the new epoch
+     (ADR 0111 decision 8); a newcomer that sealed its join record under the epoch it previewed is answered
+     `stale_epoch` and seals again under the carried one.
 
 9. **What the server stores and learns.** Per epoch a succession public key and signature instead of a chain link;
    rewritten ciphertext in rows it holds; a minted-at epoch per link. It sees a rotation and which rows it rewrites —
@@ -220,4 +229,4 @@ scope-root entries at their epoch; [ADR 0084](0084-a-members-profile-picture-is-
 carry-forward; [ADR 0036](0036-editable-share-note-recoverable-share-key.md) point 4's copy at its epoch;
 [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md) points 4 and 6;
 [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions
-19 and 23.
+19, 21 (the endorsement's digest) and 23.
