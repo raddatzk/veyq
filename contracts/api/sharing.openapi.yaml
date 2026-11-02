@@ -51,8 +51,9 @@ paths:
       summary: Create a public share of a node the caller is a member of (any scope).
       description: >
         The client generates a fresh 32-byte `K_share`, computes `wrap = symWrap(K_share, content key)` over the
-        node's content key, re-seals the node's name under a field key derived from `K_share`, seals `K_share` under the scope key as the
-        members' recovery copy, and POSTs `{ nodeId, role, wrap, sealedName, sealedShareKey, sealedShareKeyEpoch, expiresAt? }` — `role` is
+        node's content key, re-seals the node's name under a field key derived from `K_share`, seals `K_share` under a fresh value key `K_v`
+        as the members' recovery copy and wraps `K_v` under the scope key ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)), and POSTs
+        `{ nodeId, role, wrap, sealedName, sealedShareKey, wrappedRecoveryValueKey, sealedShareKeyEpoch, expiresAt? }` — `role` is
         the access mode (`ShareRole`: **READ**, **READ_WRITE** or **WRITE_ONLY**). The server verifies the caller
         is a **member** of the node's scope — personal, group, or tenant (cr-0104, ADR 0029 §6); a node whose kind
         may not be a share root with that role (`ShareRoots`) is rejected `422`, a non-member is a non-enumerable `404`. The **client** mints the 256-bit unguessable
@@ -74,6 +75,7 @@ paths:
               wrap: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
               sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
               sealedShareKey: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
+              wrappedRecoveryValueKey: d3JhcHBlZC12YWx1ZS1rZXk=
               sealedShareKeyEpoch: 0
               expiresAt: null
               writeVerifier: FsNwNHCyCakLiKYUidaFcVAETZT9pNhFigWt85nrvSQ=
@@ -85,7 +87,7 @@ paths:
               schema: { $ref: "#/components/schemas/ShareCreated" }
               example: { shareId: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i }
         "400":
-          description: Malformed request (missing/invalid fields — the recovery copy `sealedShareKey` and its `sealedShareKeyEpoch` included — or keys that do not match the role).
+          description: Malformed request (missing/invalid fields — the recovery copy `sealedShareKey`, its value key's wrap and its `sealedShareKeyEpoch` included — or keys that do not match the role).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -237,7 +239,7 @@ paths:
         ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4): when a
         bulk switch-off turned the share off (`revokeScopeShares`, or a removal's `revokeLinks`), when its owner is no
         longer a member of its scope, or when it carries a recovery copy and either the link was minted at an epoch below the
-        scope's current one (the epoch kept beside the recovery copy, which every rotation re-seals, ADR 0115 decision
+        scope's current one (the epoch kept beside the recovery copy, which a rotation leaves as it re-wraps the copy's value key, ADR 0115 decision
         2) or the scope has lost an accepted member since the share was minted (every member then
         could rebuild the link, one since removed included), the answer is `409 reissue_required`, nothing written,
         and the caller re-issues it (`reissueShare`) instead — the same predicate the list's `reissueRequired`
@@ -344,6 +346,7 @@ paths:
               wrap: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
               sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
               sealedShareKey: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
+              wrappedRecoveryValueKey: d3JhcHBlZC12YWx1ZS1rZXk=
               sealedShareKeyEpoch: 1
               writeVerifier: FsNwNHCyCakLiKYUidaFcVAETZT9pNhFigWt85nrvSQ=
       responses:
@@ -526,8 +529,8 @@ paths:
       description: >
         Edits an existing share **without minting a new link** (cr-0115/cr-0116/cr-0119, ADR 0036). Sets the
         `K_share`-sealed **note** (`sealedNote`) + **private name** (`sealedShareName`) — the caller recovers
-        `K_share` from the share's `sealedShareKey` (sealed under `K_SC` at `sealedShareKeyEpoch`, which every scope
-        member holds and no share link does — ADR 0036 point 4),
+        `K_share` from the share's `sealedShareKey` (under its own value key, which `K_SC` wraps — the key every scope
+        member holds and no share link does, ADR 0036 point 4, ADR 0115),
         re-seals them, and PATCHes them (null/blank clears a field). Optionally changes the **`role`** in place
         (cr-0119) — a plaintext authorization change, no re-crypto, **READ ↔ READ_WRITE** only (WRITE_ONLY →
         `422`). Owner-gated: only the share's `owner_account` may edit, and only while still a member of its space —
@@ -1474,7 +1477,7 @@ components:
 
     CreateShareRequest:
       type: object
-      required: [shareId, nodeId, role, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier, nodeEpoch]
+      required: [shareId, nodeId, role, sealedName, sealedShareKey, wrappedRecoveryValueKey, sealedShareKeyEpoch, writeVerifier, nodeEpoch]
       description: >
         The share's keys follow its role (ADR 0031 point 7). A READ or READ_WRITE share carries `wrap` and no
         drop key. A WRITE_ONLY share carries **no** `wrap` — its guest never holds the shared node's content key —
@@ -1601,22 +1604,35 @@ components:
         sealedShareKey:
           type: string
           description: >
-            REQUIRED recoverable copy of the per-share key (ADR 0080 decision 12) — `K_share` sealed under the scope key `K_SC` at
-            `sealedShareKeyEpoch` (AAD `share-key-recovery`, bound to scope + node + share + epoch; opaque base64).
-            Lets every scope member recover `K_share` later to reveal, edit and re-copy the share. `K_SC` is the key
-            no share link carries, so a READ or READ_WRITE link — which holds the shared node's content key — opens nothing of another
-            share; the operator never sees `K_share` (ADR 0036 point 4). Sent together with `sealedShareKeyEpoch`.
+            REQUIRED recoverable copy of the per-share key (ADR 0080 decision 12) — `K_share` sealed under a fresh value
+            key `K_v`, which `wrappedRecoveryValueKey` wraps under the scope key `K_SC` (AAD `share-key-recovery`, bound
+            to scope + node + share + `sealedShareKeyEpoch`; opaque base64). Lets every scope member recover `K_share`
+            later to reveal, edit and re-copy the share. `K_SC` is the key no share link carries, so a READ or
+            READ_WRITE link — which holds the shared node's content key — opens nothing of another share; the operator
+            never sees `K_share` (ADR 0036 point 4). Sent together with `sealedShareKeyEpoch`.
           contentEncoding: base64
           maxLength: 256
           example: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedRecoveryValueKey:
+          type: string
+          description: >
+            The recovery copy's value key `K_v` — fresh at this write — wrapped under the scope key of
+            `sealedShareKeyEpoch` (seal purpose `value-key`, bound to the scope, that epoch and the copy's address; ADR
+            0115). `K_share` is itself a key, so a rotation re-wraps this and never re-seals the copy: a wrap a rotator
+            substituted opens no `K_share` at all, never one of its choosing.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedShareKeyEpoch:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           description: >
-            The scope epoch `sealedShareKey` is sealed under — also the epoch the link is minted at, which the re-issue
-            rule keeps beside the recovery copy when a rotation re-seals it (ADR 0115 decision 2, ADR 0075 point 4).
+            The scope epoch `sealedShareKey` is written at and its value key wrapped under — also the epoch the link is
+            minted at, which the re-issue rule reads (ADR 0075 point 4); a rotation re-wraps the value key and leaves it.
             Required (else `400`), and must be the scope's **current** epoch (else `409 stale_epoch`, nothing stored).
           minimum: 0
           example: 0
@@ -1819,7 +1835,7 @@ components:
 
     ReissueShareRequest:
       type: object
-      required: [shareId, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier, nodeEpoch]
+      required: [shareId, sealedName, sealedShareKey, wrappedRecoveryValueKey, sealedShareKeyEpoch, writeVerifier, nodeEpoch]
       description: >
         The new share of a re-issue (ADR 0075): `createShare`'s body without `nodeId` and `role` — both come from
         the old share — and without `sealedDropPrivateKey`, since a WRITE_ONLY re-issue keeps the shared node's
@@ -1896,18 +1912,30 @@ components:
         sealedShareKey:
           type: string
           description: >
-            The new `K_share` sealed under the scope key `K_SC` at `sealedShareKeyEpoch` (AAD `share-key-recovery`,
-            bound to scope + node + the **new** share id + epoch; opaque base64) — the members' recovery copy
-            (ADR 0036 point 4).
+            The new `K_share` sealed under a fresh value key, which `wrappedRecoveryValueKey` wraps under `K_SC` (AAD
+            `share-key-recovery`, bound to scope + node + the **new** share id + `sealedShareKeyEpoch`; opaque base64) —
+            the members' recovery copy (ADR 0036 point 4, ADR 0115).
           contentEncoding: base64
           maxLength: 256
           example: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedRecoveryValueKey:
+          type: string
+          description: >
+            The recovery copy's value key `K_v` — fresh at this write — wrapped under the scope key of
+            `sealedShareKeyEpoch` (seal purpose `value-key`, bound to the scope, that epoch and the copy's address; ADR
+            0115). `K_share` is itself a key, so a rotation re-wraps this and never re-seals the copy: a wrap a rotator
+            substituted opens no `K_share` at all, never one of its choosing.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedShareKeyEpoch:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
-          description: The scope epoch `sealedShareKey` is sealed under, and the new link's minted-at epoch — must be the scope's **current** one (else `409 stale_epoch`, nothing written).
+          description: The scope epoch `sealedShareKey` is written at and its value key wrapped under, and the new link's minted-at epoch — must be the scope's **current** one (else `409 stale_epoch`, nothing written).
           minimum: 0
           example: 1
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
@@ -2020,16 +2048,24 @@ components:
         sealedShareKey:
           type: [string, "null"]
           description: >
-            The recoverable per-share key — `K_share` sealed under `K_SC` at `sealedShareKeyEpoch` (opaque base64),
-            or null — lets a scope member's manage UI recover `K_share` to reveal, edit and re-copy the share
+            The recoverable per-share key — `K_share` sealed under its own value key at `sealedShareKeyEpoch` (opaque
+            base64), or null — lets a scope member's manage UI recover `K_share` to reveal, edit and re-copy the share
             (ADR 0036 point 4).
           contentEncoding: base64
           maxLength: 256
           example: null
+        wrappedRecoveryValueKey:
+          type: [string, "null"]
+          description: >
+            The recovery copy's value key wrapped under the scope key of its current epoch (`value-key`, ADR 0115) —
+            what a member opens first; null exactly when `sealedShareKey` is.
+          contentEncoding: base64
+          maxLength: 128
+          example: null
         sealedShareKeyEpoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
-          description: The scope epoch `sealedShareKey` is sealed under — the current one, since every rotation re-seals the copy (ADR 0115 decision 2); null exactly when `sealedShareKey` is.
+          description: The scope epoch `sealedShareKey` was written at — the link's minted-at epoch, which a rotation leaves (ADR 0115); null exactly when `sealedShareKey` is.
           minimum: 0
           example: null
         passwordRequired:

@@ -36,9 +36,10 @@ tags:
       every node, trashed ones included, listed with its own key's epoch, the scope epoch its key was minted under and
       whether it is due; one node's core parts; its staged batches and its one-transaction commit. Beside them the
       scope's own re-key stage ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) decision
-      2): every scope-level row sealed under the scope key, read and re-sealed page by page before a rotation's commit
-      (`rotateScope`) swaps it in. The `/api/scopes/{scopeId}/rekey` subtree. Each application stages its own fields
-      through its own operation under the same re-key id.
+      2): every value key wrapped under the scope key — and each scope-root node's entry — read and re-wrapped page by
+      page before a rotation's commit (`rotateScope`) swaps the wraps in. A rotation re-wraps keys and never rewrites a
+      value. The `/api/scopes/{scopeId}/rekey` subtree. Each application stages its own wraps through its own operation
+      under the same re-key id.
 paths:
   /api/scopes/{scopeId}/nodes:
     post:
@@ -809,18 +810,23 @@ paths:
     get:
       tags: [rekey]
       operationId: listScopeRekeyParts
-      summary: One page of every scope-level row sealed under the scope key, for a rotation to re-seal (ADR 0115 decision 2).
+      summary: One page of every value key and scope-root entry under the scope key, for a rotation to re-wrap (ADR 0115 decision 2).
       description: >
-        What a rotation re-seals before its commit ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)
-        decision 2): every core row sealed under the scope key, with the address it is sealed to and its ciphertext as
-        stored — each scope-root node's entry (live and trashed), the group's name and the space's icon, each pending
-        group invitee's name key, each link's recovery copy, and for a TENANT each member's profile and each
-        verification. The rotating client opens each with the current key, re-seals it under the one it minted and
-        stages it (`stageScopeRekey`); `rotateScope` then swaps every staged value in or nothing. An application's own
-        rows are paged by its own operation (Memories' `listScopeItemFavoritesRekey`). Paged by `since` / `limit` /
-        `more`: the server serves the kinds in a fixed order, at most `limit` rows a page in all; the group name and the
-        icon ride on the first page. Nothing here is new to the server: each row is one it serves members anyway. Only a
-        caller who may commit the scope's rotation (`rotateScope`, Who may commit) and holds its current grant reads it.
+        What a rotation moves before its commit ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)
+        decision 2). **A rotation re-wraps keys and never rewrites a value:** every scope-level value that has an author
+        — the group's name and the space's icon, each link's recovery copy, and for a TENANT each member's name, picture
+        and join record and each verification — is sealed under a value key `K_v` of its own, and only that wrap
+        (`value-key`, bound to the scope, the epoch and the value's address) is under the scope key. So this lists the
+        wraps with the address each is bound to, never a value's ciphertext — and each scope-root node's entry (live and
+        trashed), which any member may write and the rotation re-seals, its slug token a keyed MAC that moves with the
+        key. The rotating client opens each wrap with the current key, wraps the same `K_v` under the one it minted
+        (one it cannot open under a key it drops, so the value reads as unreadable) and stages it (`stageScopeRekey`);
+        `rotateScope` then swaps every staged wrap in or nothing. A pending group invitee's name key is sealed to the
+        invitee and is no wrap under the scope key: a rotation leaves it. An application's own wraps are paged by its
+        own operation (Memories' `listScopeItemFavoritesRekey`). Paged by `since` / `limit` / `more`: the server serves
+        the kinds in a fixed order, at most `limit` rows a page in all; the group name's and the icon's wraps ride on
+        the first page. Nothing here is new to the server: each wrap is one it serves members anyway. Only a caller who
+        may commit the scope's rotation (`rotateScope`, Who may commit) and holds its current grant reads it.
       security:
         - bearerAuth: []
       parameters:
@@ -855,19 +861,22 @@ paths:
     post:
       tags: [rekey]
       operationId: stageScopeRekey
-      summary: Stage one batch of re-sealed scope-level rows under a rotation's re-key id (ADR 0115 decision 2).
+      summary: Stage one batch of re-wrapped value keys and scope-root entries under a rotation's re-key id (ADR 0115 decision 2).
       description: >
-        The rotating client sends each row `listScopeRekeyParts` served, re-sealed under the key it minted for epoch
-        `fromEpoch + 1`, under a re-key id it mints and later names in `rotateScope`'s `rekeyId`; up to 256 of each
-        kind a call (128 member profiles, whose pictures are 16 KiB each), the group name and the icon once. A value
-        staged twice for the same row is replaced. Each value names the SHA-256 of the ciphertext it was opened from
-        (`replacedDigest`, a member's fields one each): a row that holds another already is refused here, and one
-        written after the stage by the commit (`409 rekey_parts_stale` either way, ADR 0115 decision 2) — so neither a
-        write between the read and the stage nor one after it is replaced by a re-seal of what it replaced, and no row
-        needs a revision of its own. A field the row holds no ciphertext in is not staged at all (the commit refuses one
-        that is), so it names no digest.
+        The rotating client sends each wrap `listScopeRekeyParts` served, the same `K_v` wrapped under the key it minted
+        for epoch `fromEpoch + 1`, and each scope-root entry re-sealed under it, under a re-key id it mints and later
+        names in `rotateScope`'s `rekeyId`; up to 256 of each kind a call, the group name's and the icon's wraps once.
+        **A stage carries wraps only:** no schema here has a field for a value's ciphertext, and the commit refuses a
+        staged write to one (`422 rekey_writes_value`), so a rotator — owner or member alike — can make another
+        member's value unreadable, as any member can, and never rewrite it. A wrap staged twice for the same row is
+        replaced. Each wrap names the SHA-256 of the wrap it replaces (`replacedDigest`, a member's fields one each): a
+        row that holds another already is refused here, and one written after the stage by the commit (`409
+        rekey_parts_stale` either way, ADR 0115 decision 2) — every write of a value mints a fresh `K_v` and so a fresh
+        wrap, so neither a write between the read and the stage nor one after it is replaced by a re-wrap of the key it
+        replaced. A field the row holds no wrap in is not staged at all (the commit refuses one that is), so it names no
+        digest.
         Nothing staged is served or read before the commit, and a stage no commit took expires after a day. Each staged
-        value is ciphertext the commit would carry anyway: the server learns nothing it would not learn from the
+        wrap is ciphertext the commit would carry anyway: the server learns nothing it would not learn from the
         commit. `fromEpoch` is the scope's current epoch as the rotator read it; a rotation committed since is `409
         stale_epoch`. The caller's rights are `listScopeRekeyParts`'s.
       security:
@@ -1776,7 +1785,7 @@ components:
 
     RekeyShare:
       type: object
-      required: [shareId, role, sealedShareKey, hasWrap, hasDropPublicKey]
+      required: [shareId, role, sealedShareKey, wrappedRecoveryValueKey, hasWrap, hasDropPublicKey]
       properties:
         hasWrap:
           x-veyq-visibility: flag
@@ -1801,10 +1810,16 @@ components:
           example: READ
         sealedShareKey:
           type: string
-          description: The share's recovery copy (`K_share` under the scope key at `sealedShareKeyEpoch`), as `ShareSummary.sealedShareKey`. The node's re-key opens `K_share` through it and leaves it as it is — the scope's rotation re-sealed it at its commit (ADR 0115 decision 2).
+          description: The share's recovery copy (`K_share` under its own value key at `sealedShareKeyEpoch`), as `ShareSummary.sealedShareKey`. The node's re-key opens `K_share` through it and leaves it as it is — a rotation re-wraps only its value key (ADR 0115 decision 2).
           contentEncoding: base64
           maxLength: 256
           example: c2VhbGVkLXNoYXJlLWtleQ==
+        wrappedRecoveryValueKey:
+          type: string
+          description: The recovery copy's value key `K_v` wrapped under the scope key (`value-key`), as `ShareSummary.wrappedRecoveryValueKey` — what opens `sealedShareKey`.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
         sealedShareKeyEpoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
@@ -2098,54 +2113,49 @@ components:
     ScopeRekeyParts:
       type: object
       description: >
-        One page of the scope-level rows sealed under the scope key (`listScopeRekeyParts`), each with its address and
-        its ciphertext as stored. A kind the scope has none of is an empty list: no member profiles or verifications
-        outside a TENANT, no group name or invitees outside a GROUP.
-      required: [currentEpoch, rootNodes, groupInvitees, shares, members, verifications, more]
+        One page of what a rotation moves under the scope key (`listScopeRekeyParts`): every value key wrapped under it,
+        each with the address its wrap is bound to (never a value's ciphertext), and each scope-root node's entry. A
+        kind the scope has none of is an empty list: no member profiles or verifications outside a TENANT, no group name
+        outside a GROUP.
+      required: [currentEpoch, rootNodes, shares, members, verifications, more]
       properties:
         currentEpoch:
           x-veyq-visibility: structure
           type: integer
-          description: The scope's current epoch — every row here is sealed under its key; the rotation commits `currentEpoch + 1`.
+          description: The scope's current epoch — every wrap here is under its key; the rotation commits `currentEpoch + 1`.
           minimum: 0
           example: 0
         groupName:
-          description: A GROUP's sealed name, on the first page only; null otherwise.
+          description: A GROUP's name's value key, on the first page only; null otherwise.
           oneOf:
             - $ref: "#/components/schemas/ScopeRekeyGroupName"
             - type: "null"
         icon:
-          description: A TENANT's or GROUP's sealed icon, on the first page only; null otherwise and for a space without one.
+          description: A TENANT's or GROUP's icon's value key, on the first page only; null otherwise and for a space without one.
           oneOf:
             - $ref: "#/components/schemas/ScopeRekeyIcon"
             - type: "null"
         rootNodes:
           type: array
-          description: Each scope-root node's entry — the node's key wrapped under the scope key, its name and its slug token — live and trashed.
+          description: >
+            Each scope-root node's entry — the node's key wrapped under the scope key, its name and its slug token — live
+            and trashed. Re-sealed, not re-wrapped: any member may write a root entry (ADR 0111 decision 11), and the slug
+            token is a keyed MAC under the scope key, so it moves with the key.
           maxItems: 256
           items: { $ref: "#/components/schemas/ScopeRekeyRootNode" }
-        groupInvitees:
-          type: array
-          description: >
-            Each pending consent proposal's name key (`group-name-key`), sealed to that invitee's identity. The rotator
-            wraps the new name key to the invitee's current identity key as `listScopeMembers` serves it, after the
-            same anchor check every wrap to a member makes — or clears it for an invitee it cannot anchor
-            (`ScopeRekeyInviteeSeal`). A proposal whose name key a rotation cleared holds none and is not listed.
-          maxItems: 256
-          items: { $ref: "#/components/schemas/ScopeRekeyGroupInvitee" }
         shares:
           type: array
-          description: Each link's recovery copy (`share-key-recovery`) — every link of the scope that is not deleted and holds one, closed ones too.
+          description: Each link's recovery copy's value key — every link of the scope that is not deleted and holds a copy, closed ones too.
           maxItems: 256
           items: { $ref: "#/components/schemas/ScopeRekeyShare" }
         members:
           type: array
-          description: TENANT only — each member's profile fields sealed under the tenant key.
+          description: TENANT only — each member's profile fields' value keys.
           maxItems: 256
           items: { $ref: "#/components/schemas/ScopeRekeyMember" }
         verifications:
           type: array
-          description: TENANT only — each verification one member made of another (`member-verification`).
+          description: TENANT only — each verification's value key (one member's verification of another, `member-verification`).
           maxItems: 256
           items: { $ref: "#/components/schemas/ScopeRekeyVerification" }
         more:
@@ -2162,37 +2172,39 @@ components:
 
     ScopeRekeyGroupName:
       type: object
-      required: [encryptedName, nameEpoch]
+      required: [nameEpoch, wrappedNameValueKey]
       properties:
-        encryptedName:
-          type: string
-          description: The group's name under `K_name` of `nameEpoch` (`group-name`), as `ScopeSummary.encryptedName`.
-          contentEncoding: base64
-          maxLength: 8192
-          example: c2VhbGVkLW5hbWU=
         nameEpoch:
           x-veyq-visibility: structure
           type: integer
-          description: The epoch it is sealed at — the scope's current one, since every rotation re-seals it.
+          description: The epoch the name was written at — what its `group-name` seal binds, and so its address. A rotation leaves it.
           minimum: 0
           example: 0
+        wrappedNameValueKey:
+          type: string
+          description: >
+            The name's value key `K_v` under the scope key of `currentEpoch` (`value-key`, bound to the scope, that epoch
+            and the address of the `group-name` seal at `nameEpoch`), as `ScopeSummary.wrappedNameValueKey`.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
 
     ScopeRekeyIcon:
       type: object
-      required: [sealedIcon, iconEpoch]
+      required: [iconEpoch, wrappedIconValueKey]
       properties:
-        sealedIcon:
-          type: string
-          description: The space icon under `K_icon` of `iconEpoch` (`space-icon`), as `ScopeSummary.sealedIcon`.
-          contentEncoding: base64
-          maxLength: 21884
-          example: c2VhbGVkLWljb24=
         iconEpoch:
           x-veyq-visibility: structure
           type: integer
-          description: The epoch it is sealed at.
+          description: The epoch the icon was written at — what its `space-icon` seal binds, and so its address.
           minimum: 0
           example: 0
+        wrappedIconValueKey:
+          type: string
+          description: The icon's value key under the scope key of `currentEpoch` (`value-key`), as `ScopeSummary.wrappedIconValueKey`.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
 
     ScopeRekeyRootNode:
       type: object
@@ -2228,26 +2240,9 @@ components:
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
 
-    ScopeRekeyGroupInvitee:
-      type: object
-      required: [userId, sealedNameKey]
-      properties:
-        userId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The invitee whose consent proposal holds the name key.
-          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
-        sealedNameKey:
-          type: string
-          description: The current `K_name` sealed to the invitee's identity (`group-name-key`), as `GroupInvitation.sealedNameKey`.
-          contentEncoding: base64
-          maxLength: 8192
-          example: Z3JvdXAtbmFtZS1rZXktc2VhbGVkLXRvLWludml0ZWU=
-
     ScopeRekeyShare:
       type: object
-      required: [shareId, nodeId, sealedShareKey, sealedShareKeyEpoch]
+      required: [shareId, nodeId, sealedShareKeyEpoch, wrappedRecoveryValueKey]
       properties:
         shareId:
           x-veyq-visibility: id
@@ -2259,54 +2254,57 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The link's root — the recovery copy is bound to (scope, node, share, epoch).
+          description: The link's root — the recovery copy is bound to (scope, node, share, epoch), and so its address.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
-        sealedShareKey:
-          type: string
-          description: The recovery copy — `K_share` under the scope key at `sealedShareKeyEpoch`, as `ShareSummary.sealedShareKey`.
-          contentEncoding: base64
-          maxLength: 256
-          example: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
         sealedShareKeyEpoch:
           x-veyq-visibility: structure
           type: integer
-          description: The epoch it is sealed at — the scope's current one.
+          description: The epoch the recovery copy was written at (as `ShareSummary.sealedShareKeyEpoch`); a rotation leaves it.
           minimum: 0
           example: 0
+        wrappedRecoveryValueKey:
+          type: string
+          description: >
+            The recovery copy's value key under the scope key of `currentEpoch` (`value-key`), as
+            `ShareSummary.wrappedRecoveryValueKey`. `K_share` is itself a key, so it has a value key too: a wrap a
+            rotator substituted opens no `K_share` at all, never one of the rotator's choosing.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
 
     ScopeRekeyMember:
       type: object
-      description: One tenant member's profile fields sealed under the tenant key; a field the member has none of is null.
+      description: One tenant member's profile fields' value keys; a field the member has none of is null.
       required: [userId]
       properties:
         userId:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The member — every field is bound to (tenant scope, this id).
+          description: The member — every field is bound to (tenant scope, this id), and so is each address.
           example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
-        sealedName:
+        wrappedNameValueKey:
           type: [string, "null"]
-          description: The real name (`member-name`), as `ScopeMember.sealedName`.
+          description: The real name's (`member-name`) value key under the tenant key, as `ScopeMember.wrappedNameValueKey`.
           contentEncoding: base64
-          maxLength: 8192
-          example: c2VhbGVkLW5hbWU=
-        sealedAvatar:
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+        wrappedAvatarValueKey:
           type: [string, "null"]
-          description: The profile picture (`member-avatar`, padded to 16 KiB), as `getMemberAvatar` serves it.
+          description: The profile picture's (`member-avatar`) value key, as `getMemberAvatar` serves it.
           contentEncoding: base64
-          maxLength: 21908
+          maxLength: 128
           example: null
-        sealedJoinRecord:
+        wrappedJoinRecordValueKey:
           type: [string, "null"]
-          description: The join record (`member-join-record`), as `ScopeMember.sealedJoinRecord`.
+          description: The join record's (`member-join-record`) value key, as `ScopeMember.wrappedJoinRecordValueKey`.
           contentEncoding: base64
-          maxLength: 8192
+          maxLength: 128
           example: null
 
     ScopeRekeyVerification:
       type: object
-      required: [verifierUserId, subjectUserId, epoch, sealedStatement]
+      required: [verifierUserId, subjectUserId, epoch, wrappedValueKey]
       properties:
         verifierUserId:
           x-veyq-visibility: id
@@ -2322,22 +2320,23 @@ components:
           x-veyq-visibility: structure
           type: integer
           format: int32
-          description: The tenant epoch the statement is sealed at, as `MemberVerification.epoch`.
+          description: The tenant epoch the statement was written at, as `MemberVerification.epoch` — part of its address.
           minimum: 0
           example: 0
-        sealedStatement:
+        wrappedValueKey:
           type: string
-          description: The sealed verification (`member-verification`), as `MemberVerification.sealedStatement`.
+          description: The verification's value key under the tenant key, as `MemberVerification.wrappedValueKey`.
           contentEncoding: base64
-          maxLength: 512
-          example: c2VhbGVkLXZlcmlmaWNhdGlvbg==
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
 
     ScopeRekeyStage:
       type: object
       description: >
-        One batch of a rotation's re-sealed scope-level rows (`stageScopeRekey`), each sealed under the new key of epoch
-        `fromEpoch + 1` and bound as its row is (the epoch a seal binds being that one). Every list is optional; the
-        caps keep the largest body inside the server's request limit.
+        One batch of a rotation's scope-level moves (`stageScopeRekey`): each value key wrapped under the new key of
+        epoch `fromEpoch + 1` and bound to the value's address, each scope-root entry re-sealed under it. **Wraps only:**
+        no field here holds a value's ciphertext, and a stage that writes one is refused at the commit (`422
+        rekey_writes_value`). Every list is optional; the caps keep the largest body inside the server's request limit.
       required: [fromEpoch]
       properties:
         fromEpoch:
@@ -2348,15 +2347,15 @@ components:
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         groupName:
-          description: The group's name re-sealed under the new `K_name`.
+          description: The group name's value key re-wrapped under the new scope key.
           oneOf:
-            - $ref: "#/components/schemas/ScopeRekeyGroupNameSeal"
+            - $ref: "#/components/schemas/ScopeRekeyGroupNameWrap"
             - type: "null"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
         icon:
-          description: The space icon re-sealed under the new `K_icon`.
+          description: The space icon's value key re-wrapped under the new scope key.
           oneOf:
-            - $ref: "#/components/schemas/ScopeRekeyIconSeal"
+            - $ref: "#/components/schemas/ScopeRekeyIconWrap"
             - type: "null"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
         rootNodes:
@@ -2364,81 +2363,82 @@ components:
           maxItems: 256
           items: { $ref: "#/components/schemas/ScopeRekeyRootEntry" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
-        groupInvitees:
-          type: array
-          maxItems: 256
-          items: { $ref: "#/components/schemas/ScopeRekeyInviteeSeal" }
-          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
         shares:
           type: array
           maxItems: 256
-          items: { $ref: "#/components/schemas/ScopeRekeyShareSeal" }
+          items: { $ref: "#/components/schemas/ScopeRekeyShareWrap" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
         members:
           type: array
-          maxItems: 128
-          items: { $ref: "#/components/schemas/ScopeRekeyMemberSeal" }
-          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 128)'
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ScopeRekeyMemberWrap" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
         verifications:
           type: array
           maxItems: 256
-          items: { $ref: "#/components/schemas/ScopeRekeyVerificationSeal" }
+          items: { $ref: "#/components/schemas/ScopeRekeyVerificationWrap" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
 
-    ScopeRekeyGroupNameSeal:
+    ScopeRekeyGroupNameWrap:
       type: object
-      required: [encryptedName, replacedDigest]
+      required: [wrappedNameValueKey, replacedDigest]
       properties:
         replacedDigest:
           type: string
           description: >
-            The digest of the group's `encryptedName` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
-            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
-            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+            The digest of the wrap it replaces — base64 SHA-256 of the `wrappedNameValueKey` text as `listScopeRekeyParts`
+            served it. The stage refuses it if the row holds another by then, and the commit if it does at the commit
+            (`409 rekey_parts_stale`): a rename between the read and the commit minted a fresh key, which a re-wrap of the
+            replaced one must not overwrite (ADR 0115 decision 2).
           contentEncoding: base64
           minLength: 44
           maxLength: 44
           example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        encryptedName:
+        wrappedNameValueKey:
           type: string
-          description: The group's name under `K_name` of the new epoch (`group-name`, bound to scope and that epoch).
+          description: >
+            The same `K_v` under the new scope key (`value-key`, bound to the scope, the new epoch and the name's address
+            at its unchanged `nameEpoch`) — or, for a wrap the rotator could not open, one under a key it drops at once,
+            so the name reads as unreadable.
           contentEncoding: base64
-          maxLength: 8192
-          example: c2VhbGVkLW5hbWU=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
-    ScopeRekeyIconSeal:
+    ScopeRekeyIconWrap:
       type: object
-      required: [sealedIcon, replacedDigest]
+      required: [wrappedIconValueKey, replacedDigest]
       properties:
         replacedDigest:
           type: string
           description: >
-            The digest of the `sealedIcon` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
-            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
-            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+            The digest of the wrap it replaces — base64 SHA-256 of the `wrappedIconValueKey` text as `listScopeRekeyParts`
+            served it; refused at the stage and at the commit if the row holds another by then (`409 rekey_parts_stale`).
           contentEncoding: base64
           minLength: 44
           maxLength: 44
           example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        sealedIcon:
+        wrappedIconValueKey:
           type: string
-          description: The space icon under `K_icon` of the new epoch (`space-icon`), the same constant length.
+          description: The same `K_v` under the new scope key (`value-key`), or the stand-in under a dropped key.
           contentEncoding: base64
-          maxLength: 21884
-          example: c2VhbGVkLWljb24=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 21884) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ScopeRekeyRootEntry:
       type: object
       description: >
         A scope-root node's entry under the new scope key: its own (unchanged) key re-wrapped, its name re-sealed, its
-        slug token recomputed, each bound to its `scopeEpoch` and `placementRevision + 1`. The node's own key is
-        replaced afterwards by its node commit (it is due from the rotation's commit on). `replacedDigest` names the
-        wrap the rotator opened; the name and the slug are held by `placementRevision`, which every rename, move and
-        re-key moves.
+        slug token recomputed, each bound to its `scopeEpoch` and `placementRevision + 1`. The one thing a rotation
+        re-seals rather than re-wraps — any member may write a root entry (ADR 0111 decision 11), and its slug token is a
+        keyed MAC under the scope key. The node's own key is replaced afterwards by its node commit (it is due from the
+        rotation's commit on). `replacedDigest` names the wrap the rotator opened; the name and the slug are held by
+        `placementRevision`, which every rename, move and re-key moves.
       required: [nodeId, placementRevision, scopeEpoch, encryptedName, wrappedContentKey, replacedDigest]
       properties:
         replacedDigest:
@@ -2490,65 +2490,19 @@ components:
           example: d3JhcHBlZC1rLW1lbQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
-    ScopeRekeyInviteeSeal:
+    ScopeRekeyShareWrap:
       type: object
       description: >
-        A pending group invitee's name key under the new epoch — or, `sealedNameKey` and `recipientIdentityDigest` both
-        `null`, **cleared**: the rotator holds the invitee's identity key as an anomaly, or anchors none, and seals a name
-        key to no key it cannot anchor (ADR 0028 Decision 2). An omission is allowed and visible (ADR 0111 decision 9):
-        the commit stores no name key for the proposal, and the invitee sees it without the group's name, as a proposal
-        made before the name key existed. Exactly one of the two `null` is `400 invalid_request`.
-      required: [userId, sealedNameKey, recipientIdentityDigest, replacedDigest]
+        A link's recovery copy's value key under the new scope key; the copy itself (`sealedShareKey`) and its epoch
+        stay as they are. A wrap the rotator could not open is staged under a key it drops: the copy then opens for
+        nobody, and the link's root's node re-key closes it, key lost (ADR 0115 decision 2).
+      required: [shareId, wrappedRecoveryValueKey, replacedDigest]
       properties:
         replacedDigest:
           type: string
           description: >
-            The digest of the invitee's `sealedNameKey` the rotator read (it seals a fresh one, it cannot open this one) — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
-            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
-            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
-          contentEncoding: base64
-          minLength: 44
-          maxLength: 44
-          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        userId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
-        sealedNameKey:
-          type: [string, "null"]
-          description: >
-            The new epoch's `K_name` sealed to the invitee's identity (`group-name-key`); `null` clears the proposal's name
-            key (see the schema), with `recipientIdentityDigest` `null` too.
-          contentEncoding: base64
-          minLength: 1
-          maxLength: 8192
-          example: Z3JvdXAtbmFtZS1rZXktc2VhbGVkLXRvLWludml0ZWU=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        recipientIdentityDigest:
-          type: [string, "null"]
-          description: >
-            SHA-256 of the identity bundle it is sealed to. The commit compares it with the invitee's current identity key
-            and refuses another (`409 recipient_key_not_current`), as for a grant. `null` exactly when `sealedNameKey` is:
-            a cleared name key is sealed to nobody.
-          contentEncoding: base64
-          minLength: 1
-          maxLength: 64
-          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-
-    ScopeRekeyShareSeal:
-      type: object
-      required: [shareId, sealedShareKey, replacedDigest]
-      properties:
-        replacedDigest:
-          type: string
-          description: >
-            The digest of the recovery copy (`sealedShareKey`) the rotator opened `K_share` from — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
-            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
-            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+            The digest of the wrap it replaces — base64 SHA-256 of the `wrappedRecoveryValueKey` text as
+            `listScopeRekeyParts` served it; a re-issue or reopen since minted a fresh key and is `409 rekey_parts_stale`.
           contentEncoding: base64
           minLength: 44
           maxLength: 44
@@ -2562,24 +2516,23 @@ components:
           pattern: "^[A-Za-z0-9_-]{43}$"
           example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 43, max = 43) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_-]{43}")'
-        sealedShareKey:
+        wrappedRecoveryValueKey:
           type: string
-          description: >
-            `K_share` sealed under the new scope key (`share-key-recovery`, bound to scope, node, share and the new
-            epoch). The epoch the link was minted at stays beside it, for the re-issue rule (ADR 0075 point 4).
+          description: The same `K_v` under the new scope key (`value-key`, bound to the scope, the new epoch and the copy's address).
           contentEncoding: base64
-          maxLength: 256
-          example: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
-    ScopeRekeyMemberSeal:
+    ScopeRekeyMemberWrap:
       type: object
       description: >
-        One member's profile fields re-sealed under the new tenant key, each exactly where the stored row holds one — a
-        field missing is the commit's `rekey_parts_missing`, one the row does not hold its `rekey_parts_stale`. The
-        signed record inside a join record is unchanged. Each field comes with the digest of the one it was opened from
-        (`replacedNameDigest`, `replacedAvatarDigest`, `replacedJoinRecordDigest`): a field without its digest, or a
-        digest without its field, is `400 invalid_request`.
+        One member's profile fields' value keys under the new tenant key, each exactly where the stored row holds one — a
+        field missing is the commit's `rekey_parts_missing`, one the row does not hold its `rekey_parts_stale`. The name,
+        the picture and the join record themselves stay byte-identical. Each wrap comes with the digest of the one it
+        replaces (`replacedNameDigest`, `replacedAvatarDigest`, `replacedJoinRecordDigest`): a wrap without its digest,
+        or a digest without its wrap, is `400 invalid_request`.
       required: [userId]
       properties:
         userId:
@@ -2588,31 +2541,32 @@ components:
           format: uuid
           example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
-        sealedName:
+        wrappedNameValueKey:
           type: [string, "null"]
           contentEncoding: base64
-          maxLength: 8192
-          example: c2VhbGVkLW5hbWU=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        sealedAvatar:
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedAvatarValueKey:
           type: [string, "null"]
-          description: The picture re-sealed, the same constant length (`setMyAvatar`).
           contentEncoding: base64
-          maxLength: 21908
+          minLength: 1
+          maxLength: 128
           example: null
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        sealedJoinRecord:
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedJoinRecordValueKey:
           type: [string, "null"]
           contentEncoding: base64
-          maxLength: 8192
+          minLength: 1
+          maxLength: 128
           example: null
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         replacedNameDigest:
           type: [string, "null"]
           description: >
-            With `sealedName`: the digest of the `sealedName` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
-            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
-            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+            With `wrappedNameValueKey`: base64 SHA-256 of the wrap it replaces as `listScopeRekeyParts` served it; refused
+            at the stage and at the commit if the row holds another by then (`409 rekey_parts_stale`).
           contentEncoding: base64
           minLength: 44
           maxLength: 44
@@ -2620,10 +2574,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         replacedAvatarDigest:
           type: [string, "null"]
-          description: >
-            With `sealedAvatar`: the digest of the `sealedAvatar` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
-            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
-            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          description: With `wrappedAvatarValueKey`, as `replacedNameDigest`.
           contentEncoding: base64
           minLength: 44
           maxLength: 44
@@ -2631,26 +2582,22 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         replacedJoinRecordDigest:
           type: [string, "null"]
-          description: >
-            With `sealedJoinRecord`: the digest of the `sealedJoinRecord` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
-            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
-            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          description: With `wrappedJoinRecordValueKey`, as `replacedNameDigest`.
           contentEncoding: base64
           minLength: 44
           maxLength: 44
           example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
-    ScopeRekeyVerificationSeal:
+    ScopeRekeyVerificationWrap:
       type: object
-      required: [verifierUserId, subjectUserId, sealedStatement, replacedDigest]
+      required: [verifierUserId, subjectUserId, wrappedValueKey, replacedDigest]
       properties:
         replacedDigest:
           type: string
           description: >
-            The digest of the `sealedStatement` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
-            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
-            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+            Base64 SHA-256 of the `wrappedValueKey` it replaces as `listScopeRekeyParts` served it; refused at the stage and
+            at the commit if the row holds another by then (`409 rekey_parts_stale`).
           contentEncoding: base64
           minLength: 44
           maxLength: 44
@@ -2668,13 +2615,14 @@ components:
           format: uuid
           example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
-        sealedStatement:
+        wrappedValueKey:
           type: string
-          description: The verification re-sealed under the new tenant key (`member-verification`, bound to the new epoch); the signed statement inside is unchanged.
+          description: The verification's `K_v` under the new tenant key (`value-key`); the sealed statement stays byte-identical.
           contentEncoding: base64
-          maxLength: 512
-          example: c2VhbGVkLXZlcmlmaWNhdGlvbg==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

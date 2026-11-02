@@ -768,7 +768,10 @@ paths:
       summary: Read a tenant member's sealed profile picture.
       description: >
         A member's profile picture (uc.spaces.set-profile-picture, [ADR 0084](../../docs/decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)):
-        the one constant-length ciphertext they sealed under a field key derived from `K_tenant`, which any tenant member opens on the device.
+        the one constant-length ciphertext they sealed under a field key derived from its own value key, and that key's
+        wrap under the tenant key ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)), which
+        any tenant member opens on the device. A rotation re-wraps the key and leaves the picture, and moves
+        `avatarRevision` with the new wrap, so a client's cached pair is fetched again.
         Gated on **tenant membership** like the directory: a caller who is not an accepted member of the tenant gets the
         `404 tenant_not_found` of [ADR 0042](../../docs/decisions/0042-http-failure-projection.md). Never served to a
         guest or on a share. The `ETag` is the profile's `avatarRevision` (quoted); a client echoing it as `If-None-Match`
@@ -833,9 +836,11 @@ paths:
         Every member's signed verifications of other members in this tenant
         ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
         decisions 12–13): each a statement *"in this tenant, this verifier at this head of their key chain confirmed
-        this subject at this head of theirs"*, signed by the verifier's identity and sealed under the tenant key
-        (field `member-verification`, bound to the tenant, the verifier, the subject and the epoch it is sealed at). A
-        member's client opens each with the tenant's one key and counts one only while it names the
+        this subject at this head of theirs"*, signed by the verifier's identity and sealed under a value key of its
+        own (field `member-verification`, bound to the tenant, the verifier, the subject and the epoch it was written
+        at), whose wrap the tenant key holds ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)).
+        A member's client opens each wrap with the tenant's one key, the row with its value key, and counts one only
+        while it names the
         subject's current head and verifies under the verifier's current identity — so *verified by …* counts for every
         member of the tenant, and only there. The server stores and relays opaque rows and cannot tell which count.
 
@@ -918,10 +923,12 @@ paths:
         decision 12): written **only into the caller's own records** — the verifier is always the caller, never a field
         of the body — one row per (tenant, caller, subject), replaced by a newer one. A matching safety-number and
         chain-code compare writes it; a rotation of the caller re-signs each of the caller's rows with the new
-        identity (decision 13). The server cannot open or check the statement; it checks only that the caller and the
-        subject are accepted members of the tenant, that they differ, and that `epoch` is the tenant scope's current
-        one under its row lock (`409 stale_epoch`, ADR 0115 decision 3: a rotation re-seals every verification under
-        the one key, so none may land under an older one). Nothing here blocks anybody's write.
+        identity (decision 13). The statement is sealed under a fresh value key, wrapped under the tenant key
+        (`wrappedValueKey`, ADR 0115), so a rotation re-wraps it and never rewrites it. The server cannot open or check
+        the statement; it checks only that the caller and the subject are accepted members of the tenant, that they
+        differ, and that `epoch` is the tenant scope's current one under its row lock (`409 stale_epoch`, ADR 0115
+        decision 3: a rotation re-wraps every value key under the one key, so none may land under an older one).
+        Nothing here blocks anybody's write.
       security:
         - bearerAuth: []
       parameters:
@@ -3862,13 +3869,24 @@ components:
           description: >
             **Required for a MEMBER invite.** The newcomer's join record (ADR 0111 decisions 3 and 12) — its identity
             and Secret-Key proof public key, the owner-signed invite it came through, signed by the invite key and by
-            the new identity — sealed under the tenant key (field `member-join-record`, bound to the tenant scope and
-            the new account). Stored in the profile, served to members on `ScopeMember.sealedJoinRecord`, written
-            only here.
+            the new identity — sealed under a fresh value key of its own (field `member-join-record`, bound to the
+            tenant scope and the new account; ADR 0115). Stored in the profile, served to members on
+            `ScopeMember.sealedJoinRecord`, written only here.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLWpvaW4tcmVjb3Jk
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedJoinRecordValueKey:
+          type: [string, "null"]
+          description: >
+            With `sealedJoinRecord` (required there, and only there, else `400 invalid_request`): its value key `K_v` wrapped
+            under the tenant key of `epoch` (seal purpose `value-key`, bound to the tenant scope, that epoch and the
+            address of its `member-join-record` seal; ADR 0115).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         signerIdentityDigest:
           type: [string, "null"]
           description: >
@@ -3885,34 +3903,56 @@ components:
         sealedName:
           type: [string, "null"]
           description: >
-            OPTIONAL real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64) — the same blob the profile
-            op stores (ADR 0023). Submitted **at the join** — the invitee holds `K_tenant` at accept, from the cold
-            birth or the invite's grant; omitted ⇒ username-only, the name added/edited later in the profile.
-            Stored verbatim; the server never decrypts it.
+            OPTIONAL real name (first + last) sealed under a field key derived from a fresh value key (opaque base64) —
+            the same blob the profile op stores (ADR 0023, ADR 0115). Submitted **at the join** — the invitee holds
+            `K_tenant` at accept, from the cold birth or the invite's grant; omitted ⇒ username-only, the name
+            added/edited later in the profile. Stored verbatim; the server never decrypts it.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedNameValueKey:
+          type: [string, "null"]
+          description: >
+            With `sealedName` (required there, and only there, else `400 invalid_request`): its value key `K_v` wrapped
+            under the tenant key of `epoch` (seal purpose `value-key`, bound to the tenant scope, that epoch and the
+            address of its `member-name` seal; ADR 0115).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedAvatar:
           type: [string, "null"]
           description: >
-            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under a field key derived from `K_tenant` with the
-            `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
-            the join, where the invitee holds `K_tenant` (from the cold birth or the invite's grant); stored verbatim
-            with `avatarRevision` 1. Omitted or null = no picture.
+            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under a field key derived from a
+            fresh value key with the `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the
+            constant length). Submitted at the join, where the invitee holds `K_tenant` (from the cold birth or the
+            invite's grant); stored verbatim with `avatarRevision` 1. Omitted or null = no picture.
           contentEncoding: base64
           maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedAvatarValueKey:
+          type: [string, "null"]
+          description: >
+            With `sealedAvatar` (required there, and only there, else `400 invalid_request`): its value key `K_v` wrapped
+            under the tenant key of `epoch` (seal purpose `value-key`, bound to the tenant scope, that epoch and the
+            address of its `member-avatar` seal; ADR 0115).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         epoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            The tenant epoch whose key seals `sealedJoinRecord`, `sealedName` and `sealedAvatar` (ADR 0115 decision 3) —
-            required with any of them (else `400 invalid_request`). It must be the tenant scope's current epoch, under
-            its row lock (`409 stale_epoch`): a rotation re-seals every profile under the one key, so none may land
-            under an older one. A MEMBER invite's newcomer seals under the key its self-grant carries; an OWNER
-            invite's birth is epoch 0.
+            The tenant epoch whose key wraps the value keys of `sealedJoinRecord`, `sealedName` and `sealedAvatar` (ADR
+            0115 decision 3) — required with any of them (else `400 invalid_request`). It must be the tenant scope's
+            current epoch, under its row lock (`409 stale_epoch`): a rotation re-wraps every value key under the one key,
+            so none may land under an older one. A MEMBER invite's newcomer wraps under the key its self-grant carries;
+            an OWNER invite's birth is epoch 0.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
@@ -3960,8 +4000,8 @@ components:
 
     PutVerificationRequest:
       type: object
-      description: The caller's sealed verification of one member, and the tenant epoch it is sealed under.
-      required: [epoch, sealedStatement]
+      description: The caller's sealed verification of one member, its value key's wrap, and the tenant epoch of both.
+      required: [epoch, sealedStatement, wrappedValueKey]
       properties:
         epoch:
           x-veyq-visibility: structure
@@ -3969,25 +4009,35 @@ components:
           format: int32
           minimum: 0
           description: >
-            The tenant scope's epoch whose key seals `sealedStatement` — bound into its seal. Must be the scope's
-            current epoch (`409 stale_epoch`): the tenant has one key at a time (ADR 0115 decision 1).
+            The tenant scope's epoch the statement is written at — bound into its seal and its wrap. Must be the
+            scope's current epoch (`409 stale_epoch`): the tenant has one key at a time (ADR 0115 decision 1).
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         sealedStatement:
           type: string
           description: >
             The verification — both heads and the verifier's signature over the `verification` statement — sealed under
-            the tenant key of `epoch` (field `member-verification`, bound to the tenant, the caller, the subject and the
+            a fresh value key `K_v` (field `member-verification`, bound to the tenant, the caller, the subject and the
             epoch). Opaque, constant-length base64 (the `verification` crypto vector).
           contentEncoding: base64
           maxLength: 512
           example: c2VhbGVkLXZlcmlmaWNhdGlvbg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedValueKey:
+          type: string
+          description: >
+            The statement's `K_v` wrapped under the tenant key of `epoch` (seal purpose `value-key`, bound to the tenant
+            scope, that epoch and the statement's address).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     MemberVerification:
       type: object
       description: One member's verification of another, as stored — opaque to the server.
-      required: [verifierUserId, subjectUserId, epoch, sealedStatement, createdAt]
+      required: [verifierUserId, subjectUserId, epoch, sealedStatement, wrappedValueKey, createdAt]
       properties:
         verifierUserId:
           x-veyq-visibility: id
@@ -4006,7 +4056,7 @@ components:
           type: integer
           format: int32
           minimum: 0
-          description: The tenant epoch whose key seals the row — the current one, since every rotation re-seals it (ADR 0115 decision 2).
+          description: The tenant epoch the row was written at — bound into its seal; a rotation re-wraps its value key and leaves it (ADR 0115).
           example: 0
         sealedStatement:
           type: string
@@ -4014,6 +4064,12 @@ components:
           contentEncoding: base64
           maxLength: 512
           example: c2VhbGVkLXZlcmlmaWNhdGlvbg==
+        wrappedValueKey:
+          type: string
+          description: The row's value key wrapped under the tenant key of its current epoch (`value-key`).
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
         createdAt:
           x-veyq-visibility: time
           type: string
@@ -4039,16 +4095,23 @@ components:
 
     MemberAvatar:
       type: object
-      required: [sealedAvatar]
+      required: [sealedAvatar, wrappedAvatarValueKey]
       properties:
         sealedAvatar:
           type: string
           description: >
-            The member's profile picture sealed under a field key derived from `K_tenant` with the `member-avatar` purpose bound to (tenant
-            scope, that member's user id): opaque, constant-length base64 the server stores and relays verbatim.
+            The member's profile picture sealed under a field key derived from its own value key with the
+            `member-avatar` purpose bound to (tenant scope, that member's user id): opaque, constant-length base64 the
+            server stores and relays verbatim.
           contentEncoding: base64
           maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
+        wrappedAvatarValueKey:
+          type: string
+          description: The picture's value key wrapped under the tenant key of its current epoch (`value-key`, ADR 0115).
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
 
     TenantActivated:
       type: object
@@ -4175,13 +4238,24 @@ components:
           description: >
             **Required for a MEMBER invite.** The newcomer's join record (ADR 0111 decisions 3 and 12) — its identity
             and Secret-Key proof public key, the owner-signed invite it came through, signed by the invite key and by
-            the new identity — sealed under the tenant key (field `member-join-record`, bound to the tenant scope and
-            the new account). Stored in the profile, served to members on `ScopeMember.sealedJoinRecord`, written
-            only here.
+            the new identity — sealed under a fresh value key of its own (field `member-join-record`, bound to the
+            tenant scope and the new account; ADR 0115). Stored in the profile, served to members on
+            `ScopeMember.sealedJoinRecord`, written only here.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLWpvaW4tcmVjb3Jk
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedJoinRecordValueKey:
+          type: [string, "null"]
+          description: >
+            With `sealedJoinRecord` (required there, and only there, else `400 invalid_request`): its value key `K_v` wrapped
+            under the tenant key of `epoch` (seal purpose `value-key`, bound to the tenant scope, that epoch and the
+            address of its `member-join-record` seal; ADR 0115).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         signerIdentityDigest:
           type: [string, "null"]
           description: >
@@ -4198,34 +4272,56 @@ components:
         sealedName:
           type: [string, "null"]
           description: >
-            OPTIONAL real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64) — the same blob the profile
-            op stores (ADR 0023). Submitted **at the join** — the invitee holds `K_tenant` at accept, from the cold
-            birth or the invite's grant; omitted ⇒ username-only, the name added/edited later in the profile.
-            Stored verbatim; the server never decrypts it.
+            OPTIONAL real name (first + last) sealed under a field key derived from a fresh value key (opaque base64) —
+            the same blob the profile op stores (ADR 0023, ADR 0115). Submitted **at the join** — the invitee holds
+            `K_tenant` at accept, from the cold birth or the invite's grant; omitted ⇒ username-only, the name
+            added/edited later in the profile. Stored verbatim; the server never decrypts it.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedNameValueKey:
+          type: [string, "null"]
+          description: >
+            With `sealedName` (required there, and only there, else `400 invalid_request`): its value key `K_v` wrapped
+            under the tenant key of `epoch` (seal purpose `value-key`, bound to the tenant scope, that epoch and the
+            address of its `member-name` seal; ADR 0115).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedAvatar:
           type: [string, "null"]
           description: >
-            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under a field key derived from `K_tenant` with the
-            `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
-            the join, where the invitee holds `K_tenant` (from the cold birth or the invite's grant); stored verbatim
-            with `avatarRevision` 1. Omitted or null = no picture.
+            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under a field key derived from a
+            fresh value key with the `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the
+            constant length). Submitted at the join, where the invitee holds `K_tenant` (from the cold birth or the
+            invite's grant); stored verbatim with `avatarRevision` 1. Omitted or null = no picture.
           contentEncoding: base64
           maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedAvatarValueKey:
+          type: [string, "null"]
+          description: >
+            With `sealedAvatar` (required there, and only there, else `400 invalid_request`): its value key `K_v` wrapped
+            under the tenant key of `epoch` (seal purpose `value-key`, bound to the tenant scope, that epoch and the
+            address of its `member-avatar` seal; ADR 0115).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         epoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            The tenant epoch whose key seals `sealedJoinRecord`, `sealedName` and `sealedAvatar` (ADR 0115 decision 3) —
-            required with any of them (else `400 invalid_request`). It must be the tenant scope's current epoch, under
-            its row lock (`409 stale_epoch`): a rotation re-seals every profile under the one key, so none may land
-            under an older one. A MEMBER invite's newcomer seals under the key its self-grant carries; an OWNER
-            invite's birth is epoch 0.
+            The tenant epoch whose key wraps the value keys of `sealedJoinRecord`, `sealedName` and `sealedAvatar` (ADR
+            0115 decision 3) — required with any of them (else `400 invalid_request`). It must be the tenant scope's
+            current epoch, under its row lock (`409 stale_epoch`): a rotation re-wraps every value key under the one key,
+            so none may land under an older one. A MEMBER invite's newcomer wraps under the key its self-grant carries;
+            an OWNER invite's birth is epoch 0.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'

@@ -152,10 +152,11 @@ paths:
       description: >
         Creates a `kind=GROUP` scope for the authenticated caller in the tenant resolved from the `Host`, plus
         the caller's self-membership (`role=OWNER`). Like the personal scope, birth is **client-driven**: the
-        client generated the scope key `K_SC`, sealed the group name under its derived name-key `K_name_0`
-        (`encryptedName`, cr-0096/ADR 0027), and sealed `K_SC` to its own identity public key (`wrappedGrant`,
-        born at name-epoch 0), both bound to the scope id the client minted ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)). The server stores both
-        ciphertexts verbatim and never sees the key or the name — it only records the scope under that id + the
+        client generated the scope key `K_SC`, sealed the group name under a fresh value key `K_v` of its own
+        (`encryptedName`, born at name-epoch 0) and wrapped that `K_v` under `K_SC` (`wrappedNameValueKey`,
+        [ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)), and sealed `K_SC` to its own
+        identity public key (`wrappedGrant`), each bound to the scope id the client minted ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)). The server stores the
+        ciphertexts verbatim and never sees a key or the name — it only records the scope under that id + the
         self-membership. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads. Group names are **not**
         unique; a duplicate name is allowed (resolved client-side, ADR 0014). Adding other members is a later,
         separate operation.
@@ -169,6 +170,7 @@ paths:
             example:
               scopeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               encryptedName: c2VhbGVkLW5hbWU=
+              wrappedNameValueKey: d3JhcHBlZC12YWx1ZS1rZXk=
               wrappedGrant: AQ==
               grantSignature: c2lnbmF0dXJl
               recipientIdentityDigest: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
@@ -309,7 +311,7 @@ paths:
 
 
         **Consent (uc.spaces.consent-group-add, cr-0096/ADR 0027):** if the target turned on "ask before adding me
-        to groups", the add must carry `sealedNameKey` (the group's derived name-key `K_name` sealed to their
+        to groups", the add must carry `sealedNameKey` (the group name's value key `K_v` sealed to their
         identity, which opens the canonical `encryptedName`) and is recorded as a **soft `pendingConsent`**
         membership holding the same grant — the group is not listed to the invitee until they accept
         (`…/invitations/accept`), which changes nothing about keys; a decline queues the group's rotation, since the
@@ -561,21 +563,27 @@ paths:
     post:
       tags: [scopes]
       operationId: rotateScope
-      summary: Commit a scope-key rotation — a new epoch replacing the old key, its re-sealed rows and the re-grants.
+      summary: Commit a scope-key rotation — a new epoch replacing the old key, its re-wrapped value keys and the re-grants.
       description: >
         Commits a rotation of the scope key ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)): commits the stated `epoch` **iff** it is
         the scope's current epoch + 1, stores its succession statement (`successionPublicKey`, `successionSignature`,
-        decision 5), swaps in every value staged under `rekeyId` — core's (`stageScopeRekey`) and each application's —
+        decision 5), swaps in every wrap staged under `rekeyId` — core's (`stageScopeRekey`) and each application's —
         and applies the `grants` (each remaining member's `wrappedGrant` of the **new** epoch, updating their
         granted-epoch), in one transaction under the scope's row lock.
 
         **The old key is replaced, never chained** (decision 1): nothing seals it under the new one, and after the
-        commit no scope-level row is under it. **Fail closed** (decision 2): every row sealed under the scope key — each
-        scope-root node's entry (live and trashed), the group's name and icon, each pending invitee's name key, each
-        link's recovery copy, each tenant member's profile and verification, and each application's rows (its
-        participant) — must have a staged value, else `409 rekey_parts_missing`; a row whose ciphertext changed since
-        its value was staged (the stage keeps the digest it replaces) is `409 rekey_parts_stale`. Either way nothing is
-        written, and the client stages those again. The commit then marks every node of the scope **due** for its own
+        commit nothing at scope level is under it. **A rotation re-wraps keys and never rewrites a value:** every
+        scope-level value that has an author — the group's name and icon, each link's recovery copy, each tenant
+        member's name, picture and join record, each verification, and each application's values (its participant) —
+        is sealed under a value key of its own, and the commit swaps in only that key's wrap; the one thing it re-seals
+        is each scope-root node's entry (live and trashed), which any member may write. A stage that writes a value's
+        ciphertext is refused (`422 rekey_writes_value`, nothing stored), so a rotator — owner or member alike — can
+        make a value unreadable, as any member can, and never rewrite another member's. **Fail closed** (decision 2):
+        every wrap under the scope key and every root entry must have a staged replacement, else `409
+        rekey_parts_missing`; a row whose wrap changed since its replacement was staged (the stage keeps the digest it
+        replaces) is `409 rekey_parts_stale`. Either way nothing is written, and the client stages those again. A
+        pending group invitee's name key is sealed to the invitee, not under the scope key: a rotation leaves it. The
+        commit then marks every node of the scope **due** for its own
         re-key ([ADR 0114](../../docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 4), which
         any member holding the current grant runs. A recovery copy keeps the epoch its link was minted at beside it, for
         the re-issue rule (ADR 0075 point 4). Any other `epoch` means the rotation was built on a superseded epoch — it lost a race, or the
@@ -655,9 +663,9 @@ paths:
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is neither an OWNER of the scope nor a member whose account rotation left a pending re-key row for it at its current epoch, or is such a member and names `removesUserId` (`not_scope_owner`, nothing stored); or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042); or `removesUserId` names no member of the group (`member_not_found`, nothing stored).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), `grants`, `pendingUserIds` and `removesUserId` together do not cover exactly the scope's memberships, or a TENANT rotation's `inviteGrants` and `pendingInviteIds` are not exactly the open invites (`rotation_incomplete`, nothing stored — re-read the members and `listOpenInvites` and rebuild), a grant's or a staged invitee name key's `recipientIdentityDigest` is not its member's (or invite's) current key (`recipient_key_not_current`, nothing stored — re-read the members and rebuild), a row sealed under the scope key has no value staged under `rekeyId` (`rekey_parts_missing`, nothing stored — stage it and commit again), a row changed since its value was staged (`rekey_parts_stale`, nothing stored — re-read it, re-stage, commit again), `removesUserId` is the last remaining accepted OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), `grants`, `pendingUserIds` and `removesUserId` together do not cover exactly the scope's memberships, or a TENANT rotation's `inviteGrants` and `pendingInviteIds` are not exactly the open invites (`rotation_incomplete`, nothing stored — re-read the members and `listOpenInvites` and rebuild), a grant's `recipientIdentityDigest` is not its member's (or invite's) current key (`recipient_key_not_current`, nothing stored — re-read the members and rebuild), a wrap under the scope key or a root entry has no replacement staged under `rekeyId` (`rekey_parts_missing`, nothing stored — stage it and commit again), a row's wrap changed since its replacement was staged (`rekey_parts_stale`, nothing stored — re-read it, re-stage, commit again), `removesUserId` is the last remaining accepted OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
-        "422": { description: "The grants name the member `removesUserId` removes (`removed_member_granted`, nothing stored) — the new epoch is never wrapped to the member the rotation removes.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: removed_member_granted } } } }
+        "422": { description: "The grants name the member `removesUserId` removes (`removed_member_granted`, nothing stored) — the new epoch is never wrapped to the member the rotation removes; or a value staged under `rekeyId` writes a value's ciphertext rather than its key's wrap (`rekey_writes_value`, nothing stored — a rotation re-wraps keys and never rewrites a value, ADR 0115; a stage left from before this rule is one, and the client stages wraps again under a fresh re-key id).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: removed_member_granted } } } }
 
   /api/scopes/{scopeId}/open-invites:
     get:
@@ -833,19 +841,27 @@ paths:
         reason: >-
           The write carries only the name the owner typed, sealed fresh; nameEpoch is a rotation guard, not an
           edit guard.
-      summary: Rename a group — re-seal the name under the current epoch (forward-secret).
+      summary: Rename a group — seal the name under a fresh value key, wrapped under the current epoch's key.
       description: >
-        Renames a GROUP scope (uc.spaces.rename-group, cr-0097, ADR 0027). The client re-seals the new name under
-        `K_name` derived from the scope's **current** content-key epoch (`K_name = HKDF(E_currentEpoch,
-        "group-name-key")`) and posts the opaque `encryptedName` + the `nameEpoch` it sealed under. The server
-        overwrites the scope's `encrypted_name` + `name_epoch` — **only** when `nameEpoch == currentEpoch` (else
-        `409 stale_epoch`: a concurrent rotation advanced the epoch under the caller, refetch + retry — or, while a
-        rotation stages, its commit refuses the stale stage, `rekey_parts_stale`) and the group
-        is not being deleted (else `409 scope_deleting`, like every write during the grace period). Sealing under
-        the **current** epoch makes the rename **forward-secret** — a member removed at an earlier epoch cannot
-        derive the new `K_name`. **Name-only**: no `K_SC` rotation, no re-grant. Membership-gated first (a
-        non-member gets `404 scope_not_found`, ADR 0042), then owner-gated (`403 not_scope_owner`; ADR 0014 §4).
-        Operator-blind — the server never sees a key or the plaintext name (enforced by code, ADR 0008).
+        Renames a GROUP scope (uc.spaces.rename-group, cr-0097, ADR 0027). The client seals the new name under a
+        **fresh** value key `K_v` ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)) at
+        `nameEpoch` — the scope's current epoch — and wraps that `K_v` under the current scope key
+        (`wrappedNameValueKey`), and seals the same `K_v` to each pending consent invitee's identity
+        (`inviteeNameKeys`, `group-name-key`), so an invitee opens the new name as the members do. The server
+        overwrites the scope's name, its epoch and its wrap — **only** when `nameEpoch == currentEpoch` (else `409
+        stale_epoch`: a concurrent rotation advanced the epoch under the caller, refetch + retry — or, while a
+        rotation stages, its commit refuses the stale stage of the replaced wrap, `rekey_parts_stale`) and the group
+        is not being deleted (else `409 scope_deleting`, like every write during the grace period) — and replaces
+        each pending invitee's name key in the same transaction. **Every invitee holding a name key is named**: a
+        rename that leaves one out is `409 rename_incomplete` with nothing written (its key would open no name);
+        an entry with both `sealedNameKey` and `recipientIdentityDigest` `null` clears that invitee's name key — the
+        owner's device could not anchor the invitee's key, and seals to no key it cannot anchor (ADR 0111 decision 9)
+        — and an entry for an id that holds no pending proposal is ignored. A key sealed to an identity that is not
+        the invitee's current one is `409 recipient_key_not_current`. A fresh `K_v` makes the rename
+        **forward-secret** — a member removed at an earlier epoch never held it. **Name-only**: no `K_SC` rotation, no
+        re-grant. Membership-gated first (a non-member gets `404 scope_not_found`, ADR 0042), then owner-gated (`403
+        not_scope_owner`; ADR 0014 §4). Operator-blind — the server never sees a key or the plaintext name (enforced
+        by code, ADR 0008).
       security:
         - bearerAuth: []
       parameters:
@@ -855,14 +871,14 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/RenameGroupRequest" }
-            example: { encryptedName: c2VhbGVkLW5hbWU=, nameEpoch: 0 }
+            example: { encryptedName: c2VhbGVkLW5hbWU=, nameEpoch: 0, wrappedNameValueKey: d3JhcHBlZC12YWx1ZS1rZXk=, inviteeNameKeys: [] }
       responses:
-        "204": { description: The group was renamed (the row's encrypted_name + name_epoch were overwritten). }
-        "400": { description: Malformed request (blank/oversized/invalid encryptedName)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
+        "204": { description: "The group was renamed (the row's name, name epoch and name wrap were overwritten, each pending invitee's name key replaced)." }
+        "400": { description: "Malformed request (blank/oversized/invalid encryptedName or wrap, an invitee entry with exactly one of `sealedNameKey` and `recipientIdentityDigest`, or one invitee named twice).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such GROUP scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The submitted `nameEpoch` is stale (a concurrent rotation moved the epoch — `stale_epoch`, refetch + retry), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "409": { description: "The submitted `nameEpoch` is stale (a concurrent rotation moved the epoch — `stale_epoch`, refetch + retry), a pending invitee holding a name key is not named in `inviteeNameKeys` (`rename_incomplete`, nothing written — re-read the members and rebuild), an invitee's name key is sealed to a key that is not their current one (`recipient_key_not_current`, nothing written), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/scopes/{scopeId}/icon:
@@ -874,18 +890,18 @@ paths:
         reason: >-
           The write carries only the icon the owner chose, sealed fresh; iconEpoch is a rotation guard, not an
           edit guard.
-      summary: Set or replace a space icon — seal it under the current epoch (operator-blind, constant length).
+      summary: Set or replace a space icon — seal it under a fresh value key (operator-blind, constant length).
       description: >
         Sets or replaces a space's icon (uc.spaces.set-space-icon). The client bakes the crop, re-encodes to a
-        fixed square, **pads the plaintext to a constant length**, and seals it under `K_icon` derived from the
-        scope's **current** content-key epoch (`K_icon = HKDF(E_currentEpoch, "veyq/v1/space-icon-key")`), then
-        posts the opaque `sealedIcon` + the `iconEpoch` it sealed under. The server overwrites the scope's
-        `sealed_icon` + `icon_epoch` — **only** when `iconEpoch == currentEpoch` (else `409 stale_epoch`: a
-        concurrent rotation advanced the epoch under the caller, refetch + retry) and the scope is not being deleted
-        (else `409 scope_deleting`). Sealing under the current epoch makes a replaced icon forward-secret. The
-        scope must be a **TENANT** or a **GROUP** — a **PERSONAL** scope has no icon (nothing to tell it apart
-        from) and answers `404`. Every rotation re-seals the icon at its new epoch (ADR 0115 decision 2), so
-        `iconEpoch` is the scope's current epoch and a reader derives `K_icon` from the one key it holds.
+        fixed square, **pads the plaintext to a constant length**, and seals it under a **fresh** value key `K_v`
+        at `iconEpoch` — the scope's current epoch — and wraps that `K_v` under the current scope key
+        (`wrappedIconValueKey`, [ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)), then
+        posts the three. The server overwrites the scope's icon, its epoch and its wrap — **only** when `iconEpoch ==
+        currentEpoch` (else `409 stale_epoch`: a concurrent rotation advanced the epoch under the caller, refetch +
+        retry) and the scope is not being deleted (else `409 scope_deleting`). A fresh `K_v` makes a replaced icon
+        forward-secret. The scope must be a **TENANT** or a **GROUP** — a **PERSONAL** scope has no icon (nothing to
+        tell it apart from) and answers `404`. A rotation re-wraps the icon's `K_v` and leaves the icon and its
+        `iconEpoch`: a reader opens the wrap with the key of the scope's current epoch.
         Membership-gated first (a
         non-member gets `404 scope_not_found`, ADR 0042), then owner-gated (`403 not_scope_owner`; ADR 0007 — the
         owner gate keys on the root scope; a GROUP co-owner is an OWNER too). Because every `sealedIcon` is padded to an identical length, the
@@ -900,9 +916,9 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/SetScopeIconRequest" }
-            example: { sealedIcon: c2VhbGVkLWljb24=, iconEpoch: 0 }
+            example: { sealedIcon: c2VhbGVkLWljb24=, iconEpoch: 0, wrappedIconValueKey: d3JhcHBlZC12YWx1ZS1rZXk= }
       responses:
-        "204": { description: The icon was set (the row's sealed_icon + icon_epoch were overwritten). }
+        "204": { description: "The icon was set (the row's icon, icon epoch and icon wrap were overwritten)." }
         "400": { description: Malformed request (blank/wrong-length/invalid sealedIcon)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member of the scope but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
@@ -914,7 +930,7 @@ paths:
       operationId: clearScopeIcon
       summary: Remove a space icon — every member falls back to the initial.
       description: >
-        Clears a space's icon (uc.spaces.set-space-icon A5): the row's `sealed_icon` + `icon_epoch` are reset and
+        Clears a space's icon (uc.spaces.set-space-icon A5): the row's icon, its epoch and its wrap are reset and
         every member falls back to the initial. **No epoch check** — a removal carries no ciphertext that could be
         sealed under a stale epoch, so it is idempotent (clearing an already-iconless scope is still a `204`).
         Like every write it is refused while the scope is being deleted (`409 scope_deleting`). Access-gated first
@@ -983,7 +999,7 @@ paths:
       description: >
         Returns the caller's **pending consent proposals** — groups a GroupOwner proposed to add them to, awaiting
         their Accept/Decline (uc.spaces.consent-group-add, cr-0096/ADR 0027) — in the tenant resolved from the
-        `Host`. Each carries the `scopeId`, the `sealedNameKey` (the group's derived name-key `K_name` sealed to the
+        `Host`. Each carries the `scopeId`, the `sealedNameKey` (the group name's value key `K_v` sealed to the
         caller's identity) + the canonical `encryptedName` it opens (both decrypted on-device to the group-consistent
         name), and `addedBy` (the owner's per-tenant username). The caller's own view of their invitations; no
         `K_SC` is ever returned (a soft member holds no scope key — only the name-key, which leaks the name and
@@ -1190,7 +1206,7 @@ components:
 
     CreateGroupRequest:
       type: object
-      required: [scopeId, encryptedName, wrappedGrant, grantSignature, recipientIdentityDigest]
+      required: [scopeId, encryptedName, wrappedNameValueKey, wrappedGrant, grantSignature, recipientIdentityDigest]
       properties:
         scopeId:
           x-veyq-visibility: id
@@ -1202,14 +1218,24 @@ components:
         encryptedName:
           type: string
           description: >
-            The group's name sealed under its **derived name-key `K_name_0`** at birth (cr-0096/ADR 0027):
-            `K_name_0 = HKDF(E_0, "veyq/v1/group-name-key")` from the birth epoch key, then `symEncrypt(K_name_0,
-            name)` (seal purpose `group-name`, bound to scope + name epoch) — opaque base64 the server stores verbatim and never interprets, so the
-            server sees an **unnamed** group (ADR 0014). Born at name-epoch 0 (forward-secret-ready).
+            The group's name sealed under a fresh value key `K_v` of its own at birth (seal purpose `group-name`, bound
+            to scope + name epoch 0; ADR 0115) — opaque base64 the server stores verbatim and never interprets, so the
+            server sees an **unnamed** group (ADR 0014).
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedNameValueKey:
+          type: string
+          description: >
+            The name's `K_v` wrapped under the birth key `K_SC` (seal purpose `value-key`, bound to the scope, epoch 0
+            and the name's address — SHA-256 of its `group-name` seal context). A rotation re-wraps this and never
+            rewrites the name.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedGrant:
           type: string
           description: >
@@ -1243,15 +1269,14 @@ components:
 
     RenameGroupRequest:
       type: object
-      required: [encryptedName, nameEpoch]
+      required: [encryptedName, nameEpoch, wrappedNameValueKey, inviteeNameKeys]
       properties:
         encryptedName:
           type: string
           description: >
-            The new group name sealed under `K_name` derived from the scope's **current** content-key epoch
-            (cr-0097/ADR 0027): `K_name = HKDF(E_currentEpoch, "veyq/v1/group-name-key")`, then `symEncrypt(K_name,
-            newName)` (seal purpose `group-name`, bound to scope + name epoch) — opaque base64 the server stores verbatim and never interprets. Sealing
-            under the current epoch is what makes the rename forward-secret.
+            The new group name sealed under a fresh value key `K_v` (seal purpose `group-name`, bound to scope + name
+            epoch; ADR 0115) — opaque base64 the server stores verbatim and never interprets. A fresh `K_v` is what
+            makes the rename forward-secret.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
@@ -1261,28 +1286,79 @@ components:
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           description: >
-            The content-key epoch the client sealed `encryptedName` under — must equal the scope's **current** epoch
-            (the server rejects a stale value with `409 stale_epoch`). The server writes it to the scope's
-            `name_epoch`; members derive `K_name` from the scope's one key (cr-0097/ADR 0027, ADR 0115 decision 1).
+            The scope epoch the client wrote `encryptedName` at and wrapped its `K_v` under — must equal the scope's
+            **current** epoch (the server rejects a stale value with `409 stale_epoch`). The server writes it to the
+            scope's `name_epoch`; both the `group-name` seal and each invitee's `group-name-key` bind it.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+        wrappedNameValueKey:
+          type: string
+          description: >
+            The new name's `K_v` wrapped under the scope key of `nameEpoch` (seal purpose `value-key`, bound to the
+            scope, that epoch and the name's address).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        inviteeNameKeys:
+          type: array
+          description: >
+            The new name's `K_v` sealed to each pending consent invitee (`listScopeMembers`' `pendingConsent` rows),
+            one entry each: every invitee that holds a name key must be named (`409 rename_incomplete` otherwise).
+          maxItems: 256
+          items: { $ref: "#/components/schemas/InviteeNameKey" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Size(max = 256)'
+
+    InviteeNameKey:
+      type: object
+      description: >
+        A pending group invitee's name key after a rename — or, `sealedNameKey` and `recipientIdentityDigest` both
+        `null`, **cleared**: the owner's device holds the invitee's identity key as an anomaly, or anchors none, and
+        seals to no key it cannot anchor (ADR 0028 Decision 2). The invitee then sees the proposal without the group's
+        name (ADR 0111 decision 9). Exactly one of the two `null` is `400 invalid_request`.
+      required: [userId, sealedNameKey, recipientIdentityDigest]
+      properties:
+        userId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        sealedNameKey:
+          type: [string, "null"]
+          description: The new name's `K_v` sealed to the invitee's identity (`group-name-key`, bound to scope + `nameEpoch`); `null` clears it.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 8192
+          example: Z3JvdXAtbmFtZS1rZXktc2VhbGVkLXRvLWludml0ZWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recipientIdentityDigest:
+          type: [string, "null"]
+          description: >
+            SHA-256 of the identity bundle it is sealed to. The server compares it with the invitee's current identity
+            key and refuses another (`409 recipient_key_not_current`). `null` exactly when `sealedNameKey` is.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 64
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     SetScopeIconRequest:
       type: object
-      required: [sealedIcon, iconEpoch]
+      required: [sealedIcon, iconEpoch, wrappedIconValueKey]
       properties:
         sealedIcon:
           type: string
           description: >
             The space icon — the client bakes the crop, re-encodes to a fixed square, **pads the plaintext to a
-            constant length**, then seals it under `K_icon` derived from the scope's **current** content-key epoch
-            (uc.spaces.set-space-icon): `K_icon = HKDF(E_currentEpoch, "veyq/v1/space-icon-key")`, then
-            `symWrap(K_icon, paddedIcon, "space-icon")` (`0x02 || nonce(12) || aead`, base64). Opaque base64 the
+            constant length**, then seals it under a fresh value key `K_v` (uc.spaces.set-space-icon, ADR 0115):
+            `seal(space-icon: scope, iconEpoch, K_v, paddedIcon)` (`0x02 || nonce(12) || aead`, base64). Opaque base64 the
             server stores verbatim and never interprets. Its length is a **constant** — the exact base64 length of
             the sealed padded plaintext (a 16 KiB pad → 21884 chars) — so every stored icon is byte-identical in
             length (one icon image is indistinguishable from another) and the value is provably inside the `TEXT` column
-            (65 535). Sealing under the current epoch makes a replace forward-secret.
+            (65 535). A fresh `K_v` makes a replace forward-secret.
           contentEncoding: base64
           maxLength: 21884
           example: c2VhbGVkLWljb24=
@@ -1292,12 +1368,20 @@ components:
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           description: >
-            The content-key epoch the client sealed `sealedIcon` under — must equal the scope's **current** epoch
-            (the server rejects a stale value with `409 stale_epoch`). The server writes it to the scope's
-            `icon_epoch`; members derive `K_icon` from the scope's one key (uc.spaces.set-space-icon).
+            The scope epoch the client wrote `sealedIcon` at and wrapped its `K_v` under — must equal the scope's
+            **current** epoch (the server rejects a stale value with `409 stale_epoch`). The server writes it to the
+            scope's `icon_epoch`, which the `space-icon` seal binds.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+        wrappedIconValueKey:
+          type: string
+          description: The icon's `K_v` wrapped under the scope key of `iconEpoch` (seal purpose `value-key`, bound to the scope, that epoch and the icon's address).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ResolveGroupMemberRequest:
       type: object
@@ -1340,10 +1424,10 @@ components:
           type: string
           description: >
             **Required only when the target has consent on** (uc.spaces.consent-group-add, cr-0096, ADR 0027): the
-            group's **derived name-key `K_name`** sealed to the target's identity public key
-            (`asymWrap(inviteePub, K_name, "group-name-key")`, opaque base64), where `K_name =
-            HKDF(E_e, "veyq/v1/group-name-key")` for the name's current epoch. Handing the invitee the key — not a
-            name copy — lets them open the **same canonical `encryptedName`** the members read, so a modified owner
+            group name's value key `K_v` sealed to the target's identity public key
+            (`asymWrap(inviteePub, K_v, "group-name-key")`, opaque base64, bound to the scope and the name's epoch;
+            ADR 0115). Handing the invitee the key — not a name copy — lets them open the **same canonical
+            `encryptedName`** the members read, and a rotation leaves it, so a modified owner
             cannot privately show a divergent name. When present, the add is recorded as a **soft
             `pendingConsent`** membership, holding the grant, until the invitee accepts. Omit for the default direct-add (target consent off). The owner learns whether it
             is required from the prior member-resolve (`requiresConsent`); a `requiresConsent` target added
@@ -1667,7 +1751,7 @@ components:
           type: [string, "null"]
           description: >
             The caller's **own** grant for this tenant — the tenant scope key sealed to their identity public key
-            (opaque base64), so the switcher can open the tenant's `sealedIcon` without a per-tenant scopes call
+            (opaque base64), so the switcher can open the tenant's icon's wrap without a per-tenant scopes call
             (en.spaces.tenant-scope). The client `asymUnwrap`s it locally; the server never interprets it. `null`
             while the tenant is `SUSPENDED`, which withholds it as a standing reason
             (en.spaces.tenant-scope E1a): suspension refuses its members every read, this one included.
@@ -1677,19 +1761,27 @@ components:
         sealedIcon:
           type: [string, "null"]
           description: >
-            The tenant's icon (uc.spaces.set-space-icon): padded to a constant length and sealed under `K_icon =
-            HKDF(E_iconEpoch, "veyq/v1/space-icon-key")` — opaque base64 the client opens + unpads on-device to
-            render the tenant's avatar in the switcher. `null` when the tenant has no icon (render the initial), and
-            while the tenant is `SUSPENDED` (withheld like `wrappedGrant`).
+            The tenant's icon (uc.spaces.set-space-icon): padded to a constant length and sealed under its own value
+            key (`wrappedIconValueKey`, ADR 0115) — opaque base64 the client opens + unpads on-device to render the
+            tenant's avatar in the switcher. `null` when the tenant has no icon (render the initial), and while the
+            tenant is `SUSPENDED` (withheld like `wrappedGrant`).
           contentEncoding: base64
           maxLength: 21884
           example: c2VhbGVkLWljb24=
+        wrappedIconValueKey:
+          type: [string, "null"]
+          description: >
+            The icon's value key wrapped under the tenant key of its current epoch (`value-key`), which the key
+            `wrappedGrant` carries opens; `null` exactly when `sealedIcon` is.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
         iconEpoch:
           x-veyq-visibility: structure
           type: integer
           description: >
-            The epoch `sealedIcon` was sealed under — the tenant's current one, since every rotation re-seals the icon
-            (ADR 0115 decision 2); the client derives `K_icon` from the key its grant carries. 0 when no icon is set.
+            The epoch the icon was written at — what its `space-icon` seal binds; a rotation re-wraps the icon's value
+            key and leaves it. 0 when no icon is set.
           minimum: 0
           example: 0
         memberInviteTtlSeconds:
@@ -1778,11 +1870,20 @@ components:
         sealedName:
           type: [string, "null"]
           description: >
-            The member's real name (first + last) **sealed under a field key derived from `K_tenant`** (opaque base64), decrypted locally
-            by any tenant member. `null` when not sealed (the member left it out). The server never sees the plaintext name.
+            The member's real name (first + last) **sealed under a field key derived from its own value key**
+            (`wrappedNameValueKey`, ADR 0115; opaque base64), decrypted locally by any tenant member. `null` when not
+            sealed (the member left it out). The server never sees the plaintext name.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
+        wrappedNameValueKey:
+          type: [string, "null"]
+          description: >
+            The name's value key wrapped under the tenant key of its current epoch (`value-key`, bound to the tenant
+            scope, that epoch and the name's address); `null` exactly when `sealedName` is.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
         avatarRevision:
           x-veyq-visibility: structure
           type: integer
@@ -1851,13 +1952,19 @@ components:
           type: [string, "null"]
           description: >
             TENANT scope only: the member's join record ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 3 and 12) — who they joined
-            as, through which owner-signed invite, signed by the invite key and by their identity — sealed under the
-            tenant key (field `member-join-record`, bound to the tenant scope and this member). Written once at the
-            invite's accept and never by the profile op; `null` for the tenant's first owner (its trust root, born
-            through the Server Owner's invite) and in every other kind of scope.
+            as, through which owner-signed invite, signed by the invite key and by their identity — sealed under its
+            own value key (field `member-join-record`, bound to the tenant scope and this member; ADR 0115). Written
+            once at the invite's accept and never by the profile op; `null` for the tenant's first owner (its trust
+            root, born through the Server Owner's invite) and in every other kind of scope.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLWpvaW4tcmVjb3Jk
+        wrappedJoinRecordValueKey:
+          type: [string, "null"]
+          description: The join record's value key wrapped under the tenant key of its current epoch (`value-key`); `null` exactly when `sealedJoinRecord` is.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
         joinEndorsement:
           type: [string, "null"]
           description: >
@@ -1950,8 +2057,8 @@ components:
         identityPublicKey:
           type: string
           description: >
-            The member's identity public key bundle (opaque base64) — the owner's device wraps the group's derived
-            name-key `K_name` and later `K_SC` to it. Operational metadata the server already stores.
+            The member's identity public key bundle (opaque base64) — the owner's device seals the group name's
+            value key `K_v` and later `K_SC` to it. Operational metadata the server already stores.
           contentEncoding: base64
           maxLength: 8192
           example: bWVtYmVyLXB1YmxpYy1rZXk=
@@ -1977,7 +2084,7 @@ components:
       description: >
         A pending consent proposal to join a GROUP, from the **invitee's** point of view (uc.spaces.consent-group-add,
         cr-0096, ADR 0027). The client `asymUnwrap`s `sealedNameKey` locally with its identity private key to recover
-        the derived name-key `K_name`, then `symUnwrap`s `encryptedName` (the scope's **canonical** sealed name) under
+        the name's value key `K_v` (ADR 0115), then `symUnwrap`s `encryptedName` (the scope's **canonical** sealed name) under
         it to show the group's name — the same blob the members hold, so a modified owner cannot show a divergent name.
         `addedBy` is the owner's per-tenant username (already visible to the invitee).
       required: [scopeId, addedBy, sealedNameKey, encryptedName, nameEpoch]
@@ -2000,18 +2107,19 @@ components:
         sealedNameKey:
           type: [string, "null"]
           description: >
-            The group's **derived name-key `K_name`** sealed to the caller's identity public key
+            The group name's value key `K_v` sealed to the caller's identity public key
             (`asymWrap(..., "group-name-key")`, opaque base64) — unwrapped only on-device. It opens the canonical
-            `encryptedName` (not a private name copy), so the invitee sees exactly what the members see. `null` when a
-            rotation cleared it — the rotating device could not anchor the caller's identity key and seals to no key it
-            cannot anchor (`ScopeRekeyInviteeSeal`, ADR 0111 decision 9): the proposal is shown without the group's name.
+            `encryptedName` (not a private name copy), so the invitee sees exactly what the members see; a rotation
+            leaves it, a rename replaces it. `null` when a rename cleared it — the owner's device could not anchor the
+            caller's identity key and seals to no key it cannot anchor (`InviteeNameKey`, ADR 0111 decision 9): the
+            proposal is shown without the group's name.
           contentEncoding: base64
           maxLength: 8192
           example: Z3JvdXAtbmFtZS1rZXktc2VhbGVkLXRvLWludml0ZWU=
         encryptedName:
           type: string
           description: >
-            The scope's **canonical** sealed group name (`symEncrypt(K_name, name)`, opaque base64) — the same
+            The scope's **canonical** sealed group name (`seal(group-name, K_v, name)`, opaque base64) — the same
             ciphertext the members read, surfaced to the pending invitee so they open it with the `sealedNameKey`.
             The blind server only relays already-stored ciphertext; it holds no key and never sees the name.
           contentEncoding: base64
@@ -2056,41 +2164,52 @@ components:
         encryptedName:
           type: [string, "null"]
           description: >
-            For a `GROUP` scope: the group's name sealed under its **derived name-key `K_name`** (opaque base64,
-            cr-0096/ADR 0027), decrypted locally so the client can label the group in the switcher. The client
-            derives `K_name = HKDF(E_e, "veyq/v1/group-name-key")` from the key of the name's epoch (`nameEpoch`,
-            the current one: every rotation re-seals the name). `null` for `TENANT` / `PERSONAL` scopes, which carry no
-            per-scope sealed name.
+            For a `GROUP` scope: the group's name sealed under its own value key `K_v` (opaque base64, ADR 0115),
+            decrypted locally so the client can label the group in the switcher: it opens `wrappedNameValueKey` with
+            the key of `currentEpoch`, then the name with `K_v` at `nameEpoch`. `null` for `TENANT` / `PERSONAL`
+            scopes, which carry no per-scope sealed name.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
+        wrappedNameValueKey:
+          type: [string, "null"]
+          description: >
+            For a `GROUP` scope: the name's value key wrapped under the scope key of `currentEpoch` (`value-key`, bound
+            to the scope, that epoch and the name's address) — a rotation re-wraps it and leaves the name. `null`
+            exactly when `encryptedName` is.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
         nameEpoch:
           x-veyq-visibility: structure
           type: integer
           description: >
-            For a `GROUP` scope: the content-key epoch the `encryptedName` was sealed under (cr-0096/ADR 0027) — 0
-            at birth, moved by a rename and by every rotation, which re-seals the name at its new epoch (ADR 0115
-            decision 2) — so it is the scope's current epoch, whose key derives `K_name`. 0 for `TENANT` / `PERSONAL`
-            scopes.
+            For a `GROUP` scope: the scope epoch the name was written at (cr-0096/ADR 0027) — 0 at birth, moved by a
+            rename only; a rotation re-wraps the name's value key and leaves it. What the `group-name` seal binds. 0
+            for `TENANT` / `PERSONAL` scopes.
           minimum: 0
           example: 0
         sealedIcon:
           type: [string, "null"]
           description: >
-            The scope's icon (uc.spaces.set-space-icon): the padded, constant-length image sealed under `K_icon =
-            HKDF(E_e, "veyq/v1/space-icon-key")` for the icon's epoch (`iconEpoch`, the current one) — opaque
-            base64 the client opens + unpads on-device. `null` when the scope has no icon (the client renders the
-            initial). `PERSONAL` scopes never carry one.
+            The scope's icon (uc.spaces.set-space-icon): the padded, constant-length image sealed under its own value
+            key (`wrappedIconValueKey`, ADR 0115) — opaque base64 the client opens + unpads on-device. `null` when the
+            scope has no icon (the client renders the initial). `PERSONAL` scopes never carry one.
           contentEncoding: base64
           maxLength: 21884
           example: c2VhbGVkLWljb24=
+        wrappedIconValueKey:
+          type: [string, "null"]
+          description: The icon's value key wrapped under the scope key of `currentEpoch` (`value-key`); `null` exactly when `sealedIcon` is.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
         iconEpoch:
           x-veyq-visibility: structure
           type: integer
           description: >
-            The epoch `sealedIcon` was sealed under (uc.spaces.set-space-icon) — moved by an icon-set and by every
-            rotation, which re-seals the icon (ADR 0115 decision 2), so the scope's current epoch, whose key derives
-            `K_icon`. 0 when no icon is set.
+            The epoch the icon was written at (uc.spaces.set-space-icon) — what its `space-icon` seal binds; moved by an
+            icon-set only, a rotation re-wraps the icon's value key and leaves it. 0 when no icon is set.
           minimum: 0
           example: 0
         currentEpoch:

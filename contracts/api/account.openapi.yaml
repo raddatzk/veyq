@@ -176,7 +176,7 @@ paths:
       summary: Fetch the caller's identity profile in the active tenant.
       description: >
         Returns the authenticated caller's per-tenant profile — their `username` (plaintext) + `sealedName`
-        (their real name sealed under a field key derived from `K_tenant`, or null if not yet sealed) — in the tenant resolved from the
+        (their real name sealed under a field key derived from its own value key, with that key's wrap under `K_tenant`, or null if not yet sealed) — in the tenant resolved from the
         Host (ADR 0023). Only the caller's own profile; no id/email in the request.
       security:
         - bearerAuth: []
@@ -209,11 +209,13 @@ paths:
       summary: Update the caller's username and/or sealed real name in the active tenant.
       description: >
         Updates the caller's per-tenant profile in the Host tenant: change the `username` (re-checked unique in
-        the tenant → `409 username_taken`) and/or store the `sealedName` blob (real name sealed under a field key derived from `K_tenant`,
-        opaque ciphertext). Either field may be omitted to leave it unchanged. A `sealedName` states the tenant epoch it
-        is sealed under (`epoch`), which must be the tenant scope's current one (`409 stale_epoch`, ADR 0115 decision 3):
-        a rotation re-seals every profile under the one key, so none may land under an older one. Operator-blind: the
-        server never sees the plaintext name.
+        the tenant → `409 username_taken`) and/or store the `sealedName` blob (real name sealed under a field key derived
+        from a fresh value key `K_v`, opaque ciphertext) with `wrappedNameValueKey`, that `K_v` wrapped under the tenant
+        key ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)). Either field may be omitted
+        to leave it unchanged. A `sealedName` states the tenant epoch its wrap is under (`epoch`), which must be the
+        tenant scope's current one (`409 stale_epoch`, ADR 0115 decision 3): a rotation re-wraps every value key under
+        the one key, so none may land under an older one — and never rewrites the name, so no rotator can. Operator-blind:
+        the server never sees the plaintext name.
       security:
         - bearerAuth: []
       requestBody:
@@ -224,6 +226,7 @@ paths:
             example:
               username: kevin
               sealedName: c2VhbGVkLW5hbWU=
+              wrappedNameValueKey: d3JhcHBlZC12YWx1ZS1rZXk=
               epoch: 0
       responses:
         "200":
@@ -272,11 +275,12 @@ paths:
       description: >
         Stores the caller's profile picture in the tenant resolved from the Host (uc.spaces.set-profile-picture,
         [ADR 0084](../../docs/decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)):
-        one opaque, constant-length ciphertext (a 256 px WebP padded to 16 KiB, sealed under a field key derived from `K_tenant` with the
-        `member-avatar` purpose bound to the tenant scope and the caller's own user id). The server stores it verbatim,
-        overwrites any earlier one and bumps the profile's `avatarRevision`; it never sees the image, its size or its
-        type. Other tenants' profiles of the same account are untouched. It states the tenant epoch it is sealed under
-        (`epoch`), which must be the current one (`409 stale_epoch`, ADR 0115 decision 3).
+        one opaque, constant-length ciphertext (a 256 px WebP padded to 16 KiB, sealed under a field key derived from a
+        fresh value key `K_v` with the `member-avatar` purpose bound to the tenant scope and the caller's own user id),
+        and that `K_v` wrapped under the tenant key (`wrappedAvatarValueKey`, ADR 0115). The server stores both
+        verbatim, overwrites any earlier ones and bumps the profile's `avatarRevision`; it never sees the image, its size
+        or its type. Other tenants' profiles of the same account are untouched. It states the tenant epoch its wrap is
+        under (`epoch`), which must be the current one (`409 stale_epoch`, ADR 0115 decision 3).
       security:
         - bearerAuth: []
       requestBody:
@@ -284,7 +288,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/SetAvatarRequest" }
-            example: { sealedAvatar: c2VhbGVkLWF2YXRhcg==, epoch: 0 }
+            example: { sealedAvatar: c2VhbGVkLWF2YXRhcg==, wrappedAvatarValueKey: d3JhcHBlZC12YWx1ZS1rZXk=, epoch: 0 }
       responses:
         "204":
           description: The picture is stored and `avatarRevision` bumped.
@@ -977,8 +981,8 @@ paths:
       description: >
         Host-independent (ADR 0111 decision 21): one entry per tenant profile whose join the
         caller rooted (the signer of the invite it was accepted through) and that holds a join record, in **every**
-        tenant — the member, the sealed record as stored and the endorsement it carries now. The client opens each with
-        the tenant's epoch keys (the plan opener) and endorses it with the identity it is about to publish **only** when
+        tenant — the member, the sealed record as stored, its value key's wrap and the endorsement it carries now. The
+        client opens each wrap with the tenant's key (the plan opener), the record with the value key, and endorses it with the identity it is about to publish **only** when
         the record verifies, names the caller as its signer, and either names the caller's outgoing key or carries an
         endorsement that verifies under it; any other it declares (`endorsement: null`): a record it cannot open, or one a
         retired key signed without an endorsement — exactly what must not be carried. Operator-blind: ciphertext and
@@ -998,6 +1002,7 @@ paths:
                 - tenantId: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f
                   userId: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
                   sealedJoinRecord: c2VhbGVkLWpvaW4tcmVjb3Jk
+                  wrappedJoinRecordValueKey: d3JhcHBlZC12YWx1ZS1rZXk=
                   joinEndorsement: null
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
@@ -1997,11 +2002,19 @@ components:
         sealedName:
           type: [string, "null"]
           description: >
-            The caller's real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64), or null when not yet
+            The caller's real name (first + last) sealed under a field key derived from its own value key (opaque base64), or null when not yet
             sealed. Decrypted only on-device.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
+        wrappedNameValueKey:
+          type: [string, "null"]
+          description: >
+            The name's value key wrapped under the tenant key of its current epoch (`value-key`, ADR 0115); `null`
+            exactly when `sealedName` is.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
         avatarRevision:
           x-veyq-visibility: structure
           type: integer
@@ -2026,13 +2039,14 @@ components:
     ProfileUpdateRequest:
       type: object
       description: >
-        A profile change — set the `username` (re-checked unique in the tenant), the `sealedName` blob with the
-        `epoch` it is sealed under, and/or the account-global `requireGroupAddConsent` preference. Omit a field to
-        leave it unchanged.
-      # A `sealedName` brings its `epoch` (ProfileHandler's shape check, 400 before any answer about the instance's
-      # state). The generators ignore the keyword (content's UpdateNodeRequest note); Schemathesis reads it.
+        A profile change — set the `username` (re-checked unique in the tenant), the `sealedName` blob with its value
+        key's wrap and the `epoch` that wrap is under, and/or the account-global `requireGroupAddConsent` preference.
+        Omit a field to leave it unchanged.
+      # A `sealedName` brings its `epoch` and its wrap (ProfileHandler's shape check, 400 before any answer about the
+      # instance's state). The generators ignore the keyword (content's UpdateNodeRequest note); Schemathesis reads it.
       dependentRequired:
-        sealedName: [epoch]
+        sealedName: [epoch, wrappedNameValueKey]
+        wrappedNameValueKey: [sealedName]
       properties:
         username:
           x-veyq-visibility: pii
@@ -2051,18 +2065,29 @@ components:
         sealedName:
           type: string
           description: >
-            The real name (first + last) sealed under a field key derived from `K_tenant` (opaque base64 ciphertext the server stores
-            verbatim). Omit to leave the current name unchanged.
+            The real name (first + last) sealed under a field key derived from a fresh value key `K_v` (opaque base64
+            ciphertext the server stores verbatim). Omit to leave the current name unchanged.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedNameValueKey:
+          type: [string, "null"]
+          description: >
+            With `sealedName` (required there, and only there, else `400 invalid_request`): its `K_v` wrapped under the
+            tenant key of `epoch` (seal purpose `value-key`, bound to the tenant scope, that epoch and the name's
+            address — SHA-256 of its `member-name` seal context).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         epoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            With `sealedName` (required there, else `400 invalid_request`): the tenant epoch whose key seals it — the
-            tenant scope's current one, else `409 stale_epoch` (ADR 0115 decision 3). Ignored without it.
+            With `sealedName` (required there, else `400 invalid_request`): the tenant epoch whose key wraps its value
+            key — the tenant scope's current one, else `409 stale_epoch` (ADR 0115 decision 3). Ignored without it.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
@@ -2077,15 +2102,15 @@ components:
 
     SetAvatarRequest:
       type: object
-      required: [sealedAvatar, epoch]
+      required: [sealedAvatar, wrappedAvatarValueKey, epoch]
       properties:
         epoch:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           description: >
-            The tenant epoch whose key seals `sealedAvatar` — the tenant scope's current one, else `409 stale_epoch`
-            (ADR 0115 decision 3).
+            The tenant epoch whose key wraps `sealedAvatar`'s value key — the tenant scope's current one, else `409
+            stale_epoch` (ADR 0115 decision 3).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -2093,7 +2118,7 @@ components:
           type: string
           description: >
             The profile picture: a 256 px WebP **padded to a constant 16 KiB plaintext**, sealed under a field key
-            derived from `K_tenant` with the `member-avatar` purpose bound to (tenant scope, the caller's user id)
+            derived from a fresh value key `K_v` with the `member-avatar` purpose bound to (tenant scope, the caller's user id)
             (`0x03 || salt(16) || nonce(12) || aead`, base64; ADR 0093 § 9). Opaque base64 the server stores verbatim and
             never interprets. Its length is a **constant** - the exact base64 length of the sealed padded plaintext
             (16384 + 45 bytes -> 21908 chars) - so a photo and a drawing are indistinguishable and the value is provably
@@ -2102,6 +2127,16 @@ components:
           maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedAvatarValueKey:
+          type: string
+          description: >
+            The picture's `K_v` wrapped under the tenant key of `epoch` (seal purpose `value-key`, bound to the tenant
+            scope, that epoch and the picture's address). A rotation re-wraps it and never re-seals the picture.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     IdentityPins:
       type: object
@@ -2763,8 +2798,8 @@ components:
       type: object
       description: >
         A join record the caller rooted (ADR 0111 decision 21): the member, the sealed record
-        exactly as stored, and the endorsement it carries now.
-      required: [tenantId, userId, sealedJoinRecord]
+        exactly as stored, its value key's wrap, and the endorsement it carries now.
+      required: [tenantId, userId, sealedJoinRecord, wrappedJoinRecordValueKey]
       properties:
         tenantId:
           x-veyq-visibility: id
@@ -2781,11 +2816,17 @@ components:
         sealedJoinRecord:
           type: string
           description: >
-            The member's join record sealed under the tenant key (field `member-join-record`), exactly the bytes
-            `ScopeMember.sealedJoinRecord` serves — what an endorsement's digest covers.
+            The member's join record sealed under its own value key (field `member-join-record`), exactly the bytes
+            `ScopeMember.sealedJoinRecord` serves.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLWpvaW4tcmVjb3Jk
+        wrappedJoinRecordValueKey:
+          type: string
+          description: The record's value key wrapped under the tenant key of its current epoch, as `ScopeMember.wrappedJoinRecordValueKey`.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
         joinEndorsement:
           type: [string, "null"]
           description: >
