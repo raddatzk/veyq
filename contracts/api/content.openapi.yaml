@@ -850,8 +850,12 @@ paths:
         The rotating client sends each row `listScopeRekeyParts` served, re-sealed under the key it minted for epoch
         `fromEpoch + 1`, under a re-key id it mints and later names in `rotateScope`'s `rekeyId`; up to 256 of each
         kind a call (128 member profiles, whose pictures are 16 KiB each), the group name and the icon once. A value
-        staged twice for the same row is replaced. The server keeps beside each value the digest of the ciphertext it
-        replaces, so the commit knows a row that changed since (`409 rekey_parts_stale`) without a revision of its own.
+        staged twice for the same row is replaced. Each value names the SHA-256 of the ciphertext it was opened from
+        (`replacedDigest`, a member's fields one each): a row that holds another already is refused here, and one
+        written after the stage by the commit (`409 rekey_parts_stale` either way, ADR 0115 decision 2) — so neither a
+        write between the read and the stage nor one after it is replaced by a re-seal of what it replaced, and no row
+        needs a revision of its own. A field the row holds no ciphertext in is not staged at all (the commit refuses one
+        that is), so it names no digest.
         Nothing staged is served or read before the commit, and a stage no commit took expires after a day. Each staged
         value is ciphertext the commit would carry anyway: the server learns nothing it would not learn from the
         commit. `fromEpoch` is the scope's current epoch as the rotator read it; a rotation committed since is `409
@@ -888,8 +892,9 @@ paths:
         "409":
           description: >
             The scope's current epoch is no longer `fromEpoch` (`stale_epoch` — a rotation committed since; the client
-            re-reads and rebuilds from a fresh key), or the space is being deleted and read-only (`scope_deleting`).
-            Nothing is staged.
+            re-reads and rebuilds from a fresh key), a value's `replacedDigest` is not the digest of what its row holds
+            now (`rekey_parts_stale` — the row was written since the client read it; it re-reads that row and stages it
+            again), or the space is being deleted and read-only (`scope_deleting`). Nothing of the batch is staged.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -2346,8 +2351,19 @@ components:
 
     ScopeRekeyGroupNameSeal:
       type: object
-      required: [encryptedName]
+      required: [encryptedName, replacedDigest]
       properties:
+        replacedDigest:
+          type: string
+          description: >
+            The digest of the group's `encryptedName` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
+            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
+            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         encryptedName:
           type: string
           description: The group's name under `K_name` of the new epoch (`group-name`, bound to scope and that epoch).
@@ -2358,8 +2374,19 @@ components:
 
     ScopeRekeyIconSeal:
       type: object
-      required: [sealedIcon]
+      required: [sealedIcon, replacedDigest]
       properties:
+        replacedDigest:
+          type: string
+          description: >
+            The digest of the `sealedIcon` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
+            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
+            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedIcon:
           type: string
           description: The space icon under `K_icon` of the new epoch (`space-icon`), the same constant length.
@@ -2373,9 +2400,22 @@ components:
       description: >
         A scope-root node's entry under the new scope key: its own (unchanged) key re-wrapped, its name re-sealed, its
         slug token recomputed, each bound to its `scopeEpoch` and `placementRevision + 1`. The node's own key is
-        replaced afterwards by its node commit (it is due from the rotation's commit on).
-      required: [nodeId, placementRevision, scopeEpoch, encryptedName, wrappedContentKey]
+        replaced afterwards by its node commit (it is due from the rotation's commit on). `replacedDigest` names the
+        wrap the rotator opened; the name and the slug are held by `placementRevision`, which every rename, move and
+        re-key moves.
+      required: [nodeId, placementRevision, scopeEpoch, encryptedName, wrappedContentKey, replacedDigest]
       properties:
+        replacedDigest:
+          type: string
+          description: >
+            The digest of the `wrappedContentKey` the rotator opened the node's key from — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
+            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
+            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         placementRevision:
           x-veyq-visibility: structure
@@ -2416,8 +2456,19 @@ components:
 
     ScopeRekeyInviteeSeal:
       type: object
-      required: [userId, sealedNameKey, recipientIdentityDigest]
+      required: [userId, sealedNameKey, recipientIdentityDigest, replacedDigest]
       properties:
+        replacedDigest:
+          type: string
+          description: >
+            The digest of the invitee's `sealedNameKey` the rotator read (it seals a fresh one, it cannot open this one) — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
+            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
+            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         userId:
           x-veyq-visibility: id
           type: string
@@ -2443,8 +2494,19 @@ components:
 
     ScopeRekeyShareSeal:
       type: object
-      required: [shareId, sealedShareKey]
+      required: [shareId, sealedShareKey, replacedDigest]
       properties:
+        replacedDigest:
+          type: string
+          description: >
+            The digest of the recovery copy (`sealedShareKey`) the rotator opened `K_share` from — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
+            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
+            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         shareId:
           x-veyq-visibility: id
           type: string
@@ -2468,7 +2530,9 @@ components:
       description: >
         One member's profile fields re-sealed under the new tenant key, each exactly where the stored row holds one — a
         field missing is the commit's `rekey_parts_missing`, one the row does not hold its `rekey_parts_stale`. The
-        signed record inside a join record is unchanged.
+        signed record inside a join record is unchanged. Each field comes with the digest of the one it was opened from
+        (`replacedNameDigest`, `replacedAvatarDigest`, `replacedJoinRecordDigest`): a field without its digest, or a
+        digest without its field, is `400 invalid_request`.
       required: [userId]
       properties:
         userId:
@@ -2496,11 +2560,55 @@ components:
           maxLength: 8192
           example: null
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        replacedNameDigest:
+          type: [string, "null"]
+          description: >
+            With `sealedName`: the digest of the `sealedName` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
+            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
+            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        replacedAvatarDigest:
+          type: [string, "null"]
+          description: >
+            With `sealedAvatar`: the digest of the `sealedAvatar` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
+            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
+            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        replacedJoinRecordDigest:
+          type: [string, "null"]
+          description: >
+            With `sealedJoinRecord`: the digest of the `sealedJoinRecord` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
+            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
+            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ScopeRekeyVerificationSeal:
       type: object
-      required: [verifierUserId, subjectUserId, sealedStatement]
+      required: [verifierUserId, subjectUserId, sealedStatement, replacedDigest]
       properties:
+        replacedDigest:
+          type: string
+          description: >
+            The digest of the `sealedStatement` the rotator opened — base64 SHA-256 of its text as `listScopeRekeyParts` served it. The stage refuses it if the row holds
+            another by then, and the commit if it does at the commit (`409 rekey_parts_stale`), so a write after the
+            read is never replaced by a re-seal of what it replaced (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         verifierUserId:
           x-veyq-visibility: id
           type: string

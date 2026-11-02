@@ -62,9 +62,10 @@ a seal's AAD encodes its binding fields by position, never by name (`sed -n 327,
    opens each value with the old key, re-seals it with the new one, and stages it in pages before the commit, as a
    node's re-key does. The commit then, under the scope row's lock, takes the new epoch, its grants and its
    succession statement (point 5), and swaps every staged value in — or nothing. It fails closed: a row sealed under
-   the scope key without a staged value is `409 rekey_parts_missing`; a row whose ciphertext changed since it was
-   staged is `409 rekey_parts_stale` (the stage keeps the digest of the ciphertext it replaces, so no row needs a
-   revision of its own); the client stages those again. After the commit nothing at scope level is under the old key,
+   the scope key without a staged value is `409 rekey_parts_missing`; a row whose ciphertext is no longer the one the
+   client re-sealed is `409 rekey_parts_stale` — each staged value names the SHA-256 of the ciphertext it was opened
+   from, checked at the stage and again at the commit, so a write between the read and the stage is not overwritten by
+   a re-seal of what it replaced, and no row needs a revision of its own; the client stages those again. After the commit nothing at scope level is under the old key,
    and every node of the scope is **due** for its own re-key ([ADR 0114](0114-closing-a-link-re-keys-the-subtree-below-it.md)
    decision 4). What moves, and who stages it:
 
@@ -134,7 +135,9 @@ a seal's AAD encodes its binding fields by position, never by name (`sed -n 327,
      chain it read the old state. Accepted by the owner, like being offline.
    - **A device online with the old key** fails to open the next re-sealed row and re-opens the scope, as on an epoch
      change today.
-   - **An open invite** is re-granted by the rotation as today; its anchor is point 5's.
+   - **An open invite** is re-granted by the rotation as today; its anchor is point 5's. One a rotation declared
+     instead of carrying is redeemable once a later rotation or its owner carries it: a join record is sealed under
+     the current key only, since no later rotation could re-seal one under a key it does not hold.
    - **Moderation evidence stays openable.** A hold's copies are snapshots of the stored ciphertext and a report's
      share carries the keys that open those copies — a node's key and each field's own key, never the scope key
      ([ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md) point 8). A re-seal writes new ciphertext; the

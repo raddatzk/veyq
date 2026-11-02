@@ -184,9 +184,10 @@ paths:
       summary: Stage one batch of re-sealed item-mark rows under a rotation's re-key id (ADR 0115 decision 2).
       description: >
         Up to 32 rows a call (a row is up to 256 KiB), each re-sealed under the key of epoch `fromEpoch + 1`, under the
-        re-key id core's `rotateScope` then names. The server keeps beside each value the digest of the ciphertext it
-        replaces: a row the member replaced since is the commit's `409 rekey_parts_stale`, a row with no staged value
-        its `rekey_parts_missing`. A value staged twice is replaced; nothing staged is served before the commit, and an
+        re-key id core's `rotateScope` then names. Each value names the SHA-256 of the ciphertext it was opened from
+        (`replacedDigest`): a row the member replaced since the read is refused here, one replaced after the stage by the
+        commit (`409 rekey_parts_stale` either way, ADR 0115 decision 2); a row with no staged value is the commit's
+        `rekey_parts_missing`. A value staged twice is replaced; nothing staged is served before the commit, and an
         unclaimed stage expires after a day. The caller's rights are `listScopeItemFavoritesRekey`'s.
       security:
         - bearerAuth: []
@@ -220,7 +221,9 @@ paths:
         "409":
           description: >
             The scope's current epoch is no longer `fromEpoch` (`stale_epoch` — a rotation committed since; re-read and
-            rebuild from a fresh key), or the space is being deleted and read-only (`scope_deleting`). Nothing is staged.
+            rebuild from a fresh key), a mark's `replacedDigest` is not the digest of what its row holds now
+            (`rekey_parts_stale` — the row was replaced or removed since the read; re-read it), or the space is being
+            deleted and read-only (`scope_deleting`). Nothing of the batch is staged.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -421,8 +424,19 @@ components:
 
     ItemFavoritesRekeySeal:
       type: object
-      required: [markId, ciphertext]
+      required: [markId, ciphertext, replacedDigest]
       properties:
+        replacedDigest:
+          type: string
+          description: >
+            The digest of the row's `ciphertext` the rotator opened — base64 SHA-256 of its text as
+            `listScopeItemFavoritesRekey` served it. The stage refuses it if the row holds another by then, and the
+            commit if it does at the commit (`409 rekey_parts_stale`, ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: o9Y0RaOkrq3cboRglWOA0rKr2hpWC2yJCTKu+RiV7MY=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         markId:
           x-veyq-visibility: id
           type: string
