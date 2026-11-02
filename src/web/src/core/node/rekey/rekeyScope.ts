@@ -87,6 +87,19 @@ export async function rekeyScope(scopeId: string, opts: { signal?: AbortSignal }
   })
 }
 
+/**
+ * Why [scopeId] is re-keying, from its re-key listing: `'rotation'` while a due node still carries a key minted under a
+ * scope epoch before the current one — a rotation's re-key is unfinished — `'close'` while only nodes a link's close
+ * marked are due (each at the current scope epoch, ADR 0114 decision 4), and null when no node is due. What a screen
+ * says follows it: a rotation's re-key is the whole space's, a close's only the closed links' subtrees (decision 9).
+ */
+export async function rekeyingCause(scopeId: string): Promise<'rotation' | 'close' | null> {
+  const list = await withRefresh(() => rekeyApi().listRekeyNodes({ scopeId }))
+  const due = list.nodes.filter((n) => n.due)
+  if (!due.length) return null
+  return due.some((n) => n.scopeEpoch < list.currentEpoch) ? 'rotation' : 'close'
+}
+
 /** A path this device may not bring forward: it runs through a node only an owner re-keys, and the caller is none.
  *  `current` is the scope's epoch as the refusing round listed it. */
 export class RekeyPathNotMineError extends Error {

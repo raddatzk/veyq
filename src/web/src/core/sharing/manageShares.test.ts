@@ -89,7 +89,7 @@ describe("the note's acceptance switch (uc.sharing.share-note)", () => {
     const { req, address } = await minted({ texts: { en: 'v1' }, mustAccept: false })
     const update = vi.fn<SharingApi['updateShare']>().mockResolvedValue(undefined)
     fakeApi(sharesApi, { updateShare: update })
-    await updateShare(address, EPOCHS, req, { texts: { en: 'v2' }, mustAccept: true }, '', null)
+    await updateShare(address, EPOCHS, { ...req, enabled: true, expiresAt: null }, { texts: { en: 'v2' }, mustAccept: true }, '', null)
     const sealedNote = update.mock.calls[0][0].updateShareRequest.sealedNote!
     expect(readShareNote(EPOCHS, address, req, sealedNote)).toEqual({ texts: { en: 'v2' }, mustAccept: true })
 
@@ -156,7 +156,7 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
 
     const report = await resealShareNames(NODE_ID, 'Steuern 2026', EPOCHS)
 
-    expect(report).toEqual({ resealed: [own.row.shareId, theirs.row.shareId], skipped: [], failed: [] })
+    expect(report).toEqual({ resealed: [own.row.shareId, theirs.row.shareId], closed: [], skipped: [], failed: [] })
     expect(set).toHaveBeenCalledTimes(2)
     const sealedFor = (shareId: string) => set.mock.calls.find(([r]) => r.shareId === shareId)![0].setShareSealedNameRequest.sealedName
     for (const { row, kShare } of [own, theirs]) {
@@ -178,7 +178,7 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
 
     const report = await resealShareNames(NODE_ID, 'New', EPOCHS)
 
-    expect(report).toEqual({ resealed: [ok.row.shareId], skipped: [legacy.row.shareId], failed: [] })
+    expect(report).toEqual({ resealed: [ok.row.shareId], closed: [], skipped: [legacy.row.shareId], failed: [] })
     expect(set.mock.calls.map(([r]) => r.shareId)).toEqual([ok.row.shareId])
   })
 
@@ -197,15 +197,41 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
 
     const report = await resealShareNames(NODE_ID, 'New', EPOCHS)
 
-    expect(report).toEqual({ resealed: [ok.row.shareId], skipped: [], failed: [refused.row.shareId, broken.row.shareId] })
+    expect(report).toEqual({ resealed: [ok.row.shareId], closed: [], skipped: [], failed: [refused.row.shareId, broken.row.shareId] })
     expect(set.mock.calls.map(([r]) => r.shareId)).toEqual([refused.row.shareId, ok.row.shareId])
   })
 
   it('writes nothing for a node without shares', async () => {
     const set = vi.fn<SharingApi['setShareSealedName']>()
     fakeApi(sharesApi, { listShares: async () => [], setShareSealedName: set })
-    expect(await resealShareNames(NODE_ID, 'New', EPOCHS)).toEqual({ resealed: [], skipped: [], failed: [] })
+    expect(await resealShareNames(NODE_ID, 'New', EPOCHS)).toEqual({ resealed: [], closed: [], skipped: [], failed: [] })
     expect(set).not.toHaveBeenCalled()
+  })
+
+  // ADR 0114 decision 5: a re-key seals nothing new under a closed link, and neither does a rename — the reopen carries
+  // the root's current name. Closed is switched off or past its end date; an open sibling beside them is the control.
+  it('skips a closed link — switched off or past its end date — and re-seals the open sibling beside them', async () => {
+    const off = await mintedRow(true)
+    const expired = await mintedRow(false)
+    const open = await mintedRow(false)
+    const later = await mintedRow(true)
+    const set = vi.fn<SharingApi['setShareSealedName']>(async () => undefined)
+    fakeApi(sharesApi, {
+      listShares: async () => [
+        { ...off.row, enabled: false },
+        { ...expired.row, expiresAt: new Date(Date.now() - 60_000) },
+        open.row,
+        { ...later.row, expiresAt: new Date(Date.now() + 86_400_000) },
+      ],
+      setShareSealedName: set,
+    })
+
+    const report = await resealShareNames(NODE_ID, 'Steuern 2026', EPOCHS)
+
+    expect(report).toEqual({ resealed: [open.row.shareId, later.row.shareId], closed: [off.row.shareId, expired.row.shareId], skipped: [], failed: [] })
+    expect(set.mock.calls.map(([r]) => r.shareId)).toEqual([open.row.shareId, later.row.shareId])
+    const sealed = set.mock.calls[0][0].setShareSealedNameRequest.sealedName
+    expect(opened(open.kShare, sealed)).toBe('Steuern 2026')
   })
 })
 

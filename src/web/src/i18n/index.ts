@@ -1956,6 +1956,9 @@ const en = {
     },
     roleNeedsReissue: 'This link was made before guests had to prove they hold the whole link, so with photos added it would take no guests at all. Renew it first — the new link can then be switched to “View + add photos”.',
     disabled: 'Switched off',
+    // ADR 0114 decision 9 (the owner's words): a closed link's subtree gets new keys — on the link's row while this
+    // device re-keys it, and as the space's re-keying hint when only closed links re-key there
+    closedRekeying: 'The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.',
     byMember: 'By another member',
     loadFailed: 'Your links could not be loaded.',
     pendingDeletion: 'This space is being deleted: its links can be seen and copied, and your own can still be revoked — nothing else is made or changed.',
@@ -3916,6 +3919,7 @@ const de: typeof en = {
     },
     roleNeedsReissue: 'Dieser Link wurde erstellt, bevor Gäste nachweisen mussten, dass sie den ganzen Link haben — mit Fotos hinzufügen nähme er deshalb gar keine Gäste auf. Erneuere ihn zuerst; den neuen Link kannst du dann auf „Ansehen + Fotos hinzufügen“ umstellen.',
     disabled: 'Abgeschaltet',
+    closedRekeying: 'Der Link ist abgeschaltet. Was darunter liegt, bekommt ein neues Schloss, damit der alte Link auch künftig nichts mehr öffnet.',
     byMember: 'Von einem anderen Mitglied',
     loadFailed: 'Deine Links konnten nicht geladen werden.',
     pendingDeletion: 'Dieser Bereich wird gelöscht: Seine Links lassen sich ansehen und kopieren, und deine eigenen kannst du noch widerrufen — sonst wird nichts neu erstellt oder geändert.',

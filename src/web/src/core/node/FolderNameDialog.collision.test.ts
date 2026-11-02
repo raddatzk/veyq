@@ -48,7 +48,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(createFolder).mockResolvedValue('new')
   vi.mocked(renameNode).mockResolvedValue(undefined)
-  vi.mocked(resealShareNames).mockResolvedValue({ resealed: [], skipped: [], failed: [] })
+  vi.mocked(resealShareNames).mockResolvedValue({ resealed: [], closed: [], skipped: [], failed: [] })
   treeStore.nodes = [
     node('f1', 'FOLDER', 'Trips'),
     node('x1', 'FILE', 'foto.jpg'),

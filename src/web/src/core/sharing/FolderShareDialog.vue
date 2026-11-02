@@ -45,6 +45,7 @@ import {
   readShareNote,
   readSharePassword,
   hasLocaleText,
+  rekeyingClosedLinks,
   type LocaleMap,
   type ManagedShare,
 } from './manageShares'
@@ -157,9 +158,12 @@ async function rowAction(s: ManagedShare, action: () => Promise<void>) {
   }
 }
 
+// A switch-off is a close (ADR 0114): the server marks the folder's subtree due and `revokeShare` starts its re-key here
+// in the background. The switched-off fold opens, so the row that says so stays in view.
 const onRevoke = (s: ManagedShare) =>
   rowAction(s, async () => {
-    await revokeShare(s.shareId)
+    await revokeShare({ ...addressOf(s), role: s.role })
+    offOpen.value = true
     await loadShares()
   })
 
@@ -188,7 +192,7 @@ async function onDelete(s: ManagedShare) {
   })
   if (!confirmed) return
   await rowAction(s, async () => {
-    await deleteShare(s.shareId)
+    await deleteShare({ ...s, ...addressOf(s) })
     shares.value = shares.value.filter((x) => x.shareId !== s.shareId)
   })
 }
@@ -331,9 +335,11 @@ const { run: runSave, pending: saving } = useAsyncAction(
       ? hadPassword ? ({ remove: true } as const) : undefined
       : password.value === currentPassword.value ? undefined : ({ set: password.value } as const)
     // Note, label and expiry are full replaces: the pre-filled values are always re-sent, so an unrelated edit keeps them.
+    // An end date moved past a passed one reopens the link (ADR 0114 decision 7): the folder's key and name go with it.
     await updateShare(
       addressOf(s), props.epochs, s, effectiveNote(), name.value,
       expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null, role.value, passwordChange,
+      { root: { key: props.nodeKey, epoch: props.nodeEpoch }, rootName: props.nodeName },
     )
     editing.value = null
     view.value = 'list'
@@ -621,6 +627,10 @@ function onDialogVisible(visible: boolean) {
                 <span class="veyq-row-subtitle">
                   {{ t('share.created', { date: fmtDate(share.createdAt) }) }}<template v-if="share.expiresAt">
                     · {{ t('share.expires', { date: fmtDate(share.expiresAt) }) }}</template>
+                </span>
+                <!-- ADR 0114 decision 9: what lies below a closed link is re-keyed on this device while this shows. -->
+                <span v-if="!share.enabled && rekeyingClosedLinks.has(share.shareId)" class="veyq-row-subtitle folder-share-rekeying">
+                  {{ t('share.closedRekeying') }}
                 </span>
                 <div class="veyq-row-meta">
                   <!-- An unnamed link's title is already its role (`titleFor`): the badge would say it twice (inbox #385). -->

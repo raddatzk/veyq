@@ -42,7 +42,7 @@ vi.mock('../core/node/tree', async (importOriginal) => ({
 }))
 vi.mock('../core/sharing/manageShares', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/sharing/manageShares')>()),
-  resealShareNames: vi.fn(async () => ({ resealed: [], failed: [], skipped: [] })),
+  resealShareNames: vi.fn(async () => ({ resealed: [], closed: [], failed: [], skipped: [] })),
 }))
 vi.mock('../features/memories/components/MemoryDetail.vue', async () => {
   const { defineComponent, h } = await import('vue')

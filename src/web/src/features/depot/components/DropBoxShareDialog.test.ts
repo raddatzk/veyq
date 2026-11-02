@@ -129,7 +129,7 @@ describe('DropBoxShareDialog — switch-off and delete only where the server all
     expect(confirmRequest.value?.message).toBe(t('depot.dropBox.shareRevokeConfirm'))
     settleConfirm(true)
     await flushPromises()
-    expect(vi.mocked(revokeShare)).toHaveBeenCalledWith('own')
+    expect(vi.mocked(revokeShare)).toHaveBeenCalledWith(expect.objectContaining({ shareId: 'own', role: 'WRITE_ONLY' }))
     // control: outside a pending deletion the same rows offer their changes and the form mints
     const live = mountDialog()
     await flushPromises()

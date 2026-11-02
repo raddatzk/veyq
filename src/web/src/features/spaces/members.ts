@@ -5,7 +5,7 @@
 import { tenantsApi, scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { decodeHttpError } from '../../shared/httpError'
-import { commitRotation, openScopeById } from './scopes'
+import { commitRotation, openScopeById, rekeyClosedScopes } from './scopes'
 import { buildMemberInvite, type InviteSecret } from './memberInvite'
 import { recipientIdentityDigest, sealGrant } from './grant'
 import { zeroScopeKey } from './epochs'
@@ -98,9 +98,14 @@ export function listScopeMembers(scopeId: string): Promise<ScopeMember[]> {
  *
  * `revokeLinks` (ADR 0075 point 5) also turns off every link of the TENANT scope in the removal's transaction —
  * each then comes back only by re-issue. Unticked, no parameter is sent at all.
+ *
+ * Either way the removal switches the member's own links off, and each switch-off is a close (ADR 0114 decision 1):
+ * the server marks what lies below the links, and this device then starts the re-key of every scope it holds that is
+ * re-keying, in the background ({@link rekeyClosedScopes}).
  */
-export function removeTenantMember(tenantId: string, userId: string, revokeLinks = false): Promise<void> {
-  return withRefresh(() => tenantsApi().removeTenantMember({ tenantId, userId, ...(revokeLinks ? { revokeLinks } : {}) }))
+export async function removeTenantMember(tenantId: string, userId: string, revokeLinks = false): Promise<void> {
+  await withRefresh(() => tenantsApi().removeTenantMember({ tenantId, userId, ...(revokeLinks ? { revokeLinks } : {}) }))
+  void rekeyClosedScopes()
 }
 
 /**

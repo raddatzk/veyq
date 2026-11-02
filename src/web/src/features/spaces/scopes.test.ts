@@ -34,8 +34,13 @@ vi.mock('../account/tenantTrust', () => ({ loadTenantView: vi.fn(), cachedTenant
 // recorder, so what a rotation hands it (the re-key id, the old and the new key, who is anchored) is checked against the
 // commit it precedes.
 vi.mock('./scopeRekey', () => ({ stageScopeLevelRekey: vi.fn(), isRestageable: vi.fn(), REKEY_RESTAGES: 2 }))
+// The node re-key is rekeyScope.test.ts's; here only that a bulk close starts it, for which scope, and when.
+vi.mock('../../core/node/rekey/rekeyScope', async (orig) => ({
+  ...(await orig<typeof import('../../core/node/rekey/rekeyScope')>()), rekeyScope: vi.fn(async () => ({ done: true, committed: 0 })),
+}))
 
-import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, ROTATION_REBUILDS, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares, openPlanGrantKey, isUnreadableGrant } from './scopes'
+import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, ROTATION_REBUILDS, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares, rekeyClosedScopes, openPlanGrantKey, isUnreadableGrant } from './scopes'
+import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { ScopeKind, type MyTenant, type OpenInvite, type ScopeSuccession, type ScopeMember, type ScopeSummary, type ScopesApi } from '../../api/generated/scopes'
 import type { ContentApi } from '../../api/generated/content'
 import { scopesApi, contentApi, accountApi } from '../../api/client'
@@ -1071,6 +1076,37 @@ describe('revokeScopeShares (ADR 0075 point 5)', () => {
 
     await expect(revokeScopeShares(G1)).resolves.toBe(3)
     expect(revoke).toHaveBeenCalledWith({ scopeId: G1 })
+  })
+
+  // ADR 0114 decisions 1 and 9: every link the switch-off turned off is a close — this device starts the re-key of what
+  // the server marked, after its answer; with nothing turned off, nothing was marked.
+  it('starts the scope re-key in the background once links went off — and not when none did, or the switch-off was refused', async () => {
+    let finish!: () => void
+    vi.mocked(rekeyScope).mockReset().mockReturnValue(new Promise((r) => { finish = () => r({ done: true, committed: 2 }) }))
+    stubApi(scopesApi, { revokeScopeShares: { revoked: 2 } })
+    await expect(revokeScopeShares(G1)).resolves.toBe(2) // answered while the re-key still runs: the dialog does not wait
+    await vi.waitFor(() => expect(rekeyScope).toHaveBeenCalledWith(G1))
+    finish()
+
+    vi.mocked(rekeyScope).mockClear()
+    stubApi(scopesApi, { revokeScopeShares: { revoked: 0 } })
+    await revokeScopeShares(G1)
+    fakeApi(scopesApi, { revokeScopeShares: vi.fn(async () => { throw httpError(403, 'not_scope_owner') }) })
+    await expect(revokeScopeShares(G1)).rejects.toBeTruthy()
+    await Promise.resolve()
+    expect(rekeyScope).not.toHaveBeenCalled() // control: nothing closed, nothing re-keyed
+  })
+
+  it('a removal re-keys every scope of mine now re-keying, one after another, a failure going on to the next', async () => {
+    vi.mocked(rekeyScope).mockReset().mockImplementation(async (id) => {
+      if (id === G1) throw new Error('rekey: this device does not hold the scope\'s current epoch')
+      return { done: true, committed: 1 }
+    })
+    fakeApi(scopesApi, {
+      listMyScopes: vi.fn(async () => [{ id: G1, rekeying: true }, { id: G2, rekeying: false }, { id: TN, rekeying: true }] as ScopeSummary[]),
+    })
+    await expect(rekeyClosedScopes()).resolves.toBeUndefined()
+    expect(vi.mocked(rekeyScope).mock.calls.map(([id]) => id)).toEqual([G1, TN]) // G2 has no due node
   })
 })
 

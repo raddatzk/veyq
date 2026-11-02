@@ -5,7 +5,7 @@ vi.mock('../../api/client', () => ({
   tenantsApi: vi.fn(),
 }))
 // The group's key comes from the caller's own grant (scopes.ts, tested there); here the scope is handed over opened.
-vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn(), commitRotation: vi.fn() }))
+vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn(), commitRotation: vi.fn(), rekeyClosedScopes: vi.fn() }))
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
 // The pin store is identityPins.test.ts's; here its answer for the target is driven directly.
 vi.mock('../account/identityPins', async (o) => ({ ...(await o<typeof import('../account/identityPins')>()), anchorIdentity: vi.fn() }))
@@ -23,7 +23,7 @@ import {
 } from './members'
 import { scopesApi, tenantsApi } from '../../api/client'
 import { TenantsApi, Configuration as TenantsConfiguration } from '../../api/generated/tenants'
-import { commitRotation, openScopeById } from './scopes'
+import { commitRotation, openScopeById, rekeyClosedScopes } from './scopes'
 import { identityPrivate } from '../../app/vault'
 import { anchorIdentity, IdentityUnanchoredError } from '../account/identityPins'
 import { tenantViewOfScope, type TenantView } from '../account/tenantTrust'
@@ -155,6 +155,20 @@ describe('removeTenantMember (cr-0091)', () => {
     await removeTenantMember('t1', 'u1')
 
     expect(removeFn).toHaveBeenCalledWith({ tenantId: 't1', userId: 'u1' })
+  })
+
+  // ADR 0114 decisions 1 and 9: the removal switches the member's links off — a close — so this device starts the re-key
+  // of what it marked, after the server answered and only then.
+  it("starts the re-key of every re-keying scope once the removal landed, and not when it was refused", async () => {
+    stubApi(tenantsApi, { removeTenantMember: undefined })
+    await removeTenantMember('t1', 'u1')
+    expect(rekeyClosedScopes).toHaveBeenCalledTimes(1)
+    expect(rekeyClosedScopes).toHaveBeenCalledWith()
+
+    vi.mocked(rekeyClosedScopes).mockClear()
+    fakeApi(tenantsApi, { removeTenantMember: vi.fn(async () => { throw httpError(409, 'last_owner') }) })
+    await expect(removeTenantMember('t1', 'u2')).rejects.toBeTruthy()
+    expect(rekeyClosedScopes).not.toHaveBeenCalled() // control: nothing closed, nothing re-keyed
   })
 
   // W2 (ADR 0075 point 5), asserted on the request the generated client actually sends — a `toHaveBeenCalledWith`

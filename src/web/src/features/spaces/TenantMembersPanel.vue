@@ -35,7 +35,7 @@ import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeSc
 import { formatInviteCode } from '@veyq/crypto/invite'
 import { bumpSpaceIcon } from './spaceIconSignal'
 import { activeSpace, activeEpochKeys, refreshActiveScope } from '../../app/activeSpace'
-import { rekeyScope } from '../../core/node/rekey/rekeyScope'
+import { rekeyScope, rekeyingCause } from '../../core/node/rekey/rekeyScope'
 import { copyScopeKey, zeroScopeKey } from './epochs'
 import { ScopeKind } from '../../api/generated/scopes'
 import { openMemberName, type MemberName } from '../account/profile/profile'
@@ -68,6 +68,8 @@ const tenantName = ref('')
 const stuckRotation = ref<CompromiseRotation | null>(null)
 /** Owner-only: the tenant's last rotation is still fitting the new lock (ADR 0109). */
 const rekeying = ref(false)
+/** Owner-only: what re-keys is only what lies below closed links (ADR 0114) — the hint then names the link, not the space. */
+const closeRekeying = ref(false)
 // this device is re-sealing the space's scope-level rows for a rotation it runs (ADR 0115 decision 2)
 const resealing = computed(() => { const id = activeSpace.scopeId; return id !== null && id !== undefined && resealingScopes.has(id) })
 const tenantIcon = useObjectUrl() // an owned object URL for the decrypted icon (revoked on replace/unmount)
@@ -116,6 +118,10 @@ const { members, isOwner, trust, trustRefusal, loading, loadError, reload, on401
     tenantName.value = mine?.name ?? ''
     stuckRotation.value = mine?.compromiseRotation ?? null
     rekeying.value = owner && activeSpace.scopeId ? ((await scopeLifecycle(activeSpace.scopeId).catch(() => null))?.rekeying ?? false) : false
+    // Only closed links re-keying claims their subtrees, not the space (ADR 0114 decision 9); unknown reads as a rotation's.
+    closeRekeying.value = rekeying.value && activeSpace.scopeId
+      ? (await rekeyingCause(activeSpace.scopeId).catch(() => 'rotation')) === 'close'
+      : false
     const iconBytes = mine ? await openMyTenantIcon(mine) : null
     if (iconBytes) tenantIcon.set(new Blob([iconBytes as BlobPart], { type: 'image/webp' }))
     else tenantIcon.clear()
@@ -410,7 +416,7 @@ async function revoke(invite: PendingMemberInvite) {
       />
       <!-- the scope-level rows are sealed again under the new key before the rotation commits (ADR 0115 decision 2) -->
       <VeyqMessage v-if="resealing" tone="info">{{ t('spaceLock.resealing') }}</VeyqMessage>
-      <VeyqMessage v-else-if="isOwner && rekeying" tone="info">{{ t('rotation.statusHint.rekeying') }}</VeyqMessage>
+      <VeyqMessage v-else-if="isOwner && rekeying" tone="info">{{ closeRekeying ? t('share.closedRekeying') : t('rotation.statusHint.rekeying') }}</VeyqMessage>
 
       <div class="settings-section-header">
         <div>

@@ -11,6 +11,7 @@
 // a WRITE_ONLY link carries no wrap but the node's drop public key (ADR 0031 point 7), and the drop key is the
 // application's that registered the drop flow — so a WRITE_ONLY mint or re-issue is only reachable through a
 // [WriteOnlyMint] that application hands in (today Memories' `createShare` / `reissueShare` in features/memories/share.ts).
+import { shallowReactive } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { sharesPwTokenAsync } from '@veyq/crypto/argonWorker'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
@@ -27,7 +28,7 @@ import { fetchTreeRows, listTree } from '../node/tree'
 import { dropKeysForShare } from './dropKey'
 import { nodeKeyForWrite } from '../node/rekey/floor'
 import { assertActiveScopeFloor } from '../node/rereadNode'
-import { pullRekeyPath } from '../node/rekey/rekeyScope'
+import { pullRekeyPath, rekeyPath } from '../node/rekey/rekeyScope'
 import { ShareRole, type ShareGuestStop } from '../../api/generated/sharing'
 
 // The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the
@@ -313,7 +314,8 @@ export function carriedSettings(epochs: ScopeKey, old: ReissuableShare): Reissue
 
 /**
  * Re-issue a share (ADR 0075): a new share id and a fresh `K_share`, carrying [settings], and the old link turned off
- * — one request, one server transaction. This is what cuts a departed member off a link they could copy: the old id
+ * — one request, one server transaction — after which this device starts the root's subtree re-key in the background
+ * ({@link rekeyAfterClose}, ADR 0114 decision 9). This is what cuts a departed member off a link they could copy: the old id
  * 404s and nothing of the new one is derivable from the old `K_share`. The note, label and password are re-sealed
  * under the new key (the password with a fresh salt), the recovery copy is sealed at the scope's current epoch, and
  * the role is the old share's (the server takes it from the old row). A READ/READ_WRITE link wraps the node's key
@@ -361,6 +363,8 @@ export async function remintShare(
     if (reread) ({ root: at, recovery } = await rereadShareRoot(scopeId, nodeId, recoveryCopy))
     await post()
   }, { pull: pullRekeyPath(scopeId, [nodeId]) })
+  // The old `K_share` is closed like any other (ADR 0114 decision 1); the new link follows the new key (decision 5).
+  void rekeyAfterClose(old)
   return { shareId, kShare }
 }
 
@@ -381,6 +385,14 @@ async function rereadShareRoot<T>(
   }
 }
 
+/** The edited link as the manage list serves it: its recovery copy, and what an edit needs to tell whether it reopens
+ *  or closes the link (ADR 0114 decisions 6-7) — its role, its switch and its end date as stored. */
+export type EditedShare = RecoveryCopy & Pick<ManagedShare, 'role' | 'enabled' | 'expiresAt'>
+
+/** The shared node an edit that reopens a link seals its key and name from ({@link reopenFields}): its key with its own
+ *  epoch, and its name. */
+export type ShareRoot = { root: ShareRootKey; rootName: string }
+
 /**
  * Edit a share in place (cr-0115/cr-0116/cr-0119/cr-0118, ADR 0036/0037): recover `K_share` from its recovery copy
  * (under `K_SC` at the copy's epoch), re-seal note + name (or clear a blank one) and PATCH the full pair — the same
@@ -388,15 +400,25 @@ async function rereadShareRoot<T>(
  * optional `role` changes the grant in place (READ ↔ READ_WRITE; the server 422s WRITE_ONLY). `passwordChange` is
  * the tri-state gate: `{ set }` sets/changes it, `{ remove: true }` removes it, `undefined` leaves it untouched.
  * Owner-gated server-side; the link/`K_share` are untouched throughout.
+ *
+ * **An end date is a close, and moving it back a reopen** (ADR 0114 decisions 6-7). An edit of a switched-on link whose
+ * end date has passed that moves it into the future or clears it carries what a re-activation carries
+ * ({@link reopenFields}, sealed from [root]) — at the root's own epoch, re-read after `stale_epoch` and pulled forward on
+ * `node_rekey_pending` like every member write. A clock behind the server's is answered `422 link_key_required` and
+ * sent once more as a reopen. An end date set into the past on an open link closes it, and this device then starts the
+ * root's subtree re-key ({@link rekeyAfterClose}).
  */
-// ADR 0114 web step: an edit that moves a passed end date into the future (or clears it) reopens the link and must carry
-// `reopenFields` — the manage list does not tell this edit the link's own end date has passed yet.
 export async function updateShare(
-  share: ShareAddress, epochs: ScopeKey, copy: RecoveryCopy, note: ShareNote, name: string,
+  share: ShareAddress, epochs: ScopeKey, copy: EditedShare, note: ShareNote, name: string,
   expiresAt: Date | null, role?: ShareRole,
   passwordChange?: { set: string } | { remove: true },
+  root?: ShareRoot,
 ): Promise<void> {
   const { shareId } = share
+  const now = new Date()
+  const reopens = reopensByDate(copy, expiresAt, now)
+  if (reopens && !root) throw new Error('share_reopen_root_missing')
+  const closes = isOpenLink(copy, now) && expiresAt !== null && expiresAt <= now
   const kShare = recoverShareKey(epochs, share, copy)
   const sealedNote = sealNote(kShare, note) ?? null
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : null
@@ -407,13 +429,36 @@ export async function updateShare(
       : passwordChange && 'remove' in passwordChange
         ? { passwordRequired: false }
         : {}
-  await withRefresh(() =>
-    sharesApi().updateShare({
-      // expiresAt is a full replace (like sealedNote/sealedShareName): send the current value to preserve it,
-      // null to clear. The edit dialog always passes the pre-filled expiry, so an unrelated edit keeps it.
-      shareId, updateShareRequest: { sealedNote, sealedShareName, expiresAt: expiresAt ?? null, role, ...passwordPatch },
-    }),
-  )
+  const send = (reopen: ReopenFields | Record<string, never> = {}) =>
+    withRefresh(() =>
+      sharesApi().updateShare({
+        // expiresAt is a full replace (like sealedNote/sealedShareName): send the current value to preserve it,
+        // null to clear. The edit dialog always passes the pre-filled expiry, so an unrelated edit keeps it.
+        shareId, updateShareRequest: { sealedNote, sealedShareName, expiresAt: expiresAt ?? null, role, ...passwordPatch, ...reopen },
+      }),
+    )
+  const reopen = () => reopenAtRootEpoch({ ...share, ...copy }, root!.root, epochs, root!.rootName, send)
+  if (reopens) return reopen()
+  try {
+    await send()
+  } catch (e) {
+    // The server's clock says the end date has passed where this one did not yet: the edit is a reopen after all.
+    if (root && (await isCodedError(e, HttpStatus.unprocessable, 'link_key_required'))) return reopen()
+    throw e
+  }
+  if (closes) void rekeyAfterClose({ ...share, role: copy.role })
+}
+
+/** Whether a link is **open** (ADR 0114 decision 1): switched on and its end date not passed. A managed row is never a
+ *  tombstone. */
+export function isOpenLink(share: Pick<ManagedShare, 'enabled' | 'expiresAt'>, now: Date = new Date()): boolean {
+  return share.enabled && (share.expiresAt === null || share.expiresAt > now)
+}
+
+/** Whether an edit setting [expiresAt] reopens [share] by its end date (ADR 0114 decision 7) — the server's own rule
+ *  (`SharingStore.reopensByDate`): switched on, its end date passed, the new one in the future or none. */
+function reopensByDate(share: Pick<ManagedShare, 'enabled' | 'expiresAt'>, expiresAt: Date | null, now: Date): boolean {
+  return share.enabled && share.expiresAt !== null && share.expiresAt <= now && (expiresAt === null || expiresAt > now)
 }
 
 /** A curator's management row for one of their shares (opaque; the sealed name isn't shown — the node is known). */
@@ -487,14 +532,16 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }
 
-/** What a re-seal of the share names did, by share id: stored, skipped (no recovery copy: a tombstone or a legacy row
- *  minted before ADR 0080 decision 12, so its title stays the old name) and failed (the copy did not open, or the
- *  write was refused). */
-export type ResealReport = { resealed: string[]; skipped: string[]; failed: string[] }
+/** What a re-seal of the share names did, by share id: stored, closed (switched off or past its end date: nothing new
+ *  is sealed under its `K_share`, ADR 0114 decision 5 — its reopen carries the current name), skipped (no recovery
+ *  copy: a tombstone or a legacy row minted before ADR 0080 decision 12, so its title stays the old name) and failed
+ *  (the copy did not open, or the write was refused). */
+export type ResealReport = { resealed: string[]; closed: string[]; skipped: string[]; failed: string[] }
 
 /**
- * After a member renamed [nodeId] to [newName], re-seal the name of EVERY share rooted at it — the caller's own and
- * every other member's, switched off ones included — so no link shows a stale title (ADR 0080 decision 14). Each
+ * After a member renamed [nodeId] to [newName], re-seal the name of every OPEN share rooted at it — the caller's own and
+ * every other member's — so no link shows a stale title (ADR 0080 decision 14). A closed one is left as it is: a re-key
+ * seals nothing new under a closed link (ADR 0114 decision 5), and its reopen seals the root's name then. Each
  * share's `K_share` is opened through its recovery copy under the scope key (decision 12), the new name sealed under
  * it as a mint does, and stored with `setShareSealedName`, which any member with write access may call (not the
  * owner-gated `updateShare`). Each share is its own write: one that fails is collected and the next is still tried;
@@ -503,8 +550,13 @@ export type ResealReport = { resealed: string[]; skipped: string[]; failed: stri
  * cannot be read — then nothing was written.
  */
 export async function resealShareNames(nodeId: string, newName: string, epochs: ScopeKey): Promise<ResealReport> {
-  const report: ResealReport = { resealed: [], skipped: [], failed: [] }
+  const report: ResealReport = { resealed: [], closed: [], skipped: [], failed: [] }
+  const now = new Date()
   for (const share of await listSharesFor(nodeId)) {
+    if (!isOpenLink(share, now)) {
+      report.closed.push(share.shareId)
+      continue
+    }
     if (share.sealedShareKey == null || share.sealedShareKeyEpoch == null) {
       report.skipped.push(share.shareId) // share_key_not_recoverable: nothing to seal the new name under
       continue
@@ -522,19 +574,50 @@ export async function resealShareNames(nodeId: string, newName: string, epochs: 
   return report
 }
 
-/** Revoke a share (soft — the next guest request 404s). */
-export async function revokeShare(shareId: string): Promise<void> {
-  await withRefresh(() => sharesApi().revokeShare({ shareId }))
+/** A link a close names: where it lives and its role, which says whether its close re-keys anything. */
+export type ClosedLink = ShareAddress & { role: ShareRole }
+
+/** The links whose root's subtree this device is re-keying after closing them, by share id (ADR 0114 decision 9) —
+ *  what the share dialog says on such a link's row while it runs (`share.closedRekeying`). */
+export const rekeyingClosedLinks = shallowReactive(new Set<string>())
+
+/**
+ * After the server answered a close of [link] — a revoke, a delete of an open link, a re-issue, an end date set into
+ * the past — this device starts the re-key of the link root's subtree in the background (ADR 0114 decision 9): the
+ * path re-key with its subtree (`rekeyPath(…, { subtree: true })`), never awaited by the caller, so the dialog does not
+ * wait. Any failure — a device whose grant is behind, an owner-only node a member may not re-key, a closed tab — leaves
+ * the due marks for the members' workers, which resume any scope with a due node. A `WRITE_ONLY` link's close re-keys
+ * nothing (decision 2) and starts nothing. Answers the run, which never rejects (for a caller that waits on it: a test).
+ */
+export function rekeyAfterClose(link: ClosedLink): Promise<void> {
+  if (link.role === ShareRole.WriteOnly) return Promise.resolve()
+  rekeyingClosedLinks.add(link.shareId)
+  return rekeyPath(link.scopeId, [link.nodeId], { subtree: true })
+    .then(() => undefined, () => undefined)
+    .finally(() => rekeyingClosedLinks.delete(link.shareId))
+}
+
+/** Revoke a share (soft — the next guest request 404s). A close: the server marks the root's subtree due and this
+ *  device starts its re-key ({@link rekeyAfterClose}). */
+export async function revokeShare(link: ClosedLink): Promise<void> {
+  await withRefresh(() => sharesApi().revokeShare({ shareId: link.shareId }))
+  void rekeyAfterClose(link)
 }
 
 /** Delete a share link for good (ADR 0029 §7): the server keeps only its id, so it can never be switched back on,
- *  renewed or minted again; what its guests added stays in the shared node. */
-export async function deleteShare(shareId: string): Promise<void> {
-  await withRefresh(() => sharesApi().deleteShare({ shareId }))
+ *  renewed or minted again; what its guests added stays in the shared node. A delete of an OPEN link is a close
+ *  ({@link rekeyAfterClose}); one already closed was marked at its close. */
+export async function deleteShare(link: ClosedLink & Pick<ManagedShare, 'enabled' | 'expiresAt'>): Promise<void> {
+  const open = isOpenLink(link)
+  await withRefresh(() => sharesApi().deleteShare({ shareId: link.shareId }))
+  if (open) void rekeyAfterClose(link)
 }
 
 /** A link to switch back on, as the manage list serves it: its address, its role and its recovery copy. */
 export type ReopenedShare = ShareAddress & RecoveryCopy & { role: ShareRole }
+
+/** The fields a reopen carries ({@link reopenFields}): the root's own epoch, its name and its key for the link's role. */
+export type ReopenFields = { nodeEpoch: number; sealedName: string; wrap?: string; sealedDropPublicKey?: string }
 
 /** What a reopen carries (ADR 0114 decision 7): what the close cleared — the root's current key under the link's
  *  `K_share` (a READ or READ_WRITE link's `wrap`, a WRITE_ONLY link's drop public key) — and the root's current name
@@ -542,7 +625,7 @@ export type ReopenedShare = ShareAddress & RecoveryCopy & { role: ShareRole }
  *  with none is reopened only by a re-issue. `sealedDropPrivateKey` is the root's, for a WRITE_ONLY link. */
 export function reopenFields(
   share: ReopenedShare, root: ShareRootKey, epochs: ScopeKey, rootName: string, sealedDropPrivateKey?: string | null,
-): { nodeEpoch: number; sealedName: string; wrap?: string; sealedDropPublicKey?: string } {
+): ReopenFields {
   const kShare = recoverShareKey(epochs, share, share)
   try {
     const sealedName = sealRootName(kShare, rootName)
@@ -563,9 +646,42 @@ export function reopenFields(
  *  {@link isReissueRequired}; such a share comes back only through a re-issue ({@link remintShare}). A WRITE_ONLY link's
  *  drop key is read from the root's row. */
 export async function reactivateShare(share: ReopenedShare, root: ShareRootKey, epochs: ScopeKey, rootName: string): Promise<void> {
-  const sealedDropPrivateKey = share.role === ShareRole.WriteOnly ? await rootDropKey(share.scopeId, share.nodeId) : null
-  const reactivateShareRequest = reopenFields(share, root, epochs, rootName, sealedDropPrivateKey)
-  await withRefresh(() => sharesApi().reactivateShare({ shareId: share.shareId, reactivateShareRequest }))
+  await reopenAtRootEpoch(share, root, epochs, rootName, (reactivateShareRequest) =>
+    withRefresh(() => sharesApi().reactivateShare({ shareId: share.shareId, reactivateShareRequest })),
+  )
+}
+
+/**
+ * Send a reopen's fields ({@link reopenFields}) through [send] at the root's own epoch, as every member write that seals
+ * under a node's key (`writeAtNodeEpoch`): first from [root] as the caller holds it, behind the device floor; after
+ * `stale_epoch` — the close's re-key replaced the root's key since the caller read it — or `node_rekey_pending` — the
+ * re-key has not reached the root yet, so this device pulls its path forward first — once more from the scope and the
+ * tree re-read, with the link's recovery copy as listed now (a rotation re-seals it). A WRITE_ONLY link's drop key is
+ * read from the root's row on every attempt, since a re-key replaces it.
+ */
+async function reopenAtRootEpoch(
+  share: ReopenedShare, root: ShareRootKey, epochs: ScopeKey, rootName: string, send: (fields: ReopenFields) => Promise<unknown>,
+): Promise<void> {
+  const { scopeId, nodeId } = share
+  const dropKey = () => (share.role === ShareRole.WriteOnly ? rootDropKey(scopeId, nodeId) : Promise.resolve(null))
+  await writeAtNodeEpoch(async (reread) => {
+    if (!reread) {
+      assertActiveScopeFloor(scopeId, { id: nodeId, epoch: root.epoch })
+      await send(reopenFields(share, root, epochs, rootName, await dropKey()))
+      return
+    }
+    const opened = await openScopeById(scopeId)
+    if (!opened) throw new Error('cannot open scope to reopen the share')
+    try {
+      const now = nodeKeyForWrite(scopeId, opened.epochs, await listTree(scopeId, opened.epochs), nodeId)
+      if (!now) throw new Error('share_root_unavailable')
+      const listed = (await listSharesFor(nodeId)).find((s) => s.shareId === share.shareId)
+      const copy = listed ? { sealedShareKey: listed.sealedShareKey, sealedShareKeyEpoch: listed.sealedShareKeyEpoch } : share
+      await send(reopenFields({ ...share, ...copy }, now, opened.epochs, rootName, await dropKey()))
+    } finally {
+      zeroScopeKey(opened.epochs)
+    }
+  }, { pull: pullRekeyPath(scopeId, [nodeId]) })
 }
 
 /** The root's drop private key as its row holds it (sealed under the root's key), or null. */

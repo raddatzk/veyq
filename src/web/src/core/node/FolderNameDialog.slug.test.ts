@@ -9,7 +9,7 @@ import { mount } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
-vi.mock('../sharing/manageShares', () => ({ resealShareNames: vi.fn(async () => ({ resealed: [], skipped: [], failed: [] })) }))
+vi.mock('../sharing/manageShares', () => ({ resealShareNames: vi.fn(async () => ({ resealed: [], closed: [], skipped: [], failed: [] })) }))
 
 import FolderNameDialog from './FolderNameDialog.vue'
 import { treeStore } from './treeStore'

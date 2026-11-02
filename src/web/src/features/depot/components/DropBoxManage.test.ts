@@ -98,7 +98,7 @@ describe('the drop box share dialog', () => {
     await del().trigger('click')
     settleConfirm(true)
     await flushPromises()
-    expect(deleteShare).toHaveBeenCalledWith('link-1')
+    expect(deleteShare).toHaveBeenCalledWith(expect.objectContaining({ shareId: 'link-1', role: ShareRole.WriteOnly }))
   })
 
   // Inbox #394: switching off asks first, and an off link is switched on again (core's reactivate), as on a folder.
@@ -122,7 +122,7 @@ describe('the drop box share dialog', () => {
     await off().trigger('click')
     settleConfirm(true)
     await flushPromises()
-    expect(revokeShare).toHaveBeenCalledWith('link-1')
+    expect(revokeShare).toHaveBeenCalledWith(expect.objectContaining({ shareId: 'link-1', role: ShareRole.WriteOnly }))
   })
 
   it('an off link shows its link marked off and switches on again; one a departed member may hold says to make a new one', async () => {

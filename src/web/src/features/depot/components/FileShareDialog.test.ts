@@ -8,7 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('../../../core/sharing/shareLink', () => ({ buildShareLink: vi.fn(), recoverShareLink: vi.fn() }))
-vi.mock('../../../core/sharing/manageShares', () => ({
+vi.mock('../../../core/sharing/manageShares', async () => ({
+  rekeyingClosedLinks: (await import('vue')).shallowReactive(new Set<string>()),
   mintShare: vi.fn(), remintShare: vi.fn(), listSharesFor: vi.fn(), revokeShare: vi.fn(), reactivateShare: vi.fn(),
   deleteShare: vi.fn(), isReissueRequired: vi.fn(), isShareDeleted: vi.fn(), readShareName: vi.fn(), readShareNote: vi.fn(),
   hasLocaleText: vi.fn(),

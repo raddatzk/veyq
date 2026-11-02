@@ -8,7 +8,7 @@ import { resealingScopes } from './scopeRekey'
 // pinned identity key on this device (ADR 0111 decision 4, `addGroupMember`), so the member holds it from the add on.
 // Real names stay `@username`
 // — they're sealed under K_tenant, which a group owner needn't hold (the active key here is the group's K_SC).
-import { rekeyScope } from '../../core/node/rekey/rekeyScope'
+import { rekeyScope, rekeyingCause } from '../../core/node/rekey/rekeyScope'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
@@ -79,6 +79,8 @@ const purgeAfter = ref<Date | null>(null)
 const stuckRotation = ref<CompromiseRotation | null>(null)
 /** Owner-only: the group's last rotation is still fitting the new lock (ADR 0109) — adding waits per node meanwhile. */
 const rekeying = ref(false)
+/** Owner-only: what re-keys is only what lies below closed links (ADR 0114) — the hint then names the link, not the group. */
+const closeRekeying = ref(false)
 // this device is re-sealing the space's scope-level rows for a rotation it runs (ADR 0115 decision 2)
 const resealing = computed(() => { const id = props.scopeId; return id !== null && id !== undefined && resealingScopes.has(id) })
 const isPending = computed(() => purgeAfter.value !== null)
@@ -105,7 +107,12 @@ const { members, isOwner, trust, trustRefusal, loading, loadError, refreshTrust,
     // The identity header's avatar: the group's icon opened on-device against our own grant (null → the initial).
     if (iconBytes) groupIcon.set(new Blob([iconBytes as BlobPart], { type: 'image/webp' }))
     else groupIcon.clear()
-    return { rows, isOwner: !!me && rows.some((m) => m.username === me.username && m.role === 'OWNER') }
+    const owner = !!me && rows.some((m) => m.username === me.username && m.role === 'OWNER')
+    // Only closed links re-keying claims their subtrees, not the group (ADR 0114 decision 9); unknown reads as a rotation's.
+    closeRekeying.value = owner && rekeying.value
+      ? (await rekeyingCause(props.scopeId).catch(() => 'rotation')) === 'close'
+      : false
+    return { rows, isOwner: owner }
   })
 watch(() => props.scopeId, () => reload())
 
@@ -467,7 +474,7 @@ async function onRestore() {
       <CompromiseRotationNotice v-if="isOwner" :scope-id="scopeId" :state="stuckRotation" @requeued="stuckRotation = $event" />
       <!-- the scope-level rows are sealed again under the new key before the rotation commits (ADR 0115 decision 2) -->
       <VeyqMessage v-if="resealing" tone="info">{{ t('spaceLock.resealing') }}</VeyqMessage>
-      <VeyqMessage v-else-if="isOwner && rekeying" tone="info">{{ t('rotation.statusHint.rekeying') }}</VeyqMessage>
+      <VeyqMessage v-else-if="isOwner && rekeying" tone="info">{{ closeRekeying ? t('share.closedRekeying') : t('rotation.statusHint.rekeying') }}</VeyqMessage>
 
       <div class="settings-section-header">
         <div>

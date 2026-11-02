@@ -129,8 +129,10 @@ describe('FolderShareDialog — edit a link in place (#364)', () => {
     await flushPromises()
 
     expect(updateShare).toHaveBeenCalledTimes(1)
-    const [address, epochs, copy, note, name, expiresAt, role, passwordChange] = updateShare.mock.calls[0]
+    const [address, epochs, copy, note, name, expiresAt, role, passwordChange, root] = updateShare.mock.calls[0]
     expect(address, 'the link and the folder this dialog was opened for').toEqual({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, shareId: 's-own' })
+    // what a reopen by its end date seals (ADR 0114 decision 7): the folder's own key at its epoch, and its name
+    expect(root).toEqual({ root: { key: new Uint8Array(32), epoch: 0 }, rootName: 'Trips' })
     expect(epochs).toEqual(EPOCHS)
     expect(copy, 'its recovery copy re-opens K_share').toEqual(share)
     expect(note, 'the note is re-sent').toEqual({ texts: { en: 'Hello' }, mustAccept: false })

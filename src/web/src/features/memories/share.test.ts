@@ -64,6 +64,8 @@ const ROOT_EPOCH = 1
 const NO_COPY = { sealedShareKey: null, sealedShareKeyEpoch: null }
 /** The address of the share a createShare call minted (the recovery copy of K_share is bound to it). */
 const addressOf = (req: { shareId: string }) => ({ scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: req.shareId })
+/** A minted share as the manage list serves it to an edit: switched on, no end date (`updateShare`'s `EditedShare`). */
+const listed = <T extends { role: ShareRole }>(req: T) => ({ ...req, enabled: true, expiresAt: null })
 
 /** Seal a media's listed-metadata tier under a K_node exactly as the media layer does (bound to scope + media). */
 function sealMeta(key: Uint8Array, mediaId: string, meta: object): string {
@@ -625,7 +627,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     const req = posted(create)
     const share = addressOf(req)
 
-    await updateShare(share, EPOCHS, req, { texts: { en: 'v2 note' }, mustAccept: false }, 'For Grandma', null)
+    await updateShare(share, EPOCHS, listed(req), { texts: { en: 'v2 note' }, mustAccept: false }, 'For Grandma', null)
     const patch = update.mock.calls[0][0]
     expect(patch.shareId).toBe(req.shareId)
     // both ciphertexts round-trip to the new values via the recovered K_share
@@ -634,10 +636,10 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     // the recovery copy is bound to its share: listed on another share's row it recovers nothing (ADR 0072)
     const elsewhere = { ...share, shareId: ADDR.shareId }
     expect(readShareName(EPOCHS, elsewhere, req, patch.updateShareRequest.sealedShareName!)).toBe('')
-    await expect(updateShare(elsewhere, EPOCHS, req, { texts: { en: 'x' }, mustAccept: false }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
+    await expect(updateShare(elsewhere, EPOCHS, listed(req), { texts: { en: 'x' }, mustAccept: false }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
     // …and to its epoch: relabelled as another epoch it opens under no key (the one key, the wrong label)
     const relabelled = { ...req, sealedShareKeyEpoch: 1 }
-    await expect(updateShare(share, EPOCHS, relabelled, { texts: { en: 'x' }, mustAccept: false }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
+    await expect(updateShare(share, EPOCHS, listed(relabelled), { texts: { en: 'x' }, mustAccept: false }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
   })
 
   it('clears note + name with blank edits (PATCH nulls)', async () => {
@@ -648,7 +650,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     await createShare(SCOPE_ID, NODE_ID, { key: kNode, epoch: ROOT_EPOCH }, EPOCHS, 'Rom', undefined, null, { texts: { en: 'note' }, mustAccept: false }, 'name')
     const req = posted(create)
 
-    await updateShare(addressOf(req), EPOCHS, req, { texts: { en: '  ' }, mustAccept: false }, '   ', null)
+    await updateShare(addressOf(req), EPOCHS, listed(req), { texts: { en: '  ' }, mustAccept: false }, '   ', null)
     expect(update.mock.calls[0][0].updateShareRequest.sealedNote).toBeNull()
     expect(update.mock.calls[0][0].updateShareRequest.sealedShareName).toBeNull()
   })

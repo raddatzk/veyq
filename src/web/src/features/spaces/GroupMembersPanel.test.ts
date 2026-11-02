@@ -37,7 +37,9 @@ vi.mock('../account/profile/profile', () => ({ getMyProfile: vi.fn() }))
 vi.mock('../tasks/scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn() }))
 vi.mock('./spaceIconSignal', () => ({ bumpSpaceIcon: vi.fn() }))
 // The node re-key after a rotation is rekeyScope.test.ts's; here only that it runs, and after what.
-vi.mock('../../core/node/rekey/rekeyScope', async (orig) => ({ ...(await orig<typeof import('../../core/node/rekey/rekeyScope')>()), rekeyScope: vi.fn() }))
+vi.mock('../../core/node/rekey/rekeyScope', async (orig) => ({
+  ...(await orig<typeof import('../../core/node/rekey/rekeyScope')>()), rekeyScope: vi.fn(), rekeyingCause: vi.fn(async () => 'rotation'),
+}))
 const { toastSuccess } = vi.hoisted(() => ({ toastSuccess: vi.fn() }))
 vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: toastSuccess, error: vi.fn() }) }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
@@ -47,7 +49,7 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 
 import GroupMembersPanel from './GroupMembersPanel.vue'
 import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember, memberError, rekeySpace } from './members'
-import { rekeyScope } from '../../core/node/rekey/rekeyScope'
+import { rekeyScope, rekeyingCause } from '../../core/node/rekey/rekeyScope'
 import { httpError } from '../../test/httpError'
 import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee, scopeLifecycle, requeueScopeRotation, revokeScopeShares } from './scopes'
 import { IdentityUnanchoredError } from '../account/identityPins'
@@ -475,11 +477,21 @@ describe('GroupMembersPanel — read-only for a member who does not own the grou
   })
 
   it('control: the owner of the same group sees every owner control and no note', async () => {
+    vi.mocked(rekeyingCause).mockResolvedValue('rotation')
     const w = await mountAs('owner')
     expect(labelsShown(w)).toEqual(OWNER_LABELS) // demote on the owner's own row (the last-owner guard is the server's)
     expect(w.find('[data-testid="group-readonly"]').exists()).toBe(false)
     expect(w.text()).toContain(t('members.compromiseRotation.failed'))
     expect(w.text()).toContain(t('rotation.statusHint.rekeying'))
+    expect(w.text()).not.toContain(t('share.closedRekeying'))
+  })
+
+  it("a re-key only closed links started says so, not that the whole group gets a new lock (ADR 0114 decision 9)", async () => {
+    vi.mocked(rekeyingCause).mockResolvedValue('close')
+    const w = await mountAs('owner')
+    expect(rekeyingCause).toHaveBeenCalledWith('g-1')
+    expect(w.text()).toContain(t('share.closedRekeying'))
+    expect(w.text()).not.toContain(t('rotation.statusHint.rekeying'))
   })
 
   it('a directory that cannot be read offers nothing and says it failed, not that it is read-only', async () => {

@@ -34,7 +34,9 @@ vi.mock('../account/tenantTrust', async (orig) => ({ ...(await orig<typeof impor
 const { confirmAsk, confirmAskWithOptions } = vi.hoisted(() => ({ confirmAsk: vi.fn(), confirmAskWithOptions: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk, askWithOptions: confirmAskWithOptions }) }))
 // The node re-key after a rotation is rekeyScope.test.ts's; here only that it runs, and after what.
-vi.mock('../../core/node/rekey/rekeyScope', async (orig) => ({ ...(await orig<typeof import('../../core/node/rekey/rekeyScope')>()), rekeyScope: vi.fn() }))
+vi.mock('../../core/node/rekey/rekeyScope', async (orig) => ({
+  ...(await orig<typeof import('../../core/node/rekey/rekeyScope')>()), rekeyScope: vi.fn(), rekeyingCause: vi.fn(),
+}))
 // The tenant keys the active space holds: none unless a test hands it some (then the names open on the device).
 const held = vi.hoisted(() => ({ write: null as Uint8Array | null, epochs: null as ScopeKey | null }))
 vi.mock('../../app/activeSpace', async (orig) => ({
@@ -46,7 +48,7 @@ vi.mock('../../app/activeSpace', async (orig) => ({
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
 import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, rekeySpace, setTenantMemberRole, memberError, prepareInviteCode, type InvitePhase } from './members'
-import { rekeyScope } from '../../core/node/rekey/rekeyScope'
+import { rekeyScope, rekeyingCause } from '../../core/node/rekey/rekeyScope'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { tenantBadges } from '../account/tenantTrust'
 import { account } from '../../app/account'
@@ -119,6 +121,20 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     // One status badge per row, and it is "Active": there is no awaiting-access state to show any more.
     for (const row of rows) expect(row.findAll('.veyq-badge').map((b) => b.text())).toEqual([t('members.statusActive')])
     expect(rows.some((r) => r.find('.veyq-badge.warning').exists())).toBe(false)
+  })
+
+  // ADR 0114 decision 9: a re-key only closed links started is worded for what lies below them, never the whole space;
+  // the control on the same panel is a rotation's re-key, worded for the space.
+  it.each([
+    ['close', 'share.closedRekeying', 'rotation.statusHint.rekeying'],
+    ['rotation', 'rotation.statusHint.rekeying', 'share.closedRekeying'],
+  ] as const)("the owner's re-keying hint after a %s says what re-keys", async (cause, shown, absent) => {
+    vi.mocked(scopeLifecycle).mockResolvedValue({ deletedAt: null, purgeAfter: null, compromiseRotation: null, rekeying: true })
+    vi.mocked(rekeyingCause).mockResolvedValue(cause)
+    const wrapper = await mountPanel('OWNER')
+    expect(rekeyingCause).toHaveBeenCalledWith('t-1')
+    expect(wrapper.text()).toContain(t(shown))
+    expect(wrapper.text()).not.toContain(t(absent))
   })
 
   it('shows the invite button to the owner', async () => {

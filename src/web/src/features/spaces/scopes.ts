@@ -19,6 +19,7 @@ import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameW
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
 import { rememberGroupName, groupNameSeen } from './groupNamesSeen'
 import { stageScopeLevelRekey, isRestageable, REKEY_RESTAGES } from './scopeRekey'
+import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { ScopeKind, type CompromiseRotation, type ScopeSummary, type ScopeSummaryRoleEnum, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
 import type { OpenInvite, InviteGrantEntry } from '../../api/generated/scopes'
 import type { RotationPlanScope } from '../../api/generated/account'
@@ -29,11 +30,30 @@ export { grantContext } from './grant'
 
 /**
  * Turn off every link of a scope (ADR 0075 point 5) — a scope owner's switch-off: every enabled share, whoever made
- * it, goes off and is marked, so each comes back only by {@link reissueShare}. Resolves how many it turned off.
+ * it, goes off and is marked, so each comes back only by {@link reissueShare}. Resolves how many it turned off. Each is
+ * a close (ADR 0114 decision 1): the server marks what lies below every viewable one due, and this device starts the
+ * scope's re-key in the background ({@link rekeyClosedScopes}).
  */
 export async function revokeScopeShares(scopeId: string): Promise<number> {
   const { revoked } = await withRefresh(() => scopesApi().revokeScopeShares({ scopeId }))
+  if (revoked > 0) void rekeyClosedScopes([scopeId])
   return revoked
+}
+
+/**
+ * After a close the server ran in bulk — every link of a scope switched off, or a removed member's links in the scopes
+ * of their tenant — this device re-keys what it marked (ADR 0114 decision 9): [scopeIds], or without them every scope of
+ * the active tenant this member holds that is now re-keying, one after another, in the background — never awaited by
+ * the caller, so the dialog does not wait. The whole scope's re-key (`rekeyScope`): a bulk close marks the subtree of
+ * every link it closed, and only the due nodes are re-keyed. Any failure — a scope this device cannot open, an
+ * owner-only node a member leaves — is left to the members' workers, which resume any scope with a due node. Never
+ * rejects.
+ */
+export function rekeyClosedScopes(scopeIds?: readonly string[]): Promise<void> {
+  return (async () => {
+    const ids = scopeIds ?? (await listMyScopes()).filter((s) => s.rekeying === true).map((s) => s.id)
+    for (const id of ids) await rekeyScope(id).catch(() => undefined)
+  })().catch(() => undefined)
 }
 
 /** The caller's scopes in the active tenant (each with their own grant ciphertext). */

@@ -186,9 +186,11 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
           ? undefined
           : ({ set: password.value } as const)
       // cr-0119: a normal-flow edit may re-grade the role (READ ↔ READ_WRITE); the uploader variant never sends one.
+      // An end date moved past a passed one reopens the link (ADR 0114 decision 7): the Memory's key and name go with it.
       await updateShare(
         addressOf(props.editShare), props.epochs, props.editShare,
         effectiveNote, name.value, expiry, props.uploader ? undefined : role.value, passwordChange,
+        { root: { key: props.memoryKey, epoch: props.memoryEpoch }, rootName: props.memoryName },
       )
       emit('saved')
       emit('close')

@@ -57,7 +57,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(createFolder).mockResolvedValue('node-1')
   vi.mocked(renameNode).mockResolvedValue(undefined)
-  vi.mocked(resealShareNames).mockResolvedValue({ resealed: [], skipped: [], failed: [] })
+  vi.mocked(resealShareNames).mockResolvedValue({ resealed: [], closed: [], skipped: [], failed: [] })
 })
 
 /** Let the submit's chained awaits (rename, then the share-name re-seal) settle. */
@@ -115,7 +115,7 @@ describe('FolderNameDialog', () => {
   it.each(['FOLDER', 'MEMORY', 'CHAPTER', 'FILE'])('a rename of a %s re-seals its share names after the rename, then closes', async (kind) => {
     const order: string[] = []
     vi.mocked(renameNode).mockImplementation(async () => { order.push('rename') })
-    vi.mocked(resealShareNames).mockImplementation(async () => { order.push('reseal'); return { resealed: ['s1'], skipped: [], failed: [] } })
+    vi.mocked(resealShareNames).mockImplementation(async () => { order.push('reseal'); return { resealed: ['s1'], closed: [], skipped: [], failed: [] } })
     const wrapper = mountDialog({ mode: 'rename', node: nodeOf(kind) })
     await wrapper.find('input').setValue('New')
     await wrapper.find('form').trigger('submit')
@@ -129,8 +129,8 @@ describe('FolderNameDialog', () => {
   })
 
   it.each([
-    ['a share failed', { resealed: ['a'], skipped: [], failed: ['b'] }],
-    ['a share had no recovery copy', { resealed: [], skipped: ['b'], failed: [] }],
+    ['a share failed', { resealed: ['a'], closed: [], skipped: [], failed: ['b'] }],
+    ['a share had no recovery copy', { resealed: [], closed: [], skipped: ['b'], failed: [] }],
   ])('says so in a toast when %s, and the rename still stands', async (_, report) => {
     vi.mocked(resealShareNames).mockResolvedValue(report)
     const wrapper = mountDialog({ mode: 'rename', node: nodeOf('MEMORY', null) })

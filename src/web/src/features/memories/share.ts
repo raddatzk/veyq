@@ -83,6 +83,7 @@ export {
   reactivateShare,
   isShareDeleted,
   isReissueRequired,
+  rekeyingClosedLinks,
   type ShareAddress,
   type RecoveryCopy,
   type MintedShare,
