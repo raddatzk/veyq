@@ -185,6 +185,15 @@ function openGroupName(scopeId: string, epochs: ScopeKey, nameEpoch: number, enc
   }
 }
 
+/** [open]'s name, or the unnamed group's `''` when it does not open. */
+function unnamedUnless(open: () => string): string {
+  try {
+    return open()
+  } catch {
+    return ''
+  }
+}
+
 /** A group's icon from its scope key (uc.spaces.set-space-icon): derive `K_icon` from the one key the caller holds —
  *  every rotation re-seals the icon at its new epoch (ADR 0115 decision 2) — then open + unpad the sealed icon. Null when
  *  unopenable → the caller renders the initial. */
@@ -215,8 +224,8 @@ export type GroupSpace = {
 /**
  * The member's groups in the active tenant with their names decrypted on-device (en.spaces.group-scope). Each
  * group's name is sealed under **its own** `K_SC`, so we open every group's grant to decrypt its name — the
- * server only ever returned the ciphertext name + ciphertext grant. A group whose grant/name won't open (E2, a
- * foreign grant) is dropped from the switcher rather than crashing it. A group whose grant is BEHIND its current epoch
+ * server only ever returned the ciphertext name + ciphertext grant. A group whose grant won't open (E2, a foreign
+ * grant) is dropped from the switcher rather than crashing it; one whose name won't open is listed unnamed. A group whose grant is BEHIND its current epoch
  * stays listed, marked {@link GroupSpace.awaitingKey}: a rotation replaced its key and re-sealed its name and icon under
  * the new one, which this device does not hold yet (ADR 0115 decision 8) — it reads nothing of the group until then.
  */
@@ -237,7 +246,9 @@ export async function listMyGroups(): Promise<GroupSpace[]> {
         let epochs: ScopeKey | null = null
         try {
           epochs = scopeKeyOf(await openOwnGrant(g, priv, self), g.grantedEpoch)
-          const name = g.encryptedName ? openGroupName(g.id, epochs, g.nameEpoch, g.encryptedName) : ''
+          // A name that does not open under the key the grant opened — one a rotator could not re-seal and staged as one
+          // nobody opens (ADR 0115 decision 2) — is the unnamed group, never a reason to drop it from the switcher.
+          const name = g.encryptedName ? unnamedUnless(() => openGroupName(g.id, epochs!, g.nameEpoch, g.encryptedName!)) : ''
           const icon = g.sealedIcon ? openGroupIconAt(g.id, epochs, g.iconEpoch, g.sealedIcon) : null
           return { ...row, name, icon, awaitingKey: false }
         } catch (e) {

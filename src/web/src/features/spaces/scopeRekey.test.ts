@@ -236,18 +236,74 @@ describe('stageScopeLevelRekey — every scope-level row under the new key (ADR 
     await run()
     const [m] = staged[0].members!
     expect(openMemberName(NEW, { scopeId: SCOPE, userId: MEMBER }, m.sealedName)).toBeNull()
+    expect(() => v1.openField({ purpose: 'member-name', scopeId: SCOPE, userId: MEMBER }, NEW.key, fromB64std(m.sealedName!)), 'under no key').toThrow(v1.OpenRefused)
+    expect(fromB64std(m.sealedName!).length).toBe(fromB64std(page.members[0].sealedName!).length)
     expect(m.replacedNameDigest).toBe(replacedDigestOf(page.members[0].sealedName!))
     // control: the readable fields beside it re-sealed as they were
     expect(openMemberAvatar(NEW, { scopeId: SCOPE, userId: MEMBER }, m.sealedAvatar)).toEqual(iconBytes)
   })
 
-  it('fails closed on a root entry that does not open under the old key', async () => {
+  // One rule for every kind (ADR 0115 decision 2): a value the rotator cannot open is staged as one nobody opens — under
+  // no key anyone holds, of the replaced value's length, with its digest — so one unreadable value stops no rotation.
+  const len = (b64: string) => fromB64std(b64).length
+
+  it('stages a root entry whose name or key wrap does not open as one nobody opens, and the readable field beside it as ever', async () => {
     const page = served()
-    page.rootNodes = [rootEntry(ROOT, rootKey, 'Reisen', false)]
-    page.rootNodes[0].wrappedContentKey = wrapContentKey(v1.randomBytes(32), { scopeId: SCOPE, nodeId: ROOT, scopeEpoch: 1, placementRevision: 5 }, rootKey)
+    const was = { scopeId: SCOPE, scopeEpoch: 1, placementRevision: 5 }
+    page.rootNodes[0].encryptedName = sealName(v1.randomBytes(32), { ...was, nodeId: ROOT }, 'Reisen') // the live root's name
+    page.rootNodes[1].wrappedContentKey = wrapContentKey(v1.randomBytes(32), { ...was, nodeId: TRASHED }, trashedKey) // the trashed one's key
     api([page])
-    await expect(run()).rejects.toThrow(v1.OpenRefused)
-    expect(staged).toHaveLength(0)
+    await run()
+    expect(staged).toHaveLength(1)
+    const [live, trashed] = staged[0].rootNodes!
+    const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, scopeEpoch: 1, placementRevision: 6 })
+
+    // the live root: its name opens under no key, its slug token is under none either; its key re-wrapped (the control)
+    for (const key of [NEW.key, OLD.key]) expect(() => openName(key, at(ROOT), live.encryptedName)).toThrow(v1.OpenRefused)
+    expect(len(live.encryptedName)).toBe(len(page.rootNodes[0].encryptedName))
+    expect(live.slugToken).toHaveLength(slugTokenFor(NEW.key, SCOPE, FOLDER_KIND, 'x').length)
+    expect(openContentKey(SCOPE, NEW.key, { id: ROOT, scopeEpoch: 1, placementRevision: 6, wrappedContentKey: live.wrappedContentKey })).toEqual(rootKey)
+    expect(live.replacedDigest).toBe(replacedDigestOf(page.rootNodes[0].wrappedContentKey))
+
+    // the trashed root: its key wrap opens under no key, its name re-sealed (the control)
+    const wrapAt = { id: TRASHED, scopeEpoch: 1, placementRevision: 6, wrappedContentKey: trashed.wrappedContentKey }
+    for (const key of [NEW.key, OLD.key]) expect(() => openContentKey(SCOPE, key, wrapAt)).toThrow(v1.OpenRefused)
+    expect(len(trashed.wrappedContentKey)).toBe(len(page.rootNodes[1].wrappedContentKey))
+    expect(openName(NEW.key, at(TRASHED), trashed.encryptedName)).toBe('Alt')
+    expect(trashed.replacedDigest).toBe(replacedDigestOf(page.rootNodes[1].wrappedContentKey))
+  })
+
+  it('stages a group name, an icon and a recovery copy that do not open as ones nobody opens, each with its digest', async () => {
+    const page = served()
+    page.groupName = { encryptedName: sealGroupName(deriveGroupNameKey(v1.randomBytes(32)), SCOPE, OLD.epoch, 'Familie'), nameEpoch: OLD.epoch }
+    page.icon = { sealedIcon: sealIcon(deriveSpaceIconKey(v1.randomBytes(32)), { scopeId: SCOPE, iconEpoch: OLD.epoch }, iconBytes), iconEpoch: OLD.epoch }
+    const address = { scopeId: SCOPE, nodeId: ROOT, shareId: SHARE }
+    page.shares = [{ shareId: SHARE, nodeId: ROOT, ...sealRecoveryCopy(address, { epoch: OLD.epoch, key: v1.randomBytes(32) }, kShare) }]
+    api([page])
+    await run()
+    expect(staged).toHaveLength(1)
+    const [s] = staged
+
+    // the group name: under no key — the unnamed group — as long as the one it replaces
+    expect(() => openGroupNameWith(deriveGroupNameKey(NEW.key), SCOPE, NEW.epoch, s.groupName!.encryptedName)).toThrow(v1.OpenRefused)
+    expect(len(s.groupName!.encryptedName)).toBe(len(page.groupName.encryptedName))
+    expect(s.groupName!.replacedDigest).toBe(replacedDigestOf(page.groupName.encryptedName))
+
+    // the icon: under no key — the letter — at the one padded length every icon has
+    expect(openIcon(deriveSpaceIconKey(NEW.key), { scopeId: SCOPE, iconEpoch: NEW.epoch }, s.icon!.sealedIcon)).toBeNull()
+    expect(len(s.icon!.sealedIcon)).toBe(len(page.icon.sealedIcon))
+    expect(s.icon!.replacedDigest).toBe(replacedDigestOf(page.icon.sealedIcon))
+
+    // the recovery copy: under no key, never a K_share of random bytes under the new one — the link's key is lost, and
+    // its root's node re-key closes it
+    const [share] = s.shares!
+    expect(() => recoverShareKey(NEW, address, { sealedShareKey: share.sealedShareKey, sealedShareKeyEpoch: NEW.epoch })).toThrow(v1.OpenRefused)
+    expect(len(share.sealedShareKey)).toBe(len(page.shares[0].sealedShareKey))
+    expect(share.replacedDigest).toBe(replacedDigestOf(page.shares[0].sealedShareKey))
+
+    // control on the same page: the root entries and the member's profile re-sealed as ever
+    expect(openName(NEW.key, { scopeId: SCOPE, nodeId: ROOT, scopeEpoch: 1, placementRevision: 6 }, s.rootNodes![0].encryptedName)).toBe('Reisen')
+    expect(openMemberName(NEW, { scopeId: SCOPE, userId: MEMBER }, s.members![0].sealedName)).toEqual({ firstName: 'Ada', lastName: 'L' })
   })
 
   it('marks the scope as re-sealing while it runs, and not after', async () => {

@@ -681,7 +681,9 @@ paths:
         "204":
           description: The batch is staged.
         "400":
-          description: Malformed request (a list over 256 entries, a malformed value).
+          description: >
+            Malformed request (a list over 256 entries, a malformed value, a share naming `lostCopyDigest` beside a
+            `wrap` or a `sealedDropPublicKey`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -742,6 +744,14 @@ paths:
         wrap staged for a link that is no longer open — a close landed between the stage and the commit, and the new
         key must not sit beside a closed link (ADR 0114 decision 8): the client mints afresh and re-stages.
 
+        **A link whose key is lost.** A link the stage names by `lostCopyDigest` — its recovery copy opens for no member,
+        so nobody can wrap the new key for it — is closed by this commit, key lost, through the one close every link
+        takes (switched off, its keys cleared, its subtree due for a READ or READ_WRITE link, ADR 0114 decisions 1 and
+        5), in the same transaction and after every check above, so a refused commit closes nothing; it then needs no
+        wrap. Only an open link rooted on the node whose copy is still the one digested is closed — else
+        `409 rekey_parts_stale` — and an open link the stage neither wraps nor names is `rekey_parts_missing`, as
+        before: leaving a link out never closes it.
+
         **Order and refusals** (ADR 0114 decision 3). Checked under the scope's and the node's row lock, which every
         write sealing under the node's key takes too: `nodeEpoch` is the node's own epoch as the re-keyer read it — not
         the stored one is `409 stale_epoch` (another member re-keyed it), and so is a node that is not due; the parent
@@ -789,8 +799,8 @@ paths:
             `stale_placement` — the node
             was moved or renamed since `placementRevision`; `stale_revision` — its `wrappedMeta` moved since
             `metaRevision`; `rekey_parts_missing` — a row sealed under the node's key has no staged value;
-            `rekey_parts_stale` — a staged child moved since it was staged, or a staged wrap is for a link no longer
-            open; `slug_taken` — a re-computed token collides
+            `rekey_parts_stale` — a staged child moved since it was staged, a staged wrap is for a link no longer
+            open, or a link named key-lost is no longer open on the node or its recovery copy changed; `slug_taken` — a re-computed token collides
             (a defect: the set of names under a parent does not change); `scope_deleting`.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rekey_parts_missing } }
@@ -1916,8 +1926,17 @@ components:
       description: >
         A share's new `wrap` — the node's new key under the share's unchanged `K_share`, for every link that carries one
         (a WRITE_ONLY link carries none) — and, for a share carrying the node's drop public key, the new one sealed under
-        `K_share` (ADR 0109 points 4 and 5).
+        `K_share` (ADR 0109 points 4 and 5). Or, for a link whose recovery copy the re-keyer cannot open, neither: its
+        `lostCopyDigest`, and the commit closes the link as one whose key is lost.
       required: [shareId]
+      # A key-lost name stands alone (the stage's shape check, before any state is read): a string `lostCopyDigest` brings
+      # no `wrap` and no `sealedDropPublicKey` but a null or absent one. Under `dependentSchemas`, as CreateNodeRequest's
+      # `parentId`: the generators ignore the keyword, Schemathesis reads it.
+      dependentSchemas:
+        lostCopyDigest:
+          if: { properties: { lostCopyDigest: { type: string } } }
+          then:
+            properties: { wrap: { type: "null" }, sealedDropPublicKey: { type: "null" } }
       properties:
         shareId:
           x-veyq-visibility: id
@@ -1939,6 +1958,22 @@ components:
           maxLength: 2048
           example: null
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        lostCopyDigest:
+          type: [string, "null"]
+          description: >
+            The link's key is lost: the re-keyer cannot open its recovery copy (`RekeyShare.sealedShareKey`), so no member
+            can wrap the node's new key for it — a copy a rotator could not re-seal is staged as one nobody opens (ADR 0115
+            decision 2). The base64 SHA-256 of that copy's text as `getNodeRekeyParts` served it. The commit closes such a
+            link (`SharingStore.close`, key lost: switched off, its keys cleared, its subtree due as every close of a
+            viewable link marks it, ADR 0114 decision 1) in its own transaction before it checks the wraps, and then
+            requires none for it; a copy that is no longer this one, or a link that is no longer open on the node, is
+            `409 rekey_parts_stale`. Exclusive with `wrap` and `sealedDropPublicKey` (`400 invalid_request`). Every open
+            link the stage does not name so still needs its wrap: a link is never closed by leaving it out.
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RekeyIdentitySeal:
       type: object

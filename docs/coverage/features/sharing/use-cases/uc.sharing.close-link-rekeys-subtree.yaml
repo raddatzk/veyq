@@ -46,7 +46,23 @@ acceptanceCriteria:
           - LinkCloseRekeyCoreSliceTest.aCommitMissingAClosedLinksIdentityIsRefused
           - LinkCloseRekeyProbeCoreSliceTest.aRotationReWrapsNoSwitchedOffLink
           - LinkCloseRekeyProbeCoreSliceTest.aRotationReSealsTheIdentitiesOfADeletedLink
+          - ShareSealedNameCoreSliceTest.aRevokedShareRefusesAReSealItsOpenSiblingTakesItAndItsReactivationShowsTheNameItCarries
+          - ShareSealedNameCoreSliceTest.aLinkPastItsEndDateRefusesAReSeal
       web: { unit: [src/core/sharing/manageShares.test.ts, src/core/node/rekey/rekeyScope.test.ts] }
+  - id: a-lost-key-closes-the-link
+    text: A link whose recovery copy opens for no member is named key-lost by its root's re-key, by the digest of that copy, and the commit closes it through the one close body - switched off, keyless, its subtree below the root marked due - and finishes; a name for another copy or for a link not open on the node is 409 rekey_parts_stale and closes nothing, a name beside a wrap is 400; a commit refused after the close rolls it back; an open link the re-key neither wraps nor names is 409 rekey_parts_missing and stays open.
+    coverage:
+      backend:
+        integration:
+          - LinkCloseRekeyCoreSliceTest.aLinkWhoseKeyIsLostIsClosedByItsRootsReKeyWhichThenFinishes
+          - LinkCloseRekeyCoreSliceTest.leavingAnOpenLinkOutNeverClosesIt
+          - LinkCloseRekeyCoreSliceTest.aKeyLostNameForAnotherCopyOrLinkIsStaleAndClosesNothing
+          - LinkCloseRekeyCoreSliceTest.aRefusalAfterTheKeyLostCloseRollsTheCloseBack
+      web: { unit: [src/core/node/rekey/rekeyScope.test.ts, src/features/spaces/scopeRekey.test.ts] }
+  - id: links-closed-before-the-upgrade-are-marked
+    text: The upgrade marks due every node of every scope holding a READ or READ_WRITE link switched off or deleted before the close body existed whose root still exists; a scope with only open links, only a closed WRITE_ONLY link or a closed link whose root was purged gets no mark.
+    coverage:
+      backend: { integration: [ClosedLinksMarkDueMigrationSliceTest.everyNodeOfAScopeWithAClosedViewableLinkIsDue_andNoneElsewhere] }
   - id: the-sweep-closes-an-expired-link-once
     text: The end-date sweep closes every enabled link whose end date passed and whose close it has not carried out, once, and leaves an open link alone.
     coverage:

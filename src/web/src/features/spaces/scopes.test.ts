@@ -321,6 +321,24 @@ describe('listMyGroups', () => {
     expect(old?.icon ?? null).toBeNull()
     expect(old?.name ?? '').not.toBe('Alte Crew')
   })
+
+  // ADR 0115 decision 2: a name a rotator could not open is staged as one nobody opens — the group is listed unnamed,
+  // never dropped from the switcher, while its grant opens.
+  it('lists a group whose name opens under no key unnamed, its icon beside it as ever', async () => {
+    const key = v1.randomBytes(32)
+    const image = new Uint8Array([4, 5, 6])
+    const row = (nameKey: Uint8Array) => signed({
+      id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 0), grantedEpoch: 0, nameEpoch: 0, iconEpoch: 0,
+      encryptedName: sealGroupName(deriveGroupNameKey(nameKey), G1, 0, 'Reise-Crew'),
+      sealedIcon: sealIcon(deriveSpaceIconKey(key), { scopeId: G1, iconEpoch: 0 }, image),
+    })
+    mockScopes(listing([row(v1.randomBytes(32))]))
+    const [g] = await listMyGroups()
+    expect(g).toMatchObject({ scopeId: G1, name: '', awaitingKey: false })
+    expect(Array.from(g.icon!)).toEqual(Array.from(image))
+    mockScopes(listing([row(key)]))
+    expect((await listMyGroups())[0]).toMatchObject({ name: 'Reise-Crew' }) // control: the name under the key opens
+  })
 })
 
 describe('openGroupIcon (the settings-panel single-scope read)', () => {

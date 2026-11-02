@@ -23,7 +23,8 @@
 //     (`K_blob` itself is kept: no byte is read from or written to the store);
 //   - each link rooted on it: the new key under the link's `K_share` where the server asks for a wrap (an open link,
 //     ADR 0114 decision 5), recovered from its recovery copy — under the scope's current key, which the rotation re-sealed
-//     it under (ADR 0115 decision 2);
+//     it under (ADR 0115 decision 2); a link whose copy opens for no member is named key-lost instead, and the commit
+//     closes it — nobody can wrap the new key for it;
 //   - its drop key, replaced: the new private half under the new key, the public half under each WRITE_ONLY link's
 //     `K_share`, each guest's `K_up` re-sealed to it (point 5); a READ_WRITE guest's name re-sealed under the new key;
 //   - the kind's own rows (Memories' media, buckets), staged by its `rekeyContent` under the same re-key id.
@@ -35,7 +36,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { applicationBlobsApi, rekeyApi } from '../../../api/client'
-import type { RekeyNode } from '../../../api/generated/content'
+import type { RekeyNode, RekeyShareWrap } from '../../../api/generated/content'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { activeEpochKeys, activeSpace, refreshActiveScope } from '../../../app/activeSpace'
 import { openScopeById, type OpenedScope } from '../../../features/spaces/scopes'
@@ -72,8 +73,8 @@ async function isConflict(e: unknown): Promise<boolean> {
  * Re-key every node of [scopeId] that is due and this device may re-key: an owner every one, a member
  * every one but those only an owner re-keys (and what lies below them, top-down). Returns `done` once none lags — a
  * member's run that left only owner-only nodes lagging returns `done: false` and throws nothing. Throws when this device
- * cannot (its grant lags, a node's key does not open, a kind registers no re-key) — the scope then stays *re-keying* for
- * another member's worker to resume.
+ * cannot (its grant lags, a node's key does not open — once every other node it can reach is re-keyed —, a kind
+ * registers no re-key) — the scope then stays *re-keying* for another member's worker to resume.
  */
 export async function rekeyScope(scopeId: string, opts: { signal?: AbortSignal } = {}): Promise<RekeyScopeResult> {
   return runRekey(scopeId, opts, ({ rows, byId, owner }) => {
@@ -213,8 +214,12 @@ async function runRekey(
       if (picked === 'done') return { done: true, committed, current }
       if (picked === 'not-mine') return { done: false, committed, current }
       const keys = openKeys(scopeId, epochs, rows)
+      // A node whose key opens for no member (a root entry a rotator could not re-seal, ADR 0115 decision 2) holds up
+      // nothing else: the rest is re-keyed first, and the run refuses only once nothing but such nodes is left.
+      const workable = picked.filter((n) => keys.has(n.id))
       try {
-        for (const node of picked) {
+        if (!workable.length) throw new v1.OpenRefused('content-key')
+        for (const node of workable) {
           opts.signal?.throwIfAborted()
           await rekeyNode({ scopeId, epochs, current, rows, byId, keys, shareRoots, signal: opts.signal }, node)
           committed++
@@ -311,14 +316,21 @@ export async function rekeyNode(run: Run, node: Row): Promise<void> {
     // the drop key, replaced (point 5)
     const drop = node.sealedDropPrivateKey ? replaceDropKey(scopeId, node.id, oldKey, newKey, node.sealedDropPrivateKey) : null
 
-    // links rooted here: the new key under each open link's K_share, recovered from its copy (at the current epoch)
-    const shares = parts.shares.map((s) => {
-      const kShare = recoverShareKey(epochs, { scopeId, nodeId: node.id, shareId: s.shareId }, {
-        sealedShareKey: s.sealedShareKey, sealedShareKeyEpoch: s.sealedShareKeyEpoch ?? null,
-      })
+    // links rooted here: the new key under each open link's K_share, recovered from its copy (at the current epoch); a
+    // link whose copy opens for no member is named key-lost instead, and the commit closes it (ADR 0115 decision 2)
+    const shares = parts.shares.map((s): RekeyShareWrap => {
+      if (s.hasDropPublicKey && !drop) throw new Error('rekey: a link carries a drop key the node does not')
+      run.shareRoots.set(s.shareId, { oldKey: oldKey.slice(), newKey: newKey.slice() })
+      let kShare: Uint8Array
       try {
-        if (s.hasDropPublicKey && !drop) throw new Error('rekey: a link carries a drop key the node does not')
-        run.shareRoots.set(s.shareId, { oldKey: oldKey.slice(), newKey: newKey.slice() })
+        kShare = recoverShareKey(epochs, { scopeId, nodeId: node.id, shareId: s.shareId }, {
+          sealedShareKey: s.sealedShareKey, sealedShareKeyEpoch: s.sealedShareKeyEpoch ?? null,
+        })
+      } catch {
+        // the digest of the copy as served (the contract's `lostCopyDigest`): the commit closes only that copy's link
+        return { shareId: s.shareId, lostCopyDigest: b64std(v1.sha256Digest(v1.utf8(s.sealedShareKey))) }
+      }
+      try {
         return {
           shareId: s.shareId,
           wrap: s.hasWrap ? b64std(v1.seal(SHARE_KEY, kShare, newKey)) : null,

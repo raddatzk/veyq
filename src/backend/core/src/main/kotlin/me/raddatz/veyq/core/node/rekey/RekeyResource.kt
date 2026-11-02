@@ -74,6 +74,10 @@ class RekeyResource(
         }
 
     override fun stageNodeRekey(scopeId: UUID, nodeId: UUID, rekeyId: UUID, nodeRekeyStage: NodeRekeyStageRequest): Response {
+        // A link named key-lost gets no key from this re-key: a wrap or a drop public key beside the name is malformed.
+        if (nodeRekeyStage.shares.orEmpty().any { it.lostCopyDigest != null && (it.wrap != null || it.sealedDropPublicKey != null) }) {
+            return refused(RekeyOutcome.InvalidRequest)
+        }
         val values = buildMap {
             nodeRekeyStage.children.orEmpty().forEach { c ->
                 val id = c.nodeId.toString()
@@ -86,6 +90,7 @@ class RekeyResource(
             nodeRekeyStage.shares.orEmpty().forEach { s ->
                 s.wrap?.let { put(Key(s.shareId, RekeyStore.SHARE_WRAP), Value(it, null)) }
                 s.sealedDropPublicKey?.let { put(Key(s.shareId, RekeyStore.SHARE_DROP), Value(it, null)) }
+                s.lostCopyDigest?.let { put(Key(s.shareId, RekeyStore.SHARE_LOST), Value(it, null)) }
             }
             nodeRekeyStage.identities.orEmpty().forEach { i ->
                 val id = i.identityId.toString()

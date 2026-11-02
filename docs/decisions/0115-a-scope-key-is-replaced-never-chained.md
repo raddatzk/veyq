@@ -74,10 +74,24 @@ a scope key (`core/report/reportKeys.ts`); a seal's AAD encodes its binding fiel
    | A Memory's item marks (`item-favorites`) | re-sealed under the new key; the self-tag inside is unchanged | Memories, through core's scope re-key seam |
    | Each member's grant and each open invite's grant (`scope-grant`) | the new epoch wrapped to each (ADR 0111 decision 8) | core |
 
-   A field that does not open under the old key — what every reader already shows as no name, the letter, no join
-   record, an ignored verification — is staged as a seal of random bytes of the same length, which reads exactly the
-   same; an item-mark set that does not open is staged as an empty set nobody owns. One member's unreadable value must
-   not stop every rotation of the scope, and nothing readable is lost.
+   **One rule for every kind: a value that does not open is staged as one nobody opens, and read as unreadable.** A
+   value the rotator cannot open under the old key — a scope-root entry's name or key wrap, a group's name, an icon, a
+   link's recovery copy, a member's field, a verification — is staged as its purpose's own seal at the new epoch under
+   a random key dropped at once, of the replaced value's length, with the `replacedDigest` of what it replaces
+   (`unopenable` in `features/spaces/scopeRekey.ts`) — never random bytes under the new key, which would open: as a
+   name of garbage, or, for a recovery copy or a key wrap, as a key that is no one's. Every reader shows it as it showed
+   the value before the rotation: no name, the letter, the unnamed group, no join record, an ignored verification; the
+   tree refuses a root entry that does not open, as it did before, and no member can re-key that node, as before — its
+   re-key leaves it due and re-keys every other node first. An item-mark set that does not open is staged as an empty
+   set nobody owns. **A link whose recovery copy does not open has lost its key**: no member can wrap its root's new
+   key for it, so its root's node re-key **closes it**, key lost, through the one close every link takes
+   ([ADR 0114](0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 1) — the node stage names it with the
+   digest of the copy it could not open (`lostCopyDigest`), the commit closes it in its own transaction after every
+   check of the node and before it checks the wraps, and the server still requires a wrap for every open link it is not
+   told is lost, so leaving a link out never closes it. One unreadable value must not stop every rotation of the scope,
+   nor a node's re-key, and nothing readable is lost. **The residual:** a member re-keyer can so close the links whose
+   recovery copy it junks, or claims it cannot open — an insider's denial of service, visible to the curator as a
+   closed link, that reads nothing it could not read already.
 
    An application owns the re-seal of its own rows through core's seam (a **scope re-key participant**,
    `ScopeRekeyParticipant`, the shape of `NodeRekeyParticipant`), never core naming its tables
@@ -107,7 +121,11 @@ a scope key (`core/report/reportKeys.ts`); a seal's AAD encodes its binding fiel
    readable from the new one, nor the new from the old. So:
    - **A device's commitment** ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
      decision 23) is the succession public key of the newest epoch it held; a later grant counts only through statements
-     from it. A member pending across several epochs checks every statement in between.
+     from it. A member pending across several epochs checks every statement in between. **The upgrade drops every
+     device's held commitment:** the earlier one was a 16-byte HKDF digest of the key, and a stored record of that
+     format reads as no held key (`features/account/trustMarks.ts`), so each device's next grant of each scope it held
+     opens as a first use, once — trusted on first use, as a linked device's first grant is — and is held as the new
+     commitment from then on. The epoch floor beside it is kept: no grant below the epoch the device held opens.
    - **An invite's anchor** (ADR 0111 decision 19) stays the owner's grant beside the carried one; the newcomer
      derives the anchor epoch's succession public key from it and verifies the statements from there to the carried
      epoch. The anchor key it is handed opens only a dump from before the rotation that moved past it, since every row
@@ -183,6 +201,11 @@ encoded by position.
   gets blob keys of its own. The same holds for any value whose own key a re-seal keeps (an Expenses revision's
   `K_rev`).
 - **Pending and behind members read nothing until re-granted** (point 8).
+- **An unreadable value never blocks a rotation or a re-key** (point 2): it stays unreadable, and a link whose recovery
+  copy is one closes, key lost. A member re-keyer can thereby close links whose copy it junks or claims not to open — an
+  insider's denial of service, visible as a closed link; it reads nothing more.
+- **The upgrade costs each device one first use per scope** (point 5): the held commitments of the earlier format are
+  not read, so the next grant of each scope is trusted on first use; the epoch floor stays.
 - **A rotation is not cheap.** ADR 0024's "one random key + one chain-wrap + one asymWrap per member" became the table
   above, landing on the rotating device; a tenant re-key moves its whole profile directory.
 - **There is one key to open with**: no reader tries every held epoch, and no member carries their profile forward.
@@ -203,9 +226,15 @@ encoded by position.
   hold an older key, but the invite protocol and its vectors change for a key that opens only a dump from before.
 - **Give each picture a key of its own and re-wrap only that.** Saves the picture bytes at a tenant re-key, at the cost
   of a new envelope for one field; not taken while tenant rotations stay rare.
-- **Refuse the rotation while an invitee's or a member's field cannot be re-sealed.** Every rotation of the scope would
-  stay refused for one member's anomaly or one unreadable field; clearing the name key and the random-bytes seal keep
-  the rotation going and lose nothing readable.
+- **Refuse the rotation while an invitee's or a member's field, or any other value, cannot be re-sealed.** Every
+  rotation of the scope would stay refused for one member's anomaly or one unreadable value; clearing the name key and
+  the seal nobody opens keep the rotation going and lose nothing readable.
+- **Random bytes under the new key as the stand-in.** Reads the same for a name only where its reader checks a format;
+  a recovery copy or a key wrap of random bytes opens as a key nobody's link or node holds — a link that looks open and
+  serves nothing — so the stand-in is under no key at all.
+- **Leave a link whose copy does not open out of the node's re-key.** No wrap needed, but the server could not tell a
+  lost link from one a re-keyer skips, and an open link would be closed by omission; the stage names it instead, and
+  the close goes through the one body that marks the subtree.
 
 ## Bite tests and guards
 
@@ -218,4 +247,9 @@ The acceptance criteria are [uc.spaces.rekey-after-rotation](../features/spaces/
   until classified, an under-scope-key column nobody rewrites is red. Its bites are `validate_guard_gaps.py` cases 98
   (a purpose added unclassified) and 99 (a rewriter's assignment removed).
 - `validate_node_rekey_arity.py` names the recovery copy as the scope key's, not a node's; the new guard holds it.
+- Point 2's rule for a value that does not open: `scopeRekey.test.ts` (a root entry's name and wrap, a group name, an
+  icon, a recovery copy and a member's field, each staged under no key with its digest beside a re-sealed control),
+  `rekeyScope.test.ts` (a link whose copy does not open named key-lost, a node whose key does not open holding up no
+  other) and `LinkCloseRekeyCoreSliceTest` (the key-lost close, its digest and node checks, the rollback of a refused
+  commit, and that leaving an open link out never closes it).
 - The crypto conformance tests pin the succession statement and that the `scope-epoch` seal is gone.

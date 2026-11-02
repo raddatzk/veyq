@@ -18,6 +18,12 @@
 //     verifications (the signed statement inside unchanged, the seal at the new epoch);
 //   - every application's rows, through its scope re-key participant (`registry.scopeRekeyParticipants()`: Memories'
 //     item marks) — core never names an application's tables (ADR 0079 decision 3).
+// One rule for every kind (decision 2): a value that does not open under the old key is staged as a seal nobody opens
+// ({@link unopenable}) — the purpose's own seal at the new epoch, of the replaced value's length, under a random key
+// dropped at once — with the digest of what it replaces. Every reader shows it as it showed the value before: no name,
+// the letter, an unnamed group, an ignored verification, a tree that refuses the row, a link whose key is lost (its
+// root's node re-key then closes it, ADR 0114). One unreadable value must not stop every rotation of the scope, and
+// nothing readable is lost.
 // Operator-blind: every value is opened and sealed on this device; the server learns no key, and nothing it would not
 // learn from the commit (decision 9).
 import * as v1 from '@veyq/crypto/v1'
@@ -36,7 +42,7 @@ import type { ScopeRekeyContext } from '../../core/node/rekey/hooks'
 import { fetchTreeRows, openContentKey, openName, sealName, slugTokenFor, wrapContentKey } from '../../core/node/tree'
 import { recoverShareKey, sealRecoveryCopy } from '../../core/sharing/manageShares'
 import { HttpStatus, isCodedError } from '../../shared/httpError'
-import { AVATAR_PADDED_LEN, resealMemberAvatar } from '../account/profile/memberAvatar'
+import { resealMemberAvatar } from '../account/profile/memberAvatar'
 import { resealMemberName } from '../account/profile/memberName'
 import type { ScopeKey } from './epochs'
 import { recipientIdentityDigest } from './grant'
@@ -81,8 +87,8 @@ export type ScopeLevelRekey = {
 /**
  * Stage every scope-level row under [run.rekeyId] (see the file header): core's, page by page from
  * `listScopeRekeyParts`, then each application's through its participant. Staging twice replaces what the first run
- * staged, so a refused commit is answered by running this again. Throws on a row that does not open under the old key
- * (the scope then keeps its key; the server would refuse the commit for the missing row anyway).
+ * staged, so a refused commit is answered by running this again. A value that does not open under the old key is staged
+ * as one nobody opens ({@link unopenable}), never a reason to stop.
  */
 export async function stageScopeLevelRekey(run: ScopeLevelRekey): Promise<void> {
   resealingScopes.add(run.scopeId)
@@ -151,9 +157,19 @@ async function stagesOf(
   })
   const shares = page.shares.map((s) => {
     const address = { scopeId, nodeId: s.nodeId, shareId: s.shareId }
-    const kShare = recoverShareKey(oldKey, address, s)
+    const replacedDigest = replacedDigestOf(s.sealedShareKey)
+    let kShare: Uint8Array
     try {
-      return { shareId: s.shareId, sealedShareKey: sealRecoveryCopy(address, newKey, kShare).sealedShareKey, replacedDigest: replacedDigestOf(s.sealedShareKey) }
+      kShare = recoverShareKey(oldKey, address, s)
+    } catch {
+      // A copy nobody opens: the link's key is lost to every member, and its root's node re-key closes it as such
+      // (ADR 0114) — never random bytes under the new key, which would open as a K_share the link does not hold.
+      const sealedShareKey = unopenable(s.sealedShareKey, (key, length) =>
+        sealRecoveryCopy(address, { epoch: newKey.epoch, key }, v1.randomBytes(length)).sealedShareKey)
+      return { shareId: s.shareId, sealedShareKey, replacedDigest }
+    }
+    try {
+      return { shareId: s.shareId, sealedShareKey: sealRecoveryCopy(address, newKey, kShare).sealedShareKey, replacedDigest }
     } finally {
       kShare.fill(0)
     }
@@ -183,46 +199,61 @@ async function stagesOf(
 }
 
 /** A scope-root entry under the new key: the node's unchanged key re-wrapped, its name re-sealed and — for a live node —
- *  its slug token recomputed, bound to its `scopeEpoch` and the next placement revision. */
+ *  its slug token recomputed, bound to its `scopeEpoch` and the next placement revision. A name or a key wrap that does
+ *  not open under the old key is staged as one nobody opens, a name's slug token as one under no held key: the tree
+ *  refuses the row as it did before the rotation, and no member can re-key the node, as before. */
 function resealRootEntry(
   scopeId: string, oldKey: ScopeKey, newKey: ScopeKey, n: ScopeRekeyRootNode, kind: string | null,
 ): ScopeRekeyRootEntry {
   const now = { scopeId, nodeId: n.nodeId, scopeEpoch: n.scopeEpoch, placementRevision: n.placementRevision }
-  const name = openName(oldKey.key, now, n.encryptedName)
-  const nodeKey = openContentKey(scopeId, oldKey.key, { id: n.nodeId, ...now, wrappedContentKey: n.wrappedContentKey })
+  const at = { ...now, placementRevision: n.placementRevision + 1 }
+  const name = orNull(() => openName(oldKey.key, now, n.encryptedName))
+  const nodeKey = orNull(() => openContentKey(scopeId, oldKey.key, { id: n.nodeId, ...now, wrappedContentKey: n.wrappedContentKey }))
   try {
-    const at = { ...now, placementRevision: n.placementRevision + 1 }
     return {
       nodeId: n.nodeId, placementRevision: n.placementRevision, scopeEpoch: n.scopeEpoch,
-      encryptedName: sealName(newKey.key, at, name),
-      slugToken: kind === null ? null : slugTokenFor(newKey.key, scopeId, kind, name),
-      wrappedContentKey: wrapContentKey(newKey.key, at, nodeKey),
+      encryptedName: name !== null
+        ? sealName(newKey.key, at, name)
+        : unopenable(n.encryptedName, (key, length) => sealName(key, at, 'x'.repeat(length))),
+      slugToken: kind === null ? null : name !== null
+        ? slugTokenFor(newKey.key, scopeId, kind, name)
+        : unopenable('', (key) => slugTokenFor(key, scopeId, kind, n.nodeId)),
+      wrappedContentKey: nodeKey
+        ? wrapContentKey(newKey.key, at, nodeKey)
+        : unopenable(n.wrappedContentKey, (key, length) => wrapContentKey(key, at, v1.randomBytes(length))),
       replacedDigest: replacedDigestOf(n.wrappedContentKey),
     }
   } finally {
-    nodeKey.fill(0)
+    nodeKey?.fill(0)
   }
 }
 
+/** The group's name at the new epoch; one that does not open is staged as one nobody opens — the unnamed group. */
 function resealGroupName(scopeId: string, oldKey: ScopeKey, newKey: ScopeKey, g: { encryptedName: string; nameEpoch: number }) {
   const oldName = deriveGroupNameKey(oldKey.key)
   const newName = deriveGroupNameKey(newKey.key)
   try {
-    const name = openGroupNameWith(oldName, scopeId, g.nameEpoch, g.encryptedName)
-    return { encryptedName: sealGroupName(newName, scopeId, newKey.epoch, name), replacedDigest: replacedDigestOf(g.encryptedName) }
+    const name = orNull(() => openGroupNameWith(oldName, scopeId, g.nameEpoch, g.encryptedName))
+    const encryptedName = name !== null
+      ? sealGroupName(newName, scopeId, newKey.epoch, name)
+      : unopenable(g.encryptedName, (key, length) => sealGroupName(key, scopeId, newKey.epoch, 'x'.repeat(length)))
+    return { encryptedName, replacedDigest: replacedDigestOf(g.encryptedName) }
   } finally {
     oldName.fill(0)
     newName.fill(0)
   }
 }
 
+/** The space's icon at the new epoch; one that does not open is staged as one nobody opens — the letter. Every icon is
+ *  padded to one length, so the stand-in is too. */
 function resealIcon(scopeId: string, oldKey: ScopeKey, newKey: ScopeKey, i: { sealedIcon: string; iconEpoch: number }) {
   const oldIcon = deriveSpaceIconKey(oldKey.key)
   const newIcon = deriveSpaceIconKey(newKey.key)
+  const at = { scopeId, iconEpoch: newKey.epoch }
   try {
     const bytes = openIcon(oldIcon, { scopeId, iconEpoch: i.iconEpoch }, i.sealedIcon)
-    if (!bytes) throw new v1.OpenRefused('space-icon')
-    return { sealedIcon: sealIcon(newIcon, { scopeId, iconEpoch: newKey.epoch }, bytes), replacedDigest: replacedDigestOf(i.sealedIcon) }
+    const sealedIcon = bytes ? sealIcon(newIcon, at, bytes) : unopenable('', (key) => sealIcon(key, at, new Uint8Array(0)))
+    return { sealedIcon, replacedDigest: replacedDigestOf(i.sealedIcon) }
   } finally {
     oldIcon.fill(0)
     newIcon.fill(0)
@@ -232,23 +263,22 @@ function resealIcon(scopeId: string, oldKey: ScopeKey, newKey: ScopeKey, i: { se
 /**
  * A member's profile fields under the new tenant key, each exactly where the row holds one, with the digest it was
  * opened from. A field that does not open under the old key — what every reader shows as no name, the letter, no join
- * record — is staged as a seal of random bytes that reads exactly the same: one member's unreadable field must not stop
- * every rotation of the tenant, and nothing readable is lost (the server cannot tell either seal from the other).
+ * record — is staged as one nobody opens ({@link unopenable}), which reads exactly the same; the picture keeps its
+ * constant length that way (the contract's `maxLength`, ADR 0084).
  */
 function resealMember(tenantId: string, oldKey: ScopeKey, newKey: ScopeKey, m: ScopeRekeyMember): ScopeRekeyMemberSeal {
   const address = { scopeId: tenantId, userId: m.userId }
-  const unreadable = (purpose: 'member-name' | 'member-avatar' | 'member-join-record', length: number) =>
-    b64std(v1.sealField({ purpose, ...address }, newKey.key, v1.randomBytes(length)))
+  const unreadable = (purpose: 'member-name' | 'member-avatar' | 'member-join-record', sealed: string) => () =>
+    unopenable(sealed, (key, length) => b64std(v1.sealField({ purpose, ...address }, key, v1.randomBytes(length))))
   const out: ScopeRekeyMemberSeal = { userId: m.userId }
   if (m.sealedName) {
     const sealed = m.sealedName
-    out.sealedName = orUnreadable(() => resealMemberName(oldKey.key, newKey.key, address, sealed), () => unreadable('member-name', 32))
+    out.sealedName = orUnreadable(() => resealMemberName(oldKey.key, newKey.key, address, sealed), unreadable('member-name', sealed))
     out.replacedNameDigest = replacedDigestOf(sealed)
   }
   if (m.sealedAvatar) {
     const sealed = m.sealedAvatar
-    // the picture's constant length holds for the unreadable one too (the contract's `maxLength`, ADR 0084)
-    out.sealedAvatar = orUnreadable(() => resealMemberAvatar(oldKey.key, newKey.key, address, sealed), () => unreadable('member-avatar', AVATAR_PADDED_LEN))
+    out.sealedAvatar = orUnreadable(() => resealMemberAvatar(oldKey.key, newKey.key, address, sealed), unreadable('member-avatar', sealed))
     out.replacedAvatarDigest = replacedDigestOf(sealed)
   }
   if (m.sealedJoinRecord) {
@@ -256,7 +286,7 @@ function resealMember(tenantId: string, oldKey: ScopeKey, newKey: ScopeKey, m: S
     const joinAddress = { tenantId, userId: m.userId }
     out.sealedJoinRecord = orUnreadable(
       () => b64std(invite.sealJoinRecord(newKey.key, joinAddress, invite.openJoinRecord(oldKey.key, joinAddress, fromB64std(sealed)))),
-      () => unreadable('member-join-record', 32),
+      unreadable('member-join-record', sealed),
     )
     out.replacedJoinRecordDigest = replacedDigestOf(sealed)
   }
@@ -264,17 +294,50 @@ function resealMember(tenantId: string, oldKey: ScopeKey, newKey: ScopeKey, m: S
 }
 
 /** A verification under the new tenant key at the new epoch, the signed statement inside unchanged; one that does not
- *  open — which every reader ignores — re-sealed as random bytes that read the same (the profile fields' rule). */
+ *  open — which every reader ignores — staged as one nobody opens (the rule of every kind). */
 function resealVerification(tenantId: string, oldKey: ScopeKey, newKey: ScopeKey, v: ScopeRekeyVerification): ScopeRekeyVerificationSeal {
   const address = { tenantId, verifierUserId: v.verifierUserId, subjectUserId: v.subjectUserId }
   const sealedStatement = orUnreadable(
     () => b64std(verification.sealVerification(newKey.key, { ...address, epoch: newKey.epoch },
       verification.openVerification(oldKey.key, { ...address, epoch: v.epoch }, fromB64std(v.sealedStatement)))),
-    () => b64std(v1.sealField({
+    () => unopenable(v.sealedStatement, (key, length) => b64std(v1.sealField({
       purpose: 'member-verification', scopeId: tenantId, userId: v.verifierUserId, subjectUserId: v.subjectUserId, epoch: newKey.epoch,
-    }, newKey.key, v1.randomBytes(32))),
+    }, key, v1.randomBytes(length)))),
   )
   return { verifierUserId: v.verifierUserId, subjectUserId: v.subjectUserId, sealedStatement, replacedDigest: replacedDigestOf(v.sealedStatement) }
+}
+
+/**
+ * The stand-in for a value the rotator cannot open (ADR 0115 decision 2): [seal] — the purpose's own seal, its binding
+ * at the new epoch — under a fresh random key dropped at once, so it opens under no key anyone holds, of the length of
+ * [replaced] (its plaintext the replaced ciphertext's length less the seal's overhead). Never random bytes under the new
+ * key: those would open, as a name of garbage, or for a recovery copy or a root entry's wrap as a key that is no one's.
+ * The server cannot tell the stand-in from a re-seal.
+ */
+export function unopenable(replaced: string, seal: (key: Uint8Array, length: number) => string): string {
+  const key = v1.randomBytes(32)
+  try {
+    const overhead = byteLength(seal(key, 0))
+    return seal(key, Math.max(0, byteLength(replaced) - overhead))
+  } finally {
+    key.fill(0)
+  }
+}
+
+function byteLength(b64: string): number {
+  try {
+    return fromB64std(b64).length
+  } catch {
+    return 0
+  }
+}
+
+function orNull<T>(open: () => T): T | null {
+  try {
+    return open()
+  } catch {
+    return null
+  }
 }
 
 function orUnreadable(reseal: () => string, unreadable: () => string): string {

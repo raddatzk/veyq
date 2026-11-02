@@ -15,6 +15,7 @@ import { SHARE_KEY } from './shareTree'
 import { SHARE_MEMORY_NAME, SHARE_NOTE } from './resolvePublicShare'
 import { sharesApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
+import { httpError } from '../../test/httpError'
 import { ShareRole, type ShareSummary, type SharingApi } from '../../api/generated/sharing'
 import type { ScopeKey } from '../../features/spaces/epochs'
 
@@ -199,6 +200,24 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
 
     expect(report).toEqual({ resealed: [ok.row.shareId], closed: [], skipped: [], failed: [refused.row.shareId, broken.row.shareId] })
     expect(set.mock.calls.map(([r]) => r.shareId)).toEqual([refused.row.shareId, ok.row.shareId])
+  })
+
+  // A link that closed between the list and its write: the server refuses the re-seal (`422 link_closed`, ADR 0114
+  // decision 5) — a closed link, not a failure, so the rename shows no error for it.
+  it('counts a link the server answers `link_closed` as closed, not failed — the sibling beside it still lands', async () => {
+    const closing = await mintedRow(false)
+    const ok = await mintedRow(false)
+    const set = vi.fn<SharingApi['setShareSealedName']>(async ({ shareId }) => {
+      if (shareId === closing.row.shareId) throw httpError(422, 'link_closed')
+    })
+    fakeApi(sharesApi, { listShares: async () => [closing.row, ok.row], setShareSealedName: set })
+
+    const report = await resealShareNames(NODE_ID, 'New', EPOCHS)
+
+    expect(report).toEqual({ resealed: [ok.row.shareId], closed: [closing.row.shareId], skipped: [], failed: [] })
+    // control: another 422 stays a failure
+    set.mockImplementation(async () => { throw httpError(422, 'capability_disabled') })
+    expect((await resealShareNames(NODE_ID, 'New', EPOCHS)).failed).toEqual([closing.row.shareId, ok.row.shareId])
   })
 
   it('writes nothing for a node without shares', async () => {

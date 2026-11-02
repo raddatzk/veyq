@@ -567,8 +567,11 @@ export async function resealShareNames(nodeId: string, newName: string, epochs: 
       kShare.fill(0)
       await withRefresh(() => sharesApi().setShareSealedName({ shareId: share.shareId, setShareSealedNameRequest: { sealedName } }))
       report.resealed.push(share.shareId)
-    } catch {
-      report.failed.push(share.shareId)
+    } catch (e) {
+      // a link that closed since the list was read: the server refuses the re-seal (`422 link_closed`), as this loop
+      // skips a closed one — nothing failed
+      if (await isCodedError(e, HttpStatus.unprocessable, 'link_closed')) report.closed.push(share.shareId)
+      else report.failed.push(share.shareId)
     }
   }
   return report

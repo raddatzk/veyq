@@ -410,9 +410,10 @@ paths:
         share's owner: `updateShare` stays owner-gated
         ([ADR 0036](../../docs/decisions/0036-editable-share-note-recoverable-share-key.md) point 3) and replaces
         all of its fields, so it cannot carry this write. Changes `sealedName` and nothing else — note, label,
-        role, expiry, password, keys and the enabled state are untouched. The renaming client re-seals the name
-        under **open** links only (ADR 0114 decision 5): nothing new is sealed under a closed one's `K_share`, and its
-        reopen carries the current name (`reactivateShare`, `updateShare`); a deleted one is `404`. Operator-blind: the server
+        role, expiry, password, keys and the enabled state are untouched. A re-seal lands under **open** links only
+        (ADR 0114 decision 5): nothing new is sealed under a closed one's `K_share` — a switched-off link or one whose
+        end date has passed is `422 link_closed`, decided under the link's row lock — and its reopen carries the
+        current name (`reactivateShare`, `updateShare`); a deleted one is `404`. Operator-blind: the server
         stores the ciphertext opaquely and never opens it.
       security:
         - bearerAuth: []
@@ -444,6 +445,13 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            `link_closed` — the link is closed: switched off, or its end date has passed (ADR 0114 decision 1). Nothing
+            new is sealed under a closed link's `K_share` (decision 5); its reopen carries the root's current name
+            (decision 7). Nothing is written.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: link_closed } }
 
   /api/shares/{shareId}:
     get:
