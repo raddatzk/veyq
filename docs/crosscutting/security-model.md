@@ -767,6 +767,20 @@ protects only future content. Where layer 2 is policy-deferred (the tenant defau
 hoarded the key/ciphertext **and** colludes with a malicious operator retains that narrow residual until an explicit
 re-key — the same posture 1Password takes for shared vaults.
 
+**An old scope key opens a later dump.** The scope key is a chain ([ADR 0024](../decisions/0024-scope-key-rotation.md)):
+each epoch's key wraps the one before, and a rotation re-seals no row at scope level — its request carries the new
+epoch, the chain link, the grants and the declared omissions, nothing else (`sed -n 840,872p
+src/web/src/features/spaces/scopes.ts`). So whoever obtains an epoch key later — a removed member's, a lost device's —
+peels it down to `E_0` (`deriveEpochKeys`, `src/web/src/features/spaces/epochs.ts`) and opens, from a dump taken at
+**any later time**, every row the live store still holds under that epoch or an earlier one: a group's name and icon,
+the tenant's profile names, pictures and join records, its verifications, a Memory's item marks (sealed at `E_0` for
+good, [ADR 0068](../decisions/0068-favorites-two-confidentiality-levels.md)) and every link's recovery copy, and through
+a copy that link's `K_share`. No archive from before the rotation is needed. Node keys are replaced at each rotation
+([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)), so what is added below an existing node
+is out of that reach; a `K_blob` the party extracted while it held the key still opens that blob's bytes, since a
+re-key re-wraps keys and re-encrypts nothing. Replacing the scope key instead of chaining it is proposed in
+[ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md) (not built).
+
 ## Deletion & erasure
 
 One mechanism serves both data-loss protection and erasure: **soft-delete → trash → retention window →
