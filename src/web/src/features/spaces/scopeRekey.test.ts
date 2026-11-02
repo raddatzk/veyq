@@ -144,7 +144,7 @@ describe('stageScopeLevelRekey — every scope-level row under the new key (ADR 
 
     // the invitee's name key: the NEW K_name sealed to the anchored key it is granted under
     const [inv] = s.groupInvitees!
-    const nameKey = v1.openAs({ purpose: 'group-name-key', scopeId: SCOPE, nameEpoch: NEW.epoch }, v1.hybridSecret(INVITEE_ID.priv), fromB64std(inv.sealedNameKey))
+    const nameKey = v1.openAs({ purpose: 'group-name-key', scopeId: SCOPE, nameEpoch: NEW.epoch }, v1.hybridSecret(INVITEE_ID.priv), fromB64std(inv.sealedNameKey!))
     expect(nameKey).toEqual(deriveGroupNameKey(NEW.key))
     expect(inv.recipientIdentityDigest).toBe(recipientIdentityDigest(inviteeB64))
     expect(inv.replacedDigest).toBe(replacedDigestOf(page.groupInvitees[0].sealedNameKey))
@@ -207,10 +207,26 @@ describe('stageScopeLevelRekey — every scope-level row under the new key (ADR 
     expect(staged.filter((s) => s.icon).length).toBe(1)
   })
 
-  it('refuses a pending invitee this rotation did not anchor — no name key is sealed to an anomaly', async () => {
-    api([served()])
-    await expect(run(new Map())).rejects.toThrow(/not anchored/)
-    expect(staged).toHaveLength(0)
+  it('clears the name key of a pending invitee this rotation did not anchor — sealed to no anomaly, never left unstaged', async () => {
+    // ADR 0111 decision 9: an omission is allowed and visible. Before, the run threw here and the commit answered
+    // `rekey_parts_missing` for the invitee's row on every rotation of the group while the proposal stood.
+    const OTHER = '5c09e000-0000-4000-8000-0000000000b4'
+    const page = served()
+    const otherId = v1.generateIdentity()
+    const otherB64 = b64std(v1.serializeIdentityPublic(otherId.pub))
+    page.groupInvitees.push({ userId: OTHER, sealedNameKey: wrapNameKeyToInvitee(deriveGroupNameKey(OLD.key), SCOPE, OLD.epoch, otherB64) })
+    api([page])
+    // the rotation anchors OTHER, and holds INVITEE's key as an anomaly (absent from the keys it grants to)
+    await run(new Map([[OTHER, otherB64]]))
+    const byId = new Map(staged[0].groupInvitees!.map((i) => [i.userId, i]))
+    expect(byId.get(INVITEE)).toEqual({
+      userId: INVITEE, sealedNameKey: null, recipientIdentityDigest: null, replacedDigest: replacedDigestOf(page.groupInvitees[0].sealedNameKey),
+    })
+    // control on the same page: the anchored invitee gets the new name key, sealed to its own key
+    const other = byId.get(OTHER)!
+    const nameKey = v1.openAs({ purpose: 'group-name-key', scopeId: SCOPE, nameEpoch: NEW.epoch }, v1.hybridSecret(otherId.priv), fromB64std(other.sealedNameKey!))
+    expect(nameKey).toEqual(deriveGroupNameKey(NEW.key))
+    expect(other.recipientIdentityDigest).toBe(recipientIdentityDigest(otherB64))
   })
 
   it('stages an unreadable profile field as one that reads the same, so one member cannot stop every rotation', async () => {

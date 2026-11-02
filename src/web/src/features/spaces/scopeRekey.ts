@@ -10,7 +10,9 @@
 //     its node re-key (`core/node/rekey/rekeyScope.ts`; every node is due from the commit on);
 //   - a group's name and a space's icon, re-sealed at the new epoch;
 //   - each pending group invitee's name key — the NEW `K_name` sealed to the invitee's identity, only to one the rotation
-//     anchored (the key it wraps the grant to, ADR 0028 Decision 2);
+//     anchored (the key it wraps the grant to, ADR 0028 Decision 2); an invitee it holds as an anomaly, or anchors no key
+//     for, gets its name key CLEARED instead — an omission, allowed and visible (ADR 0111 decision 9): the proposal
+//     stands, shown to the invitee without the group's name;
 //   - each link's recovery copy, at the new epoch (the server keeps the epoch the link was minted at beside it);
 //   - a tenant's member profiles (name, picture, join record — each field as it is, the picture's constant pad kept) and
 //     verifications (the signed statement inside unchanged, the seal at the new epoch);
@@ -25,8 +27,8 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { shallowReactive } from 'vue'
 import { rekeyApi } from '../../api/client'
 import type {
-  ScopeRekeyMember, ScopeRekeyMemberSeal, ScopeRekeyParts, ScopeRekeyRootEntry, ScopeRekeyRootNode, ScopeRekeyStage,
-  ScopeRekeyVerification, ScopeRekeyVerificationSeal,
+  ScopeRekeyInviteeSeal, ScopeRekeyMember, ScopeRekeyMemberSeal, ScopeRekeyParts, ScopeRekeyRootEntry, ScopeRekeyRootNode,
+  ScopeRekeyStage, ScopeRekeyVerification, ScopeRekeyVerificationSeal,
 } from '../../api/generated/content'
 import { withRefresh } from '../../app/sessionRefresh'
 import { registry } from '../../core/applications/registry'
@@ -129,16 +131,19 @@ async function stagesOf(
   const { scopeId, oldKey, newKey } = run
   const rootNodes: ScopeRekeyRootEntry[] = []
   for (const n of page.rootNodes) rootNodes.push(resealRootEntry(scopeId, oldKey, newKey, n, n.trashed ? null : await kindOf(n.nodeId)))
-  const groupInvitees = page.groupInvitees.map((i) => {
+  const groupInvitees = page.groupInvitees.map((i): ScopeRekeyInviteeSeal => {
     const to = run.anchoredKeys.get(i.userId)
-    // A name key goes only to the key the rotation anchored and grants to (ADR 0028 Decision 2): an invitee it declared
-    // pending gets none, and the commit refuses the rotation for it (`rekey_parts_missing`) rather than seal to an anomaly.
-    if (!to) throw new Error(`scope rekey: the pending invitee ${i.userId} is not anchored on this device`)
+    const replacedDigest = replacedDigestOf(i.sealedNameKey)
+    // A name key goes only to the key the rotation anchored and grants to (ADR 0028 Decision 2). An invitee it declared
+    // pending — its key an anomaly here, or none anchored — gets none: its name key is cleared (both nulls), never sealed
+    // to an anomaly and never left unstaged, which the commit would refuse (`rekey_parts_missing`) for every rotation
+    // of the group while the proposal stood.
+    if (!to) return { userId: i.userId, sealedNameKey: null, recipientIdentityDigest: null, replacedDigest }
     const nameKey = deriveGroupNameKey(newKey.key)
     try {
       return {
         userId: i.userId, sealedNameKey: wrapNameKeyToInvitee(nameKey, scopeId, newKey.epoch, to),
-        recipientIdentityDigest: recipientIdentityDigest(to), replacedDigest: replacedDigestOf(i.sealedNameKey),
+        recipientIdentityDigest: recipientIdentityDigest(to), replacedDigest,
       }
     } finally {
       nameKey.fill(0)

@@ -117,9 +117,11 @@ data class ResolvedCandidateRow(
 )
 
 /** A pending consent proposal from the invitee's point of view (cr-0096): the group + who proposed + the wrapped
- *  name-key `K_name` (`sealedNameKey`) + the scope's canonical `encryptedName` the key opens (ADR 0027). */
+ *  name-key `K_name` (`sealedNameKey`) + the scope's canonical `encryptedName` the key opens (ADR 0027). The name key
+ *  is null when a rotation cleared it (`ScopeRekeyCommit.CLEARED`, ADR 0111 decision 9): the proposal is shown
+ *  without the group's name. */
 data class GroupInvitationRow(
-    val scopeId: String, val addedByUsername: String, val sealedNameKey: String, val encryptedName: String,
+    val scopeId: String, val addedByUsername: String, val sealedNameKey: String?, val encryptedName: String,
     /** The name epoch both seals are bound to (ADR 0072) — the invitee opens them at exactly this epoch. */
     val nameEpoch: Int,
 )
@@ -666,13 +668,15 @@ class ScopesStore(
         MembershipEntity.delete("userId = ?1 and scopeId = ?2 and pendingConsent = true", userId, scopeId).toInt()
 
     /** The caller's pending group invitations in a tenant (cr-0096): each with the wrapped name-key `K_name`, the
-     *  scope's canonical `encryptedName` the key opens, and the proposer's per-tenant username. Skips rows missing a
-     *  wrapped name-key or a scope name (never happens for a proposal, defensive). */
+     *  scope's canonical `encryptedName` the key opens, and the proposer's per-tenant username. A proposal whose name
+     *  key a rotation cleared — the rotating device could not anchor the invitee's key (ADR 0111 decision 9) — is
+     *  listed without it, so the invitee still sees and answers it. Skips a row missing a scope name (never happens
+     *  for a group, defensive). */
     fun listInvitations(userId: String, tenantId: String): List<GroupInvitationRow> {
         val profileByUser = profiles.byUserInTenant(tenantId)
         return MembershipEntity.find("userId = ?1 and tenantId = ?2 and pendingConsent = true", userId, tenantId).list()
             .mapNotNull { m ->
-                val sealedNameKey = m.sealedNameKey ?: return@mapNotNull null
+                val sealedNameKey = m.sealedNameKey
                 val scope = ScopeEntity.findById(m.scopeId) ?: return@mapNotNull null
                 val encryptedName = scope.encryptedName ?: return@mapNotNull null
                 GroupInvitationRow(

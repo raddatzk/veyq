@@ -1098,9 +1098,10 @@ paths:
       description: >
         Upserts up to 256 entries into the stage, by (`tenantId`, `userId`) (ADR 0111 decision
         21). A non-null `endorsement` is the identity the stage declares' signature over the `join-endorsement` statement
-        (the tenant, the member, the caller as signer, SHA-256 of the member's sealed join record **as stored**; the
-        `join_endorsement` crypto vector) — **verified here**, under that bundle, over the stored record:
-        `422 join_endorsement_invalid` otherwise. A `null` one declares the record: the publish clears its endorsement.
+        (the tenant, the member, the caller as signer, SHA-256 of the member's **opened** join record, never of its
+        envelope, so a rotation's re-seal leaves it valid — ADR 0115 decision 8; the `join_endorsement` crypto vector) —
+        **verified here**, under that bundle, over the `recordDigest` the entry names, since the server cannot open the
+        record (a reader that opens it checks the digest against it): `422 join_endorsement_invalid` otherwise. A `null` one declares the record: the publish clears its endorsement.
         A profile whose join the caller did not root, or that holds no join record, is `409 rotation_plan_changed`. An
         endorsement hands nobody a key, so the stage digest does not cover it (ADR 0111 decision 21). Nothing of a refused chunk
         is written; nothing staged is applied before the publish.

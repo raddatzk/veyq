@@ -115,6 +115,15 @@ describe('group invite name-key (cr-0096, ADR 0027)', () => {
     expect(openInviteeName(here)).toBe('Buchclub') // control
   })
 
+  it('a name key a rotation cleared (ADR 0111 decision 9) reads as no name, and the vault is not even asked', () => {
+    const asked = vi.fn(cloneRecipientPriv)
+    vaultPriv = asked
+    const here = invitation(v1.randomBytes(32), 'Buchclub')
+    expect(openInviteeName({ ...here, sealedNameKey: null })).toBeNull()
+    expect(asked).not.toHaveBeenCalled()
+    expect(openInviteeName(here)).toBe('Buchclub') // control: the same invitation with its key opens
+  })
+
   // cr-0089 class: an unasserted `finally` wipe silently rots. Removing the finally (BlockStatement → {}) must red.
   it('openInviteeName zeroes the name-key and the whole identity private bundle in finally', () => {
     const held = cloneRecipientPriv() // hand the SAME bundle back so we can inspect it after openInviteeName wipes it

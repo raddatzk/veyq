@@ -53,7 +53,7 @@ data class ScopeRekeyField(
  * |---|---|---|---|
  * | `nodes` | each scope-root node, live and trashed | `wrappedContentKey`, `encryptedName`, `slugToken` (a live one's; a trashed root keeps its freed slug) | core |
  * | (first page) | the GROUP's name, the TENANT's or GROUP's icon | `encryptedName` + `nameEpoch`, `sealedIcon` + `iconEpoch` | core |
- * | `invitees` | each pending consent proposal | `sealedNameKey` (sealed to the invitee's identity) | core |
+ * | `invitees` | each pending consent proposal holding a name key | `sealedNameKey` (sealed to the invitee's identity, or cleared) | core |
  * | `shares` | each link not deleted that holds a recovery copy | `sealedShareKey` + `sealedShareKeyEpoch` | core |
  * | `members` | TENANT only: each profile holding a sealed field | `sealedName`, `sealedAvatar`, `sealedJoinRecord` | core |
  * | `verifs` | TENANT only: each verification | `sealedStatement` + `epoch` | core |
@@ -314,6 +314,12 @@ class ScopeRekeyCommit(
 
         fun invitees(rows: List<MembershipEntity>) = rows.forEach { m ->
             val key = take(m.userId, INVITEE_KEY, m.sealedNameKey) ?: return@forEach
+            // A rotator that cannot anchor the invitee's key seals to none and clears it instead (ADR 0111 decision 9):
+            // allowed and visible — the proposal stays, shown without the group's name. The digest held it as any value.
+            if (key == CLEARED) {
+                writes += { _ -> m.sealedNameKey = null }
+                return@forEach
+            }
             // The new name key goes to the invitee's CURRENT identity only, as every re-grant (ADR 0111 decision 10).
             val digest = staged[Key(m.userId, INVITEE_RECIPIENT)]?.value
             if (!InviteAcceptProof.digestMatches(VeyqUser.findById(m.userId)?.identityPublicKey, digest)) {
@@ -388,6 +394,9 @@ class ScopeRekeyCommit(
         const val ICON = "icon.sealedIcon"
         const val INVITEE_KEY = "invitee.sealedNameKey"
         const val INVITEE_RECIPIENT = "invitee.recipientDigest"
+        /** The staged [INVITEE_KEY] that clears a pending invitee's name key (`ScopeRekeyInviteeSeal`'s nulls): no
+         *  ciphertext is empty, and the stage keeps no null value. */
+        const val CLEARED = ""
         const val SHARE_KEY = "share.sealedShareKey"
         const val MEMBER_NAME = "member.sealedName"
         const val MEMBER_AVATAR = "member.sealedAvatar"

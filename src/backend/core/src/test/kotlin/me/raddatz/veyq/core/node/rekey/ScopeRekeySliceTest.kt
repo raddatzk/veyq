@@ -180,6 +180,43 @@ class ScopeRekeySliceTest {
         rotate(g.owner, g.scopeId, rekeyId).statusCode(201)
     }
 
+    /** ADR 0111 decision 9: a rotator holding a pending invitee's key as an anomaly seals it no name key — and an
+     *  omission is allowed and visible, so it CLEARS the name key rather than leave the row without a staged value,
+     *  which refused every rotation of the group (`rekey_parts_missing`) for as long as the proposal stood. The invitee
+     *  then sees the proposal without the group's name. */
+    @Test
+    fun aPendingInviteeTheRotatorCannotAnchorIsClearedAndTheRotationCommits() {
+        val g = groupWorld()
+        val rekeyId = UUID.randomUUID()
+        // The block: the invitee's row left without a staged value refuses the rotation.
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage(inviteeSeal = null)).statusCode(204)
+        rotate(g.owner, g.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_missing"))
+        g.assertUntouched()
+        // A cleared seal names its key and its recipient as null together; one without the other is malformed.
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage(inviteeSeal = """{"userId":"${g.invitee}","sealedNameKey":null,"recipientIdentityDigest":"${TestGrants.digestOf(g.invitee)}","replacedDigest":"${d(NAME_KEY)}"}"""))
+            .statusCode(400).body("code", equalTo("invalid_request"))
+        // The digest still holds a cleared one: a clear of a name key the rotator did not read is refused at the stage.
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage(inviteeSeal = cleared(g.invitee, d("b3RoZXI="))))
+            .statusCode(409).body("code", equalTo("rekey_parts_stale"))
+
+        stage(g.owner, g.scopeId, rekeyId, g.fullStage(inviteeSeal = cleared(g.invitee, d(NAME_KEY)))).statusCode(204)
+        rotate(g.owner, g.scopeId, rekeyId).statusCode(201).body("epoch", equalTo(1))
+        tx {
+            val m = MembershipEntity.find("userId = ?1 and scopeId = ?2", g.invitee, g.scopeId).firstResult()!!
+            assertTrue(m.pendingConsent, "the proposal stands")
+            assertEquals(null, m.sealedNameKey, "its name key is cleared, sealed to no key")
+            // Control on the same commit: every other row moved as in the full rotation.
+            assertEquals(NEW_NAME, ScopeEntity.findById(g.scopeId)!!.encryptedName)
+        }
+        // Visible: the invitee is still shown the proposal — without the group's name key.
+        given().header("Authorization", bearer(g.invitee)).header("X-Forwarded-Host", domainOf(tenantOf(g.scopeId)))
+            .`when`().get("/api/scopes/invitations").then().statusCode(200)
+            .body("size()", equalTo(1)).body("[0].scopeId", equalTo(g.scopeId))
+            .body("[0].sealedNameKey", nullValue()).body("[0].encryptedName", equalTo(NEW_NAME))
+        // And a later rotation no longer asks for it: the proposal holds no name key under any epoch.
+        parts(g.owner, g.scopeId).statusCode(200).body("groupInvitees.size()", equalTo(0))
+    }
+
     @Test
     fun everyStagedTenantProfileAndVerificationIsSwappedIn() {
         val owner = seedUser()
@@ -268,13 +305,15 @@ class ScopeRekeySliceTest {
         fun fullStage(
             shares: Boolean = true, icon: Boolean = true, inviteeDigest: String = TestGrants.digestOf(invitee),
             nameDigest: String = d(NAME),
+            inviteeSeal: String? =
+                """{"userId":"$invitee","sealedNameKey":"$NEW_NAME_KEY","recipientIdentityDigest":"$inviteeDigest","replacedDigest":"${d(NAME_KEY)}"}""",
         ): String =
             """{"fromEpoch":0,"groupName":{"encryptedName":"$NEW_NAME","replacedDigest":"$nameDigest"},""" +
                 (if (icon) """"icon":{"sealedIcon":"$NEW_ICON","replacedDigest":"${d(ICON)}"},""" else "") +
                 """"rootNodes":[""" +
                 """{"nodeId":"$liveRoot","placementRevision":0,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","slugToken":"$NEW_SLUG","wrappedContentKey":"$NEW_WRAP","replacedDigest":"${d(CONTENT_KEY)}"},""" +
                 """{"nodeId":"$trashedRoot","placementRevision":0,"scopeEpoch":0,"encryptedName":"$NEW_ROOT_NAME","wrappedContentKey":"$NEW_WRAP","replacedDigest":"${d(CONTENT_KEY)}"}],""" +
-                """"groupInvitees":[{"userId":"$invitee","sealedNameKey":"$NEW_NAME_KEY","recipientIdentityDigest":"$inviteeDigest","replacedDigest":"${d(NAME_KEY)}"}]""" +
+                """"groupInvitees":[${inviteeSeal ?: ""}]""" +
                 (if (shares) ""","shares":[{"shareId":"$shareId","sealedShareKey":"$NEW_COPY","replacedDigest":"${d(COPY)}"}]""" else "") + "}"
 
         /** Nothing a refused rotation could have written: the epoch, the rows, the marks, the statement. */
@@ -340,6 +379,12 @@ class ScopeRekeySliceTest {
     private fun d(opened: String): String = ScopeRekeyStage.digest(opened)!!
 
     private fun domainOf(tenantId: String): String = tx { me.raddatz.veyq.core.tenant.TenantEntity.findById(tenantId)!!.domain }
+
+    private fun tenantOf(scopeId: String): String = tx { ScopeEntity.findById(scopeId)!!.tenantId }
+
+    /** A pending invitee's name key cleared ([ScopeRekeyCommit.CLEARED]), against the digest the rotator read. */
+    private fun cleared(invitee: String, replacedDigest: String): String =
+        """{"userId":"$invitee","sealedNameKey":null,"recipientIdentityDigest":null,"replacedDigest":"$replacedDigest"}"""
 
     // --- the wire ---
 

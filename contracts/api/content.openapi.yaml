@@ -2094,7 +2094,8 @@ components:
           description: >
             Each pending consent proposal's name key (`group-name-key`), sealed to that invitee's identity. The rotator
             wraps the new name key to the invitee's current identity key as `listScopeMembers` serves it, after the
-            same anchor check every wrap to a member makes.
+            same anchor check every wrap to a member makes — or clears it for an invitee it cannot anchor
+            (`ScopeRekeyInviteeSeal`). A proposal whose name key a rotation cleared holds none and is not listed.
           maxItems: 256
           items: { $ref: "#/components/schemas/ScopeRekeyGroupInvitee" }
         shares:
@@ -2456,6 +2457,12 @@ components:
 
     ScopeRekeyInviteeSeal:
       type: object
+      description: >
+        A pending group invitee's name key under the new epoch — or, `sealedNameKey` and `recipientIdentityDigest` both
+        `null`, **cleared**: the rotator holds the invitee's identity key as an anomaly, or anchors none, and seals a name
+        key to no key it cannot anchor (ADR 0028 Decision 2). An omission is allowed and visible (ADR 0111 decision 9):
+        the commit stores no name key for the proposal, and the invitee sees it without the group's name, as a proposal
+        made before the name key existed. Exactly one of the two `null` is `400 invalid_request`.
       required: [userId, sealedNameKey, recipientIdentityDigest, replacedDigest]
       properties:
         replacedDigest:
@@ -2476,21 +2483,26 @@ components:
           example: 5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         sealedNameKey:
-          type: string
-          description: The new epoch's `K_name` sealed to the invitee's identity (`group-name-key`).
+          type: [string, "null"]
+          description: >
+            The new epoch's `K_name` sealed to the invitee's identity (`group-name-key`); `null` clears the proposal's name
+            key (see the schema), with `recipientIdentityDigest` `null` too.
           contentEncoding: base64
+          minLength: 1
           maxLength: 8192
           example: Z3JvdXAtbmFtZS1rZXktc2VhbGVkLXRvLWludml0ZWU=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         recipientIdentityDigest:
-          type: string
+          type: [string, "null"]
           description: >
             SHA-256 of the identity bundle it is sealed to. The commit compares it with the invitee's current identity key
-            and refuses another (`409 recipient_key_not_current`), as for a grant.
+            and refuses another (`409 recipient_key_not_current`), as for a grant. `null` exactly when `sealedNameKey` is:
+            a cleared name key is sealed to nobody.
           contentEncoding: base64
+          minLength: 1
           maxLength: 64
           example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ScopeRekeyShareSeal:
       type: object

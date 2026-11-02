@@ -137,7 +137,9 @@ class RekeyResource(
                 (it.sealedName == null) != (it.replacedNameDigest == null) ||
                     (it.sealedAvatar == null) != (it.replacedAvatarDigest == null) ||
                     (it.sealedJoinRecord == null) != (it.replacedJoinRecordDigest == null)
-            }
+            } ||
+            // An invitee's name key and the identity it is sealed to come together; both null clear it.
+            r.groupInvitees.orEmpty().any { (it.sealedNameKey == null) != (it.recipientIdentityDigest == null) }
         ) {
             return refused(RekeyOutcome.InvalidRequest)
         }
@@ -155,8 +157,9 @@ class RekeyResource(
             }
             r.groupInvitees.orEmpty().forEach { i ->
                 val id = i.userId.toString()
-                add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_KEY, i.sealedNameKey, replacedDigest = i.replacedDigest))
-                add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_RECIPIENT, i.recipientIdentityDigest))
+                // A cleared name key is staged as [ScopeRekeyCommit.CLEARED] and sealed to nobody, so it names no recipient.
+                add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_KEY, i.sealedNameKey ?: ScopeRekeyCommit.CLEARED, replacedDigest = i.replacedDigest))
+                i.recipientIdentityDigest?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_RECIPIENT, it)) }
             }
             r.shares.orEmpty().forEach {
                 add(ScopeRekeyField(it.shareId, ScopeRekeyCommit.SHARE_KEY, it.sealedShareKey, replacedDigest = it.replacedDigest))

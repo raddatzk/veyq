@@ -1998,11 +1998,13 @@ components:
           maxLength: 32
           example: kevin
         sealedNameKey:
-          type: string
+          type: [string, "null"]
           description: >
             The group's **derived name-key `K_name`** sealed to the caller's identity public key
             (`asymWrap(..., "group-name-key")`, opaque base64) — unwrapped only on-device. It opens the canonical
-            `encryptedName` (not a private name copy), so the invitee sees exactly what the members see.
+            `encryptedName` (not a private name copy), so the invitee sees exactly what the members see. `null` when a
+            rotation cleared it — the rotating device could not anchor the caller's identity key and seals to no key it
+            cannot anchor (`ScopeRekeyInviteeSeal`, ADR 0111 decision 9): the proposal is shown without the group's name.
           contentEncoding: base64
           maxLength: 8192
           example: Z3JvdXAtbmFtZS1rZXktc2VhbGVkLXRvLWludml0ZWU=
@@ -2169,9 +2171,9 @@ components:
           x-veyq-visibility: flag
           type: boolean
           description: >
-            Served to every member: the scope's epoch moved and a live or trashed node of it still carries a key from
-            before — its rotation's re-key is unfinished (ADR 0109 point 7). Derived from the node rows the server holds
-            (`veyq_node.epoch` below `currentEpoch`), never stored. Every member's device reads it to continue the re-key
+            Served to every member: a live or trashed node of the scope is due — a rotation's commit or a link's close
+            marked it and its re-key has not reached it yet (ADR 0114 decision 4). Derived from the node rows the server
+            holds (`veyq_node.rekey_due`), never stored on the scope. Every member's device reads it to continue the re-key
             in the background ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
             decision 11); an owner's space shows *Fitting the new lock* meanwhile.
           example: false
