@@ -67,7 +67,8 @@ const renameBusy = ref(false)
 const renameError = ref('')
 const displayName = computed(() => props.name ?? '')
 // The group's icon (uc.spaces.set-space-icon, GROUP slice) — its avatar; owner-only set/replace/remove. Sealed
-// under K_icon and opened on-device under the caller's own grant's key (every rotation re-seals it, ADR 0115).
+// under a value key of its own and opened on-device through that key's wrap under the caller's own grant's key (a
+// rotation re-wraps the key and leaves the icon, ADR 0115).
 const groupIcon = useObjectUrl() // an owned object URL for the decrypted icon (revoked on replace/unmount)
 const iconDialogOpen = ref(false)
 const iconBusy = ref(false)

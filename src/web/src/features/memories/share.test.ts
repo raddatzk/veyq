@@ -61,7 +61,7 @@ const EPOCHS: ScopeKey = { epoch: 2, key: v1.randomBytes(32) }
  *  `nodeEpoch`, apart from the scope's epoch the recovery copy is sealed at. */
 const ROOT_EPOCH = 1
 /** A share with no recovery copy. */
-const NO_COPY = { sealedShareKey: null, sealedShareKeyEpoch: null }
+const NO_COPY = { sealedShareKey: null, wrappedRecoveryValueKey: null, sealedShareKeyEpoch: null }
 /** The address of the share a createShare call minted (the recovery copy of K_share is bound to it). */
 const addressOf = (req: { shareId: string }) => ({ scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: req.shareId })
 /** A minted share as the manage list serves it to an edit: switched on, no end date (`updateShare`'s `EditedShare`). */
@@ -83,7 +83,26 @@ const echoCreate = () => vi.fn<SharingApi['createShare']>(async ({ createShareRe
  *  read here as present — what the copy-reading functions take. */
 function posted(create: Mock<SharingApi['createShare']>, i = 0) {
   const req = create.mock.calls[i][0].createShareRequest
-  return { ...req, sealedShareKey: req.sealedShareKey!, sealedShareKeyEpoch: req.sealedShareKeyEpoch! }
+  return {
+    ...req, sealedShareKey: req.sealedShareKey!, wrappedRecoveryValueKey: req.wrappedRecoveryValueKey!,
+    sealedShareKeyEpoch: req.sealedShareKeyEpoch!,
+  }
+}
+type CopyContext = { purpose: 'share-key-recovery'; scopeId: string; nodeId: string; shareId: string; epoch: number }
+/** A recovery copy opened as a member opens it (ADR 0115): its value key from the wrap under `scope`'s key at that key's
+ *  epoch, bound to the copy's own context — then `K_share` under that value key. Throws `OpenRefused` when either fails. */
+function openCopy(scope: ScopeKey, ctx: CopyContext, copy: { sealedShareKey: string; wrappedRecoveryValueKey: string }): Uint8Array {
+  const valueKey = v1.unwrapValueKey(scope.key, { scopeId: ctx.scopeId, epoch: scope.epoch, value: ctx }, fromB64std(copy.wrappedRecoveryValueKey))
+  return v1.open(ctx, valueKey, fromB64std(copy.sealedShareKey))
+}
+/** A recovery copy sealed the way a mint seals it: `K_share` under a fresh value key, wrapped under `scope`'s key. */
+function sealCopy(scope: ScopeKey, ctx: CopyContext, kShare: Uint8Array) {
+  const valueKey = v1.generateValueKey()
+  return {
+    sealedShareKey: b64std(v1.seal(ctx, valueKey, kShare)),
+    wrappedRecoveryValueKey: b64std(v1.wrapValueKey(scope.key, { scopeId: ctx.scopeId, epoch: scope.epoch, value: ctx }, valueKey)),
+    sealedShareKeyEpoch: ctx.epoch,
+  }
 }
 /** The share root as the re-read after a `stale_epoch` lists it (ADR 0109 point 6): a Memory at the scope root, re-keyed
  *  by the rotation to `ek` (the post-re-key steady state) — its own key at `epoch`, minted under `ek.epoch` — and its
@@ -129,7 +148,7 @@ describe('createShare (curator)', () => {
     expect(JSON.stringify(req)).not.toContain('Rom 2026')
   })
 
-  it("seals the recovery copy under the scope's one key at its epoch, never under K_node (ADR 0036 point 4)", async () => {
+  it("seals the recovery copy under a value key the scope's one key wraps at its epoch, never under K_node (ADR 0036 point 4, ADR 0115)", async () => {
     const create = echoCreate()
     mockCurator(create)
     const kNode = v1.randomBytes(32)
@@ -139,10 +158,12 @@ describe('createShare (curator)', () => {
     expect(req.sealedShareKeyEpoch).toBe(EPOCHS.epoch)
     expect(req.nodeEpoch).toBe(ROOT_EPOCH)
     const ctx = { purpose: 'share-key-recovery', ...addressOf(req), epoch: EPOCHS.epoch } as const
-    expect(v1.open(ctx, EPOCHS.key, fromB64std(req.sealedShareKey))).toEqual(minted.kShare)
-    expect(() => v1.open(ctx, kNode, fromB64std(req.sealedShareKey))).toThrow(v1.OpenRefused)
+    expect(openCopy(EPOCHS, ctx, req)).toEqual(minted.kShare)
+    expect(() => openCopy({ epoch: EPOCHS.epoch, key: kNode }, ctx, req)).toThrow(v1.OpenRefused)
+    // the scope key itself opens no copy: only the copy's own value key does
+    expect(() => v1.open(ctx, EPOCHS.key, fromB64std(req.sealedShareKey))).toThrow(v1.OpenRefused)
     // bound to that epoch: labelled as the root's own epoch, the same key opens nothing
-    expect(() => v1.open({ ...ctx, epoch: ROOT_EPOCH }, EPOCHS.key, fromB64std(req.sealedShareKey))).toThrow(v1.OpenRefused)
+    expect(() => openCopy(EPOCHS, { ...ctx, epoch: ROOT_EPOCH }, req)).toThrow(v1.OpenRefused)
   })
 
   it('on a 409 stale_epoch re-opens the scope key and re-seals the copy at the new epoch, once', async () => {
@@ -170,9 +191,9 @@ describe('createShare (curator)', () => {
     expect(v1.open({ purpose: 'share-key' }, minted.kShare, fromB64std(second.wrap!))).toEqual(kNodeNow)
     expect(v1.open({ purpose: 'share-key' }, minted.kShare, fromB64std(first.wrap!))).toEqual(kNode)
     const ctx = { purpose: 'share-key-recovery', ...addressOf(second), epoch: 3 } as const
-    expect(v1.open(ctx, k3, fromB64std(second.sealedShareKey))).toEqual(minted.kShare)
-    // the replaced key opens nothing re-sealed at the new epoch
-    expect(() => v1.open(ctx, EPOCHS.key, fromB64std(second.sealedShareKey))).toThrow(v1.OpenRefused)
+    expect(openCopy({ epoch: 3, key: k3 }, ctx, second)).toEqual(minted.kShare)
+    // the replaced key opens nothing sealed at the new epoch
+    expect(() => openCopy({ epoch: 3, key: EPOCHS.key }, ctx, second)).toThrow(v1.OpenRefused)
     expect(fresh.key.every((b) => b === 0)).toBe(true)
   })
 
@@ -510,7 +531,10 @@ describe('shared-scope management (cr-0104)', () => {
     const c = posted(create)
     // the root was re-keyed while the link was off: the reopen wraps its CURRENT key and states that key's own epoch
     const kNodeNow = v1.randomBytes(32)
-    const share = { ...addressOf(c), role: ShareRole.Read, sealedShareKey: c.sealedShareKey, sealedShareKeyEpoch: c.sealedShareKeyEpoch }
+    const share = {
+      ...addressOf(c), role: ShareRole.Read, sealedShareKey: c.sealedShareKey, wrappedRecoveryValueKey: c.wrappedRecoveryValueKey,
+      sealedShareKeyEpoch: c.sealedShareKeyEpoch,
+    }
 
     await reactivateShare(share, { key: kNodeNow, epoch: ROOT_EPOCH + 1 }, EPOCHS, 'Rom 2026')
 
@@ -667,7 +691,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
   })
 
   it('readShareNote / readShareName return empty when there is no ciphertext or recoverable key', () => {
-    const copy = { sealedShareKey: 'x', sealedShareKeyEpoch: 0 }
+    const copy = { sealedShareKey: 'x', wrappedRecoveryValueKey: 'x', sealedShareKeyEpoch: 0 }
     expect(readShareNote(EPOCHS, ADDR, NO_COPY, 'x')).toEqual(NO_NOTE)
     expect(readShareNote(EPOCHS, ADDR, copy, null)).toEqual(NO_NOTE)
     expect(readShareName(EPOCHS, ADDR, NO_COPY, 'x')).toBe('')
@@ -715,21 +739,27 @@ describe('password protection (cr-0118)', () => {
 
   it('readSharePassword reveals the plaintext via the K_SC(epoch)-recovered K_share', () => {
     const kShare = v1.randomBytes(32)
-    // a copy the rotation to epoch 2 re-sealed under the scope's new key opens (ADR 0115 decision 2) …
-    const copy = { sealedShareKey: b64std(v1.seal({ purpose: 'share-key-recovery', ...ADDR, epoch: EPOCHS.epoch }, EPOCHS.key, kShare)), sealedShareKeyEpoch: EPOCHS.epoch }
+    // a copy whose value key's wrap the rotation to epoch 2 moved under the scope's new key opens (ADR 0115) …
+    const at = (epoch: number) => ({ purpose: 'share-key-recovery', ...ADDR, epoch }) as const
+    const copy = sealCopy(EPOCHS, at(EPOCHS.epoch), kShare)
     const sealedPassword = b64std(v1.seal({ purpose: 'share-password' }, kShare, v1.utf8('s3cret')))
     expect(readSharePassword(EPOCHS, ADDR, copy, sealedPassword)).toBe('s3cret')
-    // … one left under epoch 1's key, which the rotation replaced, opens under no key the member holds: no chain
+    // … one whose wrap is left under epoch 1's key, which the rotation replaced, opens under no key the member holds: no chain
     const replacedKey = v1.randomBytes(32)
-    const stale = { sealedShareKey: b64std(v1.seal({ purpose: 'share-key-recovery', ...ADDR, epoch: 1 }, replacedKey, kShare)), sealedShareKeyEpoch: 1 }
+    const stale = sealCopy({ epoch: 1, key: replacedKey }, at(1), kShare)
     expect(readSharePassword(EPOCHS, ADDR, stale, sealedPassword)).toBe('')
-    expect(readSharePassword({ epoch: 1, key: replacedKey }, ADDR, stale, sealedPassword), 'control: under the key it was sealed at').toBe('s3cret')
+    expect(readSharePassword({ epoch: 1, key: replacedKey }, ADDR, stale, sealedPassword), 'control: under the key it was wrapped at').toBe('s3cret')
     expect(readSharePassword(EPOCHS, ADDR, NO_COPY, sealedPassword)).toBe('') // no recoverable key → ''
     // the recovery copy is bound to its share — addressed as another share, nothing is revealed
     expect(readSharePassword(EPOCHS, { ...ADDR, shareId: 'T'.repeat(43) }, copy, sealedPassword)).toBe('')
-    // a copy sealed under K_node, as before ADR 0036 point 4, degrades to nothing rather than refusing the list
+    // a wrap a rotator substituted — a K_v of its choosing at the very slot — degrades to nothing, never another K_share
+    const substituted = sealCopy(EPOCHS, at(EPOCHS.epoch), v1.randomBytes(32)).wrappedRecoveryValueKey
+    expect(readSharePassword(EPOCHS, ADDR, { ...copy, wrappedRecoveryValueKey: substituted }, sealedPassword)).toBe('')
+    // a copy sealed under K_node with no value key, as before ADR 0036 point 4, degrades to nothing rather than refusing the list
     const kNode = v1.randomBytes(32)
-    const legacy = { sealedShareKey: b64std(v1.seal({ purpose: 'share-key-recovery', ...ADDR, epoch: EPOCHS.epoch }, kNode, kShare)), sealedShareKeyEpoch: EPOCHS.epoch }
+    const legacy = {
+      sealedShareKey: b64std(v1.seal(at(EPOCHS.epoch), kNode, kShare)), wrappedRecoveryValueKey: null, sealedShareKeyEpoch: EPOCHS.epoch,
+    }
     expect(readSharePassword(EPOCHS, ADDR, legacy, sealedPassword)).toBe('')
   })
 
@@ -775,10 +805,11 @@ describe('a link opens nothing of a sibling share (W1)', () => {
 
     for (const key of [linkKnode, a.kShare]) {
       expect(() => v1.open(bContext, key, fromB64std(b.sealedShareKey))).toThrow(v1.OpenRefused)
+      expect(() => openCopy({ epoch: EPOCHS.epoch, key }, bContext, b), 'nor as the key of its wrap').toThrow(v1.OpenRefused)
     }
     // Positive control, same predicate: a member of the scope opens B's copy at its epoch and reveals its password.
     expect(b.sealedShareKeyEpoch).toBe(EPOCHS.epoch)
-    const kShareB = v1.open(bContext, EPOCHS.key, fromB64std(b.sealedShareKey))
+    const kShareB = openCopy(EPOCHS, bContext, b)
     expect(new TextDecoder().decode(v1.open({ purpose: 'share-password' }, kShareB, fromB64std(b.sealedPassword!)))).toBe('correct horse battery')
     expect(readSharePassword(EPOCHS, addressOf(b), b, b.sealedPassword!)).toBe('correct horse battery')
   })
@@ -796,7 +827,8 @@ describe('reissueShare (ADR 0075, W1)', () => {
     const minted = await createShare(SCOPE_ID, NODE_ID, { key: kNode, epoch: ROOT_EPOCH }, EPOCHS, 'Rom', role, null, { texts: { en: 'note for B' }, mustAccept: false }, 'For Grandma', password)
     const c = posted(create, create.mock.calls.length - 1)
     const old: ReissuableShare = {
-      ...addressOf(c), role, expiresAt: null, sealedShareKey: c.sealedShareKey, sealedShareKeyEpoch: c.sealedShareKeyEpoch,
+      ...addressOf(c), role, expiresAt: null, sealedShareKey: c.sealedShareKey, wrappedRecoveryValueKey: c.wrappedRecoveryValueKey,
+      sealedShareKeyEpoch: c.sealedShareKeyEpoch,
       sealedNote: c.sealedNote ?? null, sealedShareName: c.sealedShareName ?? null,
       passwordRequired: !!c.passwordRequired, sealedPassword: c.sealedPassword ?? null,
     }
@@ -823,12 +855,13 @@ describe('reissueShare (ADR 0075, W1)', () => {
     expect(r.pwVerifier).toBe(b64std(v1.sha256Digest(v1.sharesPwToken('correct horse battery', fromB64std(r.pwSalt!)))))
     // the write proof is the NEW link's: its key and its id (ADR 0076)
     expect(r.writeVerifier).toBe(b64std(v1.sha256Digest(v1.shareWriteToken(minted.kShare, r.shareId))))
-    // the recovery copy is under the scope's one key at its epoch, bound to the NEW share id; the re-issue states the
-    // root key's own epoch
+    // the recovery copy is under a fresh value key the scope's one key wraps at its epoch, bound to the NEW share id; the
+    // re-issue states the root key's own epoch
     expect(r.sealedShareKeyEpoch).toBe(EPOCHS.epoch)
     expect(r.nodeEpoch).toBe(ROOT_EPOCH)
     const ctx = { purpose: 'share-key-recovery', scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: r.shareId, epoch: EPOCHS.epoch } as const
-    expect(v1.open(ctx, EPOCHS.key, fromB64std(r.sealedShareKey))).toEqual(minted.kShare)
+    expect(openCopy(EPOCHS, ctx, r)).toEqual(minted.kShare)
+    expect(r.wrappedRecoveryValueKey, 'a fresh value key, not the old copy\'s').not.toBe(old.wrappedRecoveryValueKey)
     // the old K_share — what a departed member may hold — opens none of the new seals and fields
     const seals: [Parameters<typeof v1.open>[0], string][] = [
       [{ purpose: 'share-password' }, r.sealedPassword!], [{ purpose: 'share-key' }, r.wrap!],

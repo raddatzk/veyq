@@ -22,8 +22,8 @@
 //   - every `K_blob` wrap in its attachment slots and of every blob its application stores through core's blob service
 //     (`K_blob` itself is kept: no byte is read from or written to the store);
 //   - each link rooted on it: the new key under the link's `K_share` where the server asks for a wrap (an open link,
-//     ADR 0114 decision 5), recovered from its recovery copy — under the scope's current key, which the rotation re-sealed
-//     it under (ADR 0115 decision 2); a link whose copy opens for no member is named key-lost instead, and the commit
+//     ADR 0114 decision 5), recovered from its recovery copy — through its value key's wrap under the scope's current key, which the rotation
+//     re-wrapped (ADR 0115 decision 2); a link whose copy opens for no member is named key-lost instead, and the commit
 //     closes it — nobody can wrap the new key for it;
 //   - its drop key, replaced: the new private half under the new key, the public half under each WRITE_ONLY link's
 //     `K_share`, each guest's `K_up` re-sealed to it (point 5); a READ_WRITE guest's name re-sealed under the new key;
@@ -324,7 +324,7 @@ export async function rekeyNode(run: Run, node: Row): Promise<void> {
       let kShare: Uint8Array
       try {
         kShare = recoverShareKey(epochs, { scopeId, nodeId: node.id, shareId: s.shareId }, {
-          sealedShareKey: s.sealedShareKey, sealedShareKeyEpoch: s.sealedShareKeyEpoch ?? null,
+          sealedShareKey: s.sealedShareKey, wrappedRecoveryValueKey: s.wrappedRecoveryValueKey, sealedShareKeyEpoch: s.sealedShareKeyEpoch ?? null,
         })
       } catch {
         // the digest of the copy as served (the contract's `lostCopyDigest`): the commit closes only that copy's link

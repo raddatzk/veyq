@@ -47,8 +47,8 @@ const source = guest
   ? guestMemorySource(() => (props.access.mode === 'guest' ? props.access : guest), props.tree)
   : memberMemorySource({ scopeId: () => props.scopeId })
 
-// Item marks seal under the scope's one key at its epoch (ADR 0115 decisions 1 and 3) — every rotation re-seals them
-// under the new key, through Memories' scope re-key participant. `activeSpace.epoch` is the reactive signal that a
+// Item marks seal under a value key whose wrap is under the scope's one key at its epoch (ADR 0115 decisions 1 and 3) —
+// every rotation re-wraps those keys under the new key, through Memories' scope re-key participant. `activeSpace.epoch` is the reactive signal that a
 // rotation happened — without reading it this would not recompute after `refreshActiveScope`. A member's only.
 const itemMarkKey = computed<ScopeKey | null>(() => {
   if (guest) return null

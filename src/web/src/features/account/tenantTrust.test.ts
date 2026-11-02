@@ -48,6 +48,7 @@ import { me } from '../spaces/grantTrust'
 import { ScopeKind, ScopeMemberRoleEnum, type ScopeMember } from '../../api/generated/scopes'
 import type { MemberVerification, TenantsApi } from '../../api/generated/tenants'
 import type { ScopeKey } from '../spaces/epochs'
+import { openValue, rewrapValueKey, sealValue, wrapValueKeyOf } from '../spaces/valueKey'
 import { httpError } from '../../test/httpError'
 
 const T = '7e000000-0000-4000-8000-0000000000f1'
@@ -94,20 +95,27 @@ function rotated(p: Person, next: ChainKeys = chainKeys()): Person {
  *  control) over other bytes: another record, or the envelope the record is stored in. */
 type Endorsement = { signerUserId: string; by: v1.Identity; over?: (sealedEnvelope: Uint8Array) => Uint8Array }
 
-/** `p` as the tenant's directory lists them: their newest key and head, a role, the join record they wrote — sealed
- *  under the tenant key (`sealedUnder`, the current one by default) — and the endorsement of it the record's signer wrote
- *  (ADR 0111 decision 21). */
+/** A join record as the accept writes it (ADR 0115): under a fresh value key, that key wrapped under [at]. */
+const sealRecord = (at: ScopeKey, userId: string, record: invite.JoinRecord) => {
+  const address = { tenantId: T, userId }
+  return sealValue(at, invite.joinRecordContext(address), (kv) => invite.sealJoinRecord(kv, address, record))
+}
+
+/** `p` as the tenant's directory lists them: their newest key and head, a role, the join record they wrote — under its own
+ *  value key, wrapped under the tenant key (`sealedUnder`, the current one by default) — and the endorsement of it the
+ *  record's signer wrote (ADR 0111 decision 21). */
 function row(
   p: Person, role: ScopeMemberRoleEnum, record?: invite.JoinRecord,
-  o: { pendingConsent?: boolean; endorsed?: Endorsement; sealedUnder?: Uint8Array } = {},
+  o: { pendingConsent?: boolean; endorsed?: Endorsement; sealedUnder?: ScopeKey } = {},
 ): ScopeMember {
-  const sealed = record ? invite.sealJoinRecord(o.sealedUnder ?? tenantKey.key, { tenantId: T, userId: p.userId }, record) : null
+  const sealed = record ? sealRecord(o.sealedUnder ?? tenantKey, p.userId, record) : null
   const e = o.endorsed
-  const endorsedBytes = sealed && record ? (e?.over ? e.over(sealed) : invite.encodeJoinRecord(record)) : null
+  const endorsedBytes = sealed && record ? (e?.over ? e.over(fromB64std(sealed.sealed)) : invite.encodeJoinRecord(record)) : null
   return {
     userId: p.userId, username: p.userId.slice(-4), avatarRevision: 0, role, identityPublicKey: bundleB64(keysOf(p)),
     keyChainHead: headOf(p.chain), pending: false, pendingConsent: o.pendingConsent,
-    sealedJoinRecord: sealed ? b64std(sealed) : null,
+    sealedJoinRecord: sealed ? sealed.sealed : null,
+    wrappedJoinRecordValueKey: sealed ? sealed.wrapped : null,
     joinEndorsement: e && endorsedBytes
       ? b64std(invite.signJoinEndorsement(e.by.priv.sign, { tenantId: T, userId: p.userId, signerUserId: e.signerUserId, joinRecord: endorsedBytes }))
       : null,
@@ -158,7 +166,8 @@ function signedInAs(p: Person) {
 // ── Verifications ────────────────────────────────────────────────────────────────────────────────────────────
 
 /** A verification row as `putMyVerification` stores it: `verifierUserId` confirmed `subjectUserId` at these heads,
- *  signed by `signKey`, sealed under the tenant key `at` (the current one by default) at its epoch. */
+ *  signed by `signKey`, sealed at the epoch of the tenant key `at` (the current one by default) under a fresh value key that
+ *  `at` wraps (ADR 0115). */
 function verificationRow(
   verifierUserId: string, subjectUserId: string, heads: { subjectHead: string; verifierHead: string }, signKey: Uint8Array,
   at: ScopeKey = tenantKey,
@@ -167,8 +176,22 @@ function verificationRow(
   const v = verification.signVerification(
     address, { subjectHead: fromB64std(heads.subjectHead), verifierHead: fromB64std(heads.verifierHead) }, signKey,
   )
-  const sealedStatement = b64std(verification.sealVerification(at.key, { ...address, epoch: at.epoch }, v))
-  return { verifierUserId, subjectUserId, epoch: at.epoch, sealedStatement, createdAt: new Date() }
+  const slot = { ...address, epoch: at.epoch }
+  const sealed = sealValue(at, verification.verificationContext(slot), (kv) => verification.sealVerification(kv, slot, v))
+  return { verifierUserId, subjectUserId, epoch: at.epoch, sealedStatement: sealed.sealed, wrappedValueKey: sealed.wrapped, createdAt: new Date() }
+}
+/** A verification row as every member opens it: its value key from the wrap under [at], then the statement. Null when
+ *  either does not open. */
+const openRowUnder = (
+  at: ScopeKey, r: { epoch?: number | null; sealedStatement: string; wrappedValueKey: string }, subjectUserId: string, verifierUserId: string,
+) => {
+  const slot = { tenantId: T, verifierUserId, subjectUserId, epoch: r.epoch ?? -1 }
+  try {
+    return openValue(at, verification.verificationContext(slot), r.wrappedValueKey, (kv) =>
+      verification.openVerification(kv, slot, fromB64std(r.sealedStatement)))
+  } catch {
+    return null
+  }
 }
 /** `verifier` (at their current head and key) confirmed `subject` at `subjectHead` (their current head by default). */
 const verifiedBy = (verifier: Person, subject: Person, o: { subjectHead?: string; signKey?: Uint8Array; verifierHead?: string; at?: ScopeKey } = {}) =>
@@ -189,7 +212,9 @@ function fakeVerifications(initial: MemberVerification[] = [], caller: () => str
   }))
   const putMyVerification = vi.fn<TenantsApi['putMyVerification']>(async ({ subjectUserId, putVerificationRequest: r }) => {
     const verifierUserId = caller()
-    rows.set(`${verifierUserId}:${subjectUserId}`, { verifierUserId, subjectUserId, epoch: r.epoch ?? 0, sealedStatement: r.sealedStatement, createdAt: new Date() })
+    rows.set(`${verifierUserId}:${subjectUserId}`, {
+      verifierUserId, subjectUserId, epoch: r.epoch ?? 0, sealedStatement: r.sealedStatement, wrappedValueKey: r.wrappedValueKey, createdAt: new Date(),
+    })
   })
   fakeApi(tenantsApi, { listVerifications, putMyVerification })
   return { rows, listVerifications, putMyVerification, all: () => [...rows.values()] }
@@ -321,7 +346,7 @@ describe('the join record anchors a person in the tenant (ADR 0111 decisions 12,
     expect(await standingOf(JOINER)).toBe('unanchored')
   })
 
-  it('#571 + ADR 0115 decision 8: an endorsement over the opened record still verifies after the rotation re-sealed the record in a fresh envelope; one over the envelope\'s bytes does not', async () => {
+  it('#571 + ADR 0115 decision 8: an endorsement over the opened record still verifies after the rotation re-wrapped the record\'s value key; one over the envelope\'s bytes does not', async () => {
     const { joiner, record, owner, current } = retiredKeyRecord()
     const address = { tenantId: T, userId: JOINER }
     const endorsed = row(joiner, 'MEMBER', record, { endorsed: { signerUserId: OWNER, by: current } })
@@ -331,21 +356,24 @@ describe('the join record anchors a person in the tenant (ADR 0111 decisions 12,
     directory = [row(owner, 'OWNER'), overEnvelope]
     expect(await standingOf(JOINER), 'an envelope is no record: its signature does not verify').toBe('unanchored')
 
-    // The tenant rotates: E1 replaces E0, and the rotation re-seals each record under it — a fresh envelope, the
-    // endorsement carried as it was.
+    // The tenant rotates: E1 replaces E0, and the rotation re-wraps each record's value key under it — the record itself
+    // byte-identical, the endorsement carried as it was.
     const K1 = v1.randomBytes(32)
-    const reseal = (m: ScopeMember): ScopeMember => ({
+    const rewrap = (m: ScopeMember): ScopeMember => ({
       ...m,
-      sealedJoinRecord: b64std(invite.sealJoinRecord(K1, address, invite.openJoinRecord(K0, address, fromB64std(m.sealedJoinRecord!)))),
+      wrappedJoinRecordValueKey: rewrapValueKey(
+        { epoch: 0, key: K0 }, { epoch: 1, key: K1 }, invite.joinRecordContext(address), m.wrappedJoinRecordValueKey!,
+      ),
     })
-    const resealed = reseal(endorsed)
-    expect(resealed.sealedJoinRecord).not.toBe(endorsed.sealedJoinRecord)
-    expect(resealed.joinEndorsement).toBe(endorsed.joinEndorsement)
+    const rewrapped = rewrap(endorsed)
+    expect(rewrapped.sealedJoinRecord).toBe(endorsed.sealedJoinRecord)
+    expect(rewrapped.wrappedJoinRecordValueKey).not.toBe(endorsed.wrappedJoinRecordValueKey)
+    expect(rewrapped.joinEndorsement).toBe(endorsed.joinEndorsement)
     tenantKey = { epoch: 1, key: K1 }
-    directory = [row(owner, 'OWNER'), resealed]
+    directory = [row(owner, 'OWNER'), rewrapped]
     expect(await standingOf(JOINER)).toBe('joined')
-    // control: the one signed over the old envelope's bytes, re-sealed the same way, still does not
-    directory = [row(owner, 'OWNER'), reseal(overEnvelope)]
+    // control: the one signed over the envelope's bytes, re-wrapped the same way, still does not
+    directory = [row(owner, 'OWNER'), rewrap(overEnvelope)]
     expect(await standingOf(JOINER)).toBe('unanchored')
   })
 
@@ -390,22 +418,44 @@ describe('the join record anchors a person in the tenant (ADR 0111 decisions 12,
     expect(await view.standing(STRANGER)).toEqual({ kind: 'unanchored' })
   })
 
-  it('a join record opens under the tenant\'s one key: one left under a replaced key anchors nobody (control: re-sealed under the current one)', async () => {
+  it('a join record opens through its value key under the tenant\'s one key: one whose wrap was left under a replaced key anchors nobody (control: re-wrapped under the current one)', async () => {
     const owner = born(OWNER)
     const joiner = born(JOINER)
     const record = joinedThrough(joiner, owner)
-    const sealedE0 = b64std(invite.sealJoinRecord(K0, { tenantId: T, userId: JOINER }, record))
-    expect(openJoinRecord(T, JOINER, sealedE0, { epoch: 0, key: K0 })).toEqual(record)
+    const E0 = { epoch: 0, key: K0 }
+    const sealedE0 = sealRecord(E0, JOINER, record)
+    expect(openJoinRecord(T, JOINER, sealedE0.sealed, sealedE0.wrapped, E0)).toEqual(record)
     // A rotation replaced K0 with K1: nothing older is tried.
     const K1 = v1.randomBytes(32)
     tenantKey = { epoch: 1, key: K1 }
-    expect(openJoinRecord(T, JOINER, sealedE0, { epoch: 1, key: K1 })).toBeNull()
-    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record, { sealedUnder: K0 })]
+    expect(openJoinRecord(T, JOINER, sealedE0.sealed, sealedE0.wrapped, tenantKey)).toBeNull()
+    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record, { sealedUnder: E0 })]
     expect(await standingOf(JOINER)).toBe('unanchored')
-    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record)] // sealed under K1, as the rotation re-sealed it
+    directory = [row(owner, 'OWNER'), row(joiner, 'MEMBER', record)] // its key wrapped under K1, as the rotation re-wraps it
     expect(await standingOf(JOINER)).toBe('joined')
-    // …and an envelope that is no base64 at all is one that does not open, never a throw
-    expect(openJoinRecord(T, JOINER, '%%%', tenantKey)).toBeNull()
+    // …the rotation's re-wrap opens the very record sealed under E0, untouched
+    const rewrapped = rewrapValueKey(E0, tenantKey, invite.joinRecordContext({ tenantId: T, userId: JOINER }), sealedE0.wrapped)
+    expect(openJoinRecord(T, JOINER, sealedE0.sealed, rewrapped, tenantKey)).toEqual(record)
+    // …and an envelope that is no base64 at all, or no wrap, is one that does not open, never a throw
+    expect(openJoinRecord(T, JOINER, '%%%', rewrapped, tenantKey)).toBeNull()
+    expect(openJoinRecord(T, JOINER, sealedE0.sealed, null, tenantKey)).toBeNull()
+  })
+
+  it('a substituted wrap of a join record\'s value key reads as no join record — unanchored, never another member\'s record', async () => {
+    const owner = born(OWNER)
+    const joiner = born(JOINER)
+    const other = born(SIGNER)
+    const genuine = row(joiner, 'MEMBER', joinedThrough(joiner, owner))
+    directory = [row(owner, 'OWNER'), genuine]
+    expect(await standingOf(JOINER)).toBe('joined') // control
+    const at = invite.joinRecordContext({ tenantId: T, userId: JOINER })
+    directory = [row(owner, 'OWNER'), { ...genuine, wrappedJoinRecordValueKey: wrapValueKeyOf(tenantKey, at, v1.generateValueKey()) }]
+    expect(await standingOf(JOINER)).toBe('unanchored')
+    // Another member's genuine record with its own key, its key re-wrapped onto this slot: not this member's record either.
+    const theirs = sealRecord(tenantKey, SIGNER, joinedThrough(other, owner))
+    const theirKey = openValue(tenantKey, invite.joinRecordContext({ tenantId: T, userId: SIGNER }), theirs.wrapped, (kv) => kv.slice())
+    directory = [row(owner, 'OWNER'), { ...genuine, sealedJoinRecord: theirs.sealed, wrappedJoinRecordValueKey: wrapValueKeyOf(tenantKey, at, theirKey) }]
+    expect(await standingOf(JOINER)).toBe('unanchored')
   })
 
   it('a tenant this device cannot open reads unavailable for everyone — and a wrap there is an anomaly', async () => {
@@ -483,20 +533,38 @@ describe('a verification counts for every member of the tenant (ADR 0111 decisio
     expect((await counted(subject)).get(SUBJECT)).toBeUndefined()
   })
 
-  it('a row opens only at the epoch of the tenant\'s one key (ADR 0115 decisions 1-2): one the rotation re-sealed counts, one left at the old epoch does not', async () => {
+  it('a row opens through its value key under the tenant\'s one key (ADR 0115 decisions 1-2): one the rotation re-wrapped counts, one whose wrap was left under the old key does not', async () => {
     const verifier = born(VERIFIER)
     const subject = born(SUBJECT)
     directory = [row(verifier, 'OWNER'), row(subject, 'OWNER')]
+    const E0: ScopeKey = { epoch: 0, key: K0 }
+    const atE0 = verifiedBy(verifier, subject, { at: E0 }) // written at epoch 0, its key wrapped under K0
     const K1 = v1.randomBytes(32)
     const E1: ScopeKey = { epoch: 1, key: K1 }
     tenantKey = E1 // the device now holds K1 at epoch 1
-    fakeVerifications([verifiedBy(verifier, subject, { at: { epoch: 0, key: K0 } })])
-    expect((await counted(subject)).get(SUBJECT), 'under the replaced key: does not open').toBeUndefined()
-    fakeVerifications([verifiedBy(verifier, subject, { at: E1 })])
-    expect((await counted(subject)).get(SUBJECT), 'control: re-sealed at epoch 1').toEqual([VERIFIER])
-    // The epoch the row states decides, before any key is tried: a row sealed with K1 at the slot of epoch 0 (and saying
-    // so) would open under K1, yet it is not at the key's epoch and is not read.
-    fakeVerifications([verifiedBy(verifier, subject, { at: { epoch: 0, key: K1 } })])
+    fakeVerifications([atE0])
+    expect((await counted(subject)).get(SUBJECT), 'its wrap under the replaced key: does not open').toBeUndefined()
+    // The rotation re-wraps the row's value key and leaves the row — still stating the epoch it was written at.
+    const slot = { tenantId: T, verifierUserId: VERIFIER, subjectUserId: SUBJECT, epoch: 0 }
+    const rewrapped = { ...atE0, wrappedValueKey: rewrapValueKey(E0, E1, verification.verificationContext(slot), atE0.wrappedValueKey) }
+    expect(rewrapped.sealedStatement, 'the row itself stays byte-identical').toBe(atE0.sealedStatement)
+    fakeVerifications([rewrapped])
+    expect((await counted(subject)).get(SUBJECT), 'control: re-wrapped under epoch 1, the row at epoch 0').toEqual([VERIFIER])
+    // The epoch the row states is bound into its seal and into its wrap's address: the same row relabelled does not open.
+    fakeVerifications([{ ...rewrapped, epoch: 1 }])
+    expect((await counted(subject)).get(SUBJECT)).toBeUndefined()
+  })
+
+  it('a row under a substituted wrap — a value key of the rotator\'s choosing — is ignored, never read as another statement', async () => {
+    const verifier = born(VERIFIER)
+    const subject = born(SUBJECT)
+    directory = [row(verifier, 'OWNER'), row(subject, 'OWNER')]
+    const genuine = verifiedBy(verifier, subject)
+    fakeVerifications([genuine])
+    expect((await counted(subject)).get(SUBJECT)).toEqual([VERIFIER]) // control
+    const slot = { tenantId: T, verifierUserId: VERIFIER, subjectUserId: SUBJECT, epoch: genuine.epoch }
+    const substituted = wrapValueKeyOf(tenantKey, verification.verificationContext(slot), v1.generateValueKey())
+    fakeVerifications([{ ...genuine, wrappedValueKey: substituted }])
     expect((await counted(subject)).get(SUBJECT)).toBeUndefined()
   })
 })
@@ -510,7 +578,7 @@ describe('verifyPerson writes this account\'s own signed statement (ADR 0111 dec
     expect(srv.putMyVerification).toHaveBeenCalledTimes(1)
     const put = srv.putMyVerification.mock.calls[0][0]
     expect(put).toMatchObject({ tenantId: T, subjectUserId: SUBJECT, putVerificationRequest: { epoch: 0 } })
-    const v = verification.openVerification(K0, { tenantId: T, verifierUserId: ME, subjectUserId: SUBJECT, epoch: 0 }, fromB64std(put.putVerificationRequest.sealedStatement))
+    const v = openRowUnder({ epoch: 0, key: K0 }, put.putVerificationRequest, SUBJECT, ME)!
     expect(b64std(v.subjectHead)).toBe(headOf(subject.chain))
     expect(b64std(v.verifierHead)).toBe(headOf(self.chain))
     expect(verification.verificationVerifies({ tenantId: T, verifierUserId: ME, subjectUserId: SUBJECT }, v, keysOf(self).identity.pub.sign)).toBe(true)
@@ -539,16 +607,8 @@ describe('verifyPerson writes this account\'s own signed statement (ADR 0111 dec
 
   describe('the write states the tenant\'s current epoch and seals once more after a `409 stale_epoch` (ADR 0115 decision 3)', () => {
     const K1 = () => v1.randomBytes(32)
-    const opens = (put: Parameters<TenantsApi['putMyVerification']>[0], at: ScopeKey) => {
-      try {
-        return verification.openVerification(
-          at.key, { tenantId: T, verifierUserId: ME, subjectUserId: SUBJECT, epoch: put.putVerificationRequest.epoch ?? -1 },
-          fromB64std(put.putVerificationRequest.sealedStatement),
-        )
-      } catch {
-        return null
-      }
-    }
+    const opens = (put: Parameters<TenantsApi['putMyVerification']>[0], at: ScopeKey) =>
+      openRowUnder(at, { ...put.putVerificationRequest, epoch: put.putVerificationRequest.epoch ?? -1 }, SUBJECT, ME)
     async function compare() {
       const subject = born(SUBJECT)
       directory = [row(self, 'OWNER'), row(subject, 'OWNER')]
@@ -692,7 +752,7 @@ describe('a rotation carries this account\'s verifications to its new key (ADR 0
 
     expect(srv.putMyVerification).toHaveBeenCalledTimes(2)
     const landed = srv.putMyVerification.mock.calls[1][0]
-    const v = verification.openVerification(K0, { tenantId: T, verifierUserId: ME, subjectUserId: landed.subjectUserId, epoch: 0 }, fromB64std(landed.putVerificationRequest.sealedStatement))
+    const v = openRowUnder({ epoch: 0, key: K0 }, landed.putVerificationRequest, landed.subjectUserId, ME)!
     expect(b64std(v.verifierHead)).toBe(headOf(after.chain))
     const address = { tenantId: T, verifierUserId: ME, subjectUserId: landed.subjectUserId }
     expect(verification.verificationVerifies(address, v, keysOf(after).identity.pub.sign)).toBe(true)

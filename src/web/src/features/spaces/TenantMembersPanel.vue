@@ -99,11 +99,11 @@ const { members, isOwner, trust, trustRefusal, loading, loadError, reload, on401
     // A member who set no name has no sealed name → null (the row shows only the @username).
     // Each name is bound to (this tenant scope, that member) — the scope we addressed and the row's member id — so a
     // server that moves one member's sealed name onto another's row shows no name there, not the wrong one. A name opens
-    // under the tenant's one key: every rotation re-seals every profile under its new key (ADR 0115 decision 2).
+    // through its value key, whose wrap is under the tenant's one key: every rotation re-wraps it (ADR 0115).
     const epochs = activeEpochKeys()
     const scopeId = activeSpace.scopeId
     names.value = epochs
-      ? Object.fromEntries(rows.map((m) => [m.userId, openMemberName(epochs, { scopeId, userId: m.userId }, m.sealedName) ?? null]))
+      ? Object.fromEntries(rows.map((m) => [m.userId, openMemberName(epochs, { scopeId, userId: m.userId }, m.sealedName, m.wrappedNameValueKey) ?? null]))
       : {}
     // The members' pictures follow the roster (ADR 0084): the version integers it carries decide what is fetched. Not awaited -
     // the rows draw their letters at once; the keys' copy is zeroed when the fetches settle.

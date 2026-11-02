@@ -66,6 +66,17 @@ import { grantContext, grantSignatureVerifies, recipientIdentityDigest, sealGran
 import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { openValue } from '../features/spaces/valueKey'
+
+/** A join record as every member opens it (ADR 0115): its value key from the wrap under the tenant key at the epoch the
+ *  accept states, then the record under that key. */
+function recordOf(
+  tenantKey: Uint8Array, a: { tenantId: string; userId: string },
+  body: { sealedJoinRecord?: string | null; wrappedJoinRecordValueKey?: string | null; epoch?: number | null },
+): invite.JoinRecord {
+  return openValue({ epoch: body.epoch!, key: tenantKey }, invite.joinRecordContext(a), body.wrappedJoinRecordValueKey, (kv) =>
+    invite.openJoinRecord(kv, a, fromB64std(body.sealedJoinRecord!)))
+}
 
 const stubs = {
   VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
@@ -134,8 +145,8 @@ beforeEach(() => {
     material: { secretKeyProofPublicKey: b64std(PROOF_PUB) },
     emergencyKit: { secretKey: b64std(SECRET_KEY) },
   } as unknown as Awaited<ReturnType<typeof buildAccount>>)
-  vi.mocked(sealName).mockReturnValue('SEALED-NAME')
-  vi.mocked(sealAvatar).mockReturnValue('SEALED-AVATAR')
+  vi.mocked(sealName).mockReturnValue({ sealedName: 'SEALED-NAME', wrappedNameValueKey: 'WRAPPED-NAME-KEY' })
+  vi.mocked(sealAvatar).mockReturnValue({ sealedAvatar: 'SEALED-AVATAR', wrappedAvatarValueKey: 'WRAPPED-AVATAR-KEY' })
   vi.mocked(anchorServedChain).mockResolvedValue('firstUse')
   vi.mocked(anchorChainKey).mockResolvedValue({ anchor: 'match', retired: false })
   vi.mocked(getPin).mockResolvedValue(null)
@@ -230,7 +241,9 @@ describe('TenantJoinView — the newcomer joins holding the tenant key', () => {
     const stmt = invite.inviteAcceptStatement({ inviteId: f.served.inviteId, userId, identityPublicKey: v1.serializeIdentityPublic(NEWCOMER.pub) })
     expect(v1.identityVerify(f.inviteKey.pub.sign, stmt, fromB64std(body.inviteProof!))).toBe(true)
     // The join record: under the tenant key, bound to this account, both signatures verify, naming the registered proof key.
-    const record = invite.openJoinRecord(f.tenantKey, { tenantId: f.tenantId, userId }, fromB64std(body.sealedJoinRecord!))
+    // …through its own value key, whose wrap the tenant key holds — the tenant key alone opens no record (ADR 0115).
+    expect(() => invite.openJoinRecord(f.tenantKey, { tenantId: f.tenantId, userId }, fromB64std(body.sealedJoinRecord!))).toThrow()
+    const record = recordOf(f.tenantKey, { tenantId: f.tenantId, userId }, body)
     expect(invite.joinRecordVerifies({ tenantId: f.tenantId, userId }, record)).toBe(true)
     expect(Array.from(record.secretKeyProofPublicKey)).toEqual(Array.from(PROOF_PUB))
     // The owner key the record names, as the accept states it (ADR 0111 decision 20).
@@ -255,26 +268,28 @@ describe('TenantJoinView — the newcomer joins holding the tenant key', () => {
     expect(second.signerIdentityDigest).toBe(recipientIdentityDigest(bundleOf(secured.owner)))
     // The second record names the new key, under the same account id.
     expect(second.userId).toBe(first.userId)
-    const record = invite.openJoinRecord(f.tenantKey, { tenantId: f.tenantId, userId: second.userId }, fromB64std(second.sealedJoinRecord!))
+    const record = recordOf(f.tenantKey, { tenantId: f.tenantId, userId: second.userId }, second)
     expect(bundleOf({ pub: v1.deserializeIdentityPublic(record.signerIdentityPublicKey) } as v1.Identity)).toBe(bundleOf(secured.owner))
     expect(w.text()).toContain(t('tenant.join.doneNoteMember'))
   })
 
-  it('offers the name and the picture, sealed under the invite\'s tenant key at (tenant, the new account)', async () => {
+  it('offers the name and the picture, their value keys wrapped under the invite\'s tenant key at (tenant, the new account)', async () => {
     // The key's bytes as the seal saw them: the view wipes the opened invite once the accept went through.
     const keysSeen: number[][] = []
-    vi.mocked(sealName).mockImplementation((k) => (keysSeen.push(Array.from(k)), 'SEALED-NAME'))
-    vi.mocked(sealAvatar).mockImplementation((k) => (keysSeen.push(Array.from(k)), 'SEALED-AVATAR'))
+    vi.mocked(sealName).mockImplementation((k) => (keysSeen.push([k.epoch, ...k.key]), { sealedName: 'SEALED-NAME', wrappedNameValueKey: 'WRAPPED-NAME-KEY' }))
+    vi.mocked(sealAvatar).mockImplementation((k) => (keysSeen.push([k.epoch, ...k.key]), { sealedAvatar: 'SEALED-AVATAR', wrappedAvatarValueKey: 'WRAPPED-AVATAR-KEY' }))
     const { pickerOffered } = await registerWith(true)
     expect(pickerOffered).toBe(true)
     const body = api.registerAndAcceptTenantInvite.mock.calls[0][0].registerAndAcceptRequest
     const [nameKey, nameAddress] = vi.mocked(sealName).mock.calls[0]
     const [, avatarAddress, bytes] = vi.mocked(sealAvatar).mock.calls[0]
-    expect(keysSeen).toEqual([Array.from(f.tenantKey), Array.from(f.tenantKey)])
-    expect(nameKey.every((b) => b === 0)).toBe(true) // …and wiped after the accept (forgetMemberInvite)
+    // the invite's tenant key at the epoch its grant carries (1): what each fresh value key is wrapped under
+    expect(keysSeen).toEqual([[1, ...f.tenantKey], [1, ...f.tenantKey]])
+    expect(nameKey.key.every((b) => b === 0)).toBe(true) // …and wiped after the accept (forgetMemberInvite)
     for (const a of [nameAddress, avatarAddress]) expect(a).toEqual({ scopeId: f.tenantId, userId: body.userId })
     expect([...bytes]).toEqual([9, 9, 9])
-    expect({ sealedName: body.sealedName, sealedAvatar: body.sealedAvatar }).toEqual({ sealedName: 'SEALED-NAME', sealedAvatar: 'SEALED-AVATAR' })
+    expect({ sealedName: body.sealedName, wrappedNameValueKey: body.wrappedNameValueKey, sealedAvatar: body.sealedAvatar, wrappedAvatarValueKey: body.wrappedAvatarValueKey })
+      .toEqual({ sealedName: 'SEALED-NAME', wrappedNameValueKey: 'WRAPPED-NAME-KEY', sealedAvatar: 'SEALED-AVATAR', wrappedAvatarValueKey: 'WRAPPED-AVATAR-KEY' })
   })
 })
 
@@ -305,7 +320,7 @@ describe('TenantJoinView — a member invite to an existing account', () => {
       { identityPublicKey: bundleOf(f.owner), keyChainHead: headOf(f.ownerChain) },
     )
     const body = api.acceptTenantInvite.mock.calls[0][0].acceptInviteRequest
-    const record = invite.openJoinRecord(f.tenantKey, { tenantId: f.tenantId, userId: ME }, fromB64std(body.sealedJoinRecord!))
+    const record = recordOf(f.tenantKey, { tenantId: f.tenantId, userId: ME }, body)
     expect(invite.joinRecordVerifies({ tenantId: f.tenantId, userId: ME }, record)).toBe(true)
     expect(Array.from(record.secretKeyProofPublicKey)).toEqual(Array.from(PROOF_PUB))
     expect(w.text()).toContain(t('tenant.join.doneNoteMember'))

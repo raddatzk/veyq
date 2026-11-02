@@ -113,7 +113,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
           shareId: writeOnlyId, nodeId: folderId, nodeEpoch: 0, role: ShareRole.WriteOnly,
           sealedDropPublicKey: b64std(v1.randomBytes(48)),
           sealedName: b64std(v1.sealField(SHARE_MEMORY_NAME, kShare, v1.utf8(FOLDER_NAME))),
-          sealedShareKey: b64std(v1.randomBytes(72)), sealedShareKeyEpoch: epochs.epoch,
+          sealedShareKey: b64std(v1.randomBytes(72)), wrappedRecoveryValueKey: b64std(v1.randomBytes(61)), sealedShareKeyEpoch: epochs.epoch,
           writeVerifier: b64std(v1.sha256Digest(v1.randomBytes(32))),
         },
       })

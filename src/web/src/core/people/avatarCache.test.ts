@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The profile-picture cache (ADR 0084, uc.spaces.set-profile-picture): fetch ONLY for a non-zero, changed `avatarRevision`, send
-// If-None-Match, open under K_tenant, one object URL per user revoked on a revision change and on reset, concurrent syncs share a
-// request, 404 clears (E4), an unopenable blob or a non-image shows the letter (E3). Sealing is REAL (the blob is opened under the
+// If-None-Match, open through the picture's value key under K_tenant (ADR 0115), one object URL per user revoked on a revision change and on reset, concurrent syncs share a
+// request, 404 clears (E4), an unopenable blob or wrap or a non-image shows the letter (E3). Sealing is REAL (the blob is opened under the
 // test key at the member's address); only the generated client is mocked.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../../test/httpError'
@@ -13,7 +13,9 @@ vi.mock('../../api/client', () => ({ tenantsApi: vi.fn() }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 
 import { syncAvatars, avatarUrlOf, resetAvatars, AVATAR_CONCURRENCY, type AvatarSource } from './avatarCache'
-import { sealAvatar } from '../../features/account/profile/memberAvatar'
+import * as v1 from '@veyq/crypto/v1'
+import { memberAvatarContext, sealAvatar } from '../../features/account/profile/memberAvatar'
+import { wrapValueKeyOf } from '../../features/spaces/valueKey'
 
 const KEY = new Uint8Array(32).fill(5)
 const SCOPE = '5c09e000-0000-4000-8000-0000000000c1'
@@ -23,7 +25,7 @@ const U3 = 'aaaaaaaa-0000-4000-8000-000000000003'
 const SOURCE: AvatarSource = { tenantId: 'tenant-1', scopeId: SCOPE, epochs: { epoch: 0, key: KEY } }
 // a minimal PNG header: what `sniffImage` recognises
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
-const sealedFor = (userId: string, bytes: Uint8Array = PNG) => ({ sealedAvatar: sealAvatar(KEY, { scopeId: SCOPE, userId }, bytes) })
+const sealedFor = (userId: string, bytes: Uint8Array = PNG) => sealAvatar({ epoch: 0, key: KEY }, { scopeId: SCOPE, userId }, bytes)
 
 /** Let every settled promise run its continuations (a queued fetch resumes a few microtasks after the slot it waited for). */
 const flushMicrotasks = async () => { for (let i = 0; i < 20; i++) await Promise.resolve() }
@@ -109,6 +111,17 @@ describe('syncAvatars', () => {
     expect(avatarUrlOf(U1)).toBeNull()
     await syncAvatars(SOURCE, [{ userId: U1, avatarRevision: 1 }]) // and it is not retried on every read
     expect(getMemberAvatar).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the letter for a picture under a substituted wrap (a K_v nobody sealed it under), never another picture', async () => {
+    const mine = sealedFor(U1)
+    const substituted = wrapValueKeyOf({ epoch: 0, key: KEY }, memberAvatarContext({ scopeId: SCOPE, userId: U1 }), v1.generateValueKey())
+    getMemberAvatar.mockResolvedValueOnce({ ...mine, wrappedAvatarValueKey: substituted })
+    await syncAvatars(SOURCE, [{ userId: U1, avatarRevision: 1 }])
+    expect(avatarUrlOf(U1)).toBeNull()
+    getMemberAvatar.mockResolvedValueOnce(mine) // control: the genuine wrap at the next revision
+    await syncAvatars(SOURCE, [{ userId: U1, avatarRevision: 2 }])
+    expect(avatarUrlOf(U1)).not.toBeNull()
   })
 
   it('shows the letter for opened bytes that are no image (they are never put in an object URL)', async () => {

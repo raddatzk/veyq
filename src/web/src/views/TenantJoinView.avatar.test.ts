@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The optional profile picture at join (ADR 0084 decision 7, uc.spaces.set-profile-picture A2/A3). The OWNER holds `K_tenant` at
-// accept (cold birth), so the picture is sealed there - under that born key, at (tenant scope, the new member) - and sent as
+// accept (cold birth), so the picture is sealed there - under a fresh value key that born key wraps at epoch 0 (ADR 0115), at (tenant scope, the new member) - and sent as
 // `sealedAvatar` next to `sealedName`. A MEMBER seals its own under the invite's tenant key (TenantJoinView.member.test.ts).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -97,8 +97,8 @@ beforeEach(() => {
   vi.mocked(buildAccount).mockResolvedValue({
     identity: {}, masterKey: new Uint8Array(32), material: {}, emergencyKit: { secretKey: 'SK' },
   } as unknown as Awaited<ReturnType<typeof buildAccount>>)
-  vi.mocked(sealName).mockReturnValue('SEALED-NAME')
-  vi.mocked(sealAvatar).mockReturnValue('SEALED-AVATAR')
+  vi.mocked(sealName).mockReturnValue({ sealedName: 'SEALED-NAME', wrappedNameValueKey: 'WRAPPED-NAME-KEY' })
+  vi.mocked(sealAvatar).mockReturnValue({ sealedAvatar: 'SEALED-AVATAR', wrappedAvatarValueKey: 'WRAPPED-AVATAR-KEY' })
   vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
   stubApi(setupApi, { getSetupStatus: setupStatus() })
   vaultState.unlocked = false
@@ -110,12 +110,13 @@ describe('TenantJoinView - the profile picture at join', () => {
     expect(pickerOffered).toBe(true)
     expect(sealAvatar).toHaveBeenCalledTimes(1)
     const [key, address, bytes] = vi.mocked(sealAvatar).mock.calls[0]
-    expect(key).toBe(BORN_KEY)
+    expect(key.key).toBe(BORN_KEY)
+    expect(key.epoch, 'the birth epoch the value key is wrapped at').toBe(0)
     expect(address.scopeId).toBe(TENANT_ID)
     expect(address.userId).toMatch(/^[0-9a-f-]{36}$/)
     expect([...bytes]).toEqual([9, 9, 9])
     const args = vi.mocked(registerAndAccept).mock.calls[0]
-    expect(args[6]).toBe('SEALED-AVATAR')
+    expect(args[6]).toEqual({ sealedAvatar: 'SEALED-AVATAR', wrappedAvatarValueKey: 'WRAPPED-AVATAR-KEY' })
     expect(args[1]).toBe(address.userId) // the very id the account is born with
   })
 

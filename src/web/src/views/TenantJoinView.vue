@@ -28,7 +28,8 @@ import {
 import type { ServedMemberInvite } from '../api/generated/tenants'
 import { parseInviteFragment } from '@veyq/crypto/invite'
 import { deriveSecretKeyProofKeypair } from '@veyq/crypto/v1'
-import { sealName, sealAvatar, myUserId } from '../features/account/profile/profile'
+import { sealName, sealAvatar, myUserId, type SealedMemberName, type SealedMemberAvatar } from '../features/account/profile/profile'
+import type { ScopeKey } from '../features/spaces/epochs'
 import JoinPicturePicker from '../features/account/profile/JoinPicturePicker.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
@@ -216,18 +217,23 @@ async function prepareRegistration() {
   }
 }
 
-/** Seal the OPTIONAL real name under K_tenant (born for an OWNER, opened from the invite for a MEMBER), or undefined
+/** Seal the OPTIONAL real name under a fresh value key K_tenant wraps (born for an OWNER, opened from the invite for a MEMBER, ADR 0115), or undefined
  *  when both fields are empty. */
-function sealedNameFor(scopeRootKey: Uint8Array, userId: string): string | undefined {
+function sealedNameFor(tenant: ScopeKey, userId: string): SealedMemberName | undefined {
   if (!firstName.value.trim() && !lastName.value.trim()) return undefined
   // Bound to (this tenant scope, the member it names) — ADR 0072.
-  return sealName(scopeRootKey, { scopeId: tenantId.value, userId }, { firstName: firstName.value, lastName: lastName.value })
+  return sealName(tenant, { scopeId: tenantId.value, userId }, { firstName: firstName.value, lastName: lastName.value })
 }
 
-/** Seal the OPTIONAL picture under the same K_tenant (`member-avatar`, bound to the tenant scope and the member), or
+/** Seal the OPTIONAL picture under a fresh value key the same K_tenant wraps (`member-avatar`, bound to the tenant scope and the member), or
  *  undefined when none was chosen. */
-function sealedAvatarFor(scopeRootKey: Uint8Array, userId: string): string | undefined {
-  return avatarBytes.value ? sealAvatar(scopeRootKey, { scopeId: tenantId.value, userId }, avatarBytes.value) : undefined
+function sealedAvatarFor(tenant: ScopeKey, userId: string): SealedMemberAvatar | undefined {
+  return avatarBytes.value ? sealAvatar(tenant, { scopeId: tenantId.value, userId }, avatarBytes.value) : undefined
+}
+
+/** The tenant key an OWNER's birth minted, at the birth epoch 0 — what its name's and picture's value keys are wrapped under. */
+function bornKey(born: { scopeRootKey: Uint8Array }): ScopeKey {
+  return { epoch: 0, key: born.scopeRootKey }
 }
 
 /** An OWNER's accept went through: this device holds the tenant key its birth minted, at the birth epoch (`bornTenantScope`), so
@@ -262,14 +268,14 @@ async function finishRegistration() {
       // The new account's Master Key keys the held tenant key: no vault holds it before the first sign-in.
       await acceptCheckedInvite(openedInvite!, (opened) => {
         const join = memberJoinFor(opened, userId, acct.identity, fromB64std(acct.material.secretKeyProofPublicKey))
-        const key = opened.epochKey
+        const key = { epoch: opened.grantedEpoch, key: opened.epochKey }
         return registerAndAccept(secret, userId, handle, acct.material, undefined, sealedNameFor(key, userId), sealedAvatarFor(key, userId), join)
       }, rereadInvite, undefined, acct.masterKey)
     } else {
       const born = bornTenantScope({ userId, identity: acct.identity }, tenantId.value)
-      const key = born.scopeRootKey
+      const key = { epoch: 0, key: born.scopeRootKey }
       await registerAndAccept(secret, userId, handle, acct.material, born.birth, sealedNameFor(key, userId), sealedAvatarFor(key, userId))
-      await holdBorn(key, acct.masterKey)
+      await holdBorn(born.scopeRootKey, acct.masterKey)
     }
     acct.masterKey.fill(0)
     finish()
@@ -308,7 +314,7 @@ async function signInAndAccept() {
       const handle = username.value.trim().toLowerCase()
       await acceptCheckedInvite(openedInvite!, (opened) => {
         const join = memberJoinFor(opened, userId, identity, proofKey)
-        const key = opened.epochKey
+        const key = { epoch: opened.grantedEpoch, key: opened.epochKey }
         return acceptInvite(secret, handle, undefined, sealedNameFor(key, userId), sealedAvatarFor(key, userId), join)
       }, rereadInvite, memberInviteAnchored)
       finish()
@@ -318,7 +324,7 @@ async function signInAndAccept() {
     const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
     await acceptInvite(
       secret, username.value.trim().toLowerCase(), born.birth,
-      sealedNameFor(born.scopeRootKey, userId), sealedAvatarFor(born.scopeRootKey, userId),
+      sealedNameFor(bornKey(born), userId), sealedAvatarFor(bornKey(born), userId),
     )
     await holdBorn(born.scopeRootKey)
     finish()
@@ -351,8 +357,8 @@ async function sealAndAccept() {
   const userId = await myUserId()
   const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
   const birth = born.birth
-  const sealedName = sealedNameFor(born.scopeRootKey, userId)
-  const sealedAvatar = sealedAvatarFor(born.scopeRootKey, userId)
+  const sealedName = sealedNameFor(bornKey(born), userId)
+  const sealedAvatar = sealedAvatarFor(bornKey(born), userId)
   await withRefresh(() => acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName, sealedAvatar))
   await holdBorn(born.scopeRootKey)
   password.value = ''

@@ -56,7 +56,7 @@ const byText = (w: ReturnType<typeof mountDialog>, text: string) => w.findAll('b
 const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
   shareId: 's', scopeId: SCOPE_ID, nodeId: FILE_ID, role: ShareRole.Read, enabled: true, mine: true,
   createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null, sealedNote: null, sealedShareName: null,
-  sealedShareKey: 'k', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
+  sealedShareKey: 'k', wrappedRecoveryValueKey: 'w', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
   reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
   ...over,
 })

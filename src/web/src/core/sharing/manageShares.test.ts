@@ -7,9 +7,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('../../api/client', () => ({ sharesApi: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
-import { fromB64std } from '@veyq/crypto/base64'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import {
-  mintShare, reactivateShare, readShareNote, recoverShareKey, remintShare, resealShareNames, updateShare, NO_NOTE, type ReissuableShare,
+  mintShare, reactivateShare, readShareNote, recoverShareKey, recoveryCopyContext, remintShare, resealShareNames, updateShare, NO_NOTE,
+  type ReissuableShare,
 } from './manageShares'
 import { SHARE_KEY } from './shareTree'
 import { SHARE_MEMORY_NAME, SHARE_NOTE } from './resolvePublicShare'
@@ -43,6 +44,30 @@ describe('mintShare', () => {
     expect(() => recoverShareKey({ epoch: 1, key: v1.randomBytes(32) }, address, req)).toThrow(v1.OpenRefused)
     expect(req.sealedDropPublicKey).toBeUndefined()
     expect(JSON.stringify(req)).not.toContain('Taxes')
+  })
+
+  it('seals the copy under a value key of its own: only its wrap is under K_SC, and a substituted wrap recovers nothing (ADR 0115)', async () => {
+    const create = vi.fn<SharingApi['createShare']>(async ({ createShareRequest }) => ({ shareId: createShareRequest.shareId }))
+    fakeApi(sharesApi, { createShare: create })
+    const minted = await mintShare(SCOPE_ID, NODE_ID, { key: v1.randomBytes(32), epoch: 1 }, EPOCHS, 'Taxes', ShareRole.Read)
+    const req = create.mock.calls[0][0].createShareRequest
+    const address = { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: minted.shareId }
+    const context = recoveryCopyContext(address, 1)
+    // control: through the wrap, K_share
+    const valueKey = v1.unwrapValueKey(EPOCHS.key, { scopeId: SCOPE_ID, epoch: 1, value: context }, fromB64std(req.wrappedRecoveryValueKey))
+    expect(v1.open(context, valueKey, fromB64std(req.sealedShareKey))).toEqual(minted.kShare)
+    // the scope key itself opens no copy: a rotator re-wraps K_v, it cannot read or rewrite K_share around it
+    expect(() => v1.open(context, EPOCHS.key, fromB64std(req.sealedShareKey))).toThrow(v1.OpenRefused)
+    // a rotator's own K_v wrapped at the very slot opens as a wrap — and the copy under it does not: the link is key-lost,
+    // never handed a K_share of the rotator's choosing
+    const substituted = b64std(v1.wrapValueKey(EPOCHS.key, { scopeId: SCOPE_ID, epoch: 1, value: context }, v1.generateValueKey()))
+    expect(() => recoverShareKey(EPOCHS, address, { ...req, wrappedRecoveryValueKey: substituted })).toThrow(v1.OpenRefused)
+    // another link's wrap moved onto this copy opens nothing either
+    const other = await mintShare(SCOPE_ID, NODE_ID, { key: v1.randomBytes(32), epoch: 1 }, EPOCHS, 'Taxes', ShareRole.Read)
+    const otherReq = create.mock.calls[1][0].createShareRequest
+    expect(otherReq.wrappedRecoveryValueKey).not.toBe(req.wrappedRecoveryValueKey) // a fresh K_v per mint
+    expect(() => recoverShareKey(EPOCHS, address, { ...req, wrappedRecoveryValueKey: otherReq.wrappedRecoveryValueKey })).toThrow(v1.OpenRefused)
+    expect(recoverShareKey(EPOCHS, { ...address, shareId: other.shareId }, otherReq)).toEqual(other.kShare)
   })
 
   it('refuses a WRITE_ONLY role without the drop half, and a drop half on any other role, before posting', async () => {
@@ -98,7 +123,7 @@ describe("the note's acceptance switch (uc.sharing.share-note)", () => {
     fakeApi(sharesApi, { reissueShare: reissue })
     const old: ReissuableShare = {
       ...address, role: ShareRole.Read, expiresAt: null, sealedNote, sealedShareName: null, passwordRequired: false, sealedPassword: null,
-      sealedShareKey: req.sealedShareKey!, sealedShareKeyEpoch: req.sealedShareKeyEpoch!,
+      sealedShareKey: req.sealedShareKey!, wrappedRecoveryValueKey: req.wrappedRecoveryValueKey!, sealedShareKeyEpoch: req.sealedShareKeyEpoch!,
     }
     const renewed = await remintShare(old, { key: v1.randomBytes(32), epoch: 1 }, EPOCHS, 'Taxes')
     const r = reissue.mock.calls[0][0].reissueShareRequest
@@ -115,7 +140,7 @@ describe('remintShare', () => {
     const old: ReissuableShare = {
       scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: 'S'.repeat(43), role: ShareRole.Read, expiresAt: null,
       sealedNote: null, sealedShareName: null, passwordRequired: false, sealedPassword: null,
-      sealedShareKey: null, sealedShareKeyEpoch: null,
+      sealedShareKey: null, wrappedRecoveryValueKey: null, sealedShareKeyEpoch: null,
     }
     const settings = { note: NO_NOTE, name: '', password: '', expiresAt: null }
 
@@ -141,7 +166,8 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
     const req = create.mock.calls[0][0].createShareRequest
     const row: ShareSummary = {
       shareId: minted.shareId, nodeId: NODE_ID, scopeId: SCOPE_ID, role: ShareRole.Read, sealedName: req.sealedName,
-      sealedShareKey: req.sealedShareKey, sealedShareKeyEpoch: req.sealedShareKeyEpoch, enabled: true, mine,
+      sealedShareKey: req.sealedShareKey, wrappedRecoveryValueKey: req.wrappedRecoveryValueKey, sealedShareKeyEpoch: req.sealedShareKeyEpoch,
+      enabled: true, mine,
       reissueRequired: false, deletable: mine, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
       createdAt: new Date(Date.UTC(2026, 9, 1) - 1000 * age++),
     }
@@ -173,7 +199,7 @@ describe('resealShareNames (ADR 0080 decision 14)', () => {
     const ok = await mintedRow(true)
     const set = vi.fn<SharingApi['setShareSealedName']>(async () => undefined)
     fakeApi(sharesApi, {
-      listShares: async () => [{ ...legacy.row, sealedShareKey: null, sealedShareKeyEpoch: null }, ok.row],
+      listShares: async () => [{ ...legacy.row, sealedShareKey: null, wrappedRecoveryValueKey: null, sealedShareKeyEpoch: null }, ok.row],
       setShareSealedName: set,
     })
 
@@ -264,7 +290,8 @@ describe('reactivateShare (ADR 0114 decision 7)', () => {
     const req = create.mock.calls[0][0].createShareRequest
     const share = {
       scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: minted.shareId, role: ShareRole.Read,
-      sealedShareKey: req.sealedShareKey ?? null, sealedShareKeyEpoch: req.sealedShareKeyEpoch ?? null,
+      sealedShareKey: req.sealedShareKey ?? null, wrappedRecoveryValueKey: req.wrappedRecoveryValueKey ?? null,
+      sealedShareKeyEpoch: req.sealedShareKeyEpoch ?? null,
     }
     return { share, kShare: minted.kShare }
   }
@@ -294,7 +321,7 @@ describe('reactivateShare (ADR 0114 decision 7)', () => {
     fakeApi(sharesApi, { reactivateShare: reactivate })
     const root = { key: v1.randomBytes(32), epoch: 1 }
 
-    await expect(reactivateShare({ ...share, sealedShareKey: null, sealedShareKeyEpoch: null }, root, EPOCHS, 'Taxes'))
+    await expect(reactivateShare({ ...share, sealedShareKey: null, wrappedRecoveryValueKey: null, sealedShareKeyEpoch: null }, root, EPOCHS, 'Taxes'))
       .rejects.toThrow('share_key_not_recoverable')
     // a copy left under a key a rotation replaced opens under no key: refused as well, nothing sent
     await expect(reactivateShare(share, root, { epoch: 1, key: v1.randomBytes(32) }, 'Taxes')).rejects.toThrow(v1.OpenRefused)

@@ -9,7 +9,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { nodeContentKey, type TreeNode } from '../node/tree'
 import { FOLDER_KIND } from '../node/kind'
-import { mintShare, recoverShareKey } from './manageShares'
+import { mintShare, recoverShareKey, recoveryCopyContext } from './manageShares'
 import { SHARE_KEY } from './shareTree'
 import { SHARE_MEMORY_NAME } from './resolvePublicShare'
 import { ShareRole } from '../../api/generated/sharing'
@@ -76,12 +76,22 @@ describe('a folder share on the wire', () => {
     expect(new TextDecoder().decode(name)).toBe('Archiv 2026')
     expect(JSON.stringify(json)).not.toContain('Archiv')
 
-    // The recovery copy opens under the scope's one key at its epoch, bound to this folder and share — not under the
-    // key the rotation replaced.
-    const copy = { sealedShareKey: json.sealedShareKey as string, sealedShareKeyEpoch: json.sealedShareKeyEpoch as number }
+    // The recovery copy is sealed under a value key of its own, whose wrap rides beside it on the wire (ADR 0115): it opens
+    // through that wrap under the scope's one key at its epoch, bound to this folder and share — not under the key the
+    // rotation replaced, and not under the scope key itself.
+    expect(typeof json.wrappedRecoveryValueKey, 'the body carries the copy\'s value-key wrap').toBe('string')
+    const copy = {
+      sealedShareKey: json.sealedShareKey as string, wrappedRecoveryValueKey: json.wrappedRecoveryValueKey as string,
+      sealedShareKeyEpoch: json.sealedShareKeyEpoch as number,
+    }
     const address = { scopeId: SCOPE_ID, nodeId: SUB, shareId: minted.shareId }
     expect(recoverShareKey(EPOCHS, address, copy)).toEqual(minted.kShare)
     expect(() => recoverShareKey({ epoch: 1, key: k0 }, address, copy)).toThrow(v1.OpenRefused)
+    const context = recoveryCopyContext(address, copy.sealedShareKeyEpoch)
+    expect(() => v1.open(context, EPOCHS.key, fromB64std(copy.sealedShareKey)), 'the copy is not under K_SC itself').toThrow(v1.OpenRefused)
+    // A wrap of a K_v of a rotator's choosing at the very slot opens — the copy under it does not: no K_share at all.
+    const substituted = b64std(v1.wrapValueKey(EPOCHS.key, { scopeId: SCOPE_ID, epoch: EPOCHS.epoch, value: context }, v1.generateValueKey()))
+    expect(() => recoverShareKey(EPOCHS, address, { ...copy, wrappedRecoveryValueKey: substituted })).toThrow(v1.OpenRefused)
     expect(json.sealedDropPublicKey).toBeUndefined()
   })
 })

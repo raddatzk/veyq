@@ -72,9 +72,10 @@
 // skipped it. There is no registry-wide rotation gate: core re-seals what it seals under the Master Key itself (the node
 // pins, `rotateKeys`), so a build with no application - or none that registers hooks - rotates as safely as any other.
 //
-// **A scope's re-key (`app.scopeRekey`, ADR 0115 decision 2).** A rotation replaces the scope key and re-seals every row
-// sealed under it before its commit; core stages its own rows, and an application that stores rows under the scope key
-// (Memories' item marks) re-seals and stages its own through the participant it registers here — once per application.
+// **A scope's re-key (`app.scopeRekey`, ADR 0115 decision 2).** A rotation replaces the scope key and re-wraps every value
+// key under it before its commit — it never rewrites a value; core stages its own wraps, and an application that stores
+// values under value keys the scope key wraps (Memories' item marks) re-wraps and stages its own through the participant
+// it registers here — once per application, handed no scope key, only the re-wrap.
 // Not required: an application with no such row registers none, and the server refuses a commit that leaves any row
 // unstaged (`rekey_parts_missing`), so a forgotten participant fails closed, never silently.
 //
@@ -513,7 +514,7 @@ export interface ApplicationRegistrar {
   /** Register the application's lifecycle hooks. Throws on a second hook set and if `onMasterKeyRotated` is not a
    *  function. */
   lifecycle(hooks: LifecycleHooks): void
-  /** Register the application's part of a rotation's scope-level re-seal (see the header). Throws on a second one. */
+  /** Register the application's part of a rotation's scope-level re-wrap (see the header). Throws on a second one. */
   scopeRekey(participant: ScopeRekeyParticipant): void
   /** Claim the drop page of a `WRITE_ONLY` link rooted at `rootKind` (see the header). Throws if that kind is already
    *  claimed, if it is not a kind this application registered, and for FOLDER. */

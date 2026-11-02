@@ -81,7 +81,7 @@ describe('DropBoxShareDialog — switch-off and delete only where the server all
   beforeEach(() => vi.clearAllMocks())
   const base = {
     scopeId: 's', nodeId: 'n', role: 'WRITE_ONLY', createdAt: new Date(), expiresAt: null, sealedNote: null,
-    sealedShareName: null, sealedShareKey: null, sealedShareKeyEpoch: null, passwordRequired: false, sealedPassword: null,
+    sealedShareName: null, sealedShareKey: null, wrappedRecoveryValueKey: null, sealedShareKeyEpoch: null, passwordRequired: false, sealedPassword: null,
     reissueRequired: false, newGuestsRefused: false, writeVerifierMissing: false,
   } as const
   const offers = (row: ReturnType<ReturnType<typeof mountDialog>['findAll']>[number]) => ({
@@ -149,7 +149,7 @@ describe('DropBoxShareDialog — a link that serves no guest says why (#457)', (
   it('names the reason on the row, offers no fix on a link it cannot re-open, and a served link says nothing', async () => {
     const base = {
       scopeId: 's', nodeId: 'n', role: 'WRITE_ONLY', enabled: true, mine: true, createdAt: new Date(), expiresAt: null,
-      sealedNote: null, sealedShareName: null, sealedShareKey: null, sealedShareKeyEpoch: null, passwordRequired: false,
+      sealedNote: null, sealedShareName: null, sealedShareKey: null, wrappedRecoveryValueKey: null, sealedShareKeyEpoch: null, passwordRequired: false,
       sealedPassword: null, reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false,
     } as const
     vi.mocked(listSharesFor).mockResolvedValue([
@@ -176,7 +176,7 @@ describe('DropBoxShareDialog — a stopped link is fixed in place (#457)', () =>
   })
   const base = {
     scopeId: 's', nodeId: 'n', role: 'WRITE_ONLY', enabled: true, mine: true, expiresAt: null, sealedNote: null,
-    sealedShareName: null, sealedShareKey: 'k', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
+    sealedShareName: null, sealedShareKey: 'k', wrappedRecoveryValueKey: 'w', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
     reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false,
   } as const
   const save = (w: ReturnType<typeof mountDialog>) => w.find('.dropbox-fix-save')

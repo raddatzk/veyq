@@ -76,7 +76,7 @@ describe('the drop box share dialog', () => {
   const link: ManagedShare = {
     shareId: 'link-1', scopeId: SCOPE, nodeId: 'b1', role: ShareRole.WriteOnly, enabled: true, mine: true,
     createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null, sealedNote: null, sealedShareName: null,
-    sealedShareKey: 'k', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
+    sealedShareKey: 'k', wrappedRecoveryValueKey: 'w', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
     reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
   } as ManagedShare
 
@@ -140,7 +140,7 @@ describe('the drop box share dialog', () => {
     // the reopen re-seals the link's root under the drop box's key at its own epoch, under the scope's one key
     expect(reactivateShare).toHaveBeenCalledOnce()
     expect(reactivateShare).toHaveBeenCalledWith(
-      expect.objectContaining({ shareId: 'link-1', nodeId: 'b1', role: ShareRole.WriteOnly, sealedShareKey: 'k', sealedShareKeyEpoch: 0 }),
+      expect.objectContaining({ shareId: 'link-1', nodeId: 'b1', role: ShareRole.WriteOnly, sealedShareKey: 'k', wrappedRecoveryValueKey: 'w', sealedShareKeyEpoch: 0 }),
       { key: new Uint8Array(32), epoch: 0 }, EPOCHS, 'Einsendungen',
     )
     expect(listSharesFor).toHaveBeenCalledTimes(2)

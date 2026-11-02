@@ -46,7 +46,7 @@ describe('FinishProfilePrompt', () => {
   })
 
   it('shows nothing when a name is set, or a picture is, or the key is not held yet', async () => {
-    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'A', lastName: 'B' }) }))
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ ...sealName({ epoch: 0, key: K }, ADDRESS, { firstName: 'A', lastName: 'B' }) }))
     expect(prompt(await mountPrompt()).exists()).toBe(false)
 
     account.userId = `user-${++user}`
@@ -57,6 +57,14 @@ describe('FinishProfilePrompt', () => {
     vi.mocked(getMyProfile).mockResolvedValue(memberProfile())
     vi.mocked(openOwnNameKey).mockResolvedValue(null)
     expect(prompt(await mountPrompt()).exists()).toBe(false)
+  })
+
+  it('a name whose value key\'s wrap does not open counts as no name and asks (control: the genuine wrap above)', async () => {
+    const sealed = sealName({ epoch: 0, key: K }, ADDRESS, { firstName: 'A', lastName: 'B' })
+    const other = sealName({ epoch: 0, key: K }, ADDRESS, { firstName: 'A', lastName: 'B' })
+    // A wrap of another write's K_v at the same slot: it opens, but the name under this K_v does not.
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ ...sealed, wrappedNameValueKey: other.wrappedNameValueKey }))
+    expect(prompt(await mountPrompt()).exists()).toBe(true)
   })
 
   it('"Not now" dismisses it for this user: stored as a flag under the user\'s own key, and a reload reads nothing and shows nothing', async () => {
@@ -100,7 +108,7 @@ describe('FinishProfilePrompt', () => {
     let handed: OwnNameKey | undefined
     vi.mocked(openOwnNameKey).mockImplementation(async () => (handed = ownNameKey(K, ADDRESS)))
     // A name that opens only under the handed key: the read used the key before it was zeroed.
-    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'A', lastName: 'B' }) }))
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ ...sealName({ epoch: 0, key: K }, ADDRESS, { firstName: 'A', lastName: 'B' }) }))
     expect(prompt(await mountPrompt()).exists()).toBe(false)
     expect(handed!.epochs.key.every((b) => b === 0)).toBe(true)
   })
