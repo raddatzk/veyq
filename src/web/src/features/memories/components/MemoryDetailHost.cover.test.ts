@@ -26,7 +26,7 @@ import { uploadedCover } from '../../../core/node/cover/coverModel'
 import { resetCovers } from '../../../core/node/cover/coverStore'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { NodeDetailProps } from '../../../core/applications/registry'
-import type { EpochKeys } from '../../spaces/epochs'
+import type { ScopeKey } from '../../spaces/epochs'
 import { fakeApi, stubApi } from '../../../test/apiMock'
 import { authenticatedCalls } from '../../../test/guestMode'
 import { galleryFakeStore } from './galleryFakeStore'
@@ -78,7 +78,7 @@ async function mountHost(access: NodeDetailProps['access'], wrappedMeta: string 
 }
 type Host = Awaited<ReturnType<typeof mountHost>>
 const action = (w: Host, id: string) => w.find(`.veyq-node-header-actions button[data-action="${id}"]`)
-const writer = () => memberAccessOf({ scopeId: SCOPE, epochs: {} as EpochKeys })
+const writer = () => memberAccessOf({ scopeId: SCOPE, epochs: {} as ScopeKey })
 const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]')
 const dialogButton = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent?.trim() === label)
 const cropperImg = () => document.body.querySelector<HTMLImageElement>('[role="dialog"] .veyq-cropper-frame img')
@@ -184,7 +184,7 @@ describe('who gets the action', () => {
   })
 
   it('a pending deletion offers none (the space is read-only)', async () => {
-    const w = await mountHost(memberAccessOf({ scopeId: SCOPE, epochs: {} as EpochKeys, readonly: true }))
+    const w = await mountHost(memberAccessOf({ scopeId: SCOPE, epochs: {} as ScopeKey, readonly: true }))
     expect(action(w, 'cover').exists()).toBe(false)
     expect((w.find('.memory-cover-preview').element as HTMLButtonElement).disabled).toBe(true)
   })

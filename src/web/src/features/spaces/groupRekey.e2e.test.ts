@@ -71,14 +71,16 @@ describe.skipIf(!process.env.VEYQ_E2E)('a group owner gives the group a new lock
     expect(await rekeySpace(groupId)).toBe(2)
     expect((await rekeyScope(groupId)).done).toBe(true)
 
-    // --- B and C hold the newest epoch, peel the ones before it, and read the folder under it --------------------------
+    // --- B and C hold the newest epoch's key — the one key, which replaced the ones before it — and read the folder,
+    //     which each re-key gave a key of its own minted under that epoch (ADR 0114 decision 4, ADR 0115) -------------
     for (const who of [B, C]) {
       await become(who)
       const held = (await openScopeById(groupId))!
-      expect(held.epochs.current, `${who.username} holds the new epoch`).toBe(2)
+      expect(held.epochs.epoch, `${who.username} holds the new epoch`).toBe(2)
       const folder = (await listTree(groupId, held.epochs)).find((n) => n.id === folderId)
       expect(folder?.name).toBe(FOLDER_NAME)
-      expect(folder?.epoch, 'the folder carries the new epoch').toBe(2)
+      expect(folder?.epoch, 'the folder was re-keyed once per rotation: its own key at its epoch 2').toBe(2)
+      expect(folder?.scopeEpoch, 'its key minted under the scope\'s new epoch').toBe(2)
     }
   }, 360_000)
 })

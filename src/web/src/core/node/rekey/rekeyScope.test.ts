@@ -1,8 +1,10 @@
 // A scope's re-key (ADR 0109) through the REAL crypto: no seal is mocked, only the transport — a small in-memory server
 // that serves the rows and applies a commit as the backend's `RekeyStore.commit` does (every staged value swapped in,
-// the node's epoch moved). The world is built at epoch 0 with the real seals, then the scope rotates to 1 (E_1 chained to
-// E_0, as a member's device holds them) and `rekeyScope` runs. Each uc.spaces.rekey-after-rotation criterion is a
-// negative with its positive control on the same key.
+// the node's own epoch +1, its `scopeEpoch` the commit's, its due mark cleared). The world is built at epoch 0 with the
+// real seals, then the scope rotated to 1 as ADR 0115 does it: a fresh key E_1 replaced E_0 (no chain — a member's
+// device holds only E_1), the rotation's commit re-sealed every scope-root entry and recovery copy under E_1 (each entry
+// still bound to the scope epoch its node's key was minted under) and marked every node due; then `rekeyScope` runs.
+// Each uc.spaces.rekey-after-rotation criterion is a negative with its positive control on the same key.
 //
 // ADR 0111 decision 11 on the same server: a member's run leaves the nodes only an owner re-keys (`ownerOnly`, which the
 // server derives as the backend's `OwnerOnlyRekey` does), and a member's write pulls its own path forward through
@@ -10,21 +12,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import type { EpochKeys } from '../../../features/spaces/epochs'
+import type { ScopeKey } from '../../../features/spaces/epochs'
 import { blobKeyContext, unwrapBlobKey } from '../../blob/keys'
 import { SHARE_KEY } from '../../sharing/shareTree'
 import { mintIdentityKey, openDropKey, openDropPublicKey, openIdentityKey } from '../../sharing/dropKey'
 import { identityNameContext } from '../../sharing/guestIdentity'
 import { sealNodeMeta, unsealNodeMeta } from '../nodeMeta'
 import { fakeApi } from '../../../test/apiMock'
-import type { RekeyBlobWrap, RekeyChildEntry, RekeyIdentitySeal, RekeyShareRoleEnum, RekeyShareWrap } from '../../../api/generated/content'
-import { contentKeyChain, openTree, sealName, slugTokenFor, wrapContentKey, type NodeAddress } from '../tree'
+import type {
+  CommitNodeRekeyRequest, RekeyBlobWrap, RekeyChildEntry, RekeyIdentitySeal, RekeyShareRoleEnum, RekeyShareWrap,
+} from '../../../api/generated/content'
+import { contentKeyChain, openContentKey, openName, openTree, sealName, slugTokenFor, wrapContentKey, type NodeAddress } from '../tree'
 
 const SCOPE = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 
 // --- the in-memory server ---------------------------------------------------------------------------------------
 type Row = {
-  id: string; parentId: string | null; kind: string; trashed: boolean; epoch: number; placementRevision: number; metaRevision: number
+  id: string; parentId: string | null; kind: string; trashed: boolean; epoch: number; scopeEpoch: number; due: boolean
+  placementRevision: number; metaRevision: number
   encryptedName: string; slugToken: string; wrappedContentKey: string; wrappedMeta: string | null; sealedDropPrivateKey: string | null
   shareIdentityId: string | null; wrappedIdentityKey: string | null
 }
@@ -42,7 +47,7 @@ const server = {
   blobs: [] as Blob[],
   stages: new Map<string, Stage>(),
   crashOnCommitOf: null as string | null,
-  epochs: null as EpochKeys | null,
+  epochs: null as ScopeKey | null,
   /** The caller's role in the scope, as its row says: an owner re-keys every node, a member all but the owner-only ones. */
   role: 'OWNER' as 'OWNER' | 'MEMBER',
   /** The nodes whose kind the server's applications declare a drop box (Depot's `DEPOT_DROPBOX`); this core-only world
@@ -50,6 +55,10 @@ const server = {
   dropBoxes: new Set<string>(),
   /** Every commit, in order: who re-keyed what. */
   commits: [] as string[],
+  /** Each commit's request, by node: what it stated. */
+  commitBodies: new Map<string, CommitNodeRekeyRequest>(),
+  /** Each staged list's `fromEpoch`, by node. */
+  stagedFrom: new Map<string, number | null>(),
 }
 
 /** The backend's `OwnerOnlyRekey`: a drop box (by its kind, which an application declares — a drop key alone is not
@@ -70,8 +79,9 @@ vi.mock('../../../app/activeSpace', () => ({ activeSpace: { scopeId: null }, act
 function installServer(): void {
   vi.mocked(openScopeById).mockImplementation(async () => {
     const ek = server.epochs!
-    // only the epochs and the caller's role are read by the driver; the rest of an opened scope is not this test's
-    return { role: server.role, epochs: { current: ek.current, keys: new Map([...ek.keys].map(([e, k]) => [e, k.slice()])) } } as unknown as Awaited<ReturnType<typeof openScopeById>>
+    // only the scope key and the caller's role are read by the driver (a copy: the run zeroes it); the rest of an opened
+    // scope is not this test's
+    return { role: server.role, epochs: { epoch: ek.epoch, key: ek.key.slice() } } as unknown as Awaited<ReturnType<typeof openScopeById>>
   })
   fakeApi(rekeyApi, {
     listRekeyNodes: async () => ({ currentEpoch: server.current, nodes: [...server.nodes.values()].map((n) => ({ ...n, ownerOnly: ownerOnly(n) })) }),
@@ -85,7 +95,8 @@ function installServer(): void {
         })),
       }
     },
-    stageNodeRekey: async ({ rekeyId, nodeRekeyStage: s }) => {
+    stageNodeRekey: async ({ nodeId, rekeyId, nodeRekeyStage: s }) => {
+      server.stagedFrom.set(nodeId, s.fromEpoch)
       const st = server.stages.get(rekeyId) ?? { children: [], blobs: [], shares: [], identities: [] }
       st.children.push(...(s.children ?? [])); st.blobs.push(...(s.blobs ?? [])); st.shares.push(...(s.shares ?? [])); st.identities.push(...(s.identities ?? []))
       server.stages.set(rekeyId, st)
@@ -94,7 +105,14 @@ function installServer(): void {
       if (server.crashOnCommitOf === nodeId) throw new Error('the device stopped')
       const node = server.nodes.get(nodeId)!
       if (server.role !== 'OWNER' && ownerOnly(node)) throw refusal(403, 'not_scope_owner')
+      // the backend's gates (ADR 0114 decisions 3-4): the node's own epoch as stored, the scope's current epoch, the
+      // parent not due and stated at its own epoch
+      if (c.nodeEpoch !== node.epoch || c.scopeEpoch !== server.current) throw refusal(409, 'stale_epoch')
+      const parent = node.parentId ? server.nodes.get(node.parentId)! : null
+      if (parent?.due) throw refusal(409, 'node_rekey_pending')
+      if (parent && c.parentEpoch !== parent.epoch) throw refusal(409, 'stale_epoch')
       server.commits.push(nodeId)
+      server.commitBodies.set(nodeId, c)
       const st = server.stages.get(rekeyId) ?? { children: [], blobs: [], shares: [], identities: [] }
       for (const ch of st.children) {
         const child = server.nodes.get(ch.nodeId)!
@@ -113,7 +131,7 @@ function installServer(): void {
       }
       Object.assign(node, {
         encryptedName: c.encryptedName, slugToken: c.slugToken, wrappedContentKey: c.wrappedContentKey,
-        placementRevision: node.placementRevision + 1, epoch: c.epoch,
+        placementRevision: node.placementRevision + 1, epoch: node.epoch + 1, scopeEpoch: c.scopeEpoch, due: false,
         ...(c.wrappedMeta ? { wrappedMeta: c.wrappedMeta, metaRevision: node.metaRevision + 1 } : {}),
         ...(c.sealedDropPrivateKey ? { sealedDropPrivateKey: c.sealedDropPrivateKey } : {}),
       })
@@ -145,9 +163,9 @@ const { retryWhileRekeying, writeAtNodeEpoch } = await import('../../../shared/r
 const { openScopeById } = await import('../../../features/spaces/scopes')
 const { rekeyApi, applicationBlobsApi } = await import('../../../api/client')
 
-// --- the world, sealed at epoch 0 ------------------------------------------------------------------------------
+// --- the world, sealed at epoch 0, then rotated to 1 -----------------------------------------------------------
 const E0 = v1.randomBytes(32)
-const E1 = v1.randomBytes(32)
+const E1 = v1.randomBytes(32) // a fresh key, not derived from E_0 (ADR 0115 decision 1)
 let K: Record<'root' | 'child' | 'box', Uint8Array>
 const ids = { root: crypto.randomUUID(), child: crypto.randomUUID(), box: crypto.randomUUID(), cover: crypto.randomUUID(), link: 'A'.repeat(43), drop: 'B'.repeat(43), guest: crypto.randomUUID(), reader: crypto.randomUUID() }
 let K_SHARE: Uint8Array
@@ -155,20 +173,30 @@ let K_DROP_SHARE: Uint8Array
 let K_UP: Uint8Array
 let OLD_DROP_PRIVATE: string
 
-const addr = (nodeId: string, epoch: number, placementRevision = 0): NodeAddress => ({ scopeId: SCOPE, nodeId, epoch, placementRevision })
-function node(id: string, parentId: string | null, entryKey: Uint8Array, key: Uint8Array, name: string, extra: Partial<Row> = {}): Row {
+const addr = (nodeId: string, scopeEpoch: number, placementRevision = 0): NodeAddress => ({ scopeId: SCOPE, nodeId, scopeEpoch, placementRevision })
+/** A row whose entry is sealed under [entryKey], bound to [at] — its key's scope epoch and its placement revision (a
+ *  scope-root entry the rotation re-sealed under E_1 is at revision 1, still bound to scope epoch 0). Due, as every
+ *  node is from the rotation's commit on. */
+function node(
+  id: string, parentId: string | null, entryKey: Uint8Array, key: Uint8Array, name: string, extra: Partial<Row> = {},
+  at: { scopeEpoch: number; placementRevision: number } = { scopeEpoch: 0, placementRevision: parentId === null ? 1 : 0 },
+): Row {
   return {
-    id, parentId, kind: 'FOLDER', trashed: false, epoch: 0, placementRevision: 0, metaRevision: 0,
-    encryptedName: sealName(entryKey, addr(id, 0), name), slugToken: slugTokenFor(entryKey, parentId ?? SCOPE, 'FOLDER', name),
-    wrappedContentKey: wrapContentKey(entryKey, addr(id, 0), key), wrappedMeta: null, sealedDropPrivateKey: null,
+    id, parentId, kind: 'FOLDER', trashed: false, epoch: 0, scopeEpoch: at.scopeEpoch, due: true,
+    placementRevision: at.placementRevision, metaRevision: 0,
+    encryptedName: sealName(entryKey, addr(id, at.scopeEpoch, at.placementRevision), name),
+    slugToken: slugTokenFor(entryKey, parentId ?? SCOPE, 'FOLDER', name),
+    wrappedContentKey: wrapContentKey(entryKey, addr(id, at.scopeEpoch, at.placementRevision), key), wrappedMeta: null, sealedDropPrivateKey: null,
     shareIdentityId: null, wrappedIdentityKey: null,
     // what a member's tree listing carries besides, so `openTree` reads these rows as it reads `listNodes`'
     ...({ orderIndex: 0, createdAt: new Date(0), blockedByOperator: false } as object), ...extra,
   }
 }
+// a link's recovery copy as the rotation re-sealed it: under E_1, at epoch 1 (ADR 0115 decision 2)
 const recovery = (nodeId: string, shareId: string, kShare: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'share-key-recovery', scopeId: SCOPE, nodeId, shareId, epoch: 0 }, E0, kShare))
-const memberEpochs = (): EpochKeys => ({ current: 1, keys: new Map([[0, E0], [1, E1]]) })
+  b64std(v1.seal({ purpose: 'share-key-recovery', scopeId: SCOPE, nodeId, shareId, epoch: 1 }, E1, kShare))
+/** What a member's device holds after the rotation: E_1 alone. */
+const memberEpochs = (): ScopeKey => ({ epoch: 1, key: E1 })
 const rows = () => [...server.nodes.values()]
 const keyOf = (id: string) => contentKeyChain(SCOPE, memberEpochs(), openTree(SCOPE, memberEpochs(), rows() as unknown as Parameters<typeof openTree>[2]), id)[0]
 
@@ -176,7 +204,7 @@ beforeEach(() => {
   installServer()
   K = { root: v1.randomBytes(32), child: v1.randomBytes(32), box: v1.randomBytes(32) }
   server.nodes.clear(); server.stages.clear(); server.crashOnCommitOf = null; server.current = 1
-  server.role = 'OWNER'; server.commits = []
+  server.role = 'OWNER'; server.commits = []; server.commitBodies.clear(); server.stagedFrom.clear()
   server.epochs = memberEpochs()
   const kBlob = v1.randomBytes(32)
   const coverRef = { blobId: ids.cover, ownerId: ids.root, role: 'COVER' as const }
@@ -186,17 +214,18 @@ beforeEach(() => {
   })
   const drop = v1.generateDropKey()
   OLD_DROP_PRIVATE = b64std(v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE, nodeId: ids.box }, K.box, v1.serializeDropKey(drop)))
-  server.nodes.set(ids.root, node(ids.root, null, E0, K.root, 'root', { wrappedMeta: meta }))
+  // the scope-root entries as the rotation's commit left them: under E_1, bound to scope epoch 0 at revision 1
+  server.nodes.set(ids.root, node(ids.root, null, E1, K.root, 'root', { wrappedMeta: meta }))
   server.nodes.set(ids.child, node(ids.child, ids.root, K.root, K.child, 'child', { trashed: true }))
-  server.nodes.set(ids.box, node(ids.box, null, E0, K.box, 'box', { sealedDropPrivateKey: OLD_DROP_PRIVATE }))
+  server.nodes.set(ids.box, node(ids.box, null, E1, K.box, 'box', { sealedDropPrivateKey: OLD_DROP_PRIVATE }))
   server.dropBoxes = new Set([ids.box])
   server.blobs = [{ blobId: ids.cover, nodeId: ids.root, role: 'COVER', wrappedBlobKey: coverWrap }]
   K_SHARE = v1.randomBytes(32)
   K_DROP_SHARE = v1.randomBytes(32)
   const dropPublicSealed = b64std(v1.seal({ purpose: 'drop-public-key' }, K_DROP_SHARE, v1.serializeHybridPublic(v1.dropKeyPublic(drop))))
   server.shares = [
-    { shareId: ids.link, nodeId: ids.root, role: 'READ_WRITE', sealedShareKey: recovery(ids.root, ids.link, K_SHARE), sealedShareKeyEpoch: 0, wrap: b64std(v1.seal(SHARE_KEY, K_SHARE, K.root)), sealedDropPublicKey: null },
-    { shareId: ids.drop, nodeId: ids.box, role: 'WRITE_ONLY', sealedShareKey: recovery(ids.box, ids.drop, K_DROP_SHARE), sealedShareKeyEpoch: 0, wrap: null, sealedDropPublicKey: dropPublicSealed },
+    { shareId: ids.link, nodeId: ids.root, role: 'READ_WRITE', sealedShareKey: recovery(ids.root, ids.link, K_SHARE), sealedShareKeyEpoch: 1, wrap: b64std(v1.seal(SHARE_KEY, K_SHARE, K.root)), sealedDropPublicKey: null },
+    { shareId: ids.drop, nodeId: ids.box, role: 'WRITE_ONLY', sealedShareKey: recovery(ids.box, ids.drop, K_DROP_SHARE), sealedShareKeyEpoch: 1, wrap: null, sealedDropPublicKey: dropPublicSealed },
   ]
   const minted = mintIdentityKey(SCOPE, ids.box, ids.guest, v1.dropKeyPublic(drop))
   K_UP = minted.identityKey
@@ -210,7 +239,7 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
   // uc.spaces.rekey-after-rotation:every-node-rekeyed
   it('bite 1: after the re-key, what is added inside a node that existed before opens with no key from before', async () => {
     expect((await rekeyScope(SCOPE)).done).toBe(true)
-    expect(rows().every((n) => n.epoch === 1)).toBe(true)
+    expect(rows().every((n) => !n.due && n.epoch === 1 && n.scopeEpoch === 1)).toBe(true)
     const newRoot = keyOf(ids.root)
     // a medium added after the re-key: its K_blob wrapped under the node's key as the tree now yields it
     const kBlob = v1.randomBytes(32)
@@ -218,7 +247,7 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
     ref.wrappedBlobKey = b64std(v1.seal(blobKeyContext(SCOPE, ref), newRoot, kBlob))
     for (const old of [K.root, E0, E1]) expect(() => unwrapBlobKey(SCOPE, old, ref), 'no key from before opens it').toThrow(v1.OpenRefused)
     expect(unwrapBlobKey(SCOPE, newRoot, ref)).toEqual(kBlob) // control
-    // and the node's own key no longer opens from the old epoch's K_SC (its entry is under E_1 now)
+    // and the node's own key is replaced: its entry under E_1 now wraps the new key, not the one from before
     expect(newRoot).not.toEqual(K.root)
   })
 
@@ -249,7 +278,7 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
     const wrap = b64std(v1.seal(blobKeyContext(SCOPE, ref), K.root, v1.randomBytes(32)))
     server.blobs.push({ ...ref, ownerId: crypto.randomUUID(), nodeId: ids.root, wrappedBlobKey: wrap }) // listed with another owner
     await expect(rekeyScope(SCOPE)).rejects.toThrow(v1.OpenRefused)
-    expect(server.nodes.get(ids.root)!.epoch).toBe(0)
+    expect(server.nodes.get(ids.root)!).toMatchObject({ epoch: 0, due: true })
   })
 
   it('re-wraps every K_blob it covers without changing it, and re-seals the meta and a READ_WRITE guest\'s name', async () => {
@@ -270,23 +299,27 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
   it('bite 4: interrupted after the parent\'s commit, the tree opens as it stands and a second run finishes it', async () => {
     server.crashOnCommitOf = ids.child
     await expect(rekeyScope(SCOPE)).rejects.toThrow('the device stopped')
-    expect(server.nodes.get(ids.root)!.epoch).toBe(1)
-    expect(server.nodes.get(ids.child)!.epoch).toBe(0)
-    // the whole tree opens from the new epoch: the child's entry is under its parent's NEW key already
+    expect(server.nodes.get(ids.root)!).toMatchObject({ epoch: 1, due: false })
+    expect(server.nodes.get(ids.child)!).toMatchObject({ epoch: 0, due: true })
+    // the whole tree opens under E_1: the child's entry is under its parent's NEW key already
     const opened = openTree(SCOPE, memberEpochs(), rows() as unknown as Parameters<typeof openTree>[2])
     expect(opened.map((n) => n.name).sort()).toEqual(['box', 'child', 'root'])
     expect(keyOf(ids.child)).toEqual(K.child) // its own key still from before: it is what the second run replaces
     server.crashOnCommitOf = null
     expect((await rekeyScope(SCOPE)).done).toBe(true) // control: resumed from the rows, nothing kept between runs
-    expect(rows().every((n) => n.epoch === 1)).toBe(true)
+    expect(rows().every((n) => !n.due && n.epoch === 1)).toBe(true)
     expect(keyOf(ids.child)).not.toEqual(K.child)
   })
 
   // uc.spaces.rekey-after-rotation:links-follow-and-stay-marked
   it('bite 5: a link from before keeps showing what is added, stays re-issue-required, and a re-issue closes it', async () => {
+    const copy = server.shares.find((s) => s.shareId === ids.link)!.sealedShareKey
     await rekeyScope(SCOPE)
     const link = server.shares.find((s) => s.shareId === ids.link)!
-    expect(link.sealedShareKeyEpoch, 'the recovery copy stays at its epoch: reissueRequired holds').toBe(0)
+    // the node's re-key leaves the recovery copy as the rotation re-sealed it (under E_1, at epoch 1): the K_share in it
+    // is the one from before, which is why the link stays re-issue-required (the server's rule, by the epoch the link
+    // was minted at, ADR 0115 decision 2)
+    expect(link).toMatchObject({ sealedShareKey: copy, sealedShareKeyEpoch: 1 })
     // the old K_share (the one an excluded party can rebuild from the copy) opens the NEW root key
     expect(v1.open(SHARE_KEY, K_SHARE, fromB64std(link.wrap!))).toEqual(keyOf(ids.root))
     // a re-issue's fresh K_share: the old one opens nothing of it
@@ -318,6 +351,78 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
   })
 })
 
+describe('the frontier and the commit (ADR 0114 decisions 3-4, ADR 0115)', () => {
+  it('re-keys what is due, whatever its epoch: a node behind but not due is left, one at the current scope epoch but due is re-keyed', async () => {
+    // the drop box behind the scope (its key from scope epoch 0) but not marked due; a link's close marked `closed`, a
+    // node whose key is already from the current scope epoch (its own epoch 2 after two earlier replacements)
+    server.nodes.get(ids.box)!.due = false
+    const kClosed = v1.randomBytes(32)
+    const closed = crypto.randomUUID()
+    server.nodes.set(closed, node(closed, null, E1, kClosed, 'closed', { epoch: 2 }, { scopeEpoch: 1, placementRevision: 0 }))
+    expect((await rekeyScope(SCOPE)).done).toBe(true)
+    expect(server.commits).not.toContain(ids.box)
+    expect(server.nodes.get(ids.box)!).toMatchObject({ epoch: 0, scopeEpoch: 0, sealedDropPrivateKey: OLD_DROP_PRIVATE })
+    expect(server.commits).toContain(closed)
+    expect(server.nodes.get(closed)!).toMatchObject({ epoch: 3, scopeEpoch: 1, due: false })
+    expect(keyOf(closed)).not.toEqual(kClosed)
+    // control: the same drop box, marked due, is re-keyed
+    server.nodes.get(ids.box)!.due = true
+    expect((await rekeyScope(SCOPE)).done).toBe(true)
+    expect(server.commits.at(-1)).toBe(ids.box)
+    expect(server.nodes.get(ids.box)!).toMatchObject({ epoch: 1, scopeEpoch: 1, due: false })
+  })
+
+  it('a due node below a due parent waits for it: the parent commits first, then the child at the parent\'s new epoch', async () => {
+    await rekeyScope(SCOPE)
+    expect(server.commits.indexOf(ids.root)).toBeLessThan(server.commits.indexOf(ids.child))
+    expect(server.commitBodies.get(ids.child)).toMatchObject({ parentId: ids.root, parentEpoch: 1 })
+  })
+
+  it('the commit states the node\'s own epoch as nodeEpoch and the scope\'s current epoch as scopeEpoch', async () => {
+    // the child's key was replaced twice under scope epoch 0 (two link closes): its own epoch is 2, its scope epoch 0
+    server.nodes.get(ids.child)!.epoch = 2
+    await rekeyScope(SCOPE)
+    expect(server.commitBodies.get(ids.root)).toMatchObject({ nodeEpoch: 0, scopeEpoch: 1 })
+    expect(server.commitBodies.get(ids.root)!.parentEpoch).toBeUndefined() // a scope-root node states no parent
+    expect(server.commitBodies.get(ids.child)).toMatchObject({ nodeEpoch: 2, scopeEpoch: 1 })
+    expect(server.stagedFrom.get(ids.root), 'its staged lists name the epoch they replace').toBe(0)
+    expect(server.nodes.get(ids.child)!).toMatchObject({ epoch: 3, scopeEpoch: 1 })
+    // control: the server's gate refuses a commit whose nodeEpoch is not the stored one, so the run's green is the gate's
+    server.nodes.get(ids.box)!.due = true
+    server.nodes.get(ids.box)!.epoch = 5
+    const before = server.commits.length
+    expect((await rekeyScope(SCOPE)).done).toBe(true)
+    expect(server.commits.length).toBe(before + 1)
+    expect(server.commitBodies.get(ids.box)).toMatchObject({ nodeEpoch: 5, scopeEpoch: 1 })
+  })
+
+  it('a scope-root entry opens under the scope\'s one key bound to its old scope epoch, and is re-sealed bound to the current one', async () => {
+    const before = server.nodes.get(ids.root)!
+    // as the rotation left it: under E_1, bound to scope epoch 0 at revision 1 — under nothing else
+    expect(openContentKey(SCOPE, E1, { ...before, scopeEpoch: 0 })).toEqual(K.root)
+    expect(() => openContentKey(SCOPE, E0, before), 'the replaced key opens nothing').toThrow(v1.OpenRefused)
+    await rekeyScope(SCOPE)
+    const after = server.nodes.get(ids.root)!
+    expect(after).toMatchObject({ scopeEpoch: 1, placementRevision: 2 })
+    const newRoot = openContentKey(SCOPE, E1, after)
+    expect(newRoot).not.toEqual(K.root)
+    expect(openName(E1, addr(ids.root, 1, 2), after.encryptedName)).toBe('root')
+    // the binding moved with it: the new entry does not open as one bound to the scope epoch from before
+    expect(() => openContentKey(SCOPE, E1, { ...after, scopeEpoch: 0 })).toThrow(v1.OpenRefused)
+    expect(() => openName(E1, addr(ids.root, 0, 2), after.encryptedName)).toThrow(v1.OpenRefused)
+  })
+
+  it('a scope-root entry still under the replaced key opens under nothing the device holds: its re-key refuses, nothing of it committed', async () => {
+    // a rotation whose commit did not re-seal the drop box's entry: it is still under E_0, which no member holds
+    server.nodes.set(ids.box, node(ids.box, null, E0, K.box, 'box', { sealedDropPrivateKey: OLD_DROP_PRIVATE }))
+    await expect(rekeyScope(SCOPE)).rejects.toThrow(v1.OpenRefused)
+    expect(server.commits).not.toContain(ids.box)
+    expect(server.nodes.get(ids.box)!).toMatchObject({ epoch: 0, due: true })
+    // control: the root's entry, re-sealed under E_1, was re-keyed in the same run
+    expect(server.commits).toContain(ids.root)
+  })
+})
+
 describe('any member re-keys (ADR 0111 decision 11)', () => {
   afterEach(() => vi.useRealTimers())
 
@@ -325,13 +430,13 @@ describe('any member re-keys (ADR 0111 decision 11)', () => {
     server.role = 'MEMBER'
     const run = await rekeyScope(SCOPE)
     expect(run).toMatchObject({ done: false, committed: 2 })
-    expect([ids.root, ids.child].map((id) => server.nodes.get(id)!.epoch)).toEqual([1, 1])
-    expect(server.nodes.get(ids.box)!.epoch, 'the drop box is an owner\'s').toBe(0)
+    expect([ids.root, ids.child].map((id) => server.nodes.get(id)!.due)).toEqual([false, false])
+    expect(server.nodes.get(ids.box)!, 'the drop box is an owner\'s').toMatchObject({ epoch: 0, due: true })
     expect(server.commits).not.toContain(ids.box)
     // control: an owner's run finishes it
     server.role = 'OWNER'
     expect((await rekeyScope(SCOPE)).done).toBe(true)
-    expect(server.nodes.get(ids.box)!.epoch).toBe(1)
+    expect(server.nodes.get(ids.box)!).toMatchObject({ epoch: 1, due: false })
   })
 
   it('a member re-keys a node its uploader link gave a drop key: the drop key replaced, the guest\'s K_up re-sealed to it', async () => {
@@ -341,7 +446,7 @@ describe('any member re-keys (ADR 0111 decision 11)', () => {
     server.role = 'MEMBER'
     expect((await rekeyScope(SCOPE)).done).toBe(true)
     const memory = server.nodes.get(ids.box)!
-    expect(memory.epoch).toBe(1)
+    expect(memory).toMatchObject({ epoch: 1, due: false })
     expect(memory.sealedDropPrivateKey).not.toBe(OLD_DROP_PRIVATE)
     // everything the member's device needed it holds: the node's old key opened the old drop key, which opened K_up
     const newDrop = openDropKey(SCOPE, ids.box, keyOf(ids.box), memory.sealedDropPrivateKey!)
@@ -356,7 +461,7 @@ describe('any member re-keys (ADR 0111 decision 11)', () => {
     server.role = 'MEMBER'
     expect((await rekeyPath(SCOPE, [ids.child])).done).toBe(true)
     expect(server.commits).toEqual([ids.root, ids.child])
-    expect(server.nodes.get(ids.box)!.epoch).toBe(0)
+    expect(server.nodes.get(ids.box)!.due).toBe(true)
   })
 
   it('a path through a node only an owner re-keys is not a member\'s: refused before any commit, and the pull says so', async () => {
@@ -366,20 +471,20 @@ describe('any member re-keys (ADR 0111 decision 11)', () => {
     expect(server.commits).toEqual([])
     server.role = 'OWNER' // control: an owner's pull brings it forward
     expect(await pullRekeyPath(SCOPE, [ids.box])()).toBe(true)
-    expect(server.nodes.get(ids.box)!.epoch).toBe(1)
+    expect(server.nodes.get(ids.box)!).toMatchObject({ epoch: 1, due: false })
   })
 
   it('a member\'s refused pull still re-opens the active scope it holds behind, so the write\'s re-read after the wait opens an owner\'s re-key (inbox #670)', async () => {
     server.role = 'MEMBER'
     const active = await import('../../../app/activeSpace')
     active.activeSpace.scopeId = SCOPE
-    vi.spyOn(active, 'activeEpochKeys').mockReturnValue({ current: 0, keys: new Map() })
+    vi.spyOn(active, 'activeEpochKeys').mockReturnValue({ epoch: 0, key: new Uint8Array(32) })
     try {
       expect(await pullRekeyPath(SCOPE, [ids.box])()).toBe(false)
       expect(active.refreshActiveScope).toHaveBeenCalledOnce()
       expect(server.commits).toEqual([])
       vi.mocked(active.refreshActiveScope).mockClear()
-      vi.spyOn(active, 'activeEpochKeys').mockReturnValue({ current: 1, keys: new Map() }) // control: held at the current epoch
+      vi.spyOn(active, 'activeEpochKeys').mockReturnValue({ epoch: 1, key: new Uint8Array(32) }) // control: held at the current epoch
       expect(await pullRekeyPath(SCOPE, [ids.box])()).toBe(false)
       expect(active.refreshActiveScope).not.toHaveBeenCalled()
     } finally {
@@ -388,10 +493,10 @@ describe('any member re-keys (ADR 0111 decision 11)', () => {
     }
   })
 
-  /** The server's gate on a write under [nodeId]'s key: `409 node_rekey_pending` while it lags. */
+  /** The server's gate on a write under [nodeId]'s key: `409 node_rekey_pending` while it is due. */
   const writeUnder = (nodeId: string, attempts: number[]) => async (n: number) => {
     attempts.push(n)
-    if (server.nodes.get(nodeId)!.epoch < server.current) throw refusal(409, 'node_rekey_pending')
+    if (server.nodes.get(nodeId)!.due) throw refusal(409, 'node_rekey_pending')
     return 'written'
   }
 

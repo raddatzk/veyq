@@ -7,7 +7,7 @@
 //
 // The rail also carries the **groups** section and, below the space switcher, the **Favorites** section (core's
 // `PinnedNodes`: every pinned node of every kind, each with its kind's icon - inbox #409); no application adds to the
-// rail (ADR 0079: the shell names no application kind). It imports no key API at all — the epoch chain that opens a node's `K_node` has no business in an
+// rail (ADR 0079: the shell names no application kind). It imports no key API at all — the scope key that opens a node's `K_node` has no business in an
 // always-mounted rail, and keeping it out is a property worth preserving, not an accident of one diff.
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -65,7 +65,7 @@ const personalActive = computed(() => isPersonalScope(activeScope.value))
 // ciphertext). A group is entered via the `#@<id>` fragment; the active one is highlighted from the leading token.
 const groups = ref<GroupSpace[]>([])
 // Each group's decrypted icon as an owned object URL keyed by scopeId (uc.spaces.set-space-icon, GROUP slice) —
-// opened on-device by listMyGroups (peeling the epoch chain). Absent → the users glyph.
+// opened on-device by listMyGroups (under each group's one key). Absent → the users glyph.
 const groupIcons = useObjectUrls()
 function groupIcon(scopeId: string): string | undefined {
   return groupIcons.get(scopeId) ?? undefined
@@ -295,7 +295,7 @@ function closeMobileMenu() {
                      declared pending) or its grant was refused: the token-less home fell back to Personal
                      (activeSpace.tenantUnavailable); the grant delivery brings it current, then this clears on the next
                      entry (ADR 0024 Decision 6). A new member never waits here: it joins with its grant (ADR 0111). -->
-                <small v-if="activeSpace.tenantUnavailable" class="sidebar-tenant-awaiting">
+                <small v-if="activeSpace.tenantUnavailable" class="sidebar-tenant-awaiting" :title="t('members.awaitingCurrentKeyBody')">
                   {{ t('members.awaitingCurrentKey') }}
                 </small>
                 <small v-else-if="activeTenant.compromiseRotation" class="sidebar-tenant-awaiting">
@@ -396,9 +396,11 @@ function closeMobileMenu() {
         >
           <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" />
           <VeyqIcon v-else name="users" class="sidebar-scope-icon" />
-          <!-- An owner's mark beside the name: a compromise rotation queued here needs an owner (stalled or failed,
+          <!-- A group whose key this device does not hold yet (a rotation replaced it, ADR 0115 decision 8): nothing of it
+               opens — its name is only what this page remembers — until a member online re-grants it. Else an owner's
+               mark beside the name: a compromise rotation queued here needs an owner (stalled or failed,
                uc.spaces.complete-queued-rotation) — the member panel says which and offers what fits. -->
-          <span><strong>{{ group.name }}</strong><small v-if="group.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small></span>
+          <span><strong>{{ group.name }}</strong><small v-if="group.awaitingKey" class="sidebar-tenant-awaiting" :title="t('members.awaitingCurrentKeyBody')">{{ t('members.awaitingCurrentKey') }}</small><small v-else-if="group.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small></span>
         </a>
       </RouterLink>
       <!-- Compact strip (measured overflow): only the groups that fit, then a "＋N" chevron menu for the rest. -->
@@ -481,7 +483,7 @@ function closeMobileMenu() {
                 <TenantAvatar :name="tenant.name" :icon="tenantIcon(tenant.tenantId)" active />
                 <span>
                   <strong>{{ tenant.name }}</strong>
-                  <small v-if="activeSpace.tenantUnavailable" class="sidebar-tenant-awaiting">{{ t('members.awaitingCurrentKey') }}</small>
+                  <small v-if="activeSpace.tenantUnavailable" class="sidebar-tenant-awaiting" :title="t('members.awaitingCurrentKeyBody')">{{ t('members.awaitingCurrentKey') }}</small>
                   <small v-else-if="tenant.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small>
                   <small v-else>{{ tenant.domain }}</small>
                 </span>
@@ -523,7 +525,7 @@ function closeMobileMenu() {
               :class="{ 'mobile-nav-item-active': groupActive(group.scopeId) }"
               @click="closeMobileMenu"
             >
-              <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" /><VeyqIcon v-else name="users" class="sidebar-scope-icon" /><span><strong>{{ group.name }}</strong><small v-if="group.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small></span>
+              <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" /><VeyqIcon v-else name="users" class="sidebar-scope-icon" /><span><strong>{{ group.name }}</strong><small v-if="group.awaitingKey" class="sidebar-tenant-awaiting" :title="t('members.awaitingCurrentKeyBody')">{{ t('members.awaitingCurrentKey') }}</small><small v-else-if="group.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small></span>
             </RouterLink>
             <button v-if="canCreateGroup" class="mobile-nav-item" type="button" @click="createGroupOpen = true; closeMobileMenu()">
               <VeyqIcon name="plus" class="sidebar-scope-icon" /><span>{{ t('shell.groupCreate') }}</span>

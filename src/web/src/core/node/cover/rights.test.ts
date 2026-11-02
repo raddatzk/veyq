@@ -3,12 +3,12 @@ import { describe, it, expect } from 'vitest'
 import { coverRights } from './rights'
 import { FOLDER_KIND } from '../kind'
 import { ShareRole } from '../../../api/generated/sharing'
-import type { EpochKeys } from '../../../features/spaces/epochs'
+import type { ScopeKey } from '../../../features/spaces/epochs'
 import { guestAccessOf, memberAccessOf } from '../../../test/models'
 
 // The cover right (inbox #411): one fail-closed function for every kind. The registry is the real one `src/test/setup.ts`
 // fills (core's FOLDER, Memories' and Depot's kinds), so what a kind says about itself is what is asserted.
-const EPOCHS = {} as EpochKeys
+const EPOCHS = {} as ScopeKey
 const writer = memberAccessOf({ epochs: EPOCHS })
 const at = (kind: string | null, inIdentityFolder = false) => ({ kind, inIdentityFolder })
 

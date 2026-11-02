@@ -51,7 +51,7 @@ let heldEpoch = 2
 const GROUP_TENANT = { tenantId: 'tenant-of-g', members: new Map(), available: true, standing: vi.fn() } as unknown as TenantView
 const openGroup = () => {
   const key = GROUP_KEYS.get(heldEpoch)!.slice()
-  return openedScope({ scopeId: G, kind: ScopeKind.Group, key, epochs: { current: heldEpoch, keys: new Map([[heldEpoch, key]]) } })
+  return openedScope({ scopeId: G, kind: ScopeKind.Group, key, epochs: { epoch: heldEpoch, key } })
 }
 
 beforeEach(() => {

@@ -8,7 +8,7 @@ import { decodeHttpError } from '../../shared/httpError'
 import { commitRotation, openScopeById } from './scopes'
 import { buildMemberInvite, type InviteSecret } from './memberInvite'
 import { recipientIdentityDigest, sealGrant } from './grant'
-import { writeKey, zeroEpochKeys } from './epochs'
+import { zeroScopeKey } from './epochs'
 import { anchorIdentity, IdentityUnanchoredError, type ServedIdentity } from '../account/identityPins'
 import { identityPrivate } from '../../app/vault'
 import { tenantViewOfScope } from '../account/tenantTrust'
@@ -159,9 +159,9 @@ export async function addGroupMember(
     const priv = identityPrivate()
     try {
       if (!priv) throw new Error('vault is locked — cannot add')
-      const epoch = opened.epochs.current
+      const epoch = opened.epochs.epoch
       const grant = sealGrant(
-        writeKey(opened.epochs), { scopeId, kind: 'GROUP', epoch },
+        opened.epochs.key, { scopeId, kind: 'GROUP', epoch },
         { userId: targetUserId, identityPublicKeyB64: targetIdentityPublicKeyB64 }, priv.sign,
       )
       const addGroupMemberRequest = {
@@ -171,7 +171,7 @@ export async function addGroupMember(
     } finally {
       priv?.kemSeed.fill(0)
       priv?.sign.fill(0)
-      zeroEpochKeys(opened.epochs)
+      zeroScopeKey(opened.epochs)
     }
   })
 }

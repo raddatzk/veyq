@@ -40,7 +40,7 @@ import { createGuestIdentity, identityNameContext, type GuestIdentity } from '..
 import { guestReserve, guestWindow, shareChunkUrls, type GuestUploadTarget } from '../../core/sharing/guestBlob'
 import type { FrameOpener, OpenOpts } from '../../core/blob/transport'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
-import type { EpochKeys } from '../spaces/epochs'
+import type { ScopeKey } from '../spaces/epochs'
 import {
   gridRef,
   lightboxRef,
@@ -110,7 +110,7 @@ export async function createShare(
   scopeId: string,
   nodeId: string,
   memory: ShareRootKey,
-  epochs: EpochKeys,
+  epochs: ScopeKey,
   memoryName: string,
   role: ShareRole = ShareRole.Read,
   expiresAt: Date | null = null,
@@ -139,7 +139,7 @@ export async function createShare(
 export async function reissueShare(
   old: ReissuableShare,
   memory: ShareRootKey,
-  epochs: EpochKeys,
+  epochs: ScopeKey,
   memoryName: string,
   settings: ReissueSettings = carriedSettings(epochs, old),
 ): Promise<MintedShare> {

@@ -20,7 +20,7 @@ const SCOPE = '5c09e000-0000-4000-8000-0000000000c1'
 const U1 = 'aaaaaaaa-0000-4000-8000-000000000001'
 const U2 = 'aaaaaaaa-0000-4000-8000-000000000002'
 const U3 = 'aaaaaaaa-0000-4000-8000-000000000003'
-const SOURCE: AvatarSource = { tenantId: 'tenant-1', scopeId: SCOPE, epochs: { current: 0, keys: new Map([[0, KEY]]) } }
+const SOURCE: AvatarSource = { tenantId: 'tenant-1', scopeId: SCOPE, epochs: { epoch: 0, key: KEY } }
 // a minimal PNG header: what `sniffImage` recognises
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
 const sealedFor = (userId: string, bytes: Uint8Array = PNG) => ({ sealedAvatar: sealAvatar(KEY, { scopeId: SCOPE, userId }, bytes) })

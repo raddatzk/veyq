@@ -43,15 +43,15 @@ const keys = { root: v1.randomBytes(32), letters: v1.randomBytes(32), nested: v1
 const HASH = `#k=${b64url(K_SHARE)}`
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { blockedByOperator: false, id, parentId, kind: FOLDER_KIND, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE_ID, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+  return { blockedByOperator: false, id, parentId, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 const head: PublicShareHead = {
   shareId: SHARE_ID, kShare: K_SHARE, scopeId: SCOPE_ID, name: 'Familie', noteByLocale: {}, role: ShareRole.Read, rootKind: FOLDER_KIND,
   share: {
     role: ShareRole.Read, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
     nodes: [
-      { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+      { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
       child(LETTERS, ROOT, keys.root, keys.letters, 'Briefe'),
       child(NESTED, LETTERS, keys.letters, keys.nested, 'Feldpost'),
     ],

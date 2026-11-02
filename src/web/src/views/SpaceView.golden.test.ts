@@ -32,7 +32,7 @@ vi.mock('../app/activeSpace', async () => {
       deletedAt: null, purgeAfter: null, trustRefusal: null,
     }),
     enterScope: vi.fn(async () => {}),
-    activeEpochKeys: () => ({ current: 0, keys: new Map([[0, fixed.scopeKey]]) }),
+    activeEpochKeys: () => ({ epoch: 0, key: fixed.scopeKey }),
   }
 })
 vi.mock('../core/favorites/favoritesStore', () => ({
@@ -102,7 +102,7 @@ function nodeOf(label: string, kind: NodeKind, parentLabel: string | null, order
   const id = uid(label)
   const key = keyOf(label)
   return treeNode({
-    id, kind, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex, epoch: 0,
+    id, kind, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex, epoch: 0, scopeEpoch: 0,
     wrappedContentKey: wrapFor(id, parentLabel === null ? fixed.scopeKey : keyOf(parentLabel), key),
     wrappedMeta: meta ? sealNodeMeta(key, { scopeId: fixed.scopeId, nodeId: id }, { v: 1, ...meta }) : null,
     metaRevision: 0, placementRevision: 0,

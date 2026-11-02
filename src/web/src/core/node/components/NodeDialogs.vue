@@ -86,6 +86,7 @@ async function guestCreate(name: string) {
     :parent-id="createParent?.id ?? null"
     :parent-key="dialogs.createParentKey.value"
     :parent-epoch="createParent?.epoch ?? null"
+    :parent-scope-epoch="createParent?.scopeEpoch ?? null"
     :node="s.name.value.mode === 'rename' ? s.name.value.node : null"
     @done="nameDone"
     @close="s.name.value = null"
@@ -99,6 +100,7 @@ async function guestCreate(name: string) {
     :parent-id="s.create.value.parent?.id ?? null"
     :parent-key="dialogs.createParentKey.value"
     :parent-epoch="s.create.value.parent?.epoch ?? null"
+    :parent-scope-epoch="s.create.value.parent?.scopeEpoch ?? null"
     @done="reload"
     @close="s.create.value = null"
   />

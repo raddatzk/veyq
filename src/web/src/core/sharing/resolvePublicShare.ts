@@ -83,6 +83,12 @@ export function shareRootEpoch(share: Pick<PublicShare, 'rootEpoch'>): number {
   return share.rootEpoch ?? 0
 }
 
+/** The shared root's `scopeEpoch` (ADR 0114 decision 3): the scope epoch a guest mints a new key under — the scope's
+ *  current one while the root is not due, which a guest has no other way to know. 0 when unserved (a locked response). */
+export function shareRootScopeEpoch(share: Pick<PublicShare, 'rootScopeEpoch'>): number {
+  return share.rootScopeEpoch ?? 0
+}
+
 /** What the platform half of a resolve yields: the unlocked server response (the application opens its own seals from
  *  it), `K_share`, and the kind-independent fields already opened. `scopeId` is the shared object's scope — every seal
  *  the application opens is bound to it (ADR 0072). */

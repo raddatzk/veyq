@@ -9,7 +9,7 @@
 // SCOPE_ROTATION job (A can't rotate G — A holds no key there). A/removed-C cannot claim it; B (the remaining
 // owner, the only one the job is offered to) claims it via runScopeRotationWorker, mints E_1 + re-grants the survivors
 // on-device, and completes — on its own commit, the only one the completion accepts.
-// Asserts the rotation genuinely happened on the live backend: epoch 0 → 1, a real chain-link at epoch 1, B
+// Asserts the rotation genuinely happened on the live backend: epoch 0 → 1, a real succession statement E_0 → E_1, B
 // re-granted at epoch 1, C gone, and the job cleared. The pure ex-member lockout crypto (E_0 can't derive E_1)
 // is unit-tested in scopes.test.ts / epochs.test.ts; this proves the whole mechanism is wired live. Its last leg
 // (cr-secure-the-account, inbox #556) has B secure their account and abandon the ceremony right after the publish: a fresh
@@ -29,7 +29,8 @@ import { listRotationStates } from '../account/rotation/finishRotation'
 import { login } from '../account/login/login'
 import { unlockMasterKey } from '../account/unlock/unlock'
 import { clearVault } from '../../app/vault'
-import { createGroup, isStaleEpoch, listMyScopes, listScopeEpochs, openScopeById, rotateGroupForRemoval } from '../spaces/scopes'
+import { createGroup, isStaleEpoch, listMyScopes, listScopeSuccessions, openScopeById, rotateGroupForRemoval } from '../spaces/scopes'
+import * as v1 from '@veyq/crypto/v1'
 import { listTree } from '../../core/node/tree'
 import { createMemory } from '../memories/memoryNodes'
 import { become, birthInstance, mkActor, onboardMember, type Actor } from '../../test/e2eBootstrap'
@@ -97,6 +98,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     await addToGroup(gG, C)
     const openedB = await openScopeById(gG)
     expect(openedB, 'B opens its own group').toBeTruthy()
+    // E_0's succession public key, derived from the key B holds — what a statement for epoch 1 must verify under.
+    const e0Succession = v1.successionKeyPair(openedB!.epochs.key).publicKey
     expect((await listMyScopes()).find((s) => s.id === gG)?.currentEpoch, 'G starts at epoch 0').toBe(0)
     await become(C)
     expect(await openScopeById(gG), 'C is a co-holder before removal: it opens G with the grant the add carried').toBeTruthy()
@@ -117,12 +120,18 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     const rotated = await runScopeRotationWorker()
     expect(rotated, 'B completed exactly one queued rotation').toBe(1)
 
-    // The rotation genuinely advanced the epoch on the live backend, re-granted the survivor, and left a chain-link.
+    // The rotation genuinely advanced the epoch on the live backend, re-granted the survivor, and stored a succession
+    // statement (ADR 0115 decision 5): E_1's succession key, signed by E_0's — and nothing that opens either key.
     const gAfter = (await listMyScopes()).find((s) => s.id === gG)
     expect(gAfter?.currentEpoch, 'G advanced to epoch 1').toBe(1)
     expect(gAfter?.grantedEpoch, 'B was re-granted at the new epoch').toBe(1)
-    const links = await listScopeEpochs(gG)
-    expect(links.some((l) => l.epoch === 1 && l.wrappedPrev.length > 0), 'a real E_1←E_0 chain-link exists').toBe(true)
+    const e1 = (await openScopeById(gG))!.epochs
+    expect(e1.epoch).toBe(1)
+    const statements = await listScopeSuccessions(gG)
+    expect(v1.verifySuccessionPath({
+      scopeId: gG, heldEpoch: 0, heldPublicKey: e0Succession, statements,
+      targetEpoch: 1, targetPublicKey: v1.successionKeyPair(e1.key).publicKey,
+    }), 'a real E_0 → E_1 succession statement exists').toBe(true)
     const after = await listScopeMembers(gG)
     expect(after.some((x) => x.userId === C.userId), 'the ex-member is gone from G').toBe(false)
 
@@ -142,7 +151,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     await addToGroup(gG, D)
 
     // D must be recorded at the CURRENT epoch (not 0) and therefore read the post-rotation memo. Before cr-0093, a
-    // grant's write left grantedEpoch=0, so D's client peeled E_1 as E_0 and listTree would fail on the epoch-1 node.
+    // grant's write left grantedEpoch=0, so D's client took E_1 for E_0 and listTree would fail on the epoch-1 node.
     await become(D)
     expect((await listMyScopes()).find((s) => s.id === gG)?.grantedEpoch, 'D granted at the current epoch').toBe(1)
     const openedD = await openScopeById(gG)
@@ -167,7 +176,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     expect(await isStaleEpoch(stale), 'a create tagged with epoch 1 after the rotation to 2 is 409 stale_epoch').toBe(true)
     // Control on the same predicate: re-opened at the current epoch, the same write lands.
     const current = await openScopeById(gG)
-    expect(current!.epochs.current).toBe(2)
+    expect(current!.epochs.epoch).toBe(2)
     await createMemory(gG, current!.epochs, 'Sealed under E_2')
 
     // --- cr-secure-the-account (inbox #556): securing the account loses no space, even abandoned after the publish ---
@@ -208,7 +217,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     // E reads it: B's new key signed E's grant, and E accepts it because B's chain reaches it from the head E pinned.
     await become(E)
     const openedE = await openScopeById(gG)
-    expect(openedE?.epochs.current, 'E holds the epoch B committed').toBe(3)
+    expect(openedE?.epochs.epoch, 'E holds the epoch B committed').toBe(3)
     expect((await listTree(gG, openedE!.epochs)).some((n) => n.name === 'Posted after securing'), 'E reads what B posted').toBe(true)
   }, 360_000)
 })

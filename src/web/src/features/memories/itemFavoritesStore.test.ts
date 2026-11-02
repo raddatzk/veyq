@@ -15,8 +15,11 @@ import {
   clearItemFavorites,
 } from './itemFavoritesStore'
 import { loadItemFavorites, saveItemFavorites } from './itemFavorites'
+import type { ScopeKey } from '../spaces/epochs'
 
-const KEY = new Uint8Array(32)
+// The scope's one key at the epoch a write states (ADR 0115 decision 3): the read opens under its bytes, the write is
+// handed the whole of it.
+const KEY: ScopeKey = { epoch: 2, key: new Uint8Array(32).fill(3) }
 
 /** Two co-members and the caller, as the read hands them over: `own` is the only identity there is. */
 const threeMembers = [
@@ -40,6 +43,7 @@ describe('itemFavoritesStore', () => {
     vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
     await loadItemFavoritesFor('s', 'n', KEY)
 
+    expect(loadItemFavorites).toHaveBeenCalledWith('s', 'n', KEY.key) // the read opens under the key's bytes
     expect(markCount('b')).toBe(3) // all three
     expect(markCount('a')).toBe(1) // the caller alone
     expect(markCount('c')).toBe(1) // one co-member alone

@@ -1,15 +1,17 @@
 // The one editor model for a member's real name AND profile picture (ADR 0084 decision 6): both live sealed under `K_tenant`
 // and both are written by their owner only, so ONE composable serves the two places that edit them - Settings > Your profile
 // (`ProfilePanel`) and the member's OWN profile page (`PersonProfile`, shown only when the page is theirs). It holds the name
-// fields and the picture choice (kept, replaced or removed) as a draft; the host's Save seals the name (`sealedName`) and
-// writes the picture (`savePicture`). `K_tenant` stays in a closure, never in reactivity, and is zeroed when the editor goes away
+// fields and the picture choice (kept, replaced or removed) as a draft; the host's Save writes the name (`saveName`) and
+// the picture (`savePicture`), each stating the tenant epoch it is sealed under and sealed once more under the re-opened
+// key when a rotation answered `409 stale_epoch` (ADR 0115 decision 3). `K_tenant` stays in a closure, never in reactivity, and is zeroed when the editor goes away
 // (its effect scope ends) or a new load replaces it (inbox #574).
 import { computed, getCurrentScope, onScopeDispose, reactive, ref } from 'vue'
 import {
-  getMyProfile, openOwnNameKey, zeroOwnNameKey, sealName, unsealNameUnderEpochs, sealAvatar, setMyAvatar, clearMyAvatar,
+  getMyProfile, openOwnNameKey, zeroOwnNameKey, sealName, openMemberName, sealAvatar, setMyAvatar, clearMyAvatar,
   type MemberProfile, type OwnNameKey,
 } from './profile'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
+import { isStaleEpoch } from '../../spaces/scopes'
 import { avatarUrlOf, loadTenantPeople, refreshPeopleDirectory } from '../../../core/people/directory'
 
 type Draft = { kind: 'keep' } | { kind: 'set'; bytes: Uint8Array } | { kind: 'clear' }
@@ -63,8 +65,8 @@ export function useNameAndPicture() {
     meId.value = ownKey?.address.userId ?? ''
     serverHasPicture.value = p.avatarRevision > 0
     if (ownKey) {
-      // Under the epoch it was saved under (any held one): a name saved before a tenant rotation still fills the fields.
-      const name = unsealNameUnderEpochs(ownKey.epochs, ownKey.address, p.sealedName)?.name
+      // Under the tenant's one key: every rotation re-seals every profile under the new one (ADR 0115 decision 2).
+      const name = openMemberName(ownKey.epochs, ownKey.address, p.sealedName)
       firstName.value = name?.firstName ?? ''
       lastName.value = name?.lastName ?? ''
       // Warm the directory so the member's own picture is in the cache (it fetches only a version it has not seen).
@@ -73,9 +75,42 @@ export function useNameAndPicture() {
     return p
   }
 
-  /** The name sealed as the fields hold it (an EMPTY name included - that is how a member removes it), or undefined without the key. */
-  function sealedName(): string | undefined {
-    return ownKey ? sealName(ownKey.key, ownKey.address, { firstName: firstName.value, lastName: lastName.value }) : undefined
+  /** The name sealed as the fields hold it (an EMPTY name included - that is how a member removes it) with the tenant epoch
+   *  it is sealed under, or undefined without the key. */
+  function sealedName(): { sealedName: string; epoch: number } | undefined {
+    return ownKey
+      ? { sealedName: sealName(ownKey.key, ownKey.address, { firstName: firstName.value, lastName: lastName.value }), epoch: ownKey.epochs.epoch }
+      : undefined
+  }
+
+  /** Re-open the tenant key after a `409 stale_epoch` — a rotation replaced it since the editor opened (ADR 0115
+   *  decision 3). False when there is no tenant key any more. */
+  async function reopen(): Promise<boolean> {
+    const opened = await openOwnNameKey()
+    if (disposed) {
+      if (opened) zeroOwnNameKey(opened)
+      return false
+    }
+    release()
+    ownKey = opened
+    hasKey.value = ownKey !== null
+    return ownKey !== null
+  }
+
+  /** Run `write` with {@link sealedName}; on `409 stale_epoch` re-open the key, seal again and run it once more. */
+  async function staleOnce<T>(write: () => Promise<T>): Promise<T> {
+    try {
+      return await write()
+    } catch (e) {
+      if (!(await isStaleEpoch(e)) || !(await reopen())) throw e
+      return write()
+    }
+  }
+
+  /** Write the name through `send` (the host's profile update, which may carry the username and the consent too): sealed
+   *  as {@link sealedName} gives it, once more under the re-opened key after a `stale_epoch`. */
+  function saveName<T>(send: (name: { sealedName: string; epoch: number } | undefined) => Promise<T>): Promise<T> {
+    return staleOnce(() => send(sealedName()))
   }
 
   function choose(bytes: Uint8Array) {
@@ -102,7 +137,10 @@ export function useNameAndPicture() {
     if (d.kind === 'keep') return
     if (d.kind === 'set') {
       if (!ownKey) throw new Error('no_tenant_key')
-      await setMyAvatar(sealAvatar(ownKey.key, ownKey.address, d.bytes))
+      await staleOnce(() => {
+        if (!ownKey) throw new Error('no_tenant_key')
+        return setMyAvatar(sealAvatar(ownKey.key, ownKey.address, d.bytes), ownKey.epochs.epoch)
+      })
     } else {
       await clearMyAvatar()
     }
@@ -113,7 +151,7 @@ export function useNameAndPicture() {
 
   return reactive({
     firstName, lastName, hasKey, meId, hasPicture, pictureUrl, pictureChanged, dialogOpen, draftKind: computed(() => draft.value.kind),
-    load, sealedName, choose, remove, discard, savePicture,
+    load, sealedName, saveName, choose, remove, discard, savePicture,
   })
 }
 

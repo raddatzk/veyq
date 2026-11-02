@@ -51,10 +51,10 @@ acceptanceCriteria:
       backend:
         integration: [ScopesSliceTest.listEpochsSeparatesTheMembershipBoundaryFromTheKeyHolderCheck, ScopesSliceTest.addGroupMemberByANonMemberOfTheGroupIs404, OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate]
   - id: remove-rotates-forward
-    text: Removal rotates the scope content key forward into a new epoch, re-granted only to the remaining members; new content seals under it, so the removed member reads pre-removal content but never post-removal content (even against a malicious operator). The client mints the epoch, chain-links the old one, and re-grants the survivors (cr-0089).
+    text: Removal rotates the scope content key forward into a new epoch, re-granted only to the remaining members; new content seals under it, so the removed member never reads post-removal content (even against a malicious operator). The client mints the epoch, which replaces the old key (no chain, ADR 0115 decision 1), re-seals every scope-level row under it, proves it by a succession statement, and re-grants the survivors.
     coverage:
       backend: { integration: [ScopesSliceTest.rotateBumpsEpochAndReGrantsRemaining] }
-      web: { unit: [src/features/spaces/scopes.test.ts, src/features/spaces/epochs.test.ts] }
+      web: { unit: [src/features/spaces/scopes.test.ts, src/features/spaces/scopeRekey.test.ts, src/features/spaces/epochs.replaced.probe.test.ts] }
   - id: queued-rotation-backstop
     text: >
       A2 (the remover holds no key): when a tenant owner's removal cuts a co-shared group they do not hold

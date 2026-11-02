@@ -3,7 +3,7 @@
 // failure once. What the job does, in this order — three steps, and nothing about the file written beside them:
 //
 //  1. the NODE: for a new file, core's `createContentNode` births a `FILE` node — a fresh random node key wrapped under
-//     the parent's key (the folder's, `E_current` at the scope root; ADR 0080 Decision 1), its name sealed and its slug
+//     the parent's key (the folder's, the scope key at the scope root; ADR 0080 Decision 1), its name sealed and its slug
 //     token derived under that same key by the kind's own folding (`fileNameSlug`, `registry.tokenInputFor`, inbox #350). A
 //     replace targets the existing node the member confirmed, with its own key.
 //  2. the BLOB: core's `planBlob` under the file node's OWN key (role and owner `FILE_CONTENT` / the node id, so the
@@ -27,8 +27,7 @@
 // attached it after all), and best effort: a node the trash call misses stays, and the section offers an upload into
 // it. A replace never trashes anything — the node was there before the job.
 import { createContentNode, deleteNode, type NodeParent } from '../../core/node/tree'
-import { assertNodeKeyAtFloor } from '../../core/node/rekey/floor'
-import { heldScopeEpochs, memberCreateOptions, rereadMemberKey } from '../../core/node/rereadNode'
+import { assertActiveScopeFloor, memberCreateOptions, rereadMemberKey } from '../../core/node/rereadNode'
 import { pullRekeyPath } from '../../core/node/rekey/rekeyScope'
 import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import { planBlob, reserveAndPump, authedReserve, authedWindow, throwIfAborted } from '../../core/blob/transport'
@@ -36,7 +35,7 @@ import type { UploadBatch, UploadJob, UploadJobContext } from '../../core/blob/q
 import type { BlobMeta } from '../../core/blob/meta'
 import type { PayloadFile } from '../../core/export/hooks'
 import { expectMintedId } from '../../core/node/mintedId'
-import type { EpochKeys } from '../spaces/epochs'
+import type { ScopeKey } from '../spaces/epochs'
 import { withRefresh } from '../../app/sessionRefresh'
 import { HttpStatus, decodeHttpError, httpStatus } from '../../shared/httpError'
 import type { FileBlobRef } from '../../api/generated/depot'
@@ -78,7 +77,7 @@ export type FileReplace = { nodeId: string; nodeKey: Uint8Array; nodeEpoch: numb
  *  new file is created under (`null` = the scope root) or the file it replaces. */
 export type FileUploadTarget = {
   scopeId: string
-  epochs: EpochKeys
+  epochs: ScopeKey
   parent: NodeParent
   replace?: FileReplace
 }
@@ -182,8 +181,9 @@ export function fileUploadJob<F extends PayloadFile = File>(target: FileUploadTa
           at.nodeEpoch = now.epoch
         }
         // the device floor before the content is sealed under the file's key (ADR 0109 point 6, layer 2), against the
-        // epochs this device holds now (a pull may have re-opened the scope since the job began)
-        assertNodeKeyAtFloor({ id: at.nodeId, epoch: at.nodeEpoch }, heldScopeEpochs(scopeId) ?? target.epochs)
+        // key this device holds now (a pull may have re-opened the scope since the job began) and the scope epoch the
+        // tree says the file's key was minted under (ADR 0115 decision 6)
+        assertActiveScopeFloor(scopeId, { id: at.nodeId, epoch: at.nodeEpoch })
         const plan = planBlob(scopeId, { ownerId: at.nodeId, role: FILE_CONTENT_ROLE }, at.nodeKey, file, fileBlobMeta(file))
         const [uploadId] = await reserveAndPump([plan], (d) => authedReserve(scopeId, d), authedWindow(scopeId), onProgress, signal)
         throwIfAborted(signal)

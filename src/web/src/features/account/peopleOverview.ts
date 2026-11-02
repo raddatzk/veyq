@@ -20,7 +20,7 @@
 // time.
 import type { ScopeMember } from '../../api/generated/scopes'
 import { openScopeById } from '../spaces/scopes'
-import { zeroEpochKeys } from '../spaces/epochs'
+import { zeroScopeKey } from '../spaces/epochs'
 import { anchorIdentity, fetchKeyChain, getPin, PinPass, type Pin } from './identityPins'
 import { countVerifications, listAllVerifications, loadTenantView, NEW_FOR_MS, type TenantView } from './tenantTrust'
 import { TrustStateRefused } from './trustMarks'
@@ -66,7 +66,7 @@ async function countedFor(view: TenantView, anchored: readonly ScopeMember[]): P
   } catch {
     return new Map()
   } finally {
-    zeroEpochKeys(opened.epochs)
+    zeroScopeKey(opened.epochs)
   }
 }
 

@@ -81,7 +81,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
 
     // --- Memories: a Memory with media, a chapter with media, then its date, place and cover ------------------------
     const memory = await createMemory(scopeId, epochs, MEMORY_NAME)
-    const birthEpoch = epochs.current // a node is born at its scope's current epoch (ADR 0024); nothing re-keys it here
+    // A node is born at its own epoch 0, its key minted under the scope's current epoch (ADR 0114 decisions 3-4); nothing
+    // re-keys it here.
+    const birth = { epoch: 0, scopeEpoch: epochs.epoch }
+    const birthEpoch = birth.epoch
     const memoryMedia: SealedMedia[] = []
     for (const salt of [1, 2]) {
       const data = bytesOf(200 * 1024 + salt, salt)
@@ -89,7 +92,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
       const { mediaId } = await addMedia(scopeId, memory.nodeId, memory.memoryKey, { blob: new Blob([data as BlobPart]), mediaType: '' }, undefined, { nodeEpoch: birthEpoch })
       memoryMedia.push({ mediaId, ...(await sealedBytes(data)) })
     }
-    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId, birthEpoch)
+    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId, birth)
     const chapterData = bytesOf(150 * 1024, 3)
     const { mediaId: chapterMediaId } = await addMedia(scopeId, chapter.nodeId, chapter.chapterKey, { blob: new Blob([chapterData as BlobPart]), mediaType: '' }, undefined, { nodeEpoch: birthEpoch })
     const chapterMedia: SealedMedia[] = [{ mediaId: chapterMediaId, ...(await sealedBytes(chapterData)) }]
@@ -105,12 +108,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('upgrade proof - seed', () => {
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
     const memberFiles: SealedFile[] = []
     for (const [name, data] of [[FILE_A, bytesOf(CHUNK_SIZE + 1234, 4)], [FILE_B, bytesOf(4321, 5)]] as const) {
-      const { nodeId } = await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey, epoch: birthEpoch } }, fileOf(data, name)).run(ctx())
+      const { nodeId } = await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey, ...birth } }, fileOf(data, name)).run(ctx())
       memberFiles.push({ nodeId, name, type: MIME, modifiedAt: MODIFIED_AT, ...(await sealedBytes(data)) })
     }
 
     // --- Depot: a drop box in that folder, and a guest's file in the guest's own folder -----------------------------
-    const boxId = await createDropBox(scopeId, epochs, { id: folderId, key: folderKey, epoch: birthEpoch }, BOX_NAME)
+    const boxId = await createDropBox(scopeId, epochs, { id: folderId, key: folderKey, ...birth }, BOX_NAME)
     const boxKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), boxId)!
     const link = await mintDropBoxLink(scopeId, boxId, { key: boxKey, epoch: birthEpoch }, epochs, BOX_NAME)
     const head = await resolvePublicShare(link.shareId, b64url(link.kShare))

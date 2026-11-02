@@ -4,7 +4,9 @@
 //   - naming: `createShareIdentity` carries a `K_up` wrap that the drop box's member opens through the drop private key
 //     (sealed under the drop box's key), and the name sealed under that `K_up`; the session keeps `K_up`;
 //   - the folder: `ensureShareDropFolder` sends a name and a content key wrap that open under `K_up` and under nothing
-//     the drop box holds; the guest opens the STORED wrap the server answers (a second call's), not the one it sent;
+//     the drop box holds, minted under the scope epoch the link serves for its root (`rootScopeEpoch`, ADR 0114
+//     decision 3) and bound to it; the guest opens the STORED wrap the server answers (a second call's), not the one it
+//     sent, at the stored folder's own epoch and scope epoch;
 //   - the upload: the guest job creates the file under its folder (`parentId`) with the file's key wrapped under the
 //     folder's key `K_F` — the member's chain drop key → K_up → K_F → the file key → K_blob, under which the file's
 //     type, name and modified time ride the declare (`wrappedBlobMeta`, inbox #397), never in plaintext.
@@ -30,7 +32,13 @@ const STORED = '5c09e000-0000-4000-8000-0000000000d1'
 const boxKey = v1.randomBytes(32)
 const kShare = v1.randomBytes(32)
 const drop = dropKeysForShare(SCOPE, BOX, boxKey, kShare, null)
-const head = { shareId: SHARE, scopeId: SCOPE, kShare, name: 'Einsendungen', share: { nodeId: BOX, sealedDropPublicKey: drop.sealedDropPublicKey } } as unknown as PublicShareHead
+// a rotated scope (epoch 2) whose drop box was re-keyed once: what a guest's new folder is minted under is the ROOT's
+// scope epoch (2), never its own epoch (1)
+const ROOT_SCOPE_EPOCH = 2
+const head = {
+  shareId: SHARE, scopeId: SCOPE, kShare, name: 'Einsendungen',
+  share: { nodeId: BOX, sealedDropPublicKey: drop.sealedDropPublicKey, rootEpoch: 1, rootScopeEpoch: ROOT_SCOPE_EPOCH },
+} as unknown as PublicShareHead
 
 type Req = { method: string; path: string; json?: Record<string, unknown> }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -41,7 +49,7 @@ beforeAll(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 /** A fake server: identities, the drop folder (answering `stored` once one exists), guest creates and the guest upload. */
-function fakeServer(stored?: () => { nodeId: string; wrappedContentKey: string }) {
+function fakeServer(stored?: () => { nodeId: string; epoch: number; scopeEpoch: number; wrappedContentKey: string }) {
   const requests: Req[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://api.test')
@@ -53,7 +61,10 @@ function fakeServer(stored?: () => { nodeId: string; wrappedContentKey: string }
     if (path === `/api/shares/${SHARE}/identities`) return json({ identityId: body!.identityId, contributorToken: 'tok-drop' }, 201)
     if (path === `/api/shares/${SHARE}/files/drop-folder`) {
       const s = stored?.()
-      return json({ nodeId: s?.nodeId ?? body!.nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: s?.wrappedContentKey ?? body!.wrappedContentKey, created: !s })
+      return json({
+        nodeId: s?.nodeId ?? body!.nodeId, epoch: s?.epoch ?? 0, scopeEpoch: s?.scopeEpoch ?? body!.scopeEpoch, placementRevision: 0,
+        wrappedContentKey: s?.wrappedContentKey ?? body!.wrappedContentKey, created: !s,
+      })
     }
     if (path === `/api/shares/${SHARE}/nodes`) return json({ nodeId: body!.nodeId }, 201)
     if (path === `/api/shares/${SHARE}/blob-uploads`) {
@@ -69,7 +80,7 @@ function fakeServer(stored?: () => { nodeId: string; wrappedContentKey: string }
   return requests
 }
 
-const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 })
+const at = (nodeId: string, scopeEpoch = ROOT_SCOPE_EPOCH) => ({ scopeId: SCOPE, nodeId, scopeEpoch, placementRevision: 0 })
 
 describe('a drop-box guest on the wire', () => {
   it('names itself with a K_up the member opens through the drop key, and keeps it on the device', async () => {
@@ -78,6 +89,8 @@ describe('a drop-box guest on the wire', () => {
     const sent = requests.find((r) => r.path.endsWith('/identities'))!.json!
     const kUp = openIdentityKey(SCOPE, BOX, openDropKey(SCOPE, BOX, boxKey, drop.sealedDropPrivateKey!), String(sent.identityId), String(sent.wrappedIdentityKey))
     expect(b64std(kUp)).toBe(session.identityKey)
+    // K_up is sealed to the drop box's drop key, which its re-key replaces: the root's OWN epoch as served (ADR 0109 point 6)
+    expect(sent.nodeEpoch).toBe(1)
     expect(new TextDecoder().decode(v1.openField(identityNameContext(SCOPE, SHARE, String(sent.identityId)), kUp, fromB64std(String(sent.sealedDisplayName))))).toBe('Adelgunde')
     // the name stays on the device for the page ("Sending as …", the folder's name at the first file) — never on the wire
     expect(session.displayName).toBe('Adelgunde')
@@ -95,25 +108,37 @@ describe('a drop-box guest on the wire', () => {
     const kUp = fromB64std(session.identityKey)
     // the server already holds this identity's folder: the guest opens THAT wrap, not the one it sent
     const storedKey = v1.randomBytes(32)
-    const stored = { nodeId: STORED, wrappedContentKey: wrapContentKey(kUp, at(STORED), storedKey) }
+    // the stored folder was re-keyed once: its own epoch 1, its key minted under the scope's epoch 2
+    const stored = { nodeId: STORED, epoch: 1, scopeEpoch: ROOT_SCOPE_EPOCH, wrappedContentKey: wrapContentKey(kUp, at(STORED), storedKey) }
     const requests = fakeServer(() => stored)
     const folder = await ensureDropFolder(head, session, 'Adelgunde')
-    expect(folder).toMatchObject({ nodeId: STORED, created: false })
+    expect(folder).toMatchObject({ nodeId: STORED, created: false, epoch: 1, scopeEpoch: ROOT_SCOPE_EPOCH })
     expect(folder.key).toEqual(storedKey)
     const sent = requests.find((r) => r.path.endsWith('/drop-folder'))!.json!
+    // minted under the scope epoch the link serves for its root (`rootScopeEpoch`), not the root's own epoch
+    expect(sent.scopeEpoch).toBe(ROOT_SCOPE_EPOCH)
+    expect(sent).not.toHaveProperty('epoch')
     const sentAt = at(String(sent.nodeId))
     expect(openName(kUp, sentAt, String(sent.encryptedName))).toBe('Adelgunde')
     expect(() => openName(boxKey, sentAt, String(sent.encryptedName))).toThrow() // never under the drop box's key
-    expect(openContentKey(SCOPE, kUp, { id: sentAt.nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: String(sent.wrappedContentKey) })).toHaveLength(32)
+    expect(openContentKey(SCOPE, kUp, { id: sentAt.nodeId, scopeEpoch: ROOT_SCOPE_EPOCH, placementRevision: 0, wrappedContentKey: String(sent.wrappedContentKey) })).toHaveLength(32)
+    // the seals bind that scope epoch: bound to another (the root's own epoch, or 0) neither opens
+    for (const other of [0, 1]) {
+      expect(() => openName(kUp, at(sentAt.nodeId, other), String(sent.encryptedName))).toThrow()
+      expect(() => openContentKey(SCOPE, kUp, { id: sentAt.nodeId, scopeEpoch: other, placementRevision: 0, wrappedContentKey: String(sent.wrappedContentKey) })).toThrow()
+    }
     expect(sent.contributorToken).toBe('tok-drop')
 
     const file = new File([new Uint8Array(300).map((_, i) => i % 251)], 'Bericht.pdf', { type: 'application/pdf' })
     const result = await guestFileUploadJob({ ctx: dropGuestContext(head, session, folder), parentId: folder.nodeId }, file)
       .run({ onProgress: () => {}, signal: new AbortController().signal })
     const create = requests.find((r) => r.path === `/api/shares/${SHARE}/nodes`)!.json!
-    expect(create).toMatchObject({ parentId: STORED, kind: FILE_KIND, nodeId: result.nodeId, epoch: 0 })
+    // the file's key is minted under its folder's scope epoch, sealed under the folder's key at its own epoch
+    expect(create).toMatchObject({ parentId: STORED, kind: FILE_KIND, nodeId: result.nodeId, scopeEpoch: ROOT_SCOPE_EPOCH, parentEpoch: 1 })
+    expect(create).not.toHaveProperty('epoch')
     expect(openName(storedKey, at(result.nodeId), String(create.encryptedName))).toBe('Bericht.pdf')
-    const fileKey = openContentKey(SCOPE, storedKey, { id: result.nodeId, epoch: 0, placementRevision: 0, wrappedContentKey: String(create.wrappedContentKey) })
+    expect(() => openName(storedKey, at(result.nodeId, 0), String(create.encryptedName))).toThrow()
+    const fileKey = openContentKey(SCOPE, storedKey, { id: result.nodeId, scopeEpoch: ROOT_SCOPE_EPOCH, placementRevision: 0, wrappedContentKey: String(create.wrappedContentKey) })
     expect(fileKey).toHaveLength(32)
     expect(requests.find((r) => r.path.endsWith('/blob-uploads'))!.json!.nodeId).toBe(result.nodeId)
     // the file's meta rides the declare, sealed under the blob's own K_blob — down the chain the member opens (inbox #397)

@@ -36,7 +36,7 @@ import { FOLDER_KIND } from '../../../core/node/kind'
 import { wrapContentKey, type TreeNode } from '../../../core/node/tree'
 import { identityNameContext } from '../../../core/sharing/guestIdentity'
 import { epochsOf } from '../../spaces/epochsTestUtil'
-import type { EpochKeys } from '../../spaces/epochs'
+import type { ScopeKey } from '../../spaces/epochs'
 import { realI18n, t } from '../../../test/i18n'
 import { stubApi } from '../../../test/apiMock'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
@@ -54,7 +54,7 @@ const anna: Person = { userId: ANNA, username: 'anna', realName: 'Anna Meyer', d
 
 let router: Router
 /** A tree whose keys really open (inbox #431): `Docs` under the epoch key, `Report.txt` under `Docs`' key. */
-type World = { nodes: TreeNode[]; node: TreeNode; epochs: EpochKeys }
+type World = { nodes: TreeNode[]; node: TreeNode; epochs: ScopeKey }
 async function mountDetail(
   uploaderKey: string | null | undefined, fileBlob: typeof BLOB | null = BLOB,
   o: { uploaderName?: FileUploaderName; world?: World } = {},
@@ -145,7 +145,7 @@ const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_6'
 const OTHER_SHARE = 'Oth3rIdOth3rIdOth3rIdOth3rIdOth3rIdOth3r-_6'
 const OTHER_IDENTITY = 'bbbbbbbb-0000-4000-8000-000000000003'
 const F = '5c09e000-0000-4000-8000-0000000000f0'
-const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, epoch: 0, placementRevision: 0 })
+const at = (nodeId: string) => ({ scopeId: SCOPE, nodeId, scopeEpoch: 0, placementRevision: 0 })
 
 /** `Docs` at the scope root holding `Report.txt`, every key really wrapped - the chain a member's tree opens. */
 function folderWorld() {

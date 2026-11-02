@@ -15,7 +15,7 @@
 // `partial` - the page says so honestly rather than pretend the list is whole. A scope that cannot be read (offline, a grant
 // that does not open) counts as `failedScopes` and also makes the result partial; every scope failing is an error.
 import { fetchTree, openTree, childEntryKey, openContentKey, type TreeNode } from '../../core/node/tree'
-import { keyAt, zeroEpochKeys, type EpochKeys } from '../spaces/epochs'
+import { zeroScopeKey, type ScopeKey } from '../spaces/epochs'
 import { listMyScopes, openScopeById } from '../spaces/scopes'
 import { ScopeKind } from '../../api/generated/scopes'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
@@ -77,14 +77,14 @@ export function resetParticipantIndex(): void {
 class Abandoned extends Error {}
 
 /** A memoizing resolver of node content keys over one opened tree (the chain is walked once per node, not once per Memory). */
-function keyResolver(scopeId: string, epochs: EpochKeys, nodes: readonly TreeNode[]): (node: TreeNode) => Uint8Array | null {
+function keyResolver(scopeId: string, epochs: ScopeKey, nodes: readonly TreeNode[]): (node: TreeNode) => Uint8Array | null {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const keys = new Map<string, Uint8Array | null>()
   const resolve = (node: TreeNode, depth: number): Uint8Array | null => {
     if (keys.has(node.id)) return keys.get(node.id)!
     let key: Uint8Array | null = null
     try {
-      if (node.parentId === null) key = openContentKey(scopeId, keyAt(epochs, node.epoch), node)
+      if (node.parentId === null) key = openContentKey(scopeId, epochs.key, node)
       else if (depth <= nodes.length) {
         const parent = byId.get(node.parentId)
         const parentKey = parent ? resolve(parent, depth + 1) : null
@@ -99,7 +99,7 @@ function keyResolver(scopeId: string, epochs: EpochKeys, nodes: readonly TreeNod
   return (node) => resolve(node, 0)
 }
 
-function readScope(scopeId: string, scopeToken: string, label: string, epochs: EpochKeys, rows: Parameters<typeof openTree>[2], etag: string | null): ScopeEntry {
+function readScope(scopeId: string, scopeToken: string, label: string, epochs: ScopeKey, rows: Parameters<typeof openTree>[2], etag: string | null): ScopeEntry {
   const nodes = openTree(scopeId, epochs, rows)
   const keyOf = keyResolver(scopeId, epochs, nodes)
   const memories: ParticipatedMemory[] = []
@@ -189,7 +189,7 @@ export async function loadParticipantIndex(): Promise<ParticipantIndex> {
         cache.set(scope.id, entry)
         entries.push(entry)
       } finally {
-        zeroEpochKeys(opened.epochs)
+        zeroScopeKey(opened.epochs)
       }
     } catch (e) {
       if (e instanceof Abandoned) throw e

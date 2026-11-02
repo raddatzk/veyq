@@ -21,7 +21,7 @@ import { NO_NOTE, type ShareNote } from '../../../core/sharing/shareNote'
 import ShareNoteAcceptField from '../../../core/sharing/ShareNoteAcceptField.vue'
 import { buildShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
-import type { EpochKeys } from '../../spaces/epochs'
+import type { ScopeKey } from '../../spaces/epochs'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { lastExpiryDay, linkRules } from '../../../core/sharing/linkRules'
 import { decodeHttpError } from '../../../shared/httpError'
@@ -39,7 +39,7 @@ const props = defineProps<{
   memoryEpoch: number
   /** The scope's epoch keys: a new share's recovery copy seals under the current one, an edited share's opens at its
    *  own epoch (ADR 0036 point 4). */
-  epochs: EpochKeys
+  epochs: ScopeKey
   memoryName: string
   /** When set, the dialog edits this share's name + note in place instead of creating a new one. */
   editShare?: ManagedShare | null

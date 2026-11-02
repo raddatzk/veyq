@@ -128,6 +128,8 @@ const en = {
     statusActive: 'Active',
     statusPendingConsent: 'Awaiting consent',
     awaitingCurrentKey: 'Waiting for the current key',
+    // ADR 0115 decision 8: a member behind the current key reads nothing of the space until re-granted
+    awaitingCurrentKeyBody: 'This space has a new lock. As soon as someone with access is online, you’ll get the new key — until then its contents stay locked.',
     compromiseRotation: {
       stalled:
         'Someone left this space, and it needs a new lock — but no owner is left who can fit it. Make someone else an owner. Until then, the person who left can still read what’s new here.',
@@ -188,6 +190,9 @@ const en = {
     subGroup: 'If a member’s device was lost, give the space a new lock. Removing a member already does this by itself. What is added from now on is closed to the old key. What was already seen stays seen.',
     confirmGroup:
       'Every member gets the new key from this device. Whoever holds only the old key, such as a lost device, can’t read what is added from now on. What they already saw stays seen, and links made before keep working until they are renewed or turned off.',
+
+    // ADR 0115 decision 2: shown to the rotating person while the scope-level rows are sealed again
+    resealing: 'Fitting the new lock: names and profiles are being sealed again. With many members this can take a moment — keep this page open.',
   },
   spaceIcon: {
     change: 'Change icon',
@@ -2184,6 +2189,7 @@ const de: typeof en = {
     statusActive: 'Aktiv',
     statusPendingConsent: 'Wartet auf Zustimmung',
     awaitingCurrentKey: 'Wartet auf den aktuellen Schlüssel',
+    awaitingCurrentKeyBody: 'Dieser Bereich hat ein neues Schloss. Sobald jemand mit Zugang online ist, bekommst du den neuen Schlüssel – bis dahin bleibt der Inhalt verschlossen.',
     compromiseRotation: {
       stalled:
         'Jemand hat diesen Bereich verlassen, und er braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann die Person, die gegangen ist, Neues hier noch lesen.',
@@ -2240,6 +2246,8 @@ const de: typeof en = {
     subGroup: 'Ist das Gerät eines Mitglieds verloren gegangen, gib dem Bereich ein neues Schloss. Das Entfernen eines Mitglieds baut von selbst eins ein. Was ab jetzt dazukommt, ist für den alten Schlüssel zu. Was schon gesehen wurde, bleibt gesehen.',
     confirmGroup:
       'Jedes Mitglied bekommt den neuen Schlüssel von diesem Gerät. Wer nur den alten Schlüssel hat, etwa ein verlorenes Gerät, kann nicht lesen, was ab jetzt dazukommt. Was schon gesehen wurde, bleibt gesehen, und vorher erstellte Links funktionieren weiter, bis sie erneuert oder abgeschaltet werden.',
+
+    resealing: 'Das neue Schloss wird eingebaut: Namen und Profile werden neu versiegelt. Bei vielen Mitgliedern kann das einen Moment dauern – lass diese Seite so lange offen.',
   },
   spaceIcon: {
     change: 'Icon ändern',

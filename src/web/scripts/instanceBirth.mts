@@ -114,7 +114,8 @@ export async function birthTenant(token: string, built: BuiltAccount, t: {
     acceptInviteRequest: {
       bootstrapSecret, username: t.username, grant: birth.wrappedGrant, grantSignature: birth.grantSignature,
       recipientIdentityDigest: recipientIdentityDigest(ownerPub),
-      ...(sealedName ? { sealedName } : {}),
+      // the birth's name is sealed under the tenant key at epoch 0, which the accept states (ADR 0115 decision 3)
+      ...(sealedName ? { sealedName, epoch: 0 } : {}),
     },
   }))
   return { tenantId, ownerId, tenantScopeKey, sealedName: sealedName !== undefined }

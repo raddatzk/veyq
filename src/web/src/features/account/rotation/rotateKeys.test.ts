@@ -19,7 +19,7 @@ import type {
 } from '../../../api/generated/account'
 import type { ModerationApi } from '../../../api/generated/moderation'
 import { emptyPinStore, fakePinServer, identityKey, pinIdOf, pinOf, pinsOn, sealPinStore, type PinServerState } from '../../../test/pinStore'
-import type { KeyChain, KeyChainApi, KeyChainStep, ScopeMember, ScopeSummary, ScopesApi } from '../../../api/generated/scopes'
+import type { KeyChain, KeyChainApi, KeyChainStep, ScopeMember, ScopeSuccession, ScopeSummary, ScopesApi } from '../../../api/generated/scopes'
 import type { TasksApi } from '../../../api/generated/tasks'
 import type { LoginApi } from '../../../api/generated/auth'
 import type { MemberVerification, TenantsApi } from '../../../api/generated/tenants'
@@ -84,6 +84,12 @@ vi.mock('../../memories/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 // The re-key after a scope's rotation (ADR 0109) is `rekeyScope`'s own suite; here it always finishes.
 vi.mock('../../../core/node/rekey/rekeyScope', () => ({ rekeyScope: vi.fn(async () => ({ done: true, committed: 0 })) }))
+// …and so is the re-seal of a rotated scope's scope-level rows (ADR 0115 decision 2, `scopeRekey.test.ts`): here it stages
+// nothing and is asserted to be handed each rotation's keys (set in `beforeEach`). Not a passthrough: the real module
+// reaches the application registry, whose graph imports `spaces/scopes` back while this factory is still running.
+vi.mock('../../spaces/scopeRekey', () => ({
+  stageScopeLevelRekey: vi.fn(), isRestageable: vi.fn(), REKEY_RESTAGES: 2, resealingScopes: new Set<string>(),
+}))
 
 // The Argon-bearing derivations run for REAL but at a light cost. They stay **input-sensitive**, which is what every
 // refusal below depends on — a stub returning a constant would make "a wrong Secret Key is refused" pass against a gate
@@ -133,6 +139,12 @@ import { raiseMarks, readMarks } from '../trustMarks'
 import { runScopeRotationWorker } from '../../tasks/scopeRotationWorker'
 import { SCOPE_ROTATION } from '../../tasks/capabilityTags'
 import { bundleB64, genesis, headOf, served, type ChainKeys } from '../../../test/keyChain'
+import { succession } from '../../../test/memberInvite'
+import { isRestageable, stageScopeLevelRekey } from '../../spaces/scopeRekey'
+import { HttpStatus, isCodedError } from '../../../shared/httpError'
+
+/** What each rotation handed the scope-level re-seal, copied before the rotation zeroed it. */
+const stagedRekeys: { scopeId: string; oldEpoch: number; epoch: number; key: Uint8Array }[] = []
 
 // This file runs in the node environment (fake-indexeddb), where src/test/setup.ts registers no application. The REAL
 // Memories hooks go into the REAL registry, so the re-seal tests below prove rotateKeys reaches the favorites modules
@@ -214,7 +226,8 @@ type Scope = {
   id: string; kind: v1.ScopeKind; tenantId: string; currentEpoch: number
   /** The epoch keys — the test's oracle; the server logic below never reads them. */
   keys: Uint8Array[]
-  links: Map<number, string>
+  /** The succession statements the server stores, one per epoch from 1 (ADR 0115 decision 5) — never a key. */
+  links: Map<number, ScopeSuccession>
   members: Map<string, Member>
   /** Listed by `listMyScopes` (the active tenant); a scope of another tenant is in the plan only. */
   active: boolean
@@ -239,8 +252,8 @@ function heldScope(
 ): Scope {
   const epoch = o.epoch ?? 0
   const keys = Array.from({ length: epoch + 1 }, () => v1.randomBytes(32))
-  const links = new Map<number, string>()
-  for (let e = 1; e <= epoch; e++) links.set(e, b64std(v1.seal({ purpose: 'scope-epoch', scopeId: id, epoch: e }, keys[e], keys[e - 1])))
+  const links = new Map<number, ScopeSuccession>()
+  for (let e = 1; e <= epoch; e++) links.set(e, succession(id, e, keys))
   const scope: Scope = { id, kind, tenantId: o.tenantId ?? SCOPE_TENANT, currentEpoch: epoch, keys, links, members: new Map(), active: o.active ?? true, blocked: o.blocked }
   const by = o.by ?? meOld
   scope.members.set(ME, { userId: ME, role: o.role ?? 'OWNER', bundle: OLD_PUB, head: '', grant: grantRow(scope, epoch, { userId: ME, bundle: OLD_PUB }, by) })
@@ -450,8 +463,11 @@ function fakeServer(opts: ServerOpts = {}) {
       const stored = records.find((r) => recordKeyOf(r) === recordKeyOf(st))
       if (!stored) throw httpError(409, 'rotation_plan_changed')
       if (st.endorsement == null) continue
-      const statement = { tenantId: st.tenantId, userId: st.userId, signerUserId: ME, sealedJoinRecord: fromB64std(stored.sealedJoinRecord) }
-      if (!invite.joinEndorsementVerifies(sign, statement, fromB64std(st.endorsement))) throw httpError(422, 'join_endorsement_invalid')
+      // Over the digest the stage names (ADR 0115 decision 8): the server cannot open the record, so it checks the
+      // signature over `recordDigest` as sent; whether that digest is the record's own is the members' check.
+      if (st.recordDigest == null) throw httpError(400)
+      const statement = { purpose: 'join-endorsement', tenantId: st.tenantId, userId: st.userId, signerUserId: ME, recordDigest: fromB64std(st.recordDigest) } as const
+      if (!v1.identityVerify(sign, statement, fromB64std(st.endorsement))) throw httpError(422, 'join_endorsement_invalid')
     }
     for (const st of chunk) stage.endorsements.set(recordKeyOf(st), st)
   })
@@ -606,7 +622,8 @@ function fakeServer(opts: ServerOpts = {}) {
       if (g.recipientIdentityDigest !== recipientIdentityDigest(s.members.get(g.userId)!.bundle)) throw httpError(409, 'recipient_key_not_current')
     }
     s.currentEpoch = r.epoch
-    s.links.set(r.epoch, r.wrappedPrev)
+    // Stored as sent — the server holds no key to check it against (ADR 0115 decision 5: no public key at a birth).
+    s.links.set(r.epoch, { epoch: r.epoch, successionPublicKey: r.successionPublicKey, successionSignature: r.successionSignature })
     for (const g of r.grants) {
       s.members.get(g.userId)!.grant = {
         wrappedGrant: g.wrappedGrant, grantSignature: g.grantSignature, grantedEpoch: r.epoch, granterUserId: ME, granterIdentityPublicKey: acct.bundle,
@@ -636,7 +653,7 @@ function fakeServer(opts: ServerOpts = {}) {
     }),
     listScopeEpochs: vi.fn<ScopesApi['listScopeEpochs']>(async ({ scopeId }) => {
       online()
-      return [...(scopes.get(scopeId)?.links ?? [])].map(([epoch, wrappedPrev]) => ({ epoch, wrappedPrev }))
+      return [...(scopes.get(scopeId)?.links.values() ?? [])]
     }),
     listOpenInvites: vi.fn<ScopesApi['listOpenInvites']>(async () => {
       online()
@@ -720,10 +737,28 @@ const openMine = (s: Scope, priv = vault.priv!) => {
   return v1.openAs(grantContext(s.id, g.grantedEpoch), v1.hybridSecret(priv), fromB64std(g.wrappedGrant))
 }
 const same = (a: Uint8Array, b: Uint8Array) => b64std(a) === b64std(b)
-const rotate = (o: { password?: string; secretKeyB64?: string } = {}) => rotateKeys(o.password ?? PASSWORD, o.secretKeyB64 ?? SECRET_KEY_B64, NEXT)
+/** Whether `s`'s stored succession statements prove `to` as the key of the epoch after `from`'s (ADR 0115 decision 5) —
+ *  what a holder of `from` checks before it takes a grant of `to`. */
+const succeeds = (s: Scope, from: Uint8Array, to: Uint8Array, fromEpoch = 0) => {
+  const pub = (k: Uint8Array) => v1.successionKeyPair(k).publicKey
+  return v1.verifySuccessionPath({
+    scopeId: s.id, heldEpoch: fromEpoch, heldPublicKey: pub(from), targetEpoch: fromEpoch + 1, targetPublicKey: pub(to),
+    statements: [...s.links.values()].map((l) => ({
+      epoch: l.epoch, successionPublicKey: fromB64std(l.successionPublicKey), successionSignature: fromB64std(l.successionSignature),
+    })),
+  })
+}
+const rotate =(o: { password?: string; secretKeyB64?: string } = {}) => rotateKeys(o.password ?? PASSWORD, o.secretKeyB64 ?? SECRET_KEY_B64, NEXT)
 
 beforeEach(() => {
   vi.clearAllMocks()
+  stagedRekeys.length = 0
+  // The rotation zeroes its keys once it settles: what each staging run was handed is recorded as a copy.
+  vi.mocked(stageScopeLevelRekey).mockImplementation(async (run) => {
+    stagedRekeys.push({ scopeId: run.scopeId, oldEpoch: run.oldKey.epoch, epoch: run.newKey.epoch, key: run.newKey.key.slice() })
+  })
+  vi.mocked(isRestageable).mockImplementation(async (e) =>
+    (await isCodedError(e, HttpStatus.conflict, 'rekey_parts_stale')) || isCodedError(e, HttpStatus.conflict, 'rekey_parts_missing'))
   globalThis.indexedDB = new IDBFactory() // this device's trust-state marks (ADR 0028 Decision 7), fresh per test
   vault.mk = MK.slice()
   vault.priv = oldPriv()
@@ -961,7 +996,9 @@ describe('securing the account loses no space (inbox #556)', () => {
       const s = srv.scopes.get(id)!
       expect(s.currentEpoch, id).toBe(1)
       expect(same(openMine(s), s.keys[0]), id).toBe(false) // E_1: a fresh key…
-      expect(v1.open({ purpose: 'scope-epoch', scopeId: id, epoch: 1 }, openMine(s), fromB64std(s.links.get(1)!)), id).toEqual(s.keys[0]) // …linked to E_0
+      expect(succeeds(s, s.keys[0], openMine(s)), id).toBe(true) // …that succeeds E_0 by a statement, never a link
+      // …and every scope-level row was staged for re-seal from E_0 to it, in the same rotation (ADR 0115 decision 2)
+      expect(stagedRekeys.some((r) => r.scopeId === id && r.oldEpoch === 0 && r.epoch === 1 && same(r.key, openMine(s))), id).toBe(true)
     }
     expect(result.states.map((s) => s.state).sort()).toEqual(['secured', 'secured'])
   })
@@ -1011,7 +1048,7 @@ describe('securing the account loses no space (inbox #556)', () => {
     for (const id of [SCOPE_PERSONAL, SCOPE_TENANT]) {
       const s = srv.scopes.get(id)!
       expect(s.currentEpoch, id).toBe(1)
-      expect(v1.open({ purpose: 'scope-epoch', scopeId: id, epoch: 1 }, openMine(s), fromB64std(s.links.get(1)!)), id).toEqual(s.keys[0])
+      expect(succeeds(s, s.keys[0], openMine(s)), id).toBe(true)
     }
     const tenant = srv.scopes.get(SCOPE_TENANT)!
     const bGrant = tenant.members.get(B)!.grant
@@ -1043,7 +1080,7 @@ describe('securing the account loses no space (inbox #556)', () => {
     const result = await rotate()
     expect(srv.applied[0].rows.has(SCOPE_ELSEWHERE)).toBe(true)
     expect(elsewhere.currentEpoch).toBe(1)
-    expect(same(v1.open({ purpose: 'scope-epoch', scopeId: SCOPE_ELSEWHERE, epoch: 1 }, openMine(elsewhere), fromB64std(elsewhere.links.get(1)!)), elsewhere.keys[0])).toBe(true)
+    expect(succeeds(elsewhere, elsewhere.keys[0], openMine(elsewhere))).toBe(true)
     expect(result.states.find((s) => s.scopeId === SCOPE_ELSEWHERE)?.state).toBe('secured')
   })
 
@@ -1138,7 +1175,7 @@ describe('securing the account loses no space (inbox #556)', () => {
       if (scopeId === SCOPE_TENANT && tenant.currentEpoch === 0) {
         tenant.keys.push(v1.randomBytes(32))
         tenant.currentEpoch = 1
-        tenant.links.set(1, b64std(v1.seal({ purpose: 'scope-epoch', scopeId: SCOPE_TENANT, epoch: 1 }, tenant.keys[1], tenant.keys[0])))
+        tenant.links.set(1, succession(SCOPE_TENANT, 1, tenant.keys))
         tenant.members.get(ME)!.grant = grantRow(tenant, 1, { userId: ME, bundle: srv.acct.bundle }, bSigner)
       }
       return base(scopeId)
@@ -1279,7 +1316,7 @@ describe('securing the account loses no space (inbox #556)', () => {
           const tenant = srv.scopes.get(SCOPE_TENANT)!
           tenant.keys.push(v1.randomBytes(32))
           tenant.currentEpoch = 1
-          tenant.links.set(1, b64std(v1.seal({ purpose: 'scope-epoch', scopeId: SCOPE_TENANT, epoch: 1 }, tenant.keys[1], tenant.keys[0])))
+          tenant.links.set(1, succession(SCOPE_TENANT, 1, tenant.keys))
           tenant.members.get(ME)!.grant = grantRow(tenant, 1, { userId: ME, bundle: OLD_PUB }, bSigner)
         },
       })
@@ -1386,20 +1423,26 @@ describe('securing the account re-signs what it rooted (ADR 0111 decisions 20 an
       inviteExpiresAt: expiresAt, signerUserId: o.signerUserId ?? ME, signerIdentityPublicKey: v1.serializeIdentityPublic(signer.pub),
     }, inviteKey.priv.sign, joiner.priv.sign)
     const sealed = invite.sealJoinRecord(o.key ?? scope.keys[scope.currentEpoch], address, record)
+    const encoded = invite.encodeJoinRecord(record)
+    recordBytes.set(`${address.tenantId}:${address.userId}`, encoded)
     const joinEndorsement = o.endorsedBy
-      ? b64std(invite.signJoinEndorsement(o.endorsedBy.priv.sign, { ...address, signerUserId: ME, sealedJoinRecord: sealed }))
+      ? b64std(invite.signJoinEndorsement(o.endorsedBy.priv.sign, { ...address, signerUserId: ME, joinRecord: encoded }))
       : null
     return { ...address, sealedJoinRecord: b64std(sealed), joinEndorsement }
   }
+  /** Each rooted record's opened bytes (`encodeJoinRecord`), by tenant and joiner — what an endorsement signs the digest of. */
+  const recordBytes = new Map<string, Uint8Array>()
+  const openedRecordOf = (r: { tenantId: string; userId: string }) => recordBytes.get(`${r.tenantId}:${r.userId}`)!
   const tenantOf = (srv: ReturnType<typeof fakeServer>) => srv.scopes.get(SCOPE_TENANT)!
   const stagedInvites = (srv: ReturnType<typeof fakeServer>) =>
     srv.putRotationStageInvites.mock.calls.flatMap((c) => c[0].rotationStageInvites.invites)
   const stagedEndorsements = (srv: ReturnType<typeof fakeServer>) =>
     srv.putRotationStageJoinEndorsements.mock.calls.flatMap((c) => c[0].rotationStageJoinEndorsements.endorsements)
-  /** [r]'s endorsement as the publish wrote it, verified under the identity the vault now holds. */
+  /** [r]'s endorsement as the publish wrote it, verified under the identity the vault now holds — over the OPENED record,
+   *  as every member checks it (ADR 0115 decision 8). */
   const endorsedByPublished = (r: RotationPlanJoinRecord) =>
     !!r.joinEndorsement && invite.joinEndorsementVerifies(
-      vaultPub().sign, { tenantId: r.tenantId, userId: r.userId, signerUserId: ME, sealedJoinRecord: fromB64std(r.sealedJoinRecord) },
+      vaultPub().sign, { tenantId: r.tenantId, userId: r.userId, signerUserId: ME, joinRecord: openedRecordOf(r) },
       fromB64std(r.joinEndorsement),
     )
 
@@ -1438,13 +1481,17 @@ describe('securing the account re-signs what it rooted (ADR 0111 decisions 20 an
     expect(srv.invites.map((i) => i.inviteId)).toEqual([mine.inviteId])
   })
 
-  it('a join record naming the outgoing key is endorsed by the NEW identity, over the sealed record as stored', async () => {
+  it('a join record naming the outgoing key is endorsed by the NEW identity, over the digest of the OPENED record, which the stage names', async () => {
     const scopes = ordinaryScopes()
     const record = rootedRecord(scopes[1], U1, OLD_ID)
     const srv = fakeServer({ scopes, records: [{ ...record }] })
     await rotate()
-    expect(stagedEndorsements(srv)).toHaveLength(1)
-    expect(endorsedByPublished(srv.records[0])).toBe(true)
+    const staged = stagedEndorsements(srv)
+    expect(staged).toHaveLength(1)
+    // `recordDigest` is SHA-256 of the record's plaintext encoding — never of the envelope a rotation re-seals.
+    expect(staged[0].recordDigest).toBe(b64std(invite.joinRecordDigest(openedRecordOf(record))))
+    expect(staged[0].recordDigest).not.toBe(b64std(invite.joinRecordDigest(fromB64std(record.sealedJoinRecord))))
+    expect(endorsedByPublished(srv.records[0])).toBe(true) // a re-seal keeps it valid: `tenantTrust.test.ts` pins that
   })
 
   it('a record a RETIRED key signed is declared without an endorsement, and endorsed again with one by the outgoing key', async () => {
@@ -1459,6 +1506,10 @@ describe('securing the account re-signs what it rooted (ADR 0111 decisions 20 an
     expect(staged.get(U1)).toBeNull()
     expect(staged.get(U3)).toBeNull()
     expect(staged.get(U2)).not.toBeNull()
+    // A declared record names no digest; the endorsed one names its opened record's.
+    const digests = new Map(stagedEndorsements(srv).map((e) => [e.userId, e.recordDigest]))
+    expect([digests.get(U1), digests.get(U3)]).toEqual([null, null])
+    expect(digests.get(U2)).toBe(b64std(invite.joinRecordDigest(openedRecordOf(endorsed))))
     const after = new Map(srv.records.map((r) => [r.userId, r]))
     expect(after.get(U1)!.joinEndorsement).toBeNull()
     expect(after.get(U3)!.joinEndorsement).toBeNull()

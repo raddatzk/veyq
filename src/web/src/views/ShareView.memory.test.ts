@@ -103,8 +103,8 @@ const keys = { memory: v1.randomBytes(32), chapter: v1.randomBytes(32) }
 const GUEST: GuestIdentity = { identityId: 'id-g', contributorToken: 'tok-g', displayName: 'Oma' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A link rooted at the Memory "Rom 2026" (its chapter "Tag 1" below), or — `chapterRoot` — at the chapter itself. */
 function head(role: ShareRole, o: { chapterRoot?: boolean; recordDays?: number } = {}): PublicShareHead {
@@ -116,9 +116,9 @@ function head(role: ShareRole, o: { chapterRoot?: boolean; recordDays?: number }
     return { ...base, share: { role, scopeId: SCOPE, rootKind, nodeId: MEMORY, sealedDropPublicKey, nodes: [], guestWriteRecordDays: o.recordDays ?? null } as unknown as PublicShare }
   }
   const nodes = o.chapterRoot
-    ? [{ id: CHAPTER, parentId: null, kind: CHAPTER_KIND, epoch: 0 }]
+    ? [{ id: CHAPTER, parentId: null, kind: CHAPTER_KIND, epoch: 0, scopeEpoch: 0 }]
     // the served root meta lists the participants as the member sealed it (a share serves `wrappedMeta` unchanged, ADR 0083)
-    : [{ id: MEMORY, parentId: null, kind: MEMORY_KIND, epoch: 0, wrappedMeta: sealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, { v: 1, participants: { userIds: ['aaaaaaaa-0000-4000-8000-000000000001'] } }) }, child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND)]
+    : [{ id: MEMORY, parentId: null, kind: MEMORY_KIND, epoch: 0, scopeEpoch: 0, wrappedMeta: sealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, { v: 1, participants: { userIds: ['aaaaaaaa-0000-4000-8000-000000000001'] } }) }, child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND)]
   const rootKey = o.chapterRoot ? keys.chapter : keys.memory
   return { ...base, share: { role, scopeId: SCOPE, rootKind, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, rootKey)), nodes } as PublicShare }
 }

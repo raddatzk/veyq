@@ -87,8 +87,8 @@ const PARTICIPANTS = ['aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-400
 const GUEST: GuestIdentity = { identityId: 'id-g', contributorToken: 'tok-g' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A folder link: the folder, a Memory in it, a chapter in the Memory. */
 function head(role: ShareRole, extraMeta: Record<string, unknown> = {}): PublicShareHead {
@@ -97,7 +97,7 @@ function head(role: ShareRole, extraMeta: Record<string, unknown> = {}): PublicS
     share: {
       role, scopeId: SCOPE, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
       nodes: [
-        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
         // a share serves the node's `wrappedMeta` UNCHANGED: the Memory's carries its participants, the guest holds its `K_node`
         { ...child(MEMORY, ROOT, keys.root, keys.memory, 'Rom 2026', MEMORY_KIND), wrappedMeta: sealNodeMeta(keys.memory, { scopeId: SCOPE, nodeId: MEMORY }, { v: 1, participants: { userIds: PARTICIPANTS }, ...extraMeta }) },
         child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND),

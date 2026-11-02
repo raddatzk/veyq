@@ -67,9 +67,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
     // The folder's key exactly as the member's shell finds it: the tree as listed, the chain walked (SpaceView).
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)
     expect(folderKey, "the folder's key opens through the chain").not.toBeNull()
-    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: folderId, key: folderKey!, epoch: 0 })
+    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: folderId, key: folderKey!, epoch: 0, scopeEpoch: epochs.epoch })
     const inMemory = await addMedia(scopeId, memory.nodeId, memory.memoryKey, photo(1))
-    const subId = await createFolder(scopeId, epochs, SUB_NAME, { id: folderId, key: folderKey!, epoch: 0 })
+    const subId = await createFolder(scopeId, epochs, SUB_NAME, { id: folderId, key: folderKey!, epoch: 0, scopeEpoch: epochs.epoch })
     const outside = await createMemory(scopeId, epochs, OUTSIDE_NAME)
 
     // --- A: a READ link of the folder, through core's mint (what FolderShareDialog calls) --------------------------
@@ -113,7 +113,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
           shareId: writeOnlyId, nodeId: folderId, nodeEpoch: 0, role: ShareRole.WriteOnly,
           sealedDropPublicKey: b64std(v1.randomBytes(48)),
           sealedName: b64std(v1.sealField(SHARE_MEMORY_NAME, kShare, v1.utf8(FOLDER_NAME))),
-          sealedShareKey: b64std(v1.randomBytes(72)), sealedShareKeyEpoch: epochs.current,
+          sealedShareKey: b64std(v1.randomBytes(72)), sealedShareKeyEpoch: epochs.epoch,
           writeVerifier: b64std(v1.sha256Digest(v1.randomBytes(32))),
         },
       })

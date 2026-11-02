@@ -59,7 +59,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('consent group-add — re-adding a member
     // A opens the group at once — no worker ran for it: the proposal held the grant.
     const openedA = await openScopeById(g)
     expect(openedA?.name, 'A opens the group with the grant the second proposal carried').toBe('Gartenclub Süd')
-    expect(openedA?.epochs.current, 'at the epoch after the decline\'s rotation').toBe(1)
+    expect(openedA?.epochs.epoch, 'at the epoch after the decline\'s rotation').toBe(1)
 
     // Control on the same worker call: an accept queues nothing.
     await become(S)

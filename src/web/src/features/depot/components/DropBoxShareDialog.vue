@@ -127,8 +127,10 @@ const reissueRefused = ref(false)
 const switchOn = (shareId: string) =>
   run(async () => {
     reissueRefused.value = false
+    const share = shares.value.find((s) => s.shareId === shareId)
+    if (!share) return
     try {
-      await reactivateShare(shareId)
+      await reactivateShare(share, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName)
     } catch (e) {
       if (!(await isReissueRequired(e))) throw e
       reissueRefused.value = true

@@ -36,10 +36,10 @@ const keys = {
 const HASH = `#k=${b64url(K_SHARE)}`
 
 function child(id: string, parentId: string, entryKey: Uint8Array, key: Uint8Array, name: string, kind: string, extra: Partial<ShareNode> = {}): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
+  const address = { scopeId: SCOPE_ID, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
   return {
     blockedByOperator: false,
-    id, parentId, kind, epoch: 0, placementRevision: 0, orderIndex: 0,
+    id, parentId, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0, orderIndex: 0,
     encryptedName: sealName(entryKey, address, name), wrappedContentKey: wrapContentKey(entryKey, address, key), ...extra,
   }
 }
@@ -55,7 +55,7 @@ function head(): PublicShareHead {
     share: {
       role: ShareRole.Read, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
       nodes: [
-        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, wrappedMeta: 'bWV0YQ==' },
+        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0, wrappedMeta: 'bWV0YQ==' },
         child(LETTERS, ROOT, keys.root, keys.letters, 'Briefe', FOLDER_KIND),
         child(NESTED, LETTERS, keys.letters, keys.nested, 'Feldpost', FOLDER_KIND, { wrappedMeta: 'c2VhbGVk' }),
         child(DROP, ROOT, keys.root, keys.drop, 'Postfach', 'DEPOT_DROPBOX', { sealedDropPrivateKey }),

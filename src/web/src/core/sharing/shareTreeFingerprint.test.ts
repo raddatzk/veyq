@@ -16,8 +16,8 @@ function share(over: Partial<PublicShare> = {}, root: Partial<ShareNode> = {}, f
     wrap: 'd3JhcA==',
     guestWriteRecordDays: 9,
     nodes: [
-      { id: ROOT, kind: 'MEMORY', epoch: 0, blockedByOperator: false, ...root },
-      { id: FOLDER, parentId: ROOT, kind: 'FOLDER', epoch: 0, encryptedName: 'bmFtZQ==', wrappedContentKey: 'a2V5', shareIdentityId: 'id-1', wrappedIdentityKey: 'a3Vw', blockedByOperator: false, ...folder },
+      { id: ROOT, kind: 'MEMORY', epoch: 0, scopeEpoch: 0, blockedByOperator: false, ...root },
+      { id: FOLDER, parentId: ROOT, kind: 'FOLDER', epoch: 0, scopeEpoch: 0, encryptedName: 'bmFtZQ==', wrappedContentKey: 'a2V5', shareIdentityId: 'id-1', wrappedIdentityKey: 'a3Vw', blockedByOperator: false, ...folder },
     ],
     ...over,
   }

@@ -22,7 +22,7 @@ import { collidingSibling, nameTakenMessage } from './siblingCollision'
 import { registry } from '../applications/registry'
 import { resealShareNames } from '../sharing/manageShares'
 import { useToast } from '../../shared/state/useToast'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { httpStatus, HttpStatus } from '../../shared/httpError'
 
@@ -30,10 +30,11 @@ import { httpStatus, HttpStatus } from '../../shared/httpError'
 const props = defineProps<{
   mode: 'create' | 'rename'
   scopeId: string
-  epochs: EpochKeys // the scope's epoch key set (ADR 0024): create seals under the write epoch, rename under the node's own
+  epochs: ScopeKey // the scope's epoch key set (ADR 0024): create seals under the write epoch, rename under the node's own
   parentId?: string | null // create: the parent (null = root)
   parentKey?: Uint8Array | null // create: the parent node's content key, which the new folder's key wraps under (ADR 0080)
-  parentEpoch?: number | null // create: the parent's epoch as read, stated as `parentEpoch` (ADR 0109 point 6)
+  parentEpoch?: number | null // create: the parent's own epoch as read, stated as `parentEpoch` (ADR 0114 decision 3)
+  parentScopeEpoch?: number | null // create: the scope epoch the parent's key was minted under, the floor's (ADR 0115)
   node?: TreeNode | null // rename: the node being renamed, of any kind
 }>()
 const emit = defineEmits<{ done: []; close: [] }>()
@@ -51,8 +52,8 @@ const confirmLabel = computed(() => (props.mode === 'rename' ? t('common.save') 
  *  creates nothing, rather than a node its parent's holders could not open. */
 function createParent(): NodeParent {
   if (!props.parentId) return null
-  if (!props.parentKey || props.parentEpoch == null) throw new Error('parent_key_unavailable')
-  return { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch }
+  if (!props.parentKey || props.parentEpoch == null || props.parentScopeEpoch == null) throw new Error('parent_key_unavailable')
+  return { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch, scopeEpoch: props.parentScopeEpoch }
 }
 
 const { run: runSubmit, pending: loading } = useAsyncAction(

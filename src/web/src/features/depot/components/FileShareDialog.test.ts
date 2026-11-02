@@ -28,7 +28,7 @@ const mintShare = vi.mocked(manage.mintShare)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000dd'
 const FILE_ID = '5c09e000-0000-4000-8000-0000000000f1'
-const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
+const EPOCHS = { epoch: 0, key: new Uint8Array(32) }
 const FILE_KEY = new Uint8Array(32).fill(9)
 
 const stubs = {

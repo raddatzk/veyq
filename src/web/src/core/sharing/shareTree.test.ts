@@ -16,9 +16,10 @@ const CHILD = '2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e'
 const GRANDCHILD = '5c09e000-0000-4000-8000-00000000ce02'
 const SIBLING = '5c09e000-0000-4000-8000-00000000ce03'
 
-/** A node's directory entry under its parent's key, as the tree seals it (ADR 0080 Decisions 2 and 3). */
-function entry(parentKey: Uint8Array, nodeId: string, name: string, key: Uint8Array, placementRevision = 0) {
-  const ctx = { scopeId: SCOPE_ID, nodeId, epoch: 0, placementRevision }
+/** A node's directory entry under its parent's key, as the tree seals it (ADR 0080 Decisions 2 and 3): bound to the
+ *  node's scope epoch — the seal's binding field `epoch` holds it (ADR 0114 decision 4). */
+function entry(parentKey: Uint8Array, nodeId: string, name: string, key: Uint8Array, placementRevision = 0, scopeEpoch = 0) {
+  const ctx = { scopeId: SCOPE_ID, nodeId, epoch: scopeEpoch, placementRevision }
   return {
     placementRevision,
     wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', ...ctx }, parentKey, key)),
@@ -32,9 +33,9 @@ describe('walkSubtree', () => {
     const childKey = v1.randomBytes(32)
     const grandKey = v1.randomBytes(32)
     const nodes: ShareNode[] = [
-      { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
-      { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...entry(rootKey, CHILD, 'Taxes', childKey) },
-      { blockedByOperator: false, id: GRANDCHILD, parentId: CHILD, kind: 'EXPENSE', epoch: 0, ...entry(childKey, GRANDCHILD, '2026', grandKey) },
+      { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
+      { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0, ...entry(rootKey, CHILD, 'Taxes', childKey) },
+      { blockedByOperator: false, id: GRANDCHILD, parentId: CHILD, kind: 'EXPENSE', epoch: 0, scopeEpoch: 0, ...entry(childKey, GRANDCHILD, '2026', grandKey) },
     ]
 
     const walk = walkSubtree(SCOPE_ID, nodes, rootKey)
@@ -51,11 +52,11 @@ describe('walkSubtree', () => {
     const rootKey = v1.randomBytes(32)
     const childKey = v1.randomBytes(32)
     const nodes: ShareNode[] = [
-      { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+      { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
       // sealed under a key the guest does not hold (e.g. the scope key): neither it nor its child opens
-      { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...entry(v1.randomBytes(32), CHILD, 'Hidden', childKey) },
-      { blockedByOperator: false, id: GRANDCHILD, parentId: CHILD, kind: FOLDER_KIND, epoch: 0, ...entry(childKey, GRANDCHILD, 'Below', v1.randomBytes(32)) },
-      { blockedByOperator: false, id: SIBLING, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...entry(rootKey, SIBLING, 'Open', v1.randomBytes(32)) },
+      { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0, ...entry(v1.randomBytes(32), CHILD, 'Hidden', childKey) },
+      { blockedByOperator: false, id: GRANDCHILD, parentId: CHILD, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0, ...entry(childKey, GRANDCHILD, 'Below', v1.randomBytes(32)) },
+      { blockedByOperator: false, id: SIBLING, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0, ...entry(rootKey, SIBLING, 'Open', v1.randomBytes(32)) },
     ]
 
     const walk = walkSubtree(SCOPE_ID, nodes, rootKey)
@@ -69,10 +70,26 @@ describe('walkSubtree', () => {
     const rootKey = v1.randomBytes(32)
     const sealed = entry(rootKey, CHILD, 'Renamed', v1.randomBytes(32), 2)
     const nodes: ShareNode[] = [
-      { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
-      { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, ...sealed, placementRevision: 1 },
+      { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
+      { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0, ...sealed, placementRevision: 1 },
     ]
     expect(walkSubtree(SCOPE_ID, nodes, rootKey).names.size).toBe(0)
+  })
+
+  it("opens an entry bound to the node's served scope epoch, never to its own epoch", () => {
+    const rootKey = v1.randomBytes(32)
+    const childKey = v1.randomBytes(32)
+    // a node at its own epoch 3, its key minted under scope epoch 1: the entry binds 1
+    const atScope = { blockedByOperator: false, id: CHILD, parentId: ROOT, kind: FOLDER_KIND, epoch: 3, scopeEpoch: 1, ...entry(rootKey, CHILD, 'Taxes', childKey, 0, 1) }
+    const root = { blockedByOperator: false, id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 3, scopeEpoch: 1 }
+
+    const walk = walkSubtree(SCOPE_ID, [root, atScope], rootKey)
+    expect(walk.keys.get(CHILD)).toEqual(childKey)
+    expect(walk.names.get(CHILD)).toBe('Taxes')
+
+    // the same node sealed bound to its own epoch (3): nothing of it opens
+    const atOwn = { ...atScope, ...entry(rootKey, CHILD, 'Taxes', childKey, 0, 3) }
+    expect(walkSubtree(SCOPE_ID, [root, atOwn], rootKey).keys.has(CHILD)).toBe(false)
   })
 
   it('returns empty maps when no root is served', () => {

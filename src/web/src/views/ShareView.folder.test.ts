@@ -41,15 +41,15 @@ const FOLDER_KEY = v1.randomBytes(32)
 const MEMORY_KEY = v1.randomBytes(32)
 
 function folderHead(): PublicShareHead {
-  const address = { scopeId: SCOPE_ID, nodeId: MEMORY, epoch: 0, placementRevision: 0 }
+  const address = { scopeId: SCOPE_ID, nodeId: MEMORY, scopeEpoch: 0, placementRevision: 0 }
   return {
     shareId: route.params.shareId, kShare: K_SHARE, scopeId: SCOPE_ID, name: 'Familie', noteByLocale: {}, role: ShareRole.Read, rootKind: FOLDER_KIND,
     share: {
       role: ShareRole.Read, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, FOLDER_KEY)),
       nodes: [
-        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
         {
-          id: MEMORY, parentId: ROOT, kind: MEMORY_KIND, epoch: 0, placementRevision: 0,
+          id: MEMORY, parentId: ROOT, kind: MEMORY_KIND, epoch: 0, scopeEpoch: 0, placementRevision: 0,
           encryptedName: sealName(FOLDER_KEY, address, 'Rom 2026'), wrappedContentKey: wrapContentKey(FOLDER_KEY, address, MEMORY_KEY),
         },
       ],

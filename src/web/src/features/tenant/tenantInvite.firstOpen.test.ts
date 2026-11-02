@@ -37,8 +37,7 @@ import { accountKeyMaterial } from '../../test/models'
 import { httpError } from '../../test/httpError'
 import { carriedTo, memberInviteFixture, type MemberInviteFixture } from '../../test/memberInvite'
 import { signGrant } from '../spaces/grant'
-import { epochLinkContext } from '../spaces/epochs'
-import type { ScopeEpochLink, ScopesApi, ScopeSummary } from '../../api/generated/scopes'
+import type { ScopeSuccession, ScopesApi, ScopeSummary } from '../../api/generated/scopes'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
@@ -89,7 +88,7 @@ async function accept(accountKey?: Uint8Array) {
 }
 
 /** Serve the tenant scope with this account's grant at [epoch] wrapping [key] (signed by [granter]) beside [links]. */
-function serveTenant(key: Uint8Array, epoch: number, granter: { userId: string; identity: v1.Identity }, links: ScopeEpochLink[] = []) {
+function serveTenant(key: Uint8Array, epoch: number, granter: { userId: string; identity: v1.Identity }, links: ScopeSuccession[] = []) {
   const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: f.tenantId, epoch }, v1.hybridPublic(ID.priv), key))
   const scope = { scopeId: f.tenantId, kind: 'TENANT' as const, epoch }
   const row: ScopeSummary = {
@@ -103,14 +102,20 @@ function serveTenant(key: Uint8Array, epoch: number, granter: { userId: string; 
   })
 }
 
-/** The link the tenant stores at [epoch]: [prev] sealed under [key]. */
-const linkUnder = (epoch: number, key: Uint8Array, prev: Uint8Array): ScopeEpochLink =>
-  ({ epoch, wrappedPrev: b64std(v1.seal(epochLinkContext(f.tenantId, epoch), key, prev)) })
+/** The succession statement the tenant stores for [epoch] (ADR 0115 decision 5): [key]'s succession public key, signed
+ *  by [prev]'s succession key. */
+function linkUnder(epoch: number, key: Uint8Array, prev: Uint8Array): ScopeSuccession {
+  const successionPublicKey = v1.successionKeyPair(key).publicKey
+  return {
+    epoch, successionPublicKey: b64std(successionPublicKey),
+    successionSignature: b64std(v1.signSuccession(prev, { scopeId: f.tenantId, epoch, successionPublicKey })),
+  }
+}
 
 describe('a member accept holds the key it checked, so the first open of the tenant runs under decision 23 (inbox #740)', () => {
   it('measured on main: after a checked accept, the first open opened a higher epoch the operator planted - now refused', async () => {
     await accept()
-    const planted = v1.randomBytes(32) // the operator never held E_1, so it cannot link its key down to it
+    const planted = v1.randomBytes(32) // the operator never held E_1, so it cannot sign a succession from it
     serveTenant(planted, 2, OPERATOR, [linkUnder(2, planted, v1.randomBytes(32))])
     expect(await openScopeById(f.tenantId)).toBeNull()
   })
@@ -119,14 +124,14 @@ describe('a member accept holds the key it checked, so the first open of the ten
     const sent = await accept()
     serveTenant(f.tenantKey, 1, { userId: ME, identity: ID })
     expect(sent.epoch).toBe(1)
-    expect((await openScopeById(f.tenantId))?.epochs.current).toBe(1)
+    expect((await openScopeById(f.tenantId))?.epochs.epoch).toBe(1)
   })
 
-  it('control: an honest rotation after the accept, its link sealing the checked E_1, opens at the first open', async () => {
+  it('control: an honest rotation after the accept, its succession signed by the checked E_1, opens at the first open', async () => {
     await accept()
     const next = v1.randomBytes(32)
     serveTenant(next, 2, MEMBER, [linkUnder(2, next, f.tenantKey)])
-    expect((await openScopeById(f.tenantId))?.epochs.current).toBe(2)
+    expect((await openScopeById(f.tenantId))?.epochs.epoch).toBe(2)
   })
 
   it('at the checked epoch itself, another key than the checked one is refused', async () => {

@@ -38,7 +38,9 @@ const deleteShare = vi.mocked(manage.deleteShare)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000dd'
 const FOLDER_ID = '5c09e000-0000-4000-8000-0000000000f0'
-const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
+// The scope's one key (ADR 0115) at epoch 3; the folder's own key is at its epoch 2 (ADR 0114 decision 4).
+const EPOCHS = { epoch: 3, key: new Uint8Array(32) }
+const FOLDER_EPOCH = 2
 const FOLDER_KEY = new Uint8Array(32).fill(4)
 
 const stubs = {
@@ -66,7 +68,7 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
 
 function mountDialog(extra: { contribute?: boolean; readonly?: boolean } = { contribute: true }) {
   return mount(FolderShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
+    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeEpoch: FOLDER_EPOCH, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -132,7 +134,7 @@ describe('FolderShareDialog — a new link', () => {
     expect(mintShare).toHaveBeenCalledTimes(1)
     const [scopeId, nodeId, key, epochs, name, mintedRole] = mintShare.mock.calls[0]
     expect({ scopeId, nodeId, name, mintedRole }).toEqual({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, name: 'Trips', mintedRole: role })
-    expect(key).toEqual({ key: FOLDER_KEY, epoch: 0 }) // the folder's key with the epoch it was minted at (ADR 0109 point 6)
+    expect(key).toEqual({ key: FOLDER_KEY, epoch: FOLDER_EPOCH }) // the folder's key with its own epoch, as read (ADR 0114 decision 4)
     expect(key.key).toBe(FOLDER_KEY)
     expect(epochs).toEqual(EPOCHS)
     expect(w.text()).toContain(t('share.linkReady'))
@@ -253,6 +255,28 @@ describe('FolderShareDialog — the folder\'s links', () => {
       expect(byLabel(live, t(label)).exists(), label).toBe(true)
     }
     expect(live.text()).not.toContain(t('share.pendingDeletion'))
+  })
+
+  // ADR 0114 decision 7: the close cleared the link's key, so its reopen carries the folder's current key and name.
+  it("switches a link back on with the folder's own key at its epoch, the scope key and its name, and re-reads the list", async () => {
+    const off = row({ shareId: 'off', enabled: false })
+    listSharesFor.mockResolvedValueOnce([off]).mockResolvedValueOnce([{ ...off, enabled: true }])
+    const w = mountDialog()
+    await flushPromises()
+    await w.find('.folder-share-fold').trigger('click')
+
+    await byLabel(w, t('share.reactivate')).trigger('click')
+    await flushPromises()
+
+    const reactivate = vi.mocked(manage.reactivateShare)
+    expect(reactivate).toHaveBeenCalledTimes(1)
+    const [share, root, epochs, name] = reactivate.mock.calls[0]
+    expect(share).toMatchObject({ shareId: 'off', scopeId: SCOPE_ID, nodeId: FOLDER_ID, role: ShareRole.Read, sealedShareKey: 'k', sealedShareKeyEpoch: 0 })
+    expect(root).toEqual({ key: FOLDER_KEY, epoch: FOLDER_EPOCH })
+    expect(root.key).toBe(FOLDER_KEY)
+    expect(epochs).toEqual(EPOCHS)
+    expect(name).toBe('Trips')
+    expect(listSharesFor).toHaveBeenCalledTimes(2)
   })
 
   it('deletes a switched-off link after the folder-worded confirm', async () => {

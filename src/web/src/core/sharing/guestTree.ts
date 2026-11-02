@@ -152,7 +152,7 @@ function assertNameFree(parts: SharedSubtree, parentId: string, kind: NodeKind, 
  */
 export async function createShareNodeAsGuest(
   ctx: GuestTreeContext, { parentId, kind, name }: { parentId: string; kind: NodeKind; name: string },
-): Promise<{ nodeId: string; contentKey: Uint8Array; epoch: number }> {
+): Promise<{ nodeId: string; contentKey: Uint8Array; epoch: number; scopeEpoch: number }> {
   let parts: GuestTreeParts = ctx
   try {
     return await writeAtNodeEpoch(async (reread) => {
@@ -162,7 +162,9 @@ export async function createShareNodeAsGuest(
       if (!parentKey || !parent) throw new v1.OpenRefused('content-key') // never K_SC: a guest writes only under keys it holds
       assertNameFree(parts, parentId, kind, name)
       const contentKey = v1.randomBytes(32)
-      const node = { scopeId: ctx.scopeId, nodeId: crypto.randomUUID(), epoch: parent.epoch, placementRevision: 0 }
+      // the new key is minted under the scope epoch the parent's key was (the scope's current one while the parent is not
+      // due, ADR 0114 decision 3): what its seals bind and the create states; it starts at its own epoch 0
+      const node = { scopeId: ctx.scopeId, nodeId: crypto.randomUUID(), scopeEpoch: parent.scopeEpoch, placementRevision: 0 }
       const res = await publicSharesApi().createShareNode({
         shareId: ctx.shareId,
         xContributorToken: ctx.contributorToken,
@@ -173,12 +175,12 @@ export async function createShareNodeAsGuest(
           kind,
           encryptedName: sealName(parentKey, node, name),
           slugToken: slugTokenFor(parentKey, parentId, kind, name),
-          epoch: node.epoch,
+          scopeEpoch: node.scopeEpoch,
           parentEpoch: parent.epoch,
           wrappedContentKey: wrapContentKey(parentKey, node, contentKey),
         },
       })
-      return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey, epoch: node.epoch }
+      return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey, epoch: 0, scopeEpoch: node.scopeEpoch }
     })
   } catch (e) {
     throw await guestTreeErrorOf(e)
@@ -249,7 +251,7 @@ async function sendGuestPlacement(
     throw new v1.OpenRefused('content-key') // nothing to re-wrap, or nothing to re-wrap it under
   }
   assertNameFree(parts, newParentId, node.kind, name, nodeId)
-  const sealedAt = { scopeId: ctx.scopeId, nodeId, epoch: node.epoch, placementRevision: node.placementRevision + 1 }
+  const sealedAt = { scopeId: ctx.scopeId, nodeId, scopeEpoch: node.scopeEpoch, placementRevision: node.placementRevision + 1 }
   await publicSharesApi().updateShareNode({
     shareId: ctx.shareId,
     nodeId,

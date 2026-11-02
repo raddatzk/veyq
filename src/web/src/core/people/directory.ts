@@ -11,8 +11,8 @@ import { shallowRef } from 'vue'
 import { activeEpochKeys, activeSpace } from '../../app/activeSpace'
 import { listScopeMembers } from '../../features/spaces/members'
 import { openScope } from '../../features/spaces/scopes'
-import { copyEpochKeys, zeroEpochKeys, type EpochKeys } from '../../features/spaces/epochs'
-import { unsealNameUnderEpochs, type MemberName } from '../../features/account/profile/memberName'
+import { copyScopeKey, zeroScopeKey, type ScopeKey } from '../../features/spaces/epochs'
+import { openMemberName, type MemberName } from '../../features/account/profile/memberName'
 import { ScopeKind } from '../../api/generated/scopes'
 import { syncAvatars, resetAvatars } from './avatarCache'
 
@@ -74,14 +74,14 @@ export async function refreshPeopleDirectory(): Promise<void> {
 }
 
 /** The tenant's members with their sealed names opened, read once a minute: the tenant scope is the active one (its keys
- *  are held) or is opened for this read and zeroed after it. Each name opens under the tenant epoch it was sealed under,
- *  tried across every held epoch key ({@link unsealNameUnderEpochs}): a name saved before a rotation still reads. Empty
+ *  are held) or is opened for this read and zeroed after it. Each name opens under the tenant's one key
+ *  ({@link openMemberName}): every rotation re-seals every profile under its new key (ADR 0115 decision 2). Empty
  *  when the caller holds no tenant grant. */
 async function tenantNames(): Promise<Map<string, TenantRow>> {
   if (namesCache && Date.now() - namesCache.at < NAMES_TTL_MS) return namesCache.names
   let scopeId: string
   let tenantId: string | null
-  let epochs: EpochKeys | null
+  let epochs: ScopeKey | null
   let release: (() => void) | null = null
   if (activeSpace.kind === ScopeKind.Tenant && activeSpace.scopeId) {
     scopeId = activeSpace.scopeId
@@ -93,14 +93,14 @@ async function tenantNames(): Promise<Map<string, TenantRow>> {
     scopeId = opened.scopeId
     tenantId = opened.tenantId
     epochs = opened.epochs
-    release = () => zeroEpochKeys(opened.epochs)
+    release = () => zeroScopeKey(opened.epochs)
   }
   try {
     const rows = await listScopeMembers(scopeId)
     const names = new Map(
       rows.map((m) => [m.userId, {
         username: m.username,
-        name: epochs ? (unsealNameUnderEpochs(epochs, { scopeId, userId: m.userId }, m.sealedName)?.name ?? null) : null,
+        name: epochs ? (openMemberName(epochs, { scopeId, userId: m.userId }, m.sealedName) ?? null) : null,
         identityPublicKey: m.identityPublicKey,
         keyChainHead: m.keyChainHead,
       }] as const),
@@ -110,8 +110,8 @@ async function tenantNames(): Promise<Map<string, TenantRow>> {
     // The pictures, in step with the roster: only the version integers were read; a picture is fetched when its version is new.
     // The keys are copied for the fetches (the scope's own may be zeroed below) and the copy zeroed when they settle.
     if (epochs && tenantId) {
-      const copy = copyEpochKeys(epochs)
-      avatarSync = syncAvatars({ tenantId, scopeId, epochs: copy }, rows).finally(() => zeroEpochKeys(copy))
+      const copy = copyScopeKey(epochs)
+      avatarSync = syncAvatars({ tenantId, scopeId, epochs: copy }, rows).finally(() => zeroScopeKey(copy))
     }
     return names
   } finally {

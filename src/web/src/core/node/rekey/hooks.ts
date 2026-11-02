@@ -32,3 +32,24 @@ export type RekeyContentHook = (ctx: RekeyNodeContext) => Promise<void>
 /** The hook of a kind that stores nothing under a node's key beyond what core re-keys (core's FOLDER, Depot's file and
  *  drop box: a file's content wrap is a core attachment). */
 export const nothingOfItsOwnToRekey: RekeyContentHook = async () => {}
+
+/**
+ * A rotation's scope-level re-seal (ADR 0115 decision 2), as core hands it to an application: the scope key is replaced,
+ * and every row the application stores sealed under it (Memories' item marks) must be re-sealed under the new key and
+ * staged under [rekeyId] before core commits the rotation — the backend's `ScopeRekeyParticipant` on the web. Core never
+ * names an application's rows (ADR 0079 decision 3). Every key here lives only for the call.
+ */
+export interface ScopeRekeyContext {
+  scopeId: string
+  /** The rotation's re-key id: what the application stages under and core names in the commit. */
+  rekeyId: string
+  /** The scope's key before the rotation (`fromEpoch`, the epoch every listed row is under) and the one it minted. */
+  oldKey: { readonly epoch: number; readonly key: Uint8Array }
+  newKey: { readonly epoch: number; readonly key: Uint8Array }
+  /** SHA-256 (base64) of a served ciphertext's TEXT — what each staged value names as `replacedDigest`. */
+  digestOf(ciphertext: string): string
+}
+
+/** Re-seal and stage an application's rows under the scope key (see [ScopeRekeyContext]). Fails closed: a row it cannot
+ *  stage throws, and the rotation is not committed (the server refuses it `rekey_parts_missing` anyway). */
+export type ScopeRekeyParticipant = (ctx: ScopeRekeyContext) => Promise<void>

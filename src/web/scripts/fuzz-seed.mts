@@ -174,11 +174,11 @@ async function ownerObjects(): Promise<Pick<Seed['ids'], 'scopeId' | 'nodeId' | 
     tiers: [],
     meta: null,
     exif: null,
-  }, { nodeEpoch: own.epochs.current })
-  // a Memory just made is minted at the scope's current epoch, which every write to it states (ADR 0109 point 6)
-  const bucket = await createBucket(own.scopeId, memory.nodeId, memory.memoryKey, own.epochs.current, 'Fuzz bucket')
+  }, { nodeEpoch: 0 })
+  // a Memory just made holds its key at its own epoch 0, which every write to it states (ADR 0114 decision 3)
+  const bucket = await createBucket(own.scopeId, memory.nodeId, memory.memoryKey, 0, 'Fuzz bucket')
   const share = await createShare(
-    own.scopeId, memory.nodeId, { key: memory.memoryKey, epoch: own.epochs.current }, own.epochs, name, ShareRole.Read,
+    own.scopeId, memory.nodeId, { key: memory.memoryKey, epoch: 0 }, own.epochs, name, ShareRole.Read,
   )
   return {
     scopeId: own.scopeId, nodeId: memory.nodeId, mediaId: medium.mediaId, blobId: medium.blobId,

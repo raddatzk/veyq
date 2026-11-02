@@ -70,18 +70,18 @@ beforeEach(() => {
 describe('MemoryNodeDialog', () => {
   it('a MEMORY inside a folder wraps under the folder\'s key (ADR 0080)', async () => {
     const parentKey = new Uint8Array(32).fill(9)
-    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: 'folder-1', parentKey, parentEpoch: 0 })
+    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: 'folder-1', parentKey, parentEpoch: 2, parentScopeEpoch: 1 })
     expect(wrapper.find('.hdr').text()).toBe(t('memory.createMemoryTitle'))
     await wrapper.find('input').setValue('Italy')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
-    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', { id: 'folder-1', key: parentKey, epoch: 0 }, { location: null, participants: [] }, { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', { id: 'folder-1', key: parentKey, epoch: 2, scopeEpoch: 1 }, { location: null, participants: [] }, { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
     expect(wrapper.emitted('done')).toBeTruthy()
     expect(wrapper.emitted('close')).toBeTruthy()
   })
 
   it('a MEMORY at the root passes parentId null and no pre-armed location (maps off)', async () => {
-    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await wrapper.find('input').setValue('Italy')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
@@ -90,7 +90,7 @@ describe('MemoryNodeDialog', () => {
   })
 
   it('a MEMORY under a parent whose key is missing creates nothing', async () => {
-    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: 'folder-1', parentKey: null, parentEpoch: null })
+    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: 'folder-1', parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await wrapper.find('input').setValue('Italy')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
@@ -101,19 +101,19 @@ describe('MemoryNodeDialog', () => {
   it('a CHAPTER is created inside the opened Memory, under the Memory\'s key, with no location step', async () => {
     setMapsConsent(true) // even with maps on: a chapter has no place of its own
     const memoryKey = new Uint8Array(32).fill(5)
-    const wrapper = mountDialog({ kind: CHAPTER_KIND, parentId: 'italy', parentKey: memoryKey, parentEpoch: 0 })
+    const wrapper = mountDialog({ kind: CHAPTER_KIND, parentId: 'italy', parentKey: memoryKey, parentEpoch: 2, parentScopeEpoch: 1 })
     expect(wrapper.find('.hdr').text()).toBe(t('memory.createChapterTitle'))
     expect(wrapper.find('.wants-location').exists()).toBe(false)
     await wrapper.find('input').setValue('Day 1')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
-    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, memoryKey, 'Day 1', 'italy', 0, { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
+    expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, memoryKey, 'Day 1', 'italy', expect.objectContaining({ epoch: 2, scopeEpoch: 1 }), { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
     expect(createMemory).not.toHaveBeenCalled()
     expect(wrapper.emitted('done')).toBeTruthy()
   })
 
   it('a CHAPTER without its Memory creates nothing', async () => {
-    const wrapper = mountDialog({ kind: CHAPTER_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const wrapper = mountDialog({ kind: CHAPTER_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await wrapper.find('input').setValue('Day 1')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
@@ -123,7 +123,7 @@ describe('MemoryNodeDialog', () => {
 
   it('the maps opt-in arms a PENDING auto location (position + name land with the first media)', async () => {
     setMapsConsent(true)
-    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await wrapper.find('input').setValue('Climbing 2026')
     await wrapper.find('.wants-location').setValue(true) // opt in — "follows your photos"
     await wrapper.find('form').trigger('submit')
@@ -134,7 +134,7 @@ describe('MemoryNodeDialog', () => {
 
   it('leaving the opt-in unchecked creates the Memory with no location', async () => {
     setMapsConsent(true)
-    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await wrapper.find('input').setValue('Trip')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
@@ -144,7 +144,7 @@ describe('MemoryNodeDialog', () => {
 
   it('maps a 409 to the slug-taken message and stays open', async () => {
     vi.mocked(createMemory).mockRejectedValueOnce(httpError(409))
-    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const wrapper = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await wrapper.find('input').setValue('Dupe')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
@@ -169,7 +169,7 @@ describe('MemoryNodeDialog: "I was there"', () => {
   for (const kind of [ScopeKind.Tenant, ScopeKind.Group]) {
     it(`${kind}: offered ticked; kept, the creator's own id is the Memory's first participant`, async () => {
       activeSpace.kind = kind
-      const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+      const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
       expect(wasThere(w).exists()).toBe(true)
       expect((wasThere(w).element as HTMLInputElement).checked, 'ticked by default').toBe(true)
       expect(w.text()).toContain(t('memory.participants.wasThere'))
@@ -180,7 +180,7 @@ describe('MemoryNodeDialog: "I was there"', () => {
 
   it('unticked: no participants are written', async () => {
     activeSpace.kind = ScopeKind.Tenant
-    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await wasThere(w).setValue(false)
     await create(w)
     expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Rom', null, { location: null, participants: [] }, ROOT_CREATE)
@@ -188,16 +188,16 @@ describe('MemoryNodeDialog: "I was there"', () => {
 
   it('is not remembered: the next create offers it ticked again', async () => {
     activeSpace.kind = ScopeKind.Tenant
-    const first = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const first = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     await wasThere(first).setValue(false)
     first.unmount()
-    const next = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const next = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     expect((wasThere(next).element as HTMLInputElement).checked).toBe(true)
   })
 
   it('is absent in a personal scope, and nothing is recorded there', async () => {
     activeSpace.kind = ScopeKind.Personal
-    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })
+    const w = mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })
     expect(wasThere(w).exists()).toBe(false)
     expect(w.text()).not.toContain(t('memory.participants.wasThere'))
     await create(w)
@@ -206,12 +206,12 @@ describe('MemoryNodeDialog: "I was there"', () => {
 
   it('is absent on a chapter, without the own id, and for a scope other than the open one', async () => {
     activeSpace.kind = ScopeKind.Tenant
-    expect(wasThere(mountDialog({ kind: CHAPTER_KIND, parentId: 'italy', parentKey: new Uint8Array(32), parentEpoch: 0 })).exists(), 'chapter').toBe(false)
-    expect(wasThere(mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })).exists(), 'control').toBe(true)
+    expect(wasThere(mountDialog({ kind: CHAPTER_KIND, parentId: 'italy', parentKey: new Uint8Array(32), parentEpoch: 0, parentScopeEpoch: 0 })).exists(), 'chapter').toBe(false)
+    expect(wasThere(mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })).exists(), 'control').toBe(true)
     account.userId = ''
-    expect(wasThere(mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })).exists(), 'no own id').toBe(false)
+    expect(wasThere(mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })).exists(), 'no own id').toBe(false)
     account.userId = ME
     activeSpace.scopeId = null
-    expect(wasThere(mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null })).exists(), 'no open scope').toBe(false)
+    expect(wasThere(mountDialog({ kind: MEMORY_KIND, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null })).exists(), 'no open scope').toBe(false)
   })
 })

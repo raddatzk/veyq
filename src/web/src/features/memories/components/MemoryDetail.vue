@@ -70,6 +70,7 @@ import BannerDialog from '../banner/BannerDialog.vue'
 import { useMemoryBanner } from '../banner/useMemoryBanner'
 import { useBannerEditor } from '../banner/useBannerEditor'
 import MapConsentRenewal from './MapConsentRenewal.vue'
+import type { ScopeKey } from '../../spaces/epochs'
 
 const props = defineProps<{
   node: TreeNode
@@ -77,7 +78,7 @@ const props = defineProps<{
   memoryKey: Uint8Array | null
   // The scope content key at the BASE epoch — what item marks seal under (ADR 0068). Not `memoryKey`: marks
   // belong to the scope's members, not to this Memory's content grain.
-  scopeKey?: Uint8Array | null
+  scopeKey?: ScopeKey | null
   // A personal scope has nobody to share a mark with, so "everyone's / only mine" is degenerate there and the
   // filter is HIDDEN rather than rendered disabled (uc.memory.gallery E4).
   personalScope?: boolean

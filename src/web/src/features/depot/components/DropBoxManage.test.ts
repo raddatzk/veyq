@@ -41,7 +41,7 @@ beforeEach(() => {
 
 describe('the drop box create dialog', () => {
   it('says what a drop box is before it asks the name, and submits with "Create"', () => {
-    const w = mount(DropBoxCreateDialog, { props: { kind: DROPBOX_KIND, scopeId: SCOPE, epochs: EPOCHS, parentId: null, parentKey: null, parentEpoch: null }, global })
+    const w = mount(DropBoxCreateDialog, { props: { kind: DROPBOX_KIND, scopeId: SCOPE, epochs: EPOCHS, parentId: null, parentKey: null, parentEpoch: null, parentScopeEpoch: null }, global })
     expect(w.find('.veyq-form-copy').text()).toBe(t('depot.dropBox.createHint'))
     expect(w.find('button[type="submit"]').text()).toBe(t('common.create'))
   })
@@ -137,7 +137,12 @@ describe('the drop box share dialog', () => {
     await rows[0].find(`button[aria-label="${t('depot.dropBox.shareReactivate')}"]`).trigger('click')
     await flushPromises()
     expect(confirmRequest.value, 'switching on asks nothing').toBeNull()
-    expect(reactivateShare).toHaveBeenCalledWith('link-1')
+    // the reopen re-seals the link's root under the drop box's key at its own epoch, under the scope's one key
+    expect(reactivateShare).toHaveBeenCalledOnce()
+    expect(reactivateShare).toHaveBeenCalledWith(
+      expect.objectContaining({ shareId: 'link-1', nodeId: 'b1', role: ShareRole.WriteOnly, sealedShareKey: 'k', sealedShareKeyEpoch: 0 }),
+      { key: new Uint8Array(32), epoch: 0 }, EPOCHS, 'Einsendungen',
+    )
     expect(listSharesFor).toHaveBeenCalledTimes(2)
   })
 })

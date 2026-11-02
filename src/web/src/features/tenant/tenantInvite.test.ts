@@ -19,7 +19,7 @@ import { stubApi } from '../../test/apiMock'
 import { ResponseError, type ServedMemberInvite } from '../../api/generated/tenants'
 import type { AccountMaterial } from '@veyq/crypto/accountBirth'
 import {
-  bundleOf, carriedTo, epochLink, foreignGranter, inviteGrant, memberInviteFixture, ownerSecured, signedInviteKey,
+  bundleOf, carriedTo, succession, foreignGranter, inviteGrant, memberInviteFixture, ownerSecured, signedInviteKey,
   type MemberInviteFixture,
 } from '../../test/memberInvite'
 import { chainKeys, genesis, headOf } from '../../test/keyChain'
@@ -43,10 +43,10 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
 
   const BIRTH = { grant: 'AQ==', grantSignature: 'c2ln', recipientIdentityDigest: 'ZGlnZXN0' }
 
-  it('acceptInvite threads the birth and the optional sealedName onto the accept request (cr-0106)', async () => {
+  it('acceptInvite threads the birth and the optional sealedName onto the accept request (cr-0106), at the birth epoch 0 (ADR 0115 decision 3)', async () => {
     await acceptInvite('secret', 'kevin', BIRTH, 'c2VhbGVkLW5hbWU=')
     expect(api.acceptTenantInvite).toHaveBeenCalledWith({
-      acceptInviteRequest: { bootstrapSecret: 'secret', username: 'kevin', ...BIRTH, sealedName: 'c2VhbGVkLW5hbWU=' },
+      acceptInviteRequest: { bootstrapSecret: 'secret', username: 'kevin', ...BIRTH, sealedName: 'c2VhbGVkLW5hbWU=', epoch: 0 },
     })
   })
 
@@ -204,18 +204,18 @@ describe('openMemberInvite — the checks before anything is sent', () => {
   it('#565 regression: an operator\'s key at epoch 1 under a granter it fabricated is refused (epoch_unlinked)', async () => {
     const f = memberInviteFixture({ epoch: 0 })
     // The probe on main: a grant at epoch 1 wrapped to the invite key with a key of the operator's choosing, signed by a
-    // freshly generated identity under an unknown user id — with a link it can make, under its own key.
+    // freshly generated identity under an unknown user id — with a succession statement it can sign, from its own key.
     const fabricated = foreignGranter(crypto.randomUUID())
     const chosen = v1.randomBytes(32)
     const served: ServedMemberInvite = {
       ...f.served,
       ...inviteGrant(f.tenantId, 1, chosen, f.served.inviteId, f.inviteKey, fabricated.identity),
       granterUserId: fabricated.userId, granterIdentityPublicKey: bundleOf(fabricated.identity), granterKeyChainHead: fabricated.head,
-      epochLinks: [epochLink(f.tenantId, 1, [v1.randomBytes(32), chosen])],
+      successions: [succession(f.tenantId, 1, [v1.randomBytes(32), chosen])],
     }
     expect(await refusal(openWith(f, served))).toBe('check:epoch_unlinked')
-    expect(await refusal(openWith(f, { ...served, epochLinks: [] }))).toBe('check:epoch_unlinked')
-    // Control: a member's rotation genuinely carried the invite to epoch 1 — its link peels down to the owner's anchor.
+    expect(await refusal(openWith(f, { ...served, successions: [] }))).toBe('check:epoch_unlinked')
+    // Control: a member's rotation genuinely carried the invite to epoch 1 — its statement starts at the owner's anchor.
     const carried = carriedTo(f, 1, fabricated)
     const opened = await openWith(carried)
     expect(Array.from(opened.epochKey)).toEqual(Array.from(carried.keys[1]))
@@ -276,6 +276,27 @@ describe('acceptCheckedInvite — one silent re-check on 409 invite_changed (ADR
     expect(seen[1].key).toEqual(Array.from(f.tenantKey))
     // The caller's invite is still the caller's; the re-opened one was wiped.
     expect(opened.link.seed.some((b) => b !== 0)).toBe(true)
+  })
+
+  it('a rotation carried the invite meanwhile (409 stale_epoch, ADR 0115 decision 8): re-read, and the join sealed again under the carried key at its epoch', async () => {
+    const f = memberInviteFixture({ epoch: 1 })
+    const opened = await openWith(f)
+    const carried = carriedTo(f, 2)
+    const seen: { epoch: number; key: number[]; join: ReturnType<typeof buildMemberJoin> }[] = []
+    const newcomer = { userId: '5c09e000-0000-4000-8000-0000000000a9', identity: v1.generateIdentity(), secretKeyProofPublicKey: new Uint8Array(32).fill(1) }
+    const send = vi.fn(async (o: OpenedMemberInvite) => {
+      seen.push({ epoch: o.grantedEpoch, key: Array.from(o.epochKey), join: buildMemberJoin(o, newcomer) })
+      if (seen.length === 1) throw httpError(409, 'stale_epoch')
+      return 'joined'
+    })
+    expect(await acceptCheckedInvite(opened, send, async () => carried.served)).toBe('joined')
+    expect(seen.map((s) => s.epoch)).toEqual([1, 2])
+    expect(seen[1].key).toEqual(Array.from(carried.tenantKey))
+    // the join states the epoch its record is sealed under, and the second record opens under the carried key only
+    expect(seen.map((s) => s.join.epoch)).toEqual([1, 2])
+    const address = { tenantId: f.tenantId, userId: newcomer.userId }
+    expect(() => invite.openJoinRecord(carried.tenantKey, address, fromB64std(seen[1].join.sealedJoinRecord))).not.toThrow()
+    expect(() => invite.openJoinRecord(f.tenantKey, address, fromB64std(seen[1].join.sealedJoinRecord))).toThrow()
   })
 
   it('once: a second invite_changed is the caller\'s — no third send', async () => {

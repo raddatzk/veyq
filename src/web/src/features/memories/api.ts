@@ -8,6 +8,7 @@ import { BucketsApi, Configuration as MediaConfiguration, MediaApi } from '../..
 import {
   Configuration as ItemFavoritesConfiguration,
   ItemFavoritesApi,
+  ItemFavoritesRekeyApi,
   OwnItemFavoritesApi,
 } from '../../api/generated/item-favorites'
 import { CaseMediaApi, Configuration as ShareMediaConfiguration, ShareMediaApi } from '../../api/generated/share-media'
@@ -30,6 +31,12 @@ export function bucketsApi(): BucketsApi {
 // pins are the other object and core's (`favoritesApi`, `api/client.ts`): different audiences, different owners.
 export function itemFavoritesApi(): ItemFavoritesApi {
   return new ItemFavoritesApi(new ItemFavoritesConfiguration(bearerParams()))
+}
+
+// A rotation's re-seal of every member's item marks in a scope (ADR 0115 decision 2) — the `rekey` tag of the
+// item-favorites spec, read and staged only by the rotating client (`stageItemMarksRekey`).
+export function itemFavoritesRekeyApi(): ItemFavoritesRekeyApi {
+  return new ItemFavoritesRekeyApi(new ItemFavoritesConfiguration(bearerParams()))
 }
 
 // The caller's own item marks across every scope (ADR 0068 §9) — the `own-item-favorites` tag, read only by an

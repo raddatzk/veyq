@@ -63,8 +63,8 @@ const NOTE_KIND = 'NOTE'
 const BROKEN_KIND = 'BROKEN'
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE_ID, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 
 function head(role: ShareRole = ShareRole.Read): PublicShareHead {
@@ -73,7 +73,7 @@ function head(role: ShareRole = ShareRole.Read): PublicShareHead {
     share: {
       role, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
       nodes: [
-        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0, scopeEpoch: 0 },
         child(LETTERS, ROOT, keys.root, keys.letters, 'Briefe', FOLDER_KIND),
         child(NESTED, LETTERS, keys.letters, keys.nested, 'Feldpost', FOLDER_KIND),
         child(NOTE, ROOT, keys.root, keys.note, 'Notizen', NOTE_KIND),
@@ -320,7 +320,7 @@ describe('ShareTreePage on a link rooted at a non-folder node', () => {
       shareId: SHARE_ID, kShare: K_SHARE, scopeId: SCOPE_ID, name: 'Rom 2026', noteByLocale: { en: 'Box **note**' }, role, rootKind: BOX_KIND,
       share: {
         role, scopeId: SCOPE_ID, rootKind: BOX_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, box.key)),
-        nodes: [{ id: BOX, parentId: null, kind: BOX_KIND, epoch: 0 }, child(INNER, BOX, box.key, box.inner, 'Tag 1', BOX_KIND)],
+        nodes: [{ id: BOX, parentId: null, kind: BOX_KIND, epoch: 0, scopeEpoch: 0 }, child(INNER, BOX, box.key, box.inner, 'Tag 1', BOX_KIND)],
       } as PublicShare,
     }
   }

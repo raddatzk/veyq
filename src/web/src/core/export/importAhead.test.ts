@@ -14,14 +14,14 @@ import { registry } from '../applications/registry'
 import { createContentNode, deleteNode } from '../node/tree'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 import type { ByteSink } from '../blob/stream'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import { importSubtree, openExport } from './importSubtree'
 import type { ManifestPayload } from './manifest'
 import { ZipWriter } from './zip'
 import { testKind } from '../../test/testApplication'
 
 const KIND = 'H_AHEAD'
-const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
+const epochs: ScopeKey = { epoch: 1, key: new Uint8Array(32) }
 const text = (s: string) => new TextEncoder().encode(s)
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 // Two payloads of sizes no ZIP structure read has (7 and 13 bytes), so a read of 13 bytes is the second payload's.
@@ -64,7 +64,7 @@ beforeEach(() => {
   unhandled.length = 0
   process.on('unhandledRejection', onUnhandled)
   let n = 0
-  vi.mocked(createContentNode).mockReset().mockImplementation(async () => ({ nodeId: `new${++n}`, contentKey: new Uint8Array(32), epoch: 1 }))
+  vi.mocked(createContentNode).mockReset().mockImplementation(async () => ({ nodeId: `new${++n}`, contentKey: new Uint8Array(32), epoch: 0, scopeEpoch: 1 }))
   vi.mocked(deleteNode).mockReset().mockResolvedValue(undefined)
   // The second payload's bytes cannot be read (a file changed on disk); every other read passes.
   const read = Blob.prototype.arrayBuffer

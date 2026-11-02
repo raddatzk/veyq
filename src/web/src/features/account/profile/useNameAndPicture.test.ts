@@ -21,8 +21,9 @@ vi.mock('../../../core/people/directory', () => ({
 }))
 
 import { useNameAndPicture } from './useNameAndPicture'
-import { getMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName, type OwnNameKey } from './profile'
+import { getMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName, unsealName, type OwnNameKey } from './profile'
 import { openAvatar } from './memberAvatar'
+import { httpError } from '../../../test/httpError'
 import { avatarUrlOf, refreshPeopleDirectory } from '../../../core/people/directory'
 
 const K = v1.randomBytes(32)
@@ -106,7 +107,7 @@ describe('useNameAndPicture', () => {
   })
 
   describe('the tenant keys it holds (inbox #574)', () => {
-    const zeroed = (own: OwnNameKey) => [...own.epochs.keys.values()].every((k) => k.every((b) => b === 0))
+    const zeroed = (own: OwnNameKey) => own.epochs.key.every((b) => b === 0)
     let handed: OwnNameKey[]
     beforeEach(() => {
       handed = []
@@ -159,6 +160,82 @@ describe('useNameAndPicture', () => {
       await loading
       expect(zeroed(handed[0])).toBe(true)
       expect(m.firstName).toBe('')
+    })
+  })
+
+  describe('a write states the tenant epoch and seals once more after `409 stale_epoch` (ADR 0115 decision 3)', () => {
+    const K1 = v1.randomBytes(32)
+    const K2 = v1.randomBytes(32)
+    /** The tenant key as `openOwnNameKey` hands it at `epoch` — a fresh copy per open, as its caller zeroes it. */
+    const at = (key: Uint8Array, epoch: number): OwnNameKey => {
+      const k = key.slice()
+      return { key: k, epochs: { epoch, key: k }, tenantId: ADDRESS.scopeId, address: ADDRESS }
+    }
+    let handed: OwnNameKey[]
+    beforeEach(() => {
+      handed = []
+      // The editor opens at epoch 1; a rotation then replaces the key with epoch 2's, which every later open hands over.
+      const opens = [at(K1, 1)]
+      vi.mocked(openOwnNameKey).mockImplementation(async () => {
+        const own = opens.shift() ?? at(K2, 2)
+        handed.push(own)
+        return own
+      })
+    })
+    const stale = () => httpError(409, 'stale_epoch')
+
+    it('the name: the first send states epoch 1 under its key, the second — after a re-open — epoch 2 under the new key', async () => {
+      const m = model()
+      await m.load(memberProfile())
+      m.firstName = 'Anna'
+      m.lastName = 'Meyer'
+      const send = vi.fn(async (_name: { sealedName: string; epoch: number } | undefined) => 'saved')
+      send.mockRejectedValueOnce(stale())
+      expect(await m.saveName(send)).toBe('saved')
+      expect(send).toHaveBeenCalledTimes(2)
+      const [first, second] = send.mock.calls.map(([n]) => n!)
+      expect(first.epoch).toBe(1)
+      expect(unsealName(K1, ADDRESS, first.sealedName)).toEqual({ firstName: 'Anna', lastName: 'Meyer' })
+      expect(second.epoch).toBe(2)
+      expect(unsealName(K2, ADDRESS, second.sealedName)).toEqual({ firstName: 'Anna', lastName: 'Meyer' })
+      expect(unsealName(K1, ADDRESS, second.sealedName), 'not under the replaced key').toBeNull()
+      expect(openOwnNameKey).toHaveBeenCalledTimes(2) // the load, and the one re-open
+      expect(handed[0].key.every((b) => b === 0), 'the replaced key is zeroed').toBe(true)
+    })
+
+    it('the picture: the same — the second PUT states epoch 2 and opens under the new key only', async () => {
+      vi.mocked(setMyAvatar).mockReset()
+      vi.mocked(setMyAvatar).mockRejectedValueOnce(stale()).mockResolvedValue(undefined)
+      const m = model()
+      await m.load(memberProfile())
+      m.choose(new Uint8Array([9, 9]))
+      await m.savePicture()
+      expect(setMyAvatar).toHaveBeenCalledTimes(2)
+      const [[firstBlob, firstEpoch], [secondBlob, secondEpoch]] = vi.mocked(setMyAvatar).mock.calls
+      expect(firstEpoch).toBe(1)
+      expect([...openAvatar(K1, ADDRESS, firstBlob)!]).toEqual([9, 9])
+      expect(secondEpoch).toBe(2)
+      expect([...openAvatar(K2, ADDRESS, secondBlob)!]).toEqual([9, 9])
+      expect(openAvatar(K1, ADDRESS, secondBlob)).toBeNull()
+      expect(m.draftKind).toBe('keep')
+    })
+
+    it('bounded: a second `stale_epoch` is thrown after two sends; any other refusal is never re-sealed', async () => {
+      const m = model()
+      await m.load(memberProfile())
+      const always = vi.fn(async (): Promise<string> => {
+        throw stale()
+      })
+      await expect(m.saveName(always)).rejects.toThrow('http 409 stale_epoch')
+      expect(always).toHaveBeenCalledTimes(2)
+
+      const other = vi.fn(async (): Promise<string> => {
+        throw httpError(409, 'username_taken')
+      })
+      const opened = vi.mocked(openOwnNameKey).mock.calls.length
+      await expect(m.saveName(other)).rejects.toThrow('username_taken')
+      expect(other).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(openOwnNameKey).mock.calls.length).toBe(opened) // no re-open
     })
   })
 })

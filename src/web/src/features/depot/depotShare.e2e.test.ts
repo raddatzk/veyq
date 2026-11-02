@@ -83,8 +83,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     const withFolder = await listTree(scopeId, epochs)
     const folderKey = nodeContentKey(scopeId, epochs, withFolder, folderId)!
     const folderRoot = { key: folderKey, epoch: withFolder.find((n) => n.id === folderId)!.epoch }
+    const folderScopeEpoch = withFolder.find((n) => n.id === folderId)!.scopeEpoch
     const memberBytes = bytesOf(CHUNK_SIZE + 321, 1)
-    const memberFile = (await fileUploadJob({ scopeId, epochs, parent: { id: folderId, ...folderRoot } }, fileOf(memberBytes, MEMBER_FILE)).run(ctx())).nodeId
+    const memberFile = (await fileUploadJob({ scopeId, epochs, parent: { id: folderId, ...folderRoot, scopeEpoch: folderScopeEpoch } }, fileOf(memberBytes, MEMBER_FILE)).run(ctx())).nodeId
 
     // --- a READ link: the guest lists and downloads through the link ----------------------------------------------
     const read = await mintShare(scopeId, folderId, folderRoot, epochs, FOLDER_NAME, ShareRole.Read)
@@ -109,7 +110,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
 
     // a READ link refuses the same write: its token names no identity there, and its role takes none
     const readWrite = await failure(publicShareFilesApi().completeShareFile({
-      shareId: read.shareId, nodeId: guestFile, shareFileCompleteRequest: { contributorToken: guest.contributorToken, uploadId: crypto.randomUUID(), nodeEpoch: epochs.current },
+      shareId: read.shareId, nodeId: guestFile, shareFileCompleteRequest: { contributorToken: guest.contributorToken, uploadId: crypto.randomUUID(), nodeEpoch: 0 },
     }))
     expect(httpStatus(readWrite)).toBe(403)
 

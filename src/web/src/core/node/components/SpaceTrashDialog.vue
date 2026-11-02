@@ -28,13 +28,13 @@ import type { VeyqIconName } from '../../../shared/ui/icons'
 import { listTrash, purgeNode, restoreNode, type TrashedNode, type TreeNode } from '../tree'
 import type { NodeKind } from '../kind'
 import { registry } from '../../applications/registry'
-import type { EpochKeys } from '../../../features/spaces/epochs'
+import type { ScopeKey } from '../../../features/spaces/epochs'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { useConfirm } from '../../../shared/state/useConfirm'
 
 // `tree` is the live tree: a trashed root's name and its restore's slug token live under its live parent's key (ADR 0080).
-const props = defineProps<{ scopeId: string; epochs: EpochKeys; tree: TreeNode[] }>()
+const props = defineProps<{ scopeId: string; epochs: ScopeKey; tree: TreeNode[] }>()
 const emit = defineEmits<{ restored: []; close: [] }>()
 const { t, locale } = useI18n()
 const { ask } = useConfirm()

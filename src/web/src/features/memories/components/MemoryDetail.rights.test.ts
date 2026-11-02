@@ -67,7 +67,7 @@ async function seedDated(memoryKey: Uint8Array) {
 
 async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean; coreActions?: CoreHeaderAction[]; canSetCover?: boolean } = {}) {
   const w = mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: o.personalScope ?? false, chapters: [chapter], rights, canSetCover: o.canSetCover ?? false },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: { epoch: 0, key: v1.randomBytes(32) }, personalScope: o.personalScope ?? false, chapters: [chapter], rights, canSetCover: o.canSetCover ?? false },
     // Core's actions come from the view around the header (`NodePage`); a stand-in supplies the given ones.
     global: { plugins: [realI18n()], provide: coreActionsStandIn(o.coreActions ?? []) },
     ...(o.attach ? { attachTo: document.body } : {}),

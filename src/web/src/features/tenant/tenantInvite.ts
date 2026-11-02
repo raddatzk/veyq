@@ -34,7 +34,15 @@ export function acceptInvite(
   sealedAvatar?: string,
   join?: MemberJoin,
 ): Promise<TenantActivated> {
-  return tenantsApi().acceptTenantInvite({ acceptInviteRequest: { bootstrapSecret, username, ...birth, ...join, sealedName, sealedAvatar } })
+  return tenantsApi().acceptTenantInvite({
+    acceptInviteRequest: { bootstrapSecret, username, ...birth, ...join, sealedName, sealedAvatar, epoch: profileEpoch(birth, join) },
+  })
+}
+
+/** The tenant epoch an accept's sealed profile fields (the join record, the name, the picture) are sealed under — the
+ *  one the server checks against the current one (ADR 0115 decision 3): a MEMBER join's key's, an OWNER birth's 0. */
+function profileEpoch(birth?: TenantBirth, join?: MemberJoin): number | undefined {
+  return join ? join.epoch : birth ? 0 : undefined
 }
 
 /** Accept an owner invite into an ACTIVE tenant whose member the signed-in caller already is (`InvitePreview.handover`,
@@ -76,6 +84,7 @@ export function registerAndAccept(
       ...join,
       sealedName,
       sealedAvatar,
+      epoch: profileEpoch(birth, join),
     },
   })
 }
@@ -119,10 +128,12 @@ export function scopeGrant(owner: TenantOwner, tenantId: string): TenantBirth {
 
 // ── A member invite: the invitee's half (ADR 0111 decisions 1 and 3) ──────────────────────────────────────────
 
-/** A MEMBER accept's join, as the wire carries it: the self-grant, the invite key's proof, the sealed join record, and
- *  the digest of the inviting owner's key the record names — the key this client checked, which the server compares
- *  with the invite's stored signer key (`409 invite_changed`, ADR 0111 decision 20). */
-export type MemberJoin = { selfGrant: InviteSelfGrant; inviteProof: string; sealedJoinRecord: string; signerIdentityDigest: string }
+/** A MEMBER accept's join, as the wire carries it: the self-grant, the invite key's proof, the sealed join record, the
+ *  digest of the inviting owner's key the record names — the key this client checked, which the server compares with
+ *  the invite's stored signer key (`409 invite_changed`, ADR 0111 decision 20) — and the tenant epoch the record (and
+ *  the name and picture beside it) is sealed under (`409 stale_epoch` when a rotation moved past it, ADR 0115
+ *  decision 3). */
+export type MemberJoin = { selfGrant: InviteSelfGrant; inviteProof: string; sealedJoinRecord: string; signerIdentityDigest: string; epoch: number }
 
 /** The code (or password) does not open the link's sealed part — mistyped, or another invite's link. */
 export class InviteCodeWrong extends Error {
@@ -171,7 +182,7 @@ export function inviteLinkMode(sealedPart: string): invite.InviteLinkMode | null
  * 19): open the link's sealed part with the typed code or password ({@link InviteCodeWrong} if it does not open), then
  * {@link invite.checkInvite} — the key the seed derives is the served one, the owner's served chain passes through the
  * head inside the seal and ends at the served owner key, which signed the invite key and the anchor grant, and the tenant
- * key is the anchor's or peels down to it through the tenant's epoch links ({@link invite.InviteCheckFailed} naming the
+ * key is the anchor's or one the tenant's succession statements lead to from it ({@link invite.InviteCheckFailed} naming the
  * check otherwise). Nothing the result relies on comes from the server unchecked.
  */
 export async function openMemberInvite(tenantId: string, served: ServedMemberInvite, sealedPart: string, typed: string): Promise<OpenedMemberInvite> {
@@ -221,13 +232,15 @@ function checkMemberInvite(tenantId: string, served: ServedMemberInvite, payload
       grantedEpoch: served.grantedEpoch,
       grantSignature: fromB64std(served.grantSignature),
       granterIdentityPublicKey: fromB64std(served.granterIdentityPublicKey),
-      epochLinks: served.epochLinks.map((l) => ({ epoch: l.epoch, wrappedPrev: fromB64std(l.wrappedPrev) })),
+      successions: served.successions.map((s) => ({
+        epoch: s.epoch, successionPublicKey: fromB64std(s.successionPublicKey), successionSignature: fromB64std(s.successionSignature),
+      })),
     }
   } catch {
     throw new invite.InviteCheckFailed('key_mismatch')
   }
   const checked = invite.checkInvite(payload, servedInvite)
-  // A grant a rotation re-wrapped above the anchor names its rotator as granter. The epoch link vouches for the grant;
+  // A grant a rotation re-wrapped above the anchor names its rotator as granter. The succession statements vouch for it;
   // the rotator is handed back only so a client that pinned them judges them ({@link memberInviteAnchored}).
   const foreign = served.grantedEpoch > served.anchorEpoch && served.granterUserId !== served.signerUserId
   return {
@@ -300,7 +313,9 @@ export async function acceptCheckedInvite<T>(
   try {
     return await sendAndHold(opened)
   } catch (e) {
-    if (!(await isCodedError(e, HttpStatus.conflict, 'invite_changed'))) throw e
+    // the owner secured their account since the check (`invite_changed`), or a rotation carried the invite to a new epoch
+    // and re-sealed the tenant under its new key (`stale_epoch`, ADR 0115 decision 8): re-read, check again, seal again
+    if (!(await isCodedError(e, HttpStatus.conflict, 'invite_changed')) && !(await isCodedError(e, HttpStatus.conflict, 'stale_epoch'))) throw e
   }
   const served = await reread()
   if (!served || served.inviteId !== opened.served.inviteId) throw new invite.InviteCheckFailed('key_mismatch')
@@ -360,5 +375,6 @@ export function buildMemberJoin(opened: OpenedMemberInvite, newcomer: Newcomer):
     inviteProof: b64std(inviteProof),
     sealedJoinRecord: b64std(invite.sealJoinRecord(epochKey, address, record)),
     signerIdentityDigest: b64std(v1.sha256Digest(signer.identityPublicKey)),
+    epoch: grantedEpoch,
   }
 }

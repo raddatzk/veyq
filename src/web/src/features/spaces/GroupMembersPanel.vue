@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { resealingScopes } from './scopeRekey'
 // uc.spaces.add-group-member (web, cr-0086) — the "Members" rubric of the GROUP settings (re-homed into the
 // settings hub, ADR 0022). Lists the group's members (username + role + active/pending consent) and, for the
 // group OWNER, adds an existing tenant member by username (inline). A member who does not own the group gets this same
@@ -66,7 +67,7 @@ const renameBusy = ref(false)
 const renameError = ref('')
 const displayName = computed(() => props.name ?? '')
 // The group's icon (uc.spaces.set-space-icon, GROUP slice) — its avatar; owner-only set/replace/remove. Sealed
-// under K_icon and opened on-device against the caller's own grant (peeling the epoch chain, unlike a tenant).
+// under K_icon and opened on-device under the caller's own grant's key (every rotation re-seals it, ADR 0115).
 const groupIcon = useObjectUrl() // an owned object URL for the decrypted icon (revoked on replace/unmount)
 const iconDialogOpen = ref(false)
 const iconBusy = ref(false)
@@ -78,6 +79,8 @@ const purgeAfter = ref<Date | null>(null)
 const stuckRotation = ref<CompromiseRotation | null>(null)
 /** Owner-only: the group's last rotation is still fitting the new lock (ADR 0109) — adding waits per node meanwhile. */
 const rekeying = ref(false)
+// this device is re-sealing the space's scope-level rows for a rotation it runs (ADR 0115 decision 2)
+const resealing = computed(() => { const id = props.scopeId; return id !== null && id !== undefined && resealingScopes.has(id) })
 const isPending = computed(() => purgeAfter.value !== null)
 const confirmingDelete = ref(false)
 const lifecycleBusy = ref(false)
@@ -462,7 +465,9 @@ async function onRestore() {
       <VeyqMessage v-if="renameError" tone="error">{{ renameError }}</VeyqMessage>
       <VeyqMessage v-if="iconError" tone="error">{{ iconError }}</VeyqMessage>
       <CompromiseRotationNotice v-if="isOwner" :scope-id="scopeId" :state="stuckRotation" @requeued="stuckRotation = $event" />
-      <VeyqMessage v-if="isOwner && rekeying" tone="info">{{ t('rotation.statusHint.rekeying') }}</VeyqMessage>
+      <!-- the scope-level rows are sealed again under the new key before the rotation commits (ADR 0115 decision 2) -->
+      <VeyqMessage v-if="resealing" tone="info">{{ t('spaceLock.resealing') }}</VeyqMessage>
+      <VeyqMessage v-else-if="isOwner && rekeying" tone="info">{{ t('rotation.statusHint.rekeying') }}</VeyqMessage>
 
       <div class="settings-section-header">
         <div>
@@ -665,7 +670,7 @@ async function onRestore() {
     </section>
 
     <!-- The owner's icon editor (uc.spaces.set-space-icon): pick + frame 1:1; on save the crop is baked + encoded
-         on-device and this panel seals + POSTs it (peeling the epoch chain to seal under the current epoch). -->
+         on-device and this panel seals + POSTs it (under the scope's one key, stating its epoch). -->
     <SpaceIconDialog v-if="iconDialogOpen" :busy="iconBusy" @save="onIconSave" @close="iconDialogOpen = false" />
 
     <!-- Review a changed identity key (cr-0099); the proactive compare is on the member's profile (ADR 0028 Decision 3). -->

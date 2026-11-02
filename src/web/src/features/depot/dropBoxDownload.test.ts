@@ -24,7 +24,7 @@ import { openZip } from '../../core/export/zip'
 import { canDownload } from '../../core/export/downloadActions'
 import type { ByteSink } from '../../core/blob/stream'
 import type { TreeSource } from '../../core/access'
-import type { EpochKeys } from '../spaces/epochs'
+import type { ScopeKey } from '../spaces/epochs'
 import { ShareRole } from '../../api/generated/sharing'
 import { memberAccessOf, guestAccessOf } from '../../test/models'
 import { fakeApi } from '../../test/apiMock'
@@ -38,10 +38,10 @@ import type { PayloadFile } from '../../core/export/hooks'
 
 if (!registry.kind(DROPBOX_KIND).supported) registerDepot(registry)
 
-const epochs = { current: 1, keys: new Map() } as unknown as EpochKeys
+const epochs: ScopeKey = { epoch: 1, key: new Uint8Array(32) }
 const access = memberAccessOf({ scopeId: 's', epochs })
 const node = (id: string, parentId: string | null, kind: string, name: string, createdAt = 0, over: Partial<TreeNode> = {}): TreeNode =>
-  ({ id, parentId, kind, name, orderIndex: 0, epoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt, ...over }) as unknown as TreeNode
+  ({ id, parentId, kind, name, orderIndex: 0, epoch: 1, scopeEpoch: 1, placementRevision: 0, wrappedContentKey: '', wrappedMeta: null, metaRevision: 0, createdAt, ...over }) as unknown as TreeNode
 // A drop box in a folder; two guests named Anna (the second sent later), each with a file.
 const NODES = [
   node('box', null, DROPBOX_KIND, 'Postfach'),
@@ -114,7 +114,7 @@ describe('a drop box as a download', () => {
     const opened = await openExport({ kind: 'zip', file: new File([archive], 'd.zip') })
     expect(planImport(opened.manifest)).toMatchObject({ nodes: 5, skipped: [] })
     let n = 0
-    vi.mocked(createContentNode).mockImplementation(async () => ({ nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(n), epoch: 1 }))
+    vi.mocked(createContentNode).mockImplementation(async () => ({ nodeId: `new${++n}`, contentKey: new Uint8Array(32).fill(n), epoch: 0, scopeEpoch: 1 }))
     const uploaded: { parent: string | undefined; name: string; body: string }[] = []
     vi.mocked(fileUploadJob).mockImplementation((target: FileUploadTarget, file: PayloadFile) => ({
       name: file.name, sizeBytes: file.size, extra: { file },
@@ -123,7 +123,7 @@ describe('a drop box as a download', () => {
         return { nodeId: `file-${file.name}` }
       },
     }))
-    await importSubtree({ scopeId: 's', epochs, tree: [], parent: { id: 'target', key: new Uint8Array(32), epoch: 1 }, opened })
+    await importSubtree({ scopeId: 's', epochs, tree: [], parent: { id: 'target', key: new Uint8Array(32), epoch: 1, scopeEpoch: 1 }, opened })
     // every node core created is a FOLDER; the two guests' folders of one name are told apart as siblings of one folder are
     expect(vi.mocked(createContentNode).mock.calls.map(([, , parent, kind, name]) => [parent?.id, kind, name])).toEqual([
       ['target', FOLDER_KIND, 'Postfach'], ['new1', FOLDER_KIND, 'Dr. Anna'], ['new1', FOLDER_KIND, 'Dr. Anna (2)'],

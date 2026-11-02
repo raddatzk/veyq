@@ -12,7 +12,7 @@ import { ShareRole, type ShareSummary } from '../../../api/generated/sharing'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { registry, type NodeShareDialogProps } from '../../../core/applications/registry'
 import { listTree, nodeContentKey } from '../../../core/node/tree'
-import { zeroEpochKeys } from '../../spaces/epochs'
+import { zeroScopeKey } from '../../spaces/epochs'
 import { listMyScopes, openScopeById } from '../../spaces/scopes'
 
 /** One link to renew. `here`: its space is one of the active tenant's, so its dialog opens from this page; `name` is the
@@ -46,7 +46,7 @@ async function nodeNames(scopeIds: string[]): Promise<Map<string, string>> {
       /* the space's tree did not open: its links read by the neutral label */
     } finally {
       opened.key.fill(0)
-      zeroEpochKeys(opened.epochs)
+      zeroScopeKey(opened.epochs)
     }
   }
   return names
@@ -69,7 +69,7 @@ export async function openRenewDialog(link: LinkToRenew): Promise<RenewDialog | 
   if (!opened) return null
   const release = () => {
     opened.key.fill(0)
-    zeroEpochKeys(opened.epochs)
+    zeroScopeKey(opened.epochs)
   }
   try {
     const tree = await listTree(scopeId, opened.epochs)

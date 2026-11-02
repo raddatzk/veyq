@@ -9,7 +9,7 @@
 import { createContentNode, type CreateNodeOptions, type NodeParent } from '../../core/node/tree'
 import { memberNodeWriter, type MemberNodeWriter } from '../../core/node/rereadNode'
 import { sealNodeMeta } from '../../core/node/nodeMeta'
-import type { EpochKeys } from '../spaces/epochs'
+import type { ScopeKey } from '../spaces/epochs'
 import { appendPotWrites, heldOfSent, type PotWrite } from './domain/potApi'
 import type { HeldRevision } from './domain/revisions'
 import type { BaseCurrency } from './domain/ledger'
@@ -63,7 +63,7 @@ export type CreatedPot = { nodeId: string; nodeKey: Uint8Array; epoch: number }
 /** Create the Pot's node named [name] under [parent], its settings ([base], [categories]) sealed into its meta — no
  *  records yet. */
 export async function createPotNode(
-  scopeId: string, epochs: EpochKeys, parent: NodeParent, name: string, base: BaseCurrency,
+  scopeId: string, epochs: ScopeKey, parent: NodeParent, name: string, base: BaseCurrency,
   opts: CreateNodeOptions = {}, categories: readonly OwnCategory[] = [],
 ): Promise<CreatedPot> {
   const meta = { v: 1, [POT_META_KEY]: potMetaObject({ base, categories: [...categories] }) }
@@ -74,7 +74,7 @@ export async function createPotNode(
 /** Create a Pot named [name] under [parent] with [base] and [categories], and its [people]. Returns its id and key.
  *  Throws {@link PotPeopleNotAdded} when the node exists but its people were not appended. */
 export async function createPot(
-  scopeId: string, epochs: EpochKeys, parent: NodeParent, name: string, base: BaseCurrency, people: readonly NewParticipant[],
+  scopeId: string, epochs: ScopeKey, parent: NodeParent, name: string, base: BaseCurrency, people: readonly NewParticipant[],
   opts: CreateNodeOptions = {}, categories: readonly OwnCategory[] = [],
 ): Promise<CreatedPot> {
   const created = await createPotNode(scopeId, epochs, parent, name, base, opts, categories)

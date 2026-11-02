@@ -7,9 +7,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import type { EpochKeys } from '../spaces/epochs'
+import type { ScopeKey } from '../spaces/epochs'
 
-const held = vi.hoisted(() => ({ epochs: { current: 0, keys: new Map() } as EpochKeys }))
+const held = vi.hoisted(() => ({ epochs: { epoch: 0, key: new Uint8Array(32) } as ScopeKey }))
 const K_UP = vi.hoisted(() => new Uint8Array(32).fill(9))
 const OLD_KEY = vi.hoisted(() => new Uint8Array(32).fill(1))
 vi.mock('../../app/activeSpace', async () => {
@@ -34,6 +34,8 @@ import type { MediaMetaTarget } from './media'
 import type { UploaderOrigin } from './mediaKey'
 import { pullRekeyPath } from '../../core/node/rekey/rekeyScope'
 import { nodeKeyForWrite } from '../../core/node/rekey/floor'
+import { treeStore } from '../../core/node/treeStore'
+import { treeNode } from '../../test/models'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const NODE_ID = 'f0000000-0000-4000-8000-000000000002'
@@ -69,10 +71,13 @@ beforeEach(() => {
     if (key !== OLD_KEY) throw new v1.OpenRefused('upload-identity-key')
     return K_UP
   })
-  held.epochs = { current: 0, keys: new Map() }
+  held.epochs = { epoch: 0, key: new Uint8Array(32) }
+  // The Memory as the active tree lists it: its own key at epoch 0, minted under the scope's epoch 0.
+  treeStore.nodes = [treeNode({ id: NODE_ID, epoch: 0, scopeEpoch: 0 })]
   vi.mocked(pullRekeyPath).mockReturnValue(pull)
   pull.mockResolvedValue(true)
-  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: NEW_KEY, epoch: 1 }))
+  // After the pull the node is re-keyed: its own epoch 1, its key minted under the scope's epoch 1.
+  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: NEW_KEY, epoch: 1, scopeEpoch: 1 }))
 })
 
 describe('a member\'s media-meta edit in a Memory not re-keyed yet (ADR 0111 decision 11)', () => {
@@ -92,7 +97,8 @@ describe('a member\'s media-meta edit in a Memory not re-keyed yet (ADR 0111 dec
   })
 
   it('the device floor already shows the Memory lags: nothing is sent under the old key, the place backfill lands under the new one', async () => {
-    held.epochs = { current: 1, keys: new Map() }
+    // The scope rotated to epoch 1; the tree still lists the Memory's key as minted under epoch 0 (ADR 0115 decision 6).
+    held.epochs = { epoch: 1, key: new Uint8Array(32) }
     updateMediaMeta
       .mockRejectedValueOnce(conflict({ code: 'stale_revision', wrappedMeta: seal(NEW_KEY, { v: 1 }), metaRevision: 3 }))
       .mockResolvedValueOnce({})

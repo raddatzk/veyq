@@ -21,7 +21,7 @@
 // `uc.sharing.share-accept` is browser-only by design.)
 import { b64url } from '@veyq/crypto/base64'
 import { recoverShareKey, type RecoveryCopy, type ShareAddress } from './manageShares'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 
 /** Build the copyable link `/s/{shareId}#k=<base64url(K_share)>` — the fragment carries `K_share`, never sent. */
 export function buildShareLink(shareId: string, kShare: Uint8Array): string {
@@ -31,7 +31,7 @@ export function buildShareLink(shareId: string, kShare: Uint8Array): string {
 /** Reconstruct a managed share's full copyable link by recovering `K_share` through the scope's epoch keys (ADR 0036
  *  point 4) — so a scope member can re-copy **any** existing link, not just the freshly-minted one. Null when the
  *  share carries no recoverable key or the recovery fails. */
-export function recoverShareLink(share: ShareAddress, epochs: EpochKeys, copy: RecoveryCopy): string | null {
+export function recoverShareLink(share: ShareAddress, epochs: ScopeKey, copy: RecoveryCopy): string | null {
   if (!copy.sealedShareKey) return null
   try {
     return buildShareLink(share.shareId, recoverShareKey(epochs, share, copy))

@@ -9,7 +9,7 @@
 // first upload materializes it. Folders carry no location and are never pinned.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { nodeContentKey, type TreeNode } from '../../core/node/tree'
-import type { EpochKeys } from '../spaces/epochs'
+import type { ScopeKey } from '../spaces/epochs'
 import { unsealMemoryLocation, type MemoryLocation } from './memoryLocation'
 import { unsealMemoryDate, type MemoryDate } from './memoryDate'
 
@@ -77,7 +77,7 @@ function inSubtree(byId: Map<string, TreeNode>, nodeId: string, rootFolderId: st
  */
 export function collectLocatedPins(
   scopeId: string,
-  epochs: EpochKeys,
+  epochs: ScopeKey,
   tree: TreeNode[],
   rootFolderId: string | null,
 ): LocatedPin[] {

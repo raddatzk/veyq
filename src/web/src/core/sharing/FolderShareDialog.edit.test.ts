@@ -37,7 +37,7 @@ const listSharesFor = vi.mocked(manage.listSharesFor)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000dd'
 const FOLDER_ID = '5c09e000-0000-4000-8000-0000000000f0'
-const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
+const EPOCHS = { epoch: 0, key: new Uint8Array(32) } // the scope's one key (ADR 0115)
 const EXPIRES = new Date('2027-03-01T22:59:59.999Z')
 
 const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({

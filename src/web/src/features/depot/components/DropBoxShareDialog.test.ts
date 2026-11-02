@@ -32,7 +32,7 @@ const stubs = {
 
 function mountDialog(extra: { readonly?: boolean } = {}) {
   return mount(DropBoxShareDialog, {
-    props: { scopeId: 's', nodeId: 'n', nodeKey: new Uint8Array(32), epochs: { current: 0, keys: new Map() }, nodeEpoch: 0, nodeName: 'Box', nodeKind: 'DEPOT_DROPBOX', ...extra },
+    props: { scopeId: 's', nodeId: 'n', nodeKey: new Uint8Array(32), epochs: { epoch: 0, key: new Uint8Array(32) }, nodeEpoch: 0, nodeName: 'Box', nodeKind: 'DEPOT_DROPBOX', ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 }

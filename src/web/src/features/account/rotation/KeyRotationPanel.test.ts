@@ -377,10 +377,10 @@ describe('the links to renew (decision 13)', () => {
     const nodeKey = new Uint8Array(32).fill(5)
     const epochKey = new Uint8Array(32).fill(6)
     vi.mocked(openScopeById).mockResolvedValue({
-      scopeId: 's-here', tenantId: 't1', kind: 'GROUP', key: new Uint8Array(32).fill(4), epochs: { current: 0, keys: new Map([[0, epochKey]]) },
+      scopeId: 's-here', tenantId: 't1', kind: 'GROUP', key: new Uint8Array(32).fill(4), epochs: { epoch: 0, key: epochKey },
       nameEpoch: 0, deletedAt: null, purgeAfter: null,
     } as unknown as Awaited<ReturnType<typeof openScopeById>>)
-    vi.mocked(listTree).mockResolvedValue([{ id: 'node-flagged', kind: 'FOLDER', name: 'Reisen', epoch: 0 } as unknown as Awaited<ReturnType<typeof listTree>>[number]])
+    vi.mocked(listTree).mockResolvedValue([{ id: 'node-flagged', kind: 'FOLDER', name: 'Reisen', epoch: 0, scopeEpoch: 0 } as unknown as Awaited<ReturnType<typeof listTree>>[number]])
     vi.mocked(nodeContentKey).mockReturnValue(nodeKey)
     const kindOf = vi.spyOn(registry, 'kind').mockReturnValue({ supported: true, shareDialog: ShareDialogStub } as unknown as ReturnType<typeof registry.kind>)
     const w = await afterRotation([share({ shareId: 'flagged' })])

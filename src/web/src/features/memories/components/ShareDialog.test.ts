@@ -32,7 +32,7 @@ vi.mocked(shareModule.readShareNote).mockReturnValue({ texts: {}, mustAccept: fa
 vi.mocked(shareModule.hasLocaleText).mockReturnValue(false)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cd'
-const EPOCHS = { current: 1, keys: new Map([[0, new Uint8Array(32)], [1, new Uint8Array(32)]]) }
+const EPOCHS = { epoch: 1, key: new Uint8Array(32) }
 
 const share = (over: Record<string, unknown>) => ({
   shareId: 's', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Read, enabled: true, mine: true,

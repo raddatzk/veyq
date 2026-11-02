@@ -77,9 +77,11 @@ const grantTo = (signKey: Uint8Array, epoch: number, key: Uint8Array, wrapped?: 
   }))
   return { wrappedGrant, grantSignature }
 }
-const epochLink = (epoch: number, newer: Uint8Array, older: Uint8Array): invite.ServedEpochLink => ({
-  epoch, wrappedPrev: v1.seal({ purpose: 'scope-epoch', scopeId: TENANT, epoch }, newer, older),
-})
+/** The succession statement to `epoch` (ADR 0115 decision 5): `newer`'s succession public key signed by `older`'s. */
+const succession = (epoch: number, newer: Uint8Array, older: Uint8Array, scopeId = TENANT): v1.SuccessionLink => {
+  const successionPublicKey = v1.successionKeyPair(newer).publicKey
+  return { epoch, successionPublicKey, successionSignature: v1.signSuccession(older, { scopeId, epoch, successionPublicKey }) }
+}
 const signInvite = (signKey: Uint8Array) =>
   invite.signInviteKey(signKey, { tenantId: TENANT, inviteId: INVITE, invitePublicKey: inviteBundle, expiresAt: EXPIRES })
 
@@ -95,7 +97,7 @@ const fresh: invite.ServedInvite = {
   signerUserId: OWNER, signerIdentityPublicKey: born.bundle, signerKeyChain: [genesis(born)],
   anchorWrappedGrant: anchor0.wrappedGrant, anchorEpoch: 0, anchorGrantSignature: anchor0.grantSignature,
   wrappedGrant: anchor0.wrappedGrant, grantedEpoch: 0, grantSignature: anchor0.grantSignature, granterIdentityPublicKey: born.bundle,
-  epochLinks: [],
+  successions: [],
 }
 
 /** B: the owner secured the account since (their securing re-signed the invite and the anchor with the new key), and a
@@ -110,7 +112,7 @@ const rotated: invite.ServedInvite = {
   signerKeyChain: [genesis(born), step1.link],
   anchorWrappedGrant: anchorBySecured.wrappedGrant, anchorEpoch: 0, anchorGrantSignature: anchorBySecured.grantSignature,
   wrappedGrant: carried2.wrappedGrant, grantedEpoch: 2, grantSignature: carried2.grantSignature, granterIdentityPublicKey: g.bundle,
-  epochLinks: [epochLink(1, E1, E0), epochLink(2, E2, E1)],
+  successions: [succession(1, E1, E0), succession(2, E2, E1)],
 }
 
 const failure = (s: invite.ServedInvite, p: invite.InviteLinkPayload = payload): invite.InviteCheckFailure | null => {
@@ -135,7 +137,7 @@ describe('the invitee\'s checks — controls', () => {
     expect(same(checked.signer.identityPublicKey, born.bundle)).toBe(true)
   })
 
-  it('B: an owner who secured the account since is accepted at the new key, reached by the doubly signed step; a carried grant whose links peel to the anchor gives E_2', () => {
+  it('B: an owner who secured the account since is accepted at the new key, reached by the doubly signed step; a carried grant whose succession statements lead from the anchor gives E_2', () => {
     const checked = invite.checkInvite(payload, rotated)
     expect(same(checked.epochKey, E2)).toBe(true)
     expect(checked.grantedEpoch).toBe(2)
@@ -238,15 +240,18 @@ describe('epoch_unlinked', () => {
   const X = v1.randomBytes(32)
   const Y = v1.randomBytes(32)
   it.each([
-    // #565, the probe on main: a grant at epoch 1 of a key the operator chose, under a granter it fabricated, with a link
-    // it made from its key to another of its own — it holds no E_0, so no link it makes ends there.
+    // #565, the probe on main: a grant at epoch 1 of a key the operator chose, under a granter it fabricated, with a
+    // statement it signed with another key of its own — it holds no E_0, so no statement it signs starts there.
     ['the operator\'s key under a granter it fabricated', (() => {
       const c = grantTo(operator.sign, 1, X)
-      return { ...fresh, wrappedGrant: c.wrappedGrant, grantedEpoch: 1, grantSignature: c.grantSignature, granterIdentityPublicKey: operator.bundle, epochLinks: [epochLink(1, X, Y)] }
+      return { ...fresh, wrappedGrant: c.wrappedGrant, grantedEpoch: 1, grantSignature: c.grantSignature, granterIdentityPublicKey: operator.bundle, successions: [succession(1, X, Y)] }
     })()],
-    ['a genuine carried grant with a link missing', { ...rotated, epochLinks: [epochLink(2, E2, E1)] }],
-    ['a genuine carried grant with a link served for another epoch', { ...rotated, epochLinks: [epochLink(2, E2, E1), { ...epochLink(1, E1, E0), epoch: 3 }] }],
-    ['a genuine carried grant with a link served twice', { ...rotated, epochLinks: [epochLink(1, E1, E0), epochLink(1, E1, E0), epochLink(2, E2, E1)] }],
+    ['a genuine carried grant with a statement missing (a gap)', { ...rotated, successions: [succession(2, E2, E1)] }],
+    ['a genuine carried grant with a statement served for another epoch', { ...rotated, successions: [succession(2, E2, E1), { ...succession(1, E1, E0), epoch: 3 }] }],
+    ['a genuine carried grant with a statement served twice', { ...rotated, successions: [succession(1, E1, E0), succession(1, E1, E0), succession(2, E2, E1)] }],
+    ['a genuine carried grant with a statement signed for another scope', { ...rotated, successions: [succession(1, E1, E0, OTHER), succession(2, E2, E1)] }],
+    ['a genuine carried grant whose path skips the anchor (the first statement not signed by E_0)', { ...rotated, successions: [succession(1, E1, Y), succession(2, E2, E1)] }],
+    ['a genuine carried grant whose statements end at another key', { ...rotated, successions: [succession(1, E1, E0), succession(2, X, E1)] }],
     ['a carried grant whose signature is not the served granter\'s', { ...rotated, granterIdentityPublicKey: operator.bundle }],
     ['a carried grant below the anchor', (() => {
       const a = grantTo(secured.sign, 2, E2)
@@ -265,23 +270,17 @@ describe('epoch_unlinked', () => {
     expect(failure(served)).toBe('epoch_unlinked')
   })
 
-  it('control: the genuine carried grant with every link from the anchor up to it', () => {
+  it('control: the genuine carried grant with every statement from the anchor up to it, in any order', () => {
     expect(failure(rotated)).toBeNull()
-  })
-})
-
-describe('peelEpochKey', () => {
-  const links = [epochLink(1, E1, E0), epochLink(2, E2, E1)]
-  it('peels E_2 down to each lower epoch, and an epoch to itself', () => {
-    expect(same(invite.peelEpochKey(TENANT, E2, 2, 0, links) as Uint8Array, E0)).toBe(true)
-    expect(same(invite.peelEpochKey(TENANT, E2, 2, 1, links) as Uint8Array, E1)).toBe(true)
-    expect(same(invite.peelEpochKey(TENANT, E2, 2, 2, []) as Uint8Array, E2)).toBe(true)
+    expect(failure({ ...rotated, successions: [...rotated.successions].reverse() })).toBeNull()
   })
 
-  it('null for a missing link, a link of another scope, upwards, or a link served twice', () => {
-    expect(invite.peelEpochKey(TENANT, E2, 2, 0, [links[1]])).toBeNull()
-    expect(invite.peelEpochKey(OTHER, E2, 2, 0, links)).toBeNull()
-    expect(invite.peelEpochKey(TENANT, E1, 1, 2, links)).toBeNull()
-    expect(invite.peelEpochKey(TENANT, E2, 2, 0, [...links, links[0]])).toBeNull()
+  it('no statement opens anything: neither the anchor\'s key nor the carried one is in what is served', () => {
+    for (const s of rotated.successions) {
+      for (const key of [E0, E1, E2]) {
+        expect(same(s.successionPublicKey, key)).toBe(false)
+        expect(Buffer.from(s.successionSignature).includes(Buffer.from(key))).toBe(false)
+      }
+    }
   })
 })

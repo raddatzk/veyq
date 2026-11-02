@@ -68,20 +68,24 @@ async function settle() {
 describe('FolderNameDialog', () => {
   it('create calls createFolder with the parent and ITS key + closes + emits done', async () => {
     const parentKey = new Uint8Array(32).fill(7)
-    const wrapper = mountDialog({ mode: 'create', parentId: 'parent-1', parentKey, parentEpoch: 0 })
+    // the parent's own epoch (2) and the scope epoch its key was minted under (1) differ, so a swap is told apart
+    const wrapper = mountDialog({ mode: 'create', parentId: 'parent-1', parentKey, parentEpoch: 2, parentScopeEpoch: 1 })
     expect(wrapper.find('.hdr').text()).toBe(t('node.createFolderTitle'))
     expect(wrapper.find('button[type="submit"]').text()).toBe(t('common.create'))
     await wrapper.find('input').setValue('Trips')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
 
-    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', { id: 'parent-1', key: parentKey, epoch: 0 }, { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
+    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', { id: 'parent-1', key: parentKey, epoch: 2, scopeEpoch: 1 }, { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })
     expect(wrapper.emitted('done')).toBeTruthy()
     expect(wrapper.emitted('close')).toBeTruthy()
   })
 
-  it('a create under a parent whose key is missing creates nothing', async () => {
-    const wrapper = mountDialog({ mode: 'create', parentId: 'parent-1', parentKey: null })
+  it.each([
+    ['its key', { parentKey: null, parentEpoch: 0, parentScopeEpoch: 0 }],
+    ['the scope epoch its key was minted under (the device floor\'s)', { parentKey: new Uint8Array(32), parentEpoch: 0, parentScopeEpoch: null }],
+  ])('a create under a parent missing %s creates nothing', async (_what, parent) => {
+    const wrapper = mountDialog({ mode: 'create', parentId: 'parent-1', ...parent })
     await wrapper.find('input').setValue('Trips')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()

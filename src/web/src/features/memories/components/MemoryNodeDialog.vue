@@ -66,18 +66,21 @@ const confirmLabel = computed(() => t('common.create'))
  *  creates nothing, rather than a node its parent's holders could not open. */
 function createParent(): NodeParent {
   if (!props.parentId) return null
-  if (!props.parentKey || props.parentEpoch == null) throw new Error('parent_key_unavailable')
-  return { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch }
+  if (!props.parentKey || props.parentEpoch == null || props.parentScopeEpoch == null) throw new Error('parent_key_unavailable')
+  return { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch, scopeEpoch: props.parentScopeEpoch }
 }
 
 const { run: runSubmit, pending: loading } = useAsyncAction(
   async () => {
     const trimmed = name.value.trim()
     if (isChapter.value) {
-      if (!props.parentId || !props.parentKey || props.parentEpoch == null) throw new Error('chapter_parent_missing')
+      if (!props.parentId || !props.parentKey || props.parentEpoch == null || props.parentScopeEpoch == null) {
+        throw new Error('chapter_parent_missing')
+      }
+      const parent = { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch, scopeEpoch: props.parentScopeEpoch }
       await createChapter(
-        props.scopeId, props.epochs, props.parentKey, trimmed, props.parentId, props.parentEpoch,
-        memberCreateOptions(props.scopeId, { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch }),
+        props.scopeId, props.epochs, props.parentKey, trimmed, props.parentId, parent,
+        memberCreateOptions(props.scopeId, parent),
       )
     } else {
       const location = showLocationStep.value && wantsLocation.value ? { name: '', nameSource: 'geocoded' as const, derivedMode: 'auto' as const } : null

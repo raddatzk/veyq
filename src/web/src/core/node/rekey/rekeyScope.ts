@@ -1,8 +1,9 @@
-// A scope's RE-KEY after a rotation (ADR 0109, uc.spaces.rekey-after-rotation): every node of the scope, live and
-// trashed, gets a fresh key minted at the scope's current epoch, top-down, one node per transaction. Run by the device
-// that committed the epoch (the remover's, the rotator's for the personal scope, an owner's scope-rotation worker for a
-// queued rotation) and by ANY member's worker that finds the scope still re-keying (resumed from the server's derived
-// state: a node below the current epoch still carries its key from before) — ADR 0111 decision 11: a re-key is not
+// A scope's RE-KEY after a rotation (ADR 0109, uc.spaces.rekey-after-rotation) or a link's close (ADR 0114): every node
+// marked **due** gets a fresh key minted under the scope's current epoch, top-down, one node per transaction — its own
+// epoch +1, its `scopeEpoch` the scope's (ADR 0114 decisions 3-4). Run by the device that committed the epoch (the
+// remover's, the rotator's for the personal scope, an owner's scope-rotation worker for a queued rotation) and by ANY
+// member's worker that finds the scope still re-keying (resumed from the server's state: a node still due carries its
+// key from before) — ADR 0111 decision 11: a re-key is not
 // governance, so every member holding the current epoch runs it, except on the nodes only an owner re-keys (a drop box,
 // a guest's identity folder and below — not a Memory merely carrying a drop key — `RekeyNode.ownerOnly`), which a
 // member's run leaves for an owner.
@@ -12,23 +13,25 @@
 // never refused (`shared/rekeyRetry.ts` `pull`).
 //
 // Per node (`rekeyNode`), everything sealed under its OLD key moves to the NEW one, and nothing else changes:
-//   - its own entry under its parent's current key (`K_SC` at the current epoch at the root; a guest's `K_up` for an
-//     identity folder), sealed at the current epoch and the next placement revision;
+//   - its own entry under its parent's current key (the scope's one key at the root — the rotation's commit re-sealed
+//     the old node key under it, ADR 0115 decision 2; a guest's `K_up` for an identity folder), bound to the scope's
+//     current epoch as the new key's `scopeEpoch` and the next placement revision;
 //   - each child's entry under the new key: its own key re-wrapped, its name re-sealed, its slug token recomputed, bound
-//     to the child's epoch and next placement revision (a guest's identity folder excepted: its entry is under `K_up`);
+//     to the child's `scopeEpoch` and next placement revision (a guest's identity folder excepted: its entry is under `K_up`);
 //   - its meta (core's cover wrap inside it, and the kind's own references through `rekeyContent`);
 //   - every `K_blob` wrap in its attachment slots and of every blob its application stores through core's blob service
 //     (`K_blob` itself is kept: no byte is read from or written to the store);
-//   - each link rooted on it: the new key under the link's `K_share`, recovered from its recovery copy, which stays at its
-//     epoch so the link stays marked `reissueRequired` (ADR 0109 point 4);
+//   - each link rooted on it: the new key under the link's `K_share` where the server asks for a wrap (an open link,
+//     ADR 0114 decision 5), recovered from its recovery copy — under the scope's current key, which the rotation re-sealed
+//     it under (ADR 0115 decision 2);
 //   - its drop key, replaced: the new private half under the new key, the public half under each WRITE_ONLY link's
 //     `K_share`, each guest's `K_up` re-sealed to it (point 5); a READ_WRITE guest's name re-sealed under the new key;
 //   - the kind's own rows (Memories' media, buckets), staged by its `rekeyContent` under the same re-key id.
 // The server swaps everything in at the commit, or nothing (`rekey_parts_missing` / `rekey_parts_stale`).
 //
-// Resumable: nothing is kept between runs. Each round re-lists the scope and re-keys the frontier — the lagging nodes
-// whose parent is current — so an interrupted run leaves a tree that opens as it stands, and the next run continues
-// where the rows say (E1). A conflict (a writer won the node's lock, another member committed it) re-lists.
+// Resumable: nothing is kept between runs. Each round re-lists the scope and re-keys the frontier — the due nodes whose
+// parent is not due (`RekeyNode.due`, ADR 0114 decision 4) — so an interrupted run leaves a tree that opens as it stands,
+// and the next run continues where the rows say (E1). A conflict (a writer won the node's lock, another member committed it) re-lists.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { applicationBlobsApi, rekeyApi } from '../../../api/client'
@@ -36,7 +39,7 @@ import type { RekeyNode } from '../../../api/generated/content'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { activeEpochKeys, activeSpace, refreshActiveScope } from '../../../app/activeSpace'
 import { openScopeById, type OpenedScope } from '../../../features/spaces/scopes'
-import { keyAt, writeKey, zeroEpochKeys, type EpochKeys } from '../../../features/spaces/epochs'
+import { zeroScopeKey, type ScopeKey } from '../../../features/spaces/epochs'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
 import { registry } from '../../applications/registry'
 import { blobKeyContext, unwrapBlobKey } from '../../blob/keys'
@@ -66,17 +69,17 @@ async function isConflict(e: unknown): Promise<boolean> {
 }
 
 /**
- * Re-key every node of [scopeId] that lags its current epoch and this device may re-key: an owner every one, a member
+ * Re-key every node of [scopeId] that is due and this device may re-key: an owner every one, a member
  * every one but those only an owner re-keys (and what lies below them, top-down). Returns `done` once none lags — a
  * member's run that left only owner-only nodes lagging returns `done: false` and throws nothing. Throws when this device
  * cannot (its grant lags, a node's key does not open, a kind registers no re-key) — the scope then stays *re-keying* for
  * another member's worker to resume.
  */
 export async function rekeyScope(scopeId: string, opts: { signal?: AbortSignal } = {}): Promise<RekeyScopeResult> {
-  return runRekey(scopeId, opts, ({ rows, byId, current, owner }) => {
-    const lagging = rows.filter((n) => n.epoch < current)
+  return runRekey(scopeId, opts, ({ rows, byId, owner }) => {
+    const lagging = rows.filter((n) => n.due)
     if (!lagging.length) return 'done'
-    const frontier = lagging.filter((n) => (owner || !n.ownerOnly) && parentCurrent(n, byId, current))
+    const frontier = lagging.filter((n) => (owner || !n.ownerOnly) && parentNotDue(n, byId))
     if (frontier.length) return frontier
     // a member's run: what still lags is an owner's (or waits below one) — not this device's to finish
     if (!owner && lagging.some((n) => n.ownerOnly)) return 'not-mine'
@@ -105,9 +108,9 @@ export async function rekeyPath(
 ): Promise<RekeyScopeResult> {
   return runRekey(scopeId, opts, ({ rows, byId, current, owner }) => {
     const wanted = pathOf(nodeIds, rows, byId, opts.subtree === true)
-    const lagging = rows.filter((n) => wanted.has(n.id) && n.epoch < current)
+    const lagging = rows.filter((n) => wanted.has(n.id) && n.due)
     if (!lagging.length) return 'done'
-    const frontier = lagging.filter((n) => parentCurrent(n, byId, current))
+    const frontier = lagging.filter((n) => parentNotDue(n, byId))
     if (!frontier.length) throw new Error('rekey: no node of the path can be re-keyed (a parent lags that is not listed)')
     const notMine = owner ? undefined : frontier.find((n) => n.ownerOnly)
     if (notMine) throw new RekeyPathNotMineError(notMine.id, current)
@@ -129,7 +132,7 @@ export async function rekeyPath(
  */
 export function pullRekeyPath(scopeId: string, nodeIds: readonly string[], opts: { subtree?: boolean } = {}): () => Promise<boolean> {
   const reopenIfBehind = async (current: number | undefined) => {
-    const held = activeSpace.scopeId === scopeId ? activeEpochKeys()?.current : undefined
+    const held = activeSpace.scopeId === scopeId ? activeEpochKeys()?.epoch : undefined
     if (held !== undefined && current !== undefined && held < current) await refreshActiveScope()
   }
   return async () => {
@@ -162,8 +165,9 @@ function pathOf(nodeIds: readonly string[], rows: Row[], byId: Map<string, Row>,
   return wanted
 }
 
-const parentCurrent = (n: Row, byId: Map<string, Row>, current: number) =>
-  n.parentId === null || (byId.get(n.parentId)?.epoch ?? -1) >= current
+/** A node's parent is re-keyed (or it has none): the frontier's rule. A parent the listing does not hold counts as due. */
+const parentNotDue = (n: Row, byId: Map<string, Row>) =>
+  n.parentId === null || byId.get(n.parentId)?.due === false
 
 /** One round's view: the rows as listed, the scope's current epoch, and whether the caller owns the scope. */
 type Round = { rows: Row[]; byId: Map<string, Row>; current: number; owner: boolean }
@@ -189,7 +193,7 @@ async function runRekey(
       opts.signal?.throwIfAborted()
       const list = await withRefresh(() => rekeyApi().listRekeyNodes({ scopeId }))
       const current = list.currentEpoch
-      if (epochs.current < current) throw new Error('rekey: this device does not hold the scope\'s current epoch')
+      if (epochs.epoch < current) throw new Error('rekey: this device does not hold the scope\'s current epoch')
       const rows = list.nodes.map((n) => ({ ...n, parentId: n.parentId ?? null }))
       const byId = new Map(rows.map((r) => [r.id, r]))
       const picked = pick({ rows, byId, current, owner })
@@ -209,17 +213,17 @@ async function runRekey(
       }
     }
   } finally {
-    zeroEpochKeys(epochs)
+    zeroScopeKey(epochs)
     for (const { oldKey, newKey } of shareRoots.values()) { oldKey.fill(0); newKey.fill(0) }
   }
 }
 
 type Row = RekeyNode & { parentId: string | null }
 
-/** Every node's CURRENT key, opened top-down from the rows as they stand: a root under `K_SC` at its own epoch, every
+/** Every node's CURRENT key, opened top-down from the rows as they stand: a root under the scope's one key, every
  *  other under its parent's key (a guest's identity folder through the parent's drop key). A node whose chain does not
  *  open is absent; re-keying it then refuses. */
-function openKeys(scopeId: string, epochs: EpochKeys, rows: Row[]): Map<string, Uint8Array> {
+function openKeys(scopeId: string, epochs: ScopeKey, rows: Row[]): Map<string, Uint8Array> {
   const children = new Map<string | null, Row[]>()
   for (const r of rows) children.set(r.parentId, [...(children.get(r.parentId) ?? []), r])
   const keys = new Map<string, Uint8Array>()
@@ -227,7 +231,7 @@ function openKeys(scopeId: string, epochs: EpochKeys, rows: Row[]): Map<string, 
   while (queue.length) {
     const { row, parent } = queue.shift()!
     try {
-      const entryKey = parent ? childEntryKey(scopeId, parent, keys.get(parent.id)!, row) : keyAt(epochs, row.epoch)
+      const entryKey = parent ? childEntryKey(scopeId, parent, keys.get(parent.id)!, row) : epochs.key
       keys.set(row.id, openContentKey(scopeId, entryKey, row))
     } catch {
       continue // its subtree stays unopened: re-keying any of it refuses
@@ -239,7 +243,7 @@ function openKeys(scopeId: string, epochs: EpochKeys, rows: Row[]): Map<string, 
 
 type Run = {
   scopeId: string
-  epochs: EpochKeys
+  epochs: ScopeKey
   current: number
   rows: Row[]
   byId: Map<string, Row>
@@ -248,7 +252,7 @@ type Run = {
   signal?: AbortSignal
 }
 
-/** Re-key one node whose parent is current (see the header). The new key lives only for the call. */
+/** Re-key one due node whose parent is not due (see the header). The new key lives only for the call. */
 export async function rekeyNode(run: Run, node: Row): Promise<void> {
   const { scopeId, epochs, current } = run
   const kind = registry.kind(node.kind)
@@ -257,25 +261,25 @@ export async function rekeyNode(run: Run, node: Row): Promise<void> {
   if (!oldKey) throw new v1.OpenRefused('content-key')
   const parent = node.parentId ? run.byId.get(node.parentId) ?? null : null
   if (node.parentId && !parent) throw new Error('rekey: the node\'s parent is not listed')
-  // The key the entry lives under: the parent's current key (its re-key ran first), `K_up` for an identity folder,
-  // `K_SC` — at the node's own epoch to open the name, at the current one to seal it — at the scope root.
+  // The key the entry lives under: the parent's current key (its re-key ran first), `K_up` for an identity folder, the
+  // scope's one key at the scope root — the same key opens the entry and seals the new one (ADR 0115 decision 1).
   const parentKey = parent ? run.keys.get(parent.id) : undefined
   if (parent && !parentKey) throw new v1.OpenRefused('content-key')
-  const entryNow = parent ? childEntryKey(scopeId, parent, parentKey!, node) : keyAt(epochs, node.epoch)
-  const entryNew = parent ? entryNow : writeKey(epochs)
-  const name = openName(entryNow, address(scopeId, node, node.epoch, node.placementRevision), node.encryptedName)
+  const entryNow = parent ? childEntryKey(scopeId, parent, parentKey!, node) : epochs.key
+  const entryNew = parent ? entryNow : epochs.key
+  const name = openName(entryNow, address(scopeId, node, node.scopeEpoch, node.placementRevision), node.encryptedName)
   const newKey = v1.randomBytes(32)
   const rekeyId = crypto.randomUUID()
   try {
     const sealedAt = address(scopeId, node, current, node.placementRevision + 1)
     const parts = await withRefresh(() => rekeyApi().getNodeRekeyParts({ scopeId, nodeId: node.id }))
 
-    // children: their unchanged keys under the new one, at their own epoch and the next placement revision
+    // children: their unchanged keys under the new one, at their own scope epoch and the next placement revision
     const children = run.rows.filter((r) => r.parentId === node.id && !r.shareIdentityId).map((c) => {
-      const childName = openName(oldKey, address(scopeId, c, c.epoch, c.placementRevision), c.encryptedName)
+      const childName = openName(oldKey, address(scopeId, c, c.scopeEpoch, c.placementRevision), c.encryptedName)
       const childKey = openContentKey(scopeId, oldKey, c)
       try {
-        const at = address(scopeId, c, c.epoch, c.placementRevision + 1)
+        const at = address(scopeId, c, c.scopeEpoch, c.placementRevision + 1)
         return {
           nodeId: c.id, placementRevision: c.placementRevision, encryptedName: sealName(newKey, at, childName),
           slugToken: slugTokenFor(newKey, node.id, c.kind, childName), wrappedContentKey: wrapContentKey(newKey, at, childKey),
@@ -294,7 +298,7 @@ export async function rekeyNode(run: Run, node: Row): Promise<void> {
     // the drop key, replaced (point 5)
     const drop = node.sealedDropPrivateKey ? replaceDropKey(scopeId, node.id, oldKey, newKey, node.sealedDropPrivateKey) : null
 
-    // links rooted here: the new key under each K_share, recovered from its copy (left at its epoch)
+    // links rooted here: the new key under each open link's K_share, recovered from its copy (at the current epoch)
     const shares = parts.shares.map((s) => {
       const kShare = recoverShareKey(epochs, { scopeId, nodeId: node.id, shareId: s.shareId }, {
         sealedShareKey: s.sealedShareKey, sealedShareKeyEpoch: s.sealedShareKeyEpoch ?? null,
@@ -345,7 +349,8 @@ export async function rekeyNode(run: Run, node: Row): Promise<void> {
     await withRefresh(() => rekeyApi().commitNodeRekey({
       scopeId, nodeId: node.id, rekeyId,
       commitNodeRekeyRequest: {
-        nodeEpoch: node.epoch, epoch: current,
+        // the node's own epoch as read, the new key's scope epoch, the parent's own epoch (ADR 0114 decision 3)
+        nodeEpoch: node.epoch, scopeEpoch: current,
         parentId: node.parentId ?? undefined, parentEpoch: parent?.epoch,
         placementRevision: node.placementRevision, metaRevision: node.metaRevision,
         encryptedName: sealName(entryNew, sealedAt, name),
@@ -360,8 +365,8 @@ export async function rekeyNode(run: Run, node: Row): Promise<void> {
   }
 }
 
-const address = (scopeId: string, node: { id: string }, epoch: number, placementRevision: number) =>
-  ({ scopeId, nodeId: node.id, epoch, placementRevision })
+const address = (scopeId: string, node: { id: string }, scopeEpoch: number, placementRevision: number) =>
+  ({ scopeId, nodeId: node.id, scopeEpoch, placementRevision })
 
 /**
  * Every `K_blob` wrap of the node's blobs in core's blob service (`listApplicationBlobRekey`, ADR 0113 decision 7),

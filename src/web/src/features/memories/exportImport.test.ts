@@ -30,7 +30,7 @@ import { writeNodeCover, uploadCoverBlob, uploadCoverImage } from '../../core/no
 import { sealNodeMeta, unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { ExportNodeContext, ImportNodeContext } from '../../core/export/hooks'
 import type { ManifestNode } from '../../core/export/manifest'
-import type { EpochKeys } from '../spaces/epochs'
+import type { ScopeKey } from '../spaces/epochs'
 import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_LIMITS, MEMORY_CONTENT, CHAPTER_CONTENT } from './exportImport'
 import { readFileSync } from 'node:fs'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
@@ -183,14 +183,14 @@ describe('a place that is a name only (inbox #458)', () => {
     expect(validateMemoryContent(wire)).toBeNull()
 
     const nodeKey = v1.randomBytes(32)
-    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0 })
-    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
+    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0, scopeEpoch: 0 })
+    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0, scopeEpoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
     const n = { id: 'n4', kind: MEMORY_KIND, name: 'Granny', content: { ...wire, media: [], cover: undefined } } as unknown as ManifestNode
     const made = await importMemoryContent(MEMORY_KIND)({
-      scopeId: SCOPE, epochs: {} as EpochKeys, parent: null, name: 'Granny', node: n, cache: new Map(), payload: vi.fn(),
+      scopeId: SCOPE, epochs: {} as ScopeKey, parent: null, name: 'Granny', node: n, cache: new Map(), payload: vi.fn(),
     } as unknown as ImportNodeContext)
     const sealer = vi.mocked(createContentNode).mock.calls[0][5]!
-    const raw = unsealNodeMeta(made.nodeKey, { scopeId: SCOPE, nodeId: NEW }, sealer(made.nodeKey, { scopeId: SCOPE, nodeId: NEW, epoch: 1, placementRevision: 0 }))
+    const raw = unsealNodeMeta(made.nodeKey, { scopeId: SCOPE, nodeId: NEW }, sealer(made.nodeKey, { scopeId: SCOPE, nodeId: NEW, scopeEpoch: 1, placementRevision: 0 }))
     expect(raw.location).toEqual({ name: 'At grandma’s', nameSource: 'manual', derivedMode: 'auto' })
   })
 })
@@ -214,17 +214,17 @@ describe('importMemoryContent', () => {
   }) as unknown as ManifestNode
   const ctx = (n: ManifestNode) =>
     ({
-      scopeId: SCOPE, epochs: {} as EpochKeys, parent: null, name: 'Lisbon (2)', node: n, cache: new Map(),
+      scopeId: SCOPE, epochs: {} as ScopeKey, parent: null, name: 'Lisbon (2)', node: n, cache: new Map(),
       payload: vi.fn(async (ref: { path: string; modifiedAt?: number }, name: string) => file(name, ref.modifiedAt ?? 0)),
     }) as unknown as ImportNodeContext
 
   beforeEach(() => {
     const nodeKey = v1.randomBytes(32)
-    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0 })
+    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0, scopeEpoch: 0 })
     let n = 0
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
     vi.mocked(prepareMedia).mockImplementation(async (source) => ({ source, sha256: 'd', tiers: [], meta: { dims: null } }) as unknown as PreparedMedia)
-    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
+    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0, scopeEpoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
   })
 
   it('creates the Memory with its date and place sealed at birth, adds the originals; an older archive\'s cover by mediaIndex is not restored', async () => {
@@ -233,7 +233,7 @@ describe('importMemoryContent', () => {
     expect(made.nodeId).toBe(NEW)
     const [, , parent, kind, name, sealer] = vi.mocked(createContentNode).mock.calls[0]
     expect([parent, kind, name]).toEqual([null, MEMORY_KIND, 'Lisbon (2)'])
-    const sealed = sealer!(made.nodeKey, { scopeId: SCOPE, nodeId: NEW, epoch: 1, placementRevision: 0 })
+    const sealed = sealer!(made.nodeKey, { scopeId: SCOPE, nodeId: NEW, scopeEpoch: 1, placementRevision: 0 })
     const raw = unsealNodeMeta(made.nodeKey, { scopeId: SCOPE, nodeId: NEW }, sealed)
     expect(raw.date).toEqual({ mode: 'single', from: '2025-09-14' })
     expect(raw.location).toMatchObject({ name: 'Lisbon' })
@@ -489,7 +489,7 @@ describe('the banner travels with its Memory', () => {
   const DIG = 'ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0'
   const importCtx = (content: Record<string, unknown>) =>
     ({
-      scopeId: SCOPE, epochs: {} as EpochKeys, parent: null, name: 'Lisbon', cache: new Map(),
+      scopeId: SCOPE, epochs: {} as ScopeKey, parent: null, name: 'Lisbon', cache: new Map(),
       node: { id: 'n', kind: MEMORY_KIND, name: 'Lisbon', content },
       payload: vi.fn(async (_ref: unknown, name: string) => new File(['x'], name)),
     }) as unknown as ImportNodeContext
@@ -497,11 +497,11 @@ describe('the banner travels with its Memory', () => {
   beforeEach(() => {
     vi.mocked(makeChunkProvider).mockReturnValue({ chunkCount: 1, byteSize: 100, getPlaintextChunk: async () => new Uint8Array([1]) } as unknown as ReturnType<typeof makeChunkProvider>)
     vi.mocked(openBlob).mockResolvedValue(new Uint8Array([0xff, 0xd8]))
-    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: v1.randomBytes(32), epoch: 0 })
+    vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: v1.randomBytes(32), epoch: 0, scopeEpoch: 0 })
     let n = 0
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
     vi.mocked(listMedia).mockResolvedValue([])
-    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
+    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: 'tw', metaRevision: 3, epoch: 0, scopeEpoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
     vi.mocked(uploadBanner).mockResolvedValue({ medium: 'video', uploadId: 'bu', posterUploadId: 'pu', blob: ref('nv'), poster: ref('np'), type: 'video/quicktime', sha256: DIG })
   })
 

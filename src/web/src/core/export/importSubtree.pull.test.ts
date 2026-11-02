@@ -8,9 +8,9 @@
 // for which node, and what it does with the answer.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 
-const held = vi.hoisted(() => ({ epochs: { current: 0, keys: new Map() } as EpochKeys }))
+const held = vi.hoisted(() => ({ epochs: { epoch: 0, key: new Uint8Array(32) } as ScopeKey }))
 vi.mock('../../app/activeSpace', async () => {
   const { reactive } = await import('vue')
   return { activeSpace: reactive({ scopeId: '5c09e000-0000-4000-8000-0000000000cc' }), activeEpochKeys: () => held.epochs }
@@ -58,22 +58,23 @@ const POT: ManifestNode = {
 }
 
 const replay = (root: ManifestNode, purpose?: 'import' | 'copy') =>
-  replaySubtrees({ scopeId: SCOPE, epochs: held.epochs, tree: [], parent: { id: PARENT, key: OLD_KEY, epoch: 0 }, items: [item(root, purpose)] })
+  replaySubtrees({ scopeId: SCOPE, epochs: held.epochs, tree: [], parent: { id: PARENT, key: OLD_KEY, epoch: 0, scopeEpoch: 0 }, items: [item(root, purpose)] })
 const requests = () => createNode.mock.calls.map((c) => c[0].createNodeRequest)
-/** The name a create sealed, opened under `key` (the parent's), as a reader of the parent opens it. */
+/** The name a create sealed, opened under `key` (the parent's), as a reader of the parent opens it: bound to the scope
+ *  epoch the create states. */
 const nameUnder = (key: Uint8Array, r: ReturnType<typeof requests>[number]) =>
-  openName(key, { scopeId: SCOPE, nodeId: r.nodeId, epoch: r.epoch ?? 0, placementRevision: 0 }, r.encryptedName)
+  openName(key, { scopeId: SCOPE, nodeId: r.nodeId, scopeEpoch: r.scopeEpoch ?? -1, placementRevision: 0 }, r.encryptedName)
 
 const pull = vi.fn(async () => true)
 let createNode: ApiMocks<ContentApi, 'createNode'>['createNode']
 beforeEach(() => {
   vi.clearAllMocks()
   ;({ createNode } = fakeApi(contentApi, { createNode: vi.fn<ContentApi['createNode']>() }))
-  held.epochs = { current: 0, keys: new Map() }
+  held.epochs = { epoch: 0, key: new Uint8Array(32) }
   vi.mocked(pullRekeyPath).mockReturnValue(pull)
   pull.mockResolvedValue(true)
-  // the re-read after the pull: the target at the scope's current epoch under its new key
-  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: NEW_KEY, epoch: 1 }))
+  // the re-read after the pull: the target re-keyed under its new key - its own epoch 2, its key from scope epoch 1
+  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: NEW_KEY, epoch: 2, scopeEpoch: 1 }))
   createNode.mockImplementation(async (r) => ({ nodeId: r.createNodeRequest.nodeId }))
 })
 afterEach(() => vi.useRealTimers())
@@ -90,16 +91,18 @@ describe('an import or a copy into a target not re-keyed yet (ADR 0111 decision 
     expect(pullRekeyPath).toHaveBeenCalledWith(SCOPE, [PARENT])
     expect(pull).toHaveBeenCalledOnce()
     const last = requests().at(-1)!
-    expect(last).toMatchObject({ parentId: PARENT, parentEpoch: 1 })
+    // the re-read parent's own epoch; the new node minted under the scope epoch the device holds
+    expect(last).toMatchObject({ parentId: PARENT, parentEpoch: 2, scopeEpoch: 0 })
     expect(nameUnder(NEW_KEY, last)).toBe(root.name)
   })
 
   it('the device floor already shows the target lags: the pull runs before anything is sealed, one create', async () => {
-    held.epochs = { current: 1, keys: new Map() }
+    // the device holds scope epoch 1; the target's key is from scope epoch 0 (the parent as the replay was handed it)
+    held.epochs = { epoch: 1, key: new Uint8Array(32) }
     await replay(MEMORY)
     expect(pull).toHaveBeenCalledOnce()
     expect(requests()).toHaveLength(1)
-    expect(requests()[0]).toMatchObject({ parentEpoch: 1 })
+    expect(requests()[0]).toMatchObject({ parentEpoch: 2, scopeEpoch: 1 })
     expect(nameUnder(NEW_KEY, requests()[0])).toBe('Rome')
   })
 
@@ -114,6 +117,6 @@ describe('an import or a copy into a target not re-keyed yet (ADR 0111 decision 
     await vi.advanceTimersByTimeAsync(2_000) // the first wait
     await run
     expect(createNode).toHaveBeenCalledTimes(2)
-    expect(requests()[1]).toMatchObject({ parentEpoch: 1 })
+    expect(requests()[1]).toMatchObject({ parentEpoch: 2 })
   })
 })

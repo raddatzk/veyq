@@ -66,8 +66,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share upload e2e (live, real cryp
     const epochs = epochsOf((await openPersonalScope())!)
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
-    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: folderId, key: folderKey, epoch: 0 })
-    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId, 0)
+    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: folderId, key: folderKey, epoch: 0, scopeEpoch: epochs.epoch })
+    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId, { epoch: 0, scopeEpoch: epochs.epoch })
     const membersPhoto = await addMedia(scopeId, memory.nodeId, memory.memoryKey, photo(1))
 
     const minted = await mintShare(scopeId, folderId, { key: folderKey, epoch: 0 }, epochs, FOLDER_NAME, ShareRole.ReadWrite)

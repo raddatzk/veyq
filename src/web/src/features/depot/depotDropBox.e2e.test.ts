@@ -77,8 +77,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('files drop box e2e (live, real crypto, a
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
     const withFolder = await listTree(scopeId, epochs)
     const folderKey = nodeContentKey(scopeId, epochs, withFolder, folderId)!
-    const folderEpoch = withFolder.find((n) => n.id === folderId)!.epoch
-    const boxId = await createDropBox(scopeId, epochs, { id: folderId, key: folderKey, epoch: folderEpoch }, BOX_NAME)
+    const { epoch: folderEpoch, scopeEpoch: folderScopeEpoch } = withFolder.find((n) => n.id === folderId)!
+    const boxId = await createDropBox(scopeId, epochs, { id: folderId, key: folderKey, epoch: folderEpoch, scopeEpoch: folderScopeEpoch }, BOX_NAME)
     const withBox = await listTree(scopeId, epochs)
     const boxKey = nodeContentKey(scopeId, epochs, withBox, boxId)!
     const link = await mintDropBoxLink(scopeId, boxId, { key: boxKey, epoch: withBox.find((n) => n.id === boxId)!.epoch }, epochs, BOX_NAME)
@@ -128,7 +128,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files drop box e2e (live, real crypto, a
     const tree = await memberReads()
 
     // A member places nothing in a guest's folder.
-    const memberCreate = await failure(createContentNode(scopeId, epochs, { id: annaFolder.nodeId, key: nodeContentKey(scopeId, epochs, tree, annaFolder.nodeId)!, epoch: tree.find((n) => n.id === annaFolder.nodeId)!.epoch }, FILE_KIND, 'mine.txt'))
+    const memberCreate = await failure(createContentNode(scopeId, epochs, { id: annaFolder.nodeId, key: nodeContentKey(scopeId, epochs, tree, annaFolder.nodeId)!, epoch: tree.find((n) => n.id === annaFolder.nodeId)!.epoch, scopeEpoch: tree.find((n) => n.id === annaFolder.nodeId)!.scopeEpoch }, FILE_KIND, 'mine.txt'))
     expect(await decodeHttpError(memberCreate)).toEqual({ status: 422, code: 'illegal_structure' })
 
     // --- revoking the link keeps everything; the guest is refused --------------------------------------------------

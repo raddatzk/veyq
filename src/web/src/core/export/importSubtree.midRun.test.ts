@@ -8,15 +8,16 @@
 // no and the write waits for an owner's device.
 //
 // The server here is an in-memory model of the epoch gate (`NodeEpochGate`, `NodesHandler.create`): every node's stored
-// epoch, the scope's current one, and the gate's two refusals. The pull (`pullRekeyPath`) is modelled as what it does on
-// a member's device — the path re-keyed to the current epoch under a fresh key, the scope re-opened at that epoch — and is
+// own epoch, the scope epoch its key was minted under and its due mark (ADR 0114 decisions 3-4), the scope's current
+// epoch, and the gate's two refusals. The pull (`pullRekeyPath`) is modelled as what it does on a member's device — the
+// path's due nodes re-keyed under a fresh key minted at the current scope epoch, the scope re-opened at that epoch — and is
 // pinned on its own in `core/node/rekey/rekeyScope.test.ts`; here, that the run asks for it, for which node, and what each
 // write does with the answer. The kinds' seals are real (a Pot's revisions, a file's and a receipt's blob plans).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 
-const held = vi.hoisted(() => ({ epochs: { current: 0, keys: new Map() } as EpochKeys }))
+const held = vi.hoisted(() => ({ epochs: { epoch: 0, key: new Uint8Array(32) } as ScopeKey }))
 vi.mock('../../app/activeSpace', async () => {
   const { reactive } = await import('vue')
   return { activeSpace: reactive({ scopeId: '5c09e000-0000-4000-8000-0000000000cc' }), activeEpochKeys: () => held.epochs }
@@ -71,37 +72,41 @@ const refusal = (code: string) => Object.assign(new Error(code), {
   response: new Response(JSON.stringify({ code }), { status: 409, headers: { 'Content-Type': 'application/json' } }),
 })
 
-/** The server: each node's stored epoch, parent and current key (as the last re-key left it), the scope's current epoch. */
-type Node = { epoch: number; parentId: string | null; key: Uint8Array | null; kind: string }
+/** The server: each node's stored own epoch, the scope epoch its key was minted under, whether it is due, its parent and
+ *  current key (as the last re-key left it); the scope's current epoch. */
+type Node = { epoch: number; scopeEpoch: number; due: boolean; parentId: string | null; key: Uint8Array | null; kind: string }
 let server: { current: number; nodes: Map<string, Node>; ownerOnly: Set<string> }
 /** Run once right after the create of a node of this kind landed — where the test has another member rotate. */
 let afterCreate: Partial<Record<string, (nodeId: string) => void>>
 
-/** `NodeEpochGate.check`: the stated epoch is the stored one, and the stored one is the scope's current one. */
+/** `NodeEpochGate.check`: the stated own epoch is the stored one, and the node is not due for its re-key. */
 function gate(nodeId: string, stated: number): void {
   const node = server.nodes.get(nodeId)!
   if (stated !== node.epoch) throw refusal('stale_epoch')
-  if (node.epoch < server.current) throw refusal('node_rekey_pending')
+  if (node.due) throw refusal('node_rekey_pending')
 }
 /** A medium's completion through the same gate - answered per item inside a 200 (`MediaStore.attach`), which the media
  *  transport throws as these two (found live, inbox #701: the stale one was once a bare `Error`). */
 function mediaGate(nodeId: string, stated: number): void {
   const node = server.nodes.get(nodeId)!
   if (stated !== node.epoch) throw new StaleNodeEpochError()
-  if (node.epoch < server.current) throw new NodeRekeyPendingError()
+  if (node.due) throw new NodeRekeyPendingError()
 }
-/** Another member rotates the scope (and, with `rekeyed`, its device re-keys those nodes before this run writes again). */
+/** Another member rotates the scope — its commit marks every node due — and, with `rekeyed`, its device re-keys those
+ *  nodes before this run writes again. */
 function rotate(rekeyed: string[] = []): void {
   server.current++
+  for (const node of server.nodes.values()) node.due = true
   for (const id of rekeyed) rekey(id)
 }
+/** A node's re-key commit: a fresh key, its own epoch + 1, minted at the scope's current epoch, no longer due. */
 function rekey(id: string): void {
   const node = server.nodes.get(id)!
-  if (node.epoch < server.current) Object.assign(node, { epoch: server.current, key: v1.randomBytes(32) })
+  if (node.due) Object.assign(node, { epoch: node.epoch + 1, scopeEpoch: server.current, due: false, key: v1.randomBytes(32) })
 }
-/** The scope's epoch keys a device holds once it opened the scope at `current`. */
+/** The one scope key a device holds once it opened the scope at `current` (ADR 0115 decision 1). */
 const EPOCH_KEYS = [v1.randomBytes(32), v1.randomBytes(32), v1.randomBytes(32)]
-const epochsAt = (current: number): EpochKeys => ({ current, keys: new Map(EPOCH_KEYS.slice(0, current + 1).map((k, e) => [e, k])) })
+const epochsAt = (current: number): ScopeKey => ({ epoch: current, key: EPOCH_KEYS[current]! })
 const keyOf = (id: string) => server.nodes.get(id)!.key!
 const ofKind = (kind: string) => [...server.nodes.entries()].filter(([, n]) => n.kind === kind).map(([id]) => id)
 const one = (kind: string) => ofKind(kind)[0]!
@@ -119,23 +124,22 @@ beforeEach(() => {
   vi.mocked(prepareMedia).mockImplementation(async (source) => ({ source, sha256: '', tiers: [], meta: { dims: null } }) as unknown as PreparedMedia)
   creates.length = 0
   afterCreate = {}
-  server = { current: 0, nodes: new Map([[PARENT, { epoch: 0, parentId: null, key: PARENT_KEY, kind: FOLDER_KIND }]]), ownerOnly: new Set() }
+  server = { current: 0, nodes: new Map([[PARENT, { epoch: 0, scopeEpoch: 0, due: false, parentId: null, key: PARENT_KEY, kind: FOLDER_KIND }]]), ownerOnly: new Set() }
   held.epochs = epochsAt(0)
 
-  // `NodesHandler.create`: the node's epoch is the scope's current one (or, deferred, its parent's as stated), the parent
-  // passes the gate, and a node epoch still below the current one after it is stale
+  // `NodesHandler.create`: the key is minted under the scope's current epoch (another is stale), the parent passes the
+  // gate at the own epoch the create states, and the new node is at its own epoch 0
   fakeApi(contentApi, {
     createNode: vi.fn<ContentApi['createNode']>(async ({ createNodeRequest: r }) => {
       creates.push(r)
-      if (r.epoch !== server.current && (!r.parentId || r.epoch !== r.parentEpoch)) throw refusal('stale_epoch')
+      if (r.scopeEpoch !== server.current) throw refusal('stale_epoch')
       if (r.parentId) gate(r.parentId, r.parentEpoch!)
-      if (r.epoch !== server.current) throw refusal('stale_epoch')
-      server.nodes.set(r.nodeId, { epoch: r.epoch, parentId: r.parentId ?? null, key: null, kind: r.kind })
+      server.nodes.set(r.nodeId, { epoch: 0, scopeEpoch: r.scopeEpoch, due: false, parentId: r.parentId ?? null, key: null, kind: r.kind })
       afterCreate[r.kind]?.(r.nodeId)
       return { nodeId: r.nodeId }
     }),
     listNodes: vi.fn<ContentApi['listNodes']>(async () =>
-      [...server.nodes.entries()].map(([id, n]) => ({ id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, wrappedMeta: null, metaRevision: 0 }) as unknown as NodeSummary)),
+      [...server.nodes.entries()].map(([id, n]) => ({ id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, scopeEpoch: n.scopeEpoch, wrappedMeta: null, metaRevision: 0 }) as unknown as NodeSummary)),
   })
   pot = fakeApi(expensesApi, {
     appendPotRevisions: vi.fn<ExpensesApi['appendPotRevisions']>(async (r) => gate(r.nodeId, r.potAppendRequest.nodeEpoch!)),
@@ -174,7 +178,7 @@ beforeEach(() => {
     return { wrappedMeta: 'm', metaRevision: 1, replaced: null } as unknown as WriteNodeCoverResult
   })
 
-  // the pull on a member's device: the node's path re-keyed to the current epoch, the scope re-opened at it - or, for a
+  // the pull on a member's device: the node's path re-keyed at the current epoch, the scope re-opened at it - or, for a
   // path through a node only an owner re-keys, only the scope re-opened (`RekeyPathNotMineError`), and the write falls
   // back to the waits
   vi.mocked(pullRekeyPath).mockImplementation((_scope, ids) => async () => {
@@ -186,12 +190,13 @@ beforeEach(() => {
     for (const id of path) rekey(id)
     return true
   })
-  // the re-read: the node's key and epoch as the re-keyed tree holds them, through the device floor - and only once this
-  // device holds the epoch the re-key minted it at (the chain opens from the scope root's entry under `E_{epoch}`)
+  // the re-read: the node's key and epochs as the re-keyed tree holds them, through the device floor (its key's scope
+  // epoch below the held one) - and only once this device holds the scope key the re-key minted it at (the chain opens
+  // from the scope root's entry under the one key; a newer one's entry opens under no key held)
   vi.mocked(nodeKeyForWrite).mockImplementation((_scope, epochs, _tree, id) => {
     const node = server.nodes.get(id)!
-    if (node.epoch < epochs.current) throw new NodeKeyBelowFloorError(id, node.epoch, epochs.current)
-    return node.key && epochs.keys.has(node.epoch) ? { key: node.key, epoch: node.epoch } : null
+    if (node.scopeEpoch < epochs.epoch) throw new NodeKeyBelowFloorError(id, node.scopeEpoch, epochs.epoch)
+    return node.key && node.scopeEpoch === epochs.epoch ? { key: node.key, epoch: node.epoch, scopeEpoch: node.scopeEpoch } : null
   })
 })
 afterEach(() => vi.useRealTimers())
@@ -206,7 +211,7 @@ const item = (root: ManifestNode, purpose: 'import' | 'copy' = 'import'): Replay
   purpose,
 })
 const replay = (root: ManifestNode, purpose?: 'import' | 'copy') =>
-  replaySubtrees({ scopeId: SCOPE, epochs: held.epochs, tree: [], parent: { id: PARENT, key: PARENT_KEY, epoch: 0 }, items: [item(root, purpose)] })
+  replaySubtrees({ scopeId: SCOPE, epochs: held.epochs, tree: [], parent: { id: PARENT, key: PARENT_KEY, epoch: 0, scopeEpoch: 0 }, items: [item(root, purpose)] })
 
 const photo = (n: number) => ({ file: { path: `Rome/p${n}.jpg`, size: 64, mediaType: 'image/jpeg' }, name: `p${n}.jpg` })
 const copiedPhoto = (n: number) => ({ ...photo(n), copy: { original: { type: 'image/jpeg' }, tiers: [] } })
@@ -233,7 +238,7 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
     expect(writes.map((w) => w.epoch)).toEqual([0, 0, 1, 1]) // p1, p2 refused, p2 again, p3 under the key the pull left
     expect(writes[2]!.key).toEqual(keyOf(rome))
     expect(writes[3]!.key).toEqual(keyOf(rome))
-    expect(server.nodes.get(rome)!.epoch).toBe(1)
+    expect(server.nodes.get(rome)!).toMatchObject({ epoch: 1, scopeEpoch: 1, due: false })
     expect(ofKind(MEMORY_KIND)).toHaveLength(1) // the Memory was not created twice
     // p2 is sealed again, never prepared again: its second write carries the stage its first one had (inbox #784)
     expect(prepareMedia).toHaveBeenCalledTimes(3)
@@ -260,8 +265,9 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
     const folder = ofKind(FOLDER_KIND).find((id) => id !== PARENT)!
     expect(pull).toHaveBeenCalledWith([folder])
     const last = creates.at(-1)!
-    expect(last).toMatchObject({ kind: MEMORY_KIND, parentId: folder, parentEpoch: 1, epoch: 1 })
-    expect(openName(keyOf(folder), { scopeId: SCOPE, nodeId: last.nodeId, epoch: 1, placementRevision: 0 }, last.encryptedName)).toBe('Rome')
+    // the folder's own epoch after its re-key; the Memory's key minted under the scope epoch the device re-opened at
+    expect(last).toMatchObject({ kind: MEMORY_KIND, parentId: folder, parentEpoch: 1, scopeEpoch: 1 })
+    expect(openName(keyOf(folder), { scopeId: SCOPE, nodeId: last.nodeId, scopeEpoch: 1, placementRevision: 0 }, last.encryptedName)).toBe('Rome')
   })
 
   it('a copy of two nodes to the scope root: the second create, after the rotation, re-opens the scope and states its epoch', async () => {
@@ -270,7 +276,7 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
     const items = ['A', 'B'].map((name) => item({ id: name, name, kind: FOLDER_KIND }, 'copy'))
     await replaySubtrees({ scopeId: SCOPE, epochs: held.epochs, tree: [], parent: null, items })
     expect(pull).toHaveBeenCalledWith([]) // the root's path is empty: the pull only brings this device to the scope's epoch
-    expect(creates.map((r) => [r.parentId ?? null, r.epoch])).toEqual([[null, 0], [null, 0], [null, 1]])
+    expect(creates.map((r) => [r.parentId ?? null, r.scopeEpoch])).toEqual([[null, 0], [null, 0], [null, 1]])
   })
 
   it('a Memory pulled forward by its own media hands its new key to the chapters created below it', async () => {
@@ -285,8 +291,8 @@ describe('a rotation lands while an import or a copy is under way (inbox #670)',
     const rome = one(MEMORY_KIND)
     expect(pull).toHaveBeenCalledTimes(1) // the medium's: the chapter's create is not refused
     const chapter = creates.at(-1)!
-    expect(chapter).toMatchObject({ kind: CHAPTER_KIND, parentId: rome, parentEpoch: 1, epoch: 1 })
-    expect(openName(keyOf(rome), { scopeId: SCOPE, nodeId: chapter.nodeId, epoch: 1, placementRevision: 0 }, chapter.encryptedName)).toBe('Day 1')
+    expect(chapter).toMatchObject({ kind: CHAPTER_KIND, parentId: rome, parentEpoch: 1, scopeEpoch: 1 })
+    expect(openName(keyOf(rome), { scopeId: SCOPE, nodeId: chapter.nodeId, scopeEpoch: 1, placementRevision: 0 }, chapter.encryptedName)).toBe('Day 1')
   })
 
   it('a Memory\'s cover after the rotation is uploaded and written under the new key; the row ahead of the key is caught before the upload', async () => {

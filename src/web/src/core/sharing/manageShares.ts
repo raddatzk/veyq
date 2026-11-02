@@ -20,11 +20,13 @@ import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { SHARE_MEMORY_NAME, SHARE_NOTE, openShareNote } from './resolvePublicShare'
 import { NO_NOTE, encodeShareNote, hasLocaleText, type ShareNote } from './shareNote'
 import { SHARE_KEY } from './shareTree'
-import { keyAt, writeKey, zeroEpochKeys, type EpochKeys } from '../../features/spaces/epochs'
+import { zeroScopeKey, type ScopeKey } from '../../features/spaces/epochs'
 import { openScopeById } from '../../features/spaces/scopes'
 import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
-import { listTree } from '../node/tree'
-import { assertNodeKeyAtFloor, nodeKeyForWrite } from '../node/rekey/floor'
+import { fetchTreeRows, listTree } from '../node/tree'
+import { dropKeysForShare } from './dropKey'
+import { nodeKeyForWrite } from '../node/rekey/floor'
+import { assertActiveScopeFloor } from '../node/rereadNode'
 import { pullRekeyPath } from '../node/rekey/rekeyScope'
 import { ShareRole, type ShareGuestStop } from '../../api/generated/sharing'
 
@@ -37,7 +39,8 @@ const SHARE_PASSWORD = { purpose: 'share-password' } as const
 /** Where a share lives: the node it shares and that node's scope, plus the share's own id (ADR 0072). */
 export type ShareAddress = { scopeId: string; nodeId: string; shareId: string }
 /** The recoverable copy of `K_share` under the scope key `K_SC` at `epoch` — shared across the scope, so it binds the
- *  share it belongs to and the epoch it is stored at (ADR 0072). */
+ *  share it belongs to and the epoch it is stored at (ADR 0072). Every rotation re-seals it at its new epoch (ADR 0115
+ *  decision 2); the epoch the link was minted at is kept beside it by the server for the re-issue rule. */
 const shareKeyRecoveryContext = (a: ShareAddress, epoch: number) =>
   ({ purpose: 'share-key-recovery', scopeId: a.scopeId, nodeId: a.nodeId, shareId: a.shareId, epoch }) as const
 /** A share's recovery copy as the manage list serves it: `K_share` sealed under `K_SC` at `sealedShareKeyEpoch`.
@@ -78,18 +81,19 @@ function openShareName(kShare: Uint8Array, sealed: string): string {
   return noteDecoder.decode(v1.openField(SHARE_NAME, kShare, fromB64std(sealed)))
 }
 /**
- * Recover `K_share` from its recovery copy, sealed under the scope key `K_SC` at the copy's epoch — a key every scope
- * member holds and **no share link does** (ADR 0036 point 4): a READ or READ_WRITE link carries the node's key, so a
+ * Recover `K_share` from its recovery copy, sealed under the scope key `K_SC` at the copy's epoch — the scope's one key,
+ * since every rotation re-seals the copy (ADR 0115 decision 2) — a key every scope member holds and **no share link
+ * does** (ADR 0036 point 4): a READ or READ_WRITE link carries the node's key, so a
  * copy under that key would open every sibling share to that link plus a dump. Bound to the share it is listed as and
  * to its epoch (ADR 0072), so a copy the server moved onto another share's row, or relabelled, does not open. Throws
  * `OpenRefused`, or a plain error when the share carries no copy.
  */
-export function recoverShareKey(epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy): Uint8Array {
+export function recoverShareKey(epochs: ScopeKey, share: ShareAddress, copy: RecoveryCopy): Uint8Array {
   const { sealedShareKey, sealedShareKeyEpoch: epoch } = copy
   if (sealedShareKey == null || epoch == null) throw new Error('share_key_not_recoverable')
-  // `keyAt` answers an epoch the caller does not hold with the WRITE key rather than refusing. That stays harmless
-  // only because the epoch is in the AAD: a copy served under an epoch label it was not sealed at opens under no key.
-  return v1.open(shareKeyRecoveryContext(share, epoch), keyAt(epochs, epoch), fromB64std(sealedShareKey))
+  // The one key the caller holds; the epoch is in the AAD, so a copy served under an epoch label it was not sealed at —
+  // or one still under a key a rotation replaced — opens under no key.
+  return v1.open(shareKeyRecoveryContext(share, epoch), epochs.key, fromB64std(sealedShareKey))
 }
 
 // --- password protection (cr-0118, ADR 0037): an operator-blind ACCESS-CONTROL gate ------------------------
@@ -115,7 +119,7 @@ async function buildPasswordFields(kShare: Uint8Array, password: string): Promis
 /** Reveal a managed share's password (scope members only): recover `K_share` through the epoch keys, open the sealed
  *  copy. '' when none / unreadable — a copy that does not open degrades, it does not refuse (ADR 0036 point 4). */
 export function readSharePassword(
-  epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy, sealedPassword: string | null,
+  epochs: ScopeKey, share: ShareAddress, copy: RecoveryCopy, sealedPassword: string | null,
 ): string {
   if (!copy.sealedShareKey || !sealedPassword) return ''
   try {
@@ -128,7 +132,7 @@ export function readSharePassword(
 /** A managed share's note, decrypted (recover `K_share` through the epoch keys, then open it): its texts and its
  *  acceptance switch. {@link NO_NOTE} when there is none, or the ciphertext or its plaintext does not open. */
 export function readShareNote(
-  epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy, sealedNote: string | null,
+  epochs: ScopeKey, share: ShareAddress, copy: RecoveryCopy, sealedNote: string | null,
 ): ShareNote {
   if (!copy.sealedShareKey || !sealedNote) return NO_NOTE
   try {
@@ -139,7 +143,7 @@ export function readShareNote(
 }
 /** A managed share's private name, decrypted. '' when none / unreadable. */
 export function readShareName(
-  epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy, sealedShareName: string | null,
+  epochs: ScopeKey, share: ShareAddress, copy: RecoveryCopy, sealedShareName: string | null,
 ): string {
   if (!copy.sealedShareKey || !sealedShareName) return ''
   try {
@@ -195,7 +199,7 @@ export async function mintShare(
   scopeId: string,
   nodeId: string,
   root: ShareRootKey,
-  epochs: EpochKeys,
+  epochs: ScopeKey,
   rootName: string,
   role: ShareRole = ShareRole.Read,
   expiresAt: Date | null = null,
@@ -220,7 +224,7 @@ export async function mintShare(
   let at = root
   const post = async () => {
     // The device floor inside the attempt, so a node below it is pulled forward and re-read like a server refusal.
-    assertNodeKeyAtFloor({ id: nodeId, epoch: at.epoch }, epochs)
+    assertActiveScopeFloor(scopeId, { id: nodeId, epoch: at.epoch })
     // Only a READ or READ_WRITE link holds the node's key; a WRITE_ONLY link's guest never does.
     const wrap = writeOnly ? undefined : b64std(v1.seal(SHARE_KEY, kShare, at.key))
     const drop = writeOnly ? await writeOnly.dropFields(kShare, at.key) : undefined
@@ -270,13 +274,18 @@ function writeVerifierOf(kShare: Uint8Array, shareId: string): string {
   return b64std(v1.sha256Digest(v1.shareWriteToken(kShare, shareId)))
 }
 
-/** The recovery copy of [kShare] for the share at [address], sealed under the scope's write key at its current epoch
- *  (ADR 0036 point 4) and bound to that share id and epoch (ADR 0072). */
+/** The recovery copy of [kShare] for the share at [address], sealed under the scope key at its epoch (ADR 0036 point 4)
+ *  and bound to that share id and epoch (ADR 0072) — what a mint writes and what a rotation re-seals under its new key
+ *  (`features/spaces/scopeRekey.ts`, ADR 0115 decision 2). */
+export function sealRecoveryCopy(address: ShareAddress, ek: ScopeKey, kShare: Uint8Array): { sealedShareKey: string; sealedShareKeyEpoch: number } {
+  return {
+    sealedShareKey: b64std(v1.seal(shareKeyRecoveryContext(address, ek.epoch), ek.key, kShare)),
+    sealedShareKeyEpoch: ek.epoch,
+  }
+}
+
 function recoveryCopyOf(address: ShareAddress, kShare: Uint8Array) {
-  return (ek: EpochKeys) => ({
-    sealedShareKey: b64std(v1.seal(shareKeyRecoveryContext(address, ek.current), writeKey(ek), kShare)),
-    sealedShareKeyEpoch: ek.current,
-  })
+  return (ek: ScopeKey) => sealRecoveryCopy(address, ek, kShare)
 }
 
 /** What a re-issue gives the new share — the settings the curator confirmed in the pre-filled dialog. */
@@ -291,7 +300,7 @@ export type ReissuableShare = ShareAddress & RecoveryCopy &
  * (ADR 0075 Decision 2). A password-protected share whose password cannot be read is refused rather than carried
  * without one: a re-issue must never quietly drop a link's protection.
  */
-export function carriedSettings(epochs: EpochKeys, old: ReissuableShare): ReissueSettings {
+export function carriedSettings(epochs: ScopeKey, old: ReissuableShare): ReissueSettings {
   const password = readSharePassword(epochs, old, old, old.sealedPassword)
   if (old.passwordRequired && !password) throw new Error('share_password_not_recoverable')
   return {
@@ -317,7 +326,7 @@ export function carriedSettings(epochs: EpochKeys, old: ReissuableShare): Reissu
 export async function remintShare(
   old: ReissuableShare,
   root: ShareRootKey,
-  epochs: EpochKeys,
+  epochs: ScopeKey,
   rootName: string,
   settings: ReissueSettings = carriedSettings(epochs, old),
   writeOnly?: WriteOnlyMint,
@@ -334,7 +343,7 @@ export async function remintShare(
   let recovery = recoveryCopy(epochs)
   let at = root
   const post = async () => {
-    assertNodeKeyAtFloor({ id: nodeId, epoch: at.epoch }, epochs) // inside the attempt: pulled and re-read as a refusal
+    assertActiveScopeFloor(scopeId, { id: nodeId, epoch: at.epoch }) // inside the attempt: pulled and re-read as a refusal
     const wrap = writeOnly ? undefined : b64std(v1.seal(SHARE_KEY, kShare, at.key))
     const sealedDropPublicKey = writeOnly ? (await writeOnly.dropFields(kShare, at.key)).sealedDropPublicKey : undefined
     await withRefresh(() =>
@@ -359,7 +368,7 @@ export async function remintShare(
  *  tree re-read for the shared node's key and epoch now, through the device floor (`nodeKeyForWrite`, which throws
  *  `NodeKeyBelowFloorError` for a node still not re-keyed — retried as pending). */
 async function rereadShareRoot<T>(
-  scopeId: string, nodeId: string, seal: (ek: EpochKeys) => T,
+  scopeId: string, nodeId: string, seal: (ek: ScopeKey) => T,
 ): Promise<{ root: ShareRootKey; recovery: T }> {
   const opened = await openScopeById(scopeId)
   if (!opened) throw new Error('cannot open scope to re-seal the share key')
@@ -368,7 +377,7 @@ async function rereadShareRoot<T>(
     if (!root) throw new Error('share_root_unavailable')
     return { root, recovery: seal(opened.epochs) }
   } finally {
-    zeroEpochKeys(opened.epochs)
+    zeroScopeKey(opened.epochs)
   }
 }
 
@@ -380,8 +389,10 @@ async function rereadShareRoot<T>(
  * the tri-state gate: `{ set }` sets/changes it, `{ remove: true }` removes it, `undefined` leaves it untouched.
  * Owner-gated server-side; the link/`K_share` are untouched throughout.
  */
+// ADR 0114 web step: an edit that moves a passed end date into the future (or clears it) reopens the link and must carry
+// `reopenFields` — the manage list does not tell this edit the link's own end date has passed yet.
 export async function updateShare(
-  share: ShareAddress, epochs: EpochKeys, copy: RecoveryCopy, note: ShareNote, name: string,
+  share: ShareAddress, epochs: ScopeKey, copy: RecoveryCopy, note: ShareNote, name: string,
   expiresAt: Date | null, role?: ShareRole,
   passwordChange?: { set: string } | { remove: true },
 ): Promise<void> {
@@ -491,7 +502,7 @@ export type ResealReport = { resealed: string[]; skipped: string[]; failed: stri
  * re-seals again). A node without shares costs one list request and writes nothing. Throws only when the list itself
  * cannot be read — then nothing was written.
  */
-export async function resealShareNames(nodeId: string, newName: string, epochs: EpochKeys): Promise<ResealReport> {
+export async function resealShareNames(nodeId: string, newName: string, epochs: ScopeKey): Promise<ResealReport> {
   const report: ResealReport = { resealed: [], skipped: [], failed: [] }
   for (const share of await listSharesFor(nodeId)) {
     if (share.sealedShareKey == null || share.sealedShareKeyEpoch == null) {
@@ -522,12 +533,44 @@ export async function deleteShare(shareId: string): Promise<void> {
   await withRefresh(() => sharesApi().deleteShare({ shareId }))
 }
 
+/** A link to switch back on, as the manage list serves it: its address, its role and its recovery copy. */
+export type ReopenedShare = ShareAddress & RecoveryCopy & { role: ShareRole }
+
+/** What a reopen carries (ADR 0114 decision 7): what the close cleared — the root's current key under the link's
+ *  `K_share` (a READ or READ_WRITE link's `wrap`, a WRITE_ONLY link's drop public key) — and the root's current name
+ *  under `K_share`, with the root's own epoch as read. `K_share` comes from the recovery copy (ADR 0036 point 4): a link
+ *  with none is reopened only by a re-issue. `sealedDropPrivateKey` is the root's, for a WRITE_ONLY link. */
+export function reopenFields(
+  share: ReopenedShare, root: ShareRootKey, epochs: ScopeKey, rootName: string, sealedDropPrivateKey?: string | null,
+): { nodeEpoch: number; sealedName: string; wrap?: string; sealedDropPublicKey?: string } {
+  const kShare = recoverShareKey(epochs, share, share)
+  try {
+    const sealedName = sealRootName(kShare, rootName)
+    if (share.role !== ShareRole.WriteOnly) return { nodeEpoch: root.epoch, sealedName, wrap: b64std(v1.seal(SHARE_KEY, kShare, root.key)) }
+    if (!sealedDropPrivateKey) throw new Error('share_drop_key_missing')
+    const { sealedDropPublicKey } = dropKeysForShare(share.scopeId, share.nodeId, root.key, kShare, sealedDropPrivateKey)
+    return { nodeEpoch: root.epoch, sealedName, sealedDropPublicKey }
+  } finally {
+    kShare.fill(0)
+  }
+}
+
 /** Re-activate a soft-revoked share and adopt its ownership (cr-0104) — any current member may take over an
- *  orphaned (disabled) share on a shared node; the guest link then resolves again, now owned by the caller. The
- *  server refuses `409 reissue_required` for a link a departed member may hold (ADR 0075) — see
- *  {@link isReissueRequired}; such a share comes back only through a re-issue ({@link remintShare}). */
-export async function reactivateShare(shareId: string): Promise<void> {
-  await withRefresh(() => sharesApi().reactivateShare({ shareId }))
+ *  orphaned (disabled) share on a shared node; the guest link then resolves again, now owned by the caller. A switch-off
+ *  is a close: the server cleared the link's key and the subtree was re-keyed (ADR 0114), so the reopen carries the
+ *  root's current key and name under `K_share` ({@link reopenFields}) — `root` the shared node's key with its own epoch,
+ *  `rootName` its name. The server refuses `409 reissue_required` for a link a departed member may hold (ADR 0075) — see
+ *  {@link isReissueRequired}; such a share comes back only through a re-issue ({@link remintShare}). A WRITE_ONLY link's
+ *  drop key is read from the root's row. */
+export async function reactivateShare(share: ReopenedShare, root: ShareRootKey, epochs: ScopeKey, rootName: string): Promise<void> {
+  const sealedDropPrivateKey = share.role === ShareRole.WriteOnly ? await rootDropKey(share.scopeId, share.nodeId) : null
+  const reactivateShareRequest = reopenFields(share, root, epochs, rootName, sealedDropPrivateKey)
+  await withRefresh(() => sharesApi().reactivateShare({ shareId: share.shareId, reactivateShareRequest }))
+}
+
+/** The root's drop private key as its row holds it (sealed under the root's key), or null. */
+async function rootDropKey(scopeId: string, nodeId: string): Promise<string | null> {
+  return (await fetchTreeRows(scopeId)).find((n) => n.id === nodeId)?.sealedDropPrivateKey ?? null
 }
 
 /** Whether a re-issue was refused because the share is already deleted — renewed once already (a concurrent renew

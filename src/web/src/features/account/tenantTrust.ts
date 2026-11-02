@@ -30,10 +30,10 @@ import type { MemberVerification } from '../../api/generated/tenants'
 import { ScopeMemberRoleEnum, type ScopeMember } from '../../api/generated/scopes'
 import { withRefresh } from '../../app/sessionRefresh'
 import { identityPrivate } from '../../app/vault'
-import { openUnderHeldEpochs, writeKey, zeroEpochKeys, type EpochKeys } from '../spaces/epochs'
+import { zeroScopeKey, type ScopeKey } from '../spaces/epochs'
 import { listScopeMembers } from '../spaces/members'
 import { me } from '../spaces/grantTrust'
-import { listMyScopes, openScopeById, type OpenedScope } from '../spaces/scopes'
+import { isStaleEpoch, listMyScopes, openScopeById, type OpenedScope } from '../spaces/scopes'
 import {
   anchorChainKey,
   anchorIdentity,
@@ -71,17 +71,14 @@ export interface TenantView extends TenantStandings {
 const UNAVAILABLE: Standing = { kind: 'unavailable' }
 const UNANCHORED: Standing = { kind: 'unanchored' }
 
-/** Open a join record with the epoch key it was sealed under — the epoch its invite's grant carried, which the record
- *  does not name, so every epoch this device holds is tried, newest first ({@link openUnderHeldEpochs}). Null for one
- *  none opens. */
-function openJoinRecord(tenantId: string, userId: string, sealed: string, epochs: EpochKeys): invite.JoinRecord | null {
-  let envelope: Uint8Array
+/** Open a join record with the tenant's one key (ADR 0115 decision 1: every rotation re-seals every record under the
+ *  new key). Null for one that does not open. */
+export function openJoinRecord(tenantId: string, userId: string, sealed: string, epochs: ScopeKey): invite.JoinRecord | null {
   try {
-    envelope = fromB64std(sealed)
+    return invite.openJoinRecord(epochs.key, { tenantId, userId }, fromB64std(sealed))
   } catch {
     return null
   }
-  return openUnderHeldEpochs(epochs, (key) => invite.openJoinRecord(key, { tenantId, userId }, envelope))?.value ?? null
 }
 
 /**
@@ -97,7 +94,8 @@ function openJoinRecord(tenantId: string, userId: string, sealed: string, epochs
  *  - **a record a retired key signed** (ADR 0111 decision 21): when the key the record names is
  *    not the signer's served current one — a retired key of their chain, at or after their join — it counts only through
  *    the signer's endorsement: the member's `joinEndorsement` must verify under the signer's served current key, over
- *    the sealed record as stored, and that key must be anchored in this tenant ({@link anchorIdentity} with this view).
+ *    the digest of the record as this view opened it (ADR 0115 decision 8 — never its envelope, which every rotation
+ *    re-seals), and that key must be anchored in this tenant ({@link anchorIdentity} with this view).
  *    An owner's securing endorses every record it rooted (`rotateKeys`), so its members stay; a record a thief signs with
  *    the retired key afterwards never carries an endorsement by the key the thief lacks.
  *
@@ -126,7 +124,7 @@ export async function loadTenantView(
       if (m.sealedJoinRecord) records.set(m.userId, openJoinRecord(tenantId, m.userId, m.sealedJoinRecord, opened.epochs))
     }
   } finally {
-    zeroEpochKeys(opened.epochs)
+    zeroScopeKey(opened.epochs)
   }
   const memo = new Map<string, Promise<Standing>>()
   const visiting = new Set<string>()
@@ -174,23 +172,24 @@ export async function loadTenantView(
         anchorChainKey(record.signerUserId, signerKey, { tenant: view }),
       )
       if (judged.anchor === 'anomaly') return UNANCHORED
-      if ((judged.retired || signerKey !== signer.identityPublicKey) && !(await endorsedBySigner(m, signer))) return UNANCHORED
+      if ((judged.retired || signerKey !== signer.identityPublicKey) && !(await endorsedBySigner(m, record, signer))) return UNANCHORED
     } finally {
       visiting.delete(userId)
     }
     return { kind: 'joined', identityPublicKey: record.identityPublicKey, secretKeyProofPublicKey: record.secretKeyProofPublicKey }
   }
-  /** Whether [m]'s join endorsement verifies under [signer]'s served current key, over [m]'s sealed record as stored,
-   *  that key anchored in this tenant (ADR 0111 decision 21). False — never a throw — for anything malformed. */
-  async function endorsedBySigner(m: ScopeMember, signer: ScopeMember): Promise<boolean> {
-    if (!m.joinEndorsement || !m.sealedJoinRecord) return false
+  /** Whether [m]'s join endorsement verifies under [signer]'s served current key, over the digest of [record] — [m]'s
+   *  record as this view opened it (ADR 0115 decision 8) —, that key anchored in this tenant (ADR 0111 decision 21).
+   *  False — never a throw — for anything malformed. */
+  async function endorsedBySigner(m: ScopeMember, record: invite.JoinRecord, signer: ScopeMember): Promise<boolean> {
+    if (!m.joinEndorsement) return false
     let signKey: Uint8Array
     let verifies: boolean
     try {
       signKey = v1.deserializeIdentityPublic(fromB64std(signer.identityPublicKey)).sign
       verifies = invite.joinEndorsementVerifies(
         signKey,
-        { tenantId, userId: m.userId, signerUserId: signer.userId, sealedJoinRecord: fromB64std(m.sealedJoinRecord) },
+        { tenantId, userId: m.userId, signerUserId: signer.userId, joinRecord: invite.encodeJoinRecord(record) },
         fromB64std(m.joinEndorsement),
       )
     } catch {
@@ -277,14 +276,13 @@ export async function listAllVerifications(
   }
 }
 
-/** One row opened with the epoch key it names, or null when this device holds no key for that epoch or the row does not
- *  open at its slot. */
-function openRow(tenantId: string, row: MemberVerification, epochs: EpochKeys): verification.Verification | null {
-  const key = epochs.keys.get(row.epoch)
-  if (!key) return null
+/** One row opened with the tenant's one key, or null when it is sealed at another epoch than the key's (every rotation
+ *  re-seals every verification at its new one, ADR 0115 decision 2) or does not open at its slot. */
+function openRow(tenantId: string, row: MemberVerification, epochs: ScopeKey): verification.Verification | null {
+  if (row.epoch !== epochs.epoch) return null
   try {
     const slot = { tenantId, verifierUserId: row.verifierUserId, subjectUserId: row.subjectUserId, epoch: row.epoch }
-    return verification.openVerification(key, slot, fromB64std(row.sealedStatement))
+    return verification.openVerification(epochs.key, slot, fromB64std(row.sealedStatement))
   } catch {
     return null
   }
@@ -298,7 +296,7 @@ function openRow(tenantId: string, row: MemberVerification, epochs: EpochKeys): 
  * by a retired key, the thief's case of decision 13, is not the current key's.
  */
 export async function countVerifications(
-  view: TenantView, rows: readonly MemberVerification[], epochs: EpochKeys, anchoredHeads: ReadonlyMap<string, string>,
+  view: TenantView, rows: readonly MemberVerification[], epochs: ScopeKey, anchoredHeads: ReadonlyMap<string, string>,
 ): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>()
   const verifierOk = new Map<string, Promise<boolean>>()
@@ -377,8 +375,6 @@ export async function verifyPerson(
     throw new IdentityUnanchoredError(subjectUserId)
   }
   const mine = await myChainHead()
-  const opened = await openScopeById(tenantId)
-  if (!opened) throw new Error('cannot open the tenant to verify — the vault is locked or no grant is held')
   const priv = identityPrivate()
   try {
     if (!priv) throw new Error('verify requires an unlocked vault')
@@ -386,15 +382,28 @@ export async function verifyPerson(
     const signed = verification.signVerification(
       address, { subjectHead: fromB64std(compared.head), verifierHead: fromB64std(mine.head) }, priv.sign,
     )
-    const epoch = opened.epochs.current
-    const sealed = verification.sealVerification(writeKey(opened.epochs), { ...address, epoch }, signed)
-    await withRefresh(() =>
-      tenantsApi().putMyVerification({ tenantId, subjectUserId, putVerificationRequest: { epoch, sealedStatement: b64std(sealed) } }),
-    )
+    // Sealed under the tenant's current key at its epoch (ADR 0115 decision 3); a rotation that replaced the key in
+    // between answers `409 stale_epoch`, and the tenant is opened again and the statement sealed once more.
+    for (let attempt = 0; ; attempt++) {
+      const opened = await openScopeById(tenantId)
+      if (!opened) throw new Error('cannot open the tenant to verify — the vault is locked or no grant is held')
+      try {
+        const epoch = opened.epochs.epoch
+        const sealed = verification.sealVerification(opened.epochs.key, { ...address, epoch }, signed)
+        await withRefresh(() =>
+          tenantsApi().putMyVerification({ tenantId, subjectUserId, putVerificationRequest: { epoch, sealedStatement: b64std(sealed) } }),
+        )
+        return
+      } catch (e) {
+        if (attempt === 0 && (await isStaleEpoch(e))) continue
+        throw e
+      } finally {
+        zeroScopeKey(opened.epochs)
+      }
+    }
   } finally {
     priv?.kemSeed.fill(0)
     priv?.sign.fill(0)
-    zeroEpochKeys(opened.epochs)
   }
 }
 
@@ -456,7 +465,7 @@ async function verifiedByIn(view: TenantView, subjects: readonly ScopeMember[]):
   } catch {
     return new Map()
   } finally {
-    zeroEpochKeys(opened.epochs)
+    zeroScopeKey(opened.epochs)
   }
 }
 
@@ -538,12 +547,12 @@ export async function collectMyVerifications(
         if (!v || b64std(v.verifierHead) !== myHead) continue
         const address = { tenantId, verifierUserId: self.userId, subjectUserId: row.subjectUserId }
         if (!verification.verificationVerifies(address, v, self.pub.sign)) continue
-        out.push({ tenantId, subjectUserId: row.subjectUserId, subjectHead: v.subjectHead, epoch: opened.epochs.current, key: writeKey(opened.epochs).slice() })
+        out.push({ tenantId, subjectUserId: row.subjectUserId, subjectHead: v.subjectHead, epoch: opened.epochs.epoch, key: opened.epochs.key.slice() })
       }
     } catch {
       /* this tenant carries nothing */
     } finally {
-      if (opened) zeroEpochKeys(opened.epochs)
+      if (opened) zeroScopeKey(opened.epochs)
     }
   }
   return out

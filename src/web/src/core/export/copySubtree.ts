@@ -20,7 +20,7 @@ import { registry } from '../applications/registry'
 import type { MemberAccess, TreeSource } from '../access'
 import { FOLDER_KIND } from '../node/kind'
 import type { NodeParent, TreeNode } from '../node/tree'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import { walkSubtree, type Pending, type SkippedNode } from './exportSubtree'
 import { framedPayload } from './copySource'
 import { ExportError, MANIFEST_FORMAT, MANIFEST_VERSION, collectPayloads, type Manifest, type ManifestNode } from './manifest'
@@ -33,7 +33,7 @@ export type CopyLeftOut = { name: string; kind: string; reason: SkippedNode['rea
 
 export type CopyTarget = {
   scopeId: string
-  epochs: EpochKeys
+  epochs: ScopeKey
   /** The decrypted tree of the scope: the destination's existing children, for `Name (2)`. */
   tree: TreeNode[]
   /** Where the copies go (null: the scope root). */

@@ -73,15 +73,16 @@ describe('scope succession (#scope_succession, ADR 0115 decision 5)', () => {
     expect(path(v.succession_public_key)).toBe(false)
   })
 
-  it('the statement is a label of its own, beside the scope-epoch seal it is to replace', () => {
+  it('the statement is a label of its own, and the scope-epoch seal it replaced is gone', () => {
     const stmt = v1.encodeStatement(v1.scopeSuccessionStatement(input()))
     expect(new TextDecoder().decode(stmt.slice(4, 4 + 'scope-succession'.length))).toBe('scope-succession')
     expect(STATEMENT_PURPOSES['scope-succession'].map(([name]) => name)).toEqual(['scopeId', 'epoch', 'successionPublicKey'])
     expect(Object.keys(vectors.seal.sym)).not.toContain('scope-succession')
     expect(Object.keys(vectors.seal.asym)).not.toContain('scope-succession')
-    // Additive: the chain link's seal and its vector stay until the web phase replaces their consumers.
-    expect(Object.keys(SEAL_PURPOSES)).toContain('scope-epoch')
-    expect(Object.keys(vectors.seal.sym)).toContain('scope-epoch')
+    // ADR 0115 decision 1: a scope key is replaced, never chained — no seal makes one key readable from another.
+    expect(Object.keys(SEAL_PURPOSES)).not.toContain('scope-epoch')
+    expect(Object.keys(vectors.seal.sym)).not.toContain('scope-epoch')
+    expect(Object.keys(SEAL_PURPOSES)).toContain('group-name') // control: the table is the one read
   })
 
   it('a scope key that is not 32 bytes derives nothing', () => {

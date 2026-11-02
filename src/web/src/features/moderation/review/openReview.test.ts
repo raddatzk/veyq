@@ -89,7 +89,7 @@ describe('a name reported on its own (ADR 0093 § 9)', () => {
     caseId: CASE_ID, itemKind: 'NAME', itemId: ROOT, reports: [report('r-1', EPOCH, keys, ROOT, 'NAME')], heldLinks: [],
     share: {
       role: ShareRole.Read, passwordRequired: false, scopeId: SCOPE_ID, rootKind: 'FOLDER',
-      nodes: [{ id: ROOT, kind: 'FOLDER', epoch: 0, blockedByOperator: false, placementRevision: 3, encryptedName }],
+      nodes: [{ id: ROOT, kind: 'FOLDER', epoch: 0, scopeEpoch: 0, blockedByOperator: false, placementRevision: 3, encryptedName }],
     },
   })
 

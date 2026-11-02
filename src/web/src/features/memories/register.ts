@@ -24,6 +24,7 @@ import MemoryShareBody from './components/MemoryShareBody.vue'
 import PersonMemories from './components/PersonMemories.vue'
 import MediumReview from './components/MediumReview.vue'
 import { memoriesLifecycle } from './lifecycle'
+import { stageItemMarksRekey } from './itemFavorites'
 import { memoryRights } from './rights'
 import { targetOf } from '../../core/access'
 import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_CONTENT_VERSION } from './exportImport'
@@ -97,5 +98,7 @@ export function registerMemories(registry: Registry): void {
   // A reported medium's review (uc.moderation.review-a-case A5): a medium is Memories' record, core cannot draw it.
   app.itemReview(MediumReview)
   app.lifecycle(memoriesLifecycle)
+  // the item marks are sealed under the scope key: a rotation re-seals them through this (ADR 0115 decision 2)
+  app.scopeRekey(stageItemMarksRekey)
 }
 

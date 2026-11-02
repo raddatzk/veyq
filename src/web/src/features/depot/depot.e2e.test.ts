@@ -74,8 +74,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     let tree = await listTree(scopeId, epochs)
     const folderKey = nodeContentKey(scopeId, epochs, tree, folderId)!
     const folderEpoch = tree.find((n) => n.id === folderId)!.epoch
+    const folderScopeEpoch = tree.find((n) => n.id === folderId)!.scopeEpoch
     const first = bytesOf(2 * CHUNK_SIZE + 1234, 1)
-    const uploaded = await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey, epoch: folderEpoch } }, fileOf(first)).run(ctx())
+    const uploaded = await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey, epoch: folderEpoch, scopeEpoch: folderScopeEpoch } }, fileOf(first)).run(ctx())
     const nodeId = uploaded.nodeId
 
     // the tree lists it as a FILE named as picked, its own payload untouched; listFiles pairs it with its blob, whose
@@ -117,7 +118,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     // replace with new bytes, expecting the blob read: the download returns the new bytes, the blob id moved
     const second = bytesOf(CHUNK_SIZE + 7, 2)
     const replaced = await fileUploadJob({
-      scopeId, epochs, parent: { id: folderId, key: folderKey, epoch: folderEpoch },
+      scopeId, epochs, parent: { id: folderId, key: folderKey, epoch: folderEpoch, scopeEpoch: folderScopeEpoch },
       replace: { nodeId, nodeKey, nodeEpoch: fileNode.epoch, expectedBlobId: blob1.blobId },
     }, new File([second as BlobPart], 'ersetzt-e2e.bin', { type: `${MIME}-2`, lastModified: 1_700_000_100_000 })).run(ctx())
     expect(replaced).toEqual({ nodeId })

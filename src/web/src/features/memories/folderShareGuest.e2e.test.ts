@@ -10,7 +10,7 @@
 //   anonymous  = a guest with NO session: every call goes through `publicSharesApi()`, which carries no bearer.
 //
 // What only this layer can prove: that the server stores what a guest seals under the keys of the chain — a folder
-// created under the root and one nested in it, named under their PARENT's key at the parent's epoch — so the member's
+// created under the root and one nested in it, named under their PARENT's key at the parent's scope epoch — so the member's
 // own `listTree` (which opens top-down from `K_SC`) reads them; that a guest's move re-wraps the Memory's key under the
 // new parent so the member still opens its chain and media; and that the server refuses what core's and Memories'
 // rules refuse, by code. The unit layer (`core/sharing/guestTree.wire.test.ts`) proves the requests at `fetch`.
@@ -74,12 +74,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     const epochs = epochsOf((await openPersonalScope())!)
     const folderId = await createFolder(scopeId, epochs, FOLDER_NAME)
     const folderKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), folderId)!
-    const leftId = await createFolder(scopeId, epochs, LEFT_NAME, { id: folderId, key: folderKey, epoch: 0 })
-    const rightId = await createFolder(scopeId, epochs, RIGHT_NAME, { id: folderId, key: folderKey, epoch: 0 })
+    const leftId = await createFolder(scopeId, epochs, LEFT_NAME, { id: folderId, key: folderKey, epoch: 0, scopeEpoch: epochs.epoch })
+    const rightId = await createFolder(scopeId, epochs, RIGHT_NAME, { id: folderId, key: folderKey, epoch: 0, scopeEpoch: epochs.epoch })
     const leftKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), leftId)!
-    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: leftId, key: leftKey, epoch: 0 })
+    const memory = await createMemory(scopeId, epochs, MEMORY_NAME, { id: leftId, key: leftKey, epoch: 0, scopeEpoch: epochs.epoch })
     const inMemory = await addMedia(scopeId, memory.nodeId, memory.memoryKey, photo(1))
-    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId, 0)
+    const chapter = await createChapter(scopeId, epochs, memory.memoryKey, CHAPTER_NAME, memory.nodeId, { epoch: 0, scopeEpoch: epochs.epoch })
 
     // --- A: a READ_WRITE link of the folder, through core's mint ---------------------------------------------------
     const minted = await mintShare(scopeId, folderId, { key: folderKey, epoch: 0 }, epochs, FOLDER_NAME, ShareRole.ReadWrite)
@@ -103,7 +103,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     const folderRow = byId(afterCreate, folderId)!
     expect(byId(afterCreate, createdId), "the guest's folder, under the root").toMatchObject({ parentId: folderId, name: CREATED_NAME, kind: FOLDER_KIND, placementRevision: 0 })
     expect(byId(afterCreate, nestedId), 'the nested folder, under it').toMatchObject({ parentId: createdId, name: NESTED_NAME, kind: FOLDER_KIND, placementRevision: 0 })
-    expect(byId(afterCreate, createdId)!.epoch, "stored at the parent's epoch, as the guest sealed").toBe(folderRow.epoch)
+    // minted under the scope epoch its parent's key was (what the guest sealed it bound to), at its own epoch 0
+    // (ADR 0114 decision 3)
+    expect(byId(afterCreate, createdId), "stored under the parent's scope epoch, as the guest sealed")
+      .toMatchObject({ epoch: 0, scopeEpoch: folderRow.scopeEpoch })
     expect(nodeContentKey(scopeId, epochs, afterCreate, nestedId), "the nested folder's key opens through the chain").not.toBeNull()
     // The raw resolve carries the new rows as ciphertext: no plaintext name of what the guest created.
     const wireAfterCreate = (await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json()) as RawResolve
@@ -150,7 +153,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     const rootPlaced = await failure(placeShareNodeAsGuest(ctx, { nodeId: folderId, newParentId: leftId }))
     expect(rootPlaced instanceof GuestTreeError && rootPlaced.code, 'the client never places the root').toBe('illegal_structure')
     const rootKey = ctx.keys.get(folderId)!
-    const rootAt = { scopeId, nodeId: folderId, epoch: folderRow.epoch, placementRevision: 1 }
+    const rootAt = { scopeId, nodeId: folderId, scopeEpoch: folderRow.scopeEpoch, placementRevision: 1 }
     const rootRenamed = await failure(
       publicSharesApi().updateShareNodeRaw({
         shareId, nodeId: folderId, xContributorToken: identity.contributorToken,
@@ -164,7 +167,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     // A placement built on the version before the move (0; the Memory is at 1 now): 409 stale_placement, raw.
     const memoryKey = ctx.keys.get(memory.nodeId)!
     const leftKeyGuest = ctx.keys.get(leftId)!
-    const staleAt = { scopeId, nodeId: memory.nodeId, epoch: ctx.nodes.get(memory.nodeId)!.epoch, placementRevision: 1 }
+    const staleAt = { scopeId, nodeId: memory.nodeId, scopeEpoch: ctx.nodes.get(memory.nodeId)!.scopeEpoch, placementRevision: 1 }
     const stale = await failure(
       publicSharesApi().updateShareNodeRaw({
         shareId, nodeId: memory.nodeId, xContributorToken: identity.contributorToken,

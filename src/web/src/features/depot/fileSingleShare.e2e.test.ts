@@ -85,7 +85,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
     const folderKey = nodeContentKey(scopeId, epochs, withFolder, folderId)!
     const targetBytes = bytesOf(CHUNK_SIZE + 211, 1)
     const siblingBytes = bytesOf(900, 2)
-    const parent = { id: folderId, key: folderKey, epoch: withFolder.find((n) => n.id === folderId)!.epoch }
+    const { epoch: folderEpoch, scopeEpoch: folderScopeEpoch } = withFolder.find((n) => n.id === folderId)!
+    const parent = { id: folderId, key: folderKey, epoch: folderEpoch, scopeEpoch: folderScopeEpoch }
     const target = (await fileUploadJob({ scopeId, epochs, parent }, fileOf(targetBytes, TARGET_FILE)).run(ctx())).nodeId
     const sibling = (await fileUploadJob({ scopeId, epochs, parent }, fileOf(siblingBytes, SIBLING_FILE)).run(ctx())).nodeId
     const tree = await listTree(scopeId, epochs)

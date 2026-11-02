@@ -78,8 +78,8 @@ const keys = { memory: v1.randomBytes(32), chapter: v1.randomBytes(32) }
 const GUEST: GuestIdentity = { identityId: 'id-1', contributorToken: 'tok-1' }
 
 function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
-  const address = { scopeId: SCOPE, nodeId: id, epoch: 0, placementRevision: 0 }
-  return { blockedByOperator: false, id, parentId, kind, epoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+  const address = { scopeId: SCOPE, nodeId: id, scopeEpoch: 0, placementRevision: 0 }
+  return { blockedByOperator: false, id, parentId, kind, epoch: 0, scopeEpoch: 0, placementRevision: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
 }
 /** A Memory link with one chapter. */
 function head(role: ShareRole): PublicShareHead {
@@ -87,7 +87,7 @@ function head(role: ShareRole): PublicShareHead {
     shareId: SHARE, kShare: K_SHARE, scopeId: SCOPE, name: 'Rom 2026', noteByLocale: {}, role, rootKind: MEMORY_KIND,
     share: {
       role, scopeId: SCOPE, rootKind: MEMORY_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.memory)),
-      nodes: [{ id: MEMORY, parentId: null, kind: MEMORY_KIND, epoch: 0 }, child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND)],
+      nodes: [{ id: MEMORY, parentId: null, kind: MEMORY_KIND, epoch: 0, scopeEpoch: 0 }, child(CHAPTER, MEMORY, keys.memory, keys.chapter, 'Tag 1', CHAPTER_KIND)],
     } as PublicShare,
   }
 }
@@ -274,6 +274,8 @@ describe("a contributor's upload and delete (READ_WRITE)", () => {
 describe("the member's source is today's calls, with its scope", () => {
   const S = 'scope-m'
   const key = v1.randomBytes(32)
+  // the item marks are sealed under the scope's one key at its epoch (ADR 0115 decision 1): the door hands both on
+  const scopeKey = { epoch: 3, key: v1.randomBytes(32) }
   const item = mediaItem({ mediaId: 'm-1' })
   const state = { wrappedMeta: null, metaRevision: 0, nodeEpoch: 0 }
   // what a member's meta write hands on beside its arguments: the floor before each attempt, and the pull of its path and
@@ -303,8 +305,8 @@ describe("the member's source is today's calls, with its scope", () => {
     ['nodeMeta.write', () => src.nodeMeta!.write('n', key, state, edit), writeNodeMeta, [S, 'n', key, state, edit, undefined, metaOpts]],
     ['mediaMeta.set', () => src.mediaMeta!.set(item, key, { id: 'n', epoch: 2 }, 5), media.setMediaMeta, [S, item, key, 2, 5, metaOpts]],
     ['mediaMeta.backfillPlace', () => src.mediaMeta!.backfillPlace(item, key, { id: 'n', epoch: 2 }, 'Rom', 'city'), media.backfillPlaceName, [S, item, key, 2, 'Rom', 'city', metaOpts]],
-    ['marks.load', () => src.marks!.load('n', key), loadItemFavoritesFor, [S, 'n', key]],
-    ['marks.toggle', () => src.marks!.toggle('m-1', 'n', key), toggleItemFavorite, ['m-1', S, 'n', key]],
+    ['marks.load', () => src.marks!.load('n', scopeKey), loadItemFavoritesFor, [S, 'n', scopeKey]],
+    ['marks.toggle', () => src.marks!.toggle('m-1', 'n', scopeKey), toggleItemFavorite, ['m-1', S, 'n', scopeKey]],
     ['buckets.list', () => src.buckets!.list('n'), media.listBuckets, [S, 'n']],
     ['buckets.people', () => src.buckets!.people(), loadScopePeople, [S]],
     ['buckets.create', () => src.buckets!.create('n', key, 2, 'A', 'p'), media.createBucket, [S, 'n', key, 2, 'A', 'p']],

@@ -86,11 +86,11 @@ describe.skipIf(!process.env.VEYQ_E2E)('move e2e (live, real crypto: a subtree k
     const aId = await createFolder(scopeId, epochs, A_NAME)
     const bId = await createFolder(scopeId, epochs, B_NAME)
     let tree = await listTree(scopeId, epochs)
-    const nId = await createFolder(scopeId, epochs, N_NAME, { id: aId, key: nodeContentKey(scopeId, epochs, tree, aId)!, epoch: byId(tree, aId).epoch })
+    const nId = await createFolder(scopeId, epochs, N_NAME, { id: aId, key: nodeContentKey(scopeId, epochs, tree, aId)!, epoch: byId(tree, aId).epoch, scopeEpoch: byId(tree, aId).scopeEpoch })
     tree = await listTree(scopeId, epochs)
     const nKey = nodeContentKey(scopeId, epochs, tree, nId)!
     const bytes = bytesOf(CHUNK_SIZE + 4321, 3)
-    const fileId = (await fileUploadJob({ scopeId, epochs, parent: { id: nId, key: nKey, epoch: byId(tree, nId).epoch } }, fileOf(bytes, FILE_NAME)).run(ctx())).nodeId
+    const fileId = (await fileUploadJob({ scopeId, epochs, parent: { id: nId, key: nKey, epoch: byId(tree, nId).epoch, scopeEpoch: byId(tree, nId).scopeEpoch } }, fileOf(bytes, FILE_NAME)).run(ctx())).nodeId
 
     /** After a move: N listed under `parent` with its name, its key unchanged, and its file decrypting byte for byte. */
     const readsUnder = async (parent: string | null) => {
@@ -119,14 +119,14 @@ describe.skipIf(!process.env.VEYQ_E2E)('move e2e (live, real crypto: a subtree k
       },
     }))
     expect(await decodeHttpError(stale)).toEqual({ status: 409, code: 'stale_placement' })
-    await moveNode(scopeId, epochs, inB, nId, null) // to the scope root: sealed under K_SC at the current epoch
+    await moveNode(scopeId, epochs, inB, nId, null) // to the scope root: sealed under the scope's one key, bound to its scope epoch
     const atRoot = await readsUnder(null)
     await moveNode(scopeId, epochs, atRoot, nId, aId)
     await readsUnder(aId)
 
     // --- a drop box guest's folder, moved out by the member ---------------------------------------------------------
     tree = await listTree(scopeId, epochs)
-    const boxId = await createDropBox(scopeId, epochs, { id: bId, key: nodeContentKey(scopeId, epochs, tree, bId)!, epoch: byId(tree, bId).epoch }, BOX_NAME)
+    const boxId = await createDropBox(scopeId, epochs, { id: bId, key: nodeContentKey(scopeId, epochs, tree, bId)!, epoch: byId(tree, bId).epoch, scopeEpoch: byId(tree, bId).scopeEpoch }, BOX_NAME)
     const boxTree = await listTree(scopeId, epochs)
     const boxKey = nodeContentKey(scopeId, epochs, boxTree, boxId)!
     const link = await mintDropBoxLink(scopeId, boxId, { key: boxKey, epoch: byId(boxTree, boxId).epoch }, epochs, BOX_NAME)

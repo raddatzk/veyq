@@ -8,6 +8,7 @@
 // have to keep; it is the only thing the data supports.
 import { reactive } from 'vue'
 import { loadItemFavorites, saveItemFavorites, type MemberMarks } from './itemFavorites'
+import type { ScopeKey } from '../spaces/epochs'
 
 export const itemFavoritesStore = reactive({
   nodeId: null as string | null,
@@ -39,9 +40,9 @@ export function markedByAnyone(): Set<string> {
 export async function loadItemFavoritesFor(
   scopeId: string,
   nodeId: string,
-  scopeKey: Uint8Array,
+  scopeKey: ScopeKey,
 ): Promise<void> {
-  const marks = await loadItemFavorites(scopeId, nodeId, scopeKey)
+  const marks = await loadItemFavorites(scopeId, nodeId, scopeKey.key)
   itemFavoritesStore.nodeId = nodeId
   itemFavoritesStore.marks = marks
   itemFavoritesStore.loaded = true
@@ -60,7 +61,7 @@ export async function toggleItemFavorite(
   mediaId: string,
   scopeId: string,
   nodeId: string,
-  scopeKey: Uint8Array,
+  scopeKey: ScopeKey,
 ): Promise<void> {
   if (!itemFavoritesStore.loaded || itemFavoritesStore.nodeId !== nodeId) return
   const before = itemFavoritesStore.marks

@@ -78,7 +78,7 @@ export interface NodeDialogs {
   createParentKey: ComputedRef<Uint8Array | null>
   shareKey: ComputedRef<Uint8Array | null>
   /** The node on screen with its key, which an import lands under (null at the scope root or while the key is not open). */
-  importParent: ComputedRef<{ id: string; key: Uint8Array; epoch: number } | null>
+  importParent: ComputedRef<{ id: string; key: Uint8Array; epoch: number; scopeEpoch: number } | null>
   /** Follow what was on screen after a write (a no-op where the page follows nothing). */
   stayOn(shown: string | null): void
   /** The delete re-read the tree: a page whose node went is left for its parent, one whose node was refused stays. */
@@ -166,7 +166,7 @@ export function useNodeDialogs(env: NodeDialogsEnv): NodeDialogs {
     const id = shown()
     const node = id ? (env.tree()?.node(id) ?? null) : null
     const key = keyOf(id)
-    return node && key ? { id: node.id, key, epoch: node.epoch } : null
+    return node && key ? { id: node.id, key, epoch: node.epoch, scopeEpoch: node.scopeEpoch } : null
   })
 
   return {

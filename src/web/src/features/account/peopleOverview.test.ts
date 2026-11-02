@@ -52,7 +52,7 @@ let directory: ScopeMember[]
 const opened = (): OpenedScope => {
   const key = K0.slice()
   return {
-    scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { current: 0, keys: new Map([[0, key]]) },
+    scopeId: T, tenantId: T, kind: ScopeKind.Tenant, key, epochs: { epoch: 0, key },
     nameEpoch: 0, deletedAt: null, purgeAfter: null,
   }
 }

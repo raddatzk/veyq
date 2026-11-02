@@ -84,6 +84,7 @@ import {
 import { forgetOwnShareMedia, loadOwnShareMedia, rememberOwnShareMedia } from './ownShareMedia'
 import type { UploadTarget } from './uploadQueue'
 import type { MemoryRights } from './rights'
+import type { ScopeKey } from '../spaces/epochs'
 import { uploadBanner, writeMemoryBanner, type PreparedBanner, type UploadedBanner, type WriteMemoryBannerArgs } from './banner/bannerWrite'
 
 /** A node's media as a source lists it — every page of it (ADR 0033 decision 6): the live media and, where the session
@@ -196,10 +197,10 @@ export interface BannerDoor {
   under<T>(nodeId: string, at: { key: Uint8Array; epoch: number }, save: (at: { key: Uint8Array; epoch: number }, reread: TreeNode | null) => Promise<T>): Promise<T>
 }
 
-/** The item marks (ADR 0068): sealed under `K_SC` at `E_0`, the scope members' own. */
+/** The item marks (ADR 0068): sealed under the scope's one key (ADR 0115 decision 1), the scope members' own. */
 export interface MarksDoor {
-  load(nodeId: string, scopeKey: Uint8Array): Promise<void>
-  toggle(mediaId: string, nodeId: string, scopeKey: Uint8Array): Promise<void>
+  load(nodeId: string, scopeKey: ScopeKey): Promise<void>
+  toggle(mediaId: string, nodeId: string, scopeKey: ScopeKey): Promise<void>
 }
 
 /** The contributions organizer (uc.memory.buckets): the buckets, the scope's members that name them, and the moves. */

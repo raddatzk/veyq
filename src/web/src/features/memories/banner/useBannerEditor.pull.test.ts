@@ -5,9 +5,9 @@
 // key. The pull itself is core's (`pullRekeyPath`, `core/node/rekey/rekeyScope.test.ts`); the door is the real one.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
-import type { EpochKeys } from '../../spaces/epochs'
+import type { ScopeKey } from '../../spaces/epochs'
 
-const held = vi.hoisted(() => ({ epochs: { current: 0, keys: new Map() } as EpochKeys }))
+const held = vi.hoisted(() => ({ epochs: { epoch: 0, key: new Uint8Array(32) } as ScopeKey }))
 vi.mock('../../../app/activeSpace', async () => {
   const { reactive } = await import('vue')
   return { activeSpace: reactive({ scopeId: '5c09e000-0000-4000-8000-0000000000cc' }), activeEpochKeys: () => held.epochs }
@@ -33,11 +33,12 @@ const OLD_KEY = v1.randomBytes(32)
 const NEW_KEY = v1.randomBytes(32)
 const NODE_ID = 'f0000000-0000-4000-8000-000000000002'
 const bannerWith = (wrap: string) => ({ medium: 'image', blob: { blobId: 'b-1', chunkCount: 1, byteSize: 9, wrappedBlobKey: wrap } })
-// The Memory as the device read it (under the old key), and as the re-read tree holds it after the re-key: its meta re-sealed
-// under the new key, the banner's wrap moved to it.
-const before = treeNode({ id: NODE_ID, kind: MEMORY_KIND, name: 'Rome', epoch: 0, metaRevision: 3,
+// The Memory as the device read it (under the old key, minted under the scope's epoch 0), and as the re-read tree holds it
+// after the re-key: its own epoch 1, its key minted under the scope's epoch 1, its meta re-sealed under the new key, the
+// banner's wrap moved to it.
+const before = treeNode({ id: NODE_ID, kind: MEMORY_KIND, name: 'Rome', epoch: 0, scopeEpoch: 0, metaRevision: 3,
   wrappedMeta: sealNodeMeta(OLD_KEY, { scopeId: SCOPE, nodeId: NODE_ID }, { v: 1, banner: bannerWith('old-wrap') }) })
-const after = { ...before, epoch: 1, metaRevision: 4,
+const after = { ...before, epoch: 1, scopeEpoch: 1, metaRevision: 4,
   wrappedMeta: sealNodeMeta(NEW_KEY, { scopeId: SCOPE, nodeId: NODE_ID }, { v: 1, banner: bannerWith('new-wrap') }) }
 
 /** A thrown generated-client error carrying `409 { code }`, the shape `isCodedError` reads. */
@@ -61,11 +62,15 @@ const writes = () => vi.mocked(writeMemoryBanner).mock.calls.map((c) => c[0])
 
 beforeEach(() => {
   vi.clearAllMocks()
-  held.epochs = { current: 0, keys: new Map() }
-  treeStore.nodes = [after]
+  held.epochs = { epoch: 0, key: new Uint8Array(32) }
+  // The tree holds the Memory as read until the pull re-keys its path and the tree is read again.
+  treeStore.nodes = [before]
   vi.mocked(pullRekeyPath).mockReturnValue(pull)
-  pull.mockResolvedValue(true)
-  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: NEW_KEY, epoch: 1 }))
+  pull.mockImplementation(async () => {
+    treeStore.nodes = [after]
+    return true
+  })
+  vi.mocked(nodeKeyForWrite).mockImplementation(() => ({ key: NEW_KEY, epoch: 1, scopeEpoch: 1 }))
   vi.mocked(uploadBanner).mockImplementation(async () => ({ medium: 'image', uploadId: `up-${vi.mocked(uploadBanner).mock.calls.length}`, blob: { blobId: 'b-2', chunkCount: 1, byteSize: 9, wrappedBlobKey: 'w' } }))
   vi.mocked(writeMemoryBanner).mockRejectedValueOnce(pending()).mockResolvedValue({ wrappedMeta: 'bmV3', metaRevision: 5 })
 })
@@ -80,7 +85,8 @@ describe('a member\'s banner on a Memory not re-keyed yet (ADR 0111 decision 11)
   })
 
   it('the device floor already shows the Memory lags: the pull runs before anything is sealed, and the banner is uploaded once', async () => {
-    held.epochs = { current: 1, keys: new Map() }
+    // The scope rotated to epoch 1; the tree lists the Memory's key as minted under epoch 0 (ADR 0115 decision 6).
+    held.epochs = { epoch: 1, key: new Uint8Array(32) }
     vi.mocked(writeMemoryBanner).mockReset().mockResolvedValue({ wrappedMeta: 'bmV3', metaRevision: 5 })
     await editor().save({ kind: 'file', file: new File([new Uint8Array([1, 2])], 'a.jpg'), type: 'image/jpeg', poster: null })
     expect(pull).toHaveBeenCalledOnce()

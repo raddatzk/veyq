@@ -97,7 +97,9 @@ async function submit() {
   }
   loading.value = true
   try {
-    const parent = props.parentId && props.parentKey && props.parentEpoch != null ? { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch } : null
+    const parent = props.parentId && props.parentKey && props.parentEpoch != null && props.parentScopeEpoch != null
+      ? { id: props.parentId, key: props.parentKey, epoch: props.parentEpoch, scopeEpoch: props.parentScopeEpoch }
+      : null
     await createPot(props.scopeId, props.epochs, parent, name.value.trim(), { currency: currency.value, minorUnits: minorUnitsOf(currency.value) }, people.value, memberCreateOptions(props.scopeId, parent))
     emit('done')
     emit('close')

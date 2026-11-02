@@ -63,7 +63,7 @@ const { run: runLoadOwn, pending: loadingOwn } = useAsyncAction(async () => {
   editing.value = true
 }, { onError: () => { editError.value = t('profilePicture.loadFailed') } })
 const { run: runSaveOwn, pending: savingOwn } = useAsyncAction(async () => {
-  await updateMyProfile({ sealedName: identity.sealedName() })
+  await identity.saveName((name) => updateMyProfile({ ...name }))
   await identity.savePicture()
   await refreshPeopleDirectory()
   editing.value = false

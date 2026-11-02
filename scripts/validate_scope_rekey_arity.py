@@ -78,8 +78,6 @@ NOT_UNDER_SCOPE_KEY = {
     "scope-grant": "the scope key itself sealed to a member's (or an open invite's) identity, not a value under it: the "
                    "rotation wraps the NEW key to each (`ScopesStore.rotate`'s grants, `rotation_incomplete` when one "
                    "is missing, ADR 0111 decision 8)",
-    "scope-epoch": "the chain link ADR 0115 decision 1 removes: no column stores it any more (`veyq_scope_epoch` "
-                   "dropped); the crypto package drops the purpose with the decision's client phase",
     "blob-key": "a K_blob under its node's key — the node's re-key re-wraps it (validate_node_rekey_arity.py)",
     "drop-private-key": "under the drop box's node key — the node's re-key replaces it",
     "favorites": "a member's own pin set under their Master Key (ADR 0068): no other member opens it",

@@ -167,7 +167,7 @@ async function onReactivate(s: ManagedShare) {
   let renew = false
   await rowAction(s, async () => {
     try {
-      await reactivateShare(s.shareId)
+      await reactivateShare(s, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName)
     } catch (e) {
       // A departed member may hold the link (ADR 0075): only a renew brings it back, so offer that instead.
       if (!(await isReissueRequired(e))) throw e

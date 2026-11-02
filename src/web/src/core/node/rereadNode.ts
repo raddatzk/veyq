@@ -10,7 +10,7 @@ import { loadTree, treeStore } from './treeStore'
 import { pullRekeyPath } from './rekey/rekeyScope'
 import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import type { CreateNodeOptions, NodeParent, TreeNode } from './tree'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 
 /** The node is not in the active scope's tree any more, or its key chain does not open: nothing to rebuild under. */
 export class NodeRereadError extends Error {
@@ -21,10 +21,15 @@ export class NodeRereadError extends Error {
 }
 
 /** The device floor for a member write under `node`'s key in scope `scopeId` (`assertNodeKeyAtFloor` against the active
- *  scope's opened epochs). A scope that is not the active one has no epochs here and is the caller's to check. */
+ *  scope's opened key). The floor reads the scope epoch the key was minted under (ADR 0115 decision 6), which the active
+ *  tree's row carries for the key at the node's own epoch the write states (ADR 0114 decision 3): a node the tree holds
+ *  at another epoch — re-keyed since, the server's `stale_epoch` — or not at all — one this device just minted — has
+ *  nothing to compare here, and neither has a scope that is not the active one (the caller's to check). */
 export function assertActiveScopeFloor(scopeId: string, node: { id: string; epoch: number }): void {
   const epochs = activeSpace.scopeId === scopeId ? activeEpochKeys() : null
-  if (epochs) assertNodeKeyAtFloor(node, epochs)
+  if (!epochs) return
+  const row = treeStore.nodes.find((n) => n.id === node.id)
+  if (row && row.epoch === node.epoch) assertNodeKeyAtFloor(row, epochs)
 }
 
 /** Re-read `nodeId` of the ACTIVE scope `scopeId` (the member's tree, `treeStore`) for {@link writeNodeMeta}'s
@@ -62,7 +67,7 @@ export function rereadMemberParent(scopeId: string, parentId: string): () => Pro
     const epochs = activeEpochKeys()
     const at = epochs ? nodeKeyForWrite(scopeId, epochs, treeStore.nodes, parentId) : null
     if (!at) throw new NodeRereadError(parentId)
-    return { id: parentId, key: at.key, epoch: at.epoch }
+    return { id: parentId, key: at.key, epoch: at.epoch, scopeEpoch: at.scopeEpoch }
   }
 }
 
@@ -100,7 +105,7 @@ export function writeUnderMemberNode<T>(
 /** The scope's epochs as this device holds them now, when `scopeId` is the active scope; null otherwise. What a long run
  *  states once a pull re-opened the scope after a rotation it raced (`pullRekeyPath`): the epochs it was started with
  *  are then the old ones, and zeroed (`refreshActiveScope`). */
-export function heldScopeEpochs(scopeId: string): EpochKeys | null {
+export function heldScopeEpochs(scopeId: string): ScopeKey | null {
   return activeSpace.scopeId === scopeId ? activeEpochKeys() : null
 }
 

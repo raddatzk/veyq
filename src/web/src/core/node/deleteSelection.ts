@@ -8,7 +8,7 @@
 // Operator-blind, unchanged: the same requests as N single deletes and N single restores.
 import { deleteNode, restoreNode, type TreeNode } from './tree'
 import type { SelectedForDelete } from './selection'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { ScopeKey } from '../../features/spaces/epochs'
 import { decodeHttpError } from '../../shared/httpError'
 
 /** How one delete (or restore) of several ended: `error` null where it went through. */
@@ -38,7 +38,7 @@ export async function deleteSelection(scopeId: string, items: readonly SelectedF
 /** Bring back each of `nodes` (as they were before the delete) through core's trash restore, against the tree `tree()`
  *  reads at that moment, then `reload` once; a failure does not stop the rest. */
 export async function restoreSelection(
-  scopeId: string, epochs: EpochKeys, nodes: readonly TreeNode[], tree: () => TreeNode[], reload: () => Promise<void>,
+  scopeId: string, epochs: ScopeKey, nodes: readonly TreeNode[], tree: () => TreeNode[], reload: () => Promise<void>,
 ): Promise<SelectionOutcome[]> {
   const outcomes: SelectionOutcome[] = []
   try {

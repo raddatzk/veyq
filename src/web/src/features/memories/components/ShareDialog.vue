@@ -187,7 +187,7 @@ async function onReactivate(share: ManagedShare) {
   reactivatingId.value = share.shareId
   actionError.value = false
   try {
-    await reactivateShare(share.shareId)
+    await reactivateShare(share, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName)
     await loadShares()
   } catch (e) {
     // The other half of the refusal — its owner left — is the server's to know: offer the renew it asks for.

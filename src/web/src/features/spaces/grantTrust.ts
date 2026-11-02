@@ -12,8 +12,8 @@ import { epochFloor } from '../account/trustMarks'
 import { grantSignatureVerifies, type GrantScope } from './grant'
 
 /** Why a grant was not opened. The key inside is never used; the scope does not open (it waits for a current grant).
- *  `epoch_unlinked` is decided where the grant is opened and held (`scopes.ts` § `requireLinkToHeld`, ADR 0111 decision
- *  23): its epoch chain does not reach the key this device held. */
+ *  `epoch_unlinked` is decided where the grant is opened and held (`scopes.ts` § `requireSuccessionFromHeld`, ADR 0115
+ *  decision 5): no chain of succession statements leads from the key this device held to the one the grant carries. */
 export type GrantRefusal =
   | 'unsigned' | 'not_self_signed' | 'bad_signature' | 'granter_key_unanchored' | 'granter_key_retired' | 'epoch_unlinked'
 
@@ -80,8 +80,8 @@ export type GrantRow = {
  *   group opens from any member the tenant anchors (ADR 0111 § What stays open, inbox #750, `groupFirstGrant.test.ts`).
  *   The TENANT scope's own grant is judged by the pin alone: its standings are read with the very key it
  *   carries, and a tenant whose directory this device cannot read (another tenant than the active one) falls back to
- *   the pin as well. What ties a new epoch to the key this device held is not the granter but the epoch chain, checked
- *   where the grant is opened and held (`scopes.ts` § `requireLinkToHeld`, ADR 0111 decision 23).
+ *   the pin as well. What ties a new epoch to the key this device held is not the granter but the succession statements,
+ *   checked where the grant is opened and held (`scopes.ts` § `requireSuccessionFromHeld`, ADR 0115 decision 5).
  */
 export async function verifyOwnGrant(
   scope: GrantScope, wrappedGrant: string, row: GrantRow, self: Me, tenantId?: string,
