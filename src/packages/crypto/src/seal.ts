@@ -349,7 +349,7 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  * Statements a key MACs or signs rather than seals — in the same canonical encoding, so their label domain-separates
  * them from each other and from every seal purpose. Pinned by `contracts/crypto/vectors/v1.json` (`#grant_signature`,
  * `#item_mark_self`, `#pairing_channel`, `#moderation_proof`, `#invite_key`, `#join_record`, `#join_endorsement`,
- * `#key_chain`, `#verification`).
+ * `#key_chain`, `#verification`, `#scope_succession`).
  *   - `grant` (ADR 0028 Decision 6): what a granter's identity key signs over a grant it posts. The scope KIND is
  *     signed so a group's genuine grant cannot be presented as the recipient's personal scope; the two digests are
  *     SHA-256 over the DECODED recipient identity public bundle and the DECODED grant ciphertext. A grant to an open
@@ -387,6 +387,10 @@ export const encodeFieldContext = (context: FieldContext): Uint8Array => encode(
  *     in this tenant, this verifier at this head of their own chain confirmed this subject at this head of theirs. It
  *     counts only while it names the subject's current head and is signed by the verifier's current key; a rotation
  *     re-signs the outgoing key's verifications with the new one (./verification.ts).
+ *   - `scope-succession` (ADR 0115 decision 5): what epoch `n`'s scope key, through the signing key it derives
+ *     (v1.ts `successionKeyPair`), signs to prove epoch `n + 1` — the scope, the NEW epoch and that epoch's succession
+ *     public key in full. It replaces the chain link: the statement opens nothing, so neither key is readable from the
+ *     other, and a holder of epoch `n` walks the statements to the epoch a grant carries (`verifySuccessionPath`).
  */
 export const STATEMENT_PURPOSES = {
   grant: [
@@ -434,6 +438,7 @@ export const STATEMENT_PURPOSES = {
     ['identityPublicKey', 'bytes'],
     ['secretKeyProofPublicKey', 'bytes'],
   ],
+  'scope-succession': [['scopeId', 'id'], ['epoch', 'uint'], ['successionPublicKey', 'bytes']],
 } as const satisfies Schema
 
 /** A statement's context: its label and exactly its fields. */
