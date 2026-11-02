@@ -18,10 +18,11 @@ interface ScopeRekeyTestStager {
 }
 
 /**
- * A rotation's scope-level re-seal for backend tests (ADR 0115 decision 2). The server never opens what it re-seals, so
- * a test stages every row sealed under the scope key with the ciphertext it holds now — what the commit checks is the
- * digest of the row it replaces and that every row has a value, both real here. The succession statement is two
- * well-formed public values the server stores and never verifies (decision 5).
+ * A rotation's scope-level move for backend tests (ADR 0115 decision 2). The server never opens what it re-wraps, so a
+ * test stages every value key's wrap (and every scope-root entry) under the scope key with the ciphertext it holds now —
+ * what the commit checks is the digest of the wrap it replaces and that every row has one, both real here. Wraps only,
+ * as a rotator's client stages: never a value's ciphertext. The succession statement is two well-formed public values
+ * the server stores and never verifies (decision 5).
  */
 object TestScopeRekey {
     /** 32 bytes of base64 — the length of a real Ed25519 public key. */
@@ -38,25 +39,21 @@ object TestScopeRekey {
             val scope = ScopeEntity.findById(scopeId)!!
             val page = commit.parts(scope, null, ALL)
             val fields = buildList {
-                page.groupName?.let { add(ScopeRekeyField(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME, it.first)) }
-                page.icon?.let { add(ScopeRekeyField(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON, it.first)) }
+                page.groupName?.let { add(ScopeRekeyField(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME_WRAP, it.first)) }
+                page.icon?.let { add(ScopeRekeyField(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON_WRAP, it.first)) }
                 page.rootNodes.forEach { n ->
                     add(ScopeRekeyField(n.id, ScopeRekeyCommit.ROOT_WRAP, n.wrappedContentKey, n.placementRevision))
                     add(ScopeRekeyField(n.id, ScopeRekeyCommit.ROOT_NAME, n.encryptedName, n.placementRevision))
                     if (n.slugToken != n.id) add(ScopeRekeyField(n.id, ScopeRekeyCommit.ROOT_SLUG, n.slugToken, n.placementRevision))
                 }
-                page.invitees.forEach { m ->
-                    add(ScopeRekeyField(m.userId, ScopeRekeyCommit.INVITEE_KEY, m.sealedNameKey!!))
-                    add(ScopeRekeyField(m.userId, ScopeRekeyCommit.INVITEE_RECIPIENT, TestGrants.digestOf(m.userId)))
-                }
-                page.shares.forEach { add(ScopeRekeyField(it.id, ScopeRekeyCommit.SHARE_KEY, it.sealedShareKey!!)) }
+                page.shares.forEach { add(ScopeRekeyField(it.id, ScopeRekeyCommit.SHARE_WRAP, it.wrappedRecoveryValueKey!!)) }
                 page.members.forEach { p ->
-                    p.sealedName?.let { add(ScopeRekeyField(p.userId, ScopeRekeyCommit.MEMBER_NAME, it)) }
-                    p.sealedAvatar?.let { add(ScopeRekeyField(p.userId, ScopeRekeyCommit.MEMBER_AVATAR, it)) }
-                    p.sealedJoinRecord?.let { add(ScopeRekeyField(p.userId, ScopeRekeyCommit.MEMBER_JOIN, it)) }
+                    p.wrappedNameValueKey?.let { add(ScopeRekeyField(p.userId, ScopeRekeyCommit.MEMBER_NAME_WRAP, it)) }
+                    p.wrappedAvatarValueKey?.let { add(ScopeRekeyField(p.userId, ScopeRekeyCommit.MEMBER_AVATAR_WRAP, it)) }
+                    p.wrappedJoinRecordValueKey?.let { add(ScopeRekeyField(p.userId, ScopeRekeyCommit.MEMBER_JOIN_WRAP, it)) }
                 }
                 page.verifications.forEach { v ->
-                    add(ScopeRekeyField("${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION, v.sealedStatement))
+                    add(ScopeRekeyField("${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION_WRAP, v.wrappedValueKey))
                 }
             }
             check(!page.more) { "a test scope with more than $ALL scope-level rows" }

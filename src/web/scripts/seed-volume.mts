@@ -326,7 +326,7 @@ async function members(target: number): Promise<void> {
   // The owner is a row of the directory too: named like every member, so "every row named" holds for the whole list.
   const ownName = await openOwnNameKey()
   if (!ownName) die('the owner holds no tenant grant')
-  await updateMyProfile({ sealedName: sealName(ownName.key, ownName.address, { firstName: 'Volume', lastName: 'Owner' }), epoch: ownName.epochs.epoch })
+  await updateMyProfile({ ...sealName(ownName.epochs, ownName.address, { firstName: 'Volume', lastName: 'Owner' }), epoch: ownName.epochs.epoch })
   const salt = fromB64std((await setupApi().getSetupStatus()).instanceSalt)
   const listed = await listScopeMembers(tenant.scopeId)
   const inTenant = new Set(listed.map((m) => m.username))
@@ -382,8 +382,8 @@ async function members(target: number): Promise<void> {
       const own = await openOwnNameKey()
       if (!own) die(`${m.email} holds no tenant grant after the delivery`)
       const name = { firstName: FIRST_NAMES[index % 10], lastName: `${LAST_NAMES[Math.floor(index / 10) % 10]} ${index}` }
-      await updateMyProfile({ sealedName: sealName(own.key, own.address, name), epoch: own.epochs.epoch })
-      if (index % 5 === 0) await setMyAvatar(sealAvatar(own.key, own.address, avatars[(index / 5) % 5]), own.epochs.epoch)
+      await updateMyProfile({ ...sealName(own.epochs, own.address, name), epoch: own.epochs.epoch })
+      if (index % 5 === 0) await setMyAvatar(sealAvatar(own.epochs, own.address, avatars[(index / 5) % 5]), own.epochs.epoch)
     })
     saveMember({ ...m, stage: 'profiled' })
     profileRate.tick()
@@ -458,10 +458,10 @@ async function marks(cap: number, width: number): Promise<void> {
   await signIn(a.owner)
   const scope = await tenantScope()
   const { memoryId, key, epoch, hash } = await ensureMemory(scope, MARKS_MEMORY)
-  // The key the gallery's heart seals under: the scope's one key (MemoryDetailHost.vue, itemFavorites.ts' header).
+  // The key the gallery's heart wraps its value key under: the scope's one key (MemoryDetailHost.vue, itemFavorites.ts' header).
   const scopeKey = scope.epochs
   const ids = async () => (await listMedia(scope.scopeId, memoryId)).map((m) => m.mediaId)
-  const own = async () => (await loadItemFavorites(scope.scopeId, memoryId, scopeKey.key)).find((m) => m.own)?.ids ?? new Set<string>()
+  const own = async () => (await loadItemFavorites(scope.scopeId, memoryId, scopeKey)).find((m) => m.own)?.ids ?? new Set<string>()
   const recorded = manifest().marks?.nodeId === memoryId ? manifest().marks : undefined
   let pastCap = recorded?.pastCap ?? null
 

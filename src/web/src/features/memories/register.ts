@@ -98,7 +98,8 @@ export function registerMemories(registry: Registry): void {
   // A reported medium's review (uc.moderation.review-a-case A5): a medium is Memories' record, core cannot draw it.
   app.itemReview(MediumReview)
   app.lifecycle(memoriesLifecycle)
-  // the item marks are sealed under the scope key: a rotation re-seals them through this (ADR 0115 decision 2)
+  // the item marks' value keys are wrapped under the scope key: a rotation re-wraps them through this, never
+  // rewriting a set (ADR 0115 decision 2)
   app.scopeRekey(stageItemMarksRekey)
 }
 

@@ -6,11 +6,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 let vaultPriv: (() => ReturnType<typeof cloneRecipientPriv> | null) = () => null
 vi.mock('../../app/vault', () => ({ identityPrivate: () => vaultPriv() }))
 
-import { deriveGroupNameKey, wrapNameKeyToInvitee, openInviteeName, sealGroupName, openGroupNameWith } from './inviteName'
+import { groupNameContext, wrapNameKeyToInvitee, openInviteeName, sealGroupName, openGroupNameWith } from './inviteName'
+import { openValue, wrapValueKeyOf } from './valueKey'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-
-const hex = (u: Uint8Array) => Buffer.from(u).toString('hex')
 
 const recipient = v1.generateIdentity()
 const recipientPubB64 = b64std(v1.serializeIdentityPublic(recipient.pub))
@@ -25,18 +24,30 @@ function cloneRecipientPriv() {
   }
 }
 
-/** An invitation row as the server lists it: the scope it proposes, its name epoch, and the two ciphertexts. */
+/** An invitation row as the server lists it: the scope it proposes, its name epoch, and the two ciphertexts — the name
+ *  under a fresh value key (ADR 0115) and that key sealed to the invitee — plus the members' wrap of the same key under
+ *  the scope key [epochKey] (`ScopeSummary.wrappedNameValueKey`), which the invitee is never served. */
 function invitation(epochKey: Uint8Array, name: string, opts: { scopeId?: string; nameEpoch?: number; to?: string } = {}) {
   const scopeId = opts.scopeId ?? GROUP
   const nameEpoch = opts.nameEpoch ?? 0
-  const nameKey = deriveGroupNameKey(epochKey)
-  return {
-    scopeId,
-    nameEpoch,
-    encryptedName: sealGroupName(nameKey, scopeId, nameEpoch, name),
-    sealedNameKey: wrapNameKeyToInvitee(nameKey, scopeId, nameEpoch, opts.to ?? recipientPubB64),
+  const nameKey = v1.generateValueKey()
+  try {
+    return {
+      scopeId,
+      nameEpoch,
+      encryptedName: sealGroupName(nameKey, scopeId, nameEpoch, name),
+      sealedNameKey: wrapNameKeyToInvitee(nameKey, scopeId, nameEpoch, opts.to ?? recipientPubB64),
+      wrappedNameValueKey: wrapValueKeyOf({ epoch: nameEpoch, key: epochKey }, groupNameContext(scopeId, nameEpoch), nameKey),
+    }
+  } finally {
+    nameKey.fill(0)
   }
 }
+
+/** A member's read of [inv]'s name: the value key from its wrap under the scope key, then the canonical name. */
+const memberRead = (epochKey: Uint8Array, inv: ReturnType<typeof invitation>) =>
+  openValue({ epoch: inv.nameEpoch, key: epochKey }, groupNameContext(inv.scopeId, inv.nameEpoch), inv.wrappedNameValueKey,
+    (nameKey) => openGroupNameWith(nameKey, inv.scopeId, inv.nameEpoch, inv.encryptedName))
 
 beforeEach(() => {
   vaultPriv = () => null
@@ -47,25 +58,22 @@ afterEach(() => {
 })
 
 describe('group invite name-key (cr-0096, ADR 0027)', () => {
-  it('derives K_name deterministically from the epoch key, one-way (not equal to the epoch key)', () => {
+  // ADR 0115: the name key is the name's own value key, minted at every write — nothing derives it from the scope key, so
+  // an invitee handed it learns the one name, and a holder of the scope key alone opens no name without its wrap.
+  it('the name is under a value key of its own, not the scope key: the scope key alone does not open it', () => {
     const epochKey = v1.randomBytes(32)
-    const a = deriveGroupNameKey(epochKey)
-    const b = deriveGroupNameKey(epochKey)
-    expect(b64std(a)).toBe(b64std(b)) // deterministic
-    expect(b64std(a)).not.toBe(b64std(epochKey)) // distinct from E_e (HKDF, not identity)
+    const a = invitation(epochKey, 'Buchclub')
+    const b = invitation(epochKey, 'Buchclub')
+    expect(memberRead(epochKey, a)).toBe('Buchclub') // control: through the wrap
+    expect(() => openGroupNameWith(epochKey, GROUP, 0, a.encryptedName)).toThrow(new v1.OpenRefused('group-name'))
+    // Two writes under the same scope key mint two keys: neither opens the other's name.
+    expect(a.wrappedNameValueKey).not.toBe(b.wrappedNameValueKey)
+    expect(() => openValue({ epoch: 0, key: epochKey }, groupNameContext(GROUP, 0), b.wrappedNameValueKey,
+      (nameKey) => openGroupNameWith(nameKey, GROUP, 0, a.encryptedName))).toThrow(new v1.OpenRefused('group-name'))
   })
 
-  // Forward KAT — deriveGroupNameKey is deterministic HKDF (no nonce), so its output BYTES are pinnable. This is
-  // what a round-trip cannot pin (both sides share the constant, so a mutated constant still round-trips): emptying
-  // NAME_KEY_INFO (`veyq/v1/group-name-key` → '') changes the HKDF `info` → the output changes → this KAT reds.
-  it('deriveGroupNameKey is a forward KAT — the HKDF info bytes are pinned to an absolute output', () => {
-    const FIXED_EPOCH_KEY = Uint8Array.from(Array.from({ length: 32 }, (_, i) => i)) // 0x00..0x1f
-    expect(hex(deriveGroupNameKey(FIXED_EPOCH_KEY)))
-      .toBe('8677b0387c41736f45d07c62a383d7331a04490ccca74d6b063945a142524422')
-  })
-
-  it('wraps K_name to the invitee — only their identity private unwraps it, back to the same K_name', () => {
-    const nameKey = deriveGroupNameKey(v1.randomBytes(32))
+  it('wraps the name key to the invitee — only their identity private unwraps it, back to the same key', () => {
+    const nameKey = v1.generateValueKey()
     const sealed = wrapNameKeyToInvitee(nameKey, GROUP, 2, recipientPubB64)
 
     // Opened with a HARDCODED context literal, not the module's own — so wrap (source) and open (this literal) are
@@ -78,7 +86,7 @@ describe('group invite name-key (cr-0096, ADR 0027)', () => {
   })
 
   it('is domain-separated from scope-grant and bound to its group + name epoch', () => {
-    const sealed = fromB64std(wrapNameKeyToInvitee(deriveGroupNameKey(v1.randomBytes(32)), GROUP, 0, recipientPubB64))
+    const sealed = fromB64std(wrapNameKeyToInvitee(v1.generateValueKey(), GROUP, 0, recipientPubB64))
     const sk = v1.hybridSecret(recipient.priv)
     // Pin the refusal, not a bare .toThrow(): each is the seal refusing the wrong address, not a structural error.
     expect(() => v1.openAs({ purpose: 'scope-grant', scopeId: GROUP, epoch: 0 }, sk, sealed)).toThrow(new v1.OpenRefused('scope-grant'))
@@ -92,12 +100,12 @@ describe('group invite name-key (cr-0096, ADR 0027)', () => {
   // is no separate owner-typed name copy, so a modified owner cannot privately show a divergent name.
   it('an invitee reads the same encryptedName as a member (no divergence)', () => {
     vaultPriv = cloneRecipientPriv
-    const epochKey = v1.randomBytes(32) // E_e — the name's content-epoch key a member holds
+    const epochKey = v1.randomBytes(32) // the scope key a member holds
     const name = 'Familie Raddatz'
     const inv = invitation(epochKey, name)
 
-    // A member derives K_name from E_e and reads the canonical blob.
-    const memberView = openGroupNameWith(deriveGroupNameKey(epochKey), GROUP, 0, inv.encryptedName)
+    // A member opens the name's value key from its wrap under the scope key and reads the canonical blob.
+    const memberView = memberRead(epochKey, inv)
     const inviteeView = openInviteeName(inv)
 
     expect(memberView).toBe(name)
@@ -115,7 +123,7 @@ describe('group invite name-key (cr-0096, ADR 0027)', () => {
     expect(openInviteeName(here)).toBe('Buchclub') // control
   })
 
-  it('a name key a rotation cleared (ADR 0111 decision 9) reads as no name, and the vault is not even asked', () => {
+  it('a name key a rename cleared (ADR 0111 decision 9) reads as no name, and the vault is not even asked', () => {
     const asked = vi.fn(cloneRecipientPriv)
     vaultPriv = asked
     const here = invitation(v1.randomBytes(32), 'Buchclub')

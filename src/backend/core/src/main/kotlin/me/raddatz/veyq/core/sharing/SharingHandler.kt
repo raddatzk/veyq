@@ -19,6 +19,7 @@ import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.blobstore.BlobStore
 import me.raddatz.veyq.core.blobstore.PresignedRef
 import me.raddatz.veyq.core.blobstore.presignGets
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
 import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
@@ -207,6 +208,9 @@ sealed interface SetShareSealedNameOutcome {
     object Deleting : SetShareSealedNameOutcome, HttpFailure by Failures.scopeDeleting
     /** No such share, it was deleted, or the caller may not write in its space — one non-enumerable 404. */
     object NotFound : SetShareSealedNameOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+    /** The link is closed — switched off or past its end date: nothing new is sealed under its `K_share` (ADR 0114
+     *  decision 5); its reopen carries the current name. */
+    object Closed : SetShareSealedNameOutcome, HttpFailure by httpFailure("link_closed", UNPROCESSABLE)
 }
 
 sealed interface ReactivateShareOutcome {
@@ -335,7 +339,7 @@ class SharingHandler(
     fun create(
         userId: String, shareId: String, nodeId: String, role: String, wrap: String?,
         sealedDropPublicKey: String?, sealedDropPrivateKey: String?, sealedName: String, expiresAt: Instant?,
-        sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
+        sealedNote: String?, sealedShareKey: String, wrappedRecoveryValueKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
         nodeEpoch: Int,
     ): CreateShareOutcome {
@@ -390,8 +394,8 @@ class SharingHandler(
                 null
             } else {
                 store.create(
-                    shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
-                    sealedShareKeyEpoch, sealedShareName,
+                    shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote,
+                    SealedValue(sealedShareKey, wrappedRecoveryValueKey), sealedShareKeyEpoch, sealedShareName,
                     passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
                 )
             }
@@ -612,10 +616,10 @@ class SharingHandler(
      * the root re-seals the name of every share on it through each one's recovery copy. **Any** member who may write
      * in the share's space may — the gate's WRITE answer, as a node rename asks it (`NodesHandler.update`) — not only
      * the share's owner: `updateShare` stays owner-gated (ADR 0036 point 3) and replaces all its fields, so it cannot
-     * carry this write. The renaming client re-seals the name under open links only (ADR 0114 decision 5) — nothing
-     * new under a closed one's `K_share`, whose reopen carries the current name — but the server takes the write for a
-     * switched-off share too: which links are open is the client's to read, and it is the share's own ciphertext either
-     * way. A deleted one is the 404. Last writer wins: the value is always the root's current name. The server never
+     * carry this write. A re-seal lands under open links only (ADR 0114 decision 5) — nothing new under a closed one's
+     * `K_share`, whose reopen carries the current name: a switched-off link or one past its end date is
+     * [SetShareSealedNameOutcome.Closed], decided under the share row's lock; the renaming client skips closed links
+     * anyway. A deleted one is the 404. Last writer wins: the value is always the root's current name. The server never
      * opens it.
      *
      * The gate is read before the store's transaction, as `updateShare` reads it. Sound by the serial-order rule
@@ -627,7 +631,11 @@ class SharingHandler(
         access.check(userId, share.scopeId, WRITE)
             .refusal(SetShareSealedNameOutcome.NotFound, SetShareSealedNameOutcome.Suspended, SetShareSealedNameOutcome.Deleting)
             ?.let { return it }
-        return if (store.setSealedName(shareId, sealedName, PrincipalKey.User(userId))) SetShareSealedNameOutcome.Done else SetShareSealedNameOutcome.NotFound
+        return when (store.setSealedName(shareId, sealedName, PrincipalKey.User(userId))) {
+            SharingStore.SealedNameResult.DONE -> SetShareSealedNameOutcome.Done
+            SharingStore.SealedNameResult.NOT_FOUND -> SetShareSealedNameOutcome.NotFound
+            SharingStore.SealedNameResult.CLOSED -> SetShareSealedNameOutcome.Closed
+        }
     }
 
     /** Re-activate a soft-revoked share and adopt it (cr-0104): any current member of the share's scope may flip
@@ -718,9 +726,9 @@ class SharingHandler(
      */
     fun reissue(
         userId: String, shareId: String, newShareId: String, wrap: String?, sealedDropPublicKey: String?,
-        sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int,
-        sealedShareName: String?, passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
-        writeVerifier: String, nodeEpoch: Int,
+        sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String, wrappedRecoveryValueKey: String,
+        sealedShareKeyEpoch: Int, sealedShareName: String?, passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?,
+        sealedPassword: String?, writeVerifier: String, nodeEpoch: Int,
     ): ReissueShareOutcome {
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
@@ -755,7 +763,8 @@ class SharingHandler(
             )?.let { return@call it }
             when (
                 store.reissue(
-                    old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareKeyEpoch,
+                    old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote,
+                    SealedValue(sealedShareKey, wrappedRecoveryValueKey), sealedShareKeyEpoch,
                     sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
                 )
             ) {

@@ -1,8 +1,8 @@
 // A scope's key (ADR 0115 decision 1): a scope has ONE key at a time, its current epoch's. A rotation mints a fresh
-// random key at epoch `n + 1`, re-seals everything that was under the old one in its commit, and seals nothing older
-// under the new one — so a member holds exactly the key its grant carries, and everything sealed under the scope key
-// (a scope-root entry, a group's name and icon, a recovery copy, a tenant profile, a verification, an item mark) opens
-// under it. What proves a newer key genuine is a succession statement, never a link (decision 5, `scopes.ts`).
+// random key at epoch `n + 1`, moves everything that was under the old one to it in its commit — each authored value's
+// own key re-wrapped (`valueKey.ts`), each scope-root entry re-sealed — and seals nothing older under the new one — so a
+// member holds exactly the key its grant carries, and everything under the scope key (a scope-root entry; the value
+// keys of a group's name and icon, a recovery copy, a tenant profile, a verification, an item mark) opens under it. What proves a newer key genuine is a succession statement, never a link (decision 5, `scopes.ts`).
 // Operator-blind: the key is opened on-device from the caller's own grant; the server stores only ciphertext.
 
 /** The scope key a caller holds: the epoch it is at and its 32 bytes. New content seals under it, and so does every

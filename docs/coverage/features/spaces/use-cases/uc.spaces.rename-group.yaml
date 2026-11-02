@@ -1,24 +1,24 @@
 useCase: uc.spaces.rename-group
 feature: spaces
 title: Rename a group
-# Web-complete (cr-0097). ADR 0027's rename mechanism: the owner re-seals the group name under K_name derived from
-# the scope's CURRENT content-key epoch and sets name_epoch, so the rename is forward-secret (a removed member
-# holding only an earlier key can't derive the new K_name); every rotation re-seals it under the new key (ADR 0115).
+# Web-complete (cr-0097). ADR 0027's rename mechanism: the owner seals the group name under a fresh value key K_v,
+# wraps K_v under the scope's CURRENT key and sets name_epoch, so the rename is forward-secret (a removed member never
+# held the new K_v), and seals K_v to every pending invitee; a rotation re-wraps K_v and never rewrites the name (ADR 0115).
 # Owner-gated, name-only (no K_SC rotation / re-grant), server rejects a stale nameEpoch (409) and a rename on a
 # pending-deletion group (409). (
 # web-first — a later CR, an explicit gap.
 acceptanceCriteria:
   - id: reseal-under-current-epoch
-    text: A GroupOwner rename re-seals the group name under K_name = HKDF(E_e, "group-name-key") for e = the scope's CURRENT content-key epoch, and sets nameEpoch := e on the scope row. POST /api/scopes/{id}/name carries { encryptedName, nameEpoch } as two opaque values; the blind server overwrites encrypted_name + name_epoch and never derives a key or reads the name. Members read the new name by deriving K_name from the one scope key their grant carries.
+    text: A GroupOwner rename seals the group name under a fresh value key K_v at e = the scope's CURRENT epoch, wraps K_v under that epoch's key, and sets nameEpoch := e on the scope row. POST /api/scopes/{id}/name carries { encryptedName, nameEpoch, wrappedNameValueKey, inviteeNameKeys }; the blind server overwrites the name, its wrap and name_epoch and never sees a key or reads the name. Members read the new name by opening K_v from its wrap with the one scope key their grant carries.
     coverage:
       backend: { integration: [ScopesSliceTest.renameGroupUpdatesEncryptedNameAndNameEpoch] }
       web: { unit: [src/features/spaces/scopes.test.ts] }
   - id: forward-secret-name
-    text: Because the new name seals under the current epoch, a member removed by a rotation (holding only E_{n-1}) cannot derive the new K_name and never reads the post-removal name — the name is forward-secret, consistent with node names. A rename after a rotation seals under the new epoch, and the rotation itself re-seals the name under its new key and sets nameEpoch to it (ADR 0115).
+    text: Because every rename mints a fresh K_v wrapped under the current epoch's key, a member removed by a rotation (holding only E_{n-1}) never holds the new K_v and never reads the post-removal name — the name is forward-secret, consistent with node names. A rename after a rotation writes at the new epoch; the rotation itself re-wraps the name's K_v under its new key and leaves the name and its nameEpoch (ADR 0115).
     coverage:
       backend: { integration: [ScopesSliceTest.renameAfterRotationSealsUnderTheNewEpoch] }
   - id: stale-epoch-rejected
-    text: The server rejects a rename whose nameEpoch != currentEpoch with 409 stale_epoch (a concurrent rotation advanced the epoch under the caller); the client refetches the current epoch, re-seals, and retries once (grant-delivery may have re-granted it). A single-owner group never races; the guard is for the multi-owner read-then-write TOCTOU. The check is part of the write itself, so a rotation that commits after the server has read the epoch still refuses the rename.
+    text: The server rejects a rename whose nameEpoch != currentEpoch with 409 stale_epoch (a concurrent rotation advanced the epoch under the caller); the client refetches the current epoch, seals again under a fresh key, and retries once (grant-delivery may have re-granted it). A single-owner group never races; the guard is for the multi-owner read-then-write TOCTOU. The check is part of the write itself, so a rotation that commits after the server has read the epoch still refuses the rename.
     coverage:
       backend:
         integration:
@@ -30,10 +30,10 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ScopesSliceTest.renameNonOwnerIs403, ScopesSliceTest.renamePendingDeletionIs409] }
   - id: name-only-no-rotation
-    text: A rename is name-only — it does NOT rotate K_SC and re-grants no member (unlike a removal). It overwrites two fields on one scope row; no per-member wrap (currentEpoch is unchanged by a rename). Operator-blind — the server sees new opaque ciphertext + a bumped small integer, never the name or a key.
+    text: A rename is name-only — it does NOT rotate K_SC and re-grants no member (unlike a removal). It overwrites the name, its wrap and its epoch on one scope row and replaces only the pending invitees' name keys (currentEpoch is unchanged by a rename). Operator-blind — the server sees new opaque ciphertext, a new wrap, sealed keys + a bumped small integer, never the name or a key.
     coverage:
       backend: { integration: [ScopesSliceTest.renameGroupUpdatesEncryptedNameAndNameEpoch] }
   - id: rename-invite-failsafe
-    text: A rename between a consent-invite and its accept seals under the epoch whose K_name the pending invitee's sealedNameKey carries, so the invitee reads the canonical name a member reads. A name key a rotation cleared (its rotator could not anchor the invitee), or one that does not open the served encryptedName, yields null non-fatally -> the preview shows "unnamed"; they can still accept and then see the current name.
+    text: A rename between a consent-invite and its accept seals the new name's K_v to the pending invitee in the same request, so the invitee reads the canonical name a member reads; a rotation leaves that key. A name key a rename cleared (the owner's device could not anchor the invitee), or one that does not open the served encryptedName, yields null non-fatally -> the preview shows "unnamed"; they can still accept and then see the current name.
     coverage:
       web: { unit: [src/features/spaces/inviteName.test.ts] }

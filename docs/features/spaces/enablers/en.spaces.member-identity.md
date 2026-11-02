@@ -7,7 +7,7 @@
   the group member-add search, editing your own identity in [uc.spaces.edit-profile](../use-cases/uc.spaces.edit-profile.md),
   and (later) the person/profile view it feeds.
 - **Provides:** a member's **identity within a tenant** — a per-tenant **`username`** (unique in the tenant,
-  plaintext, a pseudonymous handle decoupled from login) plus **`firstName` / `lastName` sealed under a field key derived from `K_tenant`**
+  plaintext, a pseudonymous handle decoupled from login) plus **`firstName` / `lastName` sealed under a field key derived from its own value key, whose wrap `K_tenant` holds**
   (operator-blind real name), and the **directory visibility rule** (every member sees username + names; only a
   tenant `OWNER` sees `email`). Instance-wide uniqueness stays with **`email`** alone
   ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)).
@@ -23,7 +23,7 @@
 - **Preconditions:** An **authenticated** caller joining or belonging to a tenant. Sealing the real name
   additionally needs an **unlocked, granted** member (holds `K_tenant`).
 - **Postconditions (success):** The caller's per-`(user, tenant)` profile row carries a tenant-unique `username`
-  (plaintext) and, once they hold `K_tenant`, a `firstName`/`lastName` blob **sealed under a field key derived from `K_tenant`** (`member-name`,
+  (plaintext) and, once they hold `K_tenant`, a `firstName`/`lastName` blob **sealed under a field key derived from its own value key, whose wrap `K_tenant` holds** (`member-name`,
   [en.platform.field-key](../../platform/enablers/en.platform.field-key.md)). The
   directory returns username + (locally decrypted) names to every member and `email` only to an owner. The server
   never saw the real name.
@@ -38,7 +38,7 @@ which would collide with a member's own group rows), split by sensitivity:
    constrained (`[a-z0-9_.-]`-ish, no whitespace), **not a login credential** (email is). Chosen at **every**
    tenant join (register-and-accept *and* existing-account accept), uniqueness checked in the target tenant
    (`409 username_taken`); changeable later with a re-check.
-2. **`firstName` / `lastName` — per-(user, tenant), sealed under a field key derived from `K_tenant`** (same profile
+2. **`firstName` / `lastName` — per-(user, tenant), sealed under a field key derived from its own value key, whose wrap `K_tenant` holds** (same profile
    row, a fresh salt per write). Real names are
    content, not operational metadata — ciphertext the server never decrypts. Every tenant member holds
    `K_tenant`, so each decrypts any member's name **locally**; directory **search/sort over names is
@@ -71,7 +71,7 @@ decision 9; the code is `core/people/directory.ts`.)
      null for the tenant's first owner, the trust root. Every member's client reads it as the anchor of that member's
      key in the tenant. Beside it the profile keeps who rooted the join (`join_signer_user_id`, the invite's signer,
      written at accept) and that owner's **endorsement** of the record (`ScopeMember.joinEndorsement`, the
-     `join-endorsement` statement over SHA-256 of the opened record, so a rotation's re-seal leaves it valid), which
+     `join-endorsement` statement over SHA-256 of the opened record, never its envelope), which
      their securing writes with the new key: a
      record signed by a key the owner has since retired counts only with it. Both go with the profile (removal, erasure,
      purge)
@@ -83,13 +83,15 @@ decision 9; the code is `core/people/directory.ts`.)
 
 ## The epoch of a sealed field
 
-The name, the picture and the join record are always under the tenant's **current** key; the profile row records no
-epoch. A write states the epoch it seals under, and another is `409 stale_epoch`
+The name, the picture and the join record are each sealed under a value key of its own, minted at every write, and
+only that key's wrap is under the tenant's **current** key; the profile row records no epoch. A write states the epoch
+its wrap is under, and another is `409 stale_epoch`
 ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 3). Every rotation of the tenant
-re-seals every member's three fields under the new key in its commit (`resealMember`,
-`src/web/src/features/spaces/scopeRekey.ts`); a field that does not open under the old key is staged as a seal of
-random bytes that reads exactly as before, so one member's unreadable field stops no rotation. A reader opens each
-field under the one tenant key it holds; a member behind the current epoch reads none until re-granted
+re-wraps every member's three value keys under the new key in its commit and never rewrites a field (`rewrapMember`,
+`src/web/src/features/spaces/scopeRekey.ts`); a wrap that does not open under the old key is staged as one nobody
+opens, so the field reads exactly as before and one member's unreadable field stops no rotation — and no rotator can
+rewrite another member's name, picture or join record. A reader opens each field through its wrap under the one
+tenant key it holds; a member behind the current epoch reads none until re-granted
 ([keys, grants and trust § Rotating a scope](../../../crosscutting/keys-grants-and-trust.md#rotating-a-scope)).
 
 ## Profile picture

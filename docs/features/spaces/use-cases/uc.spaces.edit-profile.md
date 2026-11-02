@@ -8,7 +8,7 @@
   hub is offered only there). Setting or removing the real name additionally needs the member's tenant grant
   (`K_tenant`); the username does not.
 - **Postconditions (success):** The member's per-tenant profile row carries the new `username` (plaintext,
-  unique in this tenant) and a real-name blob sealed under a field key derived from `K_tenant` at the address (this tenant's scope, the
+  unique in this tenant) and a real-name blob sealed under a field key derived from its own value key, whose wrap `K_tenant` holds at the address (this tenant's scope, the
   member's user id). Every member of the tenant sees the change in the directory; nothing changes in any other
   tenant.
 
@@ -20,7 +20,7 @@
 3. The client opens `K_tenant` from the member's own tenant grant and unseals the name on the device, at the
    address (tenant scope, own user id), under whichever held tenant epoch it was saved under.
 4. The member edits the username, the first name and/or the last name.
-5. On save, the client seals the first and last name under a field key derived from `K_tenant` at that address. The name may be empty,
+5. On save, the client seals the first and last name under a field key derived from its own value key, whose wrap `K_tenant` holds at that address. The name may be empty,
    and an empty name is sealed like any other. The client sends the username (trimmed, lower-cased), the sealed
    blob and the consent preference.
 6. The server re-checks that the username is free in this tenant, stores the handle and the blob verbatim, and
@@ -36,10 +36,10 @@
 - **A1 — remove your real name:** empty both name fields and save. An empty name is sealed, and the directory
   shows only `@username` from then on.
 - **A2 — the tenant rotated since the name was saved** (a member secured their account, or an owner re-keyed it): the
-  rotation re-sealed every member's name under the tenant's new key, so it opens in the directory of every member
-  holding that key and in this form, and the member is not asked to finish a profile they finished. A save states
-  the epoch it seals under; one that meets a rotation is answered `409 stale_epoch` and sealed once more under the new
-  key ([en.spaces.member-identity § The epoch of a sealed field](../enablers/en.spaces.member-identity.md#the-epoch-of-a-sealed-field)).
+  rotation re-wrapped every member's name's own value key under the tenant's new key and left the name, so it opens in the directory of every member
+  holding that key and in this form, and the member is not asked to finish a profile they finished. A save mints
+  a fresh value key and states the epoch its wrap is under; one that meets a rotation is answered `409 stale_epoch` and
+  sealed once more under the new key ([en.spaces.member-identity § The epoch of a sealed field](../enablers/en.spaces.member-identity.md#the-epoch-of-a-sealed-field)).
 - **E3 — the profile does not load:** the panel shows a load error instead of the form. A refused session ends
   the way every refused session ends ([uc.account.sign-out](../../account/use-cases/uc.account.sign-out.md) E1).
 

@@ -9,7 +9,7 @@
 - **Preconditions:** The target is **already a tenant member** with a published identity public key
   ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md)). The target has turned **"ask before
   adding me to groups"** on (an **account-global** preference, default **off**). The GroupOwner holds the group
-  grant (so their device can derive the group's name-key `K_name` and wrap it to the invitee).
+  grant (so their device can open the group name's value key `K_v` and seal it to the invitee).
 - **Postconditions (success on Accept):** the proposal becomes a normal membership holding the grant it already
   held, and the group opens for them at once. On **Decline**: the soft membership is dropped with no trace kept,
   and — because it held the group key — the group's **rotation is queued**. Operator-blind throughout: the server
@@ -36,18 +36,21 @@ owner-typed claim), and the **accept/decline** step.
    add does. The server sees the preference is **on**, so it records a **soft membership** (`pendingConsent`) —
    *proposed*, not yet a member — **holding that grant**. A rotation of the group re-grants a pending proposal like
    any member, so an accept never opens onto a key the group already left.
-3. **The wrapped name-key.** The owner's device — a key-holder — derives the group's **name-key**
-   `K_name = HKDF(E_e, "group-name-key")` from the group's current key, which the name is sealed under, and wraps **the key
-   bytes** (not a name copy) to the invitee's identity: `sealTo` to the invitee's X-Wing identity key under the `group-name-key` purpose,
-   posted as the proposal's `sealedNameKey`. Every rotation of the group re-seals it under the new `K_name`, or clears
-   it when the rotator cannot anchor the invitee's key; nothing re-wraps a cleared one, so that invitee sees the
-   proposal without the group's name ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2). The server returns the scope's **canonical** `encryptedName` in the
-   invitation. Handing the *key* — not a name — is the crux of [ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md):
-   the invitee opens the **same** ciphertext the members hold, so a modified owner **cannot** privately show a
-   divergent name. `K_name` is one-way from `E_e` (HKDF), so it leaks the name and nothing else — not `E_e`, not `K_SC`.
+3. **The wrapped name-key.** The owner's device — a key-holder — opens the group name's own **value key** `K_v` from
+   its wrap under the group's current key (the name is sealed under `K_v`,
+   [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md)) and seals **the key bytes** (not a
+   name copy) to the invitee's identity: `sealTo` to the invitee's X-Wing identity key under the `group-name-key`
+   purpose, posted as the proposal's `sealedNameKey`. A rotation of the group leaves it — it is no wrap under the
+   scope key — and a **rename** seals the new name's fresh `K_v` to every pending invitee in the same request, or clears
+   an invitee's name key when the owner's device cannot anchor that invitee's key; that invitee then sees the proposal
+   without the group's name until a rename by a device that anchors it. The server returns the scope's **canonical**
+   `encryptedName` in the invitation. Handing the *key* — not a name — is the crux of
+   [ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md): the invitee opens the **same** ciphertext the
+   members hold, so a modified owner **cannot** privately show a divergent name. `K_v` is random and minted for this
+   one name, so it leaks that name and nothing else — not `E_e`, not `K_SC`, no earlier or later name.
 4. **The invitee decides.** In a **group-invitations** view — reached from an **appears-on-demand attention badge**
    in the top bar (beside the upload-queue tray; rendered only while at least one proposal is open) — the invitee
-   unwraps `sealedNameKey` with their own identity private key → `K_name`, decrypts the canonical `encryptedName`
+   unwraps `sealedNameKey` with their own identity private key → the name's `K_v`, decrypts the canonical `encryptedName`
    under it, and sees **the group's (group-consistent) name + who added them** (the owner's per-tenant username,
    already visible to them) + the tenant.
    - **Accept** → the server clears `pendingConsent`; the proposal is now a normal membership with the grant it
@@ -71,9 +74,9 @@ sequenceDiagram
   actor I as Invitee<br>(consent = on)
   participant CI as Client<br>(invitee)
   O->>S: resolve username → { userId, identityPublicKey }
-  O->>O: anchor check → grant = seal K_SC to inviteePub#59; derive K_name = HKDF(E_e)#59; wrap it to inviteePub ("group-name-key")
+  O->>O: anchor check → grant = seal K_SC to inviteePub#59; open the name's K_v from its wrap#59; seal it to inviteePub ("group-name-key")
   O->>S: add + grant + sealedNameKey → consent=on → record SOFT membership (pendingConsent) holding the grant
-  I->>CI: open invitations → unwrap K_name → open CANONICAL encryptedName → see real name + who added
+  I->>CI: open invitations → unwrap K_v → open CANONICAL encryptedName → see real name + who added
   alt Accept
   I->>S: accept → clear pendingConsent (a normal member, same grant) → group opens
   else Decline

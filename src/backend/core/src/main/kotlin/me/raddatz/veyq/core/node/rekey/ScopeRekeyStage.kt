@@ -17,14 +17,15 @@ import java.util.Base64
 import java.util.UUID
 
 /**
- * One staged value of a rotation's scope-level re-seal (ADR 0115 decision 2): a ciphertext the rotation's commit
- * (`rotateScope`, [ScopeRekeyCommit]) swaps into the row [itemId] names, in the column [field] names, of the owner
- * [part] (`core`, or an application's name, [ScopeRekeyParticipant.part]). [replacedDigest] is the digest of the
- * ciphertext the row held when the value was staged ([ScopeRekeyStage.digest]; null for a row that held none), so the
- * commit refuses a row written since (`409 rekey_parts_stale`) with no revision of its own; [revision] is a scope-root
- * node's placement revision the client stated, where the row has one. Nothing serves or reads a staged value but the
- * commit; a stage no commit took is deleted after [ScopeRekeyStage.TTL] ([createdAt] is that reader). Operator-blind:
- * the same ciphertext the commit carries.
+ * One staged value of a rotation's scope-level move (ADR 0115 decision 2): a value key's new wrap — or a scope-root
+ * entry's re-sealed part — the rotation's commit (`rotateScope`, [ScopeRekeyCommit]) swaps into the row [itemId] names,
+ * in the column [field] names, of the owner [part] (`core`, or an application's name, [ScopeRekeyParticipant.part]).
+ * Never a value's own ciphertext: the commit refuses a field it does not know as a wrap (`422 rekey_writes_value`).
+ * [replacedDigest] is the digest of what the row held in that column when it was staged ([ScopeRekeyStage.digest]; null
+ * for a row that held none), so the commit refuses a row written since (`409 rekey_parts_stale`) with no revision of its
+ * own; [revision] is a scope-root node's placement revision the client stated, where the row has one. Nothing serves or
+ * reads a staged value but the commit; a stage no commit took is deleted after [ScopeRekeyStage.TTL] ([createdAt] is
+ * that reader). Operator-blind: the same ciphertext the commit carries.
  */
 @Entity
 @Table(name = "veyq_scope_rekey_stage")
@@ -65,17 +66,19 @@ class ScopeRekeyStageEntity : PanacheEntityBase {
 }
 
 /**
- * The staged values of a rotation's scope-level re-seal (ADR 0115 decision 2): the rotating client opens every row
- * sealed under the scope key with the old key, re-seals it under the one it minted and sends it here in pages, under a
- * re-key id it then names in `rotateScope`. Core's own rows and each application's ([ScopeRekeyParticipant.part]) share
- * the table. A row staged twice is replaced — and takes the digest of what the row holds at that later stage.
+ * The staged values of a rotation's scope-level move (ADR 0115 decision 2): the rotating client opens every value key's
+ * wrap under the scope key with the old key, wraps the same key under the one it minted (one it cannot open under a key
+ * it drops) and re-seals each scope-root entry, and sends them here in pages, under a re-key id it then names in
+ * `rotateScope`. Core's own rows and each application's ([ScopeRekeyParticipant.part]) share the table. A row staged
+ * twice is replaced — and takes the digest of what the row holds at that later stage.
  *
- * **What the digest covers.** Each staged value names the digest of the ciphertext the rotator opened it from (the
- * contract's `replacedDigest`, ADR 0115 decision 2), and the stage refuses a value whose row holds another by then
- * (`ScopeRekeyCommit.stage`, Memories' item-mark stage) — a write between the rotator's read and its stage. The digest
- * kept here is that same one, so the commit refuses a row written between the stage and the commit — the long window, a
- * tenant's whole profile directory staged page by page. A scope-root's name and slug are held by the placement revision
- * the rotator states instead ([Value.revision]), which every rename, move and re-key moves.
+ * **What the digest covers.** Each staged wrap names the digest of the wrap it replaces (the contract's
+ * `replacedDigest`, ADR 0115 decision 2), and the stage refuses one whose row holds another by then
+ * (`ScopeRekeyCommit.stage`, Memories' item-mark stage) — a write between the rotator's read and its stage, which minted
+ * a fresh value key and so a fresh wrap. The digest kept here is that same one, so the commit refuses a row written
+ * between the stage and the commit — the long window, a tenant's whole profile directory staged page by page. A
+ * scope-root's name and slug are held by the placement revision the rotator states instead ([Value.revision]), which
+ * every rename, move and re-key moves.
  */
 @ApplicationScoped
 class ScopeRekeyStage {
@@ -130,8 +133,8 @@ class ScopeRekeyStage {
         private const val CHUNK = 500
         const val CORE = "core"
 
-        /** The digest a staged value's compare-and-set keeps of the ciphertext it replaces (base64 SHA-256 of the stored
-         *  text), or null for a row that holds none. */
+        /** The digest a staged value's compare-and-set keeps of what it replaces — a wrap, or a root entry's wrap
+         *  (base64 SHA-256 of the stored text), or null for a row that holds none. */
         fun digest(stored: String?): String? =
             stored?.let { Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(it.toByteArray(Charsets.UTF_8))) }
 

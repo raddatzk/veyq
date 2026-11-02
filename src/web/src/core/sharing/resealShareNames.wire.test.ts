@@ -31,7 +31,8 @@ describe('resealShareNames on the wire', () => {
       if (init?.method === 'POST') {
         row = {
           shareId: body!.shareId, nodeId: NODE_ID, scopeId: SCOPE_ID, role: 'READ', sealedName: body!.sealedName,
-          sealedShareKey: body!.sealedShareKey, sealedShareKeyEpoch: body!.sealedShareKeyEpoch, enabled: true, mine: false,
+          sealedShareKey: body!.sealedShareKey, wrappedRecoveryValueKey: body!.wrappedRecoveryValueKey,
+          sealedShareKeyEpoch: body!.sealedShareKeyEpoch, enabled: true, mine: false,
           reissueRequired: false, deletable: false, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
           createdAt: '2026-10-01T10:00:00Z',
         }
@@ -41,6 +42,8 @@ describe('resealShareNames on the wire', () => {
       return new Response(null, { status: 204 })
     }))
     const minted = await mintShare(SCOPE_ID, NODE_ID, { key: v1.randomBytes(32), epoch: 0 }, EPOCHS, 'Alt', ShareRole.Read)
+    // the mint's body carries the copy's value-key wrap beside the copy (ADR 0115): what the listing serves back
+    expect(typeof (calls[0].body as Record<string, unknown>).wrappedRecoveryValueKey).toBe('string')
     calls.length = 0
 
     const report = await resealShareNames(NODE_ID, 'Neu', EPOCHS)

@@ -96,7 +96,7 @@ class MemberIdentitySliceTest {
 
         // Seal a name + change the handle.
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", "id-prof.example.com")
-            .contentType(ContentType.JSON).body("""{"username":"after","sealedName":"c2VhbGVkLW5hbWU=","epoch":0}""")
+            .contentType(ContentType.JSON).body("""{"username":"after","sealedName":"c2VhbGVkLW5hbWU=","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":0}""")
             .`when`().put("/api/account/profile")
             .then().statusCode(200)
             .body("username", equalTo("after")).body("sealedName", equalTo("c2VhbGVkLW5hbWU="))
@@ -175,7 +175,7 @@ class MemberIdentitySliceTest {
 
     /** A register-and-accept body redeeming the invite of [secret], with its join (the self-grant, the invite key's proof). */
     private fun memberRegisterBody(secret: String, username: String, sealedName: String? = null): String {
-        val nameField = sealedName?.let { ""","sealedName":"$it"""" } ?: ""
+        val nameField = sealedName?.let { ""","sealedName":"$it","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="""" } ?: ""
         val userId = UUID.randomUUID().toString()
         val key = keys.getValue(secret)
         return """

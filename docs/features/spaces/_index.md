@@ -36,8 +36,8 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   unique-in-tenant + `firstName`/`lastName` **sealed** under `K_tenant`; email the only global key, owner-only in
   the directory; [ADR 0023](../../decisions/0023-per-tenant-member-identity.md))
 - [en.spaces.scope-key-rotation](enablers/en.spaces.scope-key-rotation.md) — **built** (**replace** a scope's key
-  with a fresh one at the next epoch, granted only to the remaining members, everything scope-level re-sealed under
-  it, so a removed member reads pre-removal content but never post-removal — no re-encryption; the substrate
+  with a fresh one at the next epoch, granted only to the remaining members, every scope-level value's own key
+  re-wrapped under it and no value rewritten, so a removed member reads pre-removal content but never post-removal — no re-encryption; the substrate
   member-removal builds on; [ADR 0024](../../decisions/0024-scope-key-rotation.md),
   [ADR 0115](../../decisions/0115-a-scope-key-is-replaced-never-chained.md))
 
@@ -51,7 +51,7 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   [ADR 0111](../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1–3, a mail-only invite,
   [ADR 0055](../../decisions/0055-mail-is-a-precondition-not-a-capability.md))
 - [Edit your profile in a space](use-cases/uc.spaces.edit-profile.md) — **built (web)** (change your per-tenant
-  username and your real name, sealed under a field key derived from `K_tenant` on the device; empty both name fields to remove the name;
+  username and your real name, sealed under a field key derived from its own value key, whose wrap `K_tenant` holds on the device; empty both name fields to remove the name;
   [en.spaces.member-identity](enablers/en.spaces.member-identity.md), [ADR 0023](../../decisions/0023-per-tenant-member-identity.md))
 - [Set your profile picture in a space](use-cases/uc.spaces.set-profile-picture.md) — **built (web, backend, contract)**
   (a sealed constant-length picture on the per-tenant profile row, tenant members only, set in Settings or on your
@@ -87,13 +87,14 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   the owner can't show a divergent name; the group is listed to them only on accept, and a decline or rescind
   queues the group's rotation; [ADR 0014](../../decisions/0014-group-scopes-and-governance.md) §5,
   [ADR 0027](../../decisions/0027-group-invite-name-shared-key.md))
-- [Rename a group](use-cases/uc.spaces.rename-group.md) — **web done (cr-0097)** (owner re-seals the name under
-  `K_name` from the **current** epoch and bumps `nameEpoch`, so a rename is **forward-secret** — a removed member
+- [Rename a group](use-cases/uc.spaces.rename-group.md) — **web done (cr-0097)** (owner seals the name under a
+  fresh value key wrapped under the **current** epoch's key, hands it to each pending invitee and bumps `nameEpoch`, so
+  a rename is **forward-secret** — a removed member
   can't read the new name; name-only, no `K_SC` rotation; server rejects a stale `nameEpoch`;
   [ADR 0027](../../decisions/0027-group-invite-name-shared-key.md))
 - [Space icon](use-cases/uc.spaces.set-space-icon.md) — **built (web + backend; TENANT cr-space-icon, GROUP cr-group-space-icon)** (the owner gives a space a **face**: one
   square image, framed + re-encoded to a fixed box + **padded to a constant length** on device, then sealed under
-  `K_icon` derived from the **current** epoch → `sealedIcon` + `iconEpoch` on the scope row — a **field**, not a
+  a fresh value key wrapped under the **current** epoch's key → `sealedIcon` + its wrap + `iconEpoch` on the scope row — a **field**, not a
   blob. The tenant's *name* stays cleartext because at creation **no key exists**
   ([ADR 0006](../../decisions/0006-cold-tenant-scope-birth.md)); an icon is chosen *after* activation, so
   [ADR 0023](../../decisions/0023-per-tenant-member-identity.md)'s *only-the-plaintext-the-mechanism-requires*

@@ -28,6 +28,14 @@ import { grantContext, grantSignatureVerifies, recipientIdentityDigest } from '.
 import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { openValue, openValueKey, wrapValueKeyOf } from '../spaces/valueKey'
+
+type SealedRecord = { sealedJoinRecord: string; wrappedJoinRecordValueKey: string; epoch: number }
+/** A join record as every member opens it (ADR 0115): its value key from the wrap under [tenantKey] at the join's epoch,
+ *  then the record under that key. Throws when either does not open. */
+const openRecord = (tenantKey: Uint8Array, a: { tenantId: string; userId: string }, j: SealedRecord) =>
+  openValue({ epoch: j.epoch, key: tenantKey }, invite.joinRecordContext(a), j.wrappedJoinRecordValueKey, (kv) =>
+    invite.openJoinRecord(kv, a, fromB64std(j.sealedJoinRecord)))
 
 describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => {
   const stubInvite = () =>
@@ -43,10 +51,10 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
 
   const BIRTH = { grant: 'AQ==', grantSignature: 'c2ln', recipientIdentityDigest: 'ZGlnZXN0' }
 
-  it('acceptInvite threads the birth and the optional sealedName onto the accept request (cr-0106), at the birth epoch 0 (ADR 0115 decision 3)', async () => {
-    await acceptInvite('secret', 'kevin', BIRTH, 'c2VhbGVkLW5hbWU=')
+  it('acceptInvite threads the birth and the optional sealed name with its value key\'s wrap onto the accept request (cr-0106), at the birth epoch 0 (ADR 0115 decision 3)', async () => {
+    await acceptInvite('secret', 'kevin', BIRTH, { sealedName: 'c2VhbGVkLW5hbWU=', wrappedNameValueKey: 'd3JhcA==' })
     expect(api.acceptTenantInvite).toHaveBeenCalledWith({
-      acceptInviteRequest: { bootstrapSecret: 'secret', username: 'kevin', ...BIRTH, sealedName: 'c2VhbGVkLW5hbWU=', epoch: 0 },
+      acceptInviteRequest: { bootstrapSecret: 'secret', username: 'kevin', ...BIRTH, sealedName: 'c2VhbGVkLW5hbWU=', wrappedNameValueKey: 'd3JhcA==', epoch: 0 },
     })
   })
 
@@ -59,9 +67,12 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
     await registerAndAccept('secret', userId, 'kevin', material, BIRTH) // birth set, no name
     expect(api.registerAndAcceptTenantInvite).toHaveBeenCalledWith(
       expect.objectContaining({
-        registerAndAcceptRequest: expect.objectContaining({ userId, username: 'kevin', ...BIRTH, sealedName: undefined }),
+        registerAndAcceptRequest: expect.objectContaining({ userId, username: 'kevin', ...BIRTH }),
       }),
     )
+    const sent = api.registerAndAcceptTenantInvite.mock.calls[0][0].registerAndAcceptRequest
+    expect(sent.sealedName, 'no name skipped: none sent').toBeUndefined()
+    expect(sent.wrappedNameValueKey, '…and no wrap without it').toBeUndefined()
   })
 
   it('tenantError decodes the HTTP status and the body code', async () => {
@@ -292,11 +303,11 @@ describe('acceptCheckedInvite — one silent re-check on 409 invite_changed (ADR
     expect(await acceptCheckedInvite(opened, send, async () => carried.served)).toBe('joined')
     expect(seen.map((s) => s.epoch)).toEqual([1, 2])
     expect(seen[1].key).toEqual(Array.from(carried.tenantKey))
-    // the join states the epoch its record is sealed under, and the second record opens under the carried key only
+    // the join states the epoch its record's value key is wrapped under, and the second record opens under the carried key only
     expect(seen.map((s) => s.join.epoch)).toEqual([1, 2])
     const address = { tenantId: f.tenantId, userId: newcomer.userId }
-    expect(() => invite.openJoinRecord(carried.tenantKey, address, fromB64std(seen[1].join.sealedJoinRecord))).not.toThrow()
-    expect(() => invite.openJoinRecord(f.tenantKey, address, fromB64std(seen[1].join.sealedJoinRecord))).toThrow()
+    expect(() => openRecord(carried.tenantKey, address, seen[1].join)).not.toThrow()
+    expect(() => openRecord(f.tenantKey, address, seen[1].join)).toThrow()
   })
 
   it('once: a second invite_changed is the caller\'s — no third send', async () => {
@@ -380,26 +391,41 @@ describe('buildMemberJoin — the newcomer grants itself and writes its join rec
     expect(v1.identityVerify(f.inviteKey.pub.sign, { ...stmt, userId: crypto.randomUUID() }, proof)).toBe(false)
   })
 
-  it('the join record opens under the tenant key, bound to the newcomer, and both signatures verify', () => {
-    const envelope = fromB64std(join().sealedJoinRecord)
+  it('the join record opens through its own value key under the tenant key, bound to the newcomer, and both signatures verify', () => {
+    const j = join()
+    const envelope = fromB64std(j.sealedJoinRecord)
     const address = { tenantId: f.tenantId, userId: NEW_ID }
-    const record = invite.openJoinRecord(f.tenantKey, address, envelope)
+    const record = openRecord(f.tenantKey, address, j)
     expect(invite.joinRecordVerifies(address, record)).toBe(true)
     expect(bundleOf({ pub: v1.deserializeIdentityPublic(record.identityPublicKey) } as v1.Identity)).toBe(bundleOf(NEWCOMER))
     expect(Array.from(record.secretKeyProofPublicKey)).toEqual(Array.from(PROOF_KEY))
     expect({ inviteId: record.inviteId, signerUserId: record.signerUserId }).toEqual({ inviteId: f.served.inviteId, signerUserId: f.ownerId })
-    // Controls: another member's address does not open it, another key does not, and a record moved to another
-    // member does not verify.
-    expect(() => invite.openJoinRecord(f.tenantKey, { ...address, userId: crypto.randomUUID() }, envelope)).toThrow()
-    expect(() => invite.openJoinRecord(v1.randomBytes(32), address, envelope)).toThrow()
+    // Controls: another member's address does not open it, another key does not, the tenant key alone opens no record,
+    // and a record moved to another member does not verify.
+    expect(() => openRecord(f.tenantKey, { ...address, userId: crypto.randomUUID() }, j)).toThrow()
+    expect(() => openRecord(v1.randomBytes(32), address, j)).toThrow()
+    expect(() => invite.openJoinRecord(f.tenantKey, address, envelope)).toThrow()
     expect(invite.joinRecordVerifies({ ...address, userId: crypto.randomUUID() }, record)).toBe(false)
+  })
+
+  it('a substituted wrap of the record\'s value key opens no record — unreadable, never another one', () => {
+    const j = join()
+    const address = { tenantId: f.tenantId, userId: NEW_ID }
+    const at = { epoch: j.epoch, key: f.tenantKey }
+    expect(() => openRecord(f.tenantKey, address, j)).not.toThrow() // control
+    const substituted = wrapValueKeyOf(at, invite.joinRecordContext(address), v1.generateValueKey())
+    expect(() => openRecord(f.tenantKey, address, { ...j, wrappedJoinRecordValueKey: substituted })).toThrow()
+    // Each join mints a fresh value key: two joins of the same record carry two different keys.
+    const kv1 = openValueKey(at, invite.joinRecordContext(address), j.wrappedJoinRecordValueKey)
+    const kv2 = openValueKey(at, invite.joinRecordContext(address), join().wrappedJoinRecordValueKey)
+    expect(b64std(kv1)).not.toBe(b64std(kv2))
   })
 
   it('the record names the owner key the checks walked to, and signerIdentityDigest is SHA-256 of exactly that bundle', async () => {
     const secured = ownerSecured(f)
     opened = await openWith(secured)
     const j = join()
-    const record = invite.openJoinRecord(f.tenantKey, { tenantId: f.tenantId, userId: NEW_ID }, fromB64std(j.sealedJoinRecord))
+    const record = openRecord(f.tenantKey, { tenantId: f.tenantId, userId: NEW_ID }, j)
     expect(b64std(record.signerIdentityPublicKey)).toBe(bundleOf(secured.owner))
     expect(j.signerIdentityDigest).toBe(b64std(v1.sha256Digest(v1.serializeIdentityPublic(secured.owner.pub))))
     expect(j.signerIdentityDigest).not.toBe(b64std(v1.sha256Digest(v1.serializeIdentityPublic(f.owner.pub))))

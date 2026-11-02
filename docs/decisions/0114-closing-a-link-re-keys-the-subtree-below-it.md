@@ -43,7 +43,10 @@ which every re-key commit bumps, so a new key under an unchanged scope key needs
    - the **switch-off of a removed member's links** by a group or tenant removal or an account's erasure;
    - a **delete** (the tombstone) of an open link, and a **re-issue** ("Link erneuern"): the old `K_share` is closed
      like any other, the new link follows the new key (point 5);
-   - its **end date passing** (point 6).
+   - its **end date passing** (point 6);
+   - its **key lost**: no member opens its recovery copy any more — a copy a rotator could not re-seal is staged as one
+     nobody opens ([ADR 0115](0115-a-scope-key-is-replaced-never-chained.md) decision 2) — so no re-key can wrap its
+     root's new key for it, and the root's node re-key that names it closes it, switched off, in its own commit.
 
    Nothing else closes a link. A **pause** — the root trashed, the role's capability or a link requirement switched
    off, a moderation block, a suspended or deleting scope — stops serving at layer 1 and ends by itself; the link's
@@ -84,7 +87,8 @@ which every re-key commit bumps, so a new key under an unchanged scope key needs
 5. **A re-key seals nothing new under a closed link.** It re-wraps the root's new key, and re-seals the drop public
    key, under the **open** links rooted on the node only — after a rotation too. A close clears the link's `wrap` and
    drop public key (a tombstone clears them already); a rename re-seals the root's name under open links only
-   ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 14). What the curator
+   ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 14), and the server
+   refuses a re-seal of a closed one's (`422 link_closed`, decided under the link's row lock). What the curator
    writes into a closed link — its note, label or password — is their own words to that link's holders and stays
    allowed. The **guest identities** of every link rooted on the node are re-sealed whatever the link's state: a
    contributor's name is the node's field, not the link's.
@@ -173,6 +177,10 @@ rotation, without its scope-level re-seal and its re-grant. Writes into a node w
 - **A revoke is not free.** It costs the subtree's re-key on the revoking device, and writes into the subtree
   wait per node until it is done — for a guest of another link until a member's device has run it. A revoke followed by
   a re-activation pays a re-key for nothing it keeps.
+- **The links closed before this record are re-keyed after it, on the safe side.** The upgrade cleared the keys of the
+  links switched off before it and, in a migration of its own (`V202611021647__core_closed_links_mark_due.sql`), marks
+  due every node of every scope holding such a READ or READ_WRITE link, or a deleted one whose root still exists — more
+  than their subtrees, a one-time cost; a link whose end date had passed is closed and marked by the sweep's first run.
 - **A node's `epoch` is its own key's** on every reader and writer, the scope's at its mint is `scopeEpoch`; the wire
   names a writer states are the same.
 
@@ -208,6 +216,8 @@ are among them.
   sits in the one store body that marks the subtree (`SharingStore.close`); its bites are `validate_guard_gaps.py`
   cases 100 (a revoke written as its own assignment beside the body) and 101 (a removal's switch-off spelled as a bulk
   update).
+- `ShareSealedNameCoreSliceTest` refuses a rename's re-seal of a switched-off link and of one past its end date, each
+  beside an open control that takes it (point 5); `ClosedLinksMarkDueMigrationSliceTest` proves the upgrade's marks.
 - `validate_write_concurrency.py` keeps its node-epoch declarations, the epoch read as the node key's own.
 - `validate_node_rekey_arity.py` proves the assignments exist, not which rows they reach — point 5's selection is the
   slice tests'.

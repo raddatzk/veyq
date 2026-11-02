@@ -105,7 +105,7 @@ beforeEach(() => {
     birth: { grant: 'AQ==', grantSignature: 'AQ==', recipientIdentityDigest: 'AQ==' },
     scopeRootKey: new Uint8Array(32),
   })
-  vi.mocked(sealName).mockReturnValue('AQ==')
+  vi.mocked(sealName).mockReturnValue({ sealedName: 'AQ==', wrappedNameValueKey: 'AQ==' })
   vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
   stubApi(setupApi, {
     getSetupStatus: setupStatus(),

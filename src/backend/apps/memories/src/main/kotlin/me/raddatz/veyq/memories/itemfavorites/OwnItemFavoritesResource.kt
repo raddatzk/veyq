@@ -35,7 +35,8 @@ class OwnItemFavoritesResource(
                 OwnItemFavoritesEntry(
                     scopeId = UUID.fromString(it.scopeId),
                     nodeId = UUID.fromString(it.nodeId),
-                    ciphertext = it.ciphertext,
+                    ciphertext = it.marks.value,
+                    wrappedValueKey = it.marks.wrappedValueKey,
                 )
             },
         ).build()

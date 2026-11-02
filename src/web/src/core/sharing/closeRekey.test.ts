@@ -101,7 +101,7 @@ describe('a close starts its subtree re-key (ADR 0114 decision 9)', () => {
     fakeApi(sharesApi, { reissueShare: reissue })
     const old = (role: ShareRole): ReissuableShare => ({
       ...at('old'), role, expiresAt: null, sealedNote: null, sealedShareName: null, passwordRequired: false, sealedPassword: null,
-      sealedShareKey: null, sealedShareKeyEpoch: null,
+      sealedShareKey: null, wrappedRecoveryValueKey: null, sealedShareKeyEpoch: null,
     })
     const settings = { note: NO_NOTE, name: '', password: '', expiresAt: null }
 
@@ -137,7 +137,10 @@ async function minted() {
   return {
     kShare: m.kShare,
     share: at(m.shareId),
-    copy: { role: ShareRole.Read, sealedShareKey: req.sealedShareKey ?? null, sealedShareKeyEpoch: req.sealedShareKeyEpoch ?? null },
+    copy: {
+      role: ShareRole.Read, sealedShareKey: req.sealedShareKey ?? null, wrappedRecoveryValueKey: req.wrappedRecoveryValueKey ?? null,
+      sealedShareKeyEpoch: req.sealedShareKeyEpoch ?? null,
+    },
   }
 }
 
@@ -218,7 +221,8 @@ describe('an edit that moves a passed end date forward reopens the link (ADR 011
       // the re-read lists the link again, its recovery copy as it is now
       listShares: vi.fn<SharingApi['listShares']>(async () => [{
         shareId: share.shareId, scopeId: SCOPE_ID, nodeId: NODE_ID, role: ShareRole.Read, sealedName: 'c2VhbGVk', enabled: true, mine: true,
-        createdAt: new Date(), sealedShareKey: copy.sealedShareKey, sealedShareKeyEpoch: copy.sealedShareKeyEpoch,
+        createdAt: new Date(), sealedShareKey: copy.sealedShareKey, wrappedRecoveryValueKey: copy.wrappedRecoveryValueKey,
+        sealedShareKeyEpoch: copy.sealedShareKeyEpoch,
         reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
       }]),
     })

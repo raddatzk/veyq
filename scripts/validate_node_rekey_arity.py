@@ -52,28 +52,41 @@ EXCLUSIONS = {
     "ShareEntity.sealed_note": "under K_share",
     "ShareEntity.sealed_share_name": "under K_share",
     "ShareEntity.sealed_password": "under K_share",
-    "ShareEntity.sealed_share_key": "the link's recovery copy under the scope key, not a node's: a rotation's scope "
-                                    "commit re-seals it (ADR 0115 decision 2, validate_scope_rekey_arity.py)",
+    "ShareEntity.sealed_share_key": "the link's recovery copy under a value key of its own, not a node's: a rotation's "
+                                    "scope commit re-wraps that key (ADR 0115, validate_scope_rekey_arity.py)",
+    "ShareEntity.wrapped_recovery_value_key": "the recovery copy's value key under the scope key — the rotation's scope "
+                                              "commit re-wraps it (validate_scope_rekey_arity.py)",
     "ShareEntity.sealed_share_key_epoch": "the epoch of that recovery copy, a number",
-    "ScopeEntity.encrypted_name": "the group's name under K_name, derived from the scope key — the rotation's scope "
-                                  "commit re-seals it (validate_scope_rekey_arity.py)",
-    "ScopeEntity.sealed_icon": "the space icon under K_icon, derived from the scope key — the rotation's scope commit",
+    "ScopeEntity.encrypted_name": "the group's name under a value key of its own — the rotation's scope commit re-wraps "
+                                  "that key (validate_scope_rekey_arity.py)",
+    "ScopeEntity.wrapped_name_value_key": "the group name's value key under the scope key — the rotation's scope commit",
+    "ScopeEntity.sealed_icon": "the space icon under a value key of its own — the rotation's scope commit re-wraps that key",
+    "ScopeEntity.wrapped_icon_value_key": "the space icon's value key under the scope key — the rotation's scope commit",
     "MembershipEntity.wrapped_grant": "the scope key sealed to a member's identity, written by the rotation",
-    "MembershipEntity.sealed_name_key": "the group-name key sealed to a member's identity — the rotation's scope commit",
+    "MembershipEntity.sealed_name_key": "the group name's value key sealed to a pending invitee's identity — a rename "
+                                        "replaces it, a rotation leaves it (ADR 0115)",
     "MasterKeyWrapEntity.wrapped_key": "an account's Master Key under an unlock KEK",
     "VeyqUser.wrapped_identity_private_key": "the identity under the Master Key",
     "DeviceRegisterEntity.sealed_blob": "the device register under the Master Key",
     "IdentityPinsEntity.sealed_blob": "the identity-pin head under the Master Key",
     "IdentityPinEntryEntity.sealed_entry": "an identity pin under the Master Key",
-    "TenantProfileEntity.sealed_name": "a member's real name under K_tenant, the tenant's scope key — the rotation's "
-                                       "scope commit",
-    "TenantProfileEntity.sealed_join_record": "a member's join record under K_tenant (ADR 0111) — the rotation's scope commit",
-    "VerificationEntity.sealed_statement": "a member's verification under K_tenant (ADR 0111 decision 12) — the rotation's "
-                                           "scope commit",
+    "TenantProfileEntity.sealed_name": "a member's real name under a value key of its own, which K_tenant, the tenant's "
+                                       "scope key, wraps — the rotation's scope commit re-wraps that key",
+    "TenantProfileEntity.wrapped_name_value_key": "that name's value key under K_tenant — the rotation's scope commit",
+    "TenantProfileEntity.sealed_join_record": "a member's join record under a value key of its own (ADR 0111, ADR 0115) — "
+                                              "the rotation's scope commit re-wraps that key",
+    "TenantProfileEntity.wrapped_join_record_value_key": "that record's value key under K_tenant — the rotation's scope commit",
+    "VerificationEntity.sealed_statement": "a member's verification under a value key of its own (ADR 0111 decision 12) — "
+                                           "the rotation's scope commit re-wraps that key",
+    "VerificationEntity.wrapped_value_key": "that verification's value key under K_tenant — the rotation's scope commit",
+    "ItemFavoritesEntity.wrapped_value_key": "a member's item marks' value key under the scope key, no node's (ADR 0068) — "
+                                             "Memories' scope re-key participant re-wraps it (validate_scope_rekey_arity.py)",
     "TenantInviteEntity.wrapped_grant": "a tenant epoch key sealed to an open invite's key, written by the rotation (ADR 0111)",
     "RotationStageGrantEntity.wrapped_grant": "a scope's epoch key sealed to the identity a securing of the account will "
                                               "publish, staged until its publish applies it (cr-secure-the-account)",
-    "TenantProfileEntity.sealed_avatar": "a member's picture under K_tenant — the rotation's scope commit",
+    "TenantProfileEntity.sealed_avatar": "a member's picture under a value key of its own — the rotation's scope commit "
+                                         "re-wraps that key",
+    "TenantProfileEntity.wrapped_avatar_value_key": "that picture's value key under K_tenant — the rotation's scope commit",
     "JobEntity.sealed_body": "a task's body sealed to its worker",
     "JobEntity.sealed_result": "a task's result sealed to its originator",
     "ModerationReportEntity.sealed_report": "a report under its K_report (moderation key); a hold copy is a snapshot the "

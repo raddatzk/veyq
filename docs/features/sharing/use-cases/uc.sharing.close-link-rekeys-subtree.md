@@ -60,6 +60,13 @@
   everything added while it was closed.
 - **E7 — a rotation after the close.** It re-wraps no closed link either; a closed link comes back only by E6 or a
   re-issue.
+- **E8 — a link whose key is lost.** A link whose recovery copy opens for no member — one a rotator could not open is
+  re-sealed as one nobody opens ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md)
+  decision 2) — cannot get its root's new key. The root's re-key names it by the digest of that copy, and its commit
+  closes it through step 1's body (switched off, its subtree marked) before it checks the wraps; a refused commit
+  closes nothing, and an open link the re-key neither wraps nor names stays `rekey_parts_missing`.
+- **E9 — a rename under a closed link.** The root's new name is re-sealed under open links only; a re-seal of a closed
+  link's is `422 link_closed`, and its reopen (E6) carries the current name.
 
 ## Quality notes
 

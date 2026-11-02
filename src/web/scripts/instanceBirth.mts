@@ -109,16 +109,16 @@ export async function birthTenant(token: string, built: BuiltAccount, t: {
   const birth = sealGrant(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
   const firstName = t.firstName ?? ''
   const lastName = t.lastName ?? ''
-  const sealedName = firstName || lastName ? sealName(tenantScopeKey, { scopeId: tenantId, userId: ownerId }, { firstName, lastName }) : undefined
+  const name = firstName || lastName ? sealName({ epoch: 0, key: tenantScopeKey }, { scopeId: tenantId, userId: ownerId }, { firstName, lastName }) : undefined
   await orThrow('accept', new TenantsApi(new TenantsConfiguration(onTenant)).acceptTenantInvite({
     acceptInviteRequest: {
       bootstrapSecret, username: t.username, grant: birth.wrappedGrant, grantSignature: birth.grantSignature,
       recipientIdentityDigest: recipientIdentityDigest(ownerPub),
-      // the birth's name is sealed under the tenant key at epoch 0, which the accept states (ADR 0115 decision 3)
-      ...(sealedName ? { sealedName, epoch: 0 } : {}),
+      // the birth's name's value key is wrapped under the tenant key at epoch 0, which the accept states (ADR 0115 decision 3)
+      ...(name ? { ...name, epoch: 0 } : {}),
     },
   }))
-  return { tenantId, ownerId, tenantScopeKey, sealedName: sealedName !== undefined }
+  return { tenantId, ownerId, tenantScopeKey, sealedName: name !== undefined }
 }
 
 /** The owner's PERSONAL scope — its id client-minted, because the grant is bound to it (ADR 0072). */

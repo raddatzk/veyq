@@ -14,6 +14,9 @@ import { recipientIdentityDigest, sealGrant } from '../spaces/grant'
 import { anchorChainKey, anchorServedChain, getPin, linkOf } from '../account/identityPins'
 import { holdEpochKey } from '../account/trustMarks'
 import { HttpStatus, isCodedError } from '../../shared/httpError'
+import { sealValue } from '../spaces/valueKey'
+import type { SealedMemberName } from '../account/profile/memberName'
+import type { SealedMemberAvatar } from '../account/profile/memberAvatar'
 
 export type { InvitePreview } from '../../api/generated/tenants'
 export { tenantError } from './tenantError'
@@ -30,17 +33,17 @@ export function acceptInvite(
   bootstrapSecret: string,
   username: string,
   birth?: TenantBirth,
-  sealedName?: string,
-  sealedAvatar?: string,
+  name?: SealedMemberName,
+  avatar?: SealedMemberAvatar,
   join?: MemberJoin,
 ): Promise<TenantActivated> {
   return tenantsApi().acceptTenantInvite({
-    acceptInviteRequest: { bootstrapSecret, username, ...birth, ...join, sealedName, sealedAvatar, epoch: profileEpoch(birth, join) },
+    acceptInviteRequest: { bootstrapSecret, username, ...birth, ...join, ...name, ...avatar, epoch: profileEpoch(birth, join) },
   })
 }
 
-/** The tenant epoch an accept's sealed profile fields (the join record, the name, the picture) are sealed under — the
- *  one the server checks against the current one (ADR 0115 decision 3): a MEMBER join's key's, an OWNER birth's 0. */
+/** The tenant epoch whose key wraps the value keys of an accept's sealed profile fields (the join record, the name, the
+ *  picture, ADR 0115) — the one the server checks against the current one (ADR 0115 decision 3): a MEMBER join's key's, an OWNER birth's 0. */
 function profileEpoch(birth?: TenantBirth, join?: MemberJoin): number | undefined {
   return join ? join.epoch : birth ? 0 : undefined
 }
@@ -53,9 +56,9 @@ export function acceptOwnership(bootstrapSecret: string): Promise<void> {
 }
 
 /** Register a new account cold and accept in one step (public — the email comes from the invite). `username` is
- *  the caller's per-tenant handle; `sealedName` is the OPTIONAL real name sealed under `K_tenant` at join (ADR 0023)
- *  and `sealedAvatar` the OPTIONAL profile picture sealed alongside it (ADR 0084 decision 7) — every joiner holds
- *  `K_tenant` here, from the cold birth or its invite's grant. `birth` is set for an OWNER invite (cold-births the
+ *  the caller's per-tenant handle; `name` is the OPTIONAL real name sealed at join (ADR 0023) and `avatar` the OPTIONAL
+ *  profile picture sealed alongside it (ADR 0084 decision 7), each under a fresh value key `K_tenant` wraps
+ *  (`memberName.ts` `sealName`, `memberAvatar.ts` `sealAvatar`, ADR 0115) — every joiner holds `K_tenant` here, from the cold birth or its invite's grant. `birth` is set for an OWNER invite (cold-births the
  *  TENANT scope), `join` for a MEMBER invite (ADR 0111 decision 3). */
 export function registerAndAccept(
   bootstrapSecret: string,
@@ -63,8 +66,8 @@ export function registerAndAccept(
   username: string,
   material: AccountMaterial,
   birth?: TenantBirth,
-  sealedName?: string,
-  sealedAvatar?: string,
+  name?: SealedMemberName,
+  avatar?: SealedMemberAvatar,
   join?: MemberJoin,
 ): Promise<TenantActivatedWithUser> {
   return tenantsApi().registerAndAcceptTenantInvite({
@@ -82,8 +85,8 @@ export function registerAndAccept(
       },
       ...birth,
       ...join,
-      sealedName,
-      sealedAvatar,
+      ...name,
+      ...avatar,
       epoch: profileEpoch(birth, join),
     },
   })
@@ -130,10 +133,17 @@ export function scopeGrant(owner: TenantOwner, tenantId: string): TenantBirth {
 
 /** A MEMBER accept's join, as the wire carries it: the self-grant, the invite key's proof, the sealed join record, the
  *  digest of the inviting owner's key the record names — the key this client checked, which the server compares with
- *  the invite's stored signer key (`409 invite_changed`, ADR 0111 decision 20) — and the tenant epoch the record (and
- *  the name and picture beside it) is sealed under (`409 stale_epoch` when a rotation moved past it, ADR 0115
- *  decision 3). */
-export type MemberJoin = { selfGrant: InviteSelfGrant; inviteProof: string; sealedJoinRecord: string; signerIdentityDigest: string; epoch: number }
+ *  the invite's stored signer key (`409 invite_changed`, ADR 0111 decision 20) — and the tenant epoch whose key wraps the
+ *  record's value key (and those of the name and picture beside it; `409 stale_epoch` when a rotation moved past it, ADR
+ *  0115 decision 3). */
+export type MemberJoin = {
+  selfGrant: InviteSelfGrant
+  inviteProof: string
+  sealedJoinRecord: string
+  wrappedJoinRecordValueKey: string
+  signerIdentityDigest: string
+  epoch: number
+}
 
 /** The code (or password) does not open the link's sealed part — mistyped, or another invite's link. */
 export class InviteCodeWrong extends Error {
@@ -314,7 +324,7 @@ export async function acceptCheckedInvite<T>(
     return await sendAndHold(opened)
   } catch (e) {
     // the owner secured their account since the check (`invite_changed`), or a rotation carried the invite to a new epoch
-    // and re-sealed the tenant under its new key (`stale_epoch`, ADR 0115 decision 8): re-read, check again, seal again
+    // and the tenant's value keys under its new key (`stale_epoch`, ADR 0115 decision 8): re-read, check again, seal again
     if (!(await isCodedError(e, HttpStatus.conflict, 'invite_changed')) && !(await isCodedError(e, HttpStatus.conflict, 'stale_epoch'))) throw e
   }
   const served = await reread()
@@ -347,7 +357,8 @@ export type Newcomer = {
  * The newcomer grants itself and writes its join record (ADR 0111 decision 3): the invite grant's epoch key sealed to
  * its own identity and signed by it; the invite key's proof over (invite, account, identity) that the server checks;
  * and the join record — identity and Secret-Key proof key, the owner-signed invite it came through — signed by the
- * invite key and by the new identity, sealed under the tenant key as the field `member-join-record`; and the digest of the
+ * invite key and by the new identity, sealed as the field `member-join-record` under a fresh value key the tenant key
+ * wraps (ADR 0115, so no rotation ever rewrites it); and the digest of the
  * owner key the record names — the one the checks walked to (ADR 0111 decision 20).
  */
 export function buildMemberJoin(opened: OpenedMemberInvite, newcomer: Newcomer): MemberJoin {
@@ -370,10 +381,13 @@ export function buildMemberJoin(opened: OpenedMemberInvite, newcomer: Newcomer):
     signerUserId: served.signerUserId,
     signerIdentityPublicKey: signer.identityPublicKey,
   }, inviteKey.priv.sign, newcomer.identity.priv.sign)
+  const sealedRecord = sealValue({ epoch: grantedEpoch, key: epochKey }, invite.joinRecordContext(address), (valueKey) =>
+    invite.sealJoinRecord(valueKey, address, record))
   return {
     selfGrant: { ...signed, epoch: grantedEpoch, recipientIdentityDigest: recipientIdentityDigest(identityB64) },
     inviteProof: b64std(inviteProof),
-    sealedJoinRecord: b64std(invite.sealJoinRecord(epochKey, address, record)),
+    sealedJoinRecord: sealedRecord.sealed,
+    wrappedJoinRecordValueKey: sealedRecord.wrapped,
     signerIdentityDigest: b64std(v1.sha256Digest(signer.identityPublicKey)),
     epoch: grantedEpoch,
   }

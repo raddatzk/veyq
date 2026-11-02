@@ -51,7 +51,7 @@ import { me } from '../../spaces/grantTrust'
 import { grantSignatureVerifies, recipientIdentityDigest, sealGrant, signGrant } from '../../spaces/grant'
 import { zeroScopeKey, type ScopeKey } from '../../spaces/epochs'
 import { isUnreadableGrant, openPlanGrantKey, planOpener } from '../../spaces/scopes'
-import { collectMyVerifications, resignVerifications, type CarriedVerification } from '../tenantTrust'
+import { collectMyVerifications, openJoinRecord, resignVerifications, type CarriedVerification } from '../tenantTrust'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { registerDocument } from '../deviceRegister'
 import { fetchKeyChain, linkOf, pinStoreDocument, type PinStoreWrite } from '../identityPins'
@@ -511,7 +511,7 @@ type RootedPlan = { invites: RotationPlanInvite[]; records: RotationPlanJoinReco
  *    names this account as its signer, and either names the outgoing key or carries an endorsement that verifies under
  *    it; any other — one this device cannot open, one a retired key signed without endorsement — is declared
  *    (`endorsement: null`). The endorsement signs the digest of the OPENED record, which the stage sends beside it
- *    (`recordDigest`, ADR 0115 decision 8): every rotation re-seals the envelope, never the record.
+ *    (`recordDigest`, ADR 0115 decision 8): bound to the record, never to its envelope or the wrap of its value key.
  * Each list mirrors what the server's stage holds (by a mark of the plan entry it was judged from), so a re-read after
  * `409 rotation_plan_changed` puts up only what moved; a stage the self-grants re-opened starts both over.
  */
@@ -611,12 +611,9 @@ class RootedStage {
   /** The NEW identity's endorsement of [r] with the digest of the opened record it signs, or null to declare it. */
   private endorsement(r: RotationPlanJoinRecord, epochs: ScopeKey): { endorsement: string; recordDigest: string } | null {
     const address = { tenantId: r.tenantId, userId: r.userId }
-    let record: invite.JoinRecord
-    try {
-      record = invite.openJoinRecord(epochs.key, address, fromB64std(r.sealedJoinRecord))
-    } catch {
-      return null
-    }
+    // Through its value key, whose wrap is under the tenant's one key (ADR 0115); one that does not open is declared.
+    const record = openJoinRecord(r.tenantId, r.userId, r.sealedJoinRecord, r.wrappedJoinRecordValueKey, epochs)
+    if (!record) return null
     if (!invite.joinRecordVerifies(address, record) || record.signerUserId !== this.self.userId) return null
     const joinRecord = invite.encodeJoinRecord(record)
     const statement = { ...address, signerUserId: this.self.userId, joinRecord }
@@ -633,7 +630,7 @@ class RootedStage {
 const inviteMark = (i: RotationPlanInvite) =>
   [i.tenantId, i.invitePublicKey, i.expiresAt.getTime(), i.inviteKeySignature, i.anchorEpoch, i.anchorWrappedGrant, i.anchorGrantSignature].join('|')
 const recordKey = (r: RotationPlanJoinRecord) => `${r.tenantId}:${r.userId}`
-const recordMark = (r: RotationPlanJoinRecord) => `${r.sealedJoinRecord}|${r.joinEndorsement ?? ''}`
+const recordMark = (r: RotationPlanJoinRecord) => `${r.sealedJoinRecord}|${r.wrappedJoinRecordValueKey}|${r.joinEndorsement ?? ''}`
 
 /** Whether [endorsement] (base64, the server's) verifies under [signPublicKey] over [statement]. Never a throw. */
 function endorsedUnder(signPublicKey: Uint8Array, statement: invite.JoinEndorsementInput, endorsement: string | null | undefined): boolean {

@@ -140,7 +140,7 @@ class SharePasswordSliceTest {
 
     private fun createWithPassword(userId: String, nodeId: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"$pwVerifier","sealedPassword":"$sealedPassword","sealedShareKey":"$shareKey","nodeEpoch":0,"sealedShareKeyEpoch":0}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"$pwVerifier","sealedPassword":"$sealedPassword","sealedShareKey":"$shareKey","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","nodeEpoch":0,"sealedShareKeyEpoch":0}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 

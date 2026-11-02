@@ -150,17 +150,17 @@ class RemovalRaceSliceTest {
 
     private fun postShare(userId: String, nodeId: String, id: String, epoch: Int = 0, nodeEpoch: Int = 0): Int =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"READ","wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","nodeEpoch":$nodeEpoch,"sealedShareKeyEpoch":$epoch}""")
+            .body("""{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"READ","wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","nodeEpoch":$nodeEpoch,"sealedShareKeyEpoch":$epoch}""")
             .`when`().post("/api/shares").statusCode()
 
     private fun reissue(userId: String, shareId: String, newId: String, epoch: Int = 0, nodeEpoch: Int = 0): Int =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$newId",${ShareWriteProof.field(newId)},"wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","nodeEpoch":$nodeEpoch,"sealedShareKeyEpoch":$epoch}""")
+            .body("""{"shareId":"$newId",${ShareWriteProof.field(newId)},"wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","nodeEpoch":$nodeEpoch,"sealedShareKeyEpoch":$epoch}""")
             .`when`().post("/api/shares/$shareId/reissue").statusCode()
 
     private fun putItemFavorite(userId: String, scopeId: String, nodeId: String): Int =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"ciphertext":"$NAME","epoch":${TestGrants.epochOf(scopeId)}}""")
+            .body("""{"ciphertext":"$NAME","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":${TestGrants.epochOf(scopeId)}}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/item-favorites").statusCode()
 
     private fun <T> tx(body: () -> T): T = QuarkusTransaction.requiringNew().call(body)

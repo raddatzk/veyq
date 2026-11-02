@@ -1,8 +1,8 @@
 // The members' profile pictures as the interface draws them (ADR 0084 decision 5, uc.spaces.set-profile-picture): one
 // per-user entry `{ revision, objectUrl }`. The directory carries only the small `avatarRevision` integer; the picture is
 // fetched (`getMemberAvatar`) ONLY when that revision is non-zero and differs from the revision this cache already holds,
-// revalidated with `If-None-Match`, opened on the device under the tenant's one key (every rotation re-seals it, ADR 0115
-// decision 2; `memberAvatar.ts` § `openMemberAvatar`) and held as ONE object URL per user.
+// revalidated with `If-None-Match`, opened on the device through its value key under the tenant's one key (a rotation re-wraps it, ADR 0115
+// - and moves `avatarRevision`, so the pair is fetched again; `memberAvatar.ts` § `openMemberAvatar`) and held as ONE object URL per user.
 //
 // The rules this module keeps, each pinned by `avatarCache.test.ts`:
 // - revision 0 = no picture: no request, and a held entry is dropped (revoked);
@@ -101,7 +101,7 @@ async function fetchOne(source: AvatarSource, epochs: ScopeKey, userId: string, 
       freeSlot()
     }
     if (!alive()) return
-    const bytes = openMemberAvatar(epochs, { scopeId: source.scopeId, userId }, sealed.sealedAvatar) ?? null
+    const bytes = openMemberAvatar(epochs, { scopeId: source.scopeId, userId }, sealed.sealedAvatar, sealed.wrappedAvatarValueKey) ?? null
     const type = bytes ? sniffImage(bytes.subarray(0, 32)) : undefined
     if (bytes && type) urls.set(userId, new Blob([bytes as BlobPart], { type }))
     else urls.drop(userId)

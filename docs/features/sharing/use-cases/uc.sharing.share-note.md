@@ -22,8 +22,8 @@ that link's holders read it (mirrors the Memory-name seal `sealedName`). Because
 never stored in the clear, the share also carries a **recoverable copy** — **`sealed_share_key`**, `K_share`
 sealed under the scope key **`K_SC` at the scope's current epoch** (AAD `share-key-recovery` bound to scope,
 Memory, share and epoch — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), with the epoch stored
-beside it; every rotation re-seals it under the new key, keeping the epoch the link was minted at beside it for the
-re-issue rule ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2) — so every scope member can recover `K_share` **anytime** to re-seal (edit) the note without minting a
+beside it, under a value key of its own that the scope key wraps; every rotation re-wraps that key under the new one
+and leaves the copy, with the epoch the link was minted at beside it for the re-issue rule ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2) — so every scope member can recover `K_share` **anytime** to re-seal (edit) the note without minting a
 new link ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 **The recovery copy is for the Memory's members only.** It is deliberately *not* under `K_node`: every READ or
 READ_WRITE link carries `K_node`, so such a copy would let one link plus a database dump open every other share of

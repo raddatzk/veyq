@@ -192,7 +192,7 @@ class RotationRootedSliceTest {
             val answer = whileUncommitted(
                 change = {
                     tenantsLock(w.tenantId)
-                    profiles.create(newcomer, w.tenantId, "n${UUID.randomUUID().toString().take(8)}", sealedJoinRecord = TestGrants.JOIN_RECORD, joinSignerUserId = w.rotation.userId)
+                    profiles.create(newcomer, w.tenantId, "n${UUID.randomUUID().toString().take(8)}", joinRecord = TestGrants.SEALED_JOIN_RECORD, joinSignerUserId = w.rotation.userId)
                 },
                 overlapping = { w.rotation.send(publish).then().extract().let { it.statusCode() to it.path<String?>("code") } },
             )
@@ -375,7 +375,7 @@ class RotationRootedSliceTest {
     private fun profileRow(userId: String, tenantId: String, rootedBy: String) {
         TenantProfileEntity().apply {
             id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId; username = "m${UUID.randomUUID().toString().take(8)}"
-            sealedJoinRecord = TestGrants.JOIN_RECORD; joinSignerUserId = rootedBy
+            sealedJoinRecord = TestGrants.JOIN_RECORD; wrappedJoinRecordValueKey = TestGrants.VALUE_KEY_WRAP; joinSignerUserId = rootedBy
         }.persist()
     }
 

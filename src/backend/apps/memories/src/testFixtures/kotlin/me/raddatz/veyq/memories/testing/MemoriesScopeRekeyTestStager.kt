@@ -10,8 +10,9 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.inject.Singleton
 
 /**
- * Memories' part of `TestScopeRekey.stageAll`: every item-mark row of the scope staged as it stands, under the rotation's
- * re-key id — what the rotator's client sends through `stageScopeItemFavoritesRekey`, re-sealed (ADR 0115 decision 2).
+ * Memories' part of `TestScopeRekey.stageAll`: every item-mark row's value key wrap staged as it stands, under the
+ * rotation's re-key id — what the rotator's client sends through `stageScopeItemFavoritesRekey`, re-wrapped (ADR 0115
+ * decision 2). Wraps only: a row's ciphertext is never staged.
  */
 @Singleton
 @Unremovable
@@ -20,7 +21,7 @@ class MemoriesScopeRekeyTestStager : ScopeRekeyTestStager {
         QuarkusTransaction.requiringNew().run {
             val values = ItemFavoritesEntity.list("scopeId", scopeId).associate {
                 ScopeRekeyStage.Key(it.markId, ItemFavoritesScopeRekeyParticipant.FIELD) to
-                    ScopeRekeyStage.Value(it.ciphertext, ScopeRekeyStage.digest(it.ciphertext))
+                    ScopeRekeyStage.Value(it.wrappedValueKey, ScopeRekeyStage.digest(it.wrappedValueKey))
             }
             Arc.container().instance(ScopeRekeyStage::class.java).get()
                 .put(rekeyId, scopeId, ItemFavoritesScopeRekeyParticipant.PART, values)

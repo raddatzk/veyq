@@ -7,10 +7,11 @@ import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 
 /**
- * A rotation's scope-level re-seal before its commit (ADR 0115 decision 2): the rotator reads every row sealed under
- * the scope key page by page ([parts]), re-seals each under the key it minted and stages it ([stage]; an application its
- * own rows through [stagePart]); `rotateScope` then swaps every staged value in or nothing ([ScopeRekeyCommit.commit]).
- * Every operation asks [RekeyAccess.checkRotator] first. Nothing here writes a row a member reads.
+ * A rotation's scope-level move before its commit (ADR 0115 decision 2): the rotator reads every value key's wrap and
+ * scope-root entry under the scope key page by page ([parts]), re-wraps each key (re-seals each root entry) under the
+ * key it minted and stages it ([stage]; an application its own wraps through [stagePart]); `rotateScope` then swaps
+ * every staged wrap in or nothing ([ScopeRekeyCommit.commit]). A rotation re-wraps keys and never rewrites a value. Every
+ * operation asks [RekeyAccess.checkRotator] first. Nothing here writes a row a member reads.
  */
 @ApplicationScoped
 class ScopeRekeyHandler(private val rights: RekeyAccess, private val rows: ScopeRekeyCommit, private val stage: ScopeRekeyStage) {
@@ -28,7 +29,8 @@ class ScopeRekeyHandler(private val rights: RekeyAccess, private val rows: Scope
         return RekeyOutcome.ScopeParts(rows.parts(scope, cursor, limit))
     }
 
-    /** Core's own re-sealed rows, staged under [rekeyId] while the scope is still at [fromEpoch]. */
+    /** Core's own re-wrapped value keys and re-sealed root entries, staged under [rekeyId] while the scope is still at
+     *  [fromEpoch]. */
     fun stage(userId: String, scopeId: String, rekeyId: String, fromEpoch: Int, fields: List<ScopeRekeyField>): RekeyOutcome {
         refusal(userId, scopeId, WRITE)?.let { return it }
         val scope = ScopeEntity.findById(scopeId) ?: return RekeyRight.NoScope
@@ -39,7 +41,7 @@ class ScopeRekeyHandler(private val rights: RekeyAccess, private val rows: Scope
     }
 
     /**
-     * An application's re-sealed rows ([ScopeRekeyParticipant.part]), each beside the digest of what its row holds now
+     * An application's re-wrapped value keys ([ScopeRekeyParticipant.part]), each beside the digest of what its row holds now
      * (the application reads its own rows, [ScopeRekeyStage.digest], and refuses a value whose stated digest is not that
      * one before it calls this — ADR 0115 decision 2), staged under [rekeyId] while the scope is still at [fromEpoch]: a
      * rotation committed since is [RekeyOutcome.Stale] — the rotator rebuilds from a fresh key.

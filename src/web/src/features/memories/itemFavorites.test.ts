@@ -32,6 +32,8 @@ import { b64std } from '@veyq/crypto/base64'
 import { isStaleEpoch, openScopeById } from '../spaces/scopes'
 import { HttpStatus, isCodedError } from '../../shared/httpError'
 import { ScopeKind } from '../../api/generated/scopes'
+import { openValue, rewrapValueKey, sealValue } from '../spaces/valueKey'
+import type { ScopeKey } from '../spaces/epochs'
 
 const SCOPE = 'c0ffee00-0000-4000-8000-0000000000a1'
 const NODE = 'c0ffee00-0000-4000-8000-0000000000b1'
@@ -45,21 +47,28 @@ const MINE = [media(1)]
 const BOBS = [media(2), media(3)]
 const CLICKED = media(9)
 
+/** A blob as the server keeps it (ADR 0115): the set under a value key of its own, and that key's wrap under the scope
+ *  key — what a write sends and a read serves, beside the entry's other fields. */
+type Blob = { ciphertext: string; wrappedValueKey: string }
+/** The marks' own seal context on a node — and so the address their value key's wrap is bound to. */
+const marksAt = (nodeId = NODE) => ({ purpose: 'item-favorites', scopeId: SCOPE, nodeId }) as const
+
 /** Seal `ids` as the member whose Master Key is `mk`, through the module's own write, and return the PUT's blob. */
-async function blobAs(mk: Uint8Array, ids: string[], nodeId = NODE): Promise<string> {
+async function blobAs(mk: Uint8Array, ids: string[], nodeId = NODE): Promise<Blob> {
   vault.mk = mk
   api.put.mockClear()
   await saveItemFavorites(SCOPE, nodeId, SK, new Set(ids))
-  return api.put.mock.calls[0][0].putItemFavoritesRequest.ciphertext
+  const { ciphertext, wrappedValueKey } = api.put.mock.calls[0][0].putItemFavoritesRequest
+  return { ciphertext, wrappedValueKey }
 }
 
-/** The plaintext inside a written blob. */
-const plaintextOf = (ciphertext: string, nodeId = NODE) =>
-  v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId }, K_SC, fromB64std(ciphertext))
+/** The plaintext inside a written blob: its value key from the wrap under [scope]'s key, then the set under it. */
+const plaintextOf = (blob: Blob, nodeId = NODE, scope: ScopeKey = SK) =>
+  openValue(scope, marksAt(nodeId), blob.wrappedValueKey, (valueKey) => v1.open(marksAt(nodeId), valueKey, fromB64std(blob.ciphertext)))
 
 /** The ids a written blob holds. */
-function idsIn(ciphertext: string, nodeId = NODE): string[] {
-  return v1.decodeItemMarks(plaintextOf(ciphertext, nodeId)).ids
+function idsIn(blob: Blob, nodeId = NODE): string[] {
+  return v1.decodeItemMarks(plaintextOf(blob, nodeId)).ids
 }
 
 /** Serve `entries` as the node's read. Typed as the generated response, so a schema change reaches this file. */
@@ -102,11 +111,11 @@ describe('which item-mark entry is mine (ADR 0068 §9)', () => {
     const mine = await blobAs(MK_ME, MINE)
     vault.mk = MK_ME
 
-    serve([{ self: false, ciphertext: bobs }, { self: true, ciphertext: mine }])
-    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([MINE])
+    serve([{ self: false, ...bobs }, { self: true, ...mine }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, SK))).toEqual([MINE])
 
-    serve([{ self: true, ciphertext: bobs }, { self: false, ciphertext: mine }])
-    const marks = await loadItemFavorites(SCOPE, NODE, K_SC)
+    serve([{ self: true, ...bobs }, { self: false, ...mine }])
+    const marks = await loadItemFavorites(SCOPE, NODE, SK)
     expect(ownSets(marks)).toEqual([])
     expect(marks.map((m) => [...m.ids].sort())).toEqual([BOBS, MINE]) // still both members' sets — the count holds
   })
@@ -120,14 +129,14 @@ describe('which item-mark entry is mine (ADR 0068 §9)', () => {
     const bobs = await blobAs(MK_BOB, BOBS)
     const mine = await blobAs(MK_ME, MINE)
     vault.mk = MK_ME
-    serve([{ self: true, ciphertext: bobs }, { self: false, ciphertext: mine }])
+    serve([{ self: true, ...bobs }, { self: false, ...mine }])
     await loadItemFavoritesFor(SCOPE, NODE, SK)
     api.put.mockClear()
 
     await toggleItemFavorite(CLICKED, SCOPE, NODE, SK)
 
     expect(api.put).toHaveBeenCalledTimes(1)
-    expect(idsIn(api.put.mock.calls[0][0].putItemFavoritesRequest.ciphertext)).toEqual([CLICKED])
+    expect(idsIn(api.put.mock.calls[0][0].putItemFavoritesRequest)).toEqual([CLICKED])
     expect(markCount(BOBS[0])).toBe(1)
   })
 
@@ -142,11 +151,11 @@ describe('which item-mark entry is mine (ADR 0068 §9)', () => {
     const forged = sealAsCoMember(v1.encodeItemMarks(copiedTag, BOBS))
     vault.mk = MK_ME
 
-    serve([{ self: true, ciphertext: mine }])
-    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([MINE])
+    serve([{ self: true, ...mine }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, SK))).toEqual([MINE])
 
-    serve([{ self: true, ciphertext: forged }])
-    const marks = await loadItemFavorites(SCOPE, NODE, K_SC)
+    serve([{ self: true, ...forged }])
+    const marks = await loadItemFavorites(SCOPE, NODE, SK)
     expect(ownSets(marks)).toEqual([])
     expect(marks.map((m) => [...m.ids].sort())).toEqual([BOBS]) // it still counts — as someone else's
   })
@@ -182,29 +191,29 @@ describe('everything not provably mine counts as someone else’s (ADR 0068 §9)
     const tag = tagIn(mine)
     const oldForm = sealAsCoMember(new TextEncoder().encode(JSON.stringify({ tag: Buffer.from(tag).toString('base64'), ids: MINE })))
     const cut = sealAsCoMember(v1.encodeItemMarks(tag, MINE).slice(0, -1))
-    for (const ciphertext of [oldForm, cut]) {
-      serve([{ self: true, ciphertext }, { self: false, ciphertext: await blobAs(MK_BOB, BOBS) }])
+    for (const blob of [oldForm, cut]) {
+      serve([{ self: true, ...blob }, { self: false, ...(await blobAs(MK_BOB, BOBS)) }])
       vault.mk = MK_ME
-      const marks = await loadItemFavorites(SCOPE, NODE, K_SC)
+      const marks = await loadItemFavorites(SCOPE, NODE, SK)
       expect(marks.map((m) => [m.own, [...m.ids].sort()])).toEqual([[false, []], [false, BOBS]])
     }
-    serve([{ self: true, ciphertext: mine }]) // the control: the same tag and ids in the current form are mine
-    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([MINE])
+    serve([{ self: true, ...mine }]) // the control: the same tag and ids in the current form are mine
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, SK))).toEqual([MINE])
   })
 
   it('a verifying entry the server did NOT flag is not mine — the flag is the other half', async () => {
     const mine = await blobAs(MK_ME, MINE)
     vault.mk = MK_ME
-    serve([{ self: false, ciphertext: mine }])
-    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([])
+    serve([{ self: false, ...mine }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, SK))).toEqual([])
   })
 
   it('of several entries that are flagged and verify, only the first is mine; the rest count as others', async () => {
     const older = await blobAs(MK_ME, [media(5)])
     const mine = await blobAs(MK_ME, MINE)
     vault.mk = MK_ME
-    serve([{ self: true, ciphertext: mine }, { self: true, ciphertext: older }])
-    const marks = await loadItemFavorites(SCOPE, NODE, K_SC)
+    serve([{ self: true, ...mine }, { self: true, ...older }])
+    const marks = await loadItemFavorites(SCOPE, NODE, SK)
     expect(marks.map((m) => m.own)).toEqual([true, false])
     expect(ownSets(marks)).toEqual([MINE])
   })
@@ -212,15 +221,15 @@ describe('everything not provably mine counts as someone else’s (ADR 0068 §9)
   it('an entry that will not open is an empty set, and the rest still load', async () => {
     const mine = await blobAs(MK_ME, MINE)
     vault.mk = MK_ME
-    serve([{ self: false, ciphertext: 'AAAA' }, { self: true, ciphertext: mine }])
-    const marks = await loadItemFavorites(SCOPE, NODE, K_SC)
+    serve([{ self: false, ciphertext: 'AAAA', wrappedValueKey: 'AAAA' }, { self: true, ...mine }])
+    const marks = await loadItemFavorites(SCOPE, NODE, SK)
     expect(marks.map((m) => [m.own, m.ids.size])).toEqual([[false, 0], [true, 1]])
   })
 
   it('with the vault locked nothing is mine, and a toggle writes nothing', async () => {
     const mine = await blobAs(MK_ME, MINE)
     vault.mk = null
-    serve([{ self: true, ciphertext: mine }])
+    serve([{ self: true, ...mine }])
     await loadItemFavoritesFor(SCOPE, NODE, SK)
     expect(ownSets(itemFavoritesStore.marks)).toEqual([])
     api.put.mockClear()
@@ -249,22 +258,24 @@ describe('how many marks one Memory holds (inbox #500)', () => {
   it('the cap the client enforces is the contract\'s, on every item-mark ciphertext', () => {
     const spec = readFileSync(new URL('../../../../../contracts/api/memories/item-favorites.openapi.yaml', import.meta.url), 'utf8')
     const caps = [...spec.matchAll(/maxLength: (\d+)/g)].map((m) => Number(m[1]))
-    // the re-key listing's cursor (80) and a staged value's replaced digest (44, a SHA-256 in base64) are no ciphertext;
-    // every other cap is one — the stored, the written, and since ADR 0115 the re-key's listed and staged ones — and the
-    // client's
-    const ciphertextCaps = caps.filter((c) => c !== 80 && c !== 44)
-    expect(ciphertextCaps).toEqual(Array(5).fill(ITEM_MARKS_CIPHERTEXT_MAX))
+    // the re-key listing's cursor (80), a staged wrap's replaced digest (44, a SHA-256 in base64) and a value key's wrap
+    // (128) are no ciphertext; every other cap is one — the stored, the written and the own listing's (ADR 0115: a
+    // re-key lists and stages wraps only, never a set) — and the client's
+    const ciphertextCaps = caps.filter((c) => c !== 80 && c !== 44 && c !== 128)
+    expect(ciphertextCaps).toEqual(Array(3).fill(ITEM_MARKS_CIPHERTEXT_MAX))
     expect(caps.filter((c) => c === 44).length).toBe(1)
+    // a wrap beside each of them, and on each of the re-key's listed and staged rows
+    expect(caps.filter((c) => c === 128).length).toBe(5)
     expect(spec).toContain(`Size(max = ${ITEM_MARKS_CIPHERTEXT_MAX})`)
   })
 
   it.each([1_258, 12_000])('%i marks round-trip: written, served, and read back as mine', async (n) => {
     const ids = manyIds(n)
     const mine = await blobAs(MK_ME, ids)
-    expect(mine.length).toBeLessThanOrEqual(ITEM_MARKS_CIPHERTEXT_MAX)
+    expect(mine.ciphertext.length).toBeLessThanOrEqual(ITEM_MARKS_CIPHERTEXT_MAX)
     vault.mk = MK_ME
-    serve([{ self: true, ciphertext: mine }])
-    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([[...ids].sort()])
+    serve([{ self: true, ...mine }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, SK))).toEqual([[...ids].sort()])
   })
 
   // The last set that fits and the first that does not: the refusal is the client's, before any write, so the server
@@ -284,7 +295,7 @@ describe('how many marks one Memory holds (inbox #500)', () => {
   it('a toggle past the cap reverts the heart and hands the refusal to the gallery', async () => {
     const ids = manyIds(12_284)
     vault.mk = MK_ME
-    serve([{ self: true, ciphertext: await blobAs(MK_ME, ids) }])
+    serve([{ self: true, ...(await blobAs(MK_ME, ids)) }])
     await loadItemFavoritesFor(SCOPE, NODE, SK)
     api.put.mockClear()
     await expect(toggleItemFavorite(CLICKED, SCOPE, NODE, SK)).rejects.toBeInstanceOf(ItemMarksTooMany)
@@ -296,10 +307,11 @@ describe('how many marks one Memory holds (inbox #500)', () => {
   // 16 bytes nor its text appear anywhere in what the server stores.
   it('each mark is 16 bytes inside the seal, and no id appears in the blob in any form', async () => {
     const ids = manyIds(50)
-    const blob = fromB64std(await blobAs(MK_ME, ids))
+    const written = await blobAs(MK_ME, ids)
+    const blob = fromB64std(written.ciphertext)
     expect(blob.length).toBe(29 + 32 + 16 * ids.length)
-    expect(plaintextOf(Buffer.from(blob).toString('base64')).length).toBe(32 + 16 * ids.length)
-    const stored = Buffer.from(blob)
+    expect(plaintextOf(written).length).toBe(32 + 16 * ids.length)
+    const stored = Buffer.concat([Buffer.from(blob), Buffer.from(fromB64std(written.wrappedValueKey))])
     for (const id of ids) {
       expect(stored.indexOf(Buffer.from(id.replaceAll('-', ''), 'hex'))).toBe(-1)
       expect(stored.indexOf(Buffer.from(id, 'utf8'))).toBe(-1)
@@ -310,7 +322,7 @@ describe('how many marks one Memory holds (inbox #500)', () => {
 describe('a Master-Key rotation re-tags the caller’s own marks (ADR 0068 §9)', () => {
   const MK_NEW = v1.randomBytes(32)
   const NODE2 = 'c0ffee00-0000-4000-8000-0000000000b2'
-  const putsByNode = () => new Map(api.put.mock.calls.map((c) => [c[0].nodeId, c[0].putItemFavoritesRequest.ciphertext]))
+  const putsByNode = () => new Map(api.put.mock.calls.map((c) => [c[0].nodeId, c[0].putItemFavoritesRequest]))
 
   /**
    * **B6.** After the rider, a set tagged under the OLD Master Key reads as mine under the NEW one — and before it,
@@ -319,18 +331,18 @@ describe('a Master-Key rotation re-tags the caller’s own marks (ADR 0068 §9)'
   it('B6: an entry tagged under the old Master Key verifies as mine under the new one after the re-tag', async () => {
     const mine = await blobAs(MK_ME, MINE)
     vault.mk = MK_NEW
-    serve([{ self: true, ciphertext: mine }])
-    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([])
+    serve([{ self: true, ...mine }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, SK))).toEqual([])
 
-    api.listOwn.mockResolvedValue([{ scopeId: SCOPE, nodeId: NODE, ciphertext: mine }])
+    api.listOwn.mockResolvedValue([{ scopeId: SCOPE, nodeId: NODE, ...mine }])
     api.put.mockClear()
     await retagItemMarksUnderNewMasterKey(MK_ME, MK_NEW)
 
     expect(api.put).toHaveBeenCalledTimes(1)
     const retagged = putsByNode().get(NODE)!
     expect(idsIn(retagged)).toEqual(MINE)
-    serve([{ self: true, ciphertext: retagged }])
-    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([MINE])
+    serve([{ self: true, ...retagged }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, SK))).toEqual([MINE])
   })
 
   /**
@@ -342,8 +354,8 @@ describe('a Master-Key rotation re-tags the caller’s own marks (ADR 0068 §9)'
     const bobs = await blobAs(MK_BOB, BOBS)
     const mine = await blobAs(MK_ME, MINE, NODE2)
     api.listOwn.mockResolvedValue([
-      { scopeId: SCOPE, nodeId: NODE, ciphertext: bobs },
-      { scopeId: SCOPE, nodeId: NODE2, ciphertext: mine },
+      { scopeId: SCOPE, nodeId: NODE, ...bobs },
+      { scopeId: SCOPE, nodeId: NODE2, ...mine },
     ])
     api.put.mockClear()
 
@@ -357,9 +369,9 @@ describe('a Master-Key rotation re-tags the caller’s own marks (ADR 0068 §9)'
     const first = await blobAs(MK_ME, MINE)
     const second = await blobAs(MK_ME, BOBS, NODE2)
     api.listOwn.mockResolvedValue([
-      { scopeId: OTHER_SCOPE, nodeId: NODE, ciphertext: first },
-      { scopeId: SCOPE, nodeId: NODE, ciphertext: first },
-      { scopeId: SCOPE, nodeId: NODE2, ciphertext: second },
+      { scopeId: OTHER_SCOPE, nodeId: NODE, ...first },
+      { scopeId: SCOPE, nodeId: NODE, ...first },
+      { scopeId: SCOPE, nodeId: NODE2, ...second },
     ])
     scopes.unopenable.add(OTHER_SCOPE)
     api.put.mockClear()
@@ -376,20 +388,37 @@ describe('a Master-Key rotation re-tags the caller’s own marks (ADR 0068 §9)'
 const MEMBER_IDS = ['b0b00000-0000-4000-8000-000000000001', 'a11ce000-0000-4000-8000-000000000002']
 
 /** The self-tag inside a written blob. */
-function tagIn(ciphertext: string): Uint8Array {
-  return v1.decodeItemMarks(plaintextOf(ciphertext)).tag
+function tagIn(blob: Blob): Uint8Array {
+  return v1.decodeItemMarks(plaintextOf(blob)).tag
 }
 
-/** A plaintext of the co-member's choosing, sealed as any member can: under `K_SC`, bound to this node. */
-function sealAsCoMember(plaintext: Uint8Array): string {
-  return Buffer.from(v1.seal({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, K_SC, plaintext)).toString('base64')
+/** A plaintext of the co-member's choosing, sealed as any member can: under a value key of its own, wrapped under
+ *  `K_SC`, bound to this node. */
+function sealAsCoMember(plaintext: Uint8Array): Blob {
+  const sealed = sealValue(SK, marksAt(), (valueKey) => v1.seal(marksAt(), valueKey, plaintext))
+  return { ciphertext: sealed.sealed, wrappedValueKey: sealed.wrapped }
 }
 
-describe('a mark write states the scope epoch it is sealed under (ADR 0115 decision 3)', () => {
-  it('sends the epoch of the key it seals under', async () => {
+describe('a mark write states the scope epoch its value key is wrapped under (ADR 0115 decision 3)', () => {
+  it('sends the epoch of the key it wraps under', async () => {
     vault.mk = MK_ME
     await saveItemFavorites(SCOPE, NODE, { epoch: 4, key: K_SC }, new Set(MINE))
-    expect(api.put.mock.calls[0][0].putItemFavoritesRequest.epoch).toBe(4)
+    const sent = api.put.mock.calls[0][0].putItemFavoritesRequest
+    expect(sent.epoch).toBe(4)
+    // the wrap binds that epoch: it opens at epoch 4's slot, and at no other under the same key
+    expect(v1.decodeItemMarks(plaintextOf(sent, NODE, { epoch: 4, key: K_SC })).ids).toEqual(MINE)
+    expect(() => plaintextOf(sent, NODE, { epoch: 0, key: K_SC })).toThrow(v1.OpenRefused)
+  })
+
+  it('a write\'s set opens through its own wrap only — the scope key alone, and another write\'s key, open nothing', async () => {
+    const first = await blobAs(MK_ME, MINE)
+    const second = await blobAs(MK_ME, MINE)
+    expect(idsIn(first)).toEqual(MINE) // control
+    expect(first.wrappedValueKey).not.toBe(second.wrappedValueKey) // a fresh value key at every write
+    expect(() => v1.open(marksAt(), K_SC, fromB64std(first.ciphertext))).toThrow(v1.OpenRefused)
+    expect(() => plaintextOf({ ciphertext: first.ciphertext, wrappedValueKey: second.wrappedValueKey })).toThrow(v1.OpenRefused)
+    // the same wrap served on another Memory's row does not open there
+    expect(() => plaintextOf(first, 'c0ffee00-0000-4000-8000-0000000000b9')).toThrow(v1.OpenRefused)
   })
 
   it('on 409 stale_epoch re-opens the scope and seals once more under its key, stating its epoch', async () => {
@@ -402,9 +431,8 @@ describe('a mark write states the scope epoch it is sealed under (ADR 0115 decis
     expect(api.put).toHaveBeenCalledTimes(2)
     const second = api.put.mock.calls[1][0].putItemFavoritesRequest
     expect(second.epoch).toBe(5)
-    const plain = v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, next, fromB64std(second.ciphertext))
-    expect(v1.decodeItemMarks(plain).ids).toEqual(MINE)
-    expect(() => v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, K_SC, fromB64std(second.ciphertext))).toThrow()
+    expect(v1.decodeItemMarks(plaintextOf(second, NODE, { epoch: 5, key: next })).ids).toEqual(MINE)
+    expect(() => plaintextOf(second, NODE, { epoch: 5, key: K_SC })).toThrow(v1.OpenRefused)
   })
 
   it('retries once only, and never on another refusal', async () => {
@@ -419,17 +447,22 @@ describe('a mark write states the scope epoch it is sealed under (ADR 0115 decis
   })
 })
 
-describe('Memories\' part of a rotation: every member\'s marks re-sealed under the new scope key (ADR 0115 decision 2)', () => {
+describe('Memories\' part of a rotation: every member\'s value key re-wrapped under the new scope key, no set rewritten (ADR 0115 decision 2)', () => {
   const NEW = { epoch: 1, key: v1.randomBytes(32) }
+  // core's context as `scopeRekey.ts` hands it: no scope key, only the re-wrap from SK to NEW
   const ctx = () => ({
-    scopeId: SCOPE, rekeyId: 'r-1', oldKey: SK, newKey: NEW, digestOf: (c: string) => b64std(v1.sha256Digest(v1.utf8(c))),
+    scopeId: SCOPE, rekeyId: 'r-1', fromEpoch: SK.epoch,
+    rewrap: (value: v1.ValueContext, wrapped: string) => rewrapValueKey(SK, NEW, value, wrapped),
+    digestOf: (c: string) => b64std(v1.sha256Digest(v1.utf8(c))),
   })
-  function rekeyServer(rows: { markId: string; nodeId: string; ciphertext: string }[]) {
+  /** The listing as the server serves it: each row's value key's wrap, never its set. */
+  const listed = (markId: string, blob: Blob, nodeId = NODE) => ({ markId, nodeId, wrappedValueKey: blob.wrappedValueKey })
+  function rekeyServer(rows: { markId: string; nodeId: string; wrappedValueKey: string }[]) {
     const staged: ScopeItemFavoritesRekeyStage[] = []
     const mocks = fakeApi(itemFavoritesRekeyApi, {
       listScopeItemFavoritesRekey: vi.fn<ItemFavoritesRekeyApi['listScopeItemFavoritesRekey']>(async ({ since, limit }) => {
         const from = since ? Number(since) : 0
-        const page = rows.slice(from, from + (limit ?? 32))
+        const page = rows.slice(from, from + (limit ?? 256))
         const end = from + page.length
         return { currentEpoch: SK.epoch, marks: page, more: end < rows.length, cursor: page.length ? String(end) : null }
       }),
@@ -440,49 +473,66 @@ describe('Memories\' part of a rotation: every member\'s marks re-sealed under t
     return { staged, mocks }
   }
 
-  it('re-seals each set as it is — its self-tag unchanged — at the new key, naming the ciphertext it replaces', async () => {
+  it('re-wraps each set\'s key under the new key — the set itself never staged, byte-identical — naming the wrap it replaces', async () => {
     const mine = await blobAs(MK_ME, MINE)
     const bobs = await blobAs(MK_BOB, BOBS)
-    const { staged, mocks } = rekeyServer([{ markId: 'm1', nodeId: NODE, ciphertext: mine }, { markId: 'm2', nodeId: NODE, ciphertext: bobs }])
+    const { staged, mocks } = rekeyServer([listed('m1', mine), listed('m2', bobs)])
     await stageItemMarksRekey(ctx())
     expect(mocks.stageScopeItemFavoritesRekey).toHaveBeenCalledWith(expect.objectContaining({ scopeId: SCOPE, rekeyId: 'r-1' }))
     const marks = staged.flatMap((s) => s.marks ?? [])
     expect(staged.every((s) => s.fromEpoch === SK.epoch)).toBe(true)
     expect(marks.map((m) => m.markId)).toEqual(['m1', 'm2'])
     for (const [i, served] of [mine, bobs].entries()) {
-      const plain = v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, NEW.key, fromB64std(marks[i].ciphertext))
-      expect(plain).toEqual(plaintextOf(served)) // the self-tag and the ids, byte for byte
-      expect(() => v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, K_SC, fromB64std(marks[i].ciphertext))).toThrow()
-      expect(marks[i].replacedDigest).toBe(b64std(v1.sha256Digest(v1.utf8(served))))
+      expect(Object.keys(marks[i]).sort()).toEqual(['markId', 'replacedDigest', 'wrappedValueKey']) // a wrap, never a set
+      expect(JSON.stringify(staged).includes(served.ciphertext)).toBe(false)
+      // the set as stored opens through the new wrap under the new key: the self-tag and the ids, byte for byte
+      const moved = { ciphertext: served.ciphertext, wrappedValueKey: marks[i].wrappedValueKey }
+      expect(plaintextOf(moved, NODE, NEW)).toEqual(plaintextOf(served))
+      expect(() => plaintextOf(moved, NODE, SK)).toThrow(v1.OpenRefused) // the new wrap is shut to the old key
+      expect(() => plaintextOf(served, NODE, NEW)).toThrow(v1.OpenRefused) // and the old wrap to the new key
+      expect(marks[i].replacedDigest).toBe(b64std(v1.sha256Digest(v1.utf8(served.wrappedValueKey))))
     }
-    // the re-sealed set is still mine, read under the new key
+    // the set is still mine, read under the new key
     vault.mk = MK_ME
-    serve([{ self: true, ciphertext: marks[0].ciphertext }])
-    expect(ownSets(await loadItemFavorites(SCOPE, NODE, NEW.key))).toEqual([MINE])
+    serve([{ self: true, ciphertext: mine.ciphertext, wrappedValueKey: marks[0].wrappedValueKey }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, NEW))).toEqual([MINE])
   })
 
   it('pages through the listing at the contract\'s cap', async () => {
     const one = await blobAs(MK_ME, MINE)
-    const rows = Array.from({ length: ITEM_MARKS_REKEY_BATCH + 1 }, (_, i) => ({ markId: `m${i}`, nodeId: NODE, ciphertext: one }))
+    const rows = Array.from({ length: ITEM_MARKS_REKEY_BATCH + 1 }, (_, i) => listed(`m${i}`, one))
     const { staged, mocks } = rekeyServer(rows)
     await stageItemMarksRekey(ctx())
     expect(mocks.listScopeItemFavoritesRekey.mock.calls.map(([r]) => [r.since, r.limit])).toEqual([[undefined, ITEM_MARKS_REKEY_BATCH], [String(ITEM_MARKS_REKEY_BATCH), ITEM_MARKS_REKEY_BATCH]])
     expect(staged.map((s) => s.marks?.length)).toEqual([ITEM_MARKS_REKEY_BATCH, 1])
   })
 
-  it('stages a set that does not open as an empty one nobody owns — so one member\'s garbage stops no rotation', async () => {
-    const garbage = sealAsCoMember(v1.randomBytes(40))
-    const sealedElsewhere = Buffer.from(v1.seal({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, v1.randomBytes(32), v1.utf8('x'))).toString('base64')
-    const { staged } = rekeyServer([{ markId: 'g', nodeId: NODE, ciphertext: sealedElsewhere }, { markId: 'f', nodeId: NODE, ciphertext: garbage }])
+  it('stages a wrap that does not open as the stand-in — the set an empty one nobody owns — so one member\'s garbage stops no rotation', async () => {
+    const mine = await blobAs(MK_ME, MINE)
+    // a row whose wrap is under a key the rotator does not hold (or was never one of ours)
+    const elsewhere = sealValue({ epoch: SK.epoch, key: v1.randomBytes(32) }, marksAt(), (k) => v1.seal(marksAt(), k, v1.utf8('x')))
+    const { staged } = rekeyServer([{ markId: 'g', nodeId: NODE, wrappedValueKey: elsewhere.wrapped }, listed('f', mine)])
     await stageItemMarksRekey(ctx())
     const [g, f] = staged[0].marks!
+    expect(fromB64std(g.wrappedValueKey).length).toBe(fromB64std(elsewhere.wrapped).length) // the same length as any wrap
+    expect(() => plaintextOf({ ciphertext: elsewhere.sealed, wrappedValueKey: g.wrappedValueKey }, NODE, NEW)).toThrow(v1.OpenRefused)
     vault.mk = MK_ME
-    serve([{ self: true, ciphertext: g.ciphertext }])
-    const read = await loadItemFavorites(SCOPE, NODE, NEW.key)
-    expect(read).toEqual([{ own: false, ids: new Set() }])
-    // control: a set that opens is re-sealed as it was (here the forged plaintext, which reads as nobody's own too)
-    expect(v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, NEW.key, fromB64std(f.ciphertext))).toEqual(
-      v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, K_SC, fromB64std(garbage)),
-    )
+    serve([{ self: true, ciphertext: mine.ciphertext, wrappedValueKey: g.wrappedValueKey }])
+    expect(await loadItemFavorites(SCOPE, NODE, NEW)).toEqual([{ own: false, ids: new Set() }])
+    // control: a wrap that opens is re-wrapped, and the caller's set beside it is still the caller's
+    serve([{ self: true, ciphertext: mine.ciphertext, wrappedValueKey: f.wrappedValueKey }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, NEW))).toEqual([MINE])
+  })
+
+  it('a wrap moved onto another Memory\'s row is staged as the stand-in — that row reads as nobody\'s, never as the other set', async () => {
+    const OTHER_NODE = 'c0ffee00-0000-4000-8000-0000000000b7'
+    const mine = await blobAs(MK_ME, MINE)
+    const { staged } = rekeyServer([listed('moved', mine, OTHER_NODE), listed('own', mine)])
+    await stageItemMarksRekey(ctx())
+    const [moved, own] = staged[0].marks!
+    expect(() => plaintextOf({ ciphertext: mine.ciphertext, wrappedValueKey: moved.wrappedValueKey }, OTHER_NODE, NEW)).toThrow(v1.OpenRefused)
+    expect(() => plaintextOf({ ciphertext: mine.ciphertext, wrappedValueKey: moved.wrappedValueKey }, NODE, NEW)).toThrow(v1.OpenRefused)
+    // control: the same wrap on its own row is re-wrapped and opens the set there
+    expect(plaintextOf({ ciphertext: mine.ciphertext, wrappedValueKey: own.wrappedValueKey }, NODE, NEW)).toEqual(plaintextOf(mine))
   })
 })

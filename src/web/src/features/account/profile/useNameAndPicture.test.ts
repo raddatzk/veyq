@@ -21,13 +21,19 @@ vi.mock('../../../core/people/directory', () => ({
 }))
 
 import { useNameAndPicture } from './useNameAndPicture'
-import { getMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName, unsealName, type OwnNameKey } from './profile'
-import { openAvatar } from './memberAvatar'
+import {
+  getMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName, openMemberName, type OwnNameKey, type SealedMemberName,
+} from './profile'
+import { openMemberAvatar, type SealedMemberAvatar } from './memberAvatar'
 import { httpError } from '../../../test/httpError'
 import { avatarUrlOf, refreshPeopleDirectory } from '../../../core/people/directory'
 
 const K = v1.randomBytes(32)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000f1', userId: '5c09e000-0000-4000-8000-0000000000f2' }
+/** A name or a picture the editor sent, opened as every reader opens it: through its value key's wrap under [key] at [epoch]. */
+const nameUnder = (key: Uint8Array, n: SealedMemberName, epoch = 0) => openMemberName({ epoch, key }, ADDRESS, n.sealedName, n.wrappedNameValueKey)
+const pictureUnder = (key: Uint8Array, p: SealedMemberAvatar, epoch = 0) =>
+  openMemberAvatar({ epoch, key }, ADDRESS, p.sealedAvatar, p.wrappedAvatarValueKey)
 
 function model() {
   return effectScope().run(() => useNameAndPicture())!
@@ -43,11 +49,11 @@ beforeEach(() => {
 describe('useNameAndPicture', () => {
   it('loads the name from the sealed profile and knows whether the server holds a picture', async () => {
     const m = model()
-    await m.load(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'Anna', lastName: 'Meyer' }), avatarRevision: 4 }))
+    await m.load(memberProfile({ ...sealName({ epoch: 0, key: K }, ADDRESS, { firstName: 'Anna', lastName: 'Meyer' }), avatarRevision: 4 }))
     expect([m.firstName, m.lastName, m.hasKey, m.hasPicture, m.meId]).toEqual(['Anna', 'Meyer', true, true, ADDRESS.userId])
   })
 
-  it('a chosen picture is sealed under K_tenant at (tenant scope, own id) and PUT; the directory is re-read afterwards', async () => {
+  it('a chosen picture is sealed under a fresh K_v, wrapped under K_tenant, at (tenant scope, own id) and PUT; the directory is re-read afterwards', async () => {
     const m = model()
     await m.load(memberProfile())
     m.choose(new Uint8Array([1, 2, 3]))
@@ -56,7 +62,7 @@ describe('useNameAndPicture', () => {
     expect(m.hasPicture).toBe(true)
     await m.savePicture()
     expect(setMyAvatar).toHaveBeenCalledTimes(1)
-    expect([...openAvatar(K, ADDRESS, vi.mocked(setMyAvatar).mock.calls[0][0])!]).toEqual([1, 2, 3])
+    expect([...pictureUnder(K, vi.mocked(setMyAvatar).mock.calls[0][0])!]).toEqual([1, 2, 3])
     expect(clearMyAvatar).not.toHaveBeenCalled()
     expect(refreshPeopleDirectory).toHaveBeenCalledTimes(1)
     expect(m.draftKind).toBe('keep')
@@ -125,7 +131,7 @@ describe('useNameAndPicture', () => {
       await m.load(memberProfile())
       m.choose(new Uint8Array([7]))
       await m.savePicture()
-      expect([...openAvatar(K, ADDRESS, vi.mocked(setMyAvatar).mock.calls[0][0])!]).toEqual([7])
+      expect([...pictureUnder(K, vi.mocked(setMyAvatar).mock.calls[0][0])!]).toEqual([7])
       expect(m.sealedName()).toBeTruthy()
       expect(zeroed(handed[0])).toBe(false)
       scope.stop()
@@ -153,7 +159,7 @@ describe('useNameAndPicture', () => {
       )
       const scope = effectScope()
       const m = scope.run(() => useNameAndPicture())!
-      const loading = m.load(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'Anna', lastName: 'Meyer' }) }))
+      const loading = m.load(memberProfile({ ...sealName({ epoch: 0, key: K }, ADDRESS, { firstName: 'Anna', lastName: 'Meyer' }) }))
       await Promise.resolve()
       scope.stop()
       arrive()
@@ -189,16 +195,17 @@ describe('useNameAndPicture', () => {
       await m.load(memberProfile())
       m.firstName = 'Anna'
       m.lastName = 'Meyer'
-      const send = vi.fn(async (_name: { sealedName: string; epoch: number } | undefined) => 'saved')
+      const send = vi.fn(async (_name: (SealedMemberName & { epoch: number }) | undefined) => 'saved')
       send.mockRejectedValueOnce(stale())
       expect(await m.saveName(send)).toBe('saved')
       expect(send).toHaveBeenCalledTimes(2)
       const [first, second] = send.mock.calls.map(([n]) => n!)
       expect(first.epoch).toBe(1)
-      expect(unsealName(K1, ADDRESS, first.sealedName)).toEqual({ firstName: 'Anna', lastName: 'Meyer' })
+      expect(nameUnder(K1, first, 1)).toEqual({ firstName: 'Anna', lastName: 'Meyer' })
       expect(second.epoch).toBe(2)
-      expect(unsealName(K2, ADDRESS, second.sealedName)).toEqual({ firstName: 'Anna', lastName: 'Meyer' })
-      expect(unsealName(K1, ADDRESS, second.sealedName), 'not under the replaced key').toBeNull()
+      expect(nameUnder(K2, second, 2)).toEqual({ firstName: 'Anna', lastName: 'Meyer' })
+      expect(nameUnder(K1, second, 1), 'not under the replaced key').toBeNull()
+      expect(second.wrappedNameValueKey, 'a fresh value key per write').not.toBe(first.wrappedNameValueKey)
       expect(openOwnNameKey).toHaveBeenCalledTimes(2) // the load, and the one re-open
       expect(handed[0].key.every((b) => b === 0), 'the replaced key is zeroed').toBe(true)
     })
@@ -213,10 +220,10 @@ describe('useNameAndPicture', () => {
       expect(setMyAvatar).toHaveBeenCalledTimes(2)
       const [[firstBlob, firstEpoch], [secondBlob, secondEpoch]] = vi.mocked(setMyAvatar).mock.calls
       expect(firstEpoch).toBe(1)
-      expect([...openAvatar(K1, ADDRESS, firstBlob)!]).toEqual([9, 9])
+      expect([...pictureUnder(K1, firstBlob, 1)!]).toEqual([9, 9])
       expect(secondEpoch).toBe(2)
-      expect([...openAvatar(K2, ADDRESS, secondBlob)!]).toEqual([9, 9])
-      expect(openAvatar(K1, ADDRESS, secondBlob)).toBeNull()
+      expect([...pictureUnder(K2, secondBlob, 2)!]).toEqual([9, 9])
+      expect(pictureUnder(K1, secondBlob, 1)).toBeNull()
       expect(m.draftKind).toBe('keep')
     })
 

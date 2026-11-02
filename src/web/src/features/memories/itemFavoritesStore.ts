@@ -42,7 +42,7 @@ export async function loadItemFavoritesFor(
   nodeId: string,
   scopeKey: ScopeKey,
 ): Promise<void> {
-  const marks = await loadItemFavorites(scopeId, nodeId, scopeKey.key)
+  const marks = await loadItemFavorites(scopeId, nodeId, scopeKey)
   itemFavoritesStore.nodeId = nodeId
   itemFavoritesStore.marks = marks
   itemFavoritesStore.loaded = true

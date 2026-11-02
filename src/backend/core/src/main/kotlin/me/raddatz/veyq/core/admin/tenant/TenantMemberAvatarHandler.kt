@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import jakarta.enterprise.context.ApplicationScoped
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
@@ -24,7 +25,7 @@ object AvatarETag {
 
 /** Result of reading a tenant member's sealed picture (ADR 0084). */
 sealed interface MemberAvatarOutcome {
-    data class Found(val sealedAvatar: String, val revision: Int) : MemberAvatarOutcome
+    data class Found(val avatar: SealedValue, val revision: Int) : MemberAvatarOutcome
     /** The caller's `If-None-Match` is the picture's current revision: a `304`, no body. */
     data class NotModified(val revision: Int) : MemberAvatarOutcome
     data object Suspended : MemberAvatarOutcome, HttpFailure by Failures.tenantSuspended
@@ -48,7 +49,7 @@ class TenantMemberAvatarHandler(
         access.check(callerId, tenantId, READ)
             .refusal(MemberAvatarOutcome.NotFound, MemberAvatarOutcome.Suspended)?.let { return it }
         val profile = profiles.find(memberId, tenantId) ?: return MemberAvatarOutcome.NoAvatar
-        val sealed = profile.sealedAvatar ?: return MemberAvatarOutcome.NoAvatar
+        val sealed = SealedValue.of(profile.sealedAvatar, profile.wrappedAvatarValueKey) ?: return MemberAvatarOutcome.NoAvatar
         return if (ifNoneMatch == profile.avatarRevision) MemberAvatarOutcome.NotModified(profile.avatarRevision)
         else MemberAvatarOutcome.Found(sealed, profile.avatarRevision)
     }

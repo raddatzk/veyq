@@ -141,6 +141,7 @@ import { SCOPE_ROTATION } from '../../tasks/capabilityTags'
 import { bundleB64, genesis, headOf, served, type ChainKeys } from '../../../test/keyChain'
 import { succession } from '../../../test/memberInvite'
 import { isRestageable, stageScopeLevelRekey } from '../../spaces/scopeRekey'
+import { openValue, sealValue } from '../../spaces/valueKey'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
 
 /** What each rotation handed the scope-level re-seal, copied before the rotation zeroed it. */
@@ -1422,13 +1423,15 @@ describe('securing the account re-signs what it rooted (ADR 0111 decisions 20 an
       inviteKeySignature: invite.signInviteKey(signer.priv.sign, { tenantId: scope.id, inviteId, invitePublicKey, expiresAt }),
       inviteExpiresAt: expiresAt, signerUserId: o.signerUserId ?? ME, signerIdentityPublicKey: v1.serializeIdentityPublic(signer.pub),
     }, inviteKey.priv.sign, joiner.priv.sign)
-    const sealed = invite.sealJoinRecord(o.key ?? scope.keys[scope.currentEpoch], address, record)
+    // under a fresh value key, its wrap under the tenant key (ADR 0115) — [o.key] for one this device cannot open
+    const sealed = sealValue({ epoch: scope.currentEpoch, key: o.key ?? scope.keys[scope.currentEpoch] }, invite.joinRecordContext(address), (kv) =>
+      invite.sealJoinRecord(kv, address, record))
     const encoded = invite.encodeJoinRecord(record)
     recordBytes.set(`${address.tenantId}:${address.userId}`, encoded)
     const joinEndorsement = o.endorsedBy
       ? b64std(invite.signJoinEndorsement(o.endorsedBy.priv.sign, { ...address, signerUserId: ME, joinRecord: encoded }))
       : null
-    return { ...address, sealedJoinRecord: b64std(sealed), joinEndorsement }
+    return { ...address, sealedJoinRecord: sealed.sealed, wrappedJoinRecordValueKey: sealed.wrapped, joinEndorsement }
   }
   /** Each rooted record's opened bytes (`encodeJoinRecord`), by tenant and joiner — what an endorsement signs the digest of. */
   const recordBytes = new Map<string, Uint8Array>()
@@ -1488,10 +1491,10 @@ describe('securing the account re-signs what it rooted (ADR 0111 decisions 20 an
     await rotate()
     const staged = stagedEndorsements(srv)
     expect(staged).toHaveLength(1)
-    // `recordDigest` is SHA-256 of the record's plaintext encoding — never of the envelope a rotation re-seals.
+    // `recordDigest` is SHA-256 of the record's plaintext encoding — never of its envelope.
     expect(staged[0].recordDigest).toBe(b64std(invite.joinRecordDigest(openedRecordOf(record))))
     expect(staged[0].recordDigest).not.toBe(b64std(invite.joinRecordDigest(fromB64std(record.sealedJoinRecord))))
-    expect(endorsedByPublished(srv.records[0])).toBe(true) // a re-seal keeps it valid: `tenantTrust.test.ts` pins that
+    expect(endorsedByPublished(srv.records[0])).toBe(true) // a re-wrap keeps it valid: `tenantTrust.test.ts` pins that
   })
 
   it('a record a RETIRED key signed is declared without an endorsement, and endorsed again with one by the outgoing key', async () => {
@@ -1652,7 +1655,9 @@ describe('securing the account re-signs this account\'s verifications (ADR 0111 
     const row = (subjectUserId: string, subjectHead: Uint8Array): MemberVerification => {
       const address = { tenantId: SCOPE_TENANT, verifierUserId: ME, subjectUserId }
       const v = verification.signVerification(address, { subjectHead, verifierHead: srv.acct.chain.head }, OLD_ID.priv.sign)
-      return { verifierUserId: ME, subjectUserId, epoch: 0, sealedStatement: b64std(verification.sealVerification(tenant.keys[0], { ...address, epoch: 0 }, v)), createdAt: new Date() }
+      const slot = { ...address, epoch: 0 }
+      const sealed = sealValue({ epoch: 0, key: tenant.keys[0] }, verification.verificationContext(slot), (kv) => verification.sealVerification(kv, slot, v))
+      return { verifierUserId: ME, subjectUserId, epoch: 0, sealedStatement: sealed.sealed, wrappedValueKey: sealed.wrapped, createdAt: new Date() }
     }
     const mine = row(B, B_CHAIN.head)
     const thief = row(U1, v1.randomBytes(32))
@@ -1677,7 +1682,9 @@ describe('securing the account re-signs this account\'s verifications (ADR 0111 
     const put = putMyVerification.mock.calls[0][0]
     expect(put).toMatchObject({ tenantId: SCOPE_TENANT, subjectUserId: B, putVerificationRequest: { epoch: 0 } })
     const address = { tenantId: SCOPE_TENANT, verifierUserId: ME, subjectUserId: B }
-    const v = verification.openVerification(tenant.keys[0], { ...address, epoch: 0 }, fromB64std(put.putVerificationRequest.sealedStatement))
+    const slot = { ...address, epoch: 0 }
+    const v = openValue({ epoch: 0, key: tenant.keys[0] }, verification.verificationContext(slot), put.putVerificationRequest.wrappedValueKey, (kv) =>
+      verification.openVerification(kv, slot, fromB64std(put.putVerificationRequest.sealedStatement)))
     expect(b64std(v.subjectHead)).toBe(headOf(B_CHAIN))
     expect(b64std(v.verifierHead)).toBe(b64std(srv.acct.chain.head)) // the head the publish appended
     const published = v1.deserializeIdentityPublic(fromB64std(srv.acct.bundle))

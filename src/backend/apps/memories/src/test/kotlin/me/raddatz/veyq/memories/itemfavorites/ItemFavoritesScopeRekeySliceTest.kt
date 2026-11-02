@@ -1,6 +1,7 @@
 package me.raddatz.veyq.memories.itemfavorites
 
 import me.raddatz.veyq.core.node.rekey.ScopeRekeyStage
+import me.raddatz.veyq.core.node.rekey.ScopeRekeyStageEntity
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.node.rekey.ScopeRekeyCommit
 import me.raddatz.veyq.core.node.rekey.ScopeRekeyField
@@ -17,52 +18,90 @@ import io.restassured.http.ContentType
 import io.restassured.response.ValidatableResponse
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.not
+import org.hamcrest.CoreMatchers.nullValue
 import org.hamcrest.Matchers.hasItem
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import java.time.Instant
 import java.util.UUID
 
 /**
- * Memories' item marks re-sealed through its scope re-key participant (ADR 0115 decision 2): the marks are sealed under
- * the scope key itself, so a rotation's commit swaps in every member's row the rotator staged by its opaque `markId`, or
- * refuses — a row with no staged value `409 rekey_parts_missing`, one written since it was staged `409
- * rekey_parts_stale` — and a mark written under the old epoch after it is `409 stale_epoch` (decision 3). Each staged
- * value names the digest of the ciphertext it was opened from, so a mark rewritten between the rotator's read and its
- * stage is refused at the stage (`409 rekey_parts_stale`), never replaced by a re-seal of what it replaced.
+ * Memories' item marks moved through its scope re-key participant (ADR 0115 decision 2, owner 2026-11-02): each row is
+ * sealed under a value key of its own and only that key's wrap is under the scope key, so a rotation's commit swaps in
+ * every member's re-wrapped key the rotator staged by its opaque `markId` — **wraps only**: no row's ciphertext is served,
+ * staged or rewritten, so a rotator can never rewrite another member's marks — or refuses: a row with no staged wrap
+ * `409 rekey_parts_missing`, one written since it was staged (a write mints a fresh key, so a fresh wrap) `409
+ * rekey_parts_stale`, a stage that writes anything but a wrap `422 rekey_writes_value` — and a mark wrapped under the old
+ * epoch after it is `409 stale_epoch` (decision 3). Each refusal beside its positive control.
  */
 @QuarkusTest
 class ItemFavoritesScopeRekeySliceTest {
 
     @Test
-    fun everyMembersMarksAreReSealedThroughTheParticipant() {
+    fun everyMembersMarksAreReWrappedThroughTheParticipantAndNeverRewritten() {
         val w = world()
-        // The listing names rows by an opaque id, never a member's (ADR 0068 § 9), and carries every member's.
+        // The listing names rows by an opaque id, never a member's (ADR 0068 § 9), carries every member's — and serves
+        // each row's wrap, never its ciphertext.
         val page = list(w.owner, w.scopeId).statusCode(200).body("currentEpoch", equalTo(0)).body("marks.size()", equalTo(2))
-            .body("marks.markId", not(hasItem(w.owner))).body("marks.markId", not(hasItem(w.member))).extract()
+            .body("marks.markId", not(hasItem(w.owner))).body("marks.markId", not(hasItem(w.member)))
+            .body("marks[0].ciphertext", nullValue()).body("marks[0].wrappedValueKey", not(nullValue())).extract()
         val markIds = page.path<List<String>>("marks.markId")
+        val before = tx { ItemFavoritesEntity.list("scopeId", w.scopeId).associate { it.markId to it.ciphertext } }
         val rekeyId = coreStaged(w.scopeId)
-        stage(w.owner, w.scopeId, rekeyId, markIds.map { it to "cmUtc2VhbGVkLSR7aXR9" }).statusCode(204)
+        stage(w.owner, w.scopeId, rekeyId, markIds.map { it to REWRAPPED }).statusCode(204)
         rotate(w.owner, w.scopeId, rekeyId).statusCode(201)
         tx {
-            assertEquals(listOf("cmUtc2VhbGVkLSR7aXR9", "cmUtc2VhbGVkLSR7aXR9"), ItemFavoritesEntity.list("scopeId", w.scopeId).map { it.ciphertext })
+            val rows = ItemFavoritesEntity.list("scopeId", w.scopeId)
+            assertEquals(listOf(REWRAPPED, REWRAPPED), rows.map { it.wrappedValueKey }, "every row's key re-wrapped")
+            assertEquals(before, rows.associate { it.markId to it.ciphertext }, "no row's ciphertext rewritten")
         }
-        // A mark sealed under the replaced key is refused; at the current epoch it lands.
+        // A mark wrapped under the replaced key is refused; at the current epoch it lands.
         put(w.member, w.scopeId, w.node, epoch = 0).statusCode(409).body("code", equalTo("stale_epoch"))
         put(w.member, w.scopeId, w.node, epoch = 1).statusCode(204)
     }
 
+    /** A rotation re-wraps keys and never rewrites a value: a staged write of a row's ciphertext — what a stage carried
+     *  before the value keys, or what a rotator would forge to rewrite another member's marks — is refused, nothing
+     *  stored; the schema has no field for it, so it reaches the stage only beside the HTTP surface. */
     @Test
-    fun aMarkWithNoStagedValueRefusesTheRotation() {
+    fun aStageThatRewritesAMembersMarksIsRefusedAndWritesNothing() {
+        val w = world()
+        val markIds = list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId")
+        val memberMark = tx { ItemFavoritesEntity.findById(ItemFavoritesEntity.key(w.member, w.scopeId, w.node))!!.markId }
+        val rekeyId = coreStaged(w.scopeId)
+        stage(w.owner, w.scopeId, rekeyId, markIds.map { it to REWRAPPED }).statusCode(204)
+        tx {
+            ScopeRekeyStageEntity().apply {
+                id = UUID.randomUUID().toString(); this.rekeyId = rekeyId; scopeId = w.scopeId
+                part = ItemFavoritesScopeRekeyParticipant.PART; itemId = memberMark; field = "mark.ciphertext"
+                stageValue = "Zm9yZ2Vk"; replacedDigest = null; createdAt = Instant.now()
+            }.persist()
+        }
+        rotate(w.owner, w.scopeId, rekeyId).statusCode(422).body("code", equalTo("rekey_writes_value"))
+        assertEquals(0, TestGrants.epochOf(w.scopeId), "nothing written")
+        tx {
+            val row = ItemFavoritesEntity.findById(ItemFavoritesEntity.key(w.member, w.scopeId, w.node))!!
+            assertEquals("bWFya3M=", row.ciphertext, "the member's marks stand")
+            assertEquals(0L, ItemFavoritesEntity.count("scopeId = ?1 and wrappedValueKey = ?2", w.scopeId, REWRAPPED), "no wrap swapped in")
+        }
+        // Control: the same commit carrying only the re-wrapped keys lands.
+        tx { ScopeRekeyStageEntity.delete("rekeyId = ?1 and field = ?2", rekeyId, "mark.ciphertext") }
+        rotate(w.owner, w.scopeId, rekeyId).statusCode(201)
+        tx { assertEquals("bWFya3M=", ItemFavoritesEntity.findById(ItemFavoritesEntity.key(w.member, w.scopeId, w.node))!!.ciphertext) }
+    }
+
+    @Test
+    fun aMarkWithNoStagedWrapRefusesTheRotation() {
         val w = world()
         val rekeyId = coreStaged(w.scopeId)
-        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to SEALED }).statusCode(204)
-        // A member marks another Memory after the rotator staged: a row the rotation has no value for.
+        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to REWRAPPED }).statusCode(204)
+        // A member marks another Memory after the rotator staged: a row the rotation has no wrap for.
         put(w.member, w.scopeId, UUID.randomUUID().toString(), epoch = 0).statusCode(204)
         rotate(w.owner, w.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_missing"))
         assertEquals(0, TestGrants.epochOf(w.scopeId), "nothing written")
-        assertEquals(0L, tx { ItemFavoritesEntity.count("scopeId = ?1 and ciphertext = ?2", w.scopeId, SEALED) })
+        assertEquals(0L, tx { ItemFavoritesEntity.count("scopeId = ?1 and wrappedValueKey = ?2", w.scopeId, REWRAPPED) })
         // Control: the new row staged too, the rotation commits.
-        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to SEALED }).statusCode(204)
+        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to REWRAPPED }).statusCode(204)
         rotate(w.owner, w.scopeId, rekeyId).statusCode(201)
     }
 
@@ -70,11 +109,12 @@ class ItemFavoritesScopeRekeySliceTest {
     fun aMarkRewrittenSinceItWasStagedIsStale() {
         val w = world()
         val rekeyId = coreStaged(w.scopeId)
-        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to SEALED }).statusCode(204)
+        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to REWRAPPED }).statusCode(204)
+        // A rewrite mints a fresh value key: its wrap is no longer the one the stage replaces.
         put(w.member, w.scopeId, w.node, epoch = 0, ciphertext = "Y2hhbmdlZA==").statusCode(204)
         rotate(w.owner, w.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_stale"))
         assertEquals("Y2hhbmdlZA==", tx { ItemFavoritesEntity.findById(ItemFavoritesEntity.key(w.member, w.scopeId, w.node))!!.ciphertext })
-        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to SEALED }).statusCode(204)
+        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to REWRAPPED }).statusCode(204)
         rotate(w.owner, w.scopeId, rekeyId).statusCode(201)
     }
 
@@ -83,15 +123,15 @@ class ItemFavoritesScopeRekeySliceTest {
         val w = world()
         val rekeyId = coreStaged(w.scopeId)
         val read = list(w.owner, w.scopeId).extract()
-        val opened = read.path<List<String>>("marks.markId").zip(read.path<List<String>>("marks.ciphertext")).toMap()
-        // A member rewrites their mark after the rotator read the page, before it stages its re-seal.
+        val opened = read.path<List<String>>("marks.markId").zip(read.path<List<String>>("marks.wrappedValueKey")).toMap()
+        // A member rewrites their mark after the rotator read the page, before it stages its re-wrap.
         put(w.member, w.scopeId, w.node, epoch = 0, ciphertext = "Y2hhbmdlZA==").statusCode(204)
-        stage(w.owner, w.scopeId, rekeyId, opened.keys.map { it to SEALED }, opened.mapValues { ScopeRekeyStage.digest(it.value)!! })
+        stage(w.owner, w.scopeId, rekeyId, opened.keys.map { it to REWRAPPED }, opened.mapValues { ScopeRekeyStage.digest(it.value)!! })
             .statusCode(409).body("code", equalTo("rekey_parts_stale"))
         assertEquals("Y2hhbmdlZA==", tx { ItemFavoritesEntity.findById(ItemFavoritesEntity.key(w.member, w.scopeId, w.node))!!.ciphertext })
         rotate(w.owner, w.scopeId, rekeyId).statusCode(409).body("code", equalTo("rekey_parts_missing")) // nothing was staged
         // Control: read again, the same stage lands, and the rotation commits.
-        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to SEALED }).statusCode(204)
+        stage(w.owner, w.scopeId, rekeyId, list(w.owner, w.scopeId).extract().path<List<String>>("marks.markId").map { it to REWRAPPED }).statusCode(204)
         rotate(w.owner, w.scopeId, rekeyId).statusCode(201)
     }
 
@@ -127,30 +167,31 @@ class ItemFavoritesScopeRekeySliceTest {
         return rekeyId
     }
 
+    /** A member's write of their marks: the ciphertext under a fresh value key, its fresh wrap beside it. */
     private fun put(userId: String, scopeId: String, nodeId: String, epoch: Int, ciphertext: String = "bWFya3M="): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"ciphertext":"$ciphertext","epoch":$epoch}""")
+            .body("""{"ciphertext":"$ciphertext","wrappedValueKey":"${TestGrants.freshWrap()}","epoch":$epoch}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/item-favorites").then()
 
     private fun list(caller: String, scopeId: String): ValidatableResponse =
         given().header("Authorization", bearer(caller)).`when`().get("/api/scopes/$scopeId/item-favorites-rekey").then()
 
-    /** Stage [marks] (`markId` to its re-sealed ciphertext), each naming the digest of the ciphertext it was opened from:
-     *  [opened]'s, or by default what the row holds as the rotator reads it now. */
+    /** Stage [marks] (`markId` to its re-wrapped value key), each naming the digest of the wrap it replaces: [opened]'s,
+     *  or by default what the row holds as the rotator reads it now. */
     private fun stage(
         caller: String, scopeId: String, rekeyId: String, marks: List<Pair<String, String>>,
         opened: Map<String, String> = currentDigests(scopeId),
     ): ValidatableResponse =
         given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
             .body(
-                """{"fromEpoch":0,"marks":[${marks.joinToString(",") { (id, c) ->
-                    """{"markId":"$id","ciphertext":"$c","replacedDigest":"${opened[id] ?: ScopeRekeyStage.digest("absent")}"}"""
+                """{"fromEpoch":0,"marks":[${marks.joinToString(",") { (id, wrap) ->
+                    """{"markId":"$id","wrappedValueKey":"$wrap","replacedDigest":"${opened[id] ?: ScopeRekeyStage.digest("absent")}"}"""
                 }}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/item-favorites-rekey/$rekeyId").then()
 
     private fun currentDigests(scopeId: String): Map<String, String> =
-        tx { ItemFavoritesEntity.list("scopeId", scopeId).associate { it.markId to ScopeRekeyStage.digest(it.ciphertext)!! } }
+        tx { ItemFavoritesEntity.list("scopeId", scopeId).associate { it.markId to ScopeRekeyStage.digest(it.wrappedValueKey)!! } }
 
     private fun rotate(owner: String, scopeId: String, rekeyId: String): ValidatableResponse =
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
@@ -164,6 +205,6 @@ class ItemFavoritesScopeRekeySliceTest {
     private fun <T> tx(block: () -> T): T = QuarkusTransaction.requiringNew().call(block)
 
     private companion object {
-        const val SEALED = "cmUtc2VhbGVk"
+        const val REWRAPPED = "cmUtd3JhcHBlZA=="
     }
 }

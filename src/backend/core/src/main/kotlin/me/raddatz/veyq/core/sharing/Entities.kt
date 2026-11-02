@@ -79,22 +79,28 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "sealed_share_name")
     var sealedShareName: String? = null
 
-    /** ADR 0036: the recoverable per-share key — `K_share` sealed under the scope key `K_SC` at
-     *  [sealedShareKeyEpoch] (opaque base64), or null. Lets every scope member recover `K_share` to reveal, edit and
-     *  re-copy the share. Never under the shared node's content key: every READ/READ_WRITE link carries that key, and a copy under it
-     *  would open this share to a sibling link plus a dump (ADR 0036 point 4). */
+    /** ADR 0036: the recoverable per-share key — `K_share` sealed under a value key of its own at [sealedShareKeyEpoch]
+     *  (opaque base64), or null; that key's wrap under the scope key `K_SC` is [wrappedRecoveryValueKey] (ADR 0115).
+     *  Lets every scope member recover `K_share` to reveal, edit and re-copy the share. Never under the shared node's
+     *  content key: every READ/READ_WRITE link carries that key, and a copy under it would open this share to a sibling
+     *  link plus a dump (ADR 0036 point 4). A rotation re-wraps the value key and never rewrites the copy: `K_share` is
+     *  itself a key, so a wrap a rotator substituted opens no `K_share` at all, never one of its choosing. */
     @Column(name = "sealed_share_key")
     var sealedShareKey: String? = null
 
-    /** The scope epoch [sealedShareKey] is sealed under — non-null exactly when it is; the scope's current epoch at
-     *  create (a stale one is refused `stale_epoch`), and moved to every new epoch by the rotation that re-seals the
-     *  copy (ADR 0115 decision 2), so it is the scope's current epoch. */
+    /** [sealedShareKey]'s value key under the scope key of its current epoch (`value-key`); null exactly when the copy is. */
+    @Column(name = "wrapped_recovery_value_key", length = 128)
+    var wrappedRecoveryValueKey: String? = null
+
+    /** The scope epoch [sealedShareKey] was written at — non-null exactly when it is; the scope's current epoch at
+     *  create (a stale one is refused `stale_epoch`), and left by a rotation, which re-wraps only the copy's value key. */
     @Column(name = "sealed_share_key_epoch")
     var sealedShareKeyEpoch: Int? = null
 
     /** The scope's epoch when this link was minted with its recovery copy (ADR 0115 decision 2), null for one minted
-     *  without: what the re-issue rule compares with the scope's current epoch (ADR 0075 point 4) now that a rotation
-     *  moves [sealedShareKeyEpoch] along. Stamped in the mint's transaction (`SharingStore.persistShare`), never changed. */
+     *  without: what the re-issue rule compares with the scope's current epoch (ADR 0075 point 4). Stamped in the mint's
+     *  transaction (`SharingStore.persistShare`), never changed — equal to [sealedShareKeyEpoch] since a rotation no
+     *  longer moves that one (ADR 0115). */
     @Column(name = "minted_epoch")
     var mintedEpoch: Int? = null
 

@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.core.sharing.ShareRetiredIdEntity
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.MeasureTargets
@@ -102,7 +103,7 @@ class SharingStore(
     @Transactional
     fun create(
         id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
-        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
+        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, recoveryCopy: SealedValue?,
         sealedShareKeyEpoch: Int?, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): CreateResult {
@@ -119,7 +120,7 @@ class SharingStore(
             }
         }
         persistShare(
-            id, ownerAccount, scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
+            id, ownerAccount, scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, recoveryCopy,
             sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
         )
         return CreateResult.CREATED
@@ -148,7 +149,7 @@ class SharingStore(
     @Transactional
     fun reissue(
         oldId: String, newId: String, ownerAccount: String, keys: ShareKeys, sealedName: String, expiresAt: Instant?,
-        sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
+        sealedNote: String?, recoveryCopy: SealedValue, sealedShareKeyEpoch: Int, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): ReissueResult {
         if (idTaken(newId)) return ReissueResult.ID_TAKEN
@@ -156,7 +157,7 @@ class SharingStore(
         if (old.deleted) return ReissueResult.DELETED
         close(old, CloseKind.DELETE)
         persistShare(
-            newId, ownerAccount, old.scopeId, old.nodeId, old.role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
+            newId, ownerAccount, old.scopeId, old.nodeId, old.role, keys, sealedName, expiresAt, sealedNote, recoveryCopy,
             sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
         )
         return ReissueResult.CREATED
@@ -164,7 +165,7 @@ class SharingStore(
 
     private fun persistShare(
         id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
-        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
+        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, recoveryCopy: SealedValue?,
         sealedShareKeyEpoch: Int?, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ) {
@@ -184,10 +185,11 @@ class SharingStore(
             this.expiresAt = expiresAt
             this.sealedNote = sealedNote
             noteEditorUserId = ownerAccount.takeIf { sealedNote != null }
-            this.sealedShareKey = sealedShareKey
+            sealedShareKey = recoveryCopy?.value
+            wrappedRecoveryValueKey = recoveryCopy?.wrappedValueKey
             this.sealedShareKeyEpoch = sealedShareKeyEpoch
-            // ADR 0115 decision 2: the copy moves with every rotation, the mint's epoch stays for the re-issue rule.
-            this.mintedEpoch = sealedShareKeyEpoch.takeIf { sealedShareKey != null }
+            // The mint's epoch, for the re-issue rule (ADR 0075 point 4); a rotation re-wraps the copy's key and leaves it.
+            this.mintedEpoch = sealedShareKeyEpoch.takeIf { recoveryCopy != null }
             this.sealedShareName = sealedShareName
             shareNameEditorUserId = ownerAccount.takeIf { sealedShareName != null }
             this.passwordRequired = passwordRequired // cr-0118 (ADR 0037): the access-control gate + reveal copy
@@ -260,20 +262,27 @@ class SharingStore(
     fun reopensByDate(share: ShareEntity, expiresAt: Instant?, now: Instant): Boolean =
         share.enabled && !share.deleted && share.expiresAt?.isAfter(now) == false && expiresAt?.isAfter(now) != false
 
+    /** What a re-seal of a link's name ([setSealedName]) did. */
+    enum class SealedNameResult { DONE, NOT_FOUND, CLOSED }
+
     /** Replace a live share's `sealed_name` (ADR 0080 decision 14) — that column and no other, so a re-seal can never
-     *  revert a concurrent edit, revoke or re-activation (`@DynamicUpdate` writes only what changed). False when there
-     *  is no such share, or it is deleted: the row lock ([liveForUpdate]) makes a delete that committed first win.
+     *  revert a concurrent edit, revoke or re-activation (`@DynamicUpdate` writes only what changed). [NOT_FOUND] when
+     *  there is no such share, or it is deleted: the row lock ([liveForUpdate]) makes a delete that committed first win.
+     *  [CLOSED] when the link is closed — switched off, or its end date passed ([OPEN]'s predicate): nothing new is
+     *  sealed under a closed link's `K_share`, and its reopen carries the root's current name (ADR 0114 decisions 5 and
+     *  7). Decided under the same lock, so a revoke that committed first wins too.
      *
      *  **Lock order: the share row only** — never the scope row. `updateShare`, `revoke`, `delete` and
      *  `reactivate` take the scope row, then this row. Holding one lock, this write can wait for any of them but
      *  never hold what one waits for while it waits itself, so no order of the two deadlocks
      *  (`ShareSealedNameCoreSliceTest`). Taking the scope row after this one would be the inversion. */
     @Transactional
-    fun setSealedName(shareId: String, sealedName: String, editor: PrincipalKey.User): Boolean {
-        val share = liveForUpdate(shareId) ?: return false
+    fun setSealedName(shareId: String, sealedName: String, editor: PrincipalKey.User, now: Instant = Instant.now()): SealedNameResult {
+        val share = liveForUpdate(shareId) ?: return SealedNameResult.NOT_FOUND
+        if (!share.enabled || share.expiresAt?.isAfter(now) == false) return SealedNameResult.CLOSED
         share.sealedName = sealedName
         share.nameEditorUserId = editor.userId // ADR 0093 § 8: the member who re-sealed it
-        return true
+        return SealedNameResult.DONE
     }
 
     /** A share that exists and is not deleted — every reader's lookup (ADR 0029 §7): a tombstone is not found,
@@ -399,6 +408,12 @@ class SharingStore(
         DELETE,
         /** Its end date passed, carried out by the sweep or by an edit that sets a passed date. */
         EXPIRY,
+        /**
+         * Its key is lost: no member opens its recovery copy, so no re-key can wrap the root's new key for it — switched
+         * off, as a revoke, by the root's node re-key that names it (`RekeyStore.commit`, ADR 0115 decision 2). Its
+         * reopen needs that copy too, so only a re-issue could bring it back.
+         */
+        KEY_LOST,
     }
 
     /**
@@ -419,7 +434,7 @@ class SharingStore(
     fun close(share: ShareEntity, kind: CloseKind) {
         val marks = unclosed(share) && share.role != ShareEntity.WRITE_ONLY
         when (kind) {
-            CloseKind.REVOKE -> share.enabled = false
+            CloseKind.REVOKE, CloseKind.KEY_LOST -> share.enabled = false
             CloseKind.DELETE -> tombstone(share)
             CloseKind.EXPIRY -> share.expiryClosed = true
         }
@@ -514,6 +529,7 @@ class SharingStore(
         share.noteEditorUserId = null
         share.shareNameEditorUserId = null
         share.sealedShareKey = null
+        share.wrappedRecoveryValueKey = null
         share.sealedShareKeyEpoch = null
         share.passwordRequired = false
         share.pwSalt = null

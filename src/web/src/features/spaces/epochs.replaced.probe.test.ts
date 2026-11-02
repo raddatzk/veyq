@@ -4,7 +4,9 @@
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { copyScopeKey, scopeKeyOf, zeroScopeKey } from './epochs'
-import { deriveGroupNameKey, openGroupNameWith, sealGroupName } from './inviteName'
+import { fromB64std } from '@veyq/crypto/base64'
+import { groupNameContext, openGroupNameWith, sealGroupName } from './inviteName'
+import { openValue, rewrapValueKey, sealValue } from './valueKey'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000e1'
 
@@ -17,17 +19,18 @@ describe('ADR 0115: a held scope key opens no earlier one', () => {
     expect(Object.keys(sk).sort()).toEqual(['epoch', 'key']) // nothing beside it: no per-epoch set to look an old key up in
   })
 
-  it('what was sealed under an older key does not open under the held one; re-sealed under it, it does', () => {
+  it('a value key wrapped under an older key does not open under the held one; re-wrapped under it, it does', () => {
     const e1 = v1.randomBytes(32)
     const e2 = v1.randomBytes(32)
     const held = scopeKeyOf(e2, 2)
-    const under1 = sealGroupName(deriveGroupNameKey(e1), SCOPE, 1, 'Familie')
-    // under the held key at either epoch label: the old key's ciphertext is shut
-    expect(() => openGroupNameWith(deriveGroupNameKey(held.key), SCOPE, 1, under1)).toThrow(v1.OpenRefused)
-    expect(() => openGroupNameWith(deriveGroupNameKey(held.key), SCOPE, 2, under1)).toThrow(v1.OpenRefused)
-    // control: the rotation's re-seal of the same name under the new key at its epoch opens
-    const under2 = sealGroupName(deriveGroupNameKey(e2), SCOPE, 2, 'Familie')
-    expect(openGroupNameWith(deriveGroupNameKey(held.key), SCOPE, 2, under2)).toBe('Familie')
+    // A name written at epoch 1: under its own value key, whose wrap is under E_1 (ADR 0115).
+    const value = groupNameContext(SCOPE, 1)
+    const named = sealValue(scopeKeyOf(e1, 1), value, (nameKey) => fromB64std(sealGroupName(nameKey, SCOPE, 1, 'Familie')))
+    const read = (wrapped: string) => openValue(held, value, wrapped, (nameKey) => openGroupNameWith(nameKey, SCOPE, 1, named.sealed))
+    // under the held key: the old key's wrap is shut, and so is the name behind it
+    expect(() => read(named.wrapped)).toThrow(v1.OpenRefused)
+    // control: the rotation's re-wrap of the same value key under the new key at its epoch opens the unchanged name
+    expect(read(rewrapValueKey(scopeKeyOf(e1, 1), held, value, named.wrapped))).toBe('Familie')
   })
 
   it('the succession statement that proves epoch 2 carries neither key', () => {

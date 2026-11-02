@@ -2,12 +2,13 @@ useCase: uc.spaces.set-space-icon
 feature: spaces
 title: Space icon
 # Built — TENANT (cr-space-icon) + GROUP (cr-group-space-icon). The icon is a chosen image, baked to a fixed square,
-# re-encoded to WebP, padded to a CONSTANT plaintext length, and sealed under K_icon = HKDF(E_e, "veyq/v1/space-icon-key").
+# re-encoded to WebP, padded to a CONSTANT plaintext length, and sealed under a value key K_v of its own, fresh at every
+# icon write, whose wrap the scope key holds (ADR 0115).
 # Owner-gated on the root scope (isScopeOwner, ADR 0007; a GROUP co-owner is an OWNER too), the server rejects a stale
-# iconEpoch (409) and stores only sealed_icon (opaque, constant length) + icon_epoch. The GROUP slice lifted the kind
+# iconEpoch (409) and stores only sealed_icon (opaque, constant length) + icon_epoch + the wrap of its K_v. The GROUP slice lifted the kind
 # guard (only PERSONAL is now rejected — it never has an icon) and adds the group settings-panel icon header + the
-# sidebar group avatar. Every rotation re-seals the icon under the new key and sets iconEpoch to the new epoch
-# (ADR 0115), so a reader of either kind opens it with the one scope key its grant carries.
+# sidebar group avatar. A rotation re-wraps the icon's K_v under the new key and leaves the icon and its iconEpoch
+# (ADR 0115), so a reader of either kind opens it through its wrap with the one scope key its grant carries.
 #
 # THREE claims are structurally invisible to the hermetic suites (ADR 0040 — a test no CI run executes makes no
 # coverage claim), so their refs below prove the CI-provable PART and the DoD live smoke on veyq.localhost:8081
@@ -52,7 +53,7 @@ acceptanceCriteria:
         unit:
           - src/features/spaces/spaceIcon.test.ts
   - id: icon-sealed-under-current-epoch
-    text: The icon is sealed under K_icon_e = HKDF(E_e, "veyq/v1/space-icon-key") for e = the scope's CURRENT epoch, and iconEpoch records e. A write whose iconEpoch is not the current epoch is refused with 409 stale_epoch, checked in the write itself so a rotation that commits after the server read the epoch refuses it too; the client refetches, re-seals and retries once. Every rotation re-seals the icon under the new key and sets icon_epoch to the new epoch in its commit (ADR 0115), so a member reads it with the one key its grant carries, and a member removed by a rotation cannot derive the K_icon_e of any icon stored after it.
+    text: The icon is sealed under a fresh value key K_v at e = the scope's CURRENT epoch, K_v wrapped under that epoch's key, and iconEpoch records e. A write whose iconEpoch is not the current epoch is refused with 409 stale_epoch, checked in the write itself so a rotation that commits after the server read the epoch refuses it too; the client refetches, re-seals and retries once. A rotation re-wraps the icon's K_v under the new key in its commit and leaves the icon and its icon_epoch (ADR 0115), so a member reads it through its wrap with the one key its grant carries, and a member removed by a rotation holds no K_v of any icon stored after it.
     coverage:
       backend:
         integration:
@@ -89,10 +90,10 @@ gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
     admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
-    which rows a run has admitted). `src/v1.conformance.test.ts` carries the `space_icon_key` KAT for
-    `icon-sealed-under-current-epoch`: K_icon = HKDF(E_e, "veyq/v1/space-icon-key") against the pinned okm, with
-    an info string distinct from `group_name_key`'s. It was admitted while it lived in web; the move into the
-    shared package (ADR 0065) put it on a job no run has executed, so it waits here. Until then the criterion's
-    web refs prove the derivation round-trips and re-keys (`spaceIcon.test.ts`: a different epoch key derives a
-    different K_icon) but not that it is the pinned one. On the first run whose log shows packages/crypto's
-    suites executed, the suite goes back under that criterion and this gap goes.
+    which rows a run has admitted). `src/valueKey.conformance.test.ts` pins the icon's value key for
+    `icon-sealed-under-current-epoch`: the `space-icon` address of `value-key` (`#value_key`), a wrap of another
+    epoch or another value refused, and a re-wrap leaving the value's bytes (the `space_icon_key` HKDF KAT is gone with
+    the derived key, ADR 0115). Until then the criterion's web refs prove the seal round-trips under a fresh key per
+    write (`spaceIcon.test.ts`: another write's key and the scope key alone open nothing) but not that it is the
+    pinned encoding. On the first run whose log shows packages/crypto's suites executed, the suite goes under that
+    criterion and this gap goes.

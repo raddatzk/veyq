@@ -51,6 +51,9 @@ sealed interface RotationDecision {
     object PartsMissing : RotationDecision
     /** A staged scope-level value was staged against a row that changed since (`409 rekey_parts_stale`). */
     object PartsStale : RotationDecision
+    /** A staged scope-level value writes a value's ciphertext, not its key's wrap (`422 rekey_writes_value`, ADR 0115):
+     *  a rotation re-wraps keys and never rewrites a value. Decided by the commit, never by the policy. */
+    object WritesValue : RotationDecision
 }
 
 /**

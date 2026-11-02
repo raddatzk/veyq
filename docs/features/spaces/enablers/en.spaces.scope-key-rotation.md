@@ -6,12 +6,13 @@
   makes "remove a member" mean something cryptographically; the end-user goal lives in
   [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md).
 - **Provides:** the ability to **replace a scope's key with a fresh one at the next epoch** — granted only to the
-  **remaining** members, every scope-level value re-sealed under it in the commit, then every node of the scope
+  **remaining** members, every scope-level value's own key re-wrapped under it in the commit — no value rewritten —
+  then every node of the scope
   re-keyed under it — so a removed member can read pre-removal content but **never** post-removal content, except
   through a link they could rebuild until it is re-issued, and the key they kept opens nothing in a dump taken after
   the rotation ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md)) — **without
   re-encrypting anything in the store**.
-- **The model** — the key replacement and its re-seal, the succession statement, who may commit a rotation, the cover
+- **The model** — the key replacement and its re-wrap of the value keys, the succession statement, who may commit a rotation, the cover
   rule, the policy per scope kind, the queued rotation and the node re-key — is the topic's current picture,
   [keys, grants and trust § Rotating a scope](../../../crosscutting/keys-grants-and-trust.md#rotating-a-scope). This
   enabler keeps its use-cases, its slice and its failure modes.
@@ -31,8 +32,8 @@
 - **Depends on:** [en.spaces.group-scope](en.spaces.group-scope.md) (the scope + its grant), the grant primitive
   ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)), **grant-delivery** for a membership behind
   the epoch ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)), the **content-key hierarchy**
-  ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)). **No new crypto primitive** — the re-seal reuses
-  each value's own seal, and the succession statement is an Ed25519 signature from an HKDF-derived seed
+  ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)). **No new crypto primitive** — a value key is wrapped by
+  the one symmetric seal under a purpose of its own (`value-key`), and the succession statement is an Ed25519 signature from an HKDF-derived seed
   ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 5).
 - **Preconditions:** A scope with ≥1 owner online who holds its current grant, to perform the rotation (mint + wrap
   are client-side; the blind server cannot). After an account was secured, that account commits its scopes' next
@@ -40,16 +41,18 @@
 - **Postconditions (success):** The scope carries a new **current epoch**, one fresh key granted to each remaining
   member it anchors (the rest declared pending), proven by a succession statement from the old one; nothing at scope
   level is under the old key; every live and trashed node carries a fresh key minted at it; the removed member's
-  membership is gone (403). The server saw only a succession public key and signature, opaque grants, rewritten
-  ciphertext in rows it already held, and per-node epoch counters — never a key.
+  membership is gone (403); every scope-level value is byte-identical, opening through its key's new wrap. The server
+  saw only a succession public key and signature, opaque grants, rewritten wraps and ciphertext in rows it already
+  held, and per-node epoch counters — never a key.
 
 ## Main flow — rotate on removal
 
-1. A remaining owner's device **mints** a fresh `E_{n+1}`, opens every scope-level value under `E_n`, re-seals it
-   under `E_{n+1}` and stages it; then it posts in **one request** the succession statement signed with `E_n`'s
+1. A remaining owner's device **mints** a fresh `E_{n+1}`, opens every value key wrapped under `E_n`, wraps the same
+   key under `E_{n+1}`, re-seals each scope-root entry, and stages them — a stage that writes a value is refused
+   (`422 rekey_writes_value`); then it posts in **one request** the succession statement signed with `E_n`'s
    succession key, a grant of `E_{n+1}` to every remaining member its client anchors (naming each key), the members
    it cannot anchor as pending, and the member it removes. The server deletes the membership, commits `n+1` and swaps
-   every staged value in, in one transaction, or stores nothing
+   every staged wrap in, in one transaction, or stores nothing
    ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2).
 2. New content seals under `E_{n+1}`: a new scope-root node's entry under the scope key, every node below under its
    parent's new key; each new node's `scopeEpoch` is `n+1`.
@@ -68,9 +71,9 @@ sequenceDiagram
   participant S as Server<br>(blind)
   actor X as Removed<br>member
   O->>O: E_{n+1} = random(32)
-  O->>S: stage every scope-level value, re-sealed under E_{n+1}
+  O->>S: stage every scope-level value key, re-wrapped under E_{n+1}
   O->>S: one request — succession statement (signed by E_n) + grants to the remaining members + removes X
-  Note right of S: deletes X's membership, commits n+1 and swaps the staged values in, in one transaction
+  Note right of S: deletes X's membership, commits n+1 and swaps the staged wraps in, in one transaction
   O->>S: re-key every node under E_{n+1}, top-down (fresh keys, re-sealed fields, re-wrapped K_blob)
   O->>S: new node sealed under E_{n+1}, tagged epoch n+1
   X->>S: (colluding) fetch new node
@@ -89,7 +92,7 @@ sequenceDiagram
 - **E2 — a remaining member is not granted the new epoch:** the rotator's client cannot anchor that member's key (a
   substitution, never a legitimate rotation, which is a signed step), so it declares them pending. Their grant stays
   behind (they hold `E_n` while the scope is at `E_{n+1}`) → they are *waiting for the current key*: everything they
-  could open is re-sealed, so they read nothing of the scope until re-granted, write nothing under `E_n`, and the
+  could open is now under `E_{n+1}`, so they read nothing of the scope until re-granted, write nothing under `E_n`, and the
   server refuses a write tagged `n` (`409 stale_epoch`).
   It is **transient**: grant delivery offers the job to every key-holder, a worker that cannot anchor them declines it
   (`identity_unanchored`), and the first member whose client anchors them delivers the epoch; their row reads
@@ -99,7 +102,7 @@ sequenceDiagram
 - **E3 — the rotation was built on a superseded epoch:** another rotation committed first (two owners, two tabs,
   a job reclaimed after its lease lapsed, or a panel removal meeting a queued job), or the rotating device's
   grant lags the scope (E2's skipped member). The server answers `409 stale_epoch` and stores nothing: no statement,
-  no grant, no staged value. The device re-opens its grant, reads the members again and rebuilds the rotation **once**, from a fresh key
+  no grant, no staged wrap. The device re-opens its grant, reads the members again and rebuilds the rotation **once**, from a fresh key
   ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 4 says why the key must be fresh). After a race
   the re-opened grant is current, because the winner re-granted it. If it still lags, the rotation fails: the
   synchronous remove reports it and the member stays, and a queued job is **declined** rather than failed, so it
@@ -108,13 +111,13 @@ sequenceDiagram
 ## Quality notes
 
 - **Forward-confidential, without re-encryption.** The epoch costs one random key, one succession statement, one
-  grant per remaining member and a symmetric re-seal of every scope-level value — for a tenant every member's name,
-  picture and join record ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) § Cost); the
+  grant per remaining member and a symmetric re-wrap of every scope-level value's own key — for a tenant three wraps
+  per member, the name, picture and join record untouched ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) § Cost); the
   node re-key that follows costs symmetric re-seals per node and medium in the database, and no store object is read
   or written ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) § Cost).
 - **Operator-blind.** The server stores only the succession public keys and signatures, the per-member and
-  per-invite grants, a per-membership granted-epoch marker, per-node epoch counters and the re-seals' rewritten
-  ciphertext — no key, no plaintext. The epoch counters are operational metadata the operator could infer from timing
+  per-invite grants, a per-membership granted-epoch marker, per-node epoch counters, the rewritten wraps and the
+  re-key's rewritten ciphertext — no key, no plaintext. The epoch counters are operational metadata the operator could infer from timing
   anyway.
 - **Honest limit.** Already-read + pre-rotation content is not retractable, and a re-key re-wraps keys without
   re-encrypting content: a `K_blob` a former key-holder kept still opens that blob's bytes

@@ -33,7 +33,7 @@ type Row = {
   encryptedName: string; slugToken: string; wrappedContentKey: string; wrappedMeta: string | null; sealedDropPrivateKey: string | null
   shareIdentityId: string | null; wrappedIdentityKey: string | null
 }
-type Share = { shareId: string; nodeId: string; role: RekeyShareRoleEnum; sealedShareKey: string; sealedShareKeyEpoch: number; wrap: string | null; sealedDropPublicKey: string | null }
+type Share = { shareId: string; nodeId: string; role: RekeyShareRoleEnum; sealedShareKey: string; wrappedRecoveryValueKey: string; sealedShareKeyEpoch: number; wrap: string | null; sealedDropPublicKey: string | null }
 type Identity = { identityId: string; shareId: string; wrappedIdentityKey: string | null; sealedDisplayName: string }
 /** A blob of the node: an attachment slot's (bound to the node), or — with [ownerId] — one its application stores through
  *  core's blob service (ADR 0113), bound to the id the server lists it with. */
@@ -59,6 +59,10 @@ const server = {
   commitBodies: new Map<string, CommitNodeRekeyRequest>(),
   /** Each staged list's `fromEpoch`, by node. */
   stagedFrom: new Map<string, number | null>(),
+  /** The links a commit closed as key-lost, in order. */
+  closedLost: [] as string[],
+  /** Every share entry staged, in order. */
+  stagedShares: [] as RekeyShareWrap[],
 }
 
 /** The backend's `OwnerOnlyRekey`: a drop box (by its kind, which an application declares — a drop key alone is not
@@ -89,7 +93,7 @@ function installServer(): void {
       const shares = server.shares.filter((s) => s.nodeId === nodeId)
       return {
         blobs: server.blobs.filter((b) => b.nodeId === nodeId && !b.ownerId).map(({ blobId, role, wrappedBlobKey }) => ({ blobId, role, wrappedBlobKey })),
-        shares: shares.map((s) => ({ shareId: s.shareId, role: s.role, sealedShareKey: s.sealedShareKey, sealedShareKeyEpoch: s.sealedShareKeyEpoch, hasWrap: s.wrap !== null, hasDropPublicKey: s.sealedDropPublicKey !== null })),
+        shares: shares.map((s) => ({ shareId: s.shareId, role: s.role, sealedShareKey: s.sealedShareKey, wrappedRecoveryValueKey: s.wrappedRecoveryValueKey, sealedShareKeyEpoch: s.sealedShareKeyEpoch, hasWrap: s.wrap !== null, hasDropPublicKey: s.sealedDropPublicKey !== null })),
         identities: server.identities.filter((i) => shares.some((s) => s.shareId === i.shareId)).map((i) => ({
           identityId: i.identityId, shareId: i.shareId, wrappedIdentityKey: i.wrappedIdentityKey, sealedDisplayName: i.wrappedIdentityKey ? null : i.sealedDisplayName,
         })),
@@ -97,6 +101,7 @@ function installServer(): void {
     },
     stageNodeRekey: async ({ nodeId, rekeyId, nodeRekeyStage: s }) => {
       server.stagedFrom.set(nodeId, s.fromEpoch)
+      server.stagedShares.push(...(s.shares ?? []))
       const st = server.stages.get(rekeyId) ?? { children: [], blobs: [], shares: [], identities: [] }
       st.children.push(...(s.children ?? [])); st.blobs.push(...(s.blobs ?? [])); st.shares.push(...(s.shares ?? [])); st.identities.push(...(s.identities ?? []))
       server.stages.set(rekeyId, st)
@@ -121,6 +126,12 @@ function installServer(): void {
       for (const b of st.blobs) server.blobs.find((x) => x.blobId === b.blobId)!.wrappedBlobKey = b.wrappedBlobKey
       for (const sw of st.shares) {
         const share = server.shares.find((x) => x.shareId === sw.shareId)!
+        if (sw.lostCopyDigest) {
+          // the backend closes a key-lost link through its close body when the digest is its copy's (`RekeyStore.closeLost`)
+          if (sw.lostCopyDigest !== b64std(v1.sha256Digest(v1.utf8(share.sealedShareKey)))) throw refusal(409, 'rekey_parts_stale')
+          server.closedLost.push(share.shareId)
+          Object.assign(share, { wrap: null, sealedDropPublicKey: null })
+        }
         if (sw.wrap) share.wrap = sw.wrap
         if (sw.sealedDropPublicKey) share.sealedDropPublicKey = sw.sealedDropPublicKey
       }
@@ -192,9 +203,19 @@ function node(
     ...({ orderIndex: 0, createdAt: new Date(0), blockedByOperator: false } as object), ...extra,
   }
 }
-// a link's recovery copy as the rotation re-sealed it: under E_1, at epoch 1 (ADR 0115 decision 2)
-const recovery = (nodeId: string, shareId: string, kShare: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'share-key-recovery', scopeId: SCOPE, nodeId, shareId, epoch: 1 }, E1, kShare))
+// a link's recovery copy as a mint at epoch 1 wrote it: K_share under a value key of its own, whose wrap is under E_1
+// (ADR 0115; a rotation re-wraps it and leaves the copy)
+const recoveryContext = (nodeId: string, shareId: string) =>
+  ({ purpose: 'share-key-recovery', scopeId: SCOPE, nodeId, shareId, epoch: 1 }) as const
+const recoveryWrapOf = (scopeKey: Uint8Array, nodeId: string, shareId: string, valueKey: Uint8Array) =>
+  b64std(v1.wrapValueKey(scopeKey, { scopeId: SCOPE, epoch: 1, value: recoveryContext(nodeId, shareId) }, valueKey))
+const recovery = (nodeId: string, shareId: string, kShare: Uint8Array) => {
+  const valueKey = v1.generateValueKey()
+  return {
+    sealedShareKey: b64std(v1.seal(recoveryContext(nodeId, shareId), valueKey, kShare)),
+    wrappedRecoveryValueKey: recoveryWrapOf(E1, nodeId, shareId, valueKey),
+  }
+}
 /** What a member's device holds after the rotation: E_1 alone. */
 const memberEpochs = (): ScopeKey => ({ epoch: 1, key: E1 })
 const rows = () => [...server.nodes.values()]
@@ -204,7 +225,7 @@ beforeEach(() => {
   installServer()
   K = { root: v1.randomBytes(32), child: v1.randomBytes(32), box: v1.randomBytes(32) }
   server.nodes.clear(); server.stages.clear(); server.crashOnCommitOf = null; server.current = 1
-  server.role = 'OWNER'; server.commits = []; server.commitBodies.clear(); server.stagedFrom.clear()
+  server.role = 'OWNER'; server.commits = []; server.commitBodies.clear(); server.stagedFrom.clear(); server.closedLost = []; server.stagedShares = []
   server.epochs = memberEpochs()
   const kBlob = v1.randomBytes(32)
   const coverRef = { blobId: ids.cover, ownerId: ids.root, role: 'COVER' as const }
@@ -224,8 +245,8 @@ beforeEach(() => {
   K_DROP_SHARE = v1.randomBytes(32)
   const dropPublicSealed = b64std(v1.seal({ purpose: 'drop-public-key' }, K_DROP_SHARE, v1.serializeHybridPublic(v1.dropKeyPublic(drop))))
   server.shares = [
-    { shareId: ids.link, nodeId: ids.root, role: 'READ_WRITE', sealedShareKey: recovery(ids.root, ids.link, K_SHARE), sealedShareKeyEpoch: 1, wrap: b64std(v1.seal(SHARE_KEY, K_SHARE, K.root)), sealedDropPublicKey: null },
-    { shareId: ids.drop, nodeId: ids.box, role: 'WRITE_ONLY', sealedShareKey: recovery(ids.box, ids.drop, K_DROP_SHARE), sealedShareKeyEpoch: 1, wrap: null, sealedDropPublicKey: dropPublicSealed },
+    { shareId: ids.link, nodeId: ids.root, role: 'READ_WRITE', ...recovery(ids.root, ids.link, K_SHARE), sealedShareKeyEpoch: 1, wrap: b64std(v1.seal(SHARE_KEY, K_SHARE, K.root)), sealedDropPublicKey: null },
+    { shareId: ids.drop, nodeId: ids.box, role: 'WRITE_ONLY', ...recovery(ids.box, ids.drop, K_DROP_SHARE), sealedShareKeyEpoch: 1, wrap: null, sealedDropPublicKey: dropPublicSealed },
   ]
   const minted = mintIdentityKey(SCOPE, ids.box, ids.guest, v1.dropKeyPublic(drop))
   K_UP = minted.identityKey
@@ -313,13 +334,15 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
 
   // uc.spaces.rekey-after-rotation:links-follow-and-stay-marked
   it('bite 5: a link from before keeps showing what is added, stays re-issue-required, and a re-issue closes it', async () => {
-    const copy = server.shares.find((s) => s.shareId === ids.link)!.sealedShareKey
+    const before = server.shares.find((s) => s.shareId === ids.link)!
+    const copy = before.sealedShareKey
+    const wrap = before.wrappedRecoveryValueKey
     await rekeyScope(SCOPE)
     const link = server.shares.find((s) => s.shareId === ids.link)!
-    // the node's re-key leaves the recovery copy as the rotation re-sealed it (under E_1, at epoch 1): the K_share in it
-    // is the one from before, which is why the link stays re-issue-required (the server's rule, by the epoch the link
-    // was minted at, ADR 0115 decision 2)
-    expect(link).toMatchObject({ sealedShareKey: copy, sealedShareKeyEpoch: 1 })
+    // the node's re-key leaves the recovery copy and its value key's wrap as they were (the wrap under E_1, at epoch 1):
+    // the K_share in it is the one from before, which is why the link stays re-issue-required (the server's rule, by the
+    // epoch the link was minted at, ADR 0115 decision 2)
+    expect(link).toMatchObject({ sealedShareKey: copy, wrappedRecoveryValueKey: wrap, sealedShareKeyEpoch: 1 })
     // the old K_share (the one an excluded party can rebuild from the copy) opens the NEW root key
     expect(v1.open(SHARE_KEY, K_SHARE, fromB64std(link.wrap!))).toEqual(keyOf(ids.root))
     // a re-issue's fresh K_share: the old one opens nothing of it
@@ -410,6 +433,53 @@ describe('the frontier and the commit (ADR 0114 decisions 3-4, ADR 0115)', () =>
     // the binding moved with it: the new entry does not open as one bound to the scope epoch from before
     expect(() => openContentKey(SCOPE, E1, { ...after, scopeEpoch: 0 })).toThrow(v1.OpenRefused)
     expect(() => openName(E1, addr(ids.root, 0, 2), after.encryptedName)).toThrow(v1.OpenRefused)
+  })
+
+  // ADR 0115 decision 2: a recovery copy's value-key wrap the rotator could not open is staged as one nobody opens — a
+  // K_v of nobody's under a key dropped at once; the copy itself is untouched, but its key is lost to every member, so the
+  // root's re-key names it and the commit closes it instead of stalling the re-key for good.
+  it('names a link whose recovery copy opens for no member as key-lost, and the re-key finishes', async () => {
+    const link = server.shares.find((s) => s.shareId === ids.link)!
+    link.wrappedRecoveryValueKey = recoveryWrapOf(v1.randomBytes(32), ids.root, ids.link, v1.generateValueKey())
+    expect((await rekeyScope(SCOPE)).done).toBe(true)
+    const staged = server.stagedShares
+    expect(rows().every((n) => !n.due)).toBe(true)
+    expect(staged.find((s) => s.shareId === ids.link)).toEqual({
+      shareId: ids.link, lostCopyDigest: b64std(v1.sha256Digest(v1.utf8(link.sealedShareKey))),
+    })
+    expect(server.closedLost).toEqual([ids.link])
+    expect(link.wrap, 'nothing new under the lost link').toBeNull()
+    // control: the drop box's link, whose copy opens, gets the new drop public key under its K_share
+    const drop = server.shares.find((s) => s.shareId === ids.drop)!
+    expect(staged.find((s) => s.shareId === ids.drop)).toMatchObject({ sealedDropPublicKey: drop.sealedDropPublicKey })
+    expect(openDropPublicKey(K_DROP_SHARE, drop.sealedDropPublicKey!)).toBeTruthy()
+  })
+
+  // A rotator holds the scope key, so it can wrap a K_v of its own choosing at the very slot: that wrap opens, and the
+  // copy under it does not — the link is key-lost, and no wrap of the new root key under a K_share of the rotator's
+  // choosing is ever staged.
+  it('names a link whose copy\'s wrap was substituted as key-lost, never wrapping the new key under another K_share', async () => {
+    const link = server.shares.find((s) => s.shareId === ids.link)!
+    link.wrappedRecoveryValueKey = recoveryWrapOf(E1, ids.root, ids.link, v1.generateValueKey())
+    expect((await rekeyScope(SCOPE)).done).toBe(true)
+    expect(server.stagedShares.find((s) => s.shareId === ids.link)).toEqual({
+      shareId: ids.link, lostCopyDigest: b64std(v1.sha256Digest(v1.utf8(link.sealedShareKey))),
+    })
+    expect(server.closedLost).toEqual([ids.link])
+    // control: the drop box's link, its wrap genuine, is re-keyed as before
+    expect(server.stagedShares.find((s) => s.shareId === ids.drop)).not.toHaveProperty('lostCopyDigest', expect.any(String))
+  })
+
+  // A node whose key opens for no member — a root entry the rotator could not re-seal — holds up no other node: the run
+  // re-keys everything else first and only then refuses, leaving that node due.
+  it('re-keys every other node before it refuses on one whose key opens for no member', async () => {
+    const root = server.nodes.get(ids.root)!
+    root.wrappedContentKey = wrapContentKey(v1.randomBytes(32), addr(ids.root, 0, 1), K.root) // first in the frontier
+    await expect(rekeyScope(SCOPE)).rejects.toThrow(v1.OpenRefused)
+    expect(server.commits).toEqual([ids.box])
+    expect(server.nodes.get(ids.box)!).toMatchObject({ epoch: 1, due: false })
+    expect(server.nodes.get(ids.root)!).toMatchObject({ epoch: 0, due: true })
+    expect(server.nodes.get(ids.child)!).toMatchObject({ epoch: 0, due: true }) // below it: its chain does not open either
   })
 
   it('a scope-root entry still under the replaced key opens under nothing the device holds: its re-key refuses, nothing of it committed', async () => {

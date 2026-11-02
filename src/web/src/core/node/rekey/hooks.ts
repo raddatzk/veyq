@@ -4,6 +4,7 @@
 // it knows — its fields inside the node's meta (Memories' banner wraps) and its own rows (Memories' media, buckets),
 // staged under the commit's re-key id through its own operation. Required on every kind (`KindDescriptor.rekeyContent`),
 // so a kind cannot be registered without saying what its re-key does: one with nothing of its own says so explicitly.
+import type * as v1 from '@veyq/crypto/v1'
 import type { NodeKind } from '../kind'
 
 /** One node's re-key, as core hands it to the node's kind. Every key here lives only for the call. */
@@ -34,22 +35,29 @@ export type RekeyContentHook = (ctx: RekeyNodeContext) => Promise<void>
 export const nothingOfItsOwnToRekey: RekeyContentHook = async () => {}
 
 /**
- * A rotation's scope-level re-seal (ADR 0115 decision 2), as core hands it to an application: the scope key is replaced,
- * and every row the application stores sealed under it (Memories' item marks) must be re-sealed under the new key and
- * staged under [rekeyId] before core commits the rotation — the backend's `ScopeRekeyParticipant` on the web. Core never
- * names an application's rows (ADR 0079 decision 3). Every key here lives only for the call.
+ * A rotation's scope-level move (ADR 0115 decision 2), as core hands it to an application: the scope key is replaced, and
+ * every value the application stores under a value key of its own (Memories' item marks) has that key's wrap moved to the
+ * new key and staged under [rekeyId] before core commits the rotation — the backend's `ScopeRekeyParticipant` on the web.
+ * **A rotation re-wraps keys and never rewrites a value**: the context hands the application no scope key at all, only
+ * [rewrap], so it cannot re-seal a value, and the server refuses a stage that writes one (`422 rekey_writes_value`). Core
+ * never names an application's rows (ADR 0079 decision 3).
  */
 export interface ScopeRekeyContext {
   scopeId: string
   /** The rotation's re-key id: what the application stages under and core names in the commit. */
   rekeyId: string
-  /** The scope's key before the rotation (`fromEpoch`, the epoch every listed row is under) and the one it minted. */
-  oldKey: { readonly epoch: number; readonly key: Uint8Array }
-  newKey: { readonly epoch: number; readonly key: Uint8Array }
-  /** SHA-256 (base64) of a served ciphertext's TEXT — what each staged value names as `replacedDigest`. */
-  digestOf(ciphertext: string): string
+  /** The scope's epoch before the rotation — every listed wrap is under its key; the stage states it as `fromEpoch`. */
+  fromEpoch: number
+  /**
+   * The same value key, moved: [wrapped] (a wrap under the old key, as listed) opened and wrapped under the new key, bound
+   * to [value] — the value's own seal context, its address. A wrap that does not open is replaced by one nobody opens
+   * (`features/spaces/valueKey.ts` `rewrapValueKey`), so the value reads as unreadable and the rotation goes on.
+   */
+  rewrap(value: v1.ValueContext, wrapped: string): string
+  /** SHA-256 (base64) of a served wrap's TEXT — what each staged wrap names as `replacedDigest`. */
+  digestOf(wrapped: string): string
 }
 
-/** Re-seal and stage an application's rows under the scope key (see [ScopeRekeyContext]). Fails closed: a row it cannot
- *  stage throws, and the rotation is not committed (the server refuses it `rekey_parts_missing` anyway). */
+/** Re-wrap and stage an application's value keys under the scope key (see [ScopeRekeyContext]). Fails closed: a row it
+ *  cannot stage throws, and the rotation is not committed (the server refuses it `rekey_parts_missing` anyway). */
 export type ScopeRekeyParticipant = (ctx: ScopeRekeyContext) => Promise<void>

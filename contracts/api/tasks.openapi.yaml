@@ -40,7 +40,7 @@ info:
     `E_{n+1}` + re-grants the surviving members on-device via the rotation-commit
     (`POST /api/scopes/{scopeId}/epochs`, cr-0089), then completes — closing the job with no `sealedResult`
     (the rotation is already committed). The claimed job carries only the cleartext envelope (no `grantDelivery`
-    target); the worker reads the member directory + the scope-level rows it re-seals (`listScopeRekeyParts`) it already has endpoints for, **after** its
+    target); the worker reads the member directory + the scope-level value keys it re-wraps (`listScopeRekeyParts`) it already has endpoints for, **after** its
     claim. First-online-wins. An event **joins** a job only while it is `pending`, so many removals before anyone
     is online still cost one rotation; an event that arrives once a job is claimed gets a job of its own, because
     the claimed job's worker may already have read the directory the event changed. A job completes only once its

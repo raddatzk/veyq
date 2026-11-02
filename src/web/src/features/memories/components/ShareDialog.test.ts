@@ -40,7 +40,7 @@ const EPOCHS = { epoch: 1, key: new Uint8Array(32) }
 const share = (over: Record<string, unknown>) => ({
   shareId: 's', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Read, enabled: true, mine: true,
   createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null,
-  sealedNote: null, sealedShareName: null, sealedShareKey: 'k', sealedShareKeyEpoch: 1, passwordRequired: false, sealedPassword: null,
+  sealedNote: null, sealedShareName: null, sealedShareKey: 'k', wrappedRecoveryValueKey: 'w', sealedShareKeyEpoch: 1, passwordRequired: false, sealedPassword: null,
   reissueRequired: false,
   deletable: true,
   newGuestsRefused: false,

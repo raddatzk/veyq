@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.identity
 
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -11,16 +12,21 @@ import java.util.UUID
  * profile's stored counter.
  */
 data class ProfileView(
-    val userId: String, val username: String, val sealedName: String?, val avatarRevision: Int,
-    /** The member's sealed join record (ADR 0111 decisions 3 and 12), null for the tenant's first owner. */
-    val sealedJoinRecord: String? = null,
+    val userId: String, val username: String,
+    /** The sealed name and its value key's wrap (ADR 0115), null when the member left it out. */
+    val name: SealedValue?,
+    val avatarRevision: Int,
+    /** The member's sealed join record and its wrap (ADR 0111 decisions 3 and 12), null for the tenant's first owner. */
+    val joinRecord: SealedValue? = null,
     /** The inviting owner's endorsement of that record (ADR 0111 decision 21), or null. */
     val joinEndorsement: String? = null,
 )
 
 /** A join record an owner rooted (ADR 0111 decision 21): the member, the sealed record as
- *  stored, and the endorsement it carries now. */
-data class RootedJoinRecord(val tenantId: String, val userId: String, val sealedJoinRecord: String, val joinEndorsement: String?)
+ *  stored with its value key's wrap, and the endorsement it carries now. */
+data class RootedJoinRecord(val tenantId: String, val userId: String, val joinRecord: SealedValue, val joinEndorsement: String?) {
+    val sealedJoinRecord: String get() = joinRecord.value
+}
 
 /**
  * Persistence for the per-`(user, tenant)` identity profile (cr-0083, ADR 0023). Operator-blind: `username` is a
@@ -46,16 +52,16 @@ class TenantProfileStore {
         TenantProfileEntity.find("tenantId = ?1 and username = ?2", tenantId, norm(username)).firstResult()?.userId
 
     /**
-     * Create the member's tenant profile at the join: the username, and what the joiner sealed under `K_tenant`, which
-     * every joiner holds at accept (the owner's cold birth, a member's self-grant, ADR 0111 decision 3) — the optional
-     * name and picture (ADR 0084 decision 7: stored with revision 1, so a directory read at once shows it) and a
-     * member's join record (null for the tenant's first owner), with [joinSignerUserId] — the invite's signer, who rooted
-     * it (ADR 0111 decision 21).
+     * Create the member's tenant profile at the join: the username, and what the joiner sealed with its value keys
+     * wrapped under `K_tenant`, which every joiner holds at accept (the owner's cold birth, a member's self-grant, ADR
+     * 0111 decision 3) — the optional name and picture (ADR 0084 decision 7: stored with revision 1, so a directory read
+     * at once shows it) and a member's join record (null for the tenant's first owner), with [joinSignerUserId] — the
+     * invite's signer, who rooted it (ADR 0111 decision 21).
      */
     @Transactional
     fun create(
-        userId: String, tenantId: String, username: String, sealedName: String? = null, sealedAvatar: String? = null,
-        sealedJoinRecord: String? = null, joinSignerUserId: String? = null,
+        userId: String, tenantId: String, username: String, name: SealedValue? = null, avatar: SealedValue? = null,
+        joinRecord: SealedValue? = null, joinSignerUserId: String? = null,
     ): String {
         val id = UUID.randomUUID().toString()
         TenantProfileEntity().apply {
@@ -63,10 +69,13 @@ class TenantProfileStore {
             this.userId = userId
             this.tenantId = tenantId
             this.username = norm(username)
-            this.sealedName = sealedName
-            this.sealedAvatar = sealedAvatar
-            this.avatarRevision = if (sealedAvatar != null) 1 else 0
-            this.sealedJoinRecord = sealedJoinRecord
+            sealedName = name?.value
+            wrappedNameValueKey = name?.wrappedValueKey
+            sealedAvatar = avatar?.value
+            wrappedAvatarValueKey = avatar?.wrappedValueKey
+            avatarRevision = if (avatar != null) 1 else 0
+            sealedJoinRecord = joinRecord?.value
+            wrappedJoinRecordValueKey = joinRecord?.wrappedValueKey
             this.joinSignerUserId = joinSignerUserId
         }.persist()
         return id
@@ -77,10 +86,11 @@ class TenantProfileStore {
      *  endorsement covers the record it was made over, never this one (ADR 0111 decision 21).
      *  The only writer of the record besides [create]; the profile op never is. */
     @Transactional
-    fun setJoinRecord(userId: String, tenantId: String, sealedJoinRecord: String, joinSignerUserId: String) {
+    fun setJoinRecord(userId: String, tenantId: String, joinRecord: SealedValue, joinSignerUserId: String) {
         TenantProfileEntity.update(
-            "sealedJoinRecord = ?1, joinSignerUserId = ?2, joinEndorsement = null where userId = ?3 and tenantId = ?4",
-            sealedJoinRecord, joinSignerUserId, userId, tenantId,
+            "sealedJoinRecord = ?1, wrappedJoinRecordValueKey = ?2, joinSignerUserId = ?3, joinEndorsement = null " +
+                "where userId = ?4 and tenantId = ?5",
+            joinRecord.value, joinRecord.wrappedValueKey, joinSignerUserId, userId, tenantId,
         )
     }
 
@@ -93,7 +103,10 @@ class TenantProfileStore {
             if (tenantIds.isEmpty()) return emptyList()
             TenantProfileEntity.find("joinSignerUserId = ?1 and sealedJoinRecord is not null and tenantId in ?2", signerUserId, tenantIds).list()
         }
-        return rows.mapNotNull { RootedJoinRecord(it.tenantId, it.userId, it.sealedJoinRecord ?: return@mapNotNull null, it.joinEndorsement) }
+        return rows.mapNotNull {
+            val record = SealedValue.of(it.sealedJoinRecord, it.wrappedJoinRecordValueKey) ?: return@mapNotNull null
+            RootedJoinRecord(it.tenantId, it.userId, record, it.joinEndorsement)
+        }
             .sortedWith(compareBy({ it.tenantId }, { it.userId }))
     }
 
@@ -120,18 +133,22 @@ class TenantProfileStore {
 
     /**
      * Whether [epoch] is the tenant scope's current epoch, under that scope's row lock taken here for the caller's
-     * transaction (ADR 0115 decision 3): a field sealed under the tenant key lands only at the epoch the rotation's
-     * commit, which holds the same lock, re-seals every profile to. The lock is the tenant scope's, the first a writer
-     * of these rows takes.
+     * transaction (ADR 0115 decision 3): a value key wrapped under the tenant key lands only at the epoch the rotation's
+     * commit, which holds the same lock, re-wraps every profile's keys to. The lock is the tenant scope's, the first a
+     * writer of these rows takes.
      */
     fun atCurrentEpoch(tenantId: String, epoch: Int): Boolean = ScopeEntity.lockRow(tenantId)?.currentEpoch == epoch
 
-    /** Update the caller's profile in a tenant — change the username and/or the sealed name (each optional). */
+    /** Update the caller's profile in a tenant — change the username and/or the sealed name with its value key's wrap
+     *  (each optional; a name always replaces both). */
     @Transactional
-    fun update(userId: String, tenantId: String, username: String?, sealedName: String?) {
+    fun update(userId: String, tenantId: String, username: String?, name: SealedValue?) {
         val profile = find(userId, tenantId) ?: return
         if (username != null) profile.username = norm(username)
-        if (sealedName != null) profile.sealedName = sealedName
+        if (name != null) {
+            profile.sealedName = name.value
+            profile.wrappedNameValueKey = name.wrappedValueKey
+        }
         profile.persist()
     }
 
@@ -141,12 +158,13 @@ class TenantProfileStore {
      * whether the member has a profile in the tenant.
      */
     @Transactional
-    fun setAvatar(userId: String, tenantId: String, sealedAvatar: String, epoch: Int): AvatarSet {
-        // Sealed under the tenant key at [epoch]: only while it is the current one, under the tenant scope's lock.
+    fun setAvatar(userId: String, tenantId: String, avatar: SealedValue, epoch: Int): AvatarSet {
+        // Its value key wrapped under the tenant key at [epoch]: only while it is the current one, under the tenant
+        // scope's lock.
         if (!atCurrentEpoch(tenantId, epoch)) return AvatarSet.STALE_EPOCH
         val set = TenantProfileEntity.update(
-            "sealedAvatar = ?1, avatarRevision = avatarRevision + 1 where userId = ?2 and tenantId = ?3",
-            sealedAvatar, userId, tenantId,
+            "sealedAvatar = ?1, wrappedAvatarValueKey = ?2, avatarRevision = avatarRevision + 1 where userId = ?3 and tenantId = ?4",
+            avatar.value, avatar.wrappedValueKey, userId, tenantId,
         ) > 0
         return if (set) AvatarSet.SET else AvatarSet.NO_PROFILE
     }
@@ -162,7 +180,7 @@ class TenantProfileStore {
     @Transactional
     fun clearAvatar(userId: String, tenantId: String): Boolean =
         TenantProfileEntity.update(
-            "sealedAvatar = null, avatarRevision = avatarRevision + 1 where userId = ?1 and tenantId = ?2",
+            "sealedAvatar = null, wrappedAvatarValueKey = null, avatarRevision = avatarRevision + 1 where userId = ?1 and tenantId = ?2",
             userId, tenantId,
         ) > 0
 
@@ -173,12 +191,15 @@ class TenantProfileStore {
      */
     fun byUserInTenant(tenantId: String): Map<String, ProfileView> =
         TenantProfileEntity.getEntityManager().createQuery(
-            "select p.userId, p.username, p.sealedName, " +
-                "case when p.sealedAvatar is null then 0 else p.avatarRevision end, p.sealedJoinRecord, p.joinEndorsement " +
-                "from TenantProfileEntity p where p.tenantId = ?1",
+            "select p.userId, p.username, p.sealedName, p.wrappedNameValueKey, " +
+                "case when p.sealedAvatar is null then 0 else p.avatarRevision end, p.sealedJoinRecord, p.wrappedJoinRecordValueKey, " +
+                "p.joinEndorsement from TenantProfileEntity p where p.tenantId = ?1",
             Array<Any?>::class.java,
         ).setParameter(1, tenantId).resultList
             .associate { r ->
-                r[0] as String to ProfileView(r[0] as String, r[1] as String, r[2] as String?, (r[3] as Number).toInt(), r[4] as String?, r[5] as String?)
+                r[0] as String to ProfileView(
+                    r[0] as String, r[1] as String, SealedValue.of(r[2] as String?, r[3] as String?), (r[4] as Number).toInt(),
+                    SealedValue.of(r[5] as String?, r[6] as String?), r[7] as String?,
+                )
             }
 }

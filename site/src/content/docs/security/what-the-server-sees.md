@@ -122,8 +122,9 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
   epoch it was minted at, and whether it is **due** for a re-key.
 - **Key replacement:** per scope epoch a **succession public key and signature**, the statement by which the old key
   vouches for the new one — no link from one key to another, and nothing in it opens anything; per link the scope
-  epoch it was minted at and whether the end-date sweep closed it. At a rotation the server sees which scope-level
-  rows are rewritten, and at a link's close that the link closed and which nodes lie below it — rows and a tree it
+  epoch it was minted at and whether the end-date sweep closed it. Beside every scope-level value an author writes, the **wrap of its own value key**,
+  which every write of the value and every rotation rewrites. At a rotation the server sees which wraps and which
+  scope-root entries are rewritten — never a value, which a rotation leaves byte-identical — and at a link's close that the link closed and which nodes lie below it — rows and a tree it
   serves anyway. No key, and no new correlation
   ([ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 9,
   [ADR 0114](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 10).

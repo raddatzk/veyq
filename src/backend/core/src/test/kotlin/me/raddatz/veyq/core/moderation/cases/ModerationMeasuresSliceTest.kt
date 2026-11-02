@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.moderation.cases
 
 import me.raddatz.veyq.core.testing.TestNodeRekey
 import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.content.NodeCover
 import me.raddatz.veyq.core.moderation.ModerationTestKit
 import me.raddatz.veyq.core.moderation.block.BlockKind
@@ -93,7 +94,8 @@ class ModerationMeasuresSliceTest {
         val newId = TestIds.shareId()
         return sharing.reissue(
             ownerId, shareId, newId, wrap = "d3JhcA==", sealedDropPublicKey = null, sealedName = "c2VhbGVk", expiresAt = null,
-            sealedNote = null, sealedShareKey = "cmVjb3Zlcnk=", sealedShareKeyEpoch = 0, sealedShareName = null,
+            sealedNote = null, sealedShareKey = "cmVjb3Zlcnk=", wrappedRecoveryValueKey = TestGrants.freshWrap(),
+            sealedShareKeyEpoch = 0, sealedShareName = null,
             passwordRequired = false, pwSalt = null, pwVerifier = null, sealedPassword = null,
             writeVerifier = ShareWriteProof.verifier(newId), nodeEpoch = 0,
         ) to newId

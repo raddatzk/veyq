@@ -29,8 +29,8 @@ data class RekeyParts(
 ) {
     data class Blob(val blobId: String, val role: String, val wrappedBlobKey: String)
     data class Share(
-        val shareId: String, val role: String, val sealedShareKey: String, val sealedShareKeyEpoch: Int?,
-        val hasWrap: Boolean, val hasDropPublicKey: Boolean,
+        val shareId: String, val role: String, val sealedShareKey: String, val wrappedRecoveryValueKey: String,
+        val sealedShareKeyEpoch: Int?, val hasWrap: Boolean, val hasDropPublicKey: Boolean,
     )
     data class Identity(val identityId: String, val shareId: String, val wrappedIdentityKey: String?, val sealedDisplayName: String?)
 }
@@ -63,6 +63,7 @@ class RekeyStore(
     private val nodes: NodesStore,
     private val stage: NodeRekeyStage,
     private val ownerOnly: OwnerOnlyRekey,
+    private val sharing: SharingStore,
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
     @All participants: MutableList<NodeRekeyParticipant>,
 ) {
@@ -100,7 +101,10 @@ class RekeyStore(
         return RekeyParts(
             blobs,
             shares.map {
-                RekeyParts.Share(it.id, it.role, it.sealedShareKey!!, it.sealedShareKeyEpoch, it.wrap != null, it.sealedDropPublicKey != null)
+                RekeyParts.Share(
+                    it.id, it.role, it.sealedShareKey!!, it.wrappedRecoveryValueKey!!, it.sealedShareKeyEpoch, it.wrap != null,
+                    it.sealedDropPublicKey != null,
+                )
             },
             identities.map {
                 RekeyParts.Identity(it.id, it.shareId, it.wrappedIdentityKey, it.sealedDisplayName.takeIf { _ -> it.wrappedIdentityKey == null })
@@ -116,7 +120,7 @@ class RekeyStore(
         ShareEntity.find(
             "nodeId = :node and ${SharingStore.OPEN} and (wrap is not null or sealedDropPublicKey is not null)",
             mapOf("node" to nodeId, "now" to now),
-        ).list().filter { it.sealedShareKey != null }
+        ).list().filter { it.sealedShareKey != null && it.wrappedRecoveryValueKey != null }
 
     /** The guest identities of **every** link rooted on [nodeId], whatever its state, a tombstone included (ADR 0114
      *  decision 5): a contributor's name and a guest's `K_up` are the node's fields, not the link's, and stay readable to
@@ -146,7 +150,7 @@ class RekeyStore(
      *
      * **Lock order: the scope row, the links rooted on the node, each participant's own rows
      * ([NodeRekeyParticipant.lockRows], the applications' before the blob service's), the node row, then the rows it
-     * rewrites** (children, blobs, identities) — every
+     * rewrites** (children, blobs, identities, and the subtree's node rows a key-lost close marks) — every
      * writer's order ([NodeEpochGate]: a guest's write takes its share row, an application's writer its own rows, before
      * the node's). Everything is decided before anything is written;
      * a participant's refusal rolls the transaction back.
@@ -154,6 +158,9 @@ class RekeyStore(
      * A trashed root's freed slug token (its own id, [NodesStore.deleteSubtree]) is kept, not re-computed: it holds no
      * name and the restore supplies a fresh one; so is a trashed descendant's that an earlier delete freed. The name
      * and meta editors are kept too: a re-seal writes the same plaintext, it is no edit (ADR 0093 § 8).
+     *
+     * **A link whose key is lost** ([SHARE_LOST], [closeLost]) is closed here, after every check of the node and before
+     * the plan — so the plan needs no wrap for it, and a refusal after it rolls the close back with everything else.
      */
     @Transactional
     fun commit(scopeId: String, nodeId: String, rekeyId: String, c: RekeyCommit): RekeyOutcome {
@@ -193,9 +200,13 @@ class RekeyStore(
         if (!freedSlug && nodes.slugTaken(node.parentId, c.slugToken, exceptNodeId = nodeId)) return RekeyOutcome.SlugTaken
 
         val core = stage.read(rekeyId, nodeId, NodeRekeyStage.CORE)
-        val plan = CorePlan.of(scopeId, nodeId, node, core, rekeyedShares(nodeId, Instant.now()), identitiesOf(nodeId))
-            ?: return RekeyOutcome.PartsMissing
-        if (plan.stale) return RekeyOutcome.PartsStale
+        val now = Instant.now()
+        val closed = closeLost(nodeId, core, now) ?: return RekeyOutcome.PartsStale
+        // From here a refusal also undoes the closes above: nothing is written on any refusal.
+        fun refuse(o: RekeyOutcome): RekeyOutcome = o.also { if (closed > 0) QuarkusTransaction.setRollbackOnly() }
+        val plan = CorePlan.of(scopeId, nodeId, node, core, rekeyedShares(nodeId, now), identitiesOf(nodeId))
+            ?: return refuse(RekeyOutcome.PartsMissing)
+        if (plan.stale) return refuse(RekeyOutcome.PartsStale)
         // Core's parts first: a participant may copy what they re-sealed (a contributor's name, `MediaNodeRekeyParticipant`).
         // A participant's refusal rolls the whole transaction back, core's writes included.
         plan.apply()
@@ -223,6 +234,26 @@ class RekeyStore(
         stage.clear(rekeyId)
         nodes.bumpTree(scopeId)
         return RekeyOutcome.Committed
+    }
+
+    /**
+     * Close every link [staged] names key-lost ([SHARE_LOST]) through the one close body, key lost
+     * ([SharingStore.CloseKind.KEY_LOST]): its recovery copy opens for no member — a copy a rotator could not re-seal is
+     * staged as one nobody opens (ADR 0115 decision 2) — so nobody can wrap the node's new key for it, and the re-key
+     * would stay refused for good. Each must be an open link rooted on [nodeId] whose copy is still the one the re-keyer
+     * digested; else null (the commit's `rekey_parts_stale`) and nothing is closed. Returns how many it closed. Only a
+     * name closes: an open link the stage neither wraps nor names stays `rekey_parts_missing`. Runs under the scope's
+     * and the share rows' locks the commit took first — [SharingStore.close]'s order.
+     */
+    private fun closeLost(nodeId: String, staged: Map<Key, Value>, now: Instant): Int? {
+        val named = staged.filterKeys { it.field == SHARE_LOST }
+        if (named.isEmpty()) return 0
+        val open = rekeyedShares(nodeId, now).associateBy { it.id }
+        val lost = named.map { (key, value) ->
+            open[key.itemId]?.takeIf { ScopeRekeyStage.digest(it.sealedShareKey) == value.value } ?: return null
+        }
+        lost.forEach { sharing.close(it, SharingStore.CloseKind.KEY_LOST) }
+        return lost.size
     }
 
     /**
@@ -298,6 +329,8 @@ class RekeyStore(
         const val BLOB_WRAP = "blob.wrappedBlobKey"
         const val SHARE_WRAP = "share.wrap"
         const val SHARE_DROP = "share.sealedDropPublicKey"
+        /** A link whose recovery copy the re-keyer cannot open: the copy's digest, and the commit closes the link. */
+        const val SHARE_LOST = "share.lost"
         const val IDENTITY_KEY = "identity.wrappedIdentityKey"
         const val IDENTITY_NAME = "identity.sealedDisplayName"
     }

@@ -58,10 +58,12 @@ class MembershipEntity : PanacheEntityBase {
     @Column(name = "pending_consent", nullable = false)
     var pendingConsent: Boolean = false
 
-    /** For a `pendingConsent` proposal (cr-0096, ADR 0027): the group's **derived name-key `K_name`** sealed to
-     *  the invitee's identity public key (`asymWrap(inviteePub, K_name, "group-name-key")`) — opaque ciphertext the
-     *  server stores verbatim. Handed to the invitee so they open the scope's **canonical** `encrypted_name` (not
-     *  a private name copy) and see the group-consistent name. Null for an ordinary membership; cleared on accept. */
+    /** For a `pendingConsent` proposal (cr-0096, ADR 0027): the group name's **value key** sealed to the invitee's
+     *  identity public key (`asymWrap(inviteePub, K_v, "group-name-key")`, ADR 0115) — opaque ciphertext the server
+     *  stores verbatim. Handed to the invitee so they open the scope's **canonical** `encrypted_name` (not a private
+     *  name copy) and see the group-consistent name. Sealed to the invitee, not under the scope key, so a rotation leaves
+     *  it; a rename replaces it with the new name's key (`ScopesStore.renameGroup`). Null for an ordinary membership, or
+     *  when a rename cleared it; cleared on accept. */
     @Column(name = "sealed_name_key")
     var sealedNameKey: String? = null
 

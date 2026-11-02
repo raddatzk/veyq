@@ -75,7 +75,7 @@ export async function refreshPeopleDirectory(): Promise<void> {
 
 /** The tenant's members with their sealed names opened, read once a minute: the tenant scope is the active one (its keys
  *  are held) or is opened for this read and zeroed after it. Each name opens under the tenant's one key
- *  ({@link openMemberName}): every rotation re-seals every profile under its new key (ADR 0115 decision 2). Empty
+ *  ({@link openMemberName}), through its value key: every rotation re-wraps every value key under its new key (ADR 0115). Empty
  *  when the caller holds no tenant grant. */
 async function tenantNames(): Promise<Map<string, TenantRow>> {
   if (namesCache && Date.now() - namesCache.at < NAMES_TTL_MS) return namesCache.names
@@ -100,7 +100,7 @@ async function tenantNames(): Promise<Map<string, TenantRow>> {
     const names = new Map(
       rows.map((m) => [m.userId, {
         username: m.username,
-        name: epochs ? (openMemberName(epochs, { scopeId, userId: m.userId }, m.sealedName) ?? null) : null,
+        name: epochs ? (openMemberName(epochs, { scopeId, userId: m.userId }, m.sealedName, m.wrappedNameValueKey) ?? null) : null,
         identityPublicKey: m.identityPublicKey,
         keyChainHead: m.keyChainHead,
       }] as const),

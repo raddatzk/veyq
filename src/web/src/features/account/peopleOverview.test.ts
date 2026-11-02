@@ -32,6 +32,7 @@ import { openScopeById, type OpenedScope } from '../spaces/scopes'
 import { me } from '../spaces/grantTrust'
 import { ScopeKind, ScopeMemberRoleEnum, type ScopeMember } from '../../api/generated/scopes'
 import type { MemberVerification, TenantsApi } from '../../api/generated/tenants'
+import { sealValue } from '../spaces/valueKey'
 
 const T = '7e000000-0000-4000-8000-0000000000f2'
 const ME = '0e000000-0000-4000-8000-000000000011'
@@ -66,11 +67,18 @@ function rotated(p: Person, daysAgo: number): Person {
   chains.serve(chain)
   return { userId: p.userId, chain }
 }
+/** A join record as the accept writes it (ADR 0115): under a fresh value key, wrapped under the tenant key at epoch 0. */
+function sealedRecord(userId: string, record?: invite.JoinRecord) {
+  if (!record) return { sealedJoinRecord: null, wrappedJoinRecordValueKey: null }
+  const address = { tenantId: T, userId }
+  const s = sealValue({ epoch: 0, key: K0 }, invite.joinRecordContext(address), (kv) => invite.sealJoinRecord(kv, address, record))
+  return { sealedJoinRecord: s.sealed, wrappedJoinRecordValueKey: s.wrapped }
+}
 function row(p: Person, role: ScopeMemberRoleEnum, record?: invite.JoinRecord, o: { pendingConsent?: boolean } = {}): ScopeMember {
   return {
     userId: p.userId, username: `u${p.userId.slice(-2)}`, avatarRevision: 0, role, identityPublicKey: bundleB64(keysOf(p)),
     keyChainHead: headOf(p.chain), pending: false, pendingConsent: o.pendingConsent,
-    sealedJoinRecord: record ? b64std(invite.sealJoinRecord(K0, { tenantId: T, userId: p.userId }, record)) : null,
+    ...sealedRecord(p.userId, record),
   }
 }
 /** `p`'s join record through an invite the owner `by` signed with their current identity. */
@@ -106,8 +114,12 @@ function verifiedBy(verifier: Person, subject: Person, subjectHead = headOf(subj
   const v = verification.signVerification(
     address, { subjectHead: fromB64std(subjectHead), verifierHead: fromB64std(headOf(verifier.chain)) }, keysOf(verifier).identity.priv.sign,
   )
-  const sealedStatement = b64std(verification.sealVerification(K0, { ...address, epoch: 0 }, v))
-  return { verifierUserId: verifier.userId, subjectUserId: subject.userId, epoch: 0, sealedStatement, createdAt: new Date() }
+  const slot = { ...address, epoch: 0 }
+  const sealed = sealValue({ epoch: 0, key: K0 }, verification.verificationContext(slot), (kv) => verification.sealVerification(kv, slot, v))
+  return {
+    verifierUserId: verifier.userId, subjectUserId: subject.userId, epoch: 0, sealedStatement: sealed.sealed, wrappedValueKey: sealed.wrapped,
+    createdAt: new Date(),
+  }
 }
 function serveVerifications(rows: MemberVerification[]) {
   const listVerifications = vi.fn<TenantsApi['listVerifications']>(async () => ({ verifications: rows, more: false }))

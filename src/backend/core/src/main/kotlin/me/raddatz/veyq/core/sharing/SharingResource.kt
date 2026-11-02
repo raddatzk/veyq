@@ -101,7 +101,8 @@ class SharingResource(
             sealedName = createShareRequest.sealedName,
             expiresAt = createShareRequest.expiresAt?.toInstant(),
             sealedNote = createShareRequest.sealedNote, // cr-0115: optional curator note under K_share
-            sealedShareKey = createShareRequest.sealedShareKey, // K_share under K_SC(epoch): members recover it (ADR 0036, mandatory per ADR 0080)
+            sealedShareKey = createShareRequest.sealedShareKey, // K_share under its own K_v: members recover it (ADR 0036, mandatory per ADR 0080)
+            wrappedRecoveryValueKey = createShareRequest.wrappedRecoveryValueKey, // that K_v under K_SC(epoch) (ADR 0115)
             sealedShareKeyEpoch = createShareRequest.sealedShareKeyEpoch.validated(), // the scope epoch it is sealed at
             sealedShareName = createShareRequest.sealedShareName, // cr-0116: optional private label under K_share
             passwordRequired = createShareRequest.passwordRequired ?: false, // cr-0118: optional access-control gate
@@ -147,7 +148,8 @@ class SharingResource(
                 expiresAt = s.expiresAt?.atOffset(ZoneOffset.UTC),
                 sealedNote = s.sealedNote, // cr-0115: the manage UI shows + edits it
                 sealedShareName = s.sealedShareName, // cr-0116: the manage list's row title (falls back to the role)
-                sealedShareKey = s.sealedShareKey, // a member's manage UI recovers K_share through its epoch keys
+                sealedShareKey = s.sealedShareKey, // a member's manage UI recovers K_share through its value key's wrap
+                wrappedRecoveryValueKey = s.wrappedRecoveryValueKey,
                 sealedShareKeyEpoch = s.sealedShareKeyEpoch,
                 passwordRequired = s.passwordRequired, // cr-0118: a lock badge in the manage list
                 sealedPassword = s.sealedPassword, // cr-0118: the reveal copy (management-only; never a viewer)
@@ -210,6 +212,7 @@ class SharingResource(
             expiresAt = reissueShareRequest.expiresAt?.toInstant(),
             sealedNote = reissueShareRequest.sealedNote,
             sealedShareKey = reissueShareRequest.sealedShareKey,
+            wrappedRecoveryValueKey = reissueShareRequest.wrappedRecoveryValueKey,
             sealedShareKeyEpoch = reissueShareRequest.sealedShareKeyEpoch.validated(),
             sealedShareName = reissueShareRequest.sealedShareName,
             passwordRequired = reissueShareRequest.passwordRequired ?: false,

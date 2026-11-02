@@ -31,7 +31,7 @@ vi.mock('../account/identityPins', () => ({
 // which the anchor checks above must receive — so a wrap or a grant judged outside its tenant is red.
 vi.mock('../account/tenantTrust', () => ({ loadTenantView: vi.fn(), cachedTenantView: vi.fn(), tenantViewOfScope: vi.fn() }))
 // The scope-level re-seal a rotation stages before its commit (ADR 0115 decision 2) is scopeRekey.test.ts's; here it is a
-// recorder, so what a rotation hands it (the re-key id, the old and the new key, who is anchored) is checked against the
+// recorder, so what a rotation hands it (the re-key id, the old and the new key) is checked against the
 // commit it precedes.
 vi.mock('./scopeRekey', () => ({ stageScopeLevelRekey: vi.fn(), isRestageable: vi.fn(), REKEY_RESTAGES: 2 }))
 // The node re-key is rekeyScope.test.ts's; here only that a bulk close starts it, for which scope, and when.
@@ -39,7 +39,7 @@ vi.mock('../../core/node/rekey/rekeyScope', async (orig) => ({
   ...(await orig<typeof import('../../core/node/rekey/rekeyScope')>()), rekeyScope: vi.fn(async () => ({ done: true, committed: 0 })),
 }))
 
-import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, ROTATION_REBUILDS, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares, rekeyClosedScopes, openPlanGrantKey, isUnreadableGrant } from './scopes'
+import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, ROTATION_REBUILDS, renameGroup, wrapGroupNameKeyForInvitee, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares, rekeyClosedScopes, openPlanGrantKey, isUnreadableGrant } from './scopes'
 import { rekeyScope } from '../../core/node/rekey/rekeyScope'
 import { ScopeKind, type MyTenant, type OpenInvite, type ScopeSuccession, type ScopeMember, type ScopeSummary, type ScopesApi } from '../../api/generated/scopes'
 import type { ContentApi } from '../../api/generated/content'
@@ -50,10 +50,11 @@ import { HttpStatus, isCodedError } from '../../shared/httpError'
 import { anchorChainKey, anchorIdentity } from '../account/identityPins'
 import { cachedTenantView, loadTenantView, tenantViewOfScope, type TenantView } from '../account/tenantTrust'
 import { identityPrivate, masterKey } from '../../app/vault'
-import { deriveGroupNameKey, sealGroupName, openGroupNameWith } from './inviteName'
-import { deriveSpaceIconKey, sealIcon } from './spaceIcon'
+import { groupNameContext, sealGroupName, openGroupNameWith } from './inviteName'
+import { iconContext, sealIcon } from './spaceIcon'
+import { openValue, openValueKey, rewrapValueKey, sealValue } from './valueKey'
 import { forgetGroupNamesSeen, groupNameSeen } from './groupNamesSeen'
-import { grantSignatureVerifies, signGrant } from './grant'
+import { grantSignatureVerifies, recipientIdentityDigest, signGrant } from './grant'
 import * as invite from '@veyq/crypto/invite'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -87,6 +88,25 @@ function signed(row: Row, granter: { userId: string; identity: v1.Identity } = {
     granterIdentityPublicKey: pubOf(granter.identity),
   }
 }
+
+/** A group's name as its writer seals it (ADR 0115): under a fresh value key at `nameEpoch` (the write's epoch, `epoch`
+ *  by default), that key wrapped under the scope key [key] of `epoch` — the row's three name fields. */
+function groupNameOf(scopeId: string, key: Uint8Array, epoch: number, name: string, nameEpoch = epoch) {
+  const sealed = sealValue({ epoch, key }, groupNameContext(scopeId, nameEpoch), (nameKey) =>
+    fromB64std(sealGroupName(nameKey, scopeId, nameEpoch, name)))
+  return { encryptedName: sealed.sealed, wrappedNameValueKey: sealed.wrapped, nameEpoch }
+}
+/** A space's icon as its writer seals it (ADR 0115): the row's three icon fields, the wrap under [key] of `epoch`. */
+function spaceIconOf(scopeId: string, key: Uint8Array, epoch: number, image: Uint8Array, iconEpoch = epoch) {
+  const address = { scopeId, iconEpoch }
+  const sealed = sealValue({ epoch, key }, iconContext(address), (iconKey) => fromB64std(sealIcon(iconKey, address, image)))
+  return { sealedIcon: sealed.sealed, wrappedIconValueKey: sealed.wrapped, iconEpoch }
+}
+/** A member's read of a group name a request carries: its value key from the wrap under [key] of `epoch`, then the name. */
+const readGroupName = (
+  scopeId: string, key: Uint8Array, epoch: number, row: { encryptedName: string; wrappedNameValueKey: string; nameEpoch: number },
+) => openValue({ epoch, key }, groupNameContext(scopeId, row.nameEpoch), row.wrappedNameValueKey, (nameKey) =>
+  openGroupNameWith(nameKey, scopeId, row.nameEpoch, row.encryptedName))
 
 // Canonical scope ids — every grant, group name, icon and chain link is sealed bound to its scope (ADR 0072).
 const T = '5c09e000-0000-4000-8000-000000000e01'
@@ -229,7 +249,7 @@ describe('openScope', () => {
 })
 
 describe('createGroup', () => {
-  it('posts a self-grant + a name sealed under K_name_0 derived from the birth K_SC (operator-blind — only ciphertext leaves)', async () => {
+  it('posts a self-grant + a name sealed under a value key of its own, wrapped under the birth K_SC (operator-blind — only ciphertext leaves)', async () => {
     const list = listing([signed({ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' })])
     const createGroupFn = vi.fn<ScopesApi['createGroup']>().mockResolvedValue({ scopeId: G1, kind: 'GROUP' })
     mockScopes(list, undefined, createGroupFn)
@@ -239,24 +259,25 @@ describe('createGroup', () => {
     expect(createGroupFn).toHaveBeenCalledTimes(1)
 
     // Recover K_SC (= E_0) from the posted grant; the posted encryptedName must decrypt back to the plaintext name
-    // under K_name_0 = HKDF(E_0) (cr-0096), NOT under K_SC directly — proving the derived-name-key seal.
-    const { scopeId: posted, encryptedName, wrappedGrant } = createGroupFn.mock.calls[0][0].createGroupRequest
+    // under the value key its wrap carries (ADR 0115), NOT under K_SC directly.
+    const { scopeId: posted, encryptedName, wrappedNameValueKey, wrappedGrant } = createGroupFn.mock.calls[0][0].createGroupRequest
     expect(posted).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/) // client-minted UUIDv4
     const key = openOwn(posted, 0, wrappedGrant)
     expect(key.length).toBe(32)
-    expect(openGroupNameWith(deriveGroupNameKey(key), posted, 0, encryptedName)).toBe('Familie')
-    expect(() => openGroupNameWith(key, posted, 0, encryptedName)).toThrow() // NOT sealed under K_SC directly
+    expect(readGroupName(posted, key, 0, { encryptedName, wrappedNameValueKey, nameEpoch: 0 })).toBe('Familie')
+    expect(() => openGroupNameWith(key, posted, 0, encryptedName)).toThrow(v1.OpenRefused) // NOT sealed under K_SC directly
+    // the wrap is bound to this group's name: at another scope's slot it opens nothing
+    expect(() => openValueKey({ epoch: 0, key }, groupNameContext(G2, 0), wrappedNameValueKey)).toThrow(v1.OpenRefused)
   })
 })
 
 describe('listMyGroups', () => {
-  it('decrypts each group’s name via K_name (from the name-epoch key) on-device (the row carries only ciphertext)', async () => {
+  it('decrypts each group’s name through its value key\'s wrap under the scope key on-device (the row carries only ciphertext)', async () => {
     const key = v1.randomBytes(32) // E_0
     const grant = ownGrant(G1, key, 0)
-    const encryptedName = sealGroupName(deriveGroupNameKey(key), G1, 0, 'Reise-Crew') // sealed under K_name_0
     const list = listing([
       signed({ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' }),
-      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName, nameEpoch: 0, grantedEpoch: 0 }),
+      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, ...groupNameOf(G1, key, 0, 'Reise-Crew'), grantedEpoch: 0 }),
     ])
     mockScopes(list)
 
@@ -269,15 +290,15 @@ describe('listMyGroups', () => {
     forgetGroupNamesSeen()
     const e0 = v1.randomBytes(32)
     const e1 = v1.randomBytes(32) // the rotation's new key, which this member is not granted yet
-    const encryptedName = sealGroupName(deriveGroupNameKey(e1), G1, 1, 'Reise-Crew')
-    const sealedIcon = sealIcon(deriveSpaceIconKey(e1), { scopeId: G1, iconEpoch: 1 }, new Uint8Array([1, 2, 3]))
-    const behind = signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, e0, 0), encryptedName, nameEpoch: 1, iconEpoch: 1, sealedIcon, grantedEpoch: 0, currentEpoch: 1 })
+    const name = groupNameOf(G1, e1, 1, 'Reise-Crew')
+    const icon = spaceIconOf(G1, e1, 1, new Uint8Array([1, 2, 3]))
+    const behind = signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, e0, 0), ...name, ...icon, grantedEpoch: 0, currentEpoch: 1 })
     mockScopes(listing([behind]))
     expect(await listMyGroups()).toEqual([
       { scopeId: G1, tenantId: 't', name: '', icon: null, role: 'OWNER', deletedAt: null, purgeAfter: null, compromiseRotation: null, awaitingKey: true },
     ])
     // the remembered label, once this page opened the name under a key it held
-    const current = signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, e1, 1), encryptedName, nameEpoch: 1, grantedEpoch: 1 })
+    const current = signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, e1, 1), ...name, grantedEpoch: 1 })
     mockScopes(listing([current]))
     expect((await listMyGroups())[0]).toMatchObject({ name: 'Reise-Crew', awaitingKey: false }) // control: the current grant opens it
     mockScopes(listing([behind]))
@@ -287,8 +308,8 @@ describe('listMyGroups', () => {
   it('remembers each opened name for this page, and a later read that cannot open the group keeps it (inbox #280)', async () => {
     forgetGroupNamesSeen()
     const key = v1.randomBytes(32)
-    const encryptedName = sealGroupName(deriveGroupNameKey(key), G1, 0, 'Reise-Crew')
-    const row = (wrappedGrant: string) => signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant, encryptedName, nameEpoch: 0, grantedEpoch: 0 })
+    const name = groupNameOf(G1, key, 0, 'Reise-Crew')
+    const row = (wrappedGrant: string) => signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant, ...name, grantedEpoch: 0 })
     mockScopes(vi.fn().mockResolvedValue([row(ownGrant(G1, key, 0))]), vi.fn())
     await listMyGroups()
     expect(groupNameSeen(G1)).toBe('Reise-Crew')
@@ -300,40 +321,69 @@ describe('listMyGroups', () => {
     expect(groupNameSeen(G1)).toBe('Reise-Crew')
   })
 
-  it('opens a rotated group\'s name and icon under its one key — the rotation re-sealed them; one left under the older key opens nothing (ADR 0115)', async () => {
+  it('opens a rotated group\'s name and icon under its one key — the rotation re-wrapped their value keys and left them; a wrap left under the older key opens nothing (ADR 0115)', async () => {
     const e0 = v1.randomBytes(32)
     const e1 = v1.randomBytes(32)
     const grant1 = ownGrant(G1, e1, 1)
     const image = new Uint8Array([9, 8, 7, 6, 5, 4, 3, 2, 1])
-    const row = (key: Uint8Array, epoch: number) => signed({
-      id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, grantedEpoch: 1, nameEpoch: epoch, iconEpoch: epoch,
-      encryptedName: sealGroupName(deriveGroupNameKey(key), G1, epoch, 'Alte Crew'),
-      sealedIcon: sealIcon(deriveSpaceIconKey(key), { scopeId: G1, iconEpoch: epoch }, image),
-    })
+    // written at epoch 0, under E_0; the rotation to epoch 1 re-wraps both value keys under E_1 and leaves the values
+    const name = groupNameOf(G1, e0, 0, 'Alte Crew')
+    const icon = spaceIconOf(G1, e0, 0, image)
+    const moved = (value: v1.ValueContext, wrapped: string) => rewrapValueKey({ epoch: 0, key: e0 }, { epoch: 1, key: e1 }, value, wrapped)
+    const rotated = {
+      ...name, wrappedNameValueKey: moved(groupNameContext(G1, 0), name.wrappedNameValueKey),
+      ...icon, wrappedIconValueKey: moved(iconContext({ scopeId: G1, iconEpoch: 0 }), icon.wrappedIconValueKey),
+    }
+    const row = (fields: typeof rotated) => signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, grantedEpoch: 1, ...fields })
     const epochs = vi.fn<ScopesApi['listScopeEpochs']>().mockResolvedValue([])
-    fakeApi(scopesApi, { listMyScopes: listing([row(e1, 1)]), listScopeEpochs: epochs })
+    fakeApi(scopesApi, { listMyScopes: listing([row(rotated)]), listScopeEpochs: epochs })
     const [g] = await listMyGroups()
     expect(g.name).toBe('Alte Crew')
     expect(Array.from(g.icon!)).toEqual(Array.from(image))
-    // a name and an icon still under E_0 — a rotation that did not re-seal them — open under nothing the member holds
-    fakeApi(scopesApi, { listMyScopes: listing([row(e0, 0)]), listScopeEpochs: epochs })
+    expect(rotated.encryptedName).toBe(name.encryptedName) // the rotation left both values byte-identical
+    expect(rotated.sealedIcon).toBe(icon.sealedIcon)
+    // wraps still under E_0 — a rotation that did not re-wrap them — open under nothing the member holds
+    fakeApi(scopesApi, { listMyScopes: listing([row({ ...name, ...icon })]), listScopeEpochs: epochs })
     const [old] = await listMyGroups()
     expect(old?.icon ?? null).toBeNull()
     expect(old?.name ?? '').not.toBe('Alte Crew')
   })
+
+  // ADR 0115 decision 2: a name whose value key's wrap a rotator could not open is staged as one nobody opens — the
+  // group is listed unnamed, never dropped from the switcher, while its grant opens.
+  it('lists a group whose name\'s wrap opens under no key unnamed, its icon beside it as ever', async () => {
+    const key = v1.randomBytes(32)
+    const image = new Uint8Array([4, 5, 6])
+    const named = groupNameOf(G1, key, 0, 'Reise-Crew')
+    const row = (wrappedNameValueKey: string) => signed({
+      id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 0), grantedEpoch: 0,
+      ...named, wrappedNameValueKey, ...spaceIconOf(G1, key, 0, image),
+    })
+    // the stand-in a rotation stages for a wrap it cannot open: the same slot, under a key nobody holds
+    const standIn = rewrapValueKey({ epoch: 0, key: v1.randomBytes(32) }, { epoch: 0, key }, groupNameContext(G1, 0), named.wrappedNameValueKey)
+    mockScopes(listing([row(standIn)]))
+    const [g] = await listMyGroups()
+    expect(g).toMatchObject({ scopeId: G1, name: '', awaitingKey: false })
+    expect(Array.from(g.icon!)).toEqual(Array.from(image))
+    mockScopes(listing([row(named.wrappedNameValueKey)]))
+    expect((await listMyGroups())[0]).toMatchObject({ name: 'Reise-Crew' }) // control: the name's own wrap opens
+  })
 })
 
 describe('openGroupIcon (the settings-panel single-scope read)', () => {
-  it('opens a rotated group’s icon under its one key, refuses one still under the older key, and returns null for a group with none / an unknown id', async () => {
+  it('opens a rotated group’s icon under its one key, refuses one whose wrap is still under the older key, and returns null for a group with none / an unknown id', async () => {
     const e0 = v1.randomBytes(32)
     const e1 = v1.randomBytes(32)
     const grant1 = ownGrant(G1, e1, 1)
     const grant0 = ownGrant(G2, e0, 0)
     const image = new Uint8Array([1, 2, 3, 4, 5])
-    const sealedIcon = sealIcon(deriveSpaceIconKey(e1), { scopeId: G1, iconEpoch: 1 }, image) // re-sealed by the rotation
-    const stale = sealIcon(deriveSpaceIconKey(e0), { scopeId: G1, iconEpoch: 0 }, image)
+    const stale = spaceIconOf(G1, e0, 0, image) // written at epoch 0, its wrap under E_0
+    const rewrapped = { // the rotation re-wrapped its value key under E_1 and left the icon at epoch 0
+      ...stale,
+      wrappedIconValueKey: rewrapValueKey({ epoch: 0, key: e0 }, { epoch: 1, key: e1 }, iconContext({ scopeId: G1, iconEpoch: 0 }), stale.wrappedIconValueKey),
+    }
     const list = listing([
-      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, nameEpoch: 1, grantedEpoch: 1, iconEpoch: 1, sealedIcon }),
+      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, nameEpoch: 1, grantedEpoch: 1, ...rewrapped }),
       signed({ id: G2, kind: 'GROUP', tenantId: 't', wrappedGrant: grant0, nameEpoch: 0, grantedEpoch: 0 }), // no icon
     ])
     const epochs = vi.fn<ScopesApi['listScopeEpochs']>().mockResolvedValue([])
@@ -341,7 +391,7 @@ describe('openGroupIcon (the settings-panel single-scope read)', () => {
 
     expect(Array.from((await openGroupIcon(G1))!)).toEqual(Array.from(image)) // under the one key held
     fakeApi(scopesApi, {
-      listMyScopes: listing([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, nameEpoch: 1, grantedEpoch: 1, iconEpoch: 0, sealedIcon: stale })]),
+      listMyScopes: listing([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, nameEpoch: 1, grantedEpoch: 1, ...stale })]),
       listScopeEpochs: epochs,
     })
     expect(await openGroupIcon(G1)).toBeNull() // no older key is reachable from E_1
@@ -352,12 +402,12 @@ describe('openGroupIcon (the settings-panel single-scope read)', () => {
 })
 
 describe('openScopeById', () => {
-  it('opens a scope by id and decrypts a GROUP’s display name from encryptedName (via K_name)', async () => {
+  it('opens a scope by id and decrypts a GROUP’s display name from encryptedName (through its value key)', async () => {
     const key = v1.randomBytes(32)
     const grant = ownGrant(G1, key, 0)
-    const encryptedName = sealGroupName(deriveGroupNameKey(key), G1, 0, 'Reise-Crew')
+    const name = groupNameOf(G1, key, 0, 'Reise-Crew')
     const list = listing([
-      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName, nameEpoch: 0, grantedEpoch: 0 }),
+      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, ...name, grantedEpoch: 0 }),
     ])
     mockScopes(list)
 
@@ -378,7 +428,7 @@ describe('openGroupByToken (cr-0120 — resolve a group from its `#@<slug|id>` f
   const groupRow = (id: string, name: string) => {
     const key = v1.randomBytes(32)
     const grant = ownGrant(id, key, 0)
-    return signed({ id, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName: sealGroupName(deriveGroupNameKey(key), id, 0, name), nameEpoch: 0, grantedEpoch: 0 })
+    return signed({ id, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, ...groupNameOf(id, key, 0, name), grantedEpoch: 0 })
   }
 
   it('resolves a readable slug to its group by decrypting + slugifying each name on-device', async () => {
@@ -463,14 +513,15 @@ describe('commitRotation / rotateGroupForRemoval (cr-0089 — the client-side fo
     expect(provesSuccession(G1, 1, v1.randomBytes(32), e1a, payload)).toBe(false) // control: only E_0's key signed it
     const carried = Buffer.from(JSON.stringify(payload))
     expect(carried.includes(Buffer.from(b64std(e0)))).toBe(false)
-    // Before the commit every scope-level row was staged under the commit's re-key id, from E_0 to E_1 (decision 2),
-    // and the members it anchored are the keys a pending invitee's name key may go to.
+    // Before the commit every scope-level value key was re-wrapped under the commit's re-key id, from E_0 to E_1
+    // (decision 2). A pending invitee's name key is sealed to the invitee, not under the scope key: the run carries no
+    // member keys, since a rotation hands no invitee anything (a rename does, ADR 0115).
     expect(stageScopeLevelRekey).toHaveBeenCalledTimes(1)
     const run = vi.mocked(stageScopeLevelRekey).mock.calls[0][0]
     expect(run.rekeyId).toBe(payload.rekeyId)
     expect(run.oldKey.epoch).toBe(0)
     expect(run.newKey.epoch).toBe(1)
-    expect([...run.anchoredKeys]).toEqual([[A, pubOf(memberA)], [B, pubOf(memberB)]])
+    expect(Object.keys(run).sort()).toEqual(['newKey', 'oldKey', 'rekeyId', 'scopeId'])
     expect(vi.mocked(stageScopeLevelRekey).mock.invocationCallOrder[0]).toBeLessThan(rotate.mock.invocationCallOrder[0])
 
     // Forward-confidentiality: the new epoch differs from the old, so content sealed under E_1 is unreadable with E_0.
@@ -743,11 +794,9 @@ describe('no device seals under an epoch below the highest it has held for the s
     const keys = [v1.randomBytes(32), v1.randomBytes(32)]
     serveG1(keys, 1, 1)
     await openScopeById(G1) // this device has now held epoch 1
-    const encryptedName = sealGroupName(deriveGroupNameKey(keys[0]), G1, 0, 'Alt-Crew')
-    const sealedIcon = sealIcon(deriveSpaceIconKey(keys[0]), { scopeId: G1, iconEpoch: 0 }, new Uint8Array([1, 2, 3]))
     const rolledBack = signed({
       id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, keys[0], 0), grantedEpoch: 0, currentEpoch: 0,
-      encryptedName, nameEpoch: 0, sealedIcon, iconEpoch: 0,
+      ...groupNameOf(G1, keys[0], 0, 'Alt-Crew'), ...spaceIconOf(G1, keys[0], 0, new Uint8Array([1, 2, 3])),
     })
     fakeApi(scopesApi, { listMyScopes: listing([rolledBack]), listScopeEpochs: vi.fn<ScopesApi['listScopeEpochs']>().mockResolvedValue([]) })
     const [g] = await listMyGroups()
@@ -1007,28 +1056,80 @@ describe('commitRotation (ADR 0024 §4 — the rotation states the epoch it crea
   })
 })
 
-describe('renameGroup (cr-0097 — re-seal the name under the current epoch)', () => {
-  function mockGroupForRename(rename: Mock<ScopesApi['renameGroup']>, currentEpoch = 0, grantedEpoch = 0) {
-    const key = v1.randomBytes(32) // E_grantedEpoch = the write key the caller holds
-    const grant = ownGrant(G1, key, grantedEpoch)
-    const list = listing([
-      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName: sealGroupName(deriveGroupNameKey(key), G1, 0, 'Alt'), nameEpoch: 0, grantedEpoch, currentEpoch }),
-    ])
-    fakeApi(scopesApi, { listMyScopes: list, renameGroup: rename })
-    return key
+describe('renameGroup (cr-0097, ADR 0115 — a fresh value key per rename, handed to every pending invitee)', () => {
+  const INVITEE = 'c0000000-0000-4000-8000-0000000000c1'
+  const ODD = 'c0000000-0000-4000-8000-0000000000c2'
+  const MEMBER = 'c0000000-0000-4000-8000-0000000000c3'
+  const invitee = v1.generateIdentity()
+  const odd = v1.generateIdentity()
+  const person = (userId: string, who: v1.Identity, pendingConsent: boolean): ScopeMember => ({
+    userId, username: userId.slice(0, 2), avatarRevision: 0, role: 'MEMBER', identityPublicKey: pubOf(who),
+    keyChainHead: 'ERERERERERERERERERERERERERERERERERERERERERE=', pending: false, pendingConsent,
+  })
+  /** The name key the invitee opens from its `sealedNameKey`, bound to (scope, name epoch). */
+  const inviteeKey = (sealedNameKey: string, nameEpoch: number, who: v1.Identity = invitee) =>
+    v1.openAs({ purpose: 'group-name-key', scopeId: G1, nameEpoch }, v1.hybridSecret(who.priv), fromB64std(sealedNameKey))
+
+  /** G1 held at [grantedEpoch], its current name written at epoch 0 and its wrap under the held key; [members] listed. */
+  function mockGroupForRename(
+    rename: Mock<ScopesApi['renameGroup']>, opts: { epoch?: number; members?: Mock<ScopesApi['listScopeMembers']> } = {},
+  ) {
+    const epoch = opts.epoch ?? 0
+    const key = v1.randomBytes(32) // E_epoch = the write key the caller holds
+    const grant = ownGrant(G1, key, epoch)
+    const old = groupNameOf(G1, key, epoch, 'Alt', 0) // written at epoch 0, its wrap (re-wrapped by any rotation) under E_epoch
+    const list = listing([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, ...old, grantedEpoch: epoch, currentEpoch: epoch })])
+    const members = opts.members ?? vi.fn<ScopesApi['listScopeMembers']>().mockResolvedValue([])
+    fakeApi(scopesApi, { listMyScopes: list, renameGroup: rename, listScopeMembers: members })
+    return { key, old }
   }
 
-  it('seals the new name under K_name of the write-key epoch and posts { encryptedName, nameEpoch }', async () => {
+  it('seals the new name under a fresh value key at the write epoch, wraps it under the scope key, and seals it to each pending invitee', async () => {
     const rename = vi.fn<ScopesApi['renameGroup']>().mockResolvedValue(undefined)
-    const key = mockGroupForRename(rename)
+    const members = vi.fn<ScopesApi['listScopeMembers']>().mockResolvedValue([
+      person(MEMBER, v1.generateIdentity(), false), person(INVITEE, invitee, true), person(ODD, odd, true),
+    ])
+    vi.mocked(anchorIdentity).mockImplementation(async (userId) => (userId === ODD ? 'anomaly' : 'firstUse'))
+    const { key, old } = mockGroupForRename(rename, { members })
 
     await renameGroup(G1, 'Neu')
 
     expect(rename).toHaveBeenCalledTimes(1)
     const req = rename.mock.calls[0][0].renameGroupRequest
     expect(req.nameEpoch).toBe(0)
-    // The posted ciphertext decrypts under K_name derived from the epoch key back to the NEW plaintext.
-    expect(openGroupNameWith(deriveGroupNameKey(key), G1, req.nameEpoch!, req.encryptedName)).toBe('Neu')
+    // A member reads the NEW name through its wrap under the held key …
+    expect(readGroupName(G1, key, 0, { ...req, nameEpoch: req.nameEpoch! })).toBe('Neu')
+    // … under a key of its own: not the old name's, and not the scope key itself.
+    expect(req.wrappedNameValueKey).not.toBe(old.wrappedNameValueKey)
+    expect(() => openValue({ epoch: 0, key }, groupNameContext(G1, 0), old.wrappedNameValueKey,
+      (oldKey) => openGroupNameWith(oldKey, G1, 0, req.encryptedName))).toThrow(v1.OpenRefused)
+    expect(() => openGroupNameWith(key, G1, 0, req.encryptedName)).toThrow(v1.OpenRefused)
+    // Each pending invitee is named — never a member — and the anchored one opens the same canonical name with its key.
+    expect(req.inviteeNameKeys.map((i) => i.userId).sort()).toEqual([INVITEE, ODD].sort())
+    const handed = req.inviteeNameKeys.find((i) => i.userId === INVITEE)!
+    expect(handed.recipientIdentityDigest).toBe(recipientIdentityDigest(pubOf(invitee)))
+    expect(openGroupNameWith(inviteeKey(handed.sealedNameKey!, 0), G1, 0, req.encryptedName)).toBe('Neu')
+    // The one held as an anomaly gets its name key cleared, never sealed to a key this device cannot anchor.
+    expect(req.inviteeNameKeys.find((i) => i.userId === ODD)).toEqual({ userId: ODD, sealedNameKey: null, recipientIdentityDigest: null })
+  })
+
+  it('a rename after a rotation mints a fresh key at the new epoch and re-wraps it to each invitee — the key it held opens nothing new', async () => {
+    const rename = vi.fn<ScopesApi['renameGroup']>().mockResolvedValue(undefined)
+    const members = vi.fn<ScopesApi['listScopeMembers']>().mockResolvedValue([person(INVITEE, invitee, true)])
+    const { key, old } = mockGroupForRename(rename, { epoch: 1, members })
+    // what the invitee held from before: the old name's key, sealed to it at the old name's epoch
+    const oldKey = openValueKey({ epoch: 1, key }, groupNameContext(G1, 0), old.wrappedNameValueKey)
+
+    await renameGroup(G1, 'Nach der Rotation')
+
+    const req = rename.mock.calls[0][0].renameGroupRequest
+    expect(req.nameEpoch).toBe(1) // the epoch the rename writes at, which both seals bind
+    expect(readGroupName(G1, key, 1, { ...req, nameEpoch: 1 })).toBe('Nach der Rotation')
+    const fresh = inviteeKey(req.inviteeNameKeys[0].sealedNameKey!, 1)
+    expect(b64std(fresh)).not.toBe(b64std(oldKey))
+    expect(openGroupNameWith(fresh, G1, 1, req.encryptedName)).toBe('Nach der Rotation') // control
+    expect(() => openGroupNameWith(oldKey, G1, 1, req.encryptedName)).toThrow(v1.OpenRefused)
+    expect(() => inviteeKey(req.inviteeNameKeys[0].sealedNameKey!, 0)).toThrow(v1.OpenRefused) // bound to the new name epoch
   })
 
   it('retries once on 409 stale_epoch (a concurrent rotation), then succeeds', async () => {
@@ -1040,6 +1141,17 @@ describe('renameGroup (cr-0097 — re-seal the name under the current epoch)', (
     expect(rename).toHaveBeenCalledTimes(2) // refetch + retry once
   })
 
+  it('retries once on 409 rename_incomplete with the members read again — the proposal made meanwhile is named', async () => {
+    const rename = vi.fn<ScopesApi['renameGroup']>().mockRejectedValueOnce(httpError(409, 'rename_incomplete')).mockResolvedValueOnce(undefined)
+    const members = vi.fn<ScopesApi['listScopeMembers']>().mockResolvedValueOnce([]).mockResolvedValueOnce([person(INVITEE, invitee, true)])
+    mockGroupForRename(rename, { members })
+
+    await renameGroup(G1, 'Neu')
+    expect(rename).toHaveBeenCalledTimes(2)
+    expect(rename.mock.calls[0][0].renameGroupRequest.inviteeNameKeys).toEqual([])
+    expect(rename.mock.calls[1][0].renameGroupRequest.inviteeNameKeys.map((i) => i.userId)).toEqual([INVITEE])
+  })
+
   it('does not retry on a non-stale failure (e.g. 403) — it propagates', async () => {
     const forbidden = httpError(403, 'not_scope_owner')
     const rename = vi.fn<ScopesApi['renameGroup']>().mockRejectedValue(forbidden)
@@ -1047,6 +1159,26 @@ describe('renameGroup (cr-0097 — re-seal the name under the current epoch)', (
 
     await expect(renameGroup(G1, 'Neu')).rejects.toBe(forbidden)
     expect(rename).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('wrapGroupNameKeyForInvitee (uc.spaces.consent-group-add, ADR 0115 — the invitee is handed the name\'s value key)', () => {
+  const INVITEE = 'c0000000-0000-4000-8000-0000000000d1'
+  const invitee = v1.generateIdentity()
+  const served = { identityPublicKey: pubOf(invitee), keyChainHead: 'ERERERERERERERERERERERERERERERERERERERERERE=' }
+
+  it('seals the name\'s own value key, opened from its wrap, to the invitee — and none when the wrap does not open', async () => {
+    const key = v1.randomBytes(32)
+    const name = groupNameOf(G1, key, 1, 'Buchclub', 0) // written at epoch 0, its wrap (re-wrapped) under E_1
+    const row = (fields: typeof name) => signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 1), ...fields, grantedEpoch: 1 })
+    mockScopes(listing([row(name)]))
+    const sealed = await wrapGroupNameKeyForInvitee(G1, INVITEE, served)
+    const nameKey = v1.openAs({ purpose: 'group-name-key', scopeId: G1, nameEpoch: 0 }, v1.hybridSecret(invitee.priv), fromB64std(sealed!))
+    expect(openGroupNameWith(nameKey, G1, 0, name.encryptedName)).toBe('Buchclub') // the members' canonical blob
+    // a wrap a rotator could not open (its stand-in) yields no key to hand on: the proposal is not made with one
+    const standIn = rewrapValueKey({ epoch: 1, key: v1.randomBytes(32) }, { epoch: 1, key }, groupNameContext(G1, 0), name.wrappedNameValueKey)
+    mockScopes(listing([row({ ...name, wrappedNameValueKey: standIn })]))
+    expect(await wrapGroupNameKeyForInvitee(G1, INVITEE, served)).toBeNull()
   })
 })
 
@@ -1115,16 +1247,14 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
     const r = signed({ id: t.tenantId, kind: 'TENANT', wrappedGrant: t.wrappedGrant!, grantedEpoch: t.grantedEpoch ?? 0 })
     return { ...t, granterUserId: r.granterUserId, grantSignature: r.grantSignature, granterIdentityPublicKey: r.granterIdentityPublicKey }
   }
-  // Seal an icon under K_icon derived from a tenant scope key, wrap that key as the caller's OWN grant, and hand
-  // both to openMyTenantIcon as a MyTenant row — it must open our grant transiently and return the encoded bytes.
-  // This is the per-tenant grant-open the switcher runs once per tenant (en.spaces.tenant-scope), exercised without
-  // a live backend; the end-to-end (a SECOND tenant rendering the first's icon) is the live smoke.
-  function tenantWithIcon(encoded: Uint8Array): MyTenant {
-    const scopeKey = v1.randomBytes(32)
-    const iconKey = deriveSpaceIconKey(scopeKey)
-    const sealedIcon = sealIcon(iconKey, { scopeId: T1, iconEpoch: 0 }, encoded)
+  // Seal an icon under a value key whose wrap a tenant scope key holds (ADR 0115), wrap that scope key as the caller's
+  // OWN grant, and hand all to openMyTenantIcon as a MyTenant row — it must open our grant transiently and return the
+  // encoded bytes. This is the per-tenant grant-open the switcher runs once per tenant (en.spaces.tenant-scope),
+  // exercised without a live backend; the end-to-end (a SECOND tenant rendering the first's icon) is the live smoke.
+  function tenantWithIcon(encoded: Uint8Array, scopeKey = v1.randomBytes(32)): MyTenant {
+    const icon = spaceIconOf(T1, scopeKey, 0, encoded)
     const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: T1, epoch: 0 }, v1.hybridPublic(ID.priv), scopeKey))
-    return signedTenant(myTenant({ tenantId: T1, iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon }))
+    return signedTenant(myTenant({ tenantId: T1, grantedEpoch: 0, wrappedGrant, ...icon }))
   }
 
   it('opens the caller’s own grant and returns the encoded icon bytes', async () => {
@@ -1139,13 +1269,17 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
     expect(await openMyTenantIcon(myTenant({ tenantId: T1, role: 'MEMBER', sealedIcon: 'c2VhbGVk', wrappedGrant: null }))).toBeNull()
   })
 
-  it('returns null (never throws) when the grant opens but the icon was sealed under a different key', async () => {
-    // A foreign/mismatched sealedIcon under our real grant must fall back to the initial, not crash the switcher.
+  it('returns null (never throws) when the grant opens but the icon\'s wrap is under a different key, or substituted', async () => {
+    // A foreign/mismatched icon under our real grant must fall back to the initial, not crash the switcher.
     const scopeKey = v1.randomBytes(32)
-    const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: T1, epoch: 0 }, v1.hybridPublic(ID.priv), scopeKey))
-    const foreign = sealIcon(deriveSpaceIconKey(v1.randomBytes(32)), { scopeId: T1, iconEpoch: 0 }, new Uint8Array([9, 9, 9]))
-    const tenant: MyTenant = signedTenant(myTenant({ tenantId: T1, iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon: foreign }))
-    expect(await openMyTenantIcon(tenant)).toBeNull()
+    const ours = tenantWithIcon(new Uint8Array([9, 9, 9]), scopeKey)
+    expect([...(await openMyTenantIcon(ours))!]).toEqual([9, 9, 9]) // control
+    const foreign = spaceIconOf(T1, v1.randomBytes(32), 0, new Uint8Array([9, 9, 9]))
+    expect(await openMyTenantIcon({ ...ours, wrappedIconValueKey: foreign.wrappedIconValueKey })).toBeNull()
+    // a wrap of another K_v under OUR key at this very slot — what a rotator could stage — opens, the icon does not
+    const other = spaceIconOf(T1, scopeKey, 0, new Uint8Array([7, 7, 7]))
+    expect(await openMyTenantIcon({ ...ours, wrappedIconValueKey: other.wrappedIconValueKey })).toBeNull()
+    expect(await openMyTenantIcon({ ...ours, wrappedIconValueKey: null })).toBeNull()
   })
 })
 
@@ -1235,8 +1369,8 @@ describe('a grant opens only if its granter\'s signature verifies (ADR 0028 Deci
     const myDigest = b64std(v1.sha256Digest(fromB64std(ID_PUB)))
     expect(p.recipientIdentityDigest).toBe(myDigest)
     expect(g.recipientIdentityDigest).toBe(myDigest)
-    // No admission tag rides a group's birth any more (ADR 0111 decision 5): the body is the grant, its key and the name.
-    expect(Object.keys(g).sort()).toEqual(['encryptedName', 'grantSignature', 'recipientIdentityDigest', 'scopeId', 'wrappedGrant'])
+    // No admission tag rides a group's birth any more (ADR 0111 decision 5): the body is the grant, its key, the name and its value key's wrap (ADR 0115).
+    expect(Object.keys(g).sort()).toEqual(['encryptedName', 'grantSignature', 'recipientIdentityDigest', 'scopeId', 'wrappedGrant', 'wrappedNameValueKey'])
   })
 })
 

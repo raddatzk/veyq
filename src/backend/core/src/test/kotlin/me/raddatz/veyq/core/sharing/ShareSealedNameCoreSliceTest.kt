@@ -41,7 +41,8 @@ import org.junit.jupiter.api.Test
  * that member's client re-seals the name of every share on it — other members' included — under each share's
  * `K_share` and stores it here. Any member who may write in the share's space may, not only the owner (`updateShare`
  * stays owner-gated, ADR 0036 point 3); a reader and a stranger may not; the write changes `sealed_name` and no other
- * column; a deleted or unknown share is the 404; the bounds are the create field's; and it takes only the share row's
+ * column; a deleted or unknown share is the 404, a closed one `422 link_closed` (ADR 0114 decision 5); the bounds are
+ * the create field's; and it takes only the share row's
  * lock, so it neither reverts nor deadlocks with a revoke or a re-activation of the same link.
  *
  * A `FOLDER` share with READ: core alone shares a folder (`ShareRoots`), so this runs in `:core`.
@@ -140,19 +141,45 @@ class ShareSealedNameCoreSliceTest {
     }
 
     /**
-     * ADR 0114 decisions 5 and 7: a renaming client re-seals under open links only, and a reopen carries the root's
-     * current name — so the name a re-activation shows is the one it brought. The server still takes a re-seal of a
-     * switched-off share (the client decides which links are open); the reopen's name replaces it.
+     * ADR 0114 decisions 5 and 7: nothing new is sealed under a closed link's `K_share`, and a reopen carries the root's
+     * current name. A re-seal of a switched-off link is `422 link_closed` and writes nothing, while the same re-seal of
+     * the open sibling on the same root lands (the control); the re-activation then shows the name it brought.
      */
     @Test
-    fun aRevokedShareTakesAReSealAndItsReactivationShowsTheNameItCarries() {
+    fun aRevokedShareRefusesAReSealItsOpenSiblingTakesItAndItsReactivationShowsTheNameItCarries() {
         val w = world()
         val shareId = createShare(w.owner, w.folder)
         given().header("Authorization", bearer(w.owner)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
-        setName(w.member, shareId, newName).then().statusCode(204)
-        assertEquals(newName, row(shareId).sealedName) // control: the re-seal landed on the switched-off share
+        TestNodeRekey.finish(w.scopeId) // the revoke marked the folder due (ADR 0114 decision 1)
+        val sibling = createShare(w.owner, w.folder)
+
+        setName(w.member, shareId, newName).then().statusCode(422).body("code", equalTo("link_closed"))
+        assertEquals(oldName, row(shareId).sealedName, "the re-seal wrote under the closed link")
+        setName(w.member, sibling, newName).then().statusCode(204) // control: the open sibling takes the same re-seal
+        assertEquals(newName, row(sibling).sealedName)
+
         given().header("Authorization", bearer(w.member)).contentType(ContentType.JSON).body(TestNodeRekey.reopenBody(shareId)).`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
         resolvedName(shareId, ShareWriteProof.REOPEN_NAME)
+    }
+
+    /** ADR 0114 decision 1: a link whose end date has passed is closed by its date — before the sweep reached it too —
+     *  so its re-seal is `422 link_closed`; the same link with its end date ahead takes it (the control). */
+    @Test
+    fun aLinkPastItsEndDateRefusesAReSeal() {
+        val w = world()
+        val shareId = createShare(w.owner, w.folder)
+        val now = Instant.now()
+        QuarkusTransaction.requiringNew().run {
+            ShareEntity.update("expiresAt = ?1 where id = ?2", now.minusSeconds(60), shareId)
+        }
+        assertEquals(SharingStore.SealedNameResult.CLOSED, sharing.setSealedName(shareId, newName, PrincipalKey.User(w.member), now))
+        setName(w.member, shareId, newName).then().statusCode(422).body("code", equalTo("link_closed"))
+        assertEquals(oldName, row(shareId).sealedName)
+        QuarkusTransaction.requiringNew().run {
+            ShareEntity.update("expiresAt = ?1 where id = ?2", now.plusSeconds(3600), shareId)
+        }
+        setName(w.member, shareId, newName).then().statusCode(204) // control: its end date ahead, it is open
+        assertEquals(newName, row(shareId).sealedName)
     }
 
     @Test
@@ -175,8 +202,10 @@ class ShareSealedNameCoreSliceTest {
 
     // --- races (developer-styleguide §12): the share row's lock, and only it ---
 
+    /** A re-seal that waits on a revoke's share row sees the link closed once it gets the row (ADR 0114 decision 5): it
+     *  writes nothing and leaves the link off. One that holds the row first lands, and the revoke after it keeps it. */
     @Test
-    fun aReSealOverlappingARevokeKeepsBothWrites() {
+    fun aReSealOverlappingARevokeIsDecidedUnderTheShareRow() {
         val w = world()
         raceRounds { round ->
             val shareId = createShare(w.owner, w.folder)
@@ -184,15 +213,15 @@ class ShareSealedNameCoreSliceTest {
                 change = { assertTrue(sharing.revoke(w.owner, shareId), "round $round") },
                 overlapping = { handler.setSealedName(w.member, shareId, newName) },
             )
-            assertEquals(SetShareSealedNameOutcome.Done, outcome, "round $round")
+            assertEquals(SetShareSealedNameOutcome.Closed, outcome, "round $round")
             val r = row(shareId)
             assertFalse(r.enabled, "round $round: the re-seal switched the revoked link back on")
-            assertEquals(newName, r.sealedName, "round $round")
+            assertEquals(oldName, r.sealedName, "round $round: the re-seal wrote under the closed link")
         }
         raceRounds { round ->
             val shareId = createShare(w.owner, w.folder)
             val outcome = whileUncommitted(
-                change = { assertTrue(sharing.setSealedName(shareId, newName, PrincipalKey.User(w.owner)), "round $round") },
+                change = { assertEquals(SharingStore.SealedNameResult.DONE, sharing.setSealedName(shareId, newName, PrincipalKey.User(w.owner)), "round $round") },
                 overlapping = { handler.revoke(w.owner, shareId) },
             )
             assertEquals(RevokeShareOutcome.Done, outcome, "round $round")
@@ -249,7 +278,8 @@ class ShareSealedNameCoreSliceTest {
                 val sealed = reSeal.get(30, TimeUnit.SECONDS)
                 val (overlap, reactivated) = reactivation.get(30, TimeUnit.SECONDS)
                 overlap.requireForced()
-                assertEquals(SetShareSealedNameOutcome.Done, sealed, "round $round")
+                // The re-seal came first, on the still switched-off link: refused, under the share row alone.
+                assertEquals(SetShareSealedNameOutcome.Closed, sealed, "round $round")
                 assertEquals(ReactivateShareOutcome.Done, reactivated, "round $round")
             } finally {
                 pool.shutdownNow()

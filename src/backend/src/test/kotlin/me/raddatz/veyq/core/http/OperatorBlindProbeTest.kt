@@ -129,7 +129,7 @@ class OperatorBlindProbeTest {
         },
         "getItemFavorites" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/item-favorites") },
         "putItemFavorites" to Probe(Address.SCOPE) { s ->
-            Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/item-favorites", """{"ciphertext":"$B64","epoch":0}""")
+            Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/item-favorites", """{"ciphertext":"$B64","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":0}""")
         },
         // --- media ---
         "startBlobUploads" to Probe(Address.SCOPE) { s ->
@@ -237,8 +237,8 @@ class OperatorBlindProbeTest {
         "deleteGroup" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}") },
         "restoreGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/restore") },
         "revokeScopeShares" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/shares/revoke") },
-        "renameGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/name", """{"encryptedName":"$B64","nameEpoch":0}""") },
-        "setScopeIcon" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/icon", """{"sealedIcon":"$B64","iconEpoch":0}""") },
+        "renameGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/name", """{"encryptedName":"$B64","nameEpoch":0,"wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","inviteeNameKeys":[]}""") },
+        "setScopeIcon" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/icon", """{"sealedIcon":"$B64","wrappedIconValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","iconEpoch":0}""") },
         "clearScopeIcon" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/icon") },
         // The control's live group carries no compromise rotation, so it answers `409 rotation_not_failed` — past the gate.
         "requeueScopeRotation" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/rotation/requeue") },
@@ -246,7 +246,7 @@ class OperatorBlindProbeTest {
         // cannot reach the gate here — the tenant's own domain is refused by TenantSuspensionFilter first.
         "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"scopeId":"${UUID.randomUUID()}","wrappedGrant":"$B64",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""", host = s.domain) },
         "createGroup" to Probe(Address.HOST) { s ->
-            Call("POST", "/api/scopes/groups", """{"scopeId":"${UUID.randomUUID()}","encryptedName":"$B64","wrappedGrant":"$B64",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""", host = s.domain)
+            Call("POST", "/api/scopes/groups", """{"scopeId":"${UUID.randomUUID()}","encryptedName":"$B64","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","wrappedGrant":"$B64",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""", host = s.domain)
         },
         // --- sharing (curation) ---
         "createShare" to Probe(Address.NODE) { s ->
@@ -265,7 +265,7 @@ class OperatorBlindProbeTest {
         "reissueShare" to Probe(Address.SHARE) { s ->
             Call(
                 "POST", "/api/shares/${s.shareId}/reissue",
-                """{${ShareWriteProof.newShare()},"wrap":"$B64","sealedName":"$B64","sealedShareKey":"$B64","sealedShareKeyEpoch":0,"nodeEpoch":0}""",
+                """{${ShareWriteProof.newShare()},"wrap":"$B64","sealedName":"$B64","sealedShareKey":"$B64","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","sealedShareKeyEpoch":0,"nodeEpoch":0}""",
             )
         },
         // --- tasks ---
@@ -296,7 +296,7 @@ class OperatorBlindProbeTest {
         // own `tenant_not_found` is not.
         "listVerifications" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/verifications") },
         "putMyVerification" to Probe(Address.TENANT) { s ->
-            Call("PUT", "/api/tenants/${s.tenantId}/verifications/$someId", """{"epoch":0,"sealedStatement":"$B64"}""")
+            Call("PUT", "/api/tenants/${s.tenantId}/verifications/$someId", """{"epoch":0,"sealedStatement":"$B64","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""")
         },
         "updateTenantTerms" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/terms", """{"terms":{"de":"Bedingungen","en":"Terms"}}""")

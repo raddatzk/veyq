@@ -132,11 +132,11 @@ class RemovalRaceCoreSliceTest {
             val digest = TestGrants.digestOf(member)
             val outcome = whileUncommitted(
                 change = { removeFromTenant(t.id, member) },
-                overlapping = { handler.createGroup(member, t.id, scopeId, NAME, GRANT, digest) },
+                overlapping = { handler.createGroup(member, t.id, scopeId, TestGrants.sealed(NAME), GRANT, digest) },
             )
             assertEquals(CreateGroupOutcome.NoTenant, outcome, "round $round: a removed member created a group")
             assertNull(tx { ScopeEntity.findById(scopeId) }, "round $round: nothing written")
-            val control = handler.createGroup(t.owner, t.id, UUID.randomUUID().toString(), NAME, GRANT, TestGrants.digestOf(t.owner))
+            val control = handler.createGroup(t.owner, t.id, UUID.randomUUID().toString(), TestGrants.sealed(NAME), GRANT, TestGrants.digestOf(t.owner))
             assertTrue(control is CreateGroupOutcome.Created, "round $round: control $control")
         }
     }

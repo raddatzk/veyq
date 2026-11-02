@@ -98,7 +98,7 @@ class ReactivateShareCapabilitySliceTest {
 
     private fun reissue(auth: String, shareId: String, epoch: Int, newId: String = TestIds.shareId()) =
         given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"shareId":"$newId",${ShareWriteProof.field(newId)},"wrap":"$B64","sealedName":"$B64","sealedShareKey":"$B64","nodeEpoch":0,"sealedShareKeyEpoch":$epoch}""")
+            .body("""{"shareId":"$newId",${ShareWriteProof.field(newId)},"wrap":"$B64","sealedName":"$B64","sealedShareKey":"$B64","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","nodeEpoch":0,"sealedShareKeyEpoch":$epoch}""")
             .`when`().post("/api/shares/$shareId/reissue")
 
     private fun seededShare(s: ScopeAccessWorld.Space, role: String, enabled: Boolean = false): String {

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.itemfavorites
 
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.membership.Access
 import me.raddatz.veyq.core.http.HttpFailure
@@ -16,12 +17,12 @@ sealed interface GetItemFavoritesOutcome {
     object NoScope : GetItemFavoritesOutcome, HttpFailure by Failures.scopeNotFound
 }
 
-/** One of the caller's own item-mark rows, addressed by the slot it is stored at. */
-data class OwnItemFavorites(val scopeId: String, val nodeId: String, val ciphertext: String)
+/** One of the caller's own item-mark rows, addressed by the slot it is stored at, with its value key's wrap. */
+data class OwnItemFavorites(val scopeId: String, val nodeId: String, val marks: SealedValue)
 
 sealed interface PutItemFavoritesOutcome {
     object Stored : PutItemFavoritesOutcome
-    /** Sealed under a scope epoch that is not the current one (ADR 0115 decision 3) — nothing written. */
+    /** Its value key wrapped under a scope epoch that is not the current one (ADR 0115 decision 3) — nothing written. */
     object StaleEpoch : PutItemFavoritesOutcome, HttpFailure by Failures.staleEpoch
     object Suspended : PutItemFavoritesOutcome, HttpFailure by Failures.tenantSuspended
     object Deleting : PutItemFavoritesOutcome, HttpFailure by Failures.scopeDeleting
@@ -57,24 +58,24 @@ class ItemFavoritesHandler(private val store: ItemFavoritesStore, private val ac
         val readable = HashMap<String, Boolean>()
         return store.listOwn(userId)
             .filter { row -> readable.getOrPut(row.scopeId) { access.check(userId, row.scopeId, READ) == Access.Ok } }
-            .map { OwnItemFavorites(it.scopeId, it.nodeId, it.ciphertext) }
+            .map { OwnItemFavorites(it.scopeId, it.nodeId, SealedValue(it.ciphertext, it.wrappedValueKey)) }
     }
 
     /**
      * The gate runs twice: first as the fast path, then under the scope row's lock, taken first, in the write's own
      * transaction. Every removal holds that lock while it deletes the removed member's rows (developer-styleguide §12),
      * so checked only before it, a member being removed wrote a row the removal never saw, into a group they had left.
-     * The stated [epoch] is judged under the same lock (ADR 0115 decision 3): the blob is sealed under the scope key,
-     * which a rotation's commit replaces while it holds that lock and re-seals every row, so a row lands only at the
-     * scope's current epoch — one under the old key after the commit is `stale_epoch`.
+     * The stated [epoch] is judged under the same lock (ADR 0115 decision 3): the blob's value key is wrapped under the
+     * scope key, which a rotation's commit replaces while it holds that lock and re-wraps every row's key, so a row lands
+     * only at the scope's current epoch — one wrapped under the old key after the commit is `stale_epoch`.
      */
-    fun put(userId: String, scopeId: String, nodeId: String, ciphertext: String, epoch: Int): PutItemFavoritesOutcome {
+    fun put(userId: String, scopeId: String, nodeId: String, marks: SealedValue, epoch: Int): PutItemFavoritesOutcome {
         refusal(userId, scopeId)?.let { return it }
         return QuarkusTransaction.requiringNew().call {
             val current = store.lockScope(scopeId)
             refusal(userId, scopeId)?.let { return@call it }
             if (current != epoch) return@call PutItemFavoritesOutcome.StaleEpoch
-            store.upsert(userId, scopeId, nodeId, ciphertext)
+            store.upsert(userId, scopeId, nodeId, marks)
             PutItemFavoritesOutcome.Stored
         }
     }

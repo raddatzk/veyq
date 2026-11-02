@@ -57,6 +57,7 @@ flowchart TB
 | **Identity** (`identityPublicKey` = X-Wing encapsulation key + Ed25519 key) | the client at birth | private half sealed under the Master Key (`identity-priv`) | the account | the account is secured |
 | **Secret-Key proof key** (Ed25519) | derived from the Secret Key alone | public half on the server | whoever holds the Secret Key | with the Secret Key, when the account is secured |
 | **Scope key `K_SC`** at epoch `n` | the client that creates the scope or commits its next epoch | a **grant** per member: sealed to the member's identity (`scope-grant`, bound to scope and epoch); nothing else wraps it | every member holding a current grant | at every rotation of the scope, proven by a succession statement |
+| **Value key `K_v`** | the author of a scope-level value, fresh and random at every write: a member's tenant name, picture and join record, a verification, a Memory's item marks, a group's name, a space's icon, a link's recovery copy | under the scope key (`value-key`, bound to the scope, the epoch and the value's address: SHA-256 of its own seal context); a group name's also sealed to each pending invitee (`group-name-key`) | every member, as the scope key | at every write of the value; a rotation re-wraps it and never rewrites the value ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md)) |
 | **Node key `K_node`** | the client, fresh and random per node, every kind including folders | under the parent's node key; a scope-root node under the scope key (`content-key`) | whoever holds a key above it — a member, or a share guest below the share's root | at every rotation of the scope, and when a viewable link at or above it closes (the node re-key) |
 | **Blob key `K_blob`** | the client, per blob | under its owning node's key (`blob-key`) | as the node key | never; its wrap moves with the node key |
 | **Field key** | derived per write from the key a field belongs under | — | as that key | with every write ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)) |
@@ -64,8 +65,9 @@ flowchart TB
 - **One scope, one key at a time.** A scope's key is replaced at every rotation by a fresh random one at the next
   epoch, and nothing seals an older key under a newer one, so a held key opens no other epoch's
   ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md); `ScopeKey` in
-  `src/web/src/features/spaces/epochs.ts`). A grant carries the current key; everything sealed under the scope key is
-  re-sealed under the new one by the rotation's commit ([§ Rotating a scope](#rotating-a-scope)). The scope row holds no
+  `src/web/src/features/spaces/epochs.ts`). A grant carries the current key; everything under the scope key moves to the
+  new one in the rotation's commit — each authored value's own key re-wrapped, the value untouched, and each scope-root
+  entry re-sealed ([§ Rotating a scope](#rotating-a-scope)). The scope row holds no
   key, only its current epoch, and per epoch a succession statement.
 - **Every node carries a key** ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0012](../decisions/0012-content-key-hierarchy.md)). A node's **directory entry** — its name, its slug token and
@@ -173,9 +175,10 @@ The newcomer has no identity yet, so the owner grants the epoch to a key that st
    tenant's next rotation holds.
 
 **The join record** is the newcomer's identity public key and Secret-Key proof public key with the owner-signed
-invite, signed by the **invite key** and by the new identity (`join-record`), sealed under the tenant's current key
-(`member-join-record`, re-sealed at every rotation), stored in the tenant profile (`veyq_tenant_profile.sealed_join_record`)
-and served to every member as `ScopeMember.sealedJoinRecord`. The owner's signature on the invite key and the invite
+invite, signed by the **invite key** and by the new identity (`join-record`), sealed under a value key of its own
+(`member-join-record`) whose wrap the tenant's current key holds — a rotation re-wraps that key and never rewrites the
+record — stored in the tenant profile (`veyq_tenant_profile.sealed_join_record`, its wrap beside it) and served to every
+member as `ScopeMember.sealedJoinRecord` with `wrappedJoinRecordValueKey`. The owner's signature on the invite key and the invite
 key's signature on the record make a chain **owner → invite → newcomer** that neither the operator nor a holder of the
 tenant key can forge. The server records who rooted it (`join_signer_user_id`); when that owner secures the account,
 they **endorse** the record with the new key (`join-endorsement` over SHA-256 of the opened record, so no re-seal
@@ -207,12 +210,16 @@ sequenceDiagram
 
 A group target already has an identity in the tenant, so the group owner's client anchors the target's key in the
 tenant ([§ Trust](#trust-who-is-who)) and wraps the group's current epoch to it (`addGroupMember`,
-`src/web/src/features/spaces/members.ts`), with the group's name key (`wrapGroupNameKeyForInvitee`). An anomaly refuses
+`src/web/src/features/spaces/members.ts`), with the group name's value key opened from its wrap and sealed to the
+target (`wrapGroupNameKeyForInvitee`). An anomaly refuses
 the add (`IdentityUnanchoredError`). The server writes a **consent proposal** — a member row with `pendingConsent`,
 which access treats as no member yet — holding that grant from the add on; consenting changes nothing about keys and
 holds nothing on the invitee's device, whose first open of the group takes the grant served then. A
 decline, or the owner's rescind, deletes the row and **queues the group's rotation**, since the target held the key.
-Groups have no invites.
+Groups have no invites. A **rename** mints the name a fresh value key and seals it to every pending proposal in the same
+request (`inviteeNameKeys`, `renameGroup` in `scopes.ts`): to the key the owner's device anchors, or — for one it holds
+as an anomaly — clearing that proposal's name key; one left out is `409 rename_incomplete`. A rotation leaves the name
+keys, which are sealed to the invitees and not under the scope key.
 
 ### Grant delivery brings a behind member current
 
@@ -235,7 +242,7 @@ only the server originates it ([ADR 0021](../decisions/0021-operator-blind-backg
 
 A rotation commits the scope's **next** epoch and **replaces** the scope key
 ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md)). The rotating client mints a fresh key for
-epoch `n + 1`, re-seals every scope-level row under it ([§ The scope-level re-seal](#the-scope-level-re-seal)), and
+epoch `n + 1`, re-wraps every scope-level value key under it ([§ The scope-level re-seal](#the-scope-level-re-seal)), and
 posts one request (`rotateScope`, `commitRotation` in `src/web/src/features/spaces/scopes.ts`): the stated epoch, the
 re-key id of its stage, the **succession statement** — the new epoch's succession public key signed by the old key's
 (`HKDF(K, "veyq/v1/scope-succession")` as an Ed25519 seed, `successionKeyPair` in `src/packages/crypto/src/v1.ts`),
@@ -269,30 +276,40 @@ member the rotation declared pending reads **nothing** of the scope until a gran
 
 ### The scope-level re-seal
 
-Before the commit the rotating client pages through every row sealed under the scope key (`stageScopeLevelRekey`,
-`src/web/src/features/spaces/scopeRekey.ts`), opens each with the old key, re-seals it under the new one at the new
-epoch, and stages it under its re-key id (`veyq_scope_rekey_stage`). Only a caller who may commit the rotation and
-holds the current grant reads and stages these rows (`RekeyAccess.checkRotator`). The commit swaps every staged value
-in, in the rotation's transaction (`ScopeRekeyCommit`), or nothing: a row without a staged value is `409
-rekey_parts_missing`, and every staged value names `replacedDigest`, the SHA-256 of the ciphertext it replaces (per
-member field for a profile), so a row written since it was read is `409 rekey_parts_stale` — at the stage or at the
-commit — and the client stages again, a bounded number of times (`REKEY_RESTAGES`). Every scope-level write states the
-epoch it seals under, and one at another is `409 stale_epoch`. The rows:
+**A rotation re-wraps keys and never rewrites a value** (owner 2026-11-02). Every scope-level value that has an author is
+sealed under a value key `K_v` of its own, minted at every write; only `K_v` is under the scope key (`value-key`, bound
+to the scope, the epoch and the value's address — SHA-256 of the value's own seal context, so a wrap moved onto another
+value does not open), and a field-sealed value derives its field key from `K_v`. Before the commit the rotating client
+pages through every wrap under the scope key and every scope-root entry (`stageScopeLevelRekey`,
+`src/web/src/features/spaces/scopeRekey.ts`), opens each wrap with the old key, wraps the same `K_v` under the new one
+at the new epoch (`rewrapValueKey`, `valueKey.ts`), re-seals each root entry, and stages them under its re-key id
+(`veyq_scope_rekey_stage`). The listing serves no value's ciphertext and the stage has no field for one; the commit
+refuses a staged write to a value (`422 rekey_writes_value`) for an owner and a member rotator alike, so a rotator can
+make a value unreadable — as any member can — and never rewrite another member's. Only a caller who may commit the
+rotation and holds the current grant reads and stages (`RekeyAccess.checkRotator`). The commit swaps every staged wrap
+in, in the rotation's transaction (`ScopeRekeyCommit`), or nothing: a wrap or a root entry without a staged
+replacement is `409 rekey_parts_missing`, and every staged one names `replacedDigest`, the SHA-256 of the wrap (or the
+root entry's key wrap) it replaces, per member field for a profile; every write of a value mints a fresh `K_v` and so a
+fresh wrap, so a value written since it was read is `409 rekey_parts_stale` — at the stage or at the commit — and the
+client stages again, a bounded number of times (`REKEY_RESTAGES`). Every scope-level write states the epoch its wrap is
+under, and one at another is `409 stale_epoch`. What moves:
 
-| Row | Re-sealed as | Staged by |
+| Under the scope key | At the commit | Staged by |
 |---|---|---|
-| each scope-root node's entry, live and trashed | the node's current key re-wrapped, its name re-sealed and slug token recomputed, held by its placement revision | core |
-| a group's name, a space's icon | at the new epoch | core |
-| a pending group invitee's name key | sealed to the identity the rotation anchors for the invitee; **cleared** for one it holds as an anomaly or anchors no key for — the invitee sees the proposal unnamed, and nothing re-wraps it later | core |
-| each link's recovery copy | at the new epoch; the epoch the link was minted at stays beside it for the re-issue rule | core |
-| a tenant member's name, picture and join record; a tenant's verifications | under the new key, the signed statements inside unchanged | core |
-| a Memory's item marks | under the new key | Memories, through its `ScopeRekeyParticipant` |
+| each scope-root node's entry, live and trashed | **re-sealed** — the one exemption, because any member may write a root entry (ADR 0111 decision 11) and its slug token is a keyed MAC under the scope key: the node's current key re-wrapped, its name re-sealed and slug token recomputed, held by its placement revision | core |
+| a group's name's and a space's icon's `K_v` | re-wrapped; the name and the icon keep the epoch they were written at | core |
+| each link's recovery copy's `K_v` | re-wrapped; the copy, and the epoch the link was minted at beside it for the re-issue rule, stay | core |
+| a tenant member's name's, picture's and join record's `K_v`; each verification's | re-wrapped; the fields and the signed statements stay byte-identical | core |
+| a Memory's item marks' `K_v` | re-wrapped; each set and its self-tag stay | Memories, through its `ScopeRekeyParticipant`, handed only the re-wrap |
 
-A profile field or a verification that does not open under the old key is staged as a seal of random bytes of the same
-length, which reads exactly as before, and an item-mark set that does not open as an empty set nobody owns, so one
-unreadable value stops no rotation. A `K_blob`, a member's own favorites
-and the moderation key's epochs are under other keys and stay. `scripts/validate_scope_rekey_arity.py` holds every seal
-purpose to one side of that line.
+A wrap the rotator cannot open is staged as a stand-in — a random `K_v` at the same slot under a key dropped at once,
+of the same length — so the value reads as unreadable, exactly as before, and one unreadable value stops no rotation; a
+recovery copy that so opens for nobody closes its link, key lost ([§ Re-keying the nodes](#re-keying-the-nodes)). A
+pending group invitee's name key — the group name's own `K_v` sealed to the invitee — is under no scope key: the
+rotation leaves it, and a rename seals the new name's key to every invitee ([§ A group add wraps
+directly](#a-group-add-wraps-directly)). A `K_blob`, a member's own favorites and the moderation key's epochs are under
+other keys and stay. `scripts/validate_scope_rekey_arity.py` holds every seal purpose to one side of that line, and
+every value purpose to the re-wrapped one (`VALUE_KEY_PURPOSES`, `src/packages/crypto/src/seal.ts`).
 
 ### When a scope rotates, per kind
 
@@ -439,9 +456,9 @@ ADR 0111 decisions 6–10). It is forward secrecy, not repair: what was read sta
 From the publish on, every scope the account was in holds its current epoch for the new identity, so a lost answer, a
 closed tab or a failed next epoch strands nothing. Other members' grants are untouched by the publish; they receive
 the next epoch from it. A pending group proposal keeps its grant, re-granted like every other, but not its name: its
-name key stays sealed to the old identity until a rotation of the group re-seals it to the key it anchors, and the
-invitation shows as an unnamed group meanwhile (`openInviteeName`, `src/web/src/features/spaces/inviteName.ts`;
-ADR 0060 § Consequences).
+name key stays sealed to the old identity until a rename of the group seals the new name's key to the key the owner's
+device anchors, and the invitation shows as an unnamed group meanwhile (`openInviteeName`,
+`src/web/src/features/spaces/inviteName.ts`; ADR 0060 § Consequences).
 
 ## Trust: who is who
 

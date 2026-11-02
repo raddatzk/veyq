@@ -150,7 +150,7 @@ class GroupAddGrantSliceTest {
         val groupId = UUID.randomUUID().toString()
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", "t-$tenantId.example.com")
             .contentType(ContentType.JSON)
-            .body("""{"scopeId":"$groupId","encryptedName":"bmFtZQ==","wrappedGrant":"${TestGrants.WRAPPED}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
+            .body("""{"scopeId":"$groupId","encryptedName":"bmFtZQ==","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","wrappedGrant":"${TestGrants.WRAPPED}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups").then().statusCode(201)
         return World(tenantId, owner, groupId)
     }

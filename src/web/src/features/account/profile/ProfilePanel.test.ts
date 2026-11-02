@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // uc.spaces.edit-profile (web) — the "Your profile" rubric, mounted. `./profile` is mocked at its I/O functions
-// (`getMyProfile`, `updateMyProfile`, `openOwnNameKey`) while `sealName` / `unsealName` stay REAL: every assertion
-// about the name unseals the blob the panel sent, under the test key at the member's own address, instead of
+// (`getMyProfile`, `updateMyProfile`, `openOwnNameKey`) while `sealName` / `openMemberName` stay REAL: every assertion
+// about the name opens the blob the panel sent through its value key's wrap, under the test key at the member's own address, instead of
 // comparing it to a string — so a name sealed at the wrong address (another member's row) reddens here.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -28,14 +28,17 @@ vi.mock('../../../shared/state/useToast', () => ({
 }))
 
 import ProfilePanel from './ProfilePanel.vue'
-import { getMyProfile, updateMyProfile, openOwnNameKey, sealName, unsealName, setMyAvatar, clearMyAvatar } from './profile'
-import { openAvatar } from './memberAvatar'
+import { getMyProfile, updateMyProfile, openOwnNameKey, sealName, openMemberName, setMyAvatar, clearMyAvatar } from './profile'
+import { openMemberAvatar } from './memberAvatar'
 import NamePictureFields from './NamePictureFields.vue'
 import { ownNameKey } from '../../../test/models'
 
 const K_TENANT = v1.randomBytes(32)
+const TENANT = { epoch: 0, key: K_TENANT }
+/** The name the panel sent, opened as every reader opens it. */
+const nameOf = (u: { sealedName?: string; wrappedNameValueKey?: string }) => openMemberName(TENANT, ADDRESS, u.sealedName, u.wrappedNameValueKey)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000d1', userId: '5c09e000-0000-4000-8000-0000000000d2' }
-const STORED = { username: 'kevin', sealedName: sealName(K_TENANT, ADDRESS, { firstName: 'Kevin', lastName: 'Raddatz' }), avatarRevision: 0, requireGroupAddConsent: false }
+const STORED = { username: 'kevin', ...sealName(TENANT, ADDRESS, { firstName: 'Kevin', lastName: 'Raddatz' }), avatarRevision: 0, requireGroupAddConsent: false }
 
 const stubs = {
   VeyqButton: { props: ['label', 'loading'], template: '<button type="submit">{{ label }}</button>' },
@@ -94,7 +97,7 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
     const update = sent()
     expect(update.username).toBe('kevin')
     expect(update.requireGroupAddConsent).toBe(false)
-    expect(unsealName(K_TENANT, ADDRESS, update.sealedName)).toEqual({ firstName: 'Kev', lastName: 'Raddatz' })
+    expect(nameOf(update)).toEqual({ firstName: 'Kev', lastName: 'Raddatz' })
     expect(wrapper.text()).not.toContain(t('profile.saveFailed'))
   })
 
@@ -119,6 +122,7 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
     const update = sent()
     expect(update.username).toBe('newhandle')
     expect(update.sealedName).toBeUndefined()
+    expect(update.wrappedNameValueKey).toBeUndefined()
   })
 
   it('A1: emptying both name fields sends a sealed empty name, so the name is removed', async () => {
@@ -129,7 +133,7 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
 
     const update = sent()
     expect(update.sealedName).toBeDefined()
-    expect(unsealName(K_TENANT, ADDRESS, update.sealedName)).toEqual({ firstName: '', lastName: '' })
+    expect(nameOf(update)).toEqual({ firstName: '', lastName: '' })
   })
 })
 
@@ -156,7 +160,8 @@ describe('ProfilePanel - the profile picture (ADR 0084)', () => {
     expect(updateMyProfile).toHaveBeenCalledTimes(1)
     expect(setMyAvatar).toHaveBeenCalledTimes(1)
     expect(vi.mocked(updateMyProfile).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(setMyAvatar).mock.invocationCallOrder[0])
-    expect([...openAvatar(K_TENANT, ADDRESS, vi.mocked(setMyAvatar).mock.calls[0][0])!]).toEqual([4, 5, 6])
+    const picture = vi.mocked(setMyAvatar).mock.calls[0][0]
+    expect([...openMemberAvatar(TENANT, ADDRESS, picture.sealedAvatar, picture.wrappedAvatarValueKey)!]).toEqual([4, 5, 6])
   })
 
   it('removing the picture sends DELETE and no PUT; an untouched picture sends neither', async () => {

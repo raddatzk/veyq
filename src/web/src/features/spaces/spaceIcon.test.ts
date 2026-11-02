@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { fromB64std } from '@veyq/crypto/base64'
 import { unpad } from '@veyq/crypto/v1'
-import { deriveSpaceIconKey, sealIcon, openIcon, pad, ICON_PADDED_LEN } from './spaceIcon'
+import { iconContext, sealIcon, openIcon, pad, ICON_PADDED_LEN } from './spaceIcon'
+import { openValue, sealValue } from './valueKey'
 
 describe('space icon primitives (uc.spaces.set-space-icon)', () => {
   const key = new Uint8Array(32).fill(7)
-  // Where the icon is sealed: its space and the epoch K_icon derives from (ADR 0072).
+  // Where the icon is sealed: its space and the epoch it was written at (ADR 0072). The key is its value key K_v.
   const AT = { scopeId: '5c09e000-0000-4000-8000-0000000000a9', iconEpoch: 0 }
 
   it('seals two very different images to byte-identical ciphertext length (the constant-length invariant)', () => {
@@ -59,9 +60,18 @@ describe('space icon primitives (uc.spaces.set-space-icon)', () => {
     expect(fromB64std(sealed).length).toBe(16413)
   })
 
-  it('a different epoch key derives a different K_icon (forward-secret across a re-key)', () => {
-    const a = deriveSpaceIconKey(new Uint8Array(32).fill(1))
-    const b = deriveSpaceIconKey(new Uint8Array(32).fill(2))
-    expect([...a]).not.toEqual([...b])
+  // ADR 0115: every icon write mints a value key of its own, wrapped under the scope key — nothing derives it from the
+  // scope key, so a replaced icon's key opens no later one (forward-secret), and the scope key alone opens no icon.
+  it('each write is under a fresh value key: the scope key alone and another write\'s key open nothing', () => {
+    const scope = { epoch: 0, key: new Uint8Array(32).fill(1) }
+    const first = sealValue(scope, iconContext(AT), (iconKey) => fromB64std(sealIcon(iconKey, AT, new Uint8Array([1, 2]))))
+    const second = sealValue(scope, iconContext(AT), (iconKey) => fromB64std(sealIcon(iconKey, AT, new Uint8Array([3, 4]))))
+    const opened = (wrapped: string, sealed: string) =>
+      openValue(scope, iconContext(AT), wrapped, (iconKey) => openIcon(iconKey, AT, sealed))
+    expect([...opened(first.wrapped, first.sealed)!]).toEqual([1, 2]) // control: through its own wrap
+    expect([...opened(second.wrapped, second.sealed)!]).toEqual([3, 4])
+    expect(first.wrapped).not.toBe(second.wrapped)
+    expect(opened(second.wrapped, first.sealed)).toBeNull() // another write's key: the initial, never the other icon
+    expect(openIcon(scope.key, AT, first.sealed)).toBeNull() // the scope key itself is no icon key
   })
 })

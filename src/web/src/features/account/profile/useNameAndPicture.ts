@@ -1,4 +1,4 @@
-// The one editor model for a member's real name AND profile picture (ADR 0084 decision 6): both live sealed under `K_tenant`
+// The one editor model for a member's real name AND profile picture (ADR 0084 decision 6): both live sealed under value keys whose wraps `K_tenant` holds (ADR 0115)
 // and both are written by their owner only, so ONE composable serves the two places that edit them - Settings > Your profile
 // (`ProfilePanel`) and the member's OWN profile page (`PersonProfile`, shown only when the page is theirs). It holds the name
 // fields and the picture choice (kept, replaced or removed) as a draft; the host's Save writes the name (`saveName`) and
@@ -8,7 +8,7 @@
 import { computed, getCurrentScope, onScopeDispose, reactive, ref } from 'vue'
 import {
   getMyProfile, openOwnNameKey, zeroOwnNameKey, sealName, openMemberName, sealAvatar, setMyAvatar, clearMyAvatar,
-  type MemberProfile, type OwnNameKey,
+  type MemberProfile, type OwnNameKey, type SealedMemberName,
 } from './profile'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { isStaleEpoch } from '../../spaces/scopes'
@@ -65,8 +65,8 @@ export function useNameAndPicture() {
     meId.value = ownKey?.address.userId ?? ''
     serverHasPicture.value = p.avatarRevision > 0
     if (ownKey) {
-      // Under the tenant's one key: every rotation re-seals every profile under the new one (ADR 0115 decision 2).
-      const name = openMemberName(ownKey.epochs, ownKey.address, p.sealedName)
+      // Its value key opens under the tenant's one key: every rotation re-wraps every value key under the new one (ADR 0115).
+      const name = openMemberName(ownKey.epochs, ownKey.address, p.sealedName, p.wrappedNameValueKey)
       firstName.value = name?.firstName ?? ''
       lastName.value = name?.lastName ?? ''
       // Warm the directory so the member's own picture is in the cache (it fetches only a version it has not seen).
@@ -76,10 +76,10 @@ export function useNameAndPicture() {
   }
 
   /** The name sealed as the fields hold it (an EMPTY name included - that is how a member removes it) with the tenant epoch
-   *  it is sealed under, or undefined without the key. */
-  function sealedName(): { sealedName: string; epoch: number } | undefined {
+   *  its value key is wrapped under, or undefined without the key. Every call mints a fresh value key (ADR 0115). */
+  function sealedName(): (SealedMemberName & { epoch: number }) | undefined {
     return ownKey
-      ? { sealedName: sealName(ownKey.key, ownKey.address, { firstName: firstName.value, lastName: lastName.value }), epoch: ownKey.epochs.epoch }
+      ? { ...sealName(ownKey.epochs, ownKey.address, { firstName: firstName.value, lastName: lastName.value }), epoch: ownKey.epochs.epoch }
       : undefined
   }
 
@@ -109,7 +109,7 @@ export function useNameAndPicture() {
 
   /** Write the name through `send` (the host's profile update, which may carry the username and the consent too): sealed
    *  as {@link sealedName} gives it, once more under the re-opened key after a `stale_epoch`. */
-  function saveName<T>(send: (name: { sealedName: string; epoch: number } | undefined) => Promise<T>): Promise<T> {
+  function saveName<T>(send: (name: (SealedMemberName & { epoch: number }) | undefined) => Promise<T>): Promise<T> {
     return staleOnce(() => send(sealedName()))
   }
 
@@ -139,7 +139,7 @@ export function useNameAndPicture() {
       if (!ownKey) throw new Error('no_tenant_key')
       await staleOnce(() => {
         if (!ownKey) throw new Error('no_tenant_key')
-        return setMyAvatar(sealAvatar(ownKey.key, ownKey.address, d.bytes), ownKey.epochs.epoch)
+        return setMyAvatar(sealAvatar(ownKey.epochs, ownKey.address, d.bytes), ownKey.epochs.epoch)
       })
     } else {
       await clearMyAvatar()

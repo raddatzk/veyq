@@ -124,14 +124,14 @@ acceptanceCriteria:
       When a member renames a share root, that member's client re-seals the new name under every open share's own
       K_share — its own shares and other members' — through each share's recovery copy, and stores it with
       setShareSealedName, which any member with write access on the scope may call (a reader or a stranger is 404)
-      and which changes sealed_name only; the server takes it on a switched-off share too. A closed share (switched
-      off or past its end date) is left as it is, since nothing new is sealed under a closed link and its reopen
-      carries the root's name (ADR 0114 decision 5). A share without a recovery copy is skipped and a refused
+      and which changes sealed_name only. A closed share (switched off or past its end date) is left as it is, since
+      nothing new is sealed under a closed link and its reopen carries the root's name (ADR 0114 decision 5): the
+      server refuses a re-seal of one (422 link_closed), which the client counts as closed, not failed. A share without a recovery copy is skipped and a refused
       write is collected; the next share is still tried, nothing rolls back, and either is reported to the member
       as one notice, never as a failed rename.
     coverage:
       backend:
-        integration: [ShareSealedNameCoreSliceTest.theOwnerAndAnotherWritingMemberSetItAndResolveServesTheNewName, ShareSealedNameCoreSliceTest.aReaderIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.aStrangerIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.everyOtherColumnOfTheShareStaysUntouched, ShareSealedNameCoreSliceTest.aDeletedShareAndAnUnknownIdAre404, ShareSealedNameCoreSliceTest.aRevokedShareTakesAReSealAndItsReactivationShowsTheNameItCarries, ShareSealedNameCoreSliceTest.aReSealOverlappingAReactivationEndsConsistentWithoutADeadlock]
+        integration: [ShareSealedNameCoreSliceTest.theOwnerAndAnotherWritingMemberSetItAndResolveServesTheNewName, ShareSealedNameCoreSliceTest.aReaderIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.aStrangerIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.everyOtherColumnOfTheShareStaysUntouched, ShareSealedNameCoreSliceTest.aDeletedShareAndAnUnknownIdAre404, ShareSealedNameCoreSliceTest.aRevokedShareRefusesAReSealItsOpenSiblingTakesItAndItsReactivationShowsTheNameItCarries, ShareSealedNameCoreSliceTest.aLinkPastItsEndDateRefusesAReSeal, ShareSealedNameCoreSliceTest.aReSealOverlappingARevokeIsDecidedUnderTheShareRow, ShareSealedNameCoreSliceTest.aReSealOverlappingAReactivationEndsConsistentWithoutADeadlock]
       web:
         unit: [src/core/sharing/manageShares.test.ts, src/core/sharing/resealShareNames.wire.test.ts, src/core/node/FolderNameDialog.test.ts]
   - id: a-link-blocked-by-the-operator

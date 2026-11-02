@@ -133,10 +133,20 @@ ciphertext the server moves to another object or another purpose fails to open. 
 object (a frame under its `K_blob`, a share's fields under keys derived from its `K_share`), the key itself is the
 binding.
 
+A **scope-level value an author writes** — a member's tenant name, picture and join record, a verification, a
+Memory's item marks, a group's name and a space's icon, a link's recovery copy — is sealed, with its own purpose and
+binding, under a **value key** `K_v` of its own: 32 random bytes minted at every write. Only `K_v` is sealed under the
+scope key, by the purpose `value-key`, whose binding is the scope, the epoch whose key wraps it and the value's
+**address**: SHA-256 of the canonical encoding of the value's own seal context. A wrap moved onto another value's slot
+therefore does not open, and a value under a substituted `K_v` does not open either: a rotation, which re-wraps `K_v`
+and never touches the value, can make a value unreadable but never turn it into another one
+([ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)
+decision 2; the `value_key` vectors).
+
 A **field** (a node's name and meta, a medium's metadata, a bucket's, a guest's or a share's name, a share's note, a
 member's name and picture) seals under a key of its own, `K_field = HKDF-SHA256(K_parent, salt,
-"veyq/v1/field/" + purpose)`, where `K_parent` is the key the field belongs under and the 16-byte salt is fresh on
-every write. Its envelope is `0x03 ‖ salt ‖ nonce ‖ ciphertext`, a type byte of its own that sits in the
+"veyq/v1/field/" + purpose)`, where `K_parent` is the key the field belongs under (for a member's name, picture, join record and verification the
+value's own `K_v`) and the 16-byte salt is fresh on every write. Its envelope is `0x03 ‖ salt ‖ nonce ‖ ciphertext`, a type byte of its own that sits in the
 authenticated data, so a field never opens as a plain seal or a wrap. One revision's `K_field` opens that revision
 of that field and nothing else, which is the key a report of a field will hand over
 ([ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)

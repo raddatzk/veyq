@@ -25,10 +25,11 @@ import java.util.UUID
 
 /**
  * A scope-level write racing a rotation's commit (ADR 0115 decisions 2-3), both orders forced: the commit swaps in the
- * staged profiles under the tenant scope's row lock, and a profile write decides its stated epoch under the same lock.
- * Held first, the commit lands and the write that waited on it reads the new epoch — `stale_epoch`, nothing written
- * under the replaced key. Held first, the write lands and the commit that waited on it finds the row changed since it
- * was staged — `rekey_parts_stale`, nothing rotated. Neither order leaves a name under the old key after the rotation.
+ * staged re-wrapped value keys under the tenant scope's row lock, and a profile write decides its stated epoch under the
+ * same lock. Held first, the commit lands and the write that waited on it reads the new epoch — `stale_epoch`, nothing
+ * wrapped under the replaced key. Held first, the write lands — a fresh value key, so a fresh wrap — and the commit that
+ * waited on it finds the row's wrap changed since it was staged — `rekey_parts_stale`, nothing rotated. Neither order
+ * leaves a name's key under the old key after the rotation.
  */
 @QuarkusTest
 class ScopeRekeyRaceSliceTest {
@@ -48,7 +49,7 @@ class ScopeRekeyRaceSliceTest {
         val rekeyId = TestScopeRekey.stageAll(tenantId)
         val outcome = whileUncommitted(
             change = { assertTrue(rotate(tenantId, owner, rekeyId) is RotationDecision.Commit, "round $round") },
-            overlapping = { profiles.update(owner, tenantId, null, "bGF0ZS1uYW1l", 0, null) },
+            overlapping = { profiles.update(owner, tenantId, null, "bGF0ZS1uYW1l", TestGrants.freshWrap(), 0, null) },
         )
         assertEquals(ProfileOutcome.StaleEpoch, outcome, "round $round: a name sealed under the replaced key landed")
         assertEquals(NAME, nameOf(owner, tenantId), "round $round: the commit's re-sealed name stands")
@@ -63,7 +64,7 @@ class ScopeRekeyRaceSliceTest {
             // The handler's write in the held transaction: its epoch decided under the tenant scope's lock, then the row.
             change = {
                 assertTrue(profileRows.atCurrentEpoch(tenantId, 0), "round $round")
-                profileRows.update(owner, tenantId, null, "ZWFybHktbmFtZQ==")
+                profileRows.update(owner, tenantId, null, TestGrants.sealed("ZWFybHktbmFtZQ=="))
             },
             overlapping = { rotate(tenantId, owner, rekeyId) },
         )
@@ -74,14 +75,14 @@ class ScopeRekeyRaceSliceTest {
         assertTrue(rotate(tenantId, owner, TestScopeRekey.stageAll(tenantId)) is RotationDecision.Commit, "round $round")
     }
 
-    /** A tenant whose owner holds a sealed name, at epoch 0. */
+    /** A tenant whose owner holds a sealed name under a value key of its own, at epoch 0. */
     private fun tenant(): Pair<String, String> {
         val owner = seedUser()
         val tenantId = seedTenant(owner = owner)
         QuarkusTransaction.requiringNew().run {
             TenantProfileEntity().apply {
                 id = UUID.randomUUID().toString(); userId = owner; this.tenantId = tenantId; username = "o${owner.take(8)}"
-                sealedName = NAME
+                sealedName = NAME; wrappedNameValueKey = TestGrants.VALUE_KEY_WRAP
             }.persist()
         }
         return owner to tenantId

@@ -43,7 +43,7 @@ const EXPIRES = new Date('2027-03-01T22:59:59.999Z')
 const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
   shareId: 's-own', scopeId: SCOPE_ID, nodeId: FOLDER_ID, role: ShareRole.Read, enabled: true, mine: true,
   createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null, sealedNote: null, sealedShareName: 'sealed',
-  sealedShareKey: 'k', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
+  sealedShareKey: 'k', wrappedRecoveryValueKey: 'w', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
   reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, guestStops: [],
   ...over,
 })
@@ -87,7 +87,7 @@ describe('FolderShareDialog — edit a link in place (#364)', () => {
     listSharesFor.mockResolvedValue([
       row({ shareId: 's-own' }),
       row({ shareId: 's-other', mine: false, sealedShareName: null }),
-      row({ shareId: 's-nocopy', sealedShareKey: null, sealedShareName: null }),
+      row({ shareId: 's-nocopy', sealedShareKey: null, wrappedRecoveryValueKey: null, sealedShareName: null }),
     ])
     const w = mountDialog()
     await flushPromises()

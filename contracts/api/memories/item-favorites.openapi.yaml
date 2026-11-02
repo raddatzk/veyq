@@ -12,7 +12,8 @@ tags:
   - name: item-favorites
     description: >
       The **per-(member, scope, node) item marks** — the set of marked `veyq_media` ids inside one Memory,
-      sealed client-side under the scope key `K_SC` and stored as one opaque blob per member
+      sealed client-side under a value key of its own, which the scope key `K_SC` wraps, and stored as one opaque
+      blob per member
       (en.memory.favorites, [ADR 0068](../../../docs/decisions/0068-favorites-two-confidentiality-levels.md)).
       Deliberately **shared and member-attributed**, unlike the core `favorites` pin: the read returns **every**
       member's blob for that node so the client can render *everyone's / only mine* and a per-item count. The
@@ -30,7 +31,7 @@ tags:
 
   - name: item-favorites-rekey
     description: >
-      The item marks of a whole scope for a rotation's re-seal ([ADR 0115](../../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2): the Memories
+      The item marks' value keys of a whole scope for a rotation's re-wrap ([ADR 0115](../../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2): the Memories
       application's part of core's scope re-key stage, under the re-key id `rotateScope` names. A tag of its own so its
       resource owns the `/api/scopes/{scopeId}/item-favorites-rekey` subtree and no root path of another resource
       widens.
@@ -44,7 +45,8 @@ paths:
       description: >
         Returns one entry per member who has ever stored item marks for this node — the caller's own included
         and flagged `self`, and an empty array when nobody has. Each entry's ciphertext is the sealed set of
-        marked media ids, which the client opens with the scope key `K_SC`; the operator sees only opaque blobs. Entries carry
+        marked media ids under its own value key, which the client opens from the entry's wrap with the scope key
+        `K_SC`; the operator sees only opaque blobs. Entries carry
         **no member id**: the array separates the members, and the count of an item is how many entries hold it,
         so nothing needs a name. This read is deliberately **not** filtered to the caller: it is what lets the client render *everyone's favorites* and a per-item
         count without the blind server aggregating for it.
@@ -83,10 +85,11 @@ paths:
       description: >
         Upserts the **caller's own** item marks for this node (last-write-wins). The body carries no member id,
         so a caller cannot address another member's blob — the identity comes from the token. The client seals
-        the whole marked set for this node under the scope key `K_SC` and PUTs the opaque result with the epoch it
-        sealed under (`epoch`); the server stores it verbatim only while that is the scope's current epoch (`409
-        stale_epoch`, ADR 0115 decision 3): a rotation re-seals every row under the one key, so none may land under an
-        older one.
+        the whole marked set for this node under a fresh value key `K_v`, wraps `K_v` under the scope key `K_SC`
+        ([ADR 0115](../../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)) and PUTs both with the epoch of the wrap (`epoch`); the server stores them verbatim only
+        while that is the scope's current epoch (`409 stale_epoch`, ADR 0115 decision 3): a rotation re-wraps every
+        row's value key under the one key, so none may land under an older one — and never rewrites a row, so no
+        rotator can rewrite another member's marks.
       security:
         - bearerAuth: []
       parameters:
@@ -97,7 +100,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/PutItemFavoritesRequest" }
-            example: { ciphertext: aXRlbS1mYXZvcml0ZXMtY2lwaGVy, epoch: 0 }
+            example: { ciphertext: aXRlbS1mYXZvcml0ZXMtY2lwaGVy, wrappedValueKey: d3JhcHBlZC12YWx1ZS1rZXk=, epoch: 0 }
       responses:
         "204":
           description: The item-mark blob was stored.
@@ -127,12 +130,13 @@ paths:
     get:
       tags: [item-favorites-rekey]
       operationId: listScopeItemFavoritesRekey
-      summary: One page of the scope's item-mark rows, every member's, for a rotation to re-seal (ADR 0115 decision 2).
+      summary: One page of the scope's item-mark rows' value keys, every member's, for a rotation to re-wrap (ADR 0115 decision 2).
       description: >
-        Every item-mark row of the scope — every member's, on every node, trashed ones included — with its ciphertext as
-        stored. The rotating client opens each with the current scope key, re-seals it under the one it minted (the
-        self-tag inside unchanged) and stages it (`stageScopeItemFavoritesRekey`); core's `rotateScope` swaps it in
-        through Memories' scope re-key participant, fail closed. A row is addressed by an opaque `markId`, **never** a
+        Every item-mark row of the scope — every member's, on every node, trashed ones included — with its value key's
+        wrap as stored, never its ciphertext: a rotation re-wraps keys and never rewrites a value. The rotating client
+        opens each wrap with the current scope key, wraps the same `K_v` under the one it minted (one it cannot open
+        under a key it drops, so the row reads as unreadable) and stages it (`stageScopeItemFavoritesRekey`); core's
+        `rotateScope` swaps it in through Memories' scope re-key participant, fail closed. A row is addressed by an opaque `markId`, **never** a
         member id: the rows stay as unattributed as the node's read serves them (ADR 0068 §9). Paged by `since` /
         `limit` / `more`. The caller's rights are core's `listScopeRekeyParts`'s.
       security:
@@ -151,8 +155,8 @@ paths:
           # An empty value (`?limit=`) is this parameter's absence, as for `since` (cr-api-fuzzing).
           allowEmptyValue: true
           required: false
-          description: The most rows one page carries — the stage's cap, since a row is up to 256 KiB. Absent => 32.
-          schema: { type: integer, format: int32, minimum: 1, maximum: 32, default: 32, example: 32 }
+          description: The most rows one page carries — the stage's cap. Absent => 256.
+          schema: { type: integer, format: int32, minimum: 1, maximum: 256, default: 256, example: 256 }
       responses:
         "200":
           description: One page of the scope's item-mark rows.
@@ -181,13 +185,14 @@ paths:
     post:
       tags: [item-favorites-rekey]
       operationId: stageScopeItemFavoritesRekey
-      summary: Stage one batch of re-sealed item-mark rows under a rotation's re-key id (ADR 0115 decision 2).
+      summary: Stage one batch of re-wrapped item-mark value keys under a rotation's re-key id (ADR 0115 decision 2).
       description: >
-        Up to 32 rows a call (a row is up to 256 KiB), each re-sealed under the key of epoch `fromEpoch + 1`, under the
-        re-key id core's `rotateScope` then names. Each value names the SHA-256 of the ciphertext it was opened from
-        (`replacedDigest`): a row the member replaced since the read is refused here, one replaced after the stage by the
-        commit (`409 rekey_parts_stale` either way, ADR 0115 decision 2); a row with no staged value is the commit's
-        `rekey_parts_missing`. A value staged twice is replaced; nothing staged is served before the commit, and an
+        Up to 256 rows a call, each row's `K_v` wrapped under the key of epoch `fromEpoch + 1`, under the re-key id
+        core's `rotateScope` then names. **Wraps only:** the stage has no field for a row's ciphertext, and the commit
+        refuses a staged write to one (`422 rekey_writes_value`). Each wrap names the SHA-256 of the wrap it replaces
+        (`replacedDigest`): a row the member replaced since the read (every write mints a fresh `K_v`) is refused here,
+        one replaced after the stage by the commit (`409 rekey_parts_stale` either way, ADR 0115 decision 2); a row with
+        no staged wrap is the commit's `rekey_parts_missing`. A value staged twice is replaced; nothing staged is served before the commit, and an
         unclaimed stage expires after a day. The caller's rights are `listScopeItemFavoritesRekey`'s.
       security:
         - bearerAuth: []
@@ -203,7 +208,7 @@ paths:
         "204":
           description: The batch is staged.
         "400":
-          description: Malformed request (a list over 32 entries, a malformed value).
+          description: Malformed request (a list over 256 entries, a malformed value).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -221,7 +226,7 @@ paths:
         "409":
           description: >
             The scope's current epoch is no longer `fromEpoch` (`stale_epoch` — a rotation committed since; re-read and
-            rebuild from a fresh key), a mark's `replacedDigest` is not the digest of what its row holds now
+            rebuild from a fresh key), a mark's `replacedDigest` is not the digest of the wrap its row holds now
             (`rekey_parts_stale` — the row was replaced or removed since the read; re-read it), or the space is being
             deleted and read-only (`scope_deleting`). Nothing of the batch is staged.
           content:
@@ -237,7 +242,7 @@ paths:
         Returns the **caller's own** item-mark rows — never a co-member's — for every scope the caller is an accepted
         member of whose tenant is not suspended; a row of a scope the caller has left, or only been proposed to, is
         left out. It is what an account-key rotation re-tags: the self-tag inside each blob derives from the Master
-        Key, so a rotation re-seals the caller's marks under the new one
+        Key, so an account-key rotation re-seals the caller's marks under a fresh value key with the new tag
         ([ADR 0068](../../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §9). The server already holds
         exactly these rows under the caller's id, so this read tells it nothing; it is a hint, not a proof — the
         client re-tags only a blob whose tag verifies under its old key. A filter, not an answer: a scope it may
@@ -288,7 +293,7 @@ components:
   schemas:
     ItemFavoritesEntry:
       type: object
-      required: [self, ciphertext]
+      required: [self, ciphertext, wrappedValueKey]
       properties:
         self:
           x-veyq-visibility: flag
@@ -306,34 +311,48 @@ components:
           example: true
         ciphertext:
           type: string
-          description: That member's marked media ids for this node beside their self-tag — `tag ‖ ids`, each id its 16 raw bytes (v1.json#item_mark_self) — AEAD-sealed under the scope key `K_SC` (its current epoch's; every rotation re-seals it, ADR 0115 decision 2), context `item-favorites` (opaque base64).
+          description: That member's marked media ids for this node beside their self-tag — `tag ‖ ids`, each id its 16 raw bytes (v1.json#item_mark_self) — AEAD-sealed under the row's own value key (`wrappedValueKey`; a rotation re-wraps it and leaves this, ADR 0115), context `item-favorites` (opaque base64).
           contentEncoding: base64
           maxLength: 262144
           example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
+        wrappedValueKey:
+          type: string
+          description: The row's value key wrapped under the scope key of its current epoch (`value-key`, bound to the scope, that epoch and the row's address).
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
 
     PutItemFavoritesRequest:
       type: object
-      required: [ciphertext, epoch]
+      required: [ciphertext, wrappedValueKey, epoch]
       properties:
         epoch:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
-          description: The scope epoch whose key seals `ciphertext` — the scope's current one, else `409 stale_epoch` (ADR 0115 decision 3).
+          description: The scope epoch whose key wraps `ciphertext`'s value key — the scope's current one, else `409 stale_epoch` (ADR 0115 decision 3).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         ciphertext:
           type: string
-          description: The caller's marked media ids for this node beside their self-tag — `tag ‖ ids`, each id its 16 raw bytes (v1.json#item_mark_self) — AEAD-sealed under the scope key `K_SC` (its current epoch's; every rotation re-seals it, ADR 0115 decision 2), context `item-favorites` (opaque base64). No member id — the caller can only replace their own blob.
+          description: The caller's marked media ids for this node beside their self-tag — `tag ‖ ids`, each id its 16 raw bytes (v1.json#item_mark_self) — AEAD-sealed under a fresh value key `K_v` (ADR 0115), context `item-favorites` (opaque base64). No member id — the caller can only replace their own blob.
           contentEncoding: base64
           maxLength: 262144
           example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 262144) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedValueKey:
+          type: string
+          description: The row's `K_v` wrapped under the scope key of `epoch` (seal purpose `value-key`, bound to the scope, that epoch and the row's address).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     OwnItemFavoritesEntry:
       type: object
-      required: [scopeId, nodeId, ciphertext]
+      required: [scopeId, nodeId, ciphertext, wrappedValueKey]
       properties:
         scopeId:
           x-veyq-visibility: id
@@ -349,10 +368,16 @@ components:
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         ciphertext:
           type: string
-          description: The caller's own marked media ids for that node beside their self-tag — `tag ‖ ids`, each id its 16 raw bytes (v1.json#item_mark_self) — AEAD-sealed under the scope key `K_SC` (its current epoch's; every rotation re-seals it, ADR 0115 decision 2), context `item-favorites` (opaque base64) — exactly what the node's read serves as the caller's entry.
+          description: The caller's own marked media ids for that node beside their self-tag — `tag ‖ ids`, each id its 16 raw bytes (v1.json#item_mark_self) — AEAD-sealed under the row's own value key, context `item-favorites` (opaque base64) — exactly what the node's read serves as the caller's entry.
           contentEncoding: base64
           maxLength: 262144
           example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
+        wrappedValueKey:
+          type: string
+          description: The row's value key wrapped under the scope key of its current epoch, as `ItemFavoritesEntry.wrappedValueKey`.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
 
     ScopeItemFavoritesRekeyPage:
       type: object
@@ -361,12 +386,12 @@ components:
         currentEpoch:
           x-veyq-visibility: structure
           type: integer
-          description: The scope's current epoch — every row here is sealed under its key.
+          description: The scope's current epoch — every wrap here is under its key.
           minimum: 0
           example: 0
         marks:
           type: array
-          maxItems: 32
+          maxItems: 256
           items: { $ref: "#/components/schemas/ItemFavoritesRekeyRow" }
         more:
           x-veyq-visibility: flag
@@ -382,7 +407,7 @@ components:
 
     ItemFavoritesRekeyRow:
       type: object
-      required: [markId, nodeId, ciphertext]
+      required: [markId, nodeId, wrappedValueKey]
       properties:
         markId:
           x-veyq-visibility: id
@@ -396,14 +421,14 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The Memory the row's marks are in.
+          description: The Memory the row's marks are in — with the scope, the row's address (`item-favorites` binds both).
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
-        ciphertext:
+        wrappedValueKey:
           type: string
-          description: The row as stored — `tag ‖ ids` sealed under the scope key, context `item-favorites`, as `ItemFavoritesEntry.ciphertext`.
+          description: The row's value key as stored — under the scope key of `currentEpoch` (`value-key`), as `ItemFavoritesEntry.wrappedValueKey`.
           contentEncoding: base64
-          maxLength: 262144
-          example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
 
     ScopeItemFavoritesRekeyStage:
       type: object
@@ -418,18 +443,18 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         marks:
           type: array
-          maxItems: 32
-          items: { $ref: "#/components/schemas/ItemFavoritesRekeySeal" }
-          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 32)'
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ItemFavoritesRekeyWrap" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
 
-    ItemFavoritesRekeySeal:
+    ItemFavoritesRekeyWrap:
       type: object
-      required: [markId, ciphertext, replacedDigest]
+      required: [markId, wrappedValueKey, replacedDigest]
       properties:
         replacedDigest:
           type: string
           description: >
-            The digest of the row's `ciphertext` the rotator opened — base64 SHA-256 of its text as
+            The digest of the wrap it replaces — base64 SHA-256 of the row's `wrappedValueKey` text as
             `listScopeItemFavoritesRekey` served it. The stage refuses it if the row holds another by then, and the
             commit if it does at the commit (`409 rekey_parts_stale`, ADR 0115 decision 2).
           contentEncoding: base64
@@ -443,13 +468,17 @@ components:
           format: uuid
           example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
-        ciphertext:
+        wrappedValueKey:
           type: string
-          description: The row's plaintext re-sealed under the new scope key (context `item-favorites`), the self-tag inside unchanged.
+          description: >
+            The row's same `K_v` under the new scope key (`value-key`, bound to the scope, the new epoch and the row's
+            address), or a stand-in under a key the rotator drops at once for a wrap it could not open; the row's
+            ciphertext stays byte-identical.
           contentEncoding: base64
-          maxLength: 262144
-          example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 262144) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'

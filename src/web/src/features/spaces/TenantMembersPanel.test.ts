@@ -62,7 +62,8 @@ import { formatInviteCode, generateInviteCode, normalizeInviteCode } from '@veyq
 import * as v1 from '@veyq/crypto/v1'
 import { type ScopeKey } from './epochs'
 import { epochsOf } from './epochsTestUtil'
-import { resealMemberName, sealName } from '../account/profile/memberName'
+import { memberNameContext, sealName, type SealedMemberName } from '../account/profile/memberName'
+import { rewrapValueKey } from './valueKey'
 
 const stubs = {
   VeyqButton: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
@@ -466,23 +467,27 @@ describe('TenantMembersPanel - names across a tenant rotation (inbox #573)', () 
     activeSpace.tenantId = T
   })
 
-  // ADR 0115 decisions 1-2: the rotation re-sealed every name under the new key, so the one key the active space holds
-  // opens them all; a name left under the replaced key does not open, and the row falls back to the username.
-  it('shows the real name a member saved before the rotation, which the rotation re-sealed under the new key; one left under the old key shows the username', async () => {
+  // ADR 0115 decisions 1-2: the rotation re-wrapped every name's value key under the new key, so the one key the active space holds
+  // opens them all; a name whose wrap was left under the replaced key does not open, and the row falls back to the username.
+  it('shows the real name a member saved before the rotation, whose key the rotation re-wrapped under the new key; one whose wrap was left under the old key shows the username', async () => {
     const e0 = v1.randomBytes(32)
     const e1 = v1.randomBytes(32)
     held.write = e1
     held.epochs = epochsOf(e1, 1)
     try {
       const olga = { scopeId: T, userId: OLGA }
-      const underE0 = sealName(e0, olga, { firstName: 'Olga', lastName: 'Owner' })
-      const members = (olgaName: string): ScopeMember[] => [
-        { ...MEMBERS[0], userId: OLGA, sealedName: olgaName },
-        { ...MEMBERS[1], userId: PAUL, sealedName: sealName(e1, { scopeId: T, userId: PAUL }, { firstName: 'Paul', lastName: 'Partner' }) },
+      const underE0 = sealName(epochsOf(e0, 0), olga, { firstName: 'Olga', lastName: 'Owner' })
+      const members = (olgaName: SealedMemberName): ScopeMember[] => [
+        { ...MEMBERS[0], userId: OLGA, ...olgaName },
+        { ...MEMBERS[1], userId: PAUL, ...sealName(epochsOf(e1, 1), { scopeId: T, userId: PAUL }, { firstName: 'Paul', lastName: 'Partner' }) },
       ]
-      const titles = async (olgaName: string) =>
+      const titles = async (olgaName: SealedMemberName) =>
         (await mountPanel('MEMBER', [], members(olgaName))).findAll('.member-row .veyq-row-title').map((x) => x.text())
-      expect(await titles(resealMemberName(e0, e1, olga, underE0))).toEqual(['Olga Owner', 'Paul Partner'])
+      const rewrapped = {
+        ...underE0, wrappedNameValueKey: rewrapValueKey(epochsOf(e0, 0), epochsOf(e1, 1), memberNameContext(olga), underE0.wrappedNameValueKey),
+      }
+      expect(rewrapped.sealedName, 'the rotation leaves the name itself').toBe(underE0.sealedName)
+      expect(await titles(rewrapped)).toEqual(['Olga Owner', 'Paul Partner'])
       expect(await titles(underE0)).toEqual([`@${MEMBERS[0].username}`, 'Paul Partner'])
     } finally {
       held.write = null

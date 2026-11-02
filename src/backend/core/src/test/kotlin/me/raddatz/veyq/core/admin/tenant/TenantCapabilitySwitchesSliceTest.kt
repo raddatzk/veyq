@@ -204,7 +204,7 @@ class TenantCapabilitySwitchesSliceTest {
 
     private fun createGroup(owner: String, domain: String): Response =
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"c2VhbGVk","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"c2VhbGVk","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
 
     private data class OwnedTenant(val id: String, val owner: String, val member: String)

@@ -77,7 +77,7 @@ class ApplicationSwitchSweepTest {
             Call("POST", "/api/scopes/${c.s.scopeId}/nodes/${c.s.nodeId}/media-rekey/${UUID.randomUUID()}", """{"fromEpoch":0}""")
         },
         "putItemFavorites" to { c ->
-            Call("PUT", "/api/scopes/${c.s.scopeId}/nodes/${c.s.nodeId}/item-favorites", """{"ciphertext":"$B64","epoch":0}""")
+            Call("PUT", "/api/scopes/${c.s.scopeId}/nodes/${c.s.nodeId}/item-favorites", """{"ciphertext":"$B64","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":0}""")
         },
         "setMemoryBanner" to { c ->
             Call(

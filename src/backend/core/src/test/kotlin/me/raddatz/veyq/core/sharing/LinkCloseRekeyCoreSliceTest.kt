@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.node.rekey.ScopeRekeyStage
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -29,7 +30,8 @@ import org.junit.jupiter.api.Test
 
 /**
  * ADR 0114's acceptance criteria (§ Bite tests), each with a positive control on the same predicate: closing a link
- * re-keys the subtree below it. Core alone, every node a `FOLDER`; the probes written before it was built are
+ * re-keys the subtree below it — and a link whose key is lost is closed by its root's re-key (ADR 0115 decision 2).
+ * Core alone, every node a `FOLDER`; the probes written before it was built are
  * `LinkCloseRekeyProbeCoreSliceTest`'s.
  *
  * Every world is a root folder holding a child and a trashed grandchild — the subtree a close marks, live and trashed —
@@ -275,6 +277,111 @@ class LinkCloseRekeyCoreSliceTest {
         assertNull(row(link).wrap)
     }
 
+    // --- ADR 0115 decision 2: a link whose key is lost is closed by its root's re-key, which then finishes ---
+
+    @Test
+    fun aLinkWhoseKeyIsLostIsClosedByItsRootsReKeyWhichThenFinishes() {
+        val w = world()
+        val lost = createShare(w, w.root)
+        val sibling = createShare(w, w.root)
+        markRootDue(w)
+        val rekeyId = UUID.randomUUID()
+        stage(w, rekeyId, """"shares":[{"shareId":"$sibling","wrap":"$NEW_WRAP"},{"shareId":"$lost","lostCopyDigest":"${copyDigest(lost)}"}]""")
+            .statusCode(204)
+        commitRoot(w, rekeyId, scopeEpoch = 0).statusCode(204)
+        // The lost link is closed through the close body: switched off, keyless, and its subtree marked below the root
+        // the commit just re-keyed — the child and the trashed grandchild are due, the folder beside it is not.
+        assertFalse(row(lost).enabled, "the key-lost link is switched off")
+        assertNull(row(lost).wrap)
+        assertFalse(TestNodeRekey.isDue(w.root), "the root's re-key finished")
+        assertTrue(TestNodeRekey.isDue(w.child), "the close marks the subtree below the root")
+        assertTrue(TestNodeRekey.isDue(w.trashed))
+        assertFalse(TestNodeRekey.isDue(w.beside))
+        given().`when`().get("/api/shares/$lost").then().statusCode(404)
+        // Control: the open sibling follows the new key and stays open.
+        assertEquals(NEW_WRAP, row(sibling).wrap)
+        assertTrue(row(sibling).enabled)
+    }
+
+    /** Only a name closes: a re-keyer that leaves an open link out — one whose copy it can open, or any other — is
+     *  refused for the missing wrap, and the link stays open (the server is told nothing it could check). */
+    @Test
+    fun leavingAnOpenLinkOutNeverClosesIt() {
+        val w = world()
+        val link = createShare(w, w.root)
+        markRootDue(w)
+        val rekeyId = UUID.randomUUID()
+        stage(w, rekeyId, """"shares":[]""").statusCode(204)
+        commitRoot(w, rekeyId, scopeEpoch = 0).statusCode(409).body("code", equalTo("rekey_parts_missing"))
+        assertTrue(row(link).enabled, "a link left out is not closed")
+        assertEquals(CONTENT_KEY_WRAP, row(link).wrap)
+        assertFalse(TestNodeRekey.isDue(w.child), "nothing marked")
+        // Control: wrapped, the same commit lands and the link stays open with the new key.
+        stage(w, rekeyId, """"shares":[{"shareId":"$link","wrap":"$NEW_WRAP"}]""").statusCode(204)
+        commitRoot(w, rekeyId, scopeEpoch = 0).statusCode(204)
+        assertTrue(row(link).enabled)
+        assertEquals(NEW_WRAP, row(link).wrap)
+    }
+
+    /** A key-lost name for a copy the link no longer holds, or for a link not open on the node, closes nothing and is
+     *  `rekey_parts_stale`; one beside a wrap is malformed. Each refusal leaves every row as it was — the commit's
+     *  close is rolled back with it. */
+    @Test
+    fun aKeyLostNameForAnotherCopyOrLinkIsStaleAndClosesNothing() {
+        val w = world()
+        val link = createShare(w, w.root)
+        val elsewhere = createShare(w, w.beside)
+        markRootDue(w)
+        val rekeyId = UUID.randomUUID()
+        val otherDigest = ScopeRekeyStage.digest("c29tZS1vdGhlci1jb3B5")!!
+        stage(w, rekeyId, """"shares":[{"shareId":"$link","lostCopyDigest":"$otherDigest"}]""").statusCode(204)
+        commitRoot(w, rekeyId, scopeEpoch = 0).statusCode(409).body("code", equalTo("rekey_parts_stale"))
+        assertTrue(row(link).enabled, "a stale name closes nothing")
+        stage(w, rekeyId, """"shares":[{"shareId":"$link","wrap":"$NEW_WRAP"},{"shareId":"$elsewhere","lostCopyDigest":"${copyDigest(elsewhere)}"}]""")
+            .statusCode(204)
+        commitRoot(w, rekeyId, scopeEpoch = 0).statusCode(409).body("code", equalTo("rekey_parts_stale"))
+        assertTrue(row(elsewhere).enabled, "a link on another node is not this commit's to close")
+        stage(w, rekeyId, """"shares":[{"shareId":"$link","wrap":"$NEW_WRAP","lostCopyDigest":"${copyDigest(link)}"}]""")
+            .statusCode(400).body("code", equalTo("invalid_request"))
+        assertFalse(TestNodeRekey.isDue(w.child), "no refused commit marked anything")
+        // Control: the right digest for the link on this node closes it, and the commit lands.
+        val fresh = UUID.randomUUID()
+        stage(w, fresh, """"shares":[{"shareId":"$link","lostCopyDigest":"${copyDigest(link)}"}]""").statusCode(204)
+        commitRoot(w, fresh, scopeEpoch = 0).statusCode(204)
+        assertFalse(row(link).enabled)
+        assertTrue(row(elsewhere).enabled)
+    }
+
+    /** The close lands in the commit's transaction, before the plan: a refusal of the plan after it — here an open
+     *  sibling left without its wrap — rolls the close back too, so nothing is written on any refusal. */
+    @Test
+    fun aRefusalAfterTheKeyLostCloseRollsTheCloseBack() {
+        val w = world()
+        val lost = createShare(w, w.root)
+        val sibling = createShare(w, w.root)
+        markRootDue(w)
+        val rekeyId = UUID.randomUUID()
+        stage(w, rekeyId, """"shares":[{"shareId":"$lost","lostCopyDigest":"${copyDigest(lost)}"}]""").statusCode(204)
+        commitRoot(w, rekeyId, scopeEpoch = 0).statusCode(409).body("code", equalTo("rekey_parts_missing"))
+        assertTrue(row(lost).enabled, "the refused commit's close is rolled back")
+        assertEquals(CONTENT_KEY_WRAP, row(lost).wrap)
+        assertFalse(TestNodeRekey.isDue(w.child), "and so are its marks")
+        assertTrue(TestNodeRekey.isDue(w.root))
+        // Control: with the sibling's wrap staged too, the same commit closes the lost link and lands.
+        stage(w, rekeyId, """"shares":[{"shareId":"$sibling","wrap":"$NEW_WRAP"}]""").statusCode(204)
+        commitRoot(w, rekeyId, scopeEpoch = 0).statusCode(204)
+        assertFalse(row(lost).enabled)
+        assertEquals(NEW_WRAP, row(sibling).wrap)
+    }
+
+    /** The digest a re-keyer names a link's lost copy by: SHA-256 of the copy's text as served. */
+    private fun copyDigest(shareId: String): String = ScopeRekeyStage.digest(row(shareId).sealedShareKey)!!
+
+    /** The root alone due — the frontier a rotation's or a close's re-key starts from — so a mark below it is the commit's. */
+    private fun markRootDue(w: World) = QuarkusTransaction.requiringNew().run {
+        NodeEntity.update("rekeyDue = true where id = ?1", w.root)
+    }
+
     // --- helpers ---
 
     private data class World(
@@ -310,7 +417,7 @@ class LinkCloseRekeyCoreSliceTest {
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 this.id = id; ownerAccount = w.owner; scopeId = w.scopeId; nodeId = w.root; role = ShareEntity.WRITE_ONLY
-                sealedDropPublicKey = "ZHJvcA=="; sealedName = "c2VhbGVk"; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0
+                sealedDropPublicKey = "ZHJvcA=="; sealedName = "c2VhbGVk"; sealedShareKey = "cmVjb3Zlcnk="; wrappedRecoveryValueKey = "d3JhcHBlZC12YWx1ZS1rZXk="; sealedShareKeyEpoch = 0
                 createdAt = Instant.now()
             }.persist()
         }

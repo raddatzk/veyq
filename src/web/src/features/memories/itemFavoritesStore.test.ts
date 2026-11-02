@@ -43,7 +43,7 @@ describe('itemFavoritesStore', () => {
     vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
     await loadItemFavoritesFor('s', 'n', KEY)
 
-    expect(loadItemFavorites).toHaveBeenCalledWith('s', 'n', KEY.key) // the read opens under the key's bytes
+    expect(loadItemFavorites).toHaveBeenCalledWith('s', 'n', KEY) // the read opens each wrap under the key at its epoch
     expect(markCount('b')).toBe(3) // all three
     expect(markCount('a')).toBe(1) // the caller alone
     expect(markCount('c')).toBe(1) // one co-member alone

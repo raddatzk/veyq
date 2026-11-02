@@ -26,8 +26,8 @@ async function check() {
   try {
     const [profile, own] = await Promise.all([getMyProfile(), opening])
     if (!own) return // no tenant key yet: nothing could be sealed, so nothing to ask for
-    // A name the tenant's rotation re-sealed opens under its one key: the profile is complete, nothing to ask for.
-    const name = openMemberName(own.epochs, own.address, profile.sealedName)
+    // A name whose value key the tenant's rotation re-wrapped opens under its one key: the profile is complete, nothing to ask for.
+    const name = openMemberName(own.epochs, own.address, profile.sealedName, profile.wrappedNameValueKey)
     const hasName = Boolean(name && `${name.firstName}${name.lastName}`.trim())
     show.value = !hasName && profile.avatarRevision === 0
   } catch {

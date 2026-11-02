@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.membership
 import me.raddatz.veyq.core.admin.tenant.MemberInviteKey
 import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
 import me.raddatz.veyq.core.crypto.InviteAcceptProof
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.testing.TestFixtures
 import me.raddatz.veyq.core.scope.ScopeEntity
@@ -10,6 +11,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import java.nio.ByteBuffer
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.security.Signature
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -35,6 +37,19 @@ object TestGrants {
 
     /** A stand-in sealed join record. */
     const val JOIN_RECORD = "c2VhbGVkLWpvaW4tcmVjb3Jk"
+
+    /** A stand-in value key's wrap (ADR 0115): opaque base64 the server stores beside a value and never opens. */
+    const val VALUE_KEY_WRAP = "d3JhcHBlZC12YWx1ZS1rZXk="
+
+    /** A fresh stand-in wrap — the length of a real one (`0x02 ‖ nonce ‖ K_v ‖ tag`, 61 bytes): every write of a value
+     *  mints a fresh value key, and so a wrap no earlier write held. */
+    fun freshWrap(): String = Base64.getEncoder().encodeToString(ByteArray(61).also { SecureRandom().nextBytes(it) })
+
+    /** [value] under a fresh stand-in value key ([freshWrap]) — what an author's write carries. */
+    fun sealed(value: String): SealedValue = SealedValue(value, freshWrap())
+
+    /** A stand-in join record with its wrap. */
+    val SEALED_JOIN_RECORD: SealedValue get() = SealedValue(JOIN_RECORD, VALUE_KEY_WRAP)
 
     /** SHA-256 of a DECODED identity bundle, base64 — what a grant's `recipientIdentityDigest` must be. */
     fun digest(identityPublicKeyB64: String): String =
@@ -122,6 +137,7 @@ object TestGrants {
     ): String =
         """"selfGrant":{"wrappedGrant":"$WRAPPED",$SIGNATURE_JSON,"epoch":$epoch,"recipientIdentityDigest":"${digest(identityPublicKeyB64)}"},""" +
             """"inviteProof":"${key.proof(inviteId, userId, identityPublicKeyB64)}","sealedJoinRecord":"$JOIN_RECORD",""" +
+            """"wrappedJoinRecordValueKey":"$VALUE_KEY_WRAP",""" +
             """"signerIdentityDigest":"$signerIdentityDigest","epoch":$profileEpoch"""
 
     /** The digest of [inviteId]'s stored signer key — of a stand-in when the invite holds none (ended, or no invite), so

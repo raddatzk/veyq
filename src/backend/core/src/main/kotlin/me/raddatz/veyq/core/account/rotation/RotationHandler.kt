@@ -337,8 +337,8 @@ class RotationHandler(
      * rotation_plan_changed`); a non-null endorsement is the stage identity's `join-endorsement` signature over the
      * client's `recordDigest` — the opened record's, which the server cannot compute (ADR 0115 decision 8) — verified here
      * (else `422 join_endorsement_invalid`; one without its digest verifies over nothing). Each entry keeps the digest of
-     * the stored ciphertext it was staged against, so the publish refuses one a rejoin replaced since — or a rotation
-     * re-sealed since, which the client re-stages. All checked before anything is written.
+     * the stored ciphertext it was staged against, so the publish refuses one a rejoin replaced since (a rotation
+     * re-wraps the record's value key and leaves the record, ADR 0115). All checked before anything is written.
      */
     fun stageEndorsements(userId: String, stageId: String, entries: List<StagedEndorsementInput>): StageEndorsementsOutcome =
         QuarkusTransaction.requiringNew().call {
