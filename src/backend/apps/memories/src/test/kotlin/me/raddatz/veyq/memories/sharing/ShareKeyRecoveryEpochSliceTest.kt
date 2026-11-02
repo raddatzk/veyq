@@ -41,7 +41,7 @@ class ShareKeyRecoveryEpochSliceTest {
 
         for (epoch in listOf(1, 3)) {
             val shareId = TestIds.shareId()
-            create(userId, memory, shareId, """"sealedShareKey":"$shareKey","sealedShareKeyEpoch":$epoch""")
+            create(userId, memory, shareId, """"sealedShareKey":"$shareKey","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","sealedShareKeyEpoch":$epoch""")
                 .statusCode(409).body("code", equalTo("stale_epoch"))
             listed(userId, memory).body("find { it.shareId == '$shareId' }", nullValue())
         }
@@ -52,7 +52,7 @@ class ShareKeyRecoveryEpochSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
 
-        for (fields in listOf(""""sealedShareKey":"$shareKey"""", """"sealedShareKeyEpoch":0""")) {
+        for (fields in listOf(""""sealedShareKey":"$shareKey","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="""", """"sealedShareKeyEpoch":0""")) {
             val shareId = TestIds.shareId()
             // refused by the request bound before the handler (both fields are required), so no handler code
             create(userId, memory, shareId, fields).statusCode(400)
@@ -67,7 +67,7 @@ class ShareKeyRecoveryEpochSliceTest {
         setScopeEpoch(scopeId, 2)
         val shareId = TestIds.shareId()
 
-        create(userId, memory, shareId, """"sealedShareKey":"$shareKey","sealedShareKeyEpoch":2""").statusCode(201)
+        create(userId, memory, shareId, """"sealedShareKey":"$shareKey","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","sealedShareKeyEpoch":2""").statusCode(201)
         listed(userId, memory)
             .body("find { it.shareId == '$shareId' }.sealedShareKey", equalTo(shareKey))
             .body("find { it.shareId == '$shareId' }.sealedShareKeyEpoch", equalTo(2))
@@ -85,7 +85,7 @@ class ShareKeyRecoveryEpochSliceTest {
         create(userId, memory, shareId, null).statusCode(400)
         listed(userId, memory).body("find { it.shareId == '$shareId' }", nullValue())
 
-        create(userId, memory, shareId, """"sealedShareKey":"$shareKey","sealedShareKeyEpoch":0""").statusCode(201)
+        create(userId, memory, shareId, """"sealedShareKey":"$shareKey","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","sealedShareKeyEpoch":0""").statusCode(201)
     }
 
     // --- helpers ---

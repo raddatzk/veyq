@@ -27,7 +27,7 @@ object GuestTreeShare {
             ShareEntity().apply {
                 id = shareId; ownerAccount = ownerId; this.scopeId = scopeId; this.nodeId = nodeId; this.role = role
                 if (role == ShareEntity.WRITE_ONLY) sealedDropPublicKey = "ZHJvcA==" else wrap = "d3JhcA=="
-                sealedName = "c2VhbGVk"; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0
+                sealedName = "c2VhbGVk"; sealedShareKey = "cmVjb3Zlcnk="; wrappedRecoveryValueKey = "d3JhcHBlZC12YWx1ZS1rZXk="; sealedShareKeyEpoch = 0
                 writeVerifier = ShareWriteProof.verifier(shareId); createdAt = Instant.now()
             }.persist()
             ShareIdentityEntity().apply {

@@ -77,7 +77,7 @@ class TenantAcceptSliceTest {
         val userId = seedUser(email = "owner-name@example.com")
         given().header("Authorization", bearer(userId))
             .contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"named",${TestGrants.ownerBirthJson()},"sealedName":"c2VhbGVkLW5hbWU="}""")
+            .body("""{"bootstrapSecret":"$secret","username":"named",${TestGrants.ownerBirthJson()},"sealedName":"c2VhbGVkLW5hbWU=","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(200).body("status", equalTo("ACTIVE"))
         // The server stored the opaque sealed blob verbatim on the profile row (never a plaintext name).

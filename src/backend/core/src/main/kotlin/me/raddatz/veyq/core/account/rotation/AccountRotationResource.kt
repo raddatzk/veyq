@@ -133,7 +133,8 @@ class AccountRotationResource(
             handler.planJoinRecords(identity.principal.name).map {
                 RotationPlanJoinRecord(
                     tenantId = UUID.fromString(it.tenantId), userId = UUID.fromString(it.userId),
-                    sealedJoinRecord = it.sealedJoinRecord, joinEndorsement = it.joinEndorsement,
+                    sealedJoinRecord = it.joinRecord.value, wrappedJoinRecordValueKey = it.joinRecord.wrappedValueKey,
+                    joinEndorsement = it.joinEndorsement,
                 )
             },
         ).build()

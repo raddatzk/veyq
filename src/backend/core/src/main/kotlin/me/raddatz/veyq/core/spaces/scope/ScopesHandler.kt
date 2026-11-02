@@ -18,6 +18,7 @@ import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.membership.Access
 import me.raddatz.veyq.core.crypto.InviteAcceptProof
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.admin.tenant.OpenInviteRow
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.AccessMode.READ
@@ -164,6 +165,10 @@ sealed interface RotateOutcome {
     object PartsMissing : RotateOutcome, HttpFailure by httpFailure("rekey_parts_missing", CONFLICT)
     /** A staged scope-level value is for a row that changed since it was staged — nothing stored; the client re-stages. */
     object PartsStale : RotateOutcome, HttpFailure by httpFailure("rekey_parts_stale", CONFLICT)
+    /** A staged scope-level value writes a value's ciphertext rather than its key's wrap (ADR 0115: a rotation re-wraps
+     *  keys and never rewrites a value) — nothing stored. Not a race the client re-stages its way out of: the stage
+     *  itself is wrong. */
+    object WritesValue : RotateOutcome, HttpFailure by httpFailure("rekey_writes_value", UNPROCESSABLE)
 }
 
 /** Outcome of reading the succession statements (ADR 0115 decision 5). */
@@ -182,6 +187,13 @@ sealed interface RenameGroupOutcome {
     object ScopeNotFound : RenameGroupOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RenameGroupOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
     object StaleEpoch : RenameGroupOutcome, HttpFailure by httpFailure("stale_epoch", CONFLICT)
+    /** A pending invitee holding a name key is not named: the fresh name key would leave them a key that opens no name
+     *  (ADR 0115) — nothing written. */
+    object Incomplete : RenameGroupOutcome, HttpFailure by httpFailure("rename_incomplete", CONFLICT)
+    /** An invitee's name key is sealed to a key that is not their current identity (ADR 0111 decision 10). */
+    object RecipientKeyNotCurrent : RenameGroupOutcome, HttpFailure by Failures.recipientKeyNotCurrent
+    /** An invitee entry with exactly one of its key and its digest, or one invitee named twice. */
+    object InvalidRequest : RenameGroupOutcome, HttpFailure by Failures.invalidRequest
 }
 
 /** Outcome of setting/replacing a scope icon (uc.spaces.set-space-icon). Owner-gated, TENANT or GROUP
@@ -303,7 +315,7 @@ class ScopesHandler(
      * ciphertext name + the ciphertext self-grant, never the scope key or the plaintext name.
      */
     fun createGroup(
-        userId: String, tenantId: String?, scopeId: String, encryptedName: String, grant: SignedGrant, recipientIdentityDigest: String,
+        userId: String, tenantId: String?, scopeId: String, name: SealedValue, grant: SignedGrant, recipientIdentityDigest: String,
     ): CreateGroupOutcome {
         // Policy first (ADR 0032, ADR 0088): a personal-only instance or tenant switches group scopes off → 422,
         // enforced server-side even if a stale client still offers the affordance. The instance level is asked even
@@ -321,7 +333,7 @@ class ScopesHandler(
             if (!InviteAcceptProof.digestMatches(store.identityPublicKeyOf(userId), recipientIdentityDigest)) {
                 return@createOrConflict CreateGroupOutcome.RecipientKeyNotCurrent
             }
-            if (store.createGroup(scopeId, userId, tenantId, encryptedName, grant)) CreateGroupOutcome.Created(scopeId) else CreateGroupOutcome.IdTaken
+            if (store.createGroup(scopeId, userId, tenantId, name, grant)) CreateGroupOutcome.Created(scopeId) else CreateGroupOutcome.IdTaken
         }
     }
 
@@ -345,19 +357,33 @@ class ScopesHandler(
     /**
      * Rename a GROUP (uc.spaces.rename-group, cr-0097, ADR 0027). Owner-gated ([ADR 0014](0014) §4 — the name
      * authority); GROUP-only; refused while the group is being deleted, like every write (the gate). The client
-     * sealed the new name under `K_name` of the **current** epoch and sends that epoch back; the server enforces
-     * `nameEpoch == currentEpoch` (`StaleEpoch` on a concurrent rotation) so the name stays forward-secret, then
-     * overwrites the row's ciphertext name + name-epoch. Name-only — no `K_SC` rotation, no re-grant. Operator-blind:
-     * the server never sees a key or the plaintext name.
+     * sealed the new name under a **fresh** value key, wrapped that key under the **current** epoch's key and sealed it
+     * to each pending consent invitee, and sends that epoch back (ADR 0115); the server enforces `nameEpoch ==
+     * currentEpoch` (`StaleEpoch` on a concurrent rotation) and that every invitee holding a name key gets the new one
+     * ([ScopesStore.renameGroup]), then overwrites the row's name, wrap and name-epoch. Name-only — no `K_SC` rotation,
+     * no re-grant. Operator-blind: the server never sees a key or the plaintext name.
      */
-    fun renameGroup(callerId: String, scopeId: String, encryptedName: String, nameEpoch: Int): RenameGroupOutcome {
+    fun renameGroup(
+        callerId: String, scopeId: String, name: SealedValue, nameEpoch: Int, invitees: List<InviteeNameKey>,
+    ): RenameGroupOutcome {
+        // The request's own shape first: an invitee's key and its digest come together, and one invitee is named once.
+        if (invitees.any { (it.sealedNameKey == null) != (it.recipientIdentityDigest == null) } ||
+            invitees.map { it.userId }.toSet().size != invitees.size
+        ) {
+            return RenameGroupOutcome.InvalidRequest
+        }
         access.check(callerId, scopeId, WRITE)
             .refusal(RenameGroupOutcome.ScopeNotFound, RenameGroupOutcome.Suspended, RenameGroupOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return RenameGroupOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return RenameGroupOutcome.NotOwner
-        // The fast path; the store decides again in the write itself, where a concurrent rotation is seen.
+        // The fast path; the store decides again under the scope row's lock, where a concurrent rotation is seen.
         if (store.currentEpoch(scopeId) != nameEpoch) return RenameGroupOutcome.StaleEpoch
-        return if (store.renameGroup(scopeId, encryptedName, nameEpoch, PrincipalKey.User(callerId))) RenameGroupOutcome.Ok else RenameGroupOutcome.StaleEpoch
+        return when (store.renameGroup(scopeId, name, nameEpoch, PrincipalKey.User(callerId), invitees)) {
+            RenameResult.RENAMED -> RenameGroupOutcome.Ok
+            RenameResult.STALE_EPOCH -> RenameGroupOutcome.StaleEpoch
+            RenameResult.INCOMPLETE -> RenameGroupOutcome.Incomplete
+            RenameResult.RECIPIENT_KEY_NOT_CURRENT -> RenameGroupOutcome.RecipientKeyNotCurrent
+        }
     }
 
     /**
@@ -366,21 +392,20 @@ class ScopesHandler(
      * query, and no opening to the `tenantId`-only gate cr-0163 fixed); a GROUP root gates the same way and a GROUP
      * **co-owner** is an OWNER too. TENANT or GROUP only — a PERSONAL scope has no icon (rejected); refused while
      * the scope is being deleted, like every write (the gate). The client sealed the padded, constant-length
-     * icon under `K_icon` of the **current** epoch and sends that epoch back; the server enforces `iconEpoch ==
-     * currentEpoch` (`StaleEpoch` on a concurrent rotation) so a replace stays forward-secret, then overwrites the
-     * row's ciphertext icon + icon-epoch. (Every rotation re-seals the icon at its new epoch in its own commit, ADR 0115
-     * decision 2, so `iconEpoch` is the current epoch whenever no rotation is in flight.) Guard
+     * icon under a **fresh** value key, wrapped that key under the **current** epoch's key and sends that epoch back
+     * (ADR 0115); the server enforces `iconEpoch == currentEpoch` (`StaleEpoch` on a concurrent rotation), then
+     * overwrites the row's icon, wrap and icon-epoch. A rotation re-wraps the icon's key and leaves the icon. Guard
      * order is [renameGroup]'s exactly (access gate → kind → owner → epoch, ADR 0042). Operator-blind: the
      * server never sees a key or the image.
      */
-    fun setScopeIcon(callerId: String, scopeId: String, sealedIcon: String, iconEpoch: Int): SetScopeIconOutcome {
+    fun setScopeIcon(callerId: String, scopeId: String, icon: SealedValue, iconEpoch: Int): SetScopeIconOutcome {
         access.check(callerId, scopeId, WRITE)
             .refusal(SetScopeIconOutcome.ScopeNotFound, SetScopeIconOutcome.Suspended, SetScopeIconOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) == ScopeEntity.PERSONAL) return SetScopeIconOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return SetScopeIconOutcome.NotOwner
         // The fast path; the store decides again in the write itself, where a concurrent rotation is seen.
         if (store.currentEpoch(scopeId) != iconEpoch) return SetScopeIconOutcome.StaleEpoch
-        return if (store.setIcon(scopeId, sealedIcon, iconEpoch, PrincipalKey.User(callerId))) SetScopeIconOutcome.Ok else SetScopeIconOutcome.StaleEpoch
+        return if (store.setIcon(scopeId, icon, iconEpoch, PrincipalKey.User(callerId))) SetScopeIconOutcome.Ok else SetScopeIconOutcome.StaleEpoch
     }
 
     /**
@@ -648,6 +673,7 @@ class ScopesHandler(
             RotationDecision.RemovedMemberGranted -> RotateOutcome.RemovedMemberGranted
             RotationDecision.PartsMissing -> RotateOutcome.PartsMissing
             RotationDecision.PartsStale -> RotateOutcome.PartsStale
+            RotationDecision.WritesValue -> RotateOutcome.WritesValue
         }
     }
 

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.itemfavorites
 
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -10,7 +11,7 @@ import java.util.UUID
  * crosses the wire (ADR 0068 §6): the array already separates the members and an item's count is how many
  * entries hold it, so a member id would be data the product has decided never to show.
  */
-data class MemberItemFavorites(val own: Boolean, val ciphertext: String)
+data class MemberItemFavorites(val own: Boolean, val marks: SealedValue)
 
 /**
  * Persistence for per-(member, scope, node) item favorites (ADR 0068). Operator-blind: stores the sealed
@@ -25,7 +26,7 @@ class ItemFavoritesStore {
      */
     fun listForNode(callerId: String, scopeId: String, nodeId: String): List<MemberItemFavorites> =
         ItemFavoritesEntity.list("scopeId = ?1 and nodeId = ?2", scopeId, nodeId)
-            .map { MemberItemFavorites(own = it.userId == callerId, ciphertext = it.ciphertext) }
+            .map { MemberItemFavorites(own = it.userId == callerId, marks = SealedValue(it.ciphertext, it.wrappedValueKey)) }
 
     /**
      * The caller's **own** rows, every scope and node, unfiltered by access: which of them the caller may still see
@@ -34,12 +35,12 @@ class ItemFavoritesStore {
     fun listOwn(userId: String): List<ItemFavoritesEntity> = ItemFavoritesEntity.list("userId = ?1", userId)
 
     /** The scope row's lock, which every removal of a member and every rotation's commit hold while they delete or
-     *  re-seal these rows; answers the scope's current epoch under it, or null for no scope. */
+     *  re-wrap these rows; answers the scope's current epoch under it, or null for no scope. */
     fun lockScope(scopeId: String): Int? = ScopeEntity.lockRow(scopeId)?.currentEpoch
 
-    /** Last-write-wins upsert of the **caller's own** blob for the node. */
+    /** Last-write-wins upsert of the **caller's own** blob for the node, with its fresh value key's wrap. */
     @Transactional
-    fun upsert(userId: String, scopeId: String, nodeId: String, ciphertext: String) {
+    fun upsert(userId: String, scopeId: String, nodeId: String, marks: SealedValue) {
         val id = ItemFavoritesEntity.key(userId, scopeId, nodeId)
         val row = ItemFavoritesEntity.findById(id) ?: ItemFavoritesEntity().apply {
             this.id = id
@@ -48,7 +49,8 @@ class ItemFavoritesStore {
             this.nodeId = nodeId
             markId = UUID.randomUUID().toString()
         }
-        row.ciphertext = ciphertext
+        row.ciphertext = marks.value
+        row.wrappedValueKey = marks.wrappedValueKey
         row.persist()
     }
 }

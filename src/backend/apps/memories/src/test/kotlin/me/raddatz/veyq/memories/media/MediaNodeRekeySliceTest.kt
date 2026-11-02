@@ -247,7 +247,7 @@ class MediaNodeRekeySliceTest {
             medium(scopeId, memory, trashed, trashedBlob, META_B, null, owner, primary).deletedAt = Instant.now()
             ShareEntity().apply {
                 id = shareId; ownerAccount = owner; this.scopeId = scopeId; nodeId = memory; role = "WRITE_ONLY"
-                wrap = "b2xkLXNoYXJlLXdyYXA="; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
+                wrap = "b2xkLXNoYXJlLXdyYXA="; sealedShareKey = "cmVjb3Zlcnk="; wrappedRecoveryValueKey = "d3JhcHBlZC12YWx1ZS1rZXk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
             }.persist()
             ShareIdentityEntity().apply {
                 id = identityId; this.shareId = shareId; sealedDisplayName = GUEST_NAME; wrappedIdentityKey = "a3Vw"
@@ -258,7 +258,7 @@ class MediaNodeRekeySliceTest {
             // a READ_WRITE link with one contributor, whose primary is named with a copy of its display name
             ShareEntity().apply {
                 id = rwShareId; ownerAccount = owner; this.scopeId = scopeId; nodeId = memory; role = "READ_WRITE"
-                wrap = "b2xkLXJ3LXdyYXA="; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
+                wrap = "b2xkLXJ3LXdyYXA="; sealedShareKey = "cmVjb3Zlcnk="; wrappedRecoveryValueKey = "d3JhcHBlZC12YWx1ZS1rZXk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
             }.persist()
             ShareIdentityEntity().apply {
                 id = rwIdentityId; this.shareId = rwShareId; sealedDisplayName = RW_NAME; tokenHash = "h-$rwIdentityId".take(64)

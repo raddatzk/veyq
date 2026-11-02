@@ -136,9 +136,9 @@ class VerificationSliceTest {
         assertEquals(emptyList<Row>(), rows(t.tenantId))
         put(t, t.a, t.b, sealed = S1, epoch = 2).then().statusCode(204) // control: the current epoch is accepted
         // a body outside the contract: the shape's 400
-        putRaw(t, t.a, t.b, """{"epoch":-1,"sealedStatement":"$S1"}""").then().statusCode(400).body("code", equalTo("invalid_request"))
-        putRaw(t, t.a, t.b, """{"epoch":0,"sealedStatement":"not base64!!"}""").then().statusCode(400).body("code", equalTo("invalid_request"))
-        putRaw(t, t.a, t.b, """{"epoch":0,"sealedStatement":"${"A".repeat(516)}"}""").then().statusCode(400).body("code", equalTo("invalid_request"))
+        putRaw(t, t.a, t.b, """{"epoch":-1,"sealedStatement":"$S1","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""").then().statusCode(400).body("code", equalTo("invalid_request"))
+        putRaw(t, t.a, t.b, """{"epoch":0,"sealedStatement":"not base64!!","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""").then().statusCode(400).body("code", equalTo("invalid_request"))
+        putRaw(t, t.a, t.b, """{"epoch":0,"sealedStatement":"${"A".repeat(516)}","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""").then().statusCode(400).body("code", equalTo("invalid_request"))
         assertEquals(Row(t.a, t.b, 2, S1), rows(t.tenantId).single { it.subject == t.b }, "the refused bodies changed nothing")
     }
 
@@ -147,8 +147,8 @@ class VerificationSliceTest {
         // A required integer the contract types `[integer, "null"]` so its absence is visible: Jackson would bind a
         // missing primitive to 0, the oldest epoch, and store the row (src/backend/CLAUDE.md § Validation).
         val t = world()
-        putRaw(t, t.a, t.b, """{"sealedStatement":"$S1"}""").then().statusCode(400).body("code", equalTo("invalid_request"))
-        putRaw(t, t.a, t.b, """{"epoch":null,"sealedStatement":"$S1"}""").then().statusCode(400).body("code", equalTo("invalid_request"))
+        putRaw(t, t.a, t.b, """{"sealedStatement":"$S1","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""").then().statusCode(400).body("code", equalTo("invalid_request"))
+        putRaw(t, t.a, t.b, """{"epoch":null,"sealedStatement":"$S1","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""").then().statusCode(400).body("code", equalTo("invalid_request"))
         assertEquals(emptyList<Row>(), rows(t.tenantId))
         put(t, t.a, t.b, sealed = S1, epoch = 0).then().statusCode(204) // control: epoch 0 stated is accepted
     }
@@ -290,7 +290,7 @@ class VerificationSliceTest {
     }
 
     private fun put(t: Tenant, caller: String, subject: String, sealed: String, epoch: Int = 0): Response =
-        putRaw(t, caller, subject, """{"epoch":$epoch,"sealedStatement":"$sealed"}""")
+        putRaw(t, caller, subject, """{"epoch":$epoch,"sealedStatement":"$sealed","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""")
 
     private fun putRaw(t: Tenant, caller: String, subject: String, body: String): Response =
         given().header("Authorization", bearer(caller)).contentType(ContentType.JSON).body(body)

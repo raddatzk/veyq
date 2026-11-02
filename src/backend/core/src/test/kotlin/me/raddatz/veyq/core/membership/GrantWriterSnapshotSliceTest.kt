@@ -65,7 +65,7 @@ class GrantWriterSnapshotSliceTest {
         val scopeId = UUID.randomUUID().toString()
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", "t-$tenantId.example.com")
             .contentType(ContentType.JSON)
-            .body("""{"scopeId":"$scopeId","encryptedName":"bmFtZQ==","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}""")
+            .body("""{"scopeId":"$scopeId","encryptedName":"bmFtZQ==","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}""")
             .`when`().post("/api/scopes/groups").then().statusCode(201)
 
         assertEquals(owner to key, snapshotOf(owner, scopeId))
@@ -202,7 +202,7 @@ class GrantWriterSnapshotSliceTest {
         val groupId = UUID.randomUUID().toString()
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", "t-$tenantId.example.com")
             .contentType(ContentType.JSON)
-            .body("""{"scopeId":"$groupId","encryptedName":"bmFtZQ==","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}""")
+            .body("""{"scopeId":"$groupId","encryptedName":"bmFtZQ==","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}""")
             .`when`().post("/api/scopes/groups").then().statusCode(201)
         val target = seedUser()
         QuarkusTransaction.requiringNew().run {

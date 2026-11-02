@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.crypto.SealedValue
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import me.raddatz.veyq.core.http.FailureStatus
@@ -24,8 +25,9 @@ sealed interface PutVerificationOutcome {
     data object OfSelf : PutVerificationOutcome, HttpFailure by httpFailure("verification_of_self", FailureStatus.BAD_REQUEST)
     /** The subject is no accepted member of the tenant. */
     data object MemberNotFound : PutVerificationOutcome, HttpFailure by Failures.memberNotFound
-    /** The statement is sealed under a tenant epoch that is not the current one (ADR 0115 decision 3): the tenant has one
-     *  key at a time, and a rotation re-seals every verification under it, so none lands under another. */
+    /** The statement's value key is wrapped under a tenant epoch that is not the current one (ADR 0115 decision 3): the
+     *  tenant has one key at a time, and a rotation re-wraps every verification's key under it, so none lands under
+     *  another. */
     data object StaleEpoch : PutVerificationOutcome, HttpFailure by Failures.staleEpoch
 }
 
@@ -51,7 +53,7 @@ class TenantVerificationHandler(
     private val memberships: MembershipStore,
     private val store: VerificationStore,
 ) {
-    fun put(callerId: String, tenantId: String, subjectUserId: String, epoch: Int, sealedStatement: String): PutVerificationOutcome {
+    fun put(callerId: String, tenantId: String, subjectUserId: String, epoch: Int, statement: SealedValue): PutVerificationOutcome {
         access.check(callerId, tenantId, WRITE)
             .refusal(PutVerificationOutcome.NotFound, PutVerificationOutcome.Suspended)?.let { return it }
         if (subjectUserId == callerId) return PutVerificationOutcome.OfSelf
@@ -64,7 +66,7 @@ class TenantVerificationHandler(
                 .refusal(PutVerificationOutcome.NotFound, PutVerificationOutcome.Suspended)?.let { return@call it }
             if (!memberships.belongsToTenant(subjectUserId, tenantId)) return@call PutVerificationOutcome.MemberNotFound
             if (epoch != scope.currentEpoch) return@call PutVerificationOutcome.StaleEpoch
-            store.put(tenantId, callerId, subjectUserId, epoch, sealedStatement, Instant.now())
+            store.put(tenantId, callerId, subjectUserId, epoch, statement, Instant.now())
             PutVerificationOutcome.Stored
         }
     }

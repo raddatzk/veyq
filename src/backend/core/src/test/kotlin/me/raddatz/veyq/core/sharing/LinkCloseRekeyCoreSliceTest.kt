@@ -417,7 +417,7 @@ class LinkCloseRekeyCoreSliceTest {
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 this.id = id; ownerAccount = w.owner; scopeId = w.scopeId; nodeId = w.root; role = ShareEntity.WRITE_ONLY
-                sealedDropPublicKey = "ZHJvcA=="; sealedName = "c2VhbGVk"; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0
+                sealedDropPublicKey = "ZHJvcA=="; sealedName = "c2VhbGVk"; sealedShareKey = "cmVjb3Zlcnk="; wrappedRecoveryValueKey = "d3JhcHBlZC12YWx1ZS1rZXk="; sealedShareKeyEpoch = 0
                 createdAt = Instant.now()
             }.persist()
         }

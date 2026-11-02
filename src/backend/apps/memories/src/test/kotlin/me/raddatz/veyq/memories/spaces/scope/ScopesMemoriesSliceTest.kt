@@ -109,7 +109,7 @@ class ScopesMemoriesSliceTest {
     private fun createGroupAs(userId: String, domain: String): String =
         given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201).extract().path("scopeId")
 

@@ -268,14 +268,24 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   98 a seal purpose added to `seal.ts`'s `SEAL_PURPOSES` and classified nowhere — rejected:
      `validate_scope_rekey_arity` derives the purposes from the crypto package and holds each to a classification, so a
      new seal under the scope key cannot land without a rotation re-sealing it (ADR 0115 decision 2)
-  99 the verification's re-seal assignment removed from `ScopeRekeyCommit` (its epoch still moved) — rejected: every
-     column a purpose under the scope key is stored in must be assigned by the rotation's scope commit or a participant,
-     so a row the commit forgets cannot stay under the replaced key unseen
+  99 the verification's re-wrap assignment removed from `ScopeRekeyCommit` — rejected: every column a value key's wrap
+     under the scope key is stored in must be assigned by the rotation's scope commit or a participant, so a wrap the
+     commit forgets cannot stay under the replaced key unseen
   100 a revoke written as its own `share.enabled = false` in `SharingHandler`, beside the store's close — rejected:
      `validate_link_close_arity` holds every write that closes a link to `SharingStore.close` (or the tombstone it
      calls), so a close that marks nothing below the link cannot land (ADR 0114 decision 1)
   101 a removed member's switch-off spelled again as a bulk `ShareEntity.update("enabled = false where …")` — rejected:
      a write statement is read too, the bulk shape every switch-off had before ADR 0114
+  102 `ScopeRekeyCommit` writing a member's `sealedName` beside the name's re-wrapped key — rejected:
+     `validate_scope_rekey_arity` holds every column a rewriter assigns to a value key's wrap, so a rotation that
+     rewrites another member's name — what any rotator, a member with a pending re-key row among them, could do before
+     the value keys (owner, 2026-11-02) — cannot land beside the wraps
+  103 Memories' scope re-key participant writing a row's `ciphertext` again — rejected: an application's participant is
+     a rewriter too, so another member's item marks cannot be rewritten by a rotation either
+  104 `member-avatar` dropped from seal.ts' `VALUE_KEY_PURPOSES` — rejected: the guard's values-under-a-value-key are
+     held to the crypto package's own list both ways, so the two cannot disagree about which values carry a key
+  105 the root-entry re-seal `ScopeRootEntries` writing a group's `encryptedName` too — rejected: the exempt file may name
+     no entity holding a value, so the one place a rotation re-seals cannot become the door a value write goes through
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1543,11 +1553,55 @@ def forge_seal_purpose_unclassified(root: pathlib.Path) -> str:
 
 def forge_scope_rekey_rewrite_dropped(root: pathlib.Path) -> str:
     f = root / "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/node/rekey/ScopeRekeyCommit.kt"
-    anchor = "v.sealedStatement = statement; v.epoch = epoch"
+    anchor = "writes += { v.wrappedValueKey = wrap }"
     if not f.is_file() or anchor not in f.read_text():
-        raise ForgeError("ScopeRekeyCommit: the verification's re-seal not found (moved or drifted?)")
-    f.write_text(f.read_text().replace(anchor, "v.epoch = epoch", 1))
-    return "ScopeRekeyCommit no longer assigns a verification's sealedStatement (must be REJECTED)"
+        raise ForgeError("ScopeRekeyCommit: the verification's re-wrap not found (moved or drifted?)")
+    f.write_text(f.read_text().replace(anchor, "writes += { }", 1))
+    return "ScopeRekeyCommit no longer assigns a verification's wrappedValueKey (must be REJECTED)"
+
+
+SCOPE_REKEY = "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/node/rekey"
+
+
+def forge_scope_rekey_writes_a_name(root: pathlib.Path) -> str:
+    f = root / SCOPE_REKEY / "ScopeRekeyCommit.kt"
+    anchor = "name?.let { p.wrappedNameValueKey = it }"
+    if not f.is_file() or anchor not in f.read_text():
+        raise ForgeError("ScopeRekeyCommit: the member name's re-wrap not found (moved or drifted?)")
+    f.write_text(f.read_text().replace(anchor, "name?.let { p.wrappedNameValueKey = it; p.sealedName = it }", 1))
+    return "ScopeRekeyCommit rewrites a member's sealedName beside its re-wrapped key (must be REJECTED)"
+
+
+def forge_scope_rekey_participant_writes_marks(root: pathlib.Path) -> str:
+    f = root / "src/backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/itemfavorites/ItemFavoritesScopeRekeyParticipant.kt"
+    anchor = "for ((row, wrap) in wraps) row.wrappedValueKey = wrap"
+    if not f.is_file() or anchor not in f.read_text():
+        raise ForgeError("ItemFavoritesScopeRekeyParticipant: the row's re-wrap not found (moved or drifted?)")
+    f.write_text(f.read_text().replace(anchor, "for ((row, wrap) in wraps) { row.wrappedValueKey = wrap; row.ciphertext = wrap }", 1))
+    return "Memories' scope re-key participant rewrites an item-mark row's ciphertext (must be REJECTED)"
+
+
+def forge_value_key_purpose_dropped(root: pathlib.Path) -> str:
+    f = root / "src/packages/crypto/src/seal.ts"
+    anchor = "  'member-avatar',\n"
+    if not f.is_file() or anchor not in f.read_text():
+        raise ForgeError("seal.ts: member-avatar in VALUE_KEY_PURPOSES not found (moved or drifted?)")
+    f.write_text(f.read_text().replace(anchor, "", 1))
+    return "member-avatar dropped from seal.ts VALUE_KEY_PURPOSES (must be REJECTED)"
+
+
+def forge_root_entry_reseal_writes_a_value(root: pathlib.Path) -> str:
+    f = root / SCOPE_REKEY / "ScopeRootEntries.kt"
+    anchor = "        node.placementRevision += 1\n    }\n"
+    if not f.is_file() or anchor not in f.read_text():
+        raise ForgeError("ScopeRootEntries: the re-seal's last write not found (moved or drifted?)")
+    f.write_text(f.read_text().replace(
+        anchor,
+        anchor + "\n    fun renameToo(scope: me.raddatz.veyq.core.scope.ScopeEntity, name: String) {\n"
+                 "        scope.encryptedName = name\n    }\n",
+        1,
+    ))
+    return "ScopeRootEntries also writes a group's encryptedName through ScopeEntity (must be REJECTED)"
 
 
 LINK_CLOSE_ARITY = "validate_link_close_arity.py"
@@ -1771,6 +1825,10 @@ CASES = [
     ("93", "validate_node_rekey_arity.py", forge_rekey_column_named_outside_the_prefixes, True),
     ("98", SCOPE_REKEY_ARITY, forge_seal_purpose_unclassified, False),
     ("99", SCOPE_REKEY_ARITY, forge_scope_rekey_rewrite_dropped, False),
+    ("102", SCOPE_REKEY_ARITY, forge_scope_rekey_writes_a_name, False),
+    ("103", SCOPE_REKEY_ARITY, forge_scope_rekey_participant_writes_marks, False),
+    ("104", SCOPE_REKEY_ARITY, forge_value_key_purpose_dropped, False),
+    ("105", SCOPE_REKEY_ARITY, forge_root_entry_reseal_writes_a_value, False),
     ("100", LINK_CLOSE_ARITY, forge_link_closed_outside_the_body, False),
     ("101", LINK_CLOSE_ARITY, forge_link_closed_by_a_bulk_update, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),

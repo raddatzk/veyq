@@ -75,7 +75,7 @@ class DropBoxRekeySliceTest {
             NodeEntity.findById(box)!!.sealedDropPrivateKey = OLD_DROP_PRIVATE
             ShareEntity().apply {
                 id = shareId; ownerAccount = owner; this.scopeId = scopeId; nodeId = box; role = ShareEntity.WRITE_ONLY
-                sealedDropPublicKey = "b2xkLWRyb3AtcHVi"; sealedShareKey = "cmVjb3Zlcnk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
+                sealedDropPublicKey = "b2xkLWRyb3AtcHVi"; sealedShareKey = "cmVjb3Zlcnk="; wrappedRecoveryValueKey = "d3JhcHBlZC12YWx1ZS1rZXk="; sealedShareKeyEpoch = 0; createdAt = Instant.now()
             }.persist()
             ShareIdentityEntity().apply {
                 id = identityId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3QtbmFtZQ=="; tokenHash = "h-$identityId".take(64)

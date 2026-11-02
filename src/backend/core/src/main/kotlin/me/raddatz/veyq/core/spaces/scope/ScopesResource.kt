@@ -27,6 +27,7 @@ import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.generated.model.OpenInvite
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.tenant.RequestTenant
 import me.raddatz.veyq.core.validation.validated
@@ -81,7 +82,8 @@ class ScopesResource(
 
     override fun createGroup(createGroupRequest: CreateGroupRequest): Response =
         when (val outcome = handler.createGroup(
-            identity.principal.name, activeTenantId(), createGroupRequest.scopeId.toString(), createGroupRequest.encryptedName,
+            identity.principal.name, activeTenantId(), createGroupRequest.scopeId.toString(),
+            SealedValue(createGroupRequest.encryptedName, createGroupRequest.wrappedNameValueKey),
             SignedGrant(createGroupRequest.wrappedGrant, createGroupRequest.grantSignature), createGroupRequest.recipientIdentityDigest,
         )) {
             is CreateGroupOutcome.Created ->
@@ -98,8 +100,9 @@ class ScopesResource(
                         id = UUID.fromString(it.id), kind = ScopeKind.decode(it.kind),
                         tenantId = UUID.fromString(it.tenantId), role = ScopeSummary.Role.valueOf(it.role),
                         currentEpoch = it.currentEpoch, grantedEpoch = it.grantedEpoch,
-                        wrappedGrant = it.wrappedGrant, encryptedName = it.encryptedName, nameEpoch = it.nameEpoch,
-                        sealedIcon = it.sealedIcon, iconEpoch = it.iconEpoch,
+                        wrappedGrant = it.wrappedGrant, encryptedName = it.encryptedName, wrappedNameValueKey = it.wrappedNameValueKey,
+                        nameEpoch = it.nameEpoch, sealedIcon = it.sealedIcon, wrappedIconValueKey = it.wrappedIconValueKey,
+                        iconEpoch = it.iconEpoch,
                         deletedAt = it.deletedAt?.let { d -> OffsetDateTime.ofInstant(d, ZoneOffset.UTC) },
                         purgeAfter = it.deletedAt?.let { d -> OffsetDateTime.ofInstant(d.plus(deleteRetention), ZoneOffset.UTC) },
                         granterUserId = it.granter?.let { g -> UUID.fromString(g.userId) },
@@ -220,7 +223,9 @@ class ScopesResource(
 
     override fun renameGroup(scopeId: UUID, renameGroupRequest: RenameGroupRequest): Response =
         when (val o = handler.renameGroup(
-            identity.principal.name, scopeId.toString(), renameGroupRequest.encryptedName, renameGroupRequest.nameEpoch.validated(),
+            identity.principal.name, scopeId.toString(),
+            SealedValue(renameGroupRequest.encryptedName, renameGroupRequest.wrappedNameValueKey), renameGroupRequest.nameEpoch.validated(),
+            renameGroupRequest.inviteeNameKeys.map { InviteeNameKey(it.userId.toString(), it.sealedNameKey, it.recipientIdentityDigest) },
         )) {
             RenameGroupOutcome.Ok -> Response.noContent().build()
             is HttpFailure -> httpError(o)
@@ -228,7 +233,8 @@ class ScopesResource(
 
     override fun setScopeIcon(scopeId: UUID, setScopeIconRequest: SetScopeIconRequest): Response =
         when (val o = handler.setScopeIcon(
-            identity.principal.name, scopeId.toString(), setScopeIconRequest.sealedIcon, setScopeIconRequest.iconEpoch.validated(),
+            identity.principal.name, scopeId.toString(),
+            SealedValue(setScopeIconRequest.sealedIcon, setScopeIconRequest.wrappedIconValueKey), setScopeIconRequest.iconEpoch.validated(),
         )) {
             SetScopeIconOutcome.Ok -> Response.noContent().build()
             is HttpFailure -> httpError(o)
@@ -258,7 +264,8 @@ class ScopesResource(
                 MyTenant(
                     tenantId = UUID.fromString(it.tenantId), name = it.name, domain = it.domain, role = MyTenant.Role.valueOf(it.role),
                     status = TenantStatus.valueOf(it.status),
-                    wrappedGrant = it.wrappedGrant, sealedIcon = it.sealedIcon, iconEpoch = it.iconEpoch, grantedEpoch = it.grantedEpoch,
+                    wrappedGrant = it.wrappedGrant, sealedIcon = it.sealedIcon, wrappedIconValueKey = it.wrappedIconValueKey,
+                    iconEpoch = it.iconEpoch, grantedEpoch = it.grantedEpoch,
                     granterUserId = it.granter?.let { g -> UUID.fromString(g.userId) },
                     grantSignature = it.granter?.signature,
                     granterIdentityPublicKey = it.granter?.identityPublicKey,
@@ -270,10 +277,12 @@ class ScopesResource(
 
     /** Map a directory row to the wire DTO — carries `pendingConsent` (cr-0094); the handler already gated its visibility. */
     private fun scopeMember(row: ScopeMemberRow) = ScopeMember(
-        userId = UUID.fromString(row.userId), username = row.username, sealedName = row.sealedName, avatarRevision = row.avatarRevision,
+        userId = UUID.fromString(row.userId), username = row.username, sealedName = row.sealedName,
+        wrappedNameValueKey = row.wrappedNameValueKey, avatarRevision = row.avatarRevision,
         email = row.email, role = ScopeMember.Role.valueOf(row.role), identityPublicKey = row.identityPublicKey,
         keyChainHead = row.keyChainHead, pending = row.pending,
-        pendingConsent = row.pendingConsent, sealedJoinRecord = row.sealedJoinRecord, joinEndorsement = row.joinEndorsement,
+        pendingConsent = row.pendingConsent, sealedJoinRecord = row.sealedJoinRecord,
+        wrappedJoinRecordValueKey = row.wrappedJoinRecordValueKey, joinEndorsement = row.joinEndorsement,
     )
 
     /** The active tenant's id — resolved by [RequestTenant] through the one canonical resolver, which

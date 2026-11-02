@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.account.profile
 
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.generated.api.AccountProfileApi
 import me.raddatz.veyq.core.generated.model.MemberProfile
 import me.raddatz.veyq.core.generated.model.ProfileUpdateRequest
@@ -39,7 +40,7 @@ class AccountProfileResource(
     override fun updateMyProfile(profileUpdateRequest: ProfileUpdateRequest): Response =
         when (val outcome = handler.update(
             identity.principal.name, tenant.resolve()?.id, profileUpdateRequest.username, profileUpdateRequest.sealedName,
-            profileUpdateRequest.epoch, profileUpdateRequest.requireGroupAddConsent,
+            profileUpdateRequest.wrappedNameValueKey, profileUpdateRequest.epoch, profileUpdateRequest.requireGroupAddConsent,
         )) {
             is ProfileOutcome.Found -> Response.ok(memberProfile(outcome)).build()
             is HttpFailure -> httpError(outcome)
@@ -47,7 +48,8 @@ class AccountProfileResource(
 
     override fun setMyAvatar(setAvatarRequest: SetAvatarRequest): Response =
         when (val outcome = handler.setAvatar(
-            identity.principal.name, tenant.resolve()?.id, setAvatarRequest.sealedAvatar, setAvatarRequest.epoch.validated(),
+            identity.principal.name, tenant.resolve()?.id,
+            SealedValue(setAvatarRequest.sealedAvatar, setAvatarRequest.wrappedAvatarValueKey), setAvatarRequest.epoch.validated(),
         )) {
             AvatarWriteOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(outcome)
@@ -61,6 +63,6 @@ class AccountProfileResource(
 
     private fun memberProfile(o: ProfileOutcome.Found) = MemberProfile(
         username = o.username, avatarRevision = o.avatarRevision, requireGroupAddConsent = o.requireGroupAddConsent,
-        sealedName = o.sealedName,
+        sealedName = o.name?.value, wrappedNameValueKey = o.name?.wrappedValueKey,
     )
 }

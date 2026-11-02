@@ -122,7 +122,7 @@ class ScopeCreateRaceSliceTest {
         """{"scopeId":"$scopeId","wrappedGrant":"$personalGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}"""
 
     private fun groupBody(scopeId: String) =
-        """{"scopeId":"$scopeId","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}"""
+        """{"scopeId":"$scopeId","encryptedName":"$groupName","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","wrappedGrant":"$groupGrant",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.FIXTURE_DIGEST}"}"""
 
     private fun createPersonal(userId: String, domain: String, body: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)

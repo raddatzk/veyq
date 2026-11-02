@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.admin.tenant.InviteRegrant
 import me.raddatz.veyq.core.admin.tenant.OpenInviteRow
 import me.raddatz.veyq.core.crypto.InviteAcceptProof
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.VeyqUser
@@ -38,11 +39,15 @@ data class ScopeRow(
     val grantedEpoch: Int,
     val wrappedGrant: String,
     val encryptedName: String?,
-    /** The epoch the group name was sealed under (cr-0096/ADR 0027) — the client derives `K_name` from its key. */
+    /** The group name's value key under the scope key (ADR 0115), null exactly when [encryptedName] is. */
+    val wrappedNameValueKey: String?,
+    /** The epoch the group name was written at (cr-0096/ADR 0027) — what its seal binds. */
     val nameEpoch: Int,
-    /** The scope's icon sealed under `K_icon` (uc.spaces.set-space-icon), or null; the client opens + unpads it. */
+    /** The scope's icon under its own value key (uc.spaces.set-space-icon, ADR 0115), or null; the client opens + unpads it. */
     val sealedIcon: String?,
-    /** The epoch `sealedIcon` was sealed under — the current one, since every rotation re-seals it (ADR 0115). */
+    /** The icon's value key under the scope key, null exactly when [sealedIcon] is. */
+    val wrappedIconValueKey: String?,
+    /** The epoch `sealedIcon` was written at — what its seal binds; a rotation leaves it (ADR 0115). */
     val iconEpoch: Int,
     /** When a GROUP is in pending-deletion (cr-0090); null = active. The client marks + (for owners) restores it. */
     val deletedAt: Instant?,
@@ -72,6 +77,8 @@ data class TenantRow(
     val status: String,
     val wrappedGrant: String?,
     val sealedIcon: String?,
+    /** The icon's value key under the tenant key (ADR 0115), null exactly when [sealedIcon] is. */
+    val wrappedIconValueKey: String?,
     val iconEpoch: Int,
     /** The epoch `wrappedGrant` holds (its seal is bound to it, ADR 0072); null whenever the grant is. */
     val grantedEpoch: Int?,
@@ -89,6 +96,8 @@ data class ScopeMemberRow(
     val userId: String,
     val username: String,
     val sealedName: String?,
+    /** [sealedName]'s value key under the tenant key (ADR 0115), null exactly when the name is. */
+    val wrappedNameValueKey: String?,
     /** The picture's revision (`0` = none); the bytes never ride the directory (ADR 0084). */
     val avatarRevision: Int,
     val email: String?,
@@ -98,6 +107,8 @@ data class ScopeMemberRow(
     val pendingConsent: Boolean = false,
     /** The member's join record in a TENANT scope (ADR 0111 decisions 3 and 12), sealed; null elsewhere. */
     val sealedJoinRecord: String? = null,
+    /** [sealedJoinRecord]'s value key under the tenant key (ADR 0115); null exactly when the record is. */
+    val wrappedJoinRecordValueKey: String? = null,
     /** The inviting owner's endorsement of that record (ADR 0111 decision 21); null elsewhere. */
     val joinEndorsement: String? = null,
     /** The head of the member's key chain (ADR 0111 decision 7). */
@@ -116,15 +127,22 @@ data class ResolvedCandidateRow(
     val keyChainHead: String,
 )
 
-/** A pending consent proposal from the invitee's point of view (cr-0096): the group + who proposed + the wrapped
- *  name-key `K_name` (`sealedNameKey`) + the scope's canonical `encryptedName` the key opens (ADR 0027). The name key
- *  is null when a rotation cleared it (`ScopeRekeyCommit.CLEARED`, ADR 0111 decision 9): the proposal is shown
- *  without the group's name. */
+/** A pending consent proposal from the invitee's point of view (cr-0096): the group + who proposed + the name's value
+ *  key sealed to the invitee (`sealedNameKey`, ADR 0115) + the scope's canonical `encryptedName` the key opens (ADR
+ *  0027). The name key is null when a rename cleared it (the owner's device could not anchor the invitee's key, ADR
+ *  0111 decision 9): the proposal is shown without the group's name. */
 data class GroupInvitationRow(
     val scopeId: String, val addedByUsername: String, val sealedNameKey: String?, val encryptedName: String,
     /** The name epoch both seals are bound to (ADR 0072) — the invitee opens them at exactly this epoch. */
     val nameEpoch: Int,
 )
+
+/** A rename's name key for one pending invitee (ADR 0115): the new name's value key sealed to the invitee and the
+ *  digest of the identity it is sealed to, or both null to clear the invitee's name key. */
+data class InviteeNameKey(val userId: String, val sealedNameKey: String?, val recipientIdentityDigest: String?)
+
+/** What a rename did ([ScopesStore.renameGroup]). */
+enum class RenameResult { RENAMED, STALE_EPOCH, INCOMPLETE, RECIPIENT_KEY_NOT_CURRENT }
 
 /** The caller's membership state on a scope (cr-0094) — drives idempotent accept/decline + 404. */
 enum class ConsentState { PENDING, ACTIVE, NONE }
@@ -186,17 +204,19 @@ class ScopesStore(
     }
 
     /** Birth a GROUP scope for the caller in this tenant + the OWNER self-membership (en.spaces.group-scope,
-     *  cr-0032). Mirrors [createPersonal] but stores the opaque `encryptedName` (the group name sealed under its
-     *  derived name-key `K_name`, cr-0096) on the scope row, at name-epoch 0. Group names are not unique — no existence check. */
+     *  cr-0032). Mirrors [createPersonal] but stores the opaque `encryptedName` (the group name sealed under a value key
+     *  of its own, with that key's wrap under the birth key, ADR 0115) on the scope row, at name-epoch 0. Group names
+     *  are not unique — no existence check. */
     @Transactional
-    fun createGroup(scopeId: String, userId: String, tenantId: String, encryptedName: String, grant: SignedGrant): Boolean {
+    fun createGroup(scopeId: String, userId: String, tenantId: String, name: SealedValue, grant: SignedGrant): Boolean {
         if (scopeIdTaken(scopeId)) return false // the client-minted id is taken → nothing written
         val now = Instant.now()
         ScopeEntity().apply {
             id = scopeId
             this.tenantId = tenantId
             kind = ScopeEntity.GROUP
-            this.encryptedName = encryptedName
+            encryptedName = name.value
+            wrappedNameValueKey = name.wrappedValueKey
             nameEditorUserId = userId // ADR 0093 § 8: the creator sealed the name
         }.persist()
         MembershipEntity().apply {
@@ -214,31 +234,53 @@ class ScopesStore(
         return true
     }
 
-    /** Rename a GROUP (uc.spaces.rename-group, cr-0097): overwrite the scope's `encrypted_name` (re-sealed under
-     *  `K_name` of the current epoch) + `name_epoch`. Name-only — no rotation, no re-grant. The caller (handler)
-     *  has already gated owner + active. Returns false, nothing written, when [nameEpoch] is not the scope's current
-     *  epoch.
+    /** Rename a GROUP (uc.spaces.rename-group, cr-0097, ADR 0115): overwrite the scope's name — sealed under a fresh
+     *  value key — with that key's wrap under the current scope key and the `name_epoch`, and replace each pending
+     *  consent invitee's name key with the same fresh key sealed to them ([invitees]). Name-only — no rotation, no
+     *  re-grant. The caller (handler) has already gated owner + active. Nothing is written unless all of it holds:
+     *  [nameEpoch] is the scope's current epoch ([RenameResult.STALE_EPOCH]), every pending invitee holding a name key
+     *  is named ([RenameResult.INCOMPLETE] — its key would open no name), and every key is sealed to its invitee's
+     *  current identity ([RenameResult.RECIPIENT_KEY_NOT_CURRENT], ADR 0111 decision 10). An entry with no key clears
+     *  that invitee's (ADR 0111 decision 9); one for an id that holds no proposal is ignored.
      *
-     *  The epoch gate is this update's own WHERE, not an earlier read: a rotation holds the scope row's lock while it
-     *  advances the epoch ([rotate]), so this update waits for it and then matches the epoch it committed. Checked in
-     *  a read before the write, a rotation committed in between and a name sealed under the pre-rotation epoch landed
-     *  — readable by the member that rotation removed (ADR 0024). */
+     *  Decided under the scope row's lock, taken first, then the memberships — the rotation's order ([rotate]): a
+     *  rotation holds the lock while it advances the epoch, so this waits for it and then judges the epoch it
+     *  committed. Judged before the lock, a rotation committed in between and a name wrapped under the pre-rotation
+     *  key landed — readable by the member that rotation removed (ADR 0024). */
     @Transactional
-    fun renameGroup(scopeId: String, encryptedName: String, nameEpoch: Int, editor: PrincipalKey.User): Boolean =
-        ScopeEntity.update(
-            "encryptedName = ?1, nameEpoch = ?2, nameEditorUserId = ?4 where id = ?3 and currentEpoch = ?2",
-            encryptedName, nameEpoch, scopeId, editor.userId,
-        ) == 1
+    fun renameGroup(
+        scopeId: String, name: SealedValue, nameEpoch: Int, editor: PrincipalKey.User, invitees: List<InviteeNameKey>,
+    ): RenameResult {
+        val scope = ScopeEntity.lockRow(scopeId) ?: return RenameResult.STALE_EPOCH
+        if (scope.currentEpoch != nameEpoch) return RenameResult.STALE_EPOCH
+        val pending = MembershipEntity.find("scopeId = ?1 and pendingConsent = true", scopeId).list()
+        val named = invitees.associateBy { it.userId }
+        if (pending.any { it.sealedNameKey != null && it.userId !in named }) return RenameResult.INCOMPLETE
+        val writes = pending.mapNotNull { m -> named[m.userId]?.let { m to it } }
+        if (writes.any { (m, e) ->
+                e.sealedNameKey != null && !InviteAcceptProof.digestMatches(identityKeyOf(m.userId), e.recipientIdentityDigest)
+            }
+        ) {
+            return RenameResult.RECIPIENT_KEY_NOT_CURRENT
+        }
+        scope.encryptedName = name.value
+        scope.wrappedNameValueKey = name.wrappedValueKey
+        scope.nameEpoch = nameEpoch
+        scope.nameEditorUserId = editor.userId
+        scope.persist()
+        writes.forEach { (m, e) -> m.sealedNameKey = e.sealedNameKey }
+        return RenameResult.RENAMED
+    }
 
-    /** Set/replace a scope's icon (uc.spaces.set-space-icon): overwrite `sealed_icon` (re-sealed under `K_icon` of
-     *  the current epoch) + `icon_epoch`. The caller (handler) has already gated owner + active. Returns false,
-     *  nothing written, when [iconEpoch] is not the scope's current epoch — the [renameGroup] gate, for the same
-     *  reason. */
+    /** Set/replace a scope's icon (uc.spaces.set-space-icon): overwrite `sealed_icon` (sealed under a fresh value key),
+     *  that key's wrap under the current scope key and `icon_epoch` (ADR 0115). The caller (handler) has already gated
+     *  owner + active. Returns false, nothing written, when [iconEpoch] is not the scope's current epoch — judged by
+     *  this update's own WHERE, which a rotation holding the scope row's lock makes wait for its commit. */
     @Transactional
-    fun setIcon(scopeId: String, sealedIcon: String, iconEpoch: Int, editor: PrincipalKey.User): Boolean =
+    fun setIcon(scopeId: String, icon: SealedValue, iconEpoch: Int, editor: PrincipalKey.User): Boolean =
         ScopeEntity.update(
-            "sealedIcon = ?1, iconEpoch = ?2, iconEditorUserId = ?4 where id = ?3 and currentEpoch = ?2",
-            sealedIcon, iconEpoch, scopeId, editor.userId,
+            "sealedIcon = ?1, wrappedIconValueKey = ?5, iconEpoch = ?2, iconEditorUserId = ?4 where id = ?3 and currentEpoch = ?2",
+            icon.value, iconEpoch, scopeId, editor.userId, icon.wrappedValueKey,
         ) == 1
 
     /** Clear a scope's icon (uc.spaces.set-space-icon A5): reset `sealed_icon` + `icon_epoch` so every member falls
@@ -248,6 +290,7 @@ class ScopesStore(
     fun clearIcon(scopeId: String) {
         ScopeEntity.findById(scopeId)?.let {
             it.sealedIcon = null
+            it.wrappedIconValueKey = null
             it.iconEditorUserId = null // a cleared field has no editor (ADR 0093 § 8)
             it.iconEpoch = 0
             it.persist()
@@ -265,7 +308,8 @@ class ScopesStore(
                 ScopeEntity.findById(m.scopeId)?.let {
                     ScopeRow(
                         it.id, it.kind, it.tenantId, m.role, it.currentEpoch, m.grantedEpoch, grant, it.encryptedName,
-                        it.nameEpoch, it.sealedIcon, it.iconEpoch, it.deletedAt, granterOf(m), stuck[it.id],
+                        it.wrappedNameValueKey, it.nameEpoch, it.sealedIcon, it.wrappedIconValueKey, it.iconEpoch, it.deletedAt,
+                        granterOf(m), stuck[it.id],
                         rekeying = ScopeRekeying.lags(it.id),
                     )
                 }
@@ -492,14 +536,15 @@ class ScopesStore(
         }
         tenants.carryInvites(plan.inviteGrants.map { InviteRegrant(it.inviteId, it.grant) }, plan.newEpoch, granterId)
         tasks.markRotated(scopeId, granterId, plan.newEpoch)
-        // ADR 0115 decision 2, last: every scope-level row sealed under the old key takes its staged value — or the
-        // whole rotation, a removal's deletes included, rolls back (the commit marks the transaction). After the removal,
-        // so a removed member's rows are neither required nor written; its node writes end in the tree revision, a leaf.
+        // ADR 0115 decision 2, last: every value key wrapped under the old key takes its staged re-wrap, and every root
+        // entry its re-seal — or the whole rotation, a removal's deletes included, rolls back (the commit marks the
+        // transaction); a stage that writes a value is refused outright. After the removal, so a removed member's rows
+        // are neither required nor written; its node writes end in the tree revision, a leaf.
         return when (scopeRekey.commit(scope, rekeyId, plan.newEpoch)) {
             ScopeRekeyCommit.Verdict.APPLIED -> decision
             ScopeRekeyCommit.Verdict.MISSING -> RotationDecision.PartsMissing
             ScopeRekeyCommit.Verdict.STALE -> RotationDecision.PartsStale
-            ScopeRekeyCommit.Verdict.RECIPIENT_KEY_NOT_CURRENT -> RotationDecision.RecipientKeyNotCurrent
+            ScopeRekeyCommit.Verdict.WRITES_VALUE -> RotationDecision.WritesValue
         }
     }
 
@@ -667,10 +712,10 @@ class ScopesStore(
     fun deletePendingMembership(userId: String, scopeId: String): Int =
         MembershipEntity.delete("userId = ?1 and scopeId = ?2 and pendingConsent = true", userId, scopeId).toInt()
 
-    /** The caller's pending group invitations in a tenant (cr-0096): each with the wrapped name-key `K_name`, the
-     *  scope's canonical `encryptedName` the key opens, and the proposer's per-tenant username. A proposal whose name
-     *  key a rotation cleared — the rotating device could not anchor the invitee's key (ADR 0111 decision 9) — is
-     *  listed without it, so the invitee still sees and answers it. Skips a row missing a scope name (never happens
+    /** The caller's pending group invitations in a tenant (cr-0096): each with the name's value key sealed to the
+     *  caller (ADR 0115), the scope's canonical `encryptedName` the key opens, and the proposer's per-tenant username. A
+     *  proposal whose name key a rename cleared — the owner's device could not anchor the invitee's key (ADR 0111
+     *  decision 9) — is listed without it, so the invitee still sees and answers it. Skips a row missing a scope name (never happens
      *  for a group, defensive). */
     fun listInvitations(userId: String, tenantId: String): List<GroupInvitationRow> {
         val profileByUser = profiles.byUserInTenant(tenantId)
@@ -692,9 +737,10 @@ class ScopesStore(
         val m = MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scopeId).firstResult() ?: return null
         val u = VeyqUser.findById(userId) ?: return null
         val p = profiles.byUserInTenant(tenantId)[userId]
+        val record = p?.joinRecord?.takeIf { scopeId == tenantId }
         return ScopeMemberRow(
-            userId, p?.username ?: "", p?.sealedName, p?.avatarRevision ?: 0, u.email, m.role, u.identityPublicKey,
-            m.pendingConsent, p?.sealedJoinRecord.takeIf { scopeId == tenantId }, p?.joinEndorsement.takeIf { scopeId == tenantId },
+            userId, p?.username ?: "", p?.name?.value, p?.name?.wrappedValueKey, p?.avatarRevision ?: 0, u.email, m.role,
+            u.identityPublicKey, m.pendingConsent, record?.value, record?.wrappedValueKey, p?.joinEndorsement.takeIf { scopeId == tenantId },
             keyChainHead = keyChain.headOf(userId) ?: return null, pending = m.grantedEpoch < scope.currentEpoch,
         )
     }
@@ -720,9 +766,10 @@ class ScopesStore(
         return memberships.mapNotNull { m ->
             users[m.userId]?.let { u ->
                 val p = profileByUser[m.userId]
+                val record = p?.joinRecord?.takeIf { scopeId == tenantId }
                 ScopeMemberRow(
-                    m.userId, p?.username ?: "", p?.sealedName, p?.avatarRevision ?: 0, u.email, m.role,
-                    u.identityPublicKey, m.pendingConsent, p?.sealedJoinRecord.takeIf { scopeId == tenantId },
+                    m.userId, p?.username ?: "", p?.name?.value, p?.name?.wrappedValueKey, p?.avatarRevision ?: 0, u.email, m.role,
+                    u.identityPublicKey, m.pendingConsent, record?.value, record?.wrappedValueKey,
                     p?.joinEndorsement.takeIf { scopeId == tenantId },
                     keyChainHead = heads[m.userId] ?: return@let null, pending = m.grantedEpoch < scope.currentEpoch,
                 )
@@ -762,7 +809,7 @@ class ScopesStore(
                     val grant = root?.wrappedGrant?.takeIf { open }
                     TenantRow(
                         t.id, t.name, t.domain, role, t.status,
-                        grant, rootScope?.sealedIcon?.takeIf { open },
+                        grant, rootScope?.sealedIcon?.takeIf { open }, rootScope?.wrappedIconValueKey?.takeIf { open },
                         rootScope?.iconEpoch ?: 0,
                         root?.grantedEpoch?.takeIf { grant != null },
                         root?.takeIf { grant != null }?.let { granterOf(it) },

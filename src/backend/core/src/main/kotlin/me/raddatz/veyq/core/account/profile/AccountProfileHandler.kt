@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.account.profile
 
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
@@ -13,7 +14,7 @@ import jakarta.enterprise.context.ApplicationScoped
  *  (cr-0094) surfaced here — the caller's own settings surface. */
 sealed interface ProfileOutcome {
     data class Found(
-        val username: String, val sealedName: String?, val avatarRevision: Int, val requireGroupAddConsent: Boolean,
+        val username: String, val name: SealedValue?, val avatarRevision: Int, val requireGroupAddConsent: Boolean,
     ) : ProfileOutcome
     // no tenant for the Host, or no profile there → 404
     data object NoTenant : ProfileOutcome, HttpFailure by httpFailure("profile_not_found", NOT_FOUND)
@@ -21,7 +22,8 @@ sealed interface ProfileOutcome {
     data object UsernameTaken : ProfileOutcome, HttpFailure by Failures.usernameTaken
     // a sealed name under a tenant epoch that is not the current one (ADR 0115 decision 3) → 409
     data object StaleEpoch : ProfileOutcome, HttpFailure by Failures.staleEpoch
-    // a sealed name without the epoch it is sealed under (the contract's `dependentRequired`) → 400
+    // a sealed name without its value key's wrap or the epoch of that wrap, or a wrap without a name (the contract's
+    // `dependentRequired`) → 400
     data object InvalidRequest : ProfileOutcome, HttpFailure by Failures.invalidRequest
 }
 
@@ -34,15 +36,20 @@ sealed interface AvatarWriteOutcome {
     data object StaleEpoch : AvatarWriteOutcome, HttpFailure by Failures.staleEpoch
 }
 
+/** A stored name with its value key's wrap, as the profile read answers it. */
+private fun storedName(sealedName: String?, wrap: String?) = SealedValue.of(sealedName, wrap)
+
 /**
  * The caller's per-tenant identity profile (username + sealed real name, ADR 0023) in the tenant resolved from
  * the Host (`RequestTenant`), which arrives here as its id. Operator-blind — the sealed name is ciphertext the server stores verbatim; only the plaintext
  * `username` is read (to enforce per-tenant uniqueness). Auth is central (`@Authenticated` on the resource).
  *
- * **A sealed field states its tenant epoch** (ADR 0115 decision 3): the name and the picture are sealed under the
- * tenant scope's key, which a rotation replaces and re-seals every profile under, so each is written only while the
- * epoch it states is the tenant scope's current one — decided under that scope's row lock, which the rotation's commit
- * holds while it swaps the re-sealed profiles in. One landing after it under the old key is `409 stale_epoch`.
+ * **A sealed field comes with its value key's wrap and states its tenant epoch** (ADR 0115): the name and the picture
+ * are each sealed under a value key the member mints at this write, and only that key is wrapped under the tenant
+ * scope's key, which a rotation replaces and re-wraps every value key under — never rewriting a value — so each is
+ * written only while the epoch it states is the tenant scope's current one, decided under that scope's row lock, which
+ * the rotation's commit holds while it swaps the re-wrapped keys in. One landing after it under the old key is `409
+ * stale_epoch`.
  */
 @ApplicationScoped
 class AccountProfileHandler(private val profiles: TenantProfileStore) {
@@ -51,19 +58,21 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
         tenantId ?: return ProfileOutcome.NoTenant
         val profile = profiles.find(userId, tenantId) ?: return ProfileOutcome.NoTenant
         val consent = VeyqUser.findById(userId)?.requireGroupAddConsent ?: false
-        return ProfileOutcome.Found(profile.username, profile.sealedName, profile.wireAvatarRevision(), consent)
+        return ProfileOutcome.Found(profile.username, storedName(profile.sealedName, profile.wrappedNameValueKey), profile.wireAvatarRevision(), consent)
     }
 
     fun update(
-        userId: String, tenantId: String?, username: String?, sealedName: String?, epoch: Int?, requireGroupAddConsent: Boolean?,
+        userId: String, tenantId: String?, username: String?, sealedName: String?, wrappedNameValueKey: String?, epoch: Int?,
+        requireGroupAddConsent: Boolean?,
     ): ProfileOutcome {
-        // The request's own shape first (the contract's `dependentRequired`): a sealed name brings its epoch.
-        if (sealedName != null && epoch == null) return ProfileOutcome.InvalidRequest
+        // The request's own shape first (the contract's `dependentRequired`): a sealed name brings its wrap and its epoch.
+        if (!SealedValue.pairs(sealedName, wrappedNameValueKey) || (sealedName != null && epoch == null)) return ProfileOutcome.InvalidRequest
+        val name = SealedValue.of(sealedName, wrappedNameValueKey)
         tenantId ?: return ProfileOutcome.NoTenant
         // `ux_tp_tenant_username` lets one of two concurrent claims to a handle through; the loser answers as its
         // replay does — the handle is someone else's now.
         return createOrConflict(conflict = { if (takenByAnother(userId, tenantId, username)) ProfileOutcome.UsernameTaken else null }) {
-            applyUpdate(userId, tenantId, username, sealedName, epoch, requireGroupAddConsent)
+            applyUpdate(userId, tenantId, username, name, epoch, requireGroupAddConsent)
         }
     }
 
@@ -73,9 +82,9 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
     }
 
     private fun applyUpdate(
-        userId: String, tenantId: String, username: String?, sealedName: String?, epoch: Int?, requireGroupAddConsent: Boolean?,
+        userId: String, tenantId: String, username: String?, name: SealedValue?, epoch: Int?, requireGroupAddConsent: Boolean?,
     ): ProfileOutcome {
-        if (sealedName != null && !profiles.atCurrentEpoch(tenantId, epoch!!)) return ProfileOutcome.StaleEpoch
+        if (name != null && !profiles.atCurrentEpoch(tenantId, epoch!!)) return ProfileOutcome.StaleEpoch
         val existing = profiles.find(userId, tenantId) ?: return ProfileOutcome.NoTenant
         // A username change to a handle another member already holds is rejected; keeping (or re-setting) your
         // own is fine.
@@ -83,18 +92,18 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
             val norm = username.trim().lowercase()
             if (norm != existing.username && profiles.usernameTaken(tenantId, norm)) return ProfileOutcome.UsernameTaken
         }
-        profiles.update(userId, tenantId, username, sealedName)
+        profiles.update(userId, tenantId, username, name)
         // The consent preference is account-global (cr-0094) — it lives on the user, not the per-tenant profile.
         if (requireGroupAddConsent != null) VeyqUser.findById(userId)?.let { it.requireGroupAddConsent = requireGroupAddConsent }
         val updated = profiles.find(userId, tenantId)!!
         val consent = VeyqUser.findById(userId)?.requireGroupAddConsent ?: false
-        return ProfileOutcome.Found(updated.username, updated.sealedName, updated.wireAvatarRevision(), consent)
+        return ProfileOutcome.Found(updated.username, storedName(updated.sealedName, updated.wrappedNameValueKey), updated.wireAvatarRevision(), consent)
     }
 
     /** Set (overwrite) the caller's picture; the revision bump is the store's one guarded UPDATE. */
-    fun setAvatar(userId: String, tenantId: String?, sealedAvatar: String, epoch: Int): AvatarWriteOutcome {
+    fun setAvatar(userId: String, tenantId: String?, avatar: SealedValue, epoch: Int): AvatarWriteOutcome {
         tenantId ?: return AvatarWriteOutcome.NoTenant
-        return when (profiles.setAvatar(userId, tenantId, sealedAvatar, epoch)) {
+        return when (profiles.setAvatar(userId, tenantId, avatar, epoch)) {
             TenantProfileStore.AvatarSet.SET -> AvatarWriteOutcome.Done
             TenantProfileStore.AvatarSet.NO_PROFILE -> AvatarWriteOutcome.NoTenant
             TenantProfileStore.AvatarSet.STALE_EPOCH -> AvatarWriteOutcome.StaleEpoch

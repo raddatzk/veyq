@@ -46,26 +46,34 @@ class ScopeEntity : PanacheEntityBase {
     @Column(name = "personal_owner", columnDefinition = "uuid")
     var personalOwner: String? = null
 
-    /** A GROUP scope's name, sealed under its **derived name-key `K_name`** (ciphertext base64, cr-0096/ADR 0027);
-     *  null for TENANT/PERSONAL (ADR 0014). The server never opens it (no key); it only relays the ciphertext. */
+    /** A GROUP scope's name, sealed under a value key of its own (ciphertext base64, ADR 0115) whose wrap is
+     *  [wrappedNameValueKey]; null for TENANT/PERSONAL (ADR 0014). The server never opens it (no key); it only relays
+     *  the ciphertext. A rotation re-wraps the key and never rewrites this. */
     @Column(name = "encrypted_name")
     var encryptedName: String? = null
 
-    /** For a GROUP: the epoch the `encryptedName` was sealed under (cr-0096/ADR 0027) — 0 at birth, moved by a rename
-     *  and by every rotation, whose commit re-seals the name at its new epoch (ADR 0115 decision 2): the scope's current
-     *  epoch, whose key derives `K_name`; a pending invitee is handed `K_name` directly. */
+    /** [encryptedName]'s value key under the scope key of its current epoch (`value-key`); null exactly when the name is.
+     *  A pending invitee is handed the same key sealed to them (`MembershipEntity.sealedNameKey`). */
+    @Column(name = "wrapped_name_value_key", length = 128)
+    var wrappedNameValueKey: String? = null
+
+    /** For a GROUP: the epoch the `encryptedName` was written at (cr-0096/ADR 0027) — 0 at birth, moved by a rename
+     *  only, which mints a fresh value key; what the `group-name` and `group-name-key` seals bind. */
     @Column(name = "name_epoch", nullable = false)
     var nameEpoch: Int = 0
 
-    /** The scope's icon (uc.spaces.set-space-icon): a padded, constant-length image sealed under its **derived
-     *  icon-key `K_icon`** (`HKDF(E_iconEpoch, "veyq/v1/space-icon-key")`, opaque base64) — null for no icon. The
-     *  first sealed content on a TENANT row; the server never opens it (no key), it only relays the ciphertext. */
+    /** The scope's icon (uc.spaces.set-space-icon): a padded, constant-length image sealed under a value key of its own
+     *  (opaque base64, ADR 0115) whose wrap is [wrappedIconValueKey] — null for no icon. The first sealed content on a
+     *  TENANT row; the server never opens it (no key), it only relays the ciphertext. */
     @Column(name = "sealed_icon")
     var sealedIcon: String? = null
 
-    /** The epoch `sealedIcon` was sealed under (uc.spaces.set-space-icon, ADR 0027's per-field epoch) — 0 until an
-     *  icon is set, moved by an icon-set and by every rotation, whose commit re-seals the icon (ADR 0115 decision 2):
-     *  the scope's current epoch, whose key derives `K_icon`. */
+    /** [sealedIcon]'s value key under the scope key of its current epoch (`value-key`); null exactly when the icon is. */
+    @Column(name = "wrapped_icon_value_key", length = 128)
+    var wrappedIconValueKey: String? = null
+
+    /** The epoch `sealedIcon` was written at (uc.spaces.set-space-icon, ADR 0027's per-field epoch) — 0 until an icon is
+     *  set, moved by an icon-set only; what the `space-icon` seal binds. */
     @Column(name = "icon_epoch", nullable = false)
     var iconEpoch: Int = 0
 

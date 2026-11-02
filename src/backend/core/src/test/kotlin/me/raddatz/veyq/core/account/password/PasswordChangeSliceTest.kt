@@ -167,7 +167,7 @@ class PasswordChangeSliceTest {
             profiles.create(user, tenantId, "u$round-${UUID.randomUUID().toString().take(8)}")
             val outcome = whileUncommitted(
                 change = { assertTrue(changes.applyChange(user, NEW_PW_WRAP, KDF, NEW_AUTH_PUB), "round $round") },
-                overlapping = { profileHandler.update(user, tenantId, null, null, null, true) },
+                overlapping = { profileHandler.update(user, tenantId, null, null, null, null, true) },
             )
             assertEquals(NEW_AUTH_PUB, field(user) { it.authPublicKey }, "round $round: the consent toggle rolled the auth key back")
             assertEquals(NEW_PW_WRAP, wrapOf(user, "PASSWORD"), "round $round")

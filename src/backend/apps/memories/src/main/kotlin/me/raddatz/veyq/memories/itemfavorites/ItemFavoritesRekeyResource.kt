@@ -22,9 +22,10 @@ import jakarta.ws.rs.core.Response
 import java.util.UUID
 
 /**
- * HTTP adapter for Memories' part of a rotation's scope-level re-seal (ADR 0115 decision 2): every item-mark row of the
- * scope, paged by its opaque `markId` — never a member id (ADR 0068 § 9) — and the stage of their re-sealed values under
- * the rotation's re-key id, which core's `rotateScope` swaps in through [ItemFavoritesScopeRekeyParticipant]. The
+ * HTTP adapter for Memories' part of a rotation's scope-level move (ADR 0115 decision 2): every item-mark row's value key
+ * wrap of the scope, paged by its opaque `markId` — never a member id (ADR 0068 § 9) — and the stage of their re-wrapped
+ * keys under the rotation's re-key id, which core's `rotateScope` swaps in through [ItemFavoritesScopeRekeyParticipant].
+ * Wraps only, both ways: no row's ciphertext is served or staged here. The
  * caller's rights are core's scope re-key's ([ScopeRekeyHandler.refusal]: the rotator, holding the current grant).
  * Not held by the application switch: a rotation is the security of what exists (ADR 0109), and a group removal must
  * not wait on Memories being on.
@@ -32,7 +33,7 @@ import java.util.UUID
 @Authenticated
 @RateLimitExempt(
     reason =
-        "Authenticated, rotator-gated re-seal of one scope's item marks, read and staged at the contract's caps; its " +
+        "Authenticated, rotator-gated re-wrap of one scope's item marks' keys, read and staged at the contract's caps; its " +
             "volume is bounded by the rows the scope holds. No anonymous surface and no external cost.",
 )
 class ItemFavoritesRekeyResource(
@@ -54,7 +55,7 @@ class ItemFavoritesRekeyResource(
         return Response.ok(
             ScopeItemFavoritesRekeyPage(
                 currentEpoch = scope.currentEpoch,
-                marks = page.map { ItemFavoritesRekeyRow(UUID.fromString(it.markId), UUID.fromString(it.nodeId), it.ciphertext) },
+                marks = page.map { ItemFavoritesRekeyRow(UUID.fromString(it.markId), UUID.fromString(it.nodeId), it.wrappedValueKey) },
                 more = rows.size > n,
                 cursor = page.lastOrNull()?.markId,
             ),
@@ -66,18 +67,18 @@ class ItemFavoritesRekeyResource(
         val marks = scopeItemFavoritesRekeyStage.marks.orEmpty()
         // The rights first: what a row holds is answered to the rotator only.
         scopeRekey.refusal(identity.principal.name, sid, WRITE)?.let { return refused(it) }
-        // Each value names the digest of the ciphertext it was opened from (ADR 0115 decision 2): a row that holds another
-        // by now — replaced since the read, or gone, a mark of another scope among them — refuses the batch, so a write
-        // between the read and this stage is never replaced by a re-seal of what it replaced. The digest kept beside the
-        // value is the commit's compare-and-set for a write after it.
+        // Each wrap names the digest of the wrap it replaces (ADR 0115 decision 2): a row that holds another by now —
+        // replaced since the read (a write mints a fresh value key), or gone, a mark of another scope among them — refuses
+        // the batch, so a write between the read and this stage is never replaced by a re-wrap of the key it replaced. The
+        // digest kept beside the wrap is the commit's compare-and-set for a write after it.
         val stored = if (marks.isEmpty()) emptyMap()
         else ItemFavoritesEntity.list("scopeId = ?1 and markId in ?2", sid, marks.map { it.markId.toString() })
-            .associate { it.markId to it.ciphertext }
+            .associate { it.markId to it.wrappedValueKey }
         val values = marks.associate { m ->
             val id = m.markId.toString()
             val now = ScopeRekeyStage.digest(stored[id])
             if (now != m.replacedDigest) return refused(RekeyOutcome.PartsStale)
-            ScopeRekeyStage.Key(id, ItemFavoritesScopeRekeyParticipant.FIELD) to ScopeRekeyStage.Value(m.ciphertext, now)
+            ScopeRekeyStage.Key(id, ItemFavoritesScopeRekeyParticipant.FIELD) to ScopeRekeyStage.Value(m.wrappedValueKey, now)
         }
         return when (val o = scopeRekey.stagePart(
             identity.principal.name, sid, rekeyId.toString(), scopeItemFavoritesRekeyStage.fromEpoch.validated(),
@@ -94,7 +95,7 @@ class ItemFavoritesRekeyResource(
     }
 
     private companion object {
-        /** The contract's default page, the stage's cap: a row is up to 256 KiB. */
-        const val PAGE = 32
+        /** The contract's default page, the stage's cap: a row's wrap is under 128 characters. */
+        const val PAGE = 256
     }
 }

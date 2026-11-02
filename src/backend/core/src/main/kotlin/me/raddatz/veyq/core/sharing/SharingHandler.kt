@@ -19,6 +19,7 @@ import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.blobstore.BlobStore
 import me.raddatz.veyq.core.blobstore.PresignedRef
 import me.raddatz.veyq.core.blobstore.presignGets
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
 import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
@@ -338,7 +339,7 @@ class SharingHandler(
     fun create(
         userId: String, shareId: String, nodeId: String, role: String, wrap: String?,
         sealedDropPublicKey: String?, sealedDropPrivateKey: String?, sealedName: String, expiresAt: Instant?,
-        sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
+        sealedNote: String?, sealedShareKey: String, wrappedRecoveryValueKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
         nodeEpoch: Int,
     ): CreateShareOutcome {
@@ -393,8 +394,8 @@ class SharingHandler(
                 null
             } else {
                 store.create(
-                    shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
-                    sealedShareKeyEpoch, sealedShareName,
+                    shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote,
+                    SealedValue(sealedShareKey, wrappedRecoveryValueKey), sealedShareKeyEpoch, sealedShareName,
                     passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
                 )
             }
@@ -725,9 +726,9 @@ class SharingHandler(
      */
     fun reissue(
         userId: String, shareId: String, newShareId: String, wrap: String?, sealedDropPublicKey: String?,
-        sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int,
-        sealedShareName: String?, passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
-        writeVerifier: String, nodeEpoch: Int,
+        sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String, wrappedRecoveryValueKey: String,
+        sealedShareKeyEpoch: Int, sealedShareName: String?, passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?,
+        sealedPassword: String?, writeVerifier: String, nodeEpoch: Int,
     ): ReissueShareOutcome {
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
@@ -762,7 +763,8 @@ class SharingHandler(
             )?.let { return@call it }
             when (
                 store.reissue(
-                    old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareKeyEpoch,
+                    old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote,
+                    SealedValue(sealedShareKey, wrappedRecoveryValueKey), sealedShareKeyEpoch,
                     sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
                 )
             ) {

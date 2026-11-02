@@ -9,6 +9,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.IdClass
 import jakarta.persistence.Table
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.scope.MembershipEraser
 import org.hibernate.annotations.DynamicUpdate
 import java.io.Serializable
@@ -16,9 +17,11 @@ import java.time.Instant
 
 /**
  * One member's signed verification of another member of a tenant (ADR 0111 decisions 12-13): *"in this tenant, this
- * verifier at this head of their key chain confirmed this subject at this head of theirs"*, sealed under the tenant key
- * of [epoch] (field `member-verification`). The server stores and relays [sealedStatement] verbatim and never opens it.
- * One row per (tenant, verifier, subject); the verifier's next put replaces it. Every member of the tenant reads them.
+ * verifier at this head of their key chain confirmed this subject at this head of theirs"*, sealed at [epoch] under a
+ * value key of its own (field `member-verification`), which [wrappedValueKey] holds under the tenant key (ADR 0115): a
+ * rotation re-wraps it and never rewrites [sealedStatement], so no rotator can rewrite another member's verification.
+ * The server stores and relays both verbatim and never opens them. One row per (tenant, verifier, subject); the
+ * verifier's next put replaces it. Every member of the tenant reads them.
  *
  * Gone with either account and with the tenant (`ON DELETE CASCADE`), and with a member's removal from the tenant
  * ([VerificationMembershipEraser]).
@@ -45,6 +48,10 @@ class VerificationEntity : PanacheEntityBase {
 
     @Column(name = "sealed_statement", nullable = false, columnDefinition = "TEXT")
     lateinit var sealedStatement: String
+
+    /** [sealedStatement]'s value key under the tenant key of its current epoch (`value-key`). */
+    @Column(name = "wrapped_value_key", nullable = false, length = 128)
+    lateinit var wrappedValueKey: String
 
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
@@ -73,11 +80,12 @@ class VerificationStore {
      * Store [verifierUserId]'s verification of [subjectUserId], replacing the one it held. The caller holds the tenant
      * scope's row lock, so two puts of one pair never race to the insert.
      */
-    fun put(tenantId: String, verifierUserId: String, subjectUserId: String, epoch: Int, sealedStatement: String, now: Instant) {
+    fun put(tenantId: String, verifierUserId: String, subjectUserId: String, epoch: Int, statement: SealedValue, now: Instant) {
         val existing = VerificationEntity.findById(VerificationKey(tenantId, verifierUserId, subjectUserId))
         if (existing != null) {
             existing.epoch = epoch
-            existing.sealedStatement = sealedStatement
+            existing.sealedStatement = statement.value
+            existing.wrappedValueKey = statement.wrappedValueKey
             existing.createdAt = now
             return
         }
@@ -86,7 +94,8 @@ class VerificationStore {
             this.verifierUserId = verifierUserId
             this.subjectUserId = subjectUserId
             this.epoch = epoch
-            this.sealedStatement = sealedStatement
+            sealedStatement = statement.value
+            wrappedValueKey = statement.wrappedValueKey
             this.createdAt = now
         }.persist()
     }

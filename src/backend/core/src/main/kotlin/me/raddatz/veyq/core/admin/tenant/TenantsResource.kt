@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.generated.api.TenantsApi
 import me.raddatz.veyq.core.generated.model.AcceptInviteRequest
 import me.raddatz.veyq.core.generated.model.AcceptOwnershipRequest
@@ -261,7 +262,7 @@ class TenantsResource(
     @Authenticated
     override fun getMemberAvatar(tenantId: UUID, userId: UUID, ifNoneMatch: String?): Response =
         when (val o = avatarHandler.read(identity.principal.name, tenantId.toString(), userId.toString(), AvatarETag.parse(ifNoneMatch))) {
-            is MemberAvatarOutcome.Found -> Response.ok(MemberAvatar(o.sealedAvatar))
+            is MemberAvatarOutcome.Found -> Response.ok(MemberAvatar(o.avatar.value, o.avatar.wrappedValueKey))
                 .header("ETag", AvatarETag.of(o.revision)).header("Cache-Control", "private").build()
             is MemberAvatarOutcome.NotModified -> Response.notModified().header("ETag", AvatarETag.of(o.revision)).header("Cache-Control", "private").build()
             is HttpFailure -> httpError(o)
@@ -288,7 +289,7 @@ class TenantsResource(
                     o.page.rows.map {
                         MemberVerification(
                             UUID.fromString(it.verifierUserId), UUID.fromString(it.subjectUserId), it.epoch, it.sealedStatement,
-                            it.createdAt.utc(),
+                            it.wrappedValueKey, it.createdAt.utc(),
                         )
                     },
                     o.page.more,
@@ -302,7 +303,8 @@ class TenantsResource(
         when (
             val o = verificationHandler.put(
                 identity.principal.name, tenantId.toString(), subjectUserId.toString(),
-                putVerificationRequest.epoch.validated(), putVerificationRequest.sealedStatement,
+                putVerificationRequest.epoch.validated(),
+                SealedValue(putVerificationRequest.sealedStatement, putVerificationRequest.wrappedValueKey),
             )
         ) {
             PutVerificationOutcome.Stored -> Response.noContent().build()
@@ -341,21 +343,27 @@ class TenantsResource(
         }
 
     @Authenticated
-    override fun acceptTenantInvite(acceptInviteRequest: AcceptInviteRequest): Response =
-        when (val outcome = acceptHandler.accept(
+    override fun acceptTenantInvite(acceptInviteRequest: AcceptInviteRequest): Response {
+        val r = acceptInviteRequest
+        // A sealed field and its value key's wrap come together (ADR 0115, the contract's rule): one alone is malformed.
+        if (!profileFieldsPair(r.sealedJoinRecord, r.wrappedJoinRecordValueKey, r.sealedName, r.wrappedNameValueKey, r.sealedAvatar, r.wrappedAvatarValueKey)) {
+            return httpError(AcceptOutcome.MissingGrant)
+        }
+        return when (val outcome = acceptHandler.accept(
             identity.principal.name,
-            acceptInviteRequest.bootstrapSecret,
-            with(acceptInviteRequest) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
-            with(acceptInviteRequest) { selfGrant.join(inviteProof, sealedJoinRecord, signerIdentityDigest) },
-            acceptInviteRequest.username,
-            acceptInviteRequest.sealedName,
-            acceptInviteRequest.sealedAvatar,
-            acceptInviteRequest.epoch,
+            r.bootstrapSecret,
+            with(r) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
+            with(r) { selfGrant.join(inviteProof, SealedValue.of(sealedJoinRecord, wrappedJoinRecordValueKey), signerIdentityDigest) },
+            r.username,
+            SealedValue.of(r.sealedName, r.wrappedNameValueKey),
+            SealedValue.of(r.sealedAvatar, r.wrappedAvatarValueKey),
+            r.epoch,
         )) {
             is AcceptOutcome.Activated ->
                 Response.ok(TenantActivated(UUID.fromString(outcome.tenantId), TenantStatus.ACTIVE)).build()
             is HttpFailure -> httpError(outcome)
         }
+    }
 
     @PermitAll
     @RateLimit(key = RateLimitKey.IP) // unauthenticated account creation — per-IP bound it
@@ -369,12 +377,16 @@ class TenantsResource(
             secretKeyProofPublicKey = a.secretKeyProofPublicKey,
             wraps = a.masterKeyWraps.map { WrapData(it.method.value, it.wrappedKey, it.kdfParams) },
         )
+        val r = registerAndAcceptRequest
+        if (!profileFieldsPair(r.sealedJoinRecord, r.wrappedJoinRecordValueKey, r.sealedName, r.wrappedNameValueKey, r.sealedAvatar, r.wrappedAvatarValueKey)) {
+            return httpError(RegisterAcceptOutcome.MissingGrant)
+        }
         return when (val outcome = acceptHandler.registerAndAccept(
-            registerAndAcceptRequest.bootstrapSecret, registerAndAcceptRequest.userId.toString(), account,
-            with(registerAndAcceptRequest) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
-            with(registerAndAcceptRequest) { selfGrant.join(inviteProof, sealedJoinRecord, signerIdentityDigest) },
-            registerAndAcceptRequest.username, registerAndAcceptRequest.sealedName, registerAndAcceptRequest.sealedAvatar,
-            registerAndAcceptRequest.epoch,
+            r.bootstrapSecret, r.userId.toString(), account,
+            with(r) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
+            with(r) { selfGrant.join(inviteProof, SealedValue.of(sealedJoinRecord, wrappedJoinRecordValueKey), signerIdentityDigest) },
+            r.username, SealedValue.of(r.sealedName, r.wrappedNameValueKey), SealedValue.of(r.sealedAvatar, r.wrappedAvatarValueKey),
+            r.epoch,
         )) {
             is RegisterAcceptOutcome.Activated -> Response.status(Response.Status.CREATED)
                 .entity(TenantActivatedWithUser(UUID.fromString(outcome.tenantId), TenantStatus.ACTIVE, UUID.fromString(outcome.userId)))
@@ -614,11 +626,15 @@ private fun MemberInviteRequest.toInput() = MemberInviteInput(
 
 /** A MEMBER accept's parts, or null when any is missing (the handler answers it as a missing grant — a MEMBER accept
  *  without `signerIdentityDigest` among them, ADR 0111 decision 20). */
-private fun InviteSelfGrant?.join(inviteProof: String?, sealedJoinRecord: String?, signerIdentityDigest: String?): MemberJoin? =
+private fun InviteSelfGrant?.join(inviteProof: String?, joinRecord: SealedValue?, signerIdentityDigest: String?): MemberJoin? =
     MemberJoin.of(
-        this?.wrappedGrant, this?.grantSignature, this?.epoch, this?.recipientIdentityDigest, inviteProof, sealedJoinRecord,
+        this?.wrappedGrant, this?.grantSignature, this?.epoch, this?.recipientIdentityDigest, inviteProof, joinRecord,
         signerIdentityDigest,
     )
+
+/** Whether each of an accept's sealed profile fields comes with its value key's wrap, or neither does (ADR 0115). */
+private fun profileFieldsPair(vararg valueThenWrap: String?): Boolean =
+    valueThenWrap.toList().chunked(2).all { (value, wrap) -> SealedValue.pairs(value, wrap) }
 
 /** A live MEMBER invite as its invitee reads it in the preview — null when it holds no key (none to check): its key,
  *  signer chain, anchor, carried grant and the succession statements between the two (ADR 0111 decision 19, ADR 0115

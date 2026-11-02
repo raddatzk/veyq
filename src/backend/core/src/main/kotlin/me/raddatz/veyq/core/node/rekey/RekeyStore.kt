@@ -29,8 +29,8 @@ data class RekeyParts(
 ) {
     data class Blob(val blobId: String, val role: String, val wrappedBlobKey: String)
     data class Share(
-        val shareId: String, val role: String, val sealedShareKey: String, val sealedShareKeyEpoch: Int?,
-        val hasWrap: Boolean, val hasDropPublicKey: Boolean,
+        val shareId: String, val role: String, val sealedShareKey: String, val wrappedRecoveryValueKey: String,
+        val sealedShareKeyEpoch: Int?, val hasWrap: Boolean, val hasDropPublicKey: Boolean,
     )
     data class Identity(val identityId: String, val shareId: String, val wrappedIdentityKey: String?, val sealedDisplayName: String?)
 }
@@ -101,7 +101,10 @@ class RekeyStore(
         return RekeyParts(
             blobs,
             shares.map {
-                RekeyParts.Share(it.id, it.role, it.sealedShareKey!!, it.sealedShareKeyEpoch, it.wrap != null, it.sealedDropPublicKey != null)
+                RekeyParts.Share(
+                    it.id, it.role, it.sealedShareKey!!, it.wrappedRecoveryValueKey!!, it.sealedShareKeyEpoch, it.wrap != null,
+                    it.sealedDropPublicKey != null,
+                )
             },
             identities.map {
                 RekeyParts.Identity(it.id, it.shareId, it.wrappedIdentityKey, it.sealedDisplayName.takeIf { _ -> it.wrappedIdentityKey == null })
@@ -117,7 +120,7 @@ class RekeyStore(
         ShareEntity.find(
             "nodeId = :node and ${SharingStore.OPEN} and (wrap is not null or sealedDropPublicKey is not null)",
             mapOf("node" to nodeId, "now" to now),
-        ).list().filter { it.sealedShareKey != null }
+        ).list().filter { it.sealedShareKey != null && it.wrappedRecoveryValueKey != null }
 
     /** The guest identities of **every** link rooted on [nodeId], whatever its state, a tombstone included (ADR 0114
      *  decision 5): a contributor's name and a guest's `K_up` are the node's fields, not the link's, and stay readable to

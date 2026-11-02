@@ -153,7 +153,7 @@ class RecipientKeySliceTest {
     private fun createGroup(user: String, tenant: String, digest: String) =
         given().header("Authorization", bearer(user)).header("X-Forwarded-Host", "t-$tenant.example.com").contentType(ContentType.JSON)
             .body(
-                """{"scopeId":"${UUID.randomUUID()}","encryptedName":"bmFtZQ==","wrappedGrant":"AQ==",${TestGrants.SIGNATURE_JSON},""" +
+                """{"scopeId":"${UUID.randomUUID()}","encryptedName":"bmFtZQ==","wrappedNameValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","wrappedGrant":"AQ==",${TestGrants.SIGNATURE_JSON},""" +
                     """"recipientIdentityDigest":"$digest"}""",
             )
             .`when`().post("/api/scopes/groups")

@@ -10,9 +10,10 @@ import org.hibernate.annotations.DynamicUpdate
 
 /**
  * One member's per-node item-favorites blob (en.memory.favorites, ADR 0068). Operator-blind: `ciphertext` is
- * that member's marked-media-id set for ONE Memory, AEAD-sealed under the scope key `K_SC` — stored verbatim, never
- * interpreted. Every rotation re-seals every row under its new key (ADR 0115 decision 2,
- * [ItemFavoritesScopeRekeyParticipant]), so a row is always under the scope's current one.
+ * that member's marked-media-id set for ONE Memory, AEAD-sealed under a value key of its own the member mints at every
+ * write, and `wrappedValueKey` that key under the scope key `K_SC` (ADR 0115) — stored verbatim, never interpreted.
+ * Every rotation re-wraps every row's key under its new key and never rewrites a row ([ItemFavoritesScopeRekeyParticipant]),
+ * so a row's wrap is always under the scope's current one and no rotator can rewrite another member's marks.
  *
  * Unlike [me.raddatz.veyq.memories.favorites.FavoritesEntity] this blob is deliberately **shared**: the
  * read returns every member's row for the node, because the gallery's "everyone's / only mine" filter and its
@@ -41,6 +42,10 @@ class ItemFavoritesEntity : PanacheEntityBase {
 
     @Column(name = "ciphertext", nullable = false)
     lateinit var ciphertext: String
+
+    /** [ciphertext]'s value key under the scope key of its current epoch (`value-key`). */
+    @Column(name = "wrapped_value_key", nullable = false, length = 128)
+    lateinit var wrappedValueKey: String
 
     /** The row's opaque address for a rotation's re-seal: random, minted with the row, never changed. */
     @Column(name = "mark_id", nullable = false, columnDefinition = "uuid")

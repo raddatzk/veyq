@@ -76,7 +76,7 @@ class ShareMediaRouteSliceTest {
         },
         "reissueShare" to Probe("POST", "/api/shares/{shareId}/reissue") { w ->
             val id = TestIds.shareId()
-            authed(w).body("""{"shareId":"$id",${ShareWriteProof.field(id)},"wrap":"d3JhcA==","sealedName":"$sealedName","sealedShareKey":"cmVjb3ZlcmFibGUta2V5","nodeEpoch":0,"sealedShareKeyEpoch":1}""")
+            authed(w).body("""{"shareId":"$id",${ShareWriteProof.field(id)},"wrap":"d3JhcA==","sealedName":"$sealedName","sealedShareKey":"cmVjb3ZlcmFibGUta2V5","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","nodeEpoch":0,"sealedShareKeyEpoch":1}""")
                 .`when`().post("/api/shares/${w.unknown}/reissue").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
         "resolveShare" to Probe("GET", "/api/shares/{shareId}") { w ->

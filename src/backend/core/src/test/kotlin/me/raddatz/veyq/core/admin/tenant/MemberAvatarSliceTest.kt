@@ -212,9 +212,9 @@ class MemberAvatarSliceTest {
         put(t, nobody, "Zmlyc3Q=").then().statusCode(404).body("code", equalTo("profile_not_found"))
         delete(t, nobody).then().statusCode(404).body("code", equalTo("profile_not_found"))
         given().header("Authorization", bearer(t.member)).header("X-Forwarded-Host", "no-such-tenant.example.com")
-            .contentType(ContentType.JSON).body("""{"sealedAvatar":"Zmlyc3Q=","epoch":0}""")
+            .contentType(ContentType.JSON).body("""{"sealedAvatar":"Zmlyc3Q=","wrappedAvatarValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":0}""")
             .`when`().put("/api/account/profile/avatar").then().statusCode(404).body("code", equalTo("profile_not_found"))
-        given().contentType(ContentType.JSON).body("""{"sealedAvatar":"Zmlyc3Q=","epoch":0}""")
+        given().contentType(ContentType.JSON).body("""{"sealedAvatar":"Zmlyc3Q=","wrappedAvatarValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":0}""")
             .`when`().put("/api/account/profile/avatar").then().statusCode(401)
     }
 
@@ -224,7 +224,7 @@ class MemberAvatarSliceTest {
         val id = pendingTenant("av-acc.example.com", "owner@av-acc.example.com", secret)
         val userId = seedUser(email = "owner@av-acc.example.com")
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"avowner",${TestGrants.ownerBirthJson()},"sealedAvatar":"c2VhbGVkLWF2YXRhcg=="}""")
+            .body("""{"bootstrapSecret":"$secret","username":"avowner",${TestGrants.ownerBirthJson()},"sealedAvatar":"c2VhbGVkLWF2YXRhcg==","wrappedAvatarValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         val p = stored(id, userId)
         assertEquals("c2VhbGVkLWF2YXRhcg==", p.sealedAvatar)
@@ -272,7 +272,7 @@ class MemberAvatarSliceTest {
         val userId = seedUser(email = "owner@av-bad.example.com")
         for (bad in listOf(full + "AAAA", "not base64!!")) {
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{"bootstrapSecret":"$secret","username":"badowner",${TestGrants.ownerBirthJson()},"sealedAvatar":"$bad"}""")
+                .body("""{"bootstrapSecret":"$secret","username":"badowner",${TestGrants.ownerBirthJson()},"sealedAvatar":"$bad","wrappedAvatarValueKey":"d3JhcHBlZC12YWx1ZS1rZXk="}""")
                 .`when`().post("/api/tenants/accept").then().statusCode(400).body("code", equalTo("invalid_request"))
         }
         // the invite survived the refusals: a clean accept still works
@@ -304,7 +304,7 @@ class MemberAvatarSliceTest {
 
     private fun put(t: Tenant, caller: String, sealed: String) =
         given().header("Authorization", bearer(caller)).header("X-Forwarded-Host", t.domain)
-            .contentType(ContentType.JSON).body("""{"sealedAvatar":"$sealed","epoch":0}""")
+            .contentType(ContentType.JSON).body("""{"sealedAvatar":"$sealed","wrappedAvatarValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":0}""")
             .`when`().put("/api/account/profile/avatar")
 
     private fun delete(t: Tenant, caller: String) =
@@ -331,7 +331,7 @@ class MemberAvatarSliceTest {
         val grant = if (owner) """${TestGrants.ownerBirthJson("aWRlbnRpdHktcHVibGljLWtleQ==")},"""
         else key?.let { "${TestGrants.memberJoinJson(it, it.inviteId, userId, "aWRlbnRpdHktcHVibGljLWtleQ==")}," } ?: ""
         return """
-            {"bootstrapSecret":"$secret","userId":"$userId","username":"$username",$grant"sealedAvatar":"$avatar",
+            {"bootstrapSecret":"$secret","userId":"$userId","username":"$username",$grant"sealedAvatar":"$avatar","wrappedAvatarValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=",
              "account":{"suiteId":"v1",
                "identityPublicKey":"aWRlbnRpdHktcHVibGljLWtleQ==",
                "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",

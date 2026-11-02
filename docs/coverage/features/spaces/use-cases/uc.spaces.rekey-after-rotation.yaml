@@ -19,9 +19,11 @@ acceptanceCriteria:
     coverage:
       backend:
         integration:
-          - ScopeRekeySliceTest.everyStagedGroupRowIsSwappedInAndEveryNodeIsDue
-          - ScopeRekeySliceTest.everyStagedTenantProfileAndVerificationIsSwappedIn
-          - ItemFavoritesScopeRekeySliceTest.everyMembersMarksAreReSealedThroughTheParticipant
+          - ScopeRekeySliceTest.everyStagedGroupWrapIsSwappedInTheRootsReSealedAndEveryNodeIsDue
+          - ScopeRekeySliceTest.everyStagedTenantProfileAndVerificationWrapIsSwappedInAndNoValueMoves
+          - ScopeRekeySliceTest.aMemberRotatorsCommitThatRewritesAnotherMembersNameIsRefusedAndWritesNothing
+          - ItemFavoritesScopeRekeySliceTest.everyMembersMarksAreReWrappedThroughTheParticipantAndNeverRewritten
+          - ItemFavoritesScopeRekeySliceTest.aStageThatRewritesAMembersMarksIsRefusedAndWritesNothing
       web:
         unit:
           - src/features/spaces/scopeRekey.test.ts
@@ -33,19 +35,19 @@ acceptanceCriteria:
     coverage:
       backend:
         integration:
-          - ScopeRekeySliceTest.aRotationMissingOneRowsStagedValueIsRefusedAndWritesNothing
-          - ScopeRekeySliceTest.aRemovalRotationRefusedForAMissingRowLeavesTheMemberInPlace
+          - ScopeRekeySliceTest.aRotationMissingOneWrapIsRefusedAndWritesNothing
+          - ScopeRekeySliceTest.aRemovalRotationRefusedForAMissingWrapLeavesTheMemberInPlace
           - ScopeKeyReplacedProbeSliceTest.aRotationThatLeavesAScopeRootEntryUnderTheOldKeyIsRefused
-          - ItemFavoritesScopeRekeySliceTest.aMarkWithNoStagedValueRefusesTheRotation
+          - ItemFavoritesScopeRekeySliceTest.aMarkWithNoStagedWrapRefusesTheRotation
       web: { unit: [src/features/spaces/scopeRekey.test.ts] }
   - id: a-row-changed-since-is-stale
     text: Each staged value names the SHA-256 of the ciphertext it replaces, per item and per member field; a row written between the read and the stage is refused at the stage, one written between the stage and the commit makes the commit 409 rekey_parts_stale and writes nothing, a profile write racing the commit included; a member field staged without its digest is malformed.
     coverage:
       backend:
         integration:
-          - ScopeRekeySliceTest.aRowChangedSinceItWasStagedIsStale
-          - ScopeRekeySliceTest.aRowWrittenBetweenTheReadAndTheStageIsRefusedAtTheStage
-          - ScopeRekeySliceTest.aMemberFieldWithoutItsDigestIsMalformed
+          - ScopeRekeySliceTest.aWrapReplacedSinceItWasStagedIsStale
+          - ScopeRekeySliceTest.aWrapReplacedBetweenTheReadAndTheStageIsRefusedAtTheStage
+          - ScopeRekeySliceTest.aMemberWrapWithoutItsDigestIsMalformed
           - ScopeRekeyRaceSliceTest.aRotationThatWaitsOnAProfileWriteFindsItsStageStaleAndRotatesNothing
           - ItemFavoritesScopeRekeySliceTest.aMarkRewrittenSinceItWasStagedIsStale
           - ItemFavoritesScopeRekeySliceTest.aMarkRewrittenBetweenTheReadAndTheStageIsRefusedAtTheStage
@@ -55,7 +57,8 @@ acceptanceCriteria:
     coverage:
       backend:
         integration:
-          - ScopeRekeySliceTest.aScopeLevelWriteSealedUnderTheOldEpochIsStale
+          - ScopeRekeySliceTest.aScopeLevelWriteWrappedUnderTheOldEpochIsStale
+          - ScopeRekeySliceTest.anOwnersRenameAfterARotationStoresAFreshWrapAndReKeysTheInvitee
           - ScopeRekeyRaceSliceTest.aProfileWriteThatWaitsOnTheCommitIsStaleAndWritesNothing
       web: { unit: [src/features/account/profile/useNameAndPicture.test.ts, src/core/people/profileAcrossRotation.test.ts] }
   - id: only-the-rotator-stages
@@ -74,8 +77,8 @@ acceptanceCriteria:
     coverage:
       backend:
         integration:
-          - ScopeRekeySliceTest.aPendingInviteeTheRotatorCannotAnchorIsClearedAndTheRotationCommits
-          - ScopeRekeySliceTest.aPendingInviteesNameKeySealedToAnotherIdentityIsRefused
+          - ScopeRekeySliceTest.anOwnersRenameAfterARotationStoresAFreshWrapAndReKeysTheInvitee
+          - ScopeRekeySliceTest.aSubstitutedWrapIsAcceptedTheServerCannotTellItFromAnother
       web: { unit: [src/features/spaces/scopeRekey.test.ts, src/features/spaces/inviteName.test.ts, src/features/memories/itemFavorites.test.ts] }
   - id: a-successor-is-proven-by-succession
     text: No chain link is stored and no held key opens another epoch's; a grant at a later epoch opens only if the served succession statements lead from the key this device held to the granted key, a newcomer's carried grant only if they lead from the invite's anchor - an operator's key, or a successor signed by a former key-holder after a rotation this device made, is refused epoch_unlinked, the same grant through genuine statements opens.

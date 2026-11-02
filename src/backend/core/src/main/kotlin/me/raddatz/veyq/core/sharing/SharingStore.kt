@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.core.sharing.ShareRetiredIdEntity
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.moderation.block.BlockKind
 import me.raddatz.veyq.core.moderation.block.MeasureTargets
@@ -102,7 +103,7 @@ class SharingStore(
     @Transactional
     fun create(
         id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
-        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
+        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, recoveryCopy: SealedValue?,
         sealedShareKeyEpoch: Int?, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): CreateResult {
@@ -119,7 +120,7 @@ class SharingStore(
             }
         }
         persistShare(
-            id, ownerAccount, scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
+            id, ownerAccount, scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, recoveryCopy,
             sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
         )
         return CreateResult.CREATED
@@ -148,7 +149,7 @@ class SharingStore(
     @Transactional
     fun reissue(
         oldId: String, newId: String, ownerAccount: String, keys: ShareKeys, sealedName: String, expiresAt: Instant?,
-        sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
+        sealedNote: String?, recoveryCopy: SealedValue, sealedShareKeyEpoch: Int, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): ReissueResult {
         if (idTaken(newId)) return ReissueResult.ID_TAKEN
@@ -156,7 +157,7 @@ class SharingStore(
         if (old.deleted) return ReissueResult.DELETED
         close(old, CloseKind.DELETE)
         persistShare(
-            newId, ownerAccount, old.scopeId, old.nodeId, old.role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
+            newId, ownerAccount, old.scopeId, old.nodeId, old.role, keys, sealedName, expiresAt, sealedNote, recoveryCopy,
             sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
         )
         return ReissueResult.CREATED
@@ -164,7 +165,7 @@ class SharingStore(
 
     private fun persistShare(
         id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
-        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
+        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, recoveryCopy: SealedValue?,
         sealedShareKeyEpoch: Int?, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ) {
@@ -184,10 +185,11 @@ class SharingStore(
             this.expiresAt = expiresAt
             this.sealedNote = sealedNote
             noteEditorUserId = ownerAccount.takeIf { sealedNote != null }
-            this.sealedShareKey = sealedShareKey
+            sealedShareKey = recoveryCopy?.value
+            wrappedRecoveryValueKey = recoveryCopy?.wrappedValueKey
             this.sealedShareKeyEpoch = sealedShareKeyEpoch
-            // ADR 0115 decision 2: the copy moves with every rotation, the mint's epoch stays for the re-issue rule.
-            this.mintedEpoch = sealedShareKeyEpoch.takeIf { sealedShareKey != null }
+            // The mint's epoch, for the re-issue rule (ADR 0075 point 4); a rotation re-wraps the copy's key and leaves it.
+            this.mintedEpoch = sealedShareKeyEpoch.takeIf { recoveryCopy != null }
             this.sealedShareName = sealedShareName
             shareNameEditorUserId = ownerAccount.takeIf { sealedShareName != null }
             this.passwordRequired = passwordRequired // cr-0118 (ADR 0037): the access-control gate + reveal copy
@@ -527,6 +529,7 @@ class SharingStore(
         share.noteEditorUserId = null
         share.shareNameEditorUserId = null
         share.sealedShareKey = null
+        share.wrappedRecoveryValueKey = null
         share.sealedShareKeyEpoch = null
         share.passwordRequired = false
         share.pwSalt = null

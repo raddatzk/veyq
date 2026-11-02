@@ -9,7 +9,6 @@ import me.raddatz.veyq.core.generated.model.RekeyIdentity
 import me.raddatz.veyq.core.generated.model.RekeyNode
 import me.raddatz.veyq.core.generated.model.RekeyNodeList
 import me.raddatz.veyq.core.generated.model.RekeyShare
-import me.raddatz.veyq.core.generated.model.ScopeRekeyGroupInvitee
 import me.raddatz.veyq.core.generated.model.ScopeRekeyGroupName
 import me.raddatz.veyq.core.generated.model.ScopeRekeyIcon
 import me.raddatz.veyq.core.generated.model.ScopeRekeyMember
@@ -62,6 +61,7 @@ class RekeyResource(
                     shares = o.parts.shares.map {
                         RekeyShare(
                             shareId = it.shareId, role = RekeyShare.Role.valueOf(it.role), sealedShareKey = it.sealedShareKey,
+                            wrappedRecoveryValueKey = it.wrappedRecoveryValueKey,
                             hasWrap = it.hasWrap, hasDropPublicKey = it.hasDropPublicKey, sealedShareKeyEpoch = it.sealedShareKeyEpoch,
                         )
                     },
@@ -137,22 +137,22 @@ class RekeyResource(
     override fun stageScopeRekey(scopeId: UUID, rekeyId: UUID, scopeRekeyStage: ScopeRekeyStageRequest): Response {
         val r = scopeRekeyStage
         val sid = scopeId.toString()
-        // A member's field and its digest come together (the contract's rule); one without the other is malformed.
+        // A member's wrap and its digest come together (the contract's rule); one without the other is malformed.
         if (r.members.orEmpty().any {
-                (it.sealedName == null) != (it.replacedNameDigest == null) ||
-                    (it.sealedAvatar == null) != (it.replacedAvatarDigest == null) ||
-                    (it.sealedJoinRecord == null) != (it.replacedJoinRecordDigest == null)
-            } ||
-            // An invitee's name key and the identity it is sealed to come together; both null clear it.
-            r.groupInvitees.orEmpty().any { (it.sealedNameKey == null) != (it.recipientIdentityDigest == null) }
+                (it.wrappedNameValueKey == null) != (it.replacedNameDigest == null) ||
+                    (it.wrappedAvatarValueKey == null) != (it.replacedAvatarDigest == null) ||
+                    (it.wrappedJoinRecordValueKey == null) != (it.replacedJoinRecordDigest == null)
+            }
         ) {
             return refused(RekeyOutcome.InvalidRequest)
         }
-        // Each value beside the digest of the ciphertext it was opened from (ADR 0115 decision 2); a root's name and slug
-        // are held by its placement revision instead, an invitee's recipient digest is no ciphertext of the row's.
+        // Each wrap beside the digest of the wrap it replaces (ADR 0115 decision 2); a root's name and slug are held by
+        // its placement revision instead. No field here maps to a value's ciphertext: a rotation writes only wraps.
         val fields = buildList {
-            r.groupName?.let { add(ScopeRekeyField(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME, it.encryptedName, replacedDigest = it.replacedDigest)) }
-            r.icon?.let { add(ScopeRekeyField(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON, it.sealedIcon, replacedDigest = it.replacedDigest)) }
+            r.groupName?.let {
+                add(ScopeRekeyField(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME_WRAP, it.wrappedNameValueKey, replacedDigest = it.replacedDigest))
+            }
+            r.icon?.let { add(ScopeRekeyField(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON_WRAP, it.wrappedIconValueKey, replacedDigest = it.replacedDigest)) }
             r.rootNodes.orEmpty().forEach { n ->
                 val id = n.nodeId.toString()
                 val revision = n.placementRevision.validated()
@@ -160,25 +160,21 @@ class RekeyResource(
                 add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_NAME, n.encryptedName, revision))
                 n.slugToken?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_SLUG, it, revision)) }
             }
-            r.groupInvitees.orEmpty().forEach { i ->
-                val id = i.userId.toString()
-                // A cleared name key is staged as [ScopeRekeyCommit.CLEARED] and sealed to nobody, so it names no recipient.
-                add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_KEY, i.sealedNameKey ?: ScopeRekeyCommit.CLEARED, replacedDigest = i.replacedDigest))
-                i.recipientIdentityDigest?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_RECIPIENT, it)) }
-            }
             r.shares.orEmpty().forEach {
-                add(ScopeRekeyField(it.shareId, ScopeRekeyCommit.SHARE_KEY, it.sealedShareKey, replacedDigest = it.replacedDigest))
+                add(ScopeRekeyField(it.shareId, ScopeRekeyCommit.SHARE_WRAP, it.wrappedRecoveryValueKey, replacedDigest = it.replacedDigest))
             }
             r.members.orEmpty().forEach { m ->
                 val id = m.userId.toString()
-                m.sealedName?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_NAME, it, replacedDigest = m.replacedNameDigest)) }
-                m.sealedAvatar?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_AVATAR, it, replacedDigest = m.replacedAvatarDigest)) }
-                m.sealedJoinRecord?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_JOIN, it, replacedDigest = m.replacedJoinRecordDigest)) }
+                m.wrappedNameValueKey?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_NAME_WRAP, it, replacedDigest = m.replacedNameDigest)) }
+                m.wrappedAvatarValueKey?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_AVATAR_WRAP, it, replacedDigest = m.replacedAvatarDigest)) }
+                m.wrappedJoinRecordValueKey?.let {
+                    add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_JOIN_WRAP, it, replacedDigest = m.replacedJoinRecordDigest))
+                }
             }
             r.verifications.orEmpty().forEach { v ->
                 add(
                     ScopeRekeyField(
-                        "${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION, v.sealedStatement,
+                        "${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION_WRAP, v.wrappedValueKey,
                         replacedDigest = v.replacedDigest,
                     ),
                 )
@@ -192,19 +188,31 @@ class RekeyResource(
 
     private fun ScopeRekeyPage.toWire() = ScopeRekeyParts(
         currentEpoch = currentEpoch,
-        groupName = groupName?.let { (name, epoch) -> ScopeRekeyGroupName(name, epoch) },
-        icon = icon?.let { (sealed, epoch) -> ScopeRekeyIcon(sealed, epoch) },
+        groupName = groupName?.let { (wrap, epoch) -> ScopeRekeyGroupName(nameEpoch = epoch, wrappedNameValueKey = wrap) },
+        icon = icon?.let { (wrap, epoch) -> ScopeRekeyIcon(iconEpoch = epoch, wrappedIconValueKey = wrap) },
         rootNodes = rootNodes.map {
             ScopeRekeyRootNode(
                 nodeId = UUID.fromString(it.id), trashed = it.deletedAt != null, placementRevision = it.placementRevision,
                 scopeEpoch = it.scopeEpoch, encryptedName = it.encryptedName, wrappedContentKey = it.wrappedContentKey,
             )
         },
-        groupInvitees = invitees.map { ScopeRekeyGroupInvitee(UUID.fromString(it.userId), it.sealedNameKey!!) },
-        shares = shares.map { ScopeRekeyShare(it.id, UUID.fromString(it.nodeId), it.sealedShareKey!!, it.sealedShareKeyEpoch ?: 0) },
-        members = members.map { ScopeRekeyMember(UUID.fromString(it.userId), it.sealedName, it.sealedAvatar, it.sealedJoinRecord) },
+        shares = shares.map {
+            ScopeRekeyShare(
+                shareId = it.id, nodeId = UUID.fromString(it.nodeId), sealedShareKeyEpoch = it.sealedShareKeyEpoch ?: 0,
+                wrappedRecoveryValueKey = it.wrappedRecoveryValueKey!!,
+            )
+        },
+        members = members.map {
+            ScopeRekeyMember(
+                userId = UUID.fromString(it.userId), wrappedNameValueKey = it.wrappedNameValueKey,
+                wrappedAvatarValueKey = it.wrappedAvatarValueKey, wrappedJoinRecordValueKey = it.wrappedJoinRecordValueKey,
+            )
+        },
         verifications = verifications.map {
-            ScopeRekeyVerification(UUID.fromString(it.verifierUserId), UUID.fromString(it.subjectUserId), it.epoch, it.sealedStatement)
+            ScopeRekeyVerification(
+                verifierUserId = UUID.fromString(it.verifierUserId), subjectUserId = UUID.fromString(it.subjectUserId),
+                epoch = it.epoch, wrappedValueKey = it.wrappedValueKey,
+            )
         },
         more = more,
         cursor = cursor,

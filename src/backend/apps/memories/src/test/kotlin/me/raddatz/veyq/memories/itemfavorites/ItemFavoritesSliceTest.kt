@@ -2,6 +2,7 @@ package me.raddatz.veyq.memories.itemfavorites
 
 import me.raddatz.veyq.core.spaces.scope.ScopesStore
 import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
@@ -45,7 +46,7 @@ class ItemFavoritesSliceTest {
 
     private fun put(userId: String, scopeId: String, nodeId: String, ciphertext: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"ciphertext":"$ciphertext","epoch":0}""")
+            .body("""{"ciphertext":"$ciphertext","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/item-favorites")
             .then().statusCode(204)
 
@@ -159,7 +160,7 @@ class ItemFavoritesSliceTest {
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(200).body("[0].ciphertext", equalTo(atCap))
         val over = "A".repeat(262_145)
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"ciphertext":"$over","epoch":0}""")
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"ciphertext":"$over","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$node/item-favorites").then().statusCode(400).body("code", equalTo("invalid_request"))
         // the refused write changed nothing
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
@@ -216,7 +217,7 @@ class ItemFavoritesSliceTest {
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
         given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
-            .body("""{"ciphertext":"$mine","epoch":0}""")
+            .body("""{"ciphertext":"$mine","wrappedValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","epoch":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
     }
@@ -281,10 +282,10 @@ class ItemFavoritesSliceTest {
             membership(alice, proposed, proposed)
             MembershipEntity.update("pendingConsent = true where userId = ?1 and scopeId = ?2", alice, proposed)
         }
-        store.upsert(alice, proposed, node, theirs)
+        store.upsert(alice, proposed, node, TestGrants.sealed(theirs))
 
         val suspended = seedTenant(status = TenantEntity.SUSPENDED, owner = alice)
-        store.upsert(alice, suspended, node, theirs)
+        store.upsert(alice, suspended, node, TestGrants.sealed(theirs))
 
         assert(listOwn(alice) == setOf(Triple(live, node, mine))) {
             "only the live scope's row may come back — got ${listOwn(alice)}"

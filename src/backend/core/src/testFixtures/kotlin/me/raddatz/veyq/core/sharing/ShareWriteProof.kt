@@ -36,7 +36,7 @@ object ShareWriteProof {
      *  scope's current one (a fresh scope's is 0) and [nodeEpoch] the node's stored one (a fresh node's is 0), or the
      *  write is `409 stale_epoch`. */
     fun recovery(epoch: Int = 0, nodeEpoch: Int = 0): String =
-        """"sealedShareKey":"cmVjb3Zlcnk=","sealedShareKeyEpoch":$epoch,"nodeEpoch":$nodeEpoch"""
+        """"sealedShareKey":"cmVjb3Zlcnk=","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","sealedShareKeyEpoch":$epoch,"nodeEpoch":$nodeEpoch"""
 
     /** The root's key a reopen of a READ or READ_WRITE link carries back under its `K_share`. */
     const val REOPEN_WRAP = "cmVvcGVuLXdyYXA="

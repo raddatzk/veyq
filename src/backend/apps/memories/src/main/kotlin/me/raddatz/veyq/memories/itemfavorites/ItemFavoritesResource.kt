@@ -3,6 +3,7 @@ package me.raddatz.veyq.memories.itemfavorites
 import me.raddatz.veyq.memories.generated.api.ItemFavoritesApi
 import me.raddatz.veyq.memories.generated.model.ItemFavoritesEntry
 import me.raddatz.veyq.memories.generated.model.PutItemFavoritesRequest
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.validation.validated
@@ -37,7 +38,7 @@ class ItemFavoritesResource(
         when (val o = handler.get(identity.principal.name, scopeId.toString(), nodeId.toString())) {
             is GetItemFavoritesOutcome.Found ->
                 Response.ok(
-                    o.entries.map { ItemFavoritesEntry(self = it.own, ciphertext = it.ciphertext) },
+                    o.entries.map { ItemFavoritesEntry(self = it.own, ciphertext = it.marks.value, wrappedValueKey = it.marks.wrappedValueKey) },
                 ).build()
             is HttpFailure -> httpError(o)
         }
@@ -52,7 +53,7 @@ class ItemFavoritesResource(
                 identity.principal.name,
                 scopeId.toString(),
                 nodeId.toString(),
-                putItemFavoritesRequest.ciphertext,
+                SealedValue(putItemFavoritesRequest.ciphertext, putItemFavoritesRequest.wrappedValueKey),
                 putItemFavoritesRequest.epoch.validated(),
             )
         ) {

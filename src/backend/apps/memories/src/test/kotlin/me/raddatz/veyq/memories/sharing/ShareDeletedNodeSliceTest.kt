@@ -192,7 +192,7 @@ class ShareDeletedNodeSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val erased = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val sibling = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val withCopy = ""","sealedNote":"$sealedNote","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0"""
+        val withCopy = ""","sealedNote":"$sealedNote","sealedShareKey":"$shareKey","wrappedRecoveryValueKey":"d3JhcHBlZC12YWx1ZS1rZXk=","sealedShareKeyEpoch":0"""
         val erasedShare = createShare(userId, erased, extra = withCopy)
         val siblingShare = createShare(userId, sibling, extra = withCopy)
 
