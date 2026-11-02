@@ -83,8 +83,12 @@ class PotSliceTest {
         val pot = seedNode(scopeId, ExpensesNodeKinds.POT, wrappedContentKey = CONTENT_KEY)
         val other = seedNode(scopeId, ExpensesNodeKinds.POT, wrappedContentKey = CONTENT_KEY)
         val a = UUID.randomUUID().toString()
-        append(userId, scopeId, pot, listOf(Rev(a), Rev(a, 2))).statusCode(400).body("code", equalTo("invalid_request"))
-        append(userId, scopeId, pot, listOf(Rev(a, body = body(length = 748)))).statusCode(400).body("code", equalTo("invalid_request"))
+        // two revisions of one record: a rule across the items, the 422 (inbox #507), never the shape's 400
+        append(userId, scopeId, pot, listOf(Rev(a), Rev(a, 2))).statusCode(422).body("code", equalTo("pot_item_repeated"))
+        // a length between two size classes is inside the schema's bounds, so the rule's 422, never the shape's 400
+        for (length in listOf(748, 2788, 10988, 21904)) {
+            append(userId, scopeId, pot, listOf(Rev(a, body = body(length = length)))).statusCode(422).body("code", equalTo("size_class_invalid"))
+        }
         assertEquals(emptyList<String>(), addresses(pot), "a refused batch stores nothing")
         // every size class is one length (744, 2792, 10984, 21908): the largest lands
         append(userId, scopeId, pot, listOf(Rev(a, body = body(length = 21908)))).statusCode(204)
@@ -126,6 +130,7 @@ class PotSliceTest {
         erase(userId, scopeId, pot, entry, 5).statusCode(409).body("code", equalTo("stale_revision"))
             .body("stale[0].entryId", equalTo(entry)).body("stale[0].revision", equalTo(1))
         erase(userId, scopeId, pot, UUID.randomUUID().toString(), 2).statusCode(404).body("code", equalTo("node_not_found"))
+        erase(userId, scopeId, pot, person, 4, body = body('E', length = 748)).statusCode(422).body("code", equalTo("size_class_invalid"))
         assertEquals(4, addresses(pot).size, "a refused erasure erases nothing")
 
         erase(userId, scopeId, pot, person, 4).statusCode(204) // control: a member's erasure
