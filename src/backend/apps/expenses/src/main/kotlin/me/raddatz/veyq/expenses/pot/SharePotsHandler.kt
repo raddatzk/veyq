@@ -48,7 +48,6 @@ sealed interface SharePotAppendOutcome {
     object NotContributable : SharePotAppendOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
     object PasswordIncorrect : SharePotAppendOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
     object RateLimited : SharePotAppendOutcome, HttpFailure by Failures.rateLimited
-    object Invalid : SharePotAppendOutcome, HttpFailure by Failures.invalidRequest
     /** As a member's: two revisions of one record, or one dropped receipt twice (`422 pot_item_repeated`). */
     object Repeated : SharePotAppendOutcome, HttpFailure by PotRequests.itemRepeated
     /** As a member's: a sealed body of no size class (`422 size_class_invalid`). */

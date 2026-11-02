@@ -25,6 +25,7 @@ import me.raddatz.veyq.expenses.pot.PotRevisionEntity
 import me.raddatz.veyq.expenses.pot.PotWire
 import me.raddatz.veyq.expenses.pot.PotWire.Rev
 import me.raddatz.veyq.expenses.pot.PotWire.append
+import me.raddatz.veyq.expenses.pot.PotWire.guestAppend
 import me.raddatz.veyq.expenses.receipt.ReceiptKit.blob
 import me.raddatz.veyq.expenses.receipt.ReceiptKit.blobOf
 import me.raddatz.veyq.expenses.receipt.ReceiptKit.complete
@@ -161,9 +162,13 @@ class PotReceiptSliceTest {
         val ra = ReceiptKit.upload(fakeStore, userId, scopeId, pot, a)
         val rb = ReceiptKit.upload(fakeStore, userId, scopeId, pot, b)
 
-        // b's receipt is no receipt of a; an id the Pot holds none of neither: the batch is refused whole.
-        append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(rb)))).statusCode(400).body("code", equalTo("invalid_request"))
-        append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(UUID.randomUUID().toString())))).statusCode(400)
+        // b's receipt is no receipt of a; an id the Pot holds none of neither: the batch is refused whole — a rule on what
+        // is stored, so its own 422, never the shape's 400 (tests/fuzz/schemathesis.toml), a member's and a guest's alike.
+        append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(rb)))).statusCode(422).body("code", equalTo("receipt_not_held"))
+        append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(UUID.randomUUID().toString()))))
+            .statusCode(422).body("code", equalTo("receipt_not_held"))
+        val link = GuestTreeShare.seed(userId, scopeId, pot, ShareEntity.READ_WRITE)
+        guestAppend(link, pot, listOf(Rev(a, 2, drops = listOf(rb)))).statusCode(422).body("code", equalTo("receipt_not_held"))
         append(userId, scopeId, pot, listOf(Rev(a, 2, drops = listOf(ra, ra)))).statusCode(422).body("code", equalTo("pot_item_repeated"))
         assertEquals(1L, QuarkusTransaction.requiringNew().call { PotRevisionEntity.count("entryId", a) }, "nothing of a refused batch is stored")
         assertNull(receipt(ra)!!.releasedAt)

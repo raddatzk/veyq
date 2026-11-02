@@ -51,7 +51,6 @@ sealed interface PotWriteOutcome {
     object Done : PotWriteOutcome
     /** `409 stale_revision` with every stale record and its latest revision (0: none). */
     data class Stale(val stale: List<RevisionRef>) : PotWriteOutcome, HttpFailure by Failures.staleRevision
-    object Invalid : PotWriteOutcome, HttpFailure by Failures.invalidRequest
     /** Two revisions of one record in the batch, or one dropped receipt twice ([PotRequests.Verdict.REPEATED]). */
     object Repeated : PotWriteOutcome, HttpFailure by PotRequests.itemRepeated
     /** A sealed body of no size class ([PotRequests.Verdict.NO_SIZE_CLASS]). */
@@ -61,8 +60,8 @@ sealed interface PotWriteOutcome {
     object Deleting : PotWriteOutcome, HttpFailure by Failures.scopeDeleting
     object NoPot : PotWriteOutcome, HttpFailure by Failures.nodeNotFound
     object IdTaken : PotWriteOutcome, HttpFailure by Failures.idTaken
-    /** A dropped receipt is no receipt of its record in this Pot. */
-    object ReceiptNotHeld : PotWriteOutcome, HttpFailure by Failures.invalidRequest
+    /** A dropped receipt is no receipt of its record in this Pot ([PotRequests.receiptNotHeld]). */
+    object ReceiptNotHeld : PotWriteOutcome, HttpFailure by PotRequests.receiptNotHeld
     object StaleEpoch : PotWriteOutcome, HttpFailure by Failures.staleEpoch
     object RekeyPending : PotWriteOutcome, HttpFailure by Failures.nodeRekeyPending
     /** A moderator blocked the Pot, a node above it, or the record a write edits (`451 blocked_by_operator`, [PotBlocks]). */
@@ -96,6 +95,9 @@ internal object PotRequests {
 
     val itemRepeated = httpFailure("pot_item_repeated", FailureStatus.UNPROCESSABLE)
     val sizeClassInvalid = httpFailure("size_class_invalid", FailureStatus.UNPROCESSABLE)
+    /** A dropped receipt that is no receipt of its record in this Pot: a rule on what is stored, which no schema can state,
+     *  so its own `422`, never the shape's `400` — asked by the store under its locks, not here. */
+    val receiptNotHeld = httpFailure("receipt_not_held", FailureStatus.UNPROCESSABLE)
 
     fun verdict(writes: List<RevisionWrite>): Verdict = when {
         writes.any { PotBodies.sizeClassOf(it.sealedBody.length) == null } -> Verdict.NO_SIZE_CLASS
