@@ -1,7 +1,7 @@
 # ADR 0113 — Memories' media are blobs of core's blob service
 
-- Status: Proposed
-- Built: no
+- Status: Accepted
+- Built: yes
 - Date: 2026-11-02
 - Model: [Applications](../apps/README.md)
 
@@ -157,7 +157,7 @@ Expenses' roles are own items, and their behaviour does not change. Memories' th
   - A restore of a medium trashed longer than the retention is refused as if it were already purged, so no medium comes
     back without its bytes.
   - One window is also what the privacy notice already states.
-- **Erasing at once.** The service gains `ApplicationBlobs.eraseOwners(scopeId, ownerIds)`: an application's immediate
+- **Erasing at once.** The service gains `ApplicationBlobErasure.eraseOwners(scopeId, ownerIds)`: an application's immediate
   erase, inside its own write. It removes the rows, puts their blob rows' objects on the reclaim list (ADR 0062), and
   deletes the guest-write records that name them. Memories calls it:
   - when a member empties a medium from the trash at once;
@@ -177,6 +177,8 @@ Expenses' roles are own items, and their behaviour does not change. Memories' th
     (`heldObjectsOfOwner`).
   - The service's `ReportableItems` locates only own items, and its `UploaderContent` returns only own items. A
     medium's uploader content is the media ids Memories returns.
+  - The service's case read (`listCaseApplicationBlobs`) lists only rows in a role no application declares as its
+    owner's content — asked by the role's token, since the held node may be gone; a medium's are Memories' case read's.
   - A block on a medium reaches its blobs through the owner rule `ApplicationBlobs.served` already has.
 - **The hold.** The service's contributor already copies by node, by item and by owner. `MediaHoldSnapshot` copies only
   `veyq_media` and the buckets.
@@ -277,11 +279,11 @@ Two arms, one on each side of ADR 0079 decision 3's line, is the count this deci
   - **`validate_scope_erasure_arity` and `validate_account_erasure_arity`** replay the dropped table and need no change.
     They are run green.
   - **`validate_node_rekey_arity`** stays green, because core's participant assigns `wrappedBlobKey`. It cannot prove
-    which rows are reached, so a slice test proves the re-key. The commit misses a `READ_WRITE` medium's PREVIEW and gets
-    `409 rekey_parts_missing`. It applies without a `WRITE_ONLY` medium's wraps. Bite: drop the `K_up` rule and the
-    second case goes red.
-  - **The share predicate.** A slice test checks that a guest's GET of a trashed medium's PREVIEW is a 404. Bite: drop
-    the rule for released owner's content.
+    which rows are reached, so a slice test proves the re-key (`MediaNodeRekeySliceTest`). A commit that misses a
+    member medium's THUMBNAIL wrap gets `409 rekey_parts_missing`; one without the `WRITE_ONLY` guest medium's wrap
+    applies. Bite: drop the `K_up` rule and the second case goes red.
+  - **The share predicate.** A slice test checks that a guest's GET of a trashed medium's blob is a 404
+    (`ShareTrashedMediaSliceTest`). Bite: drop the rule for released owner's content.
   - **`ModuleCompositionTest`.**
     - Its partition stores `MEMORY` and `CHAPTER` with Memories, its admission becomes the service's, and its completion
       and guest writer stay Memories'.
@@ -289,7 +291,7 @@ Two arms, one on each side of ADR 0079 decision 3's line, is the count this deci
     - Bite: let the service's completion accept `MEMORY`.
   - **`validate_measure_target_erasure`, `validate_node_subtree_erasure` and `validate_store_reclaim_arity`** read
     erasers and calls, so they follow unchanged.
-- **Docs, at the build.**
+- **Docs.**
   - [Applications](../apps/README.md) § Core's blob service holds two arms and the two forms.
     [Memories](../apps/memories.md) and [en.memory.media](../features/memory/enablers/en.memory.media.md) describe a
     medium's blobs as the service's.
@@ -300,44 +302,6 @@ Two arms, one on each side of ADR 0079 decision 3's line, is the count this deci
   - every medium on the dev instances is gone at the move;
   - one more flag every new role must answer;
   - a re-key read that is now paged for every application.
-
-## Order of the build
-
-Each phase is a commit of its own, with its proof:
-
-1. **Contracts.** Decision 8, then the generated code. Proof: the `scripts/validate_*.py` loop, and `./gradlew check`
-   and `npm run check` compiling against the new generated code.
-2. **Core.** Decisions 2–7 on the service's side.
-   - Proof: `./gradlew check`.
-   - New slice tests, each with its bite: `attachIn` (binding, count, id, guest role), `eraseOwners` (rows, reclaim,
-     guest-write records), the released owner's-content predicate, the paged re-key read, and the `K_up` rule in read
-     and commit.
-3. **Memories' backend.**
-   - `ApplicationBlobOwners`.
-   - `MediaStore` over the service.
-   - Trash, restore and purges over `releaseOwners` / `keep` / `eraseOwners`.
-   - The listings filled from `served`.
-   - The re-key without `blobs`.
-   - The refusal migration.
-
-   Proof: `./gradlew check` with `MediaResetMigrationSliceTest`, `MediaListQueryCountSliceTest`, the lock-order and
-   trash race tests and `ModuleCompositionTest` updated.
-4. **Web.**
-   - Core's re-key driver reads the paged service rows and binds each with its `ownerId`.
-   - Memories' `rekey.ts` drops the blob wraps.
-
-   Proof: `npm run check`. Then a browser pass on the built shell:
-   - a member upload and a `WRITE_ONLY` guest upload;
-   - a trash and a restore;
-   - a guest's view of a trashed medium;
-   - a rotation's re-key of a Memory with both kinds of media;
-   - video playback.
-5. **Docs and guards.**
-   - The guard changes above, with their bites.
-   - The docs above, the `infra/README.md` reset section, and the site's configuration row.
-   - This ADR goes to Accepted.
-
-   Proof: the `validate_*.py` loop, `validate_guard_gaps.py`, and the site's `npm run check`.
 
 ## Rejected alternatives
 

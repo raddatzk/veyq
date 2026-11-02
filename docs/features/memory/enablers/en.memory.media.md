@@ -21,7 +21,8 @@
   created, so a Memory always has a byte path. The store itself is
   [cc.storage.object-lifecycle](../../../crosscutting/cc.storage.object-lifecycle.md).
 - **Postconditions (success):** the blob's **ciphertext chunks** live in the object store; the server holds the
-  blob's **metadata + chunk manifest + the `K_blob` wrap** and a **media** record linking the blob to a node.
+  blob's **metadata + chunk manifest + the `K_blob` wrap**, a **media** record on the node, and one row of core's blob
+  service per blob held by the medium in its role ([ADR 0113](../../../decisions/0113-memories-media-are-blobs-of-cores-blob-service.md)).
   The server learned **no bytes of plaintext** and holds **no content key**.
 
 ## Key & blob model (ADR 0012 + ADR 0013)
@@ -59,8 +60,9 @@
   download name, the type draws the video badge and the lightbox's `<video>` branch — and neither is ever sent in the
   clear: the server's view of a media is still no pixel, no name and no type. (Before inbox #397 the name rode the
   EXIF tier, #395 F10, and the type the listed tier with a lazy backfill on the first download; both copies are gone,
-  and the listed tier shrank by the type.) A blob row is referenced by exactly one media record (or one derivative,
-  attachment or receipt; its `K_blob` wrap is sealed to its owner and role, ADR 0072); a cover or banner equal to a stored
+  and the listed tier shrank by the type.) A blob row is referenced by exactly one record of core's blob service (a
+  medium's original or derivative, or a receipt) or one attachment; its `K_blob` wrap is sealed to its owner and role,
+  ADR 0072 — the medium for a medium's blobs; a cover or banner equal to a stored
   file is a second blob row on the same stored object, never a second record on one blob row
   ([cc.storage.object-lifecycle](../../../crosscutting/cc.storage.object-lifecycle.md) § What names a stored object).
   Each media record also carries its **bucket
@@ -91,8 +93,9 @@
    each request is authorized again, and a window that expired is simply asked for again.
 5. **Complete + attach:** POST complete-and-attach `{ uploadId, nodeId }` as the session's opener; the server
    **stats** each object to confirm presence + exact size, writes the chunk manifest, enforces the byte budget,
-   promotes the staged objects to a blob, and creates the **media** record, under the id the client minted,
-   linking it to the node.
+   promotes the staged objects to blobs, and creates the **media** record, under the id the client minted, on the
+   node, with its blobs as core's blob service's rows held by it (one per role: an item naming a tier twice is
+   refused), in one transaction.
 6. **Read back:** to display, the client asks for **presigned `GET` URLs**, fetches the raw frames directly,
    unwraps `K_blob` (via `K_node`), and `openFrame`s each (the AAD position check verifies order/count).
 

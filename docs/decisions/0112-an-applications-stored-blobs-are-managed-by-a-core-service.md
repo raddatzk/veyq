@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-11-01
 - Model: [Applications](../apps/README.md)
+- Replaced in part: decision 1 (the arm count; a wrap's key and binding are per role) and decision 3 (an owner's content is served by its application's routes) by ADR 0113
 
 ## Context
 
