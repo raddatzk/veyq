@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-07-08
 - Model: [en.spaces.member-identity](../features/spaces/enablers/en.spaces.member-identity.md)
+- Replaced in part: the epoch of a sealed name (§ Decision) by ADR 0115 (built)
 
 ## Context
 

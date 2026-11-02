@@ -112,8 +112,8 @@ contract's caps by `scripts/validate_rotation_shape.py`, measured at the cap by 
    served owner key (ADR 0111 decision 19). `anchorServedChain` judges that chain against the pin as `readChain`
    does — a pinned head must lie on it and carry the pinned key, else `anomaly` — and on first use pins the walked
    head at its real index. The granter of a grant a rotation carried is judged against its pin only if this account
-   pinned them before, and is not pinned here: the grant's epoch link down to the owner's anchor vouches for it, not
-   its key, which may be one its granter has since retired — the account pins them at its first contact as a
+   pinned them before, and is not pinned here: the succession statements from the owner's anchor to the grant's key
+   vouch for it, not its key, which may be one its granter has since retired — the account pins them at its first contact as a
    co-member.
 6. **Verification is not in this store.** A compare of safety number and chain code writes a signed statement into
    the tenant ([uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md));

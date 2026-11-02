@@ -41,12 +41,12 @@ This use-case is the tenant consumer of the grant-distribution primitive
    sendable mail settings is **refused** (`503 mail_unavailable`) before anything is minted.
 3. The owner passes the **code** on themselves, never by email.
 4. The invitee opens the link and types the code. The preview serves the invite with the owner's whole key chain,
-   the anchor grant and the tenant's epoch links above the anchor's epoch. Their client opens the seal and **checks
+   the anchor grant and the tenant's succession statements above the anchor's epoch. Their client opens the seal and **checks
    the invite before it sends anything** (`checkInvite`, ADR 0111 decision 19): the key the seed derives must be the
    served invite key and the seal's signer the served one; the owner's chain must pass through the head inside the
    seal and end at the served owner key; the owner's signatures over the invite key and over the anchor grant must
-   verify under that key; and the grant it is handed must be the anchor or peel down through the served links to
-   exactly the anchor's key. An existing account also judges the owner against its pin with that chain. It then opens
+   verify under that key; and the grant it is handed must be the anchor, or carry a key the served succession
+   statements lead to from the anchor key's succession public key (ADR 0115 decision 5). An existing account also judges the owner against its pin with that chain. It then opens
    the grant with the invite key. A wrong code is the invitee's to retype; a failed check is "This invite can't be
    checked — ask for a new one", and nothing is sent.
 5. The invitee **registers** (identity born cold on-device, the Emergency Kit issued) or, with an account already, signs in with their Secret Key. Their client **grants itself** the tenant key — a
@@ -77,8 +77,8 @@ sequenceDiagram
   O-->>I: the code, outside veyq
   I->>CI: open link, type code
   CI->>S: preview
-  S-->>CI: invite, owner's chain, anchor, grant, epoch links
-  CI->>CI: open seal → derived key = served? chain through the sealed head? signatures ok? grant peels to the anchor? → open grant
+  S-->>CI: invite, owner's chain, anchor, grant, succession statements
+  CI->>CI: open seal → derived key = served? chain through the sealed head? signatures ok? statements lead from the anchor to the grant? → open grant
   CI->>S: register or sign in + self-grant + invite-accept proof + owner key digest + sealed join record
   S->>S: verify proof and owner key → membership with grant, profile with join record, invite key, grant and anchor nulled
   Note right of S: server saw public keys, signatures,<br>opaque grants and record — never K_SC or the code
@@ -94,12 +94,14 @@ sequenceDiagram
   server refuses a rotation that does neither for an open invite (`409 rotation_incomplete`) and ignores an id that
   names no open invite. The anchor moves to the new epoch only when the invite's signer commits the rotation under
   the invite's signer key; any other rotation leaves the owner's grant as the anchor. Every member reads the open
-  invites' keys for this (`listOpenInvites`, no email). A pending invite's newcomer self-grants the epoch it can open and joins **behind**; the narrow grant delivery brings it
-  current ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) E2), and until then the
-  sidebar says *Waiting for the current key*.
+  invites' keys for this (`listOpenInvites`, no email). A pending invite's newcomer holds only a key the rotation
+  replaced: its join record sealed under it is refused (`409 stale_epoch`, nothing born), so the invite is redeemable
+  once it carries the current epoch ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md)
+  decision 8).
 - **A3 — a grant a rotation re-wrapped:** it names that rotator, not the inviting owner, as its granter. The
-  newcomer neither anchors nor pins that member: the grant counts because its epoch peels down through the served
-  links to the owner's anchor, which the operator cannot fake without the anchor's key (ADR 0111 decision 19). A
+  newcomer neither anchors nor pins that member: the grant counts because the served succession statements lead from
+  the owner's anchor to its key, which the operator cannot fake without the anchor's key (ADR 0111 decision 19,
+  ADR 0115 decision 5). A
   rotator this account already pinned is still judged against its pin.
 - **A4 — the owner secured their account after inviting:** their securing re-signed the open invite with the new
   identity ([uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md) E3), and the newcomer reaches

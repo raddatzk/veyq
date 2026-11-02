@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-10-27
 - Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
+- Replaced in part: decisions 19, 21 (the endorsement's digest) and 23 by ADR 0115 (built)
 
 ## Context
 

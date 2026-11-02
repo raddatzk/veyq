@@ -117,7 +117,7 @@ acceptanceCriteria:
     # (tenantInvite.test.ts through openMemberInvite; inviteCheck.test.ts on checkInvite itself, a crypto gap below),
     # among them the two operator probes that once passed: a key of the operator's choosing under a granter it
     # fabricated (epoch_unlinked) and a grant the owner's retired key signed after their securing (signer_chain_mismatch).
-    text: The preview serves the invite with its signer's whole key chain, the anchor grant and the tenant's epoch links above the anchor's epoch. Before it sends anything the invitee's client opens the seal with the code and requires the key the seed derives to be the served invite key (`key_mismatch`) and the seal's signer the served one (`signer_mismatch`); the owner's served chain to pass through the head inside the seal and end at the served owner key (`signer_chain_mismatch`, so a retired owner key is never accepted and a key the owner's securing installed is); the owner's signature over the invite key and its expiry (`bad_signature`) and over the anchor grant (`anchor_invalid`) to verify under that key; and the grant it is handed to be the anchor at the anchor's epoch, or to peel down through the served links to exactly the anchor's key (`epoch_unlinked`). An existing account judges the owner against its pin with that chain and pins the walked head; a carried grant's granter it pinned before is judged against that pin, one it never met is not pinned. A wrong code is the invitee's to retype; any failed check is "ask for a new one", and nothing is posted.
+    text: The preview serves the invite with its signer's whole key chain, the anchor grant and the tenant's succession statements above the anchor's epoch. Before it sends anything the invitee's client opens the seal with the code and requires the key the seed derives to be the served invite key (`key_mismatch`) and the seal's signer the served one (`signer_mismatch`); the owner's served chain to pass through the head inside the seal and end at the served owner key (`signer_chain_mismatch`, so a retired owner key is never accepted and a key the owner's securing installed is); the owner's signature over the invite key and its expiry (`bad_signature`) and over the anchor grant (`anchor_invalid`) to verify under that key; and the grant it is handed to be the anchor at the anchor's epoch, or to carry a key the served succession statements lead to from the anchor key's succession public key (`epoch_unlinked`, ADR 0115 decision 5). An existing account judges the owner against its pin with that chain and pins the walked head; a carried grant's granter it pinned before is judged against that pin, one it never met is not pinned. A wrong code is the invitee's to retype; any failed check is "ask for a new one", and nothing is posted.
     coverage:
       backend:
         integration: [InvitePlaceholderSliceTest.thePreviewServesAMemberInvitesKeySignatureAndGrant, InviteAnchorSliceTest.thePreviewServesTheSignersChainTheAnchorAndTheLinksBetween]
@@ -130,7 +130,7 @@ acceptanceCriteria:
     # first-seen granter, as it did one at the checked epoch under another key. Bites, each red: no hold, the new
     # account's Master Key dropped (in the accept and in the view), the first invite held after a re-check, the hold
     # before the send, the trust marks ignoring the given key, the born Master Key left unwiped.
-    text: Once the server took a member's accept, the device holds the tenant key the checks vouched for, at the invite's epoch — the re-checked invite's after `409 invite_changed` — under the vault's Master Key, or for a new account under the Master Key its birth hands back, which is then wiped. Its first open of the tenant then opens the self-grant and a later epoch linked down to that key, and refuses any other (`epoch_unlinked`). A refused accept holds nothing.
+    text: Once the server took a member's accept, the device holds the tenant key the checks vouched for, at the invite's epoch — the re-checked invite's after `409 invite_changed` — under the vault's Master Key, or for a new account under the Master Key its birth hands back, which is then wiped. Its first open of the tenant then opens the self-grant and a later epoch the succession statements lead to from that key, and refuses any other (`epoch_unlinked`). A refused accept holds nothing.
     coverage:
       web:
         unit: [src/features/tenant/tenantInvite.firstOpen.test.ts, src/views/TenantJoinView.member.test.ts]
@@ -177,7 +177,7 @@ gaps:
     (`#invite_key`), the code's Argon2id KEK and the link's seal and encoding (`#invite_link`, v2 with the owner's
     head), the invitee's checks, and the accept proof and join record with both signatures (`#join_record`), each
     vector from an independent Python implementation; `src/inviteCheck.test.ts` gives `checkInvite` each refusal
-    reason of ADR 0111 decision 19 with its control, and the epoch-link peel. `packages/crypto`'s job has never
+    reason of ADR 0111 decision 19 with its control, and the succession path from the anchor. `packages/crypto`'s job has never
     executed, so ADR 0040 admits none of its suites; on the first run whose log shows them executed, the suites go
     under `invite-holds-a-signed-key-and-a-grant`, `invite-sealed-under-a-code`, `invitee-checks-before-it-trusts` and
     `self-grant-and-join-record`.

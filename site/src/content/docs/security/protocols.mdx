@@ -12,6 +12,7 @@ sources:
   - docs/features/account/use-cases/uc.account.recover-access.md
   - docs/features/account/use-cases/uc.account.rotate-keys.md
   - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
+  - docs/features/sharing/enablers/en.sharing.public-link.md
 ---
 import Mermaid from '../../../components/Mermaid.astro';
 
@@ -43,7 +44,7 @@ This page claims nothing beyond it.
 | Master Key | The account's 32-byte root. It is wrapped once per unlock method and opens the identity private key. |
 | Identity key | A hybrid post-quantum encryption key and an Ed25519 signing key. Others seal scope keys to the public half; its owner signs every grant it issues. See [Cryptography](/veyq/security/cryptography/). |
 | Secret Key | 256 random bits, held by the user in the Emergency Kit. The server never stores it. |
-| `K_SC` / epoch key | A scope's content key. It is a forward chain of epochs, and a grant carries the latest epoch the member is entitled to. |
+| `K_SC` / epoch key | A scope's content key, one at a time: a rotation replaces it with a fresh key at the next epoch, and a grant carries the current one. |
 | `K_node` | A random per-Memory content key, wrapped independently, which makes it the unit a share hands out. |
 | `K_share` | A random per-link key. It travels in the URL fragment. |
 | Seal | Authenticated encryption that binds its purpose and the object it is stored as ([ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md)), so the server cannot serve one object's ciphertext as another's. |
@@ -268,15 +269,16 @@ server.
    the invites keep working. A pending invite still redeems: its
    newcomer joins one epoch behind and is brought current by grant delivery (step 9).
 5. **The invitee checks before it trusts.** On the link's page the invitee types the code. The server's preview
-   serves the invite with the owner's whole key chain, the anchor and the tenant's epoch links above the anchor's
-   epoch. The client opens the seal (a wrong code does not open it) and requires: the invite key derived from the
+   serves the invite with the owner's whole key chain, the anchor and the tenant's succession statements above the
+   anchor's epoch. The client opens the seal (a wrong code does not open it) and requires: the invite key derived from the
    seed to equal the served one, and the account in the seal to be the served owner; the owner's chain to pass
    through the head in the seal and end at the served owner key, so a key the owner's securing installed is reached
    through the step the old Secret Key signed, and a retired key is never accepted; the owner's signatures over the
    invite key and over the anchor to verify under that key; and the grant it is handed to be the anchor, or — when a
-   later rotation carried the invite — to peel down through the served epoch links to exactly the anchor's key. A
-   carried grant names the rotator as its granter, whom the newcomer need not anchor: the link to the owner's anchor
-   vouches for it, and the server holds no anchor key to forge one. An existing account also judges the owner against
+   later rotation carried the invite — to be reached from it: the client derives the anchor epoch's succession public
+   key from the anchor's key and verifies each served statement up to the granted key. A carried grant names the
+   rotator as its granter, whom the newcomer need not anchor: the statements from the owner's anchor vouch for it, and
+   the server holds no anchor key to sign one. An existing account also judges the owner against
    its pin with that chain. Any mismatch stops the accept with *This invitation can’t be checked*, before anything is
    sent.
 6. **The invitee grants itself.** It registers (its identity is born on its device, section 1) or signs in with
@@ -291,11 +293,12 @@ server.
 7. **The join record.** In the same request the client writes a **join record** into its tenant profile: its
    identity public key, its Secret-Key proof public key and the owner-signed invite it came through, signed over the
    `join-record` statement by the invite key **and** by the new identity, and sealed as the field
-   `member-join-record`, bound to the tenant and the member, under the tenant epoch key the invite grant carried. The
+   `member-join-record`, bound to the tenant and the member, under the tenant key the invite grant carried (each later
+   rotation re-seals it under the new key). The
    chain owner → invite → newcomer is one neither the operator nor a holder of the tenant key can forge while the
    owner is not compromised. Every member's client reads it as the **anchor** of the newcomer's key in this tenant
    (section 7). When the owner later secures their account, they endorse the record with their new key (statement
-   `join-endorsement` over the sealed record as stored); a record signed by a key the owner has since retired counts
+   `join-endorsement` over the opened record, so a re-seal leaves it valid); a record signed by a key the owner has since retired counts
    only with that endorsement. The tenant's first owner, its trust root, has none.
 8. **Adding a member to a group.** The person already has an identity, so no invite key is needed: the group owner's
    client runs the anchor gate (section 7) on the key and key-chain head the server serves for that username and seals
@@ -350,8 +353,8 @@ sequenceDiagram
   S-->>I: link #token.sealed by mail (no copy of the sealed part kept)
   O-->>I: out of band: the code
   I->>S: preview (token)
-  S-->>I: invite key, owner's key chain and signature,<br>anchor, grant, epoch links
-  I->>I: open seal with the code, derived key = served key,<br>chain passes the sealed head, signatures verify,<br>grant peels to the anchor
+  S-->>I: invite key, owner's key chain and signature,<br>anchor, grant, succession statements
+  I->>I: open seal with the code, derived key = served key,<br>chain passes the sealed head, signatures verify,<br>statements lead from the anchor to the grant
   I->>I: open grant, self-grant to own identity,<br>join record signed by invite key and identity
   I->>S: accept: self-grant, invite-accept proof,<br>owner key digest, sealed join record
   S->>S: verify proof under stored invite key, owner key still the invite's,<br>membership with grant, record who rooted it,<br>clear invite key, grant and anchor
@@ -371,8 +374,8 @@ never its content. It never sees the code, a scope key or a pin.
   with one Argon2id derivation per guess. A password the owner chooses instead is only as strong as that password.
 - **Swap the invite key or the owner in a mailed link.** The invitee derives the invite key from the seed and walks
   the owner's chain from the head inside the seal, so a key or an owner the server substitutes fails the check.
-- **Hand a newcomer a tenant key of its choosing,** even after a rotation carried the invite: the key must link down
-  to the owner's anchor, whose key the server does not hold.
+- **Hand a newcomer a tenant key of its choosing,** even after a rotation carried the invite: succession statements
+  must lead to the key from the owner's anchor, whose key the server does not hold.
 - **Plant a scope key of its own choosing** in a personal-scope grant, or under a granter the recipient has already
   pinned (Decision 6).
 - **Swap a key after first contact.** A client that pinned a contact's head accepts a new key only through a step
@@ -399,12 +402,13 @@ never its content. It never sees the code, a scope key or a pin.
 - **Who verified whom.** The server sees the address of every verification row.
 - **A revoked or expired invite keeps what it was granted.** The tenant does not rotate on removal
   ([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)),
-  so a link and its code still open the epochs up to the revoke — useful only with a dump of the ciphertext. A
+  so a link and its code still open the tenant keys it was granted — useful only with a dump taken before the
+  tenant next rotates. A
   revoked group proposal rotates the group.
 - **A later epoch planted for a newcomer by someone who held the anchor's.** When a rotation by someone other than
   the owner carried an invite, a party who held the anchor epoch — a member, a former member, or a thief of a
-  member's device — could, with the operator, serve the newcomer a later epoch of its own that links to it. The
-  owner's own rotation moves the anchor past it.
+  member's device — could, with the operator, serve the newcomer a later epoch of its own, succeeding it under a
+  statement that party signs. The owner's own rotation moves the anchor past it.
 - **The owner's securing withheld from a new account.** A newcomer who pinned nothing cannot tell a chain served
   only up to the head in the link from the owner's whole chain, so a thief of the owner's retired key could, with the
   operator, pass the invite's check under that key. The newcomer's join record then names the retired key without an
@@ -507,11 +511,12 @@ clear.
 - The no-install guest page is operator-served web code, so against an active operator it is passive-safe only.
 - The password and the write token are layer-1 controls. They stop a leaked link or a database copy against an
   honest server, not the operator, who can skip the check.
-- Revocation is soft. Disabling, expiring or deleting a link stops new access, but what a guest already downloaded
-  stays downloaded. A scope-key rotation does not revoke a share: its re-key re-wraps the node's new key under the
-  link's unchanged `K_share`.
+- Closing a link (switching it off, its end date passing, deleting or re-issuing it) stops new access at once on an
+  honest server and re-keys the subtree below a viewable link (section 5), so with a dump the old link reads what
+  existed at the close and nothing added after; what a guest already downloaded stays downloaded. A scope-key
+  rotation does not close a link: its re-key re-wraps the node's new key under every open link's unchanged `K_share`.
 - Every member can rebuild every link of a Memory, so a member removed from a space may hold those links until they
-  are **re-issued** (a new id and a new `K_share`;
+  are closed or **re-issued** (a new id and a new `K_share`;
   [ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)).
 - A viewer or contributor link plus a dump reads the names guests gave.
 - A reported link carries its key, so the operator can decrypt a reported public share. That is the intended
@@ -524,14 +529,16 @@ See [Known limitations](/veyq/security/known-limitations/) and the [Roadmap](/ve
 
 **Purpose.** Cut a party off. veyq does this in two layers
 ([ADR 0026](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0026-client-trust-tiers.md),
-[ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md)):
+[ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md),
+[ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)):
 
 - **Layer 1, access invalidation.** The server stops honouring a membership, a share or a session. It takes effect at
   once and needs no keys, but it is a defence only under an honest operator.
-- **Layer 2, epoch rotation and re-key.** A key-holder's client mints a new content-key epoch, grants it only to the
-  parties who remain, then re-keys every node of the scope under it, so content sealed afterwards is out of the
-  removed party's reach. Nothing in the store is re-encrypted. Each new epoch wraps its predecessor, so holding the
-  latest epoch derives every earlier one, and an old epoch never derives a newer one.
+- **Layer 2, key replacement and re-key.** A key-holder's client replaces the scope key with a fresh one at the next
+  epoch, grants it only to the parties who remain, re-seals every scope-level row under it in the same commit, then
+  re-keys every node of the scope, so content sealed afterwards is out of the removed party's reach and an old key
+  opens nothing in a dump taken after the rotation. Nothing in the store is re-encrypted. No key is sealed under
+  another: the old key vouches for the new one by a signed succession statement, which opens nothing.
 
 **When layer 2 runs is a per-scope policy**
 ([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)).
@@ -540,32 +547,39 @@ member's lost device. The **tenant** removes by layer 1 alone, and an owner can 
 compromise case: on its own, or opted into a removal, where the removal lands first and the rotation's member set, read
 after it, drops the removed member by the owner's own choice. It is the same rotation and re-key as below, and so is
 securing an account. A **personal** scope never rotates on removal (it has one member).
-A removal does not turn links off by itself: a link minted before it can no longer be re-activated, only re-issued,
-and until then it keeps working for whoever holds it; the remover may tick *also turn off every link* of the space in
-the same act ([ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)).
+A removal switches off the removed member's own links; any other link minted before it can no longer be re-activated,
+only re-issued, and until then it keeps working for whoever holds it; the remover may tick *also turn off every link*
+of the space in the same act. Each switch-off is a close, which re-keys the subtree below the link (below;
+[ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)).
 
 **Participants (group removal).** The removing owner, the server, the remaining members, and the removed member.
 
 **Steps.**
 
 1. The owner's client reads the member list **before** the removal and the current epoch `E(n)`.
-2. It mints `E(n+1)` and the chain link, which wraps `E(n)` under `E(n+1)`.
+2. It mints a fresh `E(n+1)` and signs the **succession statement** — the scope, `n+1` and `E(n+1)`'s succession
+   public key — with the succession key derived from `E(n)`. It opens every scope-level row under `E(n)`, re-seals it
+   under `E(n+1)` and stages it, each staged value naming the digest of the ciphertext it replaces.
 3. For every member it read, **except** the one being removed, it runs the anchor gate (section 7) and seals and
    signs a grant of `E(n+1)`; a pending consent proposal is re-granted like a member. A member whose key it cannot
    anchor is declared pending instead, and the server refuses a rotation that leaves anyone out silently
    (`409 rotation_incomplete`). In a tenant it also re-grants or declares every open invite (section 3).
-4. It sends the removal, the chain link and the grants in **one request**. The server deletes the
-   membership and commits epoch `n+1` in one transaction, and only if it is exactly the current epoch plus one.
-   Otherwise it refuses with `stale_epoch`, and the client rebuilds with a fresh key.
-5. The removed member is refused at once (layer 1). The remaining members open the new grant, only if its epoch link
-   peels down to the key their device held. Each device raises its per-scope **epoch floor**, keeps the new key as the
-   one a later epoch must link down to, and never seals under a lower epoch again, whatever epoch the server reports.
+4. It sends the removal, the succession statement and the grants in **one request**. In one transaction the server
+   deletes the membership, commits epoch `n+1`, swaps every staged row in and marks every node of the scope due —
+   only if it is exactly the current epoch plus one (`stale_epoch` otherwise, and the client rebuilds with a fresh
+   key), no scope-level row lacks its staged value (`409 rekey_parts_missing`) and none changed since it was read
+   (`409 rekey_parts_stale`, staged again). A scope-level write stating `n` after the commit is `409 stale_epoch`.
+5. The removed member is refused at once (layer 1). The remaining members open the new grant only if the succession
+   statements lead from the key their device held to it. Each device raises its per-scope **epoch floor**, keeps the
+   new key's succession public key as the one a later grant must be reached from, and never seals under a lower epoch
+   again, whatever epoch the server reports. A member the rotation declared pending reads nothing of the scope until
+   grant delivery re-grants them.
 6. The remover's client **re-keys every live and trashed node** of the scope, top-down, one atomic commit per node
-   ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)): a fresh node key minted at `n+1`, the node's own entry under its parent's new key (under
+   ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)): a fresh node key, its epoch raised by one and its `scopeEpoch` set to `n+1`, the node's own entry under its parent's new key (under
    `E(n+1)` at the root), each child's entry, the node's meta, its media's meta and EXIF and every `K_blob` wrap
    re-sealed under the new key, `K_blob` itself kept. A node with a drop key gets a new keypair, and its guests'
-   identity keys are re-sealed to it. Each link rooted on the node gets the new key wrapped under its unchanged
-   `K_share`, opened from its recovery copy, which stays at its epoch. A large node's fields go up in staged parts
+   identity keys are re-sealed to it. Each **open** link rooted on the node gets the new key wrapped under its
+   unchanged `K_share`, opened from its recovery copy; a closed link gets nothing. A large node's fields go up in staged parts
    first, and the commit swaps them in one transaction.
 7. Until a node is committed, a write sealed under its key is refused `409 node_rekey_pending`: a member's client
    re-keys that node and its lagging ancestors itself and retries at once, a guest's client waits and retries. A write
@@ -585,18 +599,34 @@ sequenceDiagram
   participant D as Removed member
   R->>S: read members, keys, current epoch E(n)
   S-->>R: member list (read before the removal)
-  R->>R: mint E(n+1), chain link = E(n) wrapped under E(n+1)
+  R->>R: mint E(n+1), sign succession statement<br>with the key derived from E(n)
   R->>R: for each member except D: anchor gate, seal and sign grant
-  R->>S: one request: remove D, chain link, grants, epoch n+1
-  S->>S: one transaction: delete D membership, commit epoch n+1<br>only if current + 1, else stale_epoch
+  R->>S: stage every scope-level row re-sealed under E(n+1)
+  R->>S: one request: remove D, succession statement, grants, epoch n+1
+  S->>S: one transaction: delete D membership, commit epoch n+1,<br>swap staged rows in, mark every node due<br>only if current + 1 and every row staged and unchanged
   D->>S: any request on the scope
   S-->>D: refused (layer 1)
   M->>S: fetch grant
   S-->>M: grant of E(n+1)
   R->>S: per node, top-down: fresh key, re-sealed fields,<br>re-wrapped K_blob and links, one commit each
-  M->>M: verify signature, open, raise epoch floor<br>peel chain for older content
+  M->>M: verify succession and signature, open, raise epoch floor
   M->>S: new content sealed under the node's new key
 `} />
+
+**Closing a link re-keys the subtree below it**
+([ADR 0114](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md), [en.sharing.public-link § Lifecycle](https://github.com/raddatzk/veyq/blob/main/docs/features/sharing/enablers/en.sharing.public-link.md#lifecycle)).
+A link is open while it is enabled, not deleted and its end date has not passed. Closing a viewable (`READ` or
+`READ_WRITE`) link — a revoke, a delete, a re-issue, a bulk switch-off of a space's links or of a removed member's, or
+its end date passing — marks every live and trashed node below its root due, in the same transaction as the close.
+An end date closes through a server sweep, every minute by default, which needs no key. The closing device then
+re-keys the subtree in the background as in step 6, and any member's worker finishes it (owner-only nodes by an
+owner); until a node is re-keyed, writes into it wait. A re-key wraps nothing under a closed link, and a key staged
+under a link that closed since does not land (`409 rekey_parts_stale`). So with a dump a closed link reads what
+existed at the close and nothing added after. A pause — the root trashed, the role's capability or a link requirement
+switched off, a moderation block, a suspended scope — re-keys nothing, nor does a password, role or note change, nor
+the close of an uploader (`WRITE_ONLY`) link, whose `K_share` opens only the drop public key and its guests' own
+keys. Reopening a closed link is the curator's act: it carries the root's current key under the link's `K_share`,
+and hands that link everything added while it was closed.
 
 **Revoke never takes key material**
 ([ADR 0058](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0058-revoke-never-takes-key-material.md)).
@@ -607,9 +637,10 @@ it at its next sign-in. Neither action takes back a key a device already holds.
 **Securing an account after a compromise** replaces the account's identity, Master Key and Secret Key and then
 rotates every scope it is in, from its own devices: section 7.
 
-**What the server learns.** That a membership was deleted and an epoch committed, the epoch index on each node and
-its moving to the current epoch as the re-key reaches it, rewritten ciphertext in rows it already held, the
-granted-epoch markers, and the rotation jobs a removal queues and their status. It never sees an epoch key or a node key, and no store object is read or written by a re-key.
+**What the server learns.** That a membership was deleted and an epoch committed, per epoch a succession public key
+and signature, rewritten ciphertext in rows it already held, per node a due flag and its own epoch beside the scope
+epoch its key was minted at, per link the epoch it was minted at and whether the sweep closed it, that a link closed
+and which nodes lie below it, the granted-epoch markers, and the rotation jobs a removal queues and their status. It never sees an epoch key or a node key, and no store object is read or written by a re-key.
 
 **What it cannot do.**
 
@@ -618,6 +649,9 @@ granted-epoch markers, and the rotation jobs a removal queues and their status. 
   lists them afterwards ([ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md) Decision 4).
 - **Make a member seal new content under an epoch the removed member holds**, once that member's device has held the
   newer epoch (Decision 6), nor under a node key from before it (ADR 0109 point 6).
+- **Make an old key open what it stores after the rotation.** Every scope-level row is re-sealed in the commit and
+  every node re-keyed, so a key obtained later — a removed member's, a lost device's — opens only a dump from before
+  it; a later-turned operator, a backup taken after the rotation and a new operator gain nothing from it.
 - **Undo the past.** Nothing here retracts content already read. Rotation is forward secrecy, not repair.
 
 **Residual.**
@@ -627,10 +661,19 @@ granted-epoch markers, and the rotation jobs a removal queues and their status. 
   example is a tenant removal that cuts a co-shared group.
 - **The tenant default is layer 1 only.** A removed member who kept keys and ciphertext and colludes with a
   malicious operator keeps that narrow reach until an explicit re-key.
-- **Item favorites** are sealed under `E0` by choice, so a former member can read a set written after their removal.
-- **What existed at the rotation** stays readable to whoever held its keys: blobs are re-wrapped, never re-encrypted.
-- **Links from before** keep opening the new key until re-issued, since every former member can rebuild their
-  `K_share`; a drop box's guest from before keeps their identity key, re-sealed to the new drop key, until then too.
+- **What existed at the rotation** stays readable to whoever held its keys, in a dump from before it; and a `K_blob`
+  they extracted still opens that blob's bytes in a later dump too, since a re-key re-wraps keys and re-encrypts no
+  content.
+- **Pending and behind members** read nothing of the scope until re-granted.
+- **Open links from before** keep opening the new key until closed or re-issued, since every former member can
+  rebuild their `K_share`; a drop box's guest from before keeps their identity key, re-sealed to the new drop key,
+  until then too.
+- **A closed link's reach.** A write landing between an end date and the sweep's run is under the old key. A former
+  holder of a viewable link opened the `K_up` of an uploader link's guests through the old drop private key, and reads
+  their later uploads until the uploader link is re-issued. A removed tenant member keeps the tenant key until an
+  explicit re-key, so closing their links cuts only the links' other holders. An active operator can roll a member's
+  view of the subtree back to before the re-key, so that member's device seals under the old key again: the epoch
+  floor watches the scope's epoch, which a close does not move.
 See [Known limitations](/veyq/security/known-limitations/).
 
 ## 6. Recovery

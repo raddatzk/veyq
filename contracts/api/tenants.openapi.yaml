@@ -3721,7 +3721,8 @@ components:
           type: integer
           description: >
             The epoch the invite's grant carries: the tenant's current one, or an older one if a rotation declared the
-            invite pending — its newcomer then joins behind and is brought current by the grant delivery.
+            invite pending — then the invite is redeemable only once a later rotation or its owner carries it, since the
+            join record a MEMBER accept seals is taken under the current key only (ADR 0115 decision 8).
           minimum: 0
           example: 0
         grantSignature:
@@ -3839,8 +3840,9 @@ components:
           description: >
             **Required for a MEMBER invite, omitted for an OWNER one.** The epoch key the invitee opened from the
             invite's grant, sealed to its own identity and signed by it (ADR 0111 decision 3). The server stores it as
-            the membership's grant (granter = the newcomer) — of the tenant's current epoch, or older when a rotation
-            declared the invite pending (the membership is then behind, and the grant delivery brings it current).
+            the membership's grant (granter = the newcomer) — of the tenant's current epoch: a MEMBER accept also seals
+            a join record, taken under the current key only, so an invite a rotation declared pending is redeemable
+            once it is carried (ADR 0115 decision 8).
           oneOf:
             - $ref: "#/components/schemas/InviteSelfGrant"
             - type: "null"
@@ -3942,8 +3944,9 @@ components:
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           description: >
-            The epoch it carries — the invite grant's. Above the tenant's current epoch is `409 stale_epoch`; below it
-            is taken (a pending invite) and leaves the membership behind.
+            The epoch it carries — the invite grant's. Above the tenant's current epoch is `409 stale_epoch`; below it,
+            a pending invite's, the accept is refused with the join record it requires (`409 stale_epoch`, ADR 0115
+            decision 8) until a rotation carries the invite.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
@@ -4150,8 +4153,9 @@ components:
           description: >
             **Required for a MEMBER invite, omitted for an OWNER one.** The epoch key the invitee opened from the
             invite's grant, sealed to its own identity and signed by it (ADR 0111 decision 3). The server stores it as
-            the membership's grant (granter = the newcomer) — of the tenant's current epoch, or older when a rotation
-            declared the invite pending (the membership is then behind, and the grant delivery brings it current).
+            the membership's grant (granter = the newcomer) — of the tenant's current epoch: a MEMBER accept also seals
+            a join record, taken under the current key only, so an invite a rotation declared pending is redeemable
+            once it is carried (ADR 0115 decision 8).
           oneOf:
             - $ref: "#/components/schemas/InviteSelfGrant"
             - type: "null"

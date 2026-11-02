@@ -31,7 +31,7 @@ acceptanceCriteria:
       states that epoch (the grant is sealed bound to it, ADR 0072); the server records exactly the stated epoch as
       grantedEpoch and refuses one that is not the scope's currentEpoch (409 stale_epoch — nothing written, the lease
       released without spending an attempt, the job re-runs) — so a member it reaches reads post-rotation content
-      (not stranded peeling E_current as E_0). A member left STALE by a rotation
+      (not stranded on a key the rotation replaced). A member left STALE by a rotation
       (grantedEpoch < currentEpoch — e.g. a re-wrap that failed, en.spaces.scope-key-rotation §E2) is re-originated
       by the reconciler and re-delivered at the current epoch. Idempotent + first-online-wins.
     coverage:

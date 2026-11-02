@@ -20,7 +20,11 @@
   link minted before the removal that carries a recovery copy, a co-member's included — can no longer be
   re-activated, only renewed: until a member renews it or a switch-off (A5) turns it off, such a link **keeps
   working** for whoever holds it ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)
-  point 4). The server saw only membership deletions, a removal count and a lifecycle timestamp — never a key.
+  point 4). The removed member's own links in every scope the removal cut are switched off, and each switch-off is a
+  close that re-keys the subtree below the link's root
+  ([en.sharing.public-link § Lifecycle](../../sharing/enablers/en.sharing.public-link.md#lifecycle)); the tenant key
+  they hold opens a later dump of the tenant until an owner re-keys it (A8). The server saw only membership
+  deletions, a removal count, due marks on the nodes below those links and a lifecycle timestamp — never a key.
 
 ## Main flow
 
@@ -68,12 +72,13 @@
   removal **joins** the group's still-unclaimed job, so removals before anyone is online cost one rotation; one
   that arrives after an owner claimed the job gets its own; first-online-wins
   ([uc.spaces.complete-queued-rotation](uc.spaces.complete-queued-rotation.md)). Not a hole: layer-1 already blocks new
-  fetches; until rotation, the ex-member's old grant reads only pre-departure epochs (the "rotation queued until a
-  key-holder is online" limit accepted for group removal, [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) §E1).
+  fetches; until the rotation, the ex-member's old key opens with a dump what the group holds meanwhile (the
+  "rotation queued until a key-holder is online" limit accepted for group removal, [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) §E1).
 - **A5 — turn off every link of the space in the same act.** The removal confirmation carries an unchecked box,
   *"also turn off every link in this space"*; ticked, the removal also turns off every enabled public link of the
   **tenant** space — whoever made it — in its own transaction, and marks each so it comes back only as a renewed
-  link ([uc.sharing.share-shared-scope](../../sharing/use-cases/uc.sharing.share-shared-scope.md) A4). Not the
+  link ([uc.sharing.share-shared-scope](../../sharing/use-cases/uc.sharing.share-shared-scope.md) A4); each
+  switch-off is a close that re-keys the subtree below the link's root. Not the
   co-shared groups' links: the tenant owner need not be in those groups and cannot see them; there the removal count
   marks every link and the group's owners renew. A refused removal (A1–A3) turns nothing off
   ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5).

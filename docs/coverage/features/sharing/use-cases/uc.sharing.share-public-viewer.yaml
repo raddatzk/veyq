@@ -3,7 +3,7 @@ feature: sharing
 title: Share a Memory as a public viewer link (web)
 # Built (web vertical, cr-0100 + ADR 0029): a public READ share of one Memory (any scope, ADR 0029 §6) —
 # symWrap(K_share, K_node), the key in the URL fragment, an unguessable 256-bit shareId, an unauthenticated
-# resolve + gated presigned blob reads, soft (L1) revoke/expiry, and the operator-served-viewer trust-tier
+# resolve + gated presigned blob reads, revoke/expiry (a close, ADR 0114), and the operator-served-viewer trust-tier
 # honesty carried by a footer link. The six criteria are covered by the backend slice (create -> anonymous
 # resolve -> gated blob -> revoke/expiry -> subtree isolation), the http guest-boundary assertions, and the web
 # unit round-trip of the operator-blind decrypt path. v1 scope is deliberately narrow: personal-scope
@@ -62,7 +62,7 @@ acceptanceCriteria:
       web:
         e2e: [src/features/memories/shareContributor.e2e.test.ts]
   - id: soft-revoke-and-expiry
-    text: enabled=false or a passed expiresAt makes the resolve AND the gated blob endpoint 404 (same shape as an unknown id — non-enumerable). There is no content-key rotation for a viewer share; content a visitor already downloaded is not retractable (stated limitation).
+    text: enabled=false or a passed expiresAt makes the resolve AND the gated blob endpoint 404 (same shape as an unknown id — non-enumerable). Content a visitor already downloaded is not retractable (stated limitation); what the close re-keys below the link's root is en.sharing.public-link § Lifecycle's (ADR 0114).
     coverage:
       backend:
         integration: [ShareSliceTest.revokeMakesGuestPaths404, ShareSliceTest.expiredShareResolves404]
@@ -121,10 +121,12 @@ acceptanceCriteria:
         e2e: [src/features/memories/chapterShare.e2e.test.ts]
   - id: root-rename-reseals-share-names
     text: >-
-      When a member renames a share root, that member's client re-seals the new name under every share's own
-      K_share — its own shares and other members', switched-off ones too — through each share's recovery copy, and
-      stores it with setShareSealedName, which any member with write access on the scope may call (a reader or a
-      stranger is 404) and which changes sealed_name only. A share without a recovery copy is skipped and a refused
+      When a member renames a share root, that member's client re-seals the new name under every open share's own
+      K_share — its own shares and other members' — through each share's recovery copy, and stores it with
+      setShareSealedName, which any member with write access on the scope may call (a reader or a stranger is 404)
+      and which changes sealed_name only; the server takes it on a switched-off share too. A closed share (switched
+      off or past its end date) is left as it is, since nothing new is sealed under a closed link and its reopen
+      carries the root's name (ADR 0114 decision 5). A share without a recovery copy is skipped and a refused
       write is collected; the next share is still tried, nothing rolls back, and either is reported to the member
       as one notice, never as a failed rename.
     coverage:

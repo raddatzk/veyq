@@ -37,9 +37,11 @@ owner-typed claim), and the **accept/decline** step.
    *proposed*, not yet a member — **holding that grant**. A rotation of the group re-grants a pending proposal like
    any member, so an accept never opens onto a key the group already left.
 3. **The wrapped name-key.** The owner's device — a key-holder — derives the group's **name-key**
-   `K_name = HKDF(E_e, "group-name-key")` from the key of the epoch the name was sealed under, and wraps **the key
+   `K_name = HKDF(E_e, "group-name-key")` from the group's current key, which the name is sealed under, and wraps **the key
    bytes** (not a name copy) to the invitee's identity: `sealTo` to the invitee's X-Wing identity key under the `group-name-key` purpose,
-   posted as the proposal's `sealedNameKey`. The server returns the scope's **canonical** `encryptedName` in the
+   posted as the proposal's `sealedNameKey`. Every rotation of the group re-seals it under the new `K_name`, or clears
+   it when the rotator cannot anchor the invitee's key; nothing re-wraps a cleared one, so that invitee sees the
+   proposal without the group's name ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2). The server returns the scope's **canonical** `encryptedName` in the
    invitation. Handing the *key* — not a name — is the crux of [ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md):
    the invitee opens the **same** ciphertext the members hold, so a modified owner **cannot** privately show a
    divergent name. `K_name` is one-way from `E_e` (HKDF), so it leaks the name and nothing else — not `E_e`, not `K_SC`.

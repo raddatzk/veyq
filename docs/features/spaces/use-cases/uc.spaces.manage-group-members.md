@@ -11,7 +11,7 @@
 - **Postconditions (success):** The target's role/membership reflects the action. On **removal**, the membership is
   deleted (instant 403) **and**, in the same transaction, the scope rotates its content key forward so the removed
   member can't read post-removal content ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md)). The server
-  saw only role/membership metadata + opaque epoch links/grants — never a key.
+  saw only role/membership metadata, a succession statement, opaque grants and re-sealed ciphertext — never a key.
 
 ## Main flow
 
@@ -21,7 +21,7 @@
    `K_SC`). Groups have only OWNER / MEMBER; **multiple owners allowed** ([ADR 0007](../../../decisions/0007-membership-role-grant-relation.md)).
 3. **Demote co-owner → member:** the OWNER's role becomes `MEMBER`. Blocked by the **last-owner guard** (below).
 4. **Remove a member — one request** ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 4):
-   - The owner's device mints a new content-epoch
+   - The owner's device mints a new key at the next epoch, re-seals every scope-level value under it
      ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md)) and wraps it to the remaining
      members — the directory the owner **picked the member from**, minus that member, by the owner's own choice;
      never a list read after the removal. The request names the member it removes.
@@ -31,10 +31,11 @@
    - Members the rotation could not re-grant (a key the owner's client cannot anchor) are declared pending in the
      request, which the server requires (`409 rotation_incomplete` otherwise), and get the new epoch later by
      grant-delivery from any member who anchors them; until then
-     their scope reads as *waiting for the current key* and they write nothing (A4). A pending consent proposal is
-     re-granted like any member: it holds the group's key from its add on. New content
-     seals under the new epoch. The removed member keeps the old epoch → reads pre-removal content, **never**
-     post-removal content — against a malicious operator as far as ADR 0024 § Guarantee states.
+     their scope reads as *waiting for the current key*: they read nothing of it and write nothing (A4). A pending
+     consent proposal is re-granted like any member: it holds the group's key from its add on. New content
+     seals under the new epoch. The removed member keeps the old key → reads pre-removal content, **never**
+     post-removal content, and their key opens nothing in a dump taken after the rotation — as far as
+     [security model § Revocation](../../../crosscutting/security-model.md#revocation--two-layers) states.
 
 ## Alternate / exception flows
 
@@ -57,21 +58,25 @@
   invalid_request` — a tenant member leaves by [uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md)'s
   cascade.
 - **A4 — a member whose grant is older than the current epoch** (a rotation skipped them, or its re-grant has not
-  arrived): their client reads the scope as waiting for the current key and writes nothing into it until re-granted, and the
-  server refuses a node create tagged with an older epoch (`409 stale_epoch`) — content under an old epoch would
-  be readable by every member removed since ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 6).
+  arrived): everything they could open was re-sealed under the new key, so their client reads the scope as waiting
+  for the current key — it reads nothing of it and writes nothing into it until re-granted
+  ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 8) — and the server refuses a
+  node create tagged with an older epoch (`409 stale_epoch`): content under an old key would be readable by every
+  member removed since ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 6).
 - **A5 — turn off every link of the group.** An owner may turn off every public link of the group at once — on a
   removal, through the confirmation's unchecked *"also turn off every link"*
   ([uc.sharing.share-shared-scope](../../sharing/use-cases/uc.sharing.share-shared-scope.md) A5), or at any time
   from the group panel, behind a confirmation that says they come back only as renewed links; the result names how
   many went off. Either way each link is marked so it comes back only by renewal, never by re-activation
-  ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5). A non-owner is
+  ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5), and each
+  switch-off closes the link, which re-keys the subtree below its root
+  ([en.sharing.public-link § Lifecycle](../../sharing/enablers/en.sharing.public-link.md#lifecycle)). A non-owner is
   refused (`403 not_scope_owner`); a group in its deletion grace is read-only (`409 scope_deleting`).
 - **A6 — give the group a new lock, with no removal.** For the compromise case with nobody to remove — a member's
   device lost — a GroupOwner may re-key the group at any time from its members panel
   ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) § 1), behind a confirmation that says what
   it protects (a holder of only the old key cannot read what is added from now on) and what it does not (what was
-  already seen; links made before keep working until renewed or turned off, a rotation re-wraps them). It is the
+  already seen; links made before keep working until renewed or turned off, a rotation re-wraps the open ones). It is the
   tenant owner's action ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) A9) on the group: a plain
   rotation as any rotation is
   ([keys, grants and trust § Rotating a scope](../../../crosscutting/keys-grants-and-trust.md#rotating-a-scope)), no
@@ -99,7 +104,8 @@
 ## Quality notes
 
 - **Operator-blind.** Role changes + membership deletion are operational metadata the server already holds; the
-  rotation stores only opaque epoch links + grants + a per-node epoch index — never a key or a name.
+  rotation stores only a succession statement, grants, re-sealed ciphertext and per-node epoch counters — never a key
+  or a name.
 - **Membership stays owner-gated; a skipped re-grant is any key-holder's.** Only an OWNER may change roles or
   remove; a re-grant the removal's rotation had to skip is completed by any online key-holder (first-online-wins)
   ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)).

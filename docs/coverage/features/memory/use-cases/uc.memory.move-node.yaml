@@ -29,7 +29,7 @@ acceptanceCriteria:
         unit: [src/core/node/tree.test.ts, src/features/memories/share.test.ts]
 
   - id: a-placement-keeps-the-nodes-epoch
-    text: "A placement never changes a node's epoch: it states the node's own, and any other is 409 stale_epoch at every destination; an entry at the scope root lives under K_SC at the node's epoch, so a node the last rotation's re-key has not reached is 409 node_rekey_pending into the root, and a destination parent not re-keyed is 409 node_rekey_pending too (ADR 0080 decision 4, ADR 0109 point 6)."
+    text: "A placement never changes a node's epoch (its own key's counter): it states the node's own, and any other is 409 stale_epoch at every destination; the entry's seals bind the node's scopeEpoch. A node due for its re-key is 409 node_rekey_pending wherever it goes, the scope root included, and a destination parent due for its re-key is 409 node_rekey_pending too (ADR 0080 decision 4, ADR 0114 decision 3)."
     coverage:
       backend:
         integration: [NodePlacementCoreSliceTest.aRootRenameOfANodeTheReKeyHasNotReachedIsPendingAndAnotherEpochStale, NodePlacementCoreSliceTest.aPlacementKeepsTheNodesEpochAndWaitsForItsDestination, NodePlacementCoreSliceTest.anEpochThatIsNotTheNodesIsRefusedForAnyDestination]

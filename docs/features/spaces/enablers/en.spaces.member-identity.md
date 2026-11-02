@@ -65,33 +65,32 @@ decision 9; the code is `core/people/directory.ts`.)
    the accept), or later from the profile. Both entry points seal identically; the name stays editable in the
    profile.
    - A member's join also writes the profile's **join record** — identity and Secret-Key proof public keys and the
-     owner-signed invite, signed by the invite key and the new identity, sealed under the tenant epoch key the
-     invite's grant carried (field `member-join-record`, bound to tenant and member). It is written only at accept,
+     owner-signed invite, signed by the invite key and the new identity, sealed under the tenant key the invite's
+     grant carried, which must be the current one (field `member-join-record`, bound to tenant and member). It is written only at accept,
      never by a profile update, served to co-members on the tenant listing (`ScopeMember.sealedJoinRecord`), and
      null for the tenant's first owner, the trust root. Every member's client reads it as the anchor of that member's
      key in the tenant. Beside it the profile keeps who rooted the join (`join_signer_user_id`, the invite's signer,
      written at accept) and that owner's **endorsement** of the record (`ScopeMember.joinEndorsement`, the
-     `join-endorsement` statement over the sealed record as stored), which their securing writes with the new key: a
+     `join-endorsement` statement over SHA-256 of the opened record, so a rotation's re-seal leaves it valid), which
+     their securing writes with the new key: a
      record signed by a key the owner has since retired counts only with it. Both go with the profile (removal, erasure,
      purge)
      ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 3, 12, 15, 21).
 3. Any tenant member reading the directory gets each member's `username` (plaintext) + the sealed name blob,
-   **decrypts the name locally**, and can search/sort. A tenant **OWNER** additionally gets `email`. A name saved under an
-   earlier tenant epoch still opens after a rotation, and its member's own client moves it forward
+   **decrypts the name locally**, and can search/sort. A tenant **OWNER** additionally gets `email`. A name opens under
+   the one tenant key the reader holds, whenever it was saved
    ([§ The epoch of a sealed field](#the-epoch-of-a-sealed-field)).
 
 ## The epoch of a sealed field
 
-The name and the picture are sealed under the tenant epoch current when their member saved them; the profile row
-records no epoch ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md) § The epoch of a sealed name holds
-why).
-- **Reading:** every reader opens them under every tenant epoch key it holds, newest first — the join record's rule,
-  `openUnderHeldEpochs` (`src/web/src/features/spaces/epochs.ts`). A grant at the current epoch peels the chain down to
-  `E_0`, so a newcomer reads every name; nothing opens under a key the reader does not hold.
-- **Carrying forward:** the member's own client moves its name and picture to the current epoch when it enters the
-  tenant (`src/web/src/features/account/profile/carryProfileForward.ts`): opened and sealed again, written only while the
-  stored blob (the name) or revision (the picture) is still the one it opened, so a save from another device in between
-  wins. In the steady state a read is then one open per member.
+The name, the picture and the join record are always under the tenant's **current** key; the profile row records no
+epoch. A write states the epoch it seals under, and another is `409 stale_epoch`
+([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 3). Every rotation of the tenant
+re-seals every member's three fields under the new key in its commit (`resealMember`,
+`src/web/src/features/spaces/scopeRekey.ts`); a field that does not open under the old key is staged as a seal of
+random bytes that reads exactly as before, so one member's unreadable field stops no rotation. A reader opens each
+field under the one tenant key it holds; a member behind the current epoch reads none until re-granted
+([keys, grants and trust § Rotating a scope](../../../crosscutting/keys-grants-and-trust.md#rotating-a-scope)).
 
 ## Profile picture
 

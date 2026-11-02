@@ -35,7 +35,7 @@ They look like one feature and are not. The full rule, its rejected alternatives
 | --- | --- | --- |
 | what | a node id, of any kind | a `veyq_media` id |
 | audience | **private to the member** | **shared** with the scope, member-attributed |
-| seal | master key, purpose `favorites`, bound to the scope | `K_SC@E_0`, purpose `item-favorites`, bound to scope + node |
+| seal | master key, purpose `favorites`, bound to the scope | the current `K_SC`, purpose `item-favorites`, bound to scope + node |
 | stored | one blob per **(user, scope)** | one blob per **(member, scope, node)** |
 | read | the caller's blob only | the scope's **per-member** blobs |
 | surfaces | sidebar Favorites; the heart on every row and header | gallery filter + per-tile aggregate |
@@ -144,9 +144,12 @@ Neither table stores a time: the operator sees the rows and their sizes.
   self-tag's key derives from the master key, so the rotation also **re-tags** the caller's own marks — those whose
   tag verifies under the old key — read through `GET /api/item-favorites`, best-effort too: a set whose re-tag does
   not land counts as someone else's, and the next toggle on that Memory starts the caller's set from empty.
-- **The base epoch survives only on the shared side.** Item marks seal under `K_SC` at the **base epoch `E_0`**,
-  so a scope-key rotation cannot strand a set. Pins no longer need that: the master key does not rotate with
-  scope epochs.
+- **A rotation moves the marks to the new key.** Item marks seal under the scope's current `K_SC`, and a write states
+  the epoch it sealed under (`409 stale_epoch` otherwise); every scope-key rotation re-seals every set under the new
+  key in its commit, through Memories' scope re-key participant (`ItemFavoritesScopeRekeyParticipant`,
+  [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2), the self-tag inside
+  unchanged — so no rotation strands a set. Pins are untouched by it: the master key does not rotate with the scope
+  key.
 - **Idempotent + recoverable.** A missing/unreadable blob decodes to the empty set; the feature never blocks
   browse or the gallery.
 
@@ -161,5 +164,5 @@ Neither table stores a time: the operator sees the rows and their sizes.
 - Concepts: [Security Model](../../../crosscutting/security-model.md) (operator-blind metadata boundary)
 - Decisions: [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) (the two objects —
   the governing decision), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_SC` sealing),
-  [ADR 0024](../../../decisions/0024-scope-key-rotation.md) (the epoch chain behind `E_0`),
+  [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) (a rotation re-seals the marks),
   [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §7 (the defect this fixes)

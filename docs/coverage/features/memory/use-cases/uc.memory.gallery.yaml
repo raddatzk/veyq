@@ -256,7 +256,7 @@ acceptanceCriteria:
   - id: item-marks-are-shared-and-attributed-to-nobody
     text: >
       A member marks an individual medium inside a Memory; the mark is SHARED with the scope, sealed under
-      K_SC at the base epoch with its own `item-favorites` context, and stored as one blob per
+      the current K_SC with its own `item-favorites` context, and stored as one blob per
       (member, scope, node). The read returns every member's blob — deliberately not filtered to the caller,
       because an operator-blind server cannot aggregate for the client — but carries no member id at all: the
       only identity on the wire is a `self` flag on the caller's own entry. Aggregate-only is therefore a

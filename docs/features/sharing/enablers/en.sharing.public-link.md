@@ -9,7 +9,7 @@
 - **Provides:** the public link — one node and what lies below it handed to anyone, account or not — as one model:
   the share record the server keeps, the key path per role, who may create, edit, switch off, re-issue and delete a
   link, how a guest gets an identity and proves it holds the link's key, and every state a link passes through,
-  including what a scope rotation, a node re-key, a removal and a deletion do to it.
+  including what a scope rotation, a node re-key, a close, a removal and a deletion do to it.
 - **Serves (use-cases):** [uc.sharing.share-public-viewer](../use-cases/uc.sharing.share-public-viewer.md),
   [uc.sharing.share-contributor](../use-cases/uc.sharing.share-contributor.md),
   [uc.sharing.share-uploader](../use-cases/uc.sharing.share-uploader.md),
@@ -17,9 +17,10 @@
   [uc.sharing.share-note](../use-cases/uc.sharing.share-note.md),
   [uc.sharing.share-password](../use-cases/uc.sharing.share-password.md),
   [uc.sharing.share-link-storage-limit](../use-cases/uc.sharing.share-link-storage-limit.md),
-  [uc.sharing.share-accept](../use-cases/uc.sharing.share-accept.md).
-- **Depends on:** [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (the chain a link hangs
-  off: `K_SC` epochs, node keys, the re-key after a rotation), [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md)
+  [uc.sharing.share-accept](../use-cases/uc.sharing.share-accept.md),
+  [uc.sharing.close-link-rekeys-subtree](../use-cases/uc.sharing.close-link-rekeys-subtree.md).
+- **Depends on:** [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (the keys a link hangs
+  off: `K_SC`, node keys, the node re-key), [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md)
   (the node tree and its keys), [scopes and tenancy](../../../crosscutting/scopes-and-tenancy.md) (who is a member,
   who owns a scope). What each application lets a guest do inside its own kinds is its role matrix
   ([Memories](../../../apps/memories.md#what-a-guest-may-do--the-role-matrix), [Depot](../../../apps/depot.md),
@@ -48,14 +49,16 @@ One `veyq_share` row per link (`core/sharing/Entities.kt`):
 | `owner_account` | the account that owns the link — its creator, or the member who re-activated or re-issued it |
 | `scope_id`, `node_id` | the scope and the shared node (the subtree root) |
 | `role` | `READ`, `READ_WRITE` or `WRITE_ONLY`, in plaintext |
-| `wrap` | the root's node key sealed under `K_share` (`share-key`); null for `WRITE_ONLY` |
-| `sealed_drop_public_key` | `WRITE_ONLY` only: the node's drop public key sealed under `K_share` |
+| `wrap` | the root's node key sealed under `K_share` (`share-key`); null for `WRITE_ONLY` and for a closed link |
+| `sealed_drop_public_key` | `WRITE_ONLY` only: the node's drop public key sealed under `K_share`; null for a closed link |
 | `sealed_name` | the root's name re-sealed under `K_share`, so the guest reads the title |
 | `sealed_note`, `sealed_share_name` | the curator note (per locale, with its accept switch inside the seal) and the private label, both under `K_share`; the label is never served to a guest |
-| `sealed_share_key`, `sealed_share_key_epoch` | the **recovery copy**: `K_share` sealed under the scope key `K_SC` at that epoch (`share-key-recovery`, bound to scope, node, share and epoch) |
+| `sealed_share_key`, `sealed_share_key_epoch` | the **recovery copy**: `K_share` sealed under the scope key `K_SC` at its current epoch (`share-key-recovery`, bound to scope, node, share and epoch), re-sealed by every rotation |
+| `minted_epoch` | the scope's epoch when the link was minted with a recovery copy, never moved; null without one |
 | `password_required`, `pw_salt`, `pw_verifier`, `sealed_password` | the password gate (§ Gates); `sealed_password` is the password under `K_share`, for members to reveal |
 | `write_verifier` | `SHA-256` of the guest-write token (§ Guests) |
 | `enabled`, `expires_at` | switched on or off; an optional expiry |
+| `expiry_closed` | the end-date sweep carried out this link's close (§ Lifecycle); a reopen clears it |
 | `reissue_only` | set by a bulk switch-off: the link comes back only by re-issue |
 | `member_removals_at_mint` | the scope's removal counter when the link was minted |
 | `deleted` | the tombstone flag (§ Lifecycle) |
@@ -98,7 +101,7 @@ flowchart LR
   dpub["drop public key<br>(WRITE_ONLY)"]
   kup["guest's own K_up"]
   dpriv["drop private key<br>(under K_node)"]
-  ksc["K_SC (epoch e)"]
+  ksc["K_SC (current epoch)"]
   rec["recovery copy<br>of K_share"]
   frag --> wrap --> knode --> sub
   frag --> dpub
@@ -119,26 +122,30 @@ flowchart LR
   drop private key → `K_up` ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). In a Depot drop box
   each guest's files sit in its own **identity folder**, whose key is wrapped under `K_up`
   ([Depot § The drop box](../../../apps/depot.md#the-drop-box)).
-- **The recovery copy** is `K_share` under `K_SC` at the epoch current when the link was minted
-  ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md) point 1). Every member of the
+- **The recovery copy** is `K_share` under the scope's current `K_SC`, re-sealed by every rotation
+  ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md) point 1,
+  [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2). Every member of the
   scope opens it, so any member can show, copy, edit and re-key any link of the scope; no link opens it, because no
   link carries `K_SC` (point 4). Create and re-issue refuse a copy below the current epoch (`409 stale_epoch`).
 - **The note, the private label and the root's name** are sealed under field keys derived from `K_share`, one per
   write ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 9); the password's member copy directly under `K_share`. Any member re-seals the root's name
-  on every link through the recovery copy when it renames the root (`setShareSealedName`, ADR 0080 decision 14).
+  on every **open** link through the recovery copy when it renames the root (`setShareSealedName`, ADR 0080 decision 14);
+  a closed link gets the current name with its reopen.
 - **A password is not a key.** It gates what the server serves; the content stays under `K_share` (§ Gates).
 
-**What a re-key does to a link.** After a scope rotation every node is re-keyed
-([keys, grants and trust § Re-keying the nodes](../../../crosscutting/keys-grants-and-trust.md#re-keying-the-nodes)).
-For each share rooted on the node that is not deleted and has a recovery copy, the re-keying client recovers `K_share`
-from that copy and seals the new node key under the **same** `K_share` (a new `wrap`), or the node's new drop public
-key (a new `sealed_drop_public_key`); each `WRITE_ONLY` guest's `K_up` is re-sealed to the new drop key and each
-`READ_WRITE` guest's name re-sealed under the new node key. The commit refuses a node whose shares are not all staged.
-The link's id, `K_share` and URL stay; a switched-off link is re-keyed too, so a re-activation finds it current. The
-recovery copy is **not** re-sealed: it stays at its old epoch, which is what marks the link for re-issue
-([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) points 4 and 5). Until a node is
-re-keyed, a create, a re-issue and a guest naming itself on it answer `409 node_rekey_pending`.
+**What a re-key does to a link.** A node is re-keyed after a scope rotation and after the close of a viewable link at
+or above it ([keys, grants and trust § Re-keying the nodes](../../../crosscutting/keys-grants-and-trust.md#re-keying-the-nodes)).
+For each **open** link rooted on the node that has a recovery copy, the re-keying client recovers `K_share` from that
+copy and seals the new node key under the **same** `K_share` (a new `wrap`), or the node's new drop public key (a new
+`sealed_drop_public_key`). A closed link gets nothing new: its holders keep only what existed at its close, and its
+reopen carries the current key (§ Lifecycle). Each `WRITE_ONLY` guest's `K_up` is re-sealed to the new drop key and
+each `READ_WRITE` guest's name re-sealed under the new node key, for every link on the node whatever its state. The
+commit refuses a node whose open links and identities are not all staged, and one carrying a key staged for a link
+closed since (`409 rekey_parts_stale`). The link's id, `K_share` and URL stay
+([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) points 4 and 5,
+[ADR 0114](../../../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 5). Until a node is
+re-keyed, a create, a re-issue, a reopen and a guest naming itself on it answer `409 node_rekey_pending`.
 
 ## Gates — who may do what
 
@@ -151,11 +158,11 @@ that link, gets the same non-enumerable `404` as for an unknown id. Beyond that,
 |---|---|---|
 | **Create** (`createShare`) | any member | the capability for the role, the tenant's link requirements, a live node whose kind takes the role, the recovery copy at the current epoch |
 | **List** a node's links | any member who reads the node | each row carries the recovery copy and `sealed_password`, so any member rebuilds, copies and reveals any link; plus `mine`, `deletable`, `reissueRequired`, `newGuestsRefused`, `writeVerifierMissing` |
-| **Edit** (`updateShare`) | the link's owner | note and label (full replace), expiry (full replace), the password (set, change, remove), and the role between `READ` and `READ_WRITE` only — a change into or out of `WRITE_ONLY` is `422`; the role change needs the target role's capability; `K_share`, `wrap` and the link stay |
+| **Edit** (`updateShare`) | the link's owner | note and label (full replace), expiry (full replace; an expiry set into the past closes the link, one moved off a passed date reopens it with the root's key), the password (set, change, remove), and the role between `READ` and `READ_WRITE` only — a change into or out of `WRITE_ONLY` is `422`; the role change needs the target role's capability; `K_share`, `wrap` and the link stay |
 | **Rename the root on the link** (`setShareSealedName`) | any member | that one column |
 | **Switch off** one link (`revokeShare`) | the link's owner | `enabled = false` |
 | **Switch off every link of a scope** (`revokeScopeShares`) | any owner of the scope, every scope kind | the bulk switch-off (§ Lifecycle) |
-| **Re-activate** (`reactivateShare`) | any member | the member adopts the link; refused `409 reissue_required` by the re-issue rule, and while a moderator blocks the link |
+| **Re-activate** (`reactivateShare`) | any member | the member adopts the link, carrying the root's current key and name under its `K_share` (§ Lifecycle); refused `409 reissue_required` by the re-issue rule, and while a moderator blocks the link |
 | **Re-issue** (`reissueShare`) | an enabled link: its owner; a switched-off one: any member, who becomes its owner | a fresh id and `K_share`; refused while a moderator blocks the link |
 | **Delete** (`deleteShare`) | the link's owner; any member once the owner is no longer a member of the scope | a tombstone |
 
@@ -176,7 +183,7 @@ time on every guest path (`X-Share-Password`). Without a token a resolve answers
 `passwordRequired`, `pw_salt`); a wrong one is `403`; wrong attempts are bounded per link (default 10 per 60 s, then
 `429`). The server never sees the password; the minimum length is the client's rule.
 
-**Expiry and storage.** `expires_at` in the past answers `404` on every guest path. Every `READ_WRITE` and
+**Expiry and storage.** `expires_at` in the past answers `404` on every guest path, and is a close (§ Lifecycle). Every `READ_WRITE` and
 `WRITE_ONLY` link stores at most the tenant owner's per-link limit (10 GiB until changed); an upload that does not fit
 is refused at its start ([ADR 0073](../../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) §4).
 
@@ -223,6 +230,9 @@ the blob read and the terms read are not.
 stateDiagram-v2
   [*] --> Active: create
   Active --> Off: switch off (owner)<br/>owner removed from scope
+  Active --> Expired: end date passes (sweep)
+  Expired --> Active: end date moved or cleared (owner)
+  Expired --> Deleted: delete / re-issue / node purge
   Active --> OffReissueOnly: bulk switch-off
   Off --> Active: re-activate (any member)<br/>unless the re-issue rule holds
   Off --> OffReissueOnly: bulk switch-off
@@ -236,26 +246,48 @@ stateDiagram-v2
   Erased --> [*]
 ```
 
-- **Active** — `enabled`, not deleted. It is served only while nothing stops it: not expired, its scope live (not in
-  a group's deletion grace, its tenant neither suspended nor being deleted), its role's capability on, the tenant's
-  link requirements met, no moderation block. Any of those answers its guests `404` without changing the row.
+- **Active** — `enabled`, not deleted, not expired: the link is **open**. It is served only while nothing pauses it:
+  its scope live (not in a group's deletion grace, its tenant neither suspended nor being deleted), its root not
+  trashed, its role's capability on, the tenant's link requirements met, no moderation block. Any of those answers its
+  guests `404` without changing the row; a pause re-keys nothing and keeps the root's key under the link, since its
+  holders are meant to read again.
+- **Every close re-keys what is below a viewable link** ([ADR 0114](../../../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md)).
+  Each move out of Active — to Off, Off re-issue only, Expired or Deleted, a node purge's tombstone excepted — runs
+  through one store body (`SharingStore.close`, held by `scripts/validate_link_close_arity.py`): it clears the link's
+  `wrap` and sealed drop public key and, for a `READ` or `READ_WRITE` link, marks every node of the root's subtree, live
+  and trashed, **due** for its re-key, in the close's own transaction. From there no write lands under a key the link's
+  holder has (`409 node_rekey_pending`); the closing device starts the subtree's re-key in the background and any
+  member's worker finishes it. A `WRITE_ONLY` close marks nothing: its `K_share` opens only the drop public key and its
+  guest's own `K_up`. With a dump, a closed link reads what existed at its close and nothing added after; what stays in
+  its reach is [security-model § Revocation](../../../crosscutting/security-model.md#revocation--two-layers).
 - **Off** — `enabled = false`. Its owner switched it off, or its owner was removed from the scope, which switches off
   every link that member owns there in the removal's transaction.
+- **Expired** — enabled, its end date passed. No client is there when it passes: a server sweep (`ShareExpiryCloseSweep`,
+  every `veyq.share.expiry-close.every`, default `1m`) carries out the close and sets `expiry_closed`, once per link; an
+  edit that sets a passed date closes it at once. A write landing between the end date and the sweep's run is under
+  the old key — the sweep interval is the exposure.
 - **Off, re-issue only** — a **bulk switch-off** turned off every enabled link of the scope and marked every link of it
   `reissue_only` ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5). It
   runs through any scope owner's `revokeScopeShares`, or, opted into, a group removal's or a tenant removal's
   `revokeLinks` (a tenant removal's reaches only the tenant scope's links).
+- **Reopening** — a re-activation, or an edit that moves a passed end date into the future or clears it — is the
+  curator's act and carries what the re-key left out: the root's current key under the link's `K_share` (for
+  `WRITE_ONLY` the drop public key) and the root's name, stating the root's `nodeEpoch`; the member opens `K_share`
+  from the recovery copy. Without them it is `422 link_key_required`, a stale or due root answers `stale_epoch` /
+  `node_rekey_pending`, and a link with no recovery copy comes back only by re-issue. A reopen hands the old `K_share`
+  everything added while the link was closed.
 - **Re-activation** turns a link on again and makes the caller its owner, unless the **re-issue rule** holds
   (`ReissuePolicy`, ADR 0075 point 4): the link is marked `reissue_only`; or its owner is no longer a member; or it
-  has a recovery copy and that copy is below the scope's current epoch or the scope has lost a member since it was
-  minted (`member_removals_at_mint` below `member_removals`). Then it is `409 reissue_required`, and the manage list
-  marks the link `reissueRequired` from the same predicate. Because a rotation leaves recovery copies at their epoch,
-  every link minted before a rotation carries the mark; it keeps serving while enabled. A member's own marked links
+  has a recovery copy and was minted below the scope's current epoch (`minted_epoch`) or the scope has lost a member
+  since (`member_removals_at_mint` below `member_removals`). Then it is `409 reissue_required`, and the manage list
+  marks the link `reissueRequired` from the same predicate. So every link minted before a rotation carries the mark;
+  it keeps serving while open. A member's own marked links
   are also listed, across tenants, in the account's key-rotation panel as *links to renew*.
 - **Re-issue** is one request: a new row — fresh id, fresh `K_share`, the old scope, node and role, owner the caller,
   the recovery copy at the current epoch, the note, label, expiry and password carried over and re-sealed — and the old
   row tombstoned, spent by a compare-and-set so it happens at most once (`409 share_deleted` after). A `WRITE_ONLY`
-  re-issue seals to the node's existing drop key. Guest identities stay on the old row, so returning guests name
+  re-issue seals to the node's existing drop key. The old link closes like any other (above), and the new one follows
+  the new key. Guest identities stay on the old row, so returning guests name
   themselves again; the old link answers `404`, with no redirect.
 - **Deleted** — a tombstone: switched off, `deleted` set, every ciphertext column (wrap, drop public key, name, note,
   label, recovery copy, password fields, write verifier) and the expiry cleared. The row keeps id, scope, node, role,
@@ -272,10 +304,13 @@ stateDiagram-v2
 
 | Event | Effect on the scope's links |
 |---|---|
-| Scope rotation | no share row is written; each link keeps serving, and its recovery copy is now below the epoch (re-issue rule) |
-| Node re-key | `wrap` / drop public key re-sealed under the same `K_share`, guests' keys and names re-sealed (above); URL unchanged |
-| Member removed (group removal-rotation, tenant removal, account erasure) | the removed member's links in each scope it is cut from switch off; the removal counter goes up; opted in, the bulk switch-off |
-| Root trashed / restored | not served / served again; rows untouched |
+| Scope rotation | each recovery copy re-sealed at the new epoch; each link keeps serving, and one minted before it carries the re-issue mark |
+| Node re-key | an open link's `wrap` / drop public key re-sealed under the same `K_share`, every link's guests' keys and names re-sealed (above); URL unchanged |
+| Close (switch-off, bulk switch-off, delete of an open link, re-issue, end date) | `wrap` and drop public key cleared; a viewable link's subtree marked due and re-keyed |
+| Member removed (group removal-rotation, tenant removal, account erasure) | the removed member's links in each scope it is cut from switch off — a close each; the removal counter goes up; opted in, the bulk switch-off |
+| Root renamed | the root's name re-sealed under each open link |
+| Password, role (`READ` ↔ `READ_WRITE`), note or label edited | nothing re-keyed: the link stays open, a password is a gate, not a key |
+| Root trashed / restored | not served / served again; rows untouched, nothing re-keyed |
 | Root purged | tombstoned |
 | Group soft-deleted / restored | not served (`SPACE_UNAVAILABLE`) / served again, but a link its creator switched off in the window, the one link write it allows (`uc.spaces.scope-access` A1) |
 | Tenant suspended or being deleted | not served |
@@ -296,7 +331,11 @@ stateDiagram-v2
   [ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md) (the write proof),
   [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) (folder and
   chapter roots, the guest tree, identity folders), [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)
-  (what a re-key does to a link), [ADR 0073](../../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)
+  (what a re-key does to a link), [ADR 0114](../../../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md)
+  (a close re-keys the subtree), [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) (the
+  recovery copy follows each rotation), [ADR 0073](../../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)
   (the per-link limit).
 - **Threat model:** what a link holds against an operator or a dump is the [security model](../../../crosscutting/security-model.md);
   its residuals are on the docs site's [Known limitations](../../../../site/src/content/docs/security/known-limitations.md).
+- **Published:** [Key hierarchy](../../../../site/src/content/docs/security/key-hierarchy.md),
+  [Protocols](../../../../site/src/content/docs/security/protocols.mdx)

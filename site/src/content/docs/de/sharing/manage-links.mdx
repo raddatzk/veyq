@@ -4,6 +4,7 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
   - docs/features/sharing/use-cases/uc.sharing.share-shared-scope.md
   - docs/features/sharing/use-cases/uc.sharing.share-password.md
+  - docs/features/sharing/use-cases/uc.sharing.close-link-rekeys-subtree.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -20,13 +21,19 @@ listet jeden Link mit seiner Rolle, wann er erstellt wurde und, falls gesetzt, w
   Hat der Link ein Passwort, ist es dort eingetragen; das Auge daneben zeigt es an, so kannst du es später
   nachschauen.
 - **Widerrufen** schaltet den Link sofort ab. Was Gäste hinzugefügt haben, bleibt bei dir.
-- **Reaktivieren** schaltet einen widerrufenen Link wieder ein.
+- **Reaktivieren** schaltet einen widerrufenen Link wieder ein, mit allem, was dazugekommen ist, während er aus war.
 - **Link erneuern** macht eine neue Adresse und löscht die alte; gib den neuen Link weiter. Ein Link zeigt weiter, was
-  dazukommt, auch nachdem ein Bereich ein neues Schloss bekommen hat. Erst das Erneuern schließt ihn also für jemanden,
-  der den Bereich verlassen oder sein Konto abgesichert hat. So ein Link zeigt **Muss erneuert werden**. Bei einer
-  Erinnerung behalten Gäste, was sie hinzugefügt haben, nennen ihren Namen aber erneut.
+  dazukommt, auch nachdem ein Bereich ein neues Schloss bekommen hat. Erst Erneuern oder Abschalten schließt ihn also
+  für jemanden, der den Bereich verlassen oder sein Konto abgesichert hat. So ein Link zeigt **Muss erneuert
+  werden**. Bei einer Erinnerung behalten Gäste, was sie hinzugefügt haben, nennen ihren Namen aber erneut.
 - **Link löschen** entfernt einen abgeschalteten Link endgültig. Löschen kannst du deine eigenen Links und die von
   anderen, sobald die Person, die sie erstellt hat, den Bereich verlassen hat.
+
+Schaltest du einen Link ab oder erneuerst du ihn, oder ist sein Ablaufdatum vorbei, bekommt, was darunter liegt, ein
+neues Schloss, damit der alte Link auch künftig nichts mehr öffnet. Das geschieht von selbst im Hintergrund;
+bis es fertig ist, kann Hinzufügen dort etwas länger dauern. Ein Upload-Link hat nichts, das ein neues Schloss
+bräuchte. Legst du, was du geteilt hast, in den Papierkorb, sind seine Links nur angehalten: Nichts bekommt ein neues
+Schloss, und stellst du es wieder her, ist es wieder in ihnen.
 
 Ändern kannst du nur Links, die du erstellt hast; der Link eines anderen Mitglieds zeigt **Von einem anderen Mitglied**.
 Wird ein Mitglied aus dem Bereich oder aus einer Gruppe entfernt, schalten sich die Links, die diese Person dort

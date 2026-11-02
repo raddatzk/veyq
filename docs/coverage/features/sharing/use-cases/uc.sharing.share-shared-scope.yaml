@@ -3,13 +3,14 @@ feature: sharing
 title: Public-share a Memory in a shared scope (group / tenant)
 # Built (web vertical, cr-0104 + ADR 0029 §6; re-issue + the re-activation refusal, ADR 0075): ANY member of a
 # group or tenant scope may public-share a Memory there (all three built roles), gated on scope-membership AND the
-# role's sharing.* capability (ADR 0032) — any member may publish, not only an owner. Member removal soft-revokes
+# role's sharing.* capability (ADR 0032) — any member may publish, not only an owner. Member removal switches off
 # (enabled=false) every share the removed member created in that scope (or, opted in, every share of the group); any
 # remaining member may re-activate a deactivated share, which transfers its owner_account — unless a departed member
 # may hold its link, which then comes back only as a re-issue (a new id + key, the old one deleted, one transaction) — the
-# removal count marks that on a tenant, and a bulk switch-off's mark makes it stick. K_node is stable across rotation (ADR 0024), so the share
-# follows new content and cannot be rotated away — the server-side deactivation IS the honest-server revocation
-# (the only forward layer for a tenant, which is ACL-revoke).
+# removal count marks that on a tenant, and a bulk switch-off's mark makes it stick. A rotation re-wraps an open
+# share's root key under its unchanged K_share (ADR 0109), so the share follows new content and is not rotated away;
+# what cuts its key off what comes later is its close — every switch-off, delete, re-issue and passed end date
+# re-keys the subtree below its root (ADR 0114, en.sharing.public-link § Lifecycle).
 acceptanceCriteria:
   - id: member-authored-any-scope
     text: A member of a group/tenant scope may createShare a MEMORY in that scope (personal still works); the create-gate is "a node of a kind that may be a share root with that role (ShareRoots) in a scope the caller is a member of" AND the role's sharing.* capability — not owner-only, not personal-only. A non-member cannot (no reveal).
@@ -19,7 +20,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/memories/share.test.ts]
   - id: removal-deactivates-shares
-    text: Removing a member from a scope soft-revokes (enabled=false) every share that member created in that scope; the anonymous resolve + gated blob endpoint then 404. Runs independently of the group scope-key rotation the removal also triggers.
+    text: Removing a member from a scope switches off (enabled=false) every share that member created in that scope — each a close of the link (ADR 0114); the anonymous resolve + gated blob endpoint then 404. Runs independently of the group scope-key rotation the removal also triggers.
     coverage:
       backend:
         integration: [ShareSharedScopeSliceTest.removingGroupMemberDeactivatesOnlyTheirShares, ShareSharedScopeSliceTest.removingTenantMemberDeactivatesTheirTenantScopeShares]
@@ -31,7 +32,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/memories/share.test.ts]
   - id: follows-new-content
-    text: Content added to the shared Memory is visible via the existing share, after a rotation too - between rotations K_node stays, and a rotation's re-key re-wraps the share's root key under its unchanged K_share (ADR 0109 point 4); the URL/fragment never changes, and the link stays reissueRequired because its recovery copy keeps its epoch.
+    text: Content added to the shared Memory is visible via the existing share, after a rotation too - between rotations K_node stays, and a rotation's re-key re-wraps an open share's root key under its unchanged K_share (ADR 0109 point 4); the URL/fragment never changes, and the link stays reissueRequired because it keeps the epoch it was minted at, while the rotation re-seals its recovery copy under the new scope key (ADR 0115).
     coverage:
       backend:
         integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks, RekeyCoreSliceTest.aCommitIsTopDownAndSwapsEveryStagedPartInOneTransaction]
@@ -48,7 +49,7 @@ acceptanceCriteria:
     text: >
       Re-activation is refused 409 reissue_required, nothing written, when a bulk switch-off marked the share, when its
       owner is no longer a member of its scope (a removed group member, or a removed tenant member's own tenant-scope
-      share), or when it carries a recovery copy sealed below the scope's current epoch or minted before the scope's
+      share), or when it carries a recovery copy and was minted below the scope's current epoch or before the scope's
       last member removal — the removal count marks a co-member's tenant link, and a co-shared group's link while its
       queued rotation has not run; a share without a copy is judged by the switch-off and its owner alone. The manage
       list serves the same predicate per row (reissueRequired), and the panel marks such a link and offers renew

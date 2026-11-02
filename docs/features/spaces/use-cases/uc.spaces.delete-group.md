@@ -12,7 +12,7 @@
 - **Postconditions (success):** The group is in **pending-deletion** (a `deletedAt` marker + a `purgeAfter` date); it
   stays readable but **read-only** for every member and is flagged as deleting. **Restore** (any owner, in-window)
   returns it to fully active. At `purgeAfter`, the scheduled job **hard-erases** the group and all its content —
-  nodes, their blob objects in the store, memberships, epoch links, favorites, queued background jobs, shares, and
+  nodes, their blob objects in the store, memberships, succession statements, favorites, queued background jobs, shares, and
   the scope row. The server saw only a lifecycle timestamp + opaque deletions — never a key or a name.
 
 ## Main flow
@@ -34,7 +34,7 @@
 5. **At `purgeAfter`**, a scheduled server job **hard-purges** the scope: it puts the store objects of every blob
    **and of every upload still open in the group** on the reclaim list, which `StoreReclaimSweep` drains
    ([ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)), then erases the
-   media/node rows, upload sessions, memberships, epoch-chain links, favorites, queued background jobs, shares,
+   media/node rows, upload sessions, memberships, succession statements, favorites, queued background jobs, shares,
    and finally the scope row. **Irreversible** — nothing is recoverable after this.
 
    **Erasure is total, and that is a schema-level rule rather than a list to keep in step:** every table that

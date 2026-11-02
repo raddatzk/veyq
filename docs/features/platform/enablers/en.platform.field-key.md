@@ -27,7 +27,7 @@ belongs under; the AAD binds purpose and object as every seal does
 
 | Purpose | Field | `K_parent` |
 |---|---|---|
-| `node-name` | a node's directory entry (`encryptedName`) | the entry key: the parent's `K_node`; `K_SC` at the node's epoch for a scope root; a guest's `K_up` for its identity folder |
+| `node-name` | a node's directory entry (`encryptedName`) | the entry key: the parent's `K_node`; the current `K_SC` for a scope root; a guest's `K_up` for its identity folder |
 | `node-meta` | a node's meta (`wrappedMeta`) | the node's own `K_node` |
 | `media-meta`, `media-exif` | a Memories medium's two metadata tiers | the Memory's or chapter's `K_node`, or the guest's `K_up` |
 | `bucket-name` | a Memories bucket's name | the Memory's or chapter's `K_node`, or `K_up` |

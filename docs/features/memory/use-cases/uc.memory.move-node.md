@@ -4,7 +4,7 @@
 - **Primary actor:** A **member** with an unlocked vault browsing a space; or a **`READ_WRITE` guest** of a folder link.
 - **Goal:** Put a node — with everything inside it — at another place in the tree, and keep everything in it readable,
   without the server learning a name or a key.
-- **Preconditions:** The member's scope is open (its epoch keys held) and not pending deletion; a guest holds a
+- **Preconditions:** The member's scope is open (its scope key held) and not pending deletion; a guest holds a
   `READ_WRITE` link and the keys of its subtree (the link's `#k=` and the chain below it). The node tree and its
   placement write exist ([en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md),
   [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 3).
@@ -31,7 +31,7 @@
    same slug **in the same route group** (ADR 0080 decision 16: a Memory never meets a Pot or a folder) is named ("There is already a file named … there").
 4. Moving a drop-box guest's folder out asks first: it becomes an ordinary folder, its guest can add nothing more, and
    it cannot be moved back into the drop box.
-5. The client re-wraps the node's own content key under the destination's key (`K_SC` at the current epoch at the scope
+5. The client re-wraps the node's own content key under the destination's key (the current `K_SC` at the scope
    root, else the destination node's key), re-seals its name (a field key derived from that key) and recomputes its slug token there, binds all of it to the next
    placement revision and sends one placement write stating the revision it was built on — a member's `updateNode`, a
    guest's `updateShareNode` after the page's naming flow.
@@ -71,8 +71,8 @@ a `READ_WRITE` guest of a folder link moved a folder, a file and a Memory into a
   guest's folder, or lies outside a guest's subtree — the server's rules decide, the picker only mirrors them.
 - **E2 — the link does not allow it** (`422 illegal_scope`): a guest's move a container's owner refuses (out of or into
   a Memory: Memories declares no guest tree rules).
-- **E3 — the keys were renewed meanwhile** (`409 stale_epoch`): a move into or out of the scope root was sealed at an
-  epoch a rotation superseded; reload and try again.
+- **E3 — the keys were renewed meanwhile** (`409 stale_epoch`): the move stated a node or parent epoch whose key a
+  rotation or a link's close replaced since; reload and try again.
 - **E4 — the link stopped allowing writes or is gone** (`share_not_contributable`, `share_not_found`,
   `node_not_found`), **rate-limited**, or **the space is being deleted** (`scope_deleting`): said by name; nothing moved.
 - **E5 — a guest declines to name itself**: nothing is sent, nothing said.

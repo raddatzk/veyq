@@ -124,10 +124,12 @@ Wie die verschiedenen Links funktionieren — nur ansehen, ansehen und mitwirken
 Drei ehrliche Grenzen:
 - **Entteilen macht das Heruntergeladene nicht rückgängig.** Ein Entzug stoppt den *künftigen* Zugriff;
   er kann nicht zurückgreifen und löschen, was jemand bereits gespeichert hat.
-- **Links, die entstanden sind, bevor jemand gegangen ist, funktionieren weiter, bis du sie erneuerst.**
-  Alle in einer Gruppe oder einem geteilten Bereich können jeden seiner öffentlichen Links kopieren — wer
-  geht, hat also vielleicht noch einen. Erneuern gibt dem Link eine neue Adresse und löscht die alte;
-  gib dann die neue weiter. Entfernst du jemanden, kannst du im selben Schritt — oder jederzeit — alle
+- **Links, die entstanden sind, bevor jemand gegangen ist, funktionieren weiter, bis du sie erneuerst
+  oder abschaltest.** Alle in einer Gruppe oder einem geteilten Bereich können jeden seiner öffentlichen
+  Links kopieren — wer geht, hat also vielleicht noch einen. Erneuern gibt dem Link eine neue Adresse und
+  löscht die alte; gib dann die neue weiter. Schaltest du einen Link ab oder erneuerst du ihn, oder ist
+  sein Ablaufdatum vorbei, bekommt, was darunter liegt, ein neues Schloss, damit der alte Link auch
+  künftig nichts mehr öffnet. Entfernst du jemanden, kannst du im selben Schritt — oder jederzeit — alle
   Links des Bereichs abschalten. Einen abgeschalteten Link kannst du endgültig löschen; die Fotos, die
   Gäste darüber hinzugefügt haben, bleiben in der Erinnerung. Wird eine Erinnerung endgültig gelöscht,
   verschwinden auch ihre Links.

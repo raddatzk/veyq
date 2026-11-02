@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-07-10
 - Model: [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)
-- Replaced in part: point 2 by ADR 0093 (built)
+- Replaced in part: point 2 by ADR 0093 (built); point 4's copy at its epoch by ADR 0115 (built)
 
 ## Context
 

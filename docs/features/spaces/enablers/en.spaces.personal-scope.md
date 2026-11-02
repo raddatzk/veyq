@@ -51,7 +51,7 @@ The server creates the scope row + the self-membership. The client **auto-births
 4. To **open** (now or on a later launch): from `GET /api/scopes` take the personal scope's `wrappedGrant`,
    check that it is signed by the member's **own** identity key — the key from the vault, never the
    directory — and refuse it otherwise; then open it with the vaulted identity (hybrid secret + public derived
-   from the identity private bundle) → the **scope key**, held in memory (the active space's epoch keys, `src/web/src/app/activeSpace.ts`).
+   from the identity private bundle) → the **scope key**, held in memory (the active space's scope key, `src/web/src/app/activeSpace.ts`).
 
 ```mermaid
 ---

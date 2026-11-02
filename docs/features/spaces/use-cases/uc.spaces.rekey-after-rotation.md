@@ -1,4 +1,4 @@
-# UC: Re-key a space's nodes after a rotation
+# UC: Re-key a space after a rotation
 
 - **ID:** uc.spaces.rekey-after-rotation
 - **Primary actor:** The **device that commits a scope's new epoch** — the remover's, right after a group removal; an
@@ -11,38 +11,43 @@
   only.
 - **Secondary actor:** Every other **writer** of the scope. A member's write into a node not yet re-keyed re-keys
   that node's path first and goes through; a guest's waits until a member's or an owner's device has reached its node.
-- **Goal:** After a rotation, nothing added to the space seals under a key the excluded party holds — inside a
-  folder, Memory or chapter that existed before it as much as at the scope root
-  ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)).
-- **Preconditions:** The scope has just committed epoch `n+1` ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md)).
-  The device holds `E_{n+1}`.
-- **Postconditions (success):** Every live and trashed node of the scope carries epoch `n+1`: a fresh random key,
-  its entry under its parent's new key, and every field that was sealed under its old key re-sealed under the new
+- **Goal:** After a rotation, nothing stored in the space opens under a key the excluded party holds, and nothing
+  added seals under one — at scope level, inside a folder, Memory or chapter that existed before it, and at the scope
+  root ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md),
+  [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)).
+- **Preconditions:** The scope has just committed epoch `n+1` ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md)):
+  a fresh key, proven by a succession statement, that replaced the old one; the commit re-sealed every scope-level row
+  under it ([keys, grants and trust § The scope-level re-seal](../../../crosscutting/keys-grants-and-trust.md#the-scope-level-re-seal))
+  and marked every node of the scope **due**. The device holds the key of epoch `n+1`.
+- **Postconditions (success):** No row of the scope is under the old key. Every live and trashed node of the scope is
+  re-keyed: a fresh random key, its own epoch one higher, its `scopeEpoch` `n+1`, no due mark, its entry under its
+  parent's new key, and every field that was sealed under its old key re-sealed under the new
   one. No store object was written. Each share on a re-keyed node opens the new key; each drop key is new. The
-  rotation reads *secured*. The server saw rewritten ciphertext in rows it already held, and nodes' epochs moving.
+  rotation reads *secured*. The server saw rewritten ciphertext in rows it already held, and nodes' epochs and due marks
+  moving.
 
 ## Main flow
 
 1. **List the scope.** The device lists every node of the scope, trashed descendants included, with each node's
-   epoch, and the media, attachments, buckets, shares and guest identities hanging off each node.
-2. **Re-key top-down.** For each node whose epoch is below `n+1`, parents before children, it mints a fresh key and
+   epoch and due mark, and the media, attachments, buckets, shares and guest identities hanging off each node.
+2. **Re-key top-down.** For each due node, parents before children, it mints a fresh key and
    commits the node in one transaction: its own entry under its parent's current key; each child's entry (the
    child's current key re-wrapped, its name re-sealed, its slug token recomputed); the node's meta; its media's meta
    and EXIF; every `K_blob` wrap; its buckets' and its contributors' names; its drop key, replaced; every share
-   rooted on it, re-wrapped under that share's `K_share` from its recovery copy. A large node's fields may go up in
+   rooted on it and open, re-wrapped under that share's `K_share` from its recovery copy. A large node's fields may go up in
    parts before the commit.
 3. **A member's write pulls its path; a guest waits per node.** Until a node is committed, every write sealed under its
    key is `409 node_rekey_pending`. A member's client then re-keys that node and its lagging ancestors (step 2 on that
    path only) and retries at once: its write is delayed by its path's re-key, not refused. A guest's client — it holds
    no key above its root — waits and retries. A write stating the node's key from before is `409 stale_epoch`, and the
    writer re-reads once. A node already committed takes writes at once.
-4. **Finish.** When no node of the scope is below `n+1`, the rotation is *secured*; a queued job may now complete.
+4. **Finish.** When no node of the scope is due, the rotation is *secured*; a queued job may now complete.
 
 ## Alternate / exception flows
 
 - **E1 — the device stops halfway.** Every committed node opens from its parent's current key, so the tree reads as
   it stands. The rotation reads *re-keying* on every member's scope row. Any member's worker that holds `E_{n+1}`
-  resumes at the first node still below `n+1` (every 45 s while unlocked, and when the tab becomes visible); for the
+  resumes at the first node still due (every 45 s while unlocked, and when the tab becomes visible); for the
   personal scope, the owner's own device on its next unlock. Two devices re-keying the same node leave one commit: the
   second is `409 stale_epoch` and re-lists.
 - **E2 — a writer races the commit.** Both take the node's row lock. The writer that loses sees `node_rekey_pending`
@@ -53,8 +58,9 @@
   excluded party could open it before the rotation, so its later uploads stay in their reach until the link is
   re-issued, which starts every guest over ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)
   point 2).
-- **E5 — a link from before.** It keeps working and shows what is added, and stays marked `reissueRequired`: the
-  excluded party can rebuild its `K_share`. Its re-issue closes it.
+- **E5 — a link from before.** An open one keeps working and shows what is added, and stays marked `reissueRequired`:
+  the excluded party can rebuild its `K_share`. Its re-issue or switch-off closes it, and a closed link gets no new key
+  ([uc.sharing.close-link-rekeys-subtree](../../sharing/use-cases/uc.sharing.close-link-rekeys-subtree.md)).
 - **E6 — a node a moderation hold copied.** The hold is a snapshot of the stored ciphertext and stays as it is; the
   report's keys keep opening what was reported.
 - **E7 — a drop box.** A drop box (Depot's: its guests get identity folders), a guest's identity folder and what lies
@@ -81,12 +87,24 @@
   epoch, re-opens the scope the same way. Below a drop box the write waits for an owner (E7); the refused pull still
   re-opens the scope, so the re-read after the wait opens the owner's re-key. Only when the waits run out is the run
   rolled back.
+- **E10 — the scope-level commit is refused.** A scope-level row without a staged value is `409 rekey_parts_missing`,
+  one written since the rotator read it `409 rekey_parts_stale` (each staged value names the digest of what it
+  replaces): nothing commits, and the rotator stages again, a bounded number of times. A scope-level write stating the
+  old epoch after the commit is `409 stale_epoch`. Only a caller who may commit the rotation and holds the current
+  grant reads and stages the scope-level rows.
+- **E11 — a row the rotator cannot re-seal.** A pending group invitee it cannot anchor gets its name key cleared (the
+  proposal stays, unnamed); a profile field or a verification that does not open under the old key is staged as random
+  bytes that read the same. The rotation commits.
+- **E12 — a member behind.** A member the rotation declared pending reads nothing of the scope — it reads as *awaiting
+  the current key* — until a grant reaches them; a grant whose succession statements do not lead from the key their
+  device held is refused (`epoch_unlinked`).
 
 ## Quality notes
 
 - **Nothing in the store moves.** Each `K_blob` keeps encrypting its chunks; only its wrap changes. A Chapter of 1,000
   photos is about 5,000 symmetric seals, about 20 requests.
-- **What stays in the excluded party's reach:** what existed at the rotation, and links until re-issued (E4, E5).
+- **What stays in the excluded party's reach:** a dump from before the rotation, the bytes of a `K_blob` they
+  extracted (a re-key re-wraps, it re-encrypts nothing), and open links until closed or re-issued (E4, E5).
 - **Operator-blind.** No key reaches the server; it learns nothing it did not see from the epoch change.
 - **Honest-operator for the server's refusals, layer 2 for the floor.** The `409`s are layer 1; a client also seals
   nothing under a node key bound to an epoch below the highest it has held for the scope
@@ -106,7 +124,8 @@ member's device finishes the rest in the background.
 - Triggers: [uc.spaces.complete-queued-rotation](uc.spaces.complete-queued-rotation.md),
   [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md),
   [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) (a removal)
-- Decisions: [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md),
+- Decisions: [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md),
+  [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md),
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md), [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)
 - End-user view (docs site): [Secure your account](../../../../site/src/content/docs/account/replace-your-keys.mdx),

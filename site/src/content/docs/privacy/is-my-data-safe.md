@@ -117,9 +117,11 @@ them off and renewing them in [Change, switch off, renew and delete links](/veyq
 Three honest limits:
 - **Un-sharing doesn't un-download.** Revoking access stops *future* access; it can't reach back and
   erase what someone already saved.
-- **Links made before someone left keep working until you renew them.** Everyone in a group or a
-  shared space can copy every public link of it, so someone who leaves may still have one. Renewing a
-  link gives it a new address and deletes the old one — hand out the new one. When you remove someone
+- **Links made before someone left keep working until you renew or switch them off.** Everyone in a
+  group or a shared space can copy every public link of it, so someone who leaves may still have one.
+  Renewing a link gives it a new address and deletes the old one — hand out the new one. Switching a
+  link off, renewing it, or its expiry date passing gives what is below it a new lock, so the old link
+  opens nothing added afterwards either. When you remove someone
   you can also switch off every link of the space in the same step, or at any time. A link you switched
   off can be deleted for good; the photos guests added through it stay in the Memory. Deleting a Memory
   for good deletes its links too.

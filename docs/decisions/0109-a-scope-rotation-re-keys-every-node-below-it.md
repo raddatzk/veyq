@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-10-23
 - Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
-- Replaced in part: point 7 by ADR 0111 (built)
+- Replaced in part: point 7 by ADR 0111 (built); points 1, 4 and 6 by ADR 0114 (built); points 4 and 6 by ADR 0115 (built)
 
 ## Context
 

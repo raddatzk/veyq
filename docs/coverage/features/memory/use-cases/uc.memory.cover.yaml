@@ -32,7 +32,7 @@ acceptanceCriteria:
           - src/features/memories/components/MemoryCard.test.ts
           - src/components/app/AppSidebar.test.ts
   - id: covers-resolved-once-per-scope
-    text: One store resolves a Memory's cover for EVERY surface that shows one — a thumbnail is decrypted once per Memory per scope, not once per surface — re-resolves it when the node's sealed meta changes (the cache is keyed on `wrappedMeta`, so a cover edited on one surface cannot leave a stale image on another), and releases every decrypted object URL when the active space is left, rotated or cleared. The store is core's (`core/node/cover/coverStore.ts`, a member's singleton and a guest page's own); the surfaces read the result and hold no key material — the epoch chain that opens a node's K_node stays out of the always-mounted rail.
+    text: One store resolves a Memory's cover for EVERY surface that shows one — a thumbnail is decrypted once per Memory per scope, not once per surface — re-resolves it when the node's sealed meta changes (the cache is keyed on `wrappedMeta`, so a cover edited on one surface cannot leave a stale image on another), and releases every decrypted object URL when the active space is left, rotated or cleared. The store is core's (`core/node/cover/coverStore.ts`, a member's singleton and a guest page's own); the surfaces read the result and hold no key material — the scope key and node-key chain that open a node's K_node stay out of the always-mounted rail.
     # Both halves are bitten by injection, since the store is new and neither defect is live: keying the entry on
     # the nodeId alone reddens the stale-cover and removed-cover cases, and deleting the reset from
     # clearActiveSpace reddens the release case.

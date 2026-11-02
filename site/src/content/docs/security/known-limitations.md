@@ -35,11 +35,11 @@ operator is you, and the active-operator entries do not apply.
 | [Forks and queued rotations](#scope-rotation-forks-queued-rotations-and-an-invented-member) | active operator | ADR 0024 | nothing recorded |
 | [A member the operator presents as an owner](#identity-keys-tofus-first-use-gap) | active operator | ADR 0111 | signed roles and removals, not designed (a non-owner without a join record is an anomaly, built) |
 | [QR reader who also runs the relay](#device-linking-an-attacker-who-reads-the-qr-and-runs-the-relay) | operator who also sees the QR | ADR 0059 §11 | nothing recorded |
-| [Item favorites under `E_0`](#item-favorites-sealed-under-the-base-epoch) | former member with a dump or the operator; the operator alone for counts | ADR 0068 | re-open condition named in ADR 0068 §9 |
-| [Departed members and copied links](#departed-members-and-the-links-they-could-copy) | removed member | ADR 0075, ADR 0109 | re-issue (built; with a rotation also against a dump) |
+| [Item favorites' count](#item-favorites-a-count-as-honest-as-the-operator) | the operator; with a member, forged entries | ADR 0068, ADR 0115 | a freshness floor covering them (ADR 0068 §9) |
+| [Departed members and copied links](#departed-members-and-the-links-they-could-copy) | removed member | ADR 0075, ADR 0109, ADR 0114 | a close or a re-issue (built; also against a dump of what is added after) |
 | [Guest names vs. a viewer link](#guest-names-and-an-operator-holding-a-link) | operator holding a link | ADR 0030 point 8 | accepted |
 | [Share password is access control](#a-share-password-is-access-control-not-cryptography) | operator colluding with a link holder | ADR 0037 | [cryptographic share password](/veyq/security/roadmap/) |
-| [Revocation cannot retract what was read](#revocation-cannot-retract-what-was-already-read) | any former recipient | security-model, ADR 0024, ADR 0025, ADR 0109 | inherent; links by re-issue |
+| [Revocation cannot retract what was read](#revocation-cannot-retract-what-was-already-read) | any former recipient | security-model, ADR 0024, ADR 0025, ADR 0109, ADR 0114, ADR 0115 | inherent; links by a close or a re-issue |
 | [Server-visible metadata](#metadata-the-server-sees) | operator | security-model | by design |
 | [Append-only entries can be dropped or reordered](#applications-entries-are-not-bound-to-their-neighbours) | operator | security-model, ADR 0072 | a sequence number or hash chain per application |
 | [Per-instance rate limiting](#rate-limiting-is-per-instance) | online attacker | cc.security.rate-limit | deferred hardening |
@@ -97,7 +97,7 @@ key and an Ed25519 signing key), which the server relays from its directory. Wha
   link and walks the owner's key chain from the head sealed beside it to the key that signed the invite, so the
   operator, which mails the link, cannot swap the key or the owner in it, and an owner who secured their account since
   is followed through their chain. The tenant key it is handed must be the owner's own grant kept beside the invite,
-  or link down to it, so the operator cannot hand the newcomer a key of its choosing. The seal opens only with a code
+  or be reached from it through the tenant's succession statements, so the operator cannot hand the newcomer a key of its choosing. The seal opens only with a code
   the owner passes on outside veyq (50 bits behind Argon2id), or a password the owner chose
   ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decisions 1 and 19).
@@ -119,17 +119,17 @@ The same gap covers further cases:
   offline; a weak password the owner chose instead falls faster.
 - **A shared-scope grant signed by a granter identity the operator fabricated**, where the pin alone decides: the
   tenant scope's own grant, and a group's grant outside the active tenant — in a device's first grant of that scope:
-  a later epoch must link down to the key the device held, which the operator never held, and the device that accepted
+  a later epoch must be reached through succession statements from the key the device held, which the operator never
+  held, and the device that accepted
   an invite holds the key it checked there from the accept on. That first grant pins the
   granter on first use, so an operator that fabricates both the granter and the key is not detected on the spot —
   only by the next verification of that granter's safety number. Someone who holds the device's key (a member, or one
-  removed while the tenant has not re-keyed since) can, with the operator, still plant a linked next epoch. In the active tenant a group grant from a granter without an
+  removed while the tenant has not re-keyed since) can, with the operator, still sign a next epoch of its own. In the active tenant a group grant from a granter without an
   owner-rooted join record is refused. The signature rules out a grant presented under the identity of someone the
   recipient has already pinned (ADR 0028 Decision 6).
 - **A group's first grant from any member of its tenant.** A device that holds no key of a group yet — a newcomer's
   after accepting the proposal, a new or linked device — opens a grant from any member the tenant anchors, in the
-  group or not. With the operator, such a member has the device write under a key of its choosing; one removed from
-  the group can link that key to the epoch it held, so the device also shows the group's history. Accepted, because it
+  group or not. With the operator, such a member has the device write under a key of its choosing. Accepted, because it
   gains nothing over a group of that member's own: which groups you are listed in, who else is in one and who proposed
   you are the server's word, so the operator can present that group as this one. Nothing on the device tells the two
   apart; closing it needs signed group membership (ADR 0111 § What stays open).
@@ -156,8 +156,8 @@ The same gap covers further cases:
   is keyed by, and a compare's two writes arrive seconds apart, so hiding the subject would hide little.
 - **A later epoch planted for a newcomer by someone who held the anchor's.** When a rotation by someone other than the
   inviting owner carried an open invite, a party who held the epoch the invite is anchored at — a member, a former
-  member, or a thief of a member's device — could, with the operator, serve the newcomer a later epoch of its own that
-  links to it. The owner's own rotation moves the anchor past it.
+  member, or a thief of a member's device — could, with the operator, serve the newcomer a later epoch of its own,
+  succeeding it under a statement that party signs. The owner's own rotation moves the anchor past it.
 - **The owner's securing withheld from a new account.** A newcomer that pinned nothing cannot tell a chain served only
   up to the head in the link from the owner's whole chain, so a thief of the owner's retired key could, with the
   operator, pass the invite's check under that key. The newcomer's join record then names the retired key, which
@@ -193,7 +193,7 @@ places:
 |---|---|---|
 | Pin store | a store below the highest revision it opened, a missing store once it held one, a store that does not open, an entry withheld, added, rolled back or moved under its head — before every read and every write | ADR 0028 Decision 7, ADR 0104 |
 | Device register | the same rule | ADR 0028 Decision 7 |
-| Per-scope epoch floor, and the epoch key it held | a grant below the highest epoch it has held for that scope, and one at or above it whose epoch links do not peel down to the key it held; it never seals under either | ADR 0024 Decision 6, ADR 0111 decision 23 |
+| Per-scope epoch floor, and the succession public key of the epoch key it held | a grant below the highest epoch it has held for that scope, and one at or above it that the succession statements do not lead to from the key it held; it never seals under either | ADR 0024 Decision 6, ADR 0111 decision 23, ADR 0115 decision 5 |
 
 The marks are per device, local and never synced (a synced mark is one more thing the server could roll back). They
 are filed under a one-way derivation of the Master Key, not under an id the server names. A device linked by another
@@ -203,7 +203,11 @@ inherits the linker's marks inside the authenticated pairing envelope.
 
 - **Everything else.** For every other object the server chooses which authentic version it serves — including,
   for item favorites, an older genuine version of the caller's own set
-  ([below](#item-favorites-sealed-under-the-base-epoch)).
+  ([below](#item-favorites-a-count-as-honest-as-the-operator)).
+- **A node rolled back past a link's close.** The epoch floor watches the scope's epoch, which a close does not
+  move, so an active operator can serve a member the subtree as it stood before the close's re-key, and that member's
+  device seals under the old node key again. A per-node mark is not built
+  ([ADR 0114](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) § Consequences).
 - **A device with no mark** trusts the first store it is served — the first-use gap applied to trust state. After
   an account-key rotation, every device other than the rotating one unlocks afresh and has no marks unless it is
   linked again.
@@ -220,8 +224,9 @@ inherits the linker's marks inside the authenticated pairing envelope.
 
 ## Scope rotation: forks, queued rotations and an invented member
 
-Removing a member from a group mints a new content-key epoch in the same request, wrapped only to the members the
-remover's own client picked, minus the one it removes; new content seals under it. Against an active operator, on a
+Removing a member from a group replaces the scope key in the same request, wrapped only to the members the
+remover's own client picked, minus the one it removes; every scope-level row is re-sealed under it in the commit, and
+new content seals under it. Against an active operator, on a
 client it does not serve, this holds for content sealed by any client that has received the new epoch
 ([ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md) § Guarantee).
 Three things it does not cover:
@@ -261,17 +266,17 @@ and no maintained library ships.
 
 **Closed by:** nothing recorded.
 
-## Item favorites, sealed under the base epoch
+## Item favorites: a count as honest as the operator
 
-A member's marks on individual media items (the gallery's shared favorites) are sealed under the scope's **base
-epoch `E_0`** by choice, so that a rotation cannot strand a set. Every member the scope ever had holds `E_0`. Hence:
+A member's marks on individual media items (the gallery's shared favorites) are sealed under the scope key and
+re-sealed at every rotation like every scope-level row, so a member removed by a rotation reads no set from a dump
+taken after it. A tenant's routine removal does not rotate, and that member keeps the tenant key until an explicit
+re-key. Beyond that:
 
-- **A former member can read a set written after their removal**, if they obtain its ciphertext from a dump or a
-  colluding operator. What leaks is each member's marked media ids per Memory. Item favorites are outside ADR 0024's
-  post-rotation guarantee by this choice.
 - **The per-tile count is exactly as honest as the operator.** On its own the operator can withhold entries (down to
   zero), serve an earlier version of a member's set, keep serving a removed member's set, and serve stored sets again
-  as extra entries. With any present or past member it can forge entries with any content.
+  as extra entries. With any member, or a former one who still holds the current key, it can forge entries with any
+  content.
 - **Which entry is the caller's own** is proven by a self-tag only the caller's client computes, so another member's
   marks are never shown as the caller's and a toggle never writes another member's set into the caller's row. The
   operator can still serve the caller an older genuine version of their own set.
@@ -282,39 +287,42 @@ None of this reaches content confidentiality. The private node pin (the sidebar 
 sealed under the member's Master Key.
 
 **Decided in:** [ADR 0068](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0068-favorites-two-confidentiality-levels.md)
-  §9 and § Consequences.
+  §9 and § Consequences; [ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2 (the re-seal).
 
-**Closed by:** ADR 0068 §9 names the condition for re-opening the count's design: marks no longer sealed under
-  `E_0`, and a freshness floor covering them.
+**Closed by:** ADR 0068 §9 names the condition for re-opening the count's design: marks no longer sealed under the
+  first epoch, which holds, and a freshness floor covering them, which is not built.
 
 ## Departed members and the links they could copy
 
 A public share link is a bearer capability: `/s/{shareId}#k=K_share`, with the key in the fragment. Every member can
 rebuild every link of a Memory from its recovery copy, so a member removed from a group or the tenant may hold every
-link that existed on its Memories while they belonged. Using one needs no dump: against an honest server the link
-alone works, and a rotation re-wraps the link to the Memory's new key rather than closing it
+link that existed on its Memories while they belonged. Using one needs no dump: against an honest server an open link
+alone works, and a rotation re-wraps an open link to the Memory's new key rather than closing it
 ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 4).
 
-What is built: a **re-issue** (one request, one transaction: a new id and a fresh `K_share` carrying the old settings,
-the old link deleted) cuts a departed member off. Re-activating a link a departed member may hold is refused
-(`reissue_required`), and a removal — or any owner of the space later — can turn every link of the space off at
-once.
+What is built: closing a viewable link — a switch-off, a delete, its end date, a re-issue — re-keys every node below
+its root ([ADR 0114](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md)), and a **re-issue** (one request, one transaction: a new id and a fresh
+`K_share` carrying the old settings, the old link closed) cuts a departed member off while the link lives on.
+Re-activating a link a departed member may hold is refused (`reissue_required`); a removal turns off the removed
+member's own links, and it — or any owner of the space later — can turn every link of the space off at once.
 
 **What remains:**
 
-- **The cut is honest-server only.** Revocation is access control; a malicious operator can keep serving a revoked
-  id.
-- **Until a link is re-issued, the departed member can keep using it**, with no dump.
-- **With a dump**, they also read the old share's later password, label or note edits, and what is added below the
-  link's root through its `K_share`, after a rotation too. Without a rotation (a tenant member's routine removal), the
-  Memory's content under the `K_node` they kept stays readable whatever the link does.
+- **The instant cut is honest-server only.** A malicious operator can keep serving a closed id, but once its subtree
+  is re-keyed only what existed at the close.
+- **Until a link is closed or re-issued, the departed member can keep using it**, with no dump.
+- **With a dump**, they also read the share's later password, label or note edits, closed or not (the curator's
+  words to that link's holders), and, while it is open, what is added below the link's root through its `K_share`,
+  after a rotation too. A closed link keeps [the residuals of a close](#revocation-cannot-retract-what-was-already-read).
+  Without a rotation (a tenant member's routine removal), they keep the tenant key, so the Memory's content stays
+  readable to them with a dump whatever the link does.
 
-**Decided in:** [ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md).
+**Decided in:** [ADR 0075](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md),
+  [ADR 0114](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md).
 
-**Closed by:** a re-issue, against an honest server; once the scope has also rotated, against a dump of what is
-  added afterwards too, since the fresh `K_share` opens nothing the old one reaches. Without a rotation, the dump case
-  is the class [ADR 0012](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0012-content-key-hierarchy.md)
-  accepts until the next one.
+**Closed by:** a close or a re-issue, against an honest server and, once the subtree is re-keyed, against a dump of
+  what is added afterwards too. For a removed tenant member, who keeps the tenant key, the dump case is the class
+  [ADR 0012](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0012-content-key-hierarchy.md) accepts until the next rotation.
 
 ## Guest names and an operator holding a link
 
@@ -347,32 +355,44 @@ the stored verifier can brute-force offline at one Argon2id per guess.
 ## Revocation cannot retract what was already read
 
 Revocation has two layers. **Layer 1** is access control: the server stops honouring the membership or share and
-serves nothing further — instant, but a defence only against an honest operator. **Layer 2** is a content-key
-rotation: a new epoch for the remaining members, so new content is sealed out of the removed member's reach. Neither
+serves nothing further — instant, but a defence only against an honest operator. **Layer 2** replaces the scope key:
+a fresh one for the remaining members, every scope-level row re-sealed under it and every node re-keyed, so new content
+is sealed out of the removed member's reach and their old key opens nothing in a dump taken after the rotation. Neither
 can retract content a recipient already downloaded and decrypted; rotation protects only future content.
 
 - **Layer 2 is a per-scope policy.** Groups rotate on removal; the **tenant** uses layer 1 alone by default and
   rotates only on an explicit re-key; a personal scope has one member. A revoked tenant member who both hoarded the
   key and ciphertext **and** colludes with a malicious operator keeps that narrow residual until an explicit re-key.
-  A revoked or expired tenant invite is the same class: its link and code still open the epochs it was granted up to
-  the revoke, useful only with a dump of the ciphertext (ADR 0111 § Consequences).
+  A revoked or expired tenant invite is the same class: its link and code still open the tenant keys it was granted,
+  useful only with a dump taken before the tenant next rotates (ADR 0111 § Consequences).
 - **A rotation closes what is added afterwards, not everything.** It re-keys every live and trashed node of the
   scope ([ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)); a member's write into a node not yet re-keyed re-keys its path first, a guest's waits. What stays in the excluded party's reach:
-  - what existed at the rotation;
-  - every link they could rebuild, until it is re-issued: the re-key re-wraps it to the new key
+  - what existed at the rotation, in a dump from before it;
+  - a blob whose `K_blob` they extracted, in a later dump too: a re-key re-wraps keys and re-encrypts no content
+    ([ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) § Consequences);
+  - every open link they could rebuild, until it is closed or re-issued: the re-key re-wraps it to the new key
     ([above](#departed-members-and-the-links-they-could-copy));
   - a drop box's guest identity from before: its `K_up` is re-sealed to the new drop key, not replaced (only the
     guest holds it), so whoever held the old drop key reads what that guest adds to their identity folder afterwards,
-    until the link is re-issued;
+    until the uploader link is re-issued;
   - a queued rotation before an owner runs it (*waiting*, *stalled*).
-- **Without a rotation, kept node keys keep reading.** A removal that does not rotate (the tenant's routine one) and
-  a revoked link's guest read, with a dump, what is added under the nodes whose keys they kept, until the next
-  rotation.
+- **A member a rotation could not grant at once reads nothing** of the scope until re-granted.
+- **Without a rotation, the tenant key keeps reading.** A removal that does not rotate (the tenant's routine one)
+  leaves the member the tenant key, so with a dump they read what is added in the tenant until an explicit re-key.
+- **A closed link reads what existed at the close.** Closing a viewable link re-keys every node below its root, so
+  with a dump it reads nothing added after ([ADR 0114](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md)). What stays: a write landing between an end
+  date and the server sweep that closes the link (every minute by default); the later uploads of an uploader link's
+  guest, whose `K_up` the viewable link's holder opened through the old drop private key, until the uploader link is
+  re-issued; a removed tenant member, who keeps the tenant key, so their links' close cuts only the other holders;
+  and an active operator rolling a member's view of the subtree back
+  ([Freshness](#freshness-only-where-a-device-keeps-a-mark)). A pause re-keys nothing, and neither does closing an
+  uploader link, whose key opens only what its own guests uploaded.
 - **Account-key rotation after a compromise is forward secrecy, not repair.** What was already read stays read.
 
 **Decided in:** [security-model § Revocation](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#revocation--two-layers),
   ADR 0024,
-  [ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md).
+  [ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md),
+  [ADR 0114](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md), [ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md).
 
 **Closed by:** inherent; no scheme can retract what was seen.
 

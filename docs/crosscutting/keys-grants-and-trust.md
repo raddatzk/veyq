@@ -35,7 +35,7 @@ flowchart TB
   mk["Master Key<br>(one per account)"]
   id["Identity<br>X-Wing KEM + Ed25519"]
   grant["Grant<br>K_SC epoch sealed to an identity,<br>signed by its granter"]
-  ep["Epoch key E_n of a scope (K_SC)<br>E_n sealed under E_n+1"]
+  ep["Scope key K_SC at epoch n<br>replaced at each rotation"]
   root["Scope-root node key"]
   node["Node key K_node<br>(folder, Memory, Chapter, …)"]
   blob["Blob key K_blob"]
@@ -56,23 +56,27 @@ flowchart TB
 | **Master Key** | the client at account birth, 32 random bytes | one wrap per unlock method ([en.account.key-model](../features/account/enablers/en.account.key-model.md)) | the account's unlocked devices | the account is secured |
 | **Identity** (`identityPublicKey` = X-Wing encapsulation key + Ed25519 key) | the client at birth | private half sealed under the Master Key (`identity-priv`) | the account | the account is secured |
 | **Secret-Key proof key** (Ed25519) | derived from the Secret Key alone | public half on the server | whoever holds the Secret Key | with the Secret Key, when the account is secured |
-| **Epoch key `E_n`** of a scope (`K_SC`) | the client that creates the scope or commits its next epoch | a **grant** per member: sealed to the member's identity (`scope-grant`, bound to scope and epoch); and `E_{n-1}` sealed under `E_n` (`scope-epoch`) | every member holding a current grant | at every rotation of the scope |
-| **Node key `K_node`** | the client, fresh and random per node, every kind including folders | under the parent's node key; a scope-root node under the epoch key of its epoch (`content-key`) | whoever holds a key above it — a member, or a share guest below the share's root | at every rotation of the scope (the node re-key) |
+| **Scope key `K_SC`** at epoch `n` | the client that creates the scope or commits its next epoch | a **grant** per member: sealed to the member's identity (`scope-grant`, bound to scope and epoch); nothing else wraps it | every member holding a current grant | at every rotation of the scope, proven by a succession statement |
+| **Node key `K_node`** | the client, fresh and random per node, every kind including folders | under the parent's node key; a scope-root node under the scope key (`content-key`) | whoever holds a key above it — a member, or a share guest below the share's root | at every rotation of the scope, and when a viewable link at or above it closes (the node re-key) |
 | **Blob key `K_blob`** | the client, per blob | under its owning node's key (`blob-key`) | as the node key | never; its wrap moves with the node key |
 | **Field key** | derived per write from the key a field belongs under | — | as that key | with every write ([en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)) |
 
-- **One scope, one epoch chain.** A scope's content key is the sequence `E_0, E_1, …`; each new epoch is random and
-  seals its predecessor (`deriveEpochKeys` in `src/web/src/features/spaces/epochs.ts`), so holding `E_n` derives every
-  earlier epoch and never a later one. A grant carries the newest epoch its member holds
-  ([ADR 0024](../decisions/0024-scope-key-rotation.md)). The scope row holds no key, only its current epoch.
+- **One scope, one key at a time.** A scope's key is replaced at every rotation by a fresh random one at the next
+  epoch, and nothing seals an older key under a newer one, so a held key opens no other epoch's
+  ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md); `ScopeKey` in
+  `src/web/src/features/spaces/epochs.ts`). A grant carries the current key; everything sealed under the scope key is
+  re-sealed under the new one by the rotation's commit ([§ Rotating a scope](#rotating-a-scope)). The scope row holds no
+  key, only its current epoch, and per epoch a succession statement.
 - **Every node carries a key** ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md),
   [ADR 0012](../decisions/0012-content-key-hierarchy.md)). A node's **directory entry** — its name, its slug token and
-  the wrap of its key — lives under its **parent's** key; only a scope-root node's entry lives under an epoch key, the
-  write key at creation (`src/web/src/core/node/tree.ts`). So whoever holds a node's key reads every name below it and
-  nothing above it, and a member, holding the epoch keys, opens the whole tree top-down.
-- **Every node carries an epoch**: the epoch its key was minted at. A write sealed under a node's key states it, and
-  the server refuses one that states an older epoch (`409 stale_epoch`) or meets a node whose epoch lags the scope's
-  (`409 node_rekey_pending`, `NodeEpochGate`) — [§ Re-keying the nodes](#re-keying-the-nodes).
+  the wrap of its key — lives under its **parent's** key; only a scope-root node's entry lives under the scope key
+  (`src/web/src/core/node/tree.ts`). So whoever holds a node's key reads every name below it and nothing above it, and
+  a member, holding the scope key, opens the whole tree top-down.
+- **Every node carries its own key's epoch** (`0` at its mint, `+1` at every replacement) and, beside it,
+  `scopeEpoch`, the scope's epoch when the key was minted, which the `content-key` and `node-name` seals bind. A write
+  sealed under a node's key states the node's epoch, and the server refuses one that states another (`409
+  stale_epoch`) or meets a node marked **due** for its re-key (`409 node_rekey_pending`, `NodeEpochGate`) —
+  [§ Re-keying the nodes](#re-keying-the-nodes).
 - **Every seal names its object** — a grant its scope and epoch, a node key and a name its scope, node, epoch and
   placement revision, a blob key its scope, owner, blob and role — so a wrap served on another row fails to open
   ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)). The client mints the id of every object it seals and
@@ -85,7 +89,7 @@ flowchart TB
 
 ## Grants: who wraps a scope key to whom
 
-A grant is an epoch key sealed to one identity **and a signed statement** by its granter's identity over the scope,
+A grant is a scope key sealed to one identity **and a signed statement** by its granter's identity over the scope,
 its kind, the epoch, the recipient's user id, the SHA-256 of the recipient's identity bundle and the SHA-256 of the
 wrapped grant (`grant` statement; `sealGrant` in `src/web/src/features/spaces/grant.ts`). The membership row stores the
 wrapped grant, its epoch, the granter's id, the signature and a copy of the granter's identity bundle **as it was when
@@ -120,9 +124,10 @@ the personal scope only under the account's **own** key, so the server cannot pl
 scope under a granter key the trust check anchors ([§ Trust](#trust-who-is-who)) — for a group from the granter's
 standing in its tenant, not in the group, for the tenant scope's own grant by the pin alone — and a key the granter has since retired
 only at an epoch at or below this device's floor for the scope. Then, where the grant is opened (`openOwnGrant`,
-`scopes.ts`), a grant at or above the epoch whose key this device holds must peel down through the served epoch links to
-exactly that key, so a key the operator chose under a granter it fabricated is refused: it never held the key the link
-must end at (ADR 0111 decision 23). Refusals: `unsigned`, `not_self_signed`, `bad_signature`, `granter_key_unanchored`,
+`scopes.ts`), a grant at or above the epoch whose key this device holds must be reached by the served succession
+statements from exactly that key (`requireSuccessionFromHeld`, `verifySuccessionPath`), so a key the operator chose
+under a granter it fabricated is refused: it never held the key whose derived signing key must sign the first step
+([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 5, ADR 0111 decision 23). Refusals: `unsigned`, `not_self_signed`, `bad_signature`, `granter_key_unanchored`,
 `granter_key_retired`, `epoch_unlinked`. So a device that holds no key of a group yet — a newcomer's after a consent
 accept, a new or linked device — opens a first grant from any member the tenant anchors, in the group or not: a residual
 with no gain over a group of that member's own, since who is in a group is the server's word (ADR 0111 § What stays
@@ -150,27 +155,31 @@ The newcomer has no identity yet, so the owner grants the epoch to a key that st
 4. **Accept.** The invitee's client opens the seal with the code and runs `checkInvite`: the key the seed derives is the
    served invite key; the signer's chain, which the preview serves, passes through the head in the seal and ends at the
    served signer key; the `invite-key` signature and the anchor's `grant` signature verify under that key; and the
-   carried epoch peels down through the served epoch links to exactly the anchor's key. So a key the operator chose
-   under a granter it fabricated is refused (`epoch_unlinked`) — it holds no anchor key to link to — and so is anything
+   served succession statements lead from the anchor key's derived public key to the carried key's. So a key the
+   operator chose under a granter it fabricated is refused (`epoch_unlinked`) — it holds no anchor key to sign from —
+   and so is anything
    an owner's retired key signed (`signer_chain_mismatch`). It then **grants the epoch to its own new identity**, proves
    it holds the invite key (`invite-accept`, verified by the server, else `403 invite_proof_invalid`), names the signer
    key its join record carries (`signerIdentityDigest`, refused unless it is still the invite's: `409 invite_changed`,
    then re-read and re-checked once), and writes a **join record** (below). The server consumes the invite — key,
    grant and anchor nulled — writes a member row whose granter is the newcomer itself and records who rooted the join
    (`TenantAcceptHandler`, `TenantStore.joinAsMember`). An existing account judges the inviting owner against its pin
-   with the served chain and pins the walked head (`anchorServedChain`). A newcomer joining through an invite a
-   rotation declared pending joins at an older epoch, behind, and is brought current by grant delivery.
+   with the served chain and pins the walked head (`anchorServedChain`). An invite a rotation declared pending
+   is redeemable only once a later rotation or its owner carries it to the current epoch: the join record is sealed
+   under the current key and an accept stating another epoch is `409 stale_epoch` (`TenantAcceptHandler.profileSeal`).
 5. **Revoking an invite is removing a member.** Accept, revoke, supersede, expiry and the erasure of the signer's or the
    addressee's account null its key, grant and anchor. The tenant does not rotate on it, so a revoked link with its code
-   still opens the epochs up to the revoke.
+   and a dump from before the revoke still opens the tenant key of that epoch, and with it what a dump taken before the
+   tenant's next rotation holds.
 
 **The join record** is the newcomer's identity public key and Secret-Key proof public key with the owner-signed
-invite, signed by the **invite key** and by the new identity (`join-record`), sealed under the tenant epoch key the
-invite's grant carried (`member-join-record`), stored in the tenant profile (`veyq_tenant_profile.sealed_join_record`)
+invite, signed by the **invite key** and by the new identity (`join-record`), sealed under the tenant's current key
+(`member-join-record`, re-sealed at every rotation), stored in the tenant profile (`veyq_tenant_profile.sealed_join_record`)
 and served to every member as `ScopeMember.sealedJoinRecord`. The owner's signature on the invite key and the invite
 key's signature on the record make a chain **owner → invite → newcomer** that neither the operator nor a holder of the
 tenant key can forge. The server records who rooted it (`join_signer_user_id`); when that owner secures the account,
-they **endorse** the record with the new key (`join-endorsement` over the sealed record, `ScopeMember.joinEndorsement`),
+they **endorse** the record with the new key (`join-endorsement` over SHA-256 of the opened record, so no re-seal
+voids it; `ScopeMember.joinEndorsement`),
 without which a record their retired key signed counts nowhere. A tenant's first owner has none
 ([§ Trust](#trust-who-is-who)).
 
@@ -188,8 +197,8 @@ sequenceDiagram
   S-->>N: mail: link with sealed {seed, owner head}
   Note over O,N: the code travels outside veyq
   N->>S: preview
-  S-->>N: invite, owner's chain, anchor, carried grant, epoch links
-  N->>N: open seal with code, walk chain from head, check signatures, peel carried epoch to the anchor
+  S-->>N: invite, owner's chain, anchor, carried grant, succession statements
+  N->>N: open seal with code, walk chain from head, check signatures, verify succession from anchor to carried key
   N->>S: register/accept: self-grant, invite-accept proof, signer digest, sealed join record
   S->>S: verify proof and digest, consume invite, member row, record who rooted it
 ```
@@ -207,8 +216,7 @@ Groups have no invites.
 
 ### Grant delivery brings a behind member current
 
-A member is **behind** when their grant is older than the scope's epoch: a rotation declared them pending, or they
-joined through an invite a rotation declared pending. The server keeps one `grant-delivery` job per behind membership,
+A member is **behind** when their grant is older than the scope's epoch: a rotation declared them pending. The server keeps one `grant-delivery` job per behind membership,
 reconciled on every claim and by a scheduled backstop (`TasksStore.reconcileGrantDelivery`, `GrantDeliveryOriginator`);
 only the server originates it ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md)).
 
@@ -225,9 +233,13 @@ only the server originates it ([ADR 0021](../decisions/0021-operator-blind-backg
 
 ## Rotating a scope
 
-A rotation commits the scope's **next** epoch. The rotating client mints `E_{n+1}`, seals `E_n` under it, and posts
-one request (`rotateScope`, `commitRotation` in `src/web/src/features/spaces/scopes.ts`): the stated epoch, the chain
-link, a grant to every member whose key it anchors and always to itself, the members it cannot anchor as
+A rotation commits the scope's **next** epoch and **replaces** the scope key
+([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md)). The rotating client mints a fresh key for
+epoch `n + 1`, re-seals every scope-level row under it ([§ The scope-level re-seal](#the-scope-level-re-seal)), and
+posts one request (`rotateScope`, `commitRotation` in `src/web/src/features/spaces/scopes.ts`): the stated epoch, the
+re-key id of its stage, the **succession statement** — the new epoch's succession public key signed by the old key's
+(`HKDF(K, "veyq/v1/scope-succession")` as an Ed25519 seed, `successionKeyPair` in `src/packages/crypto/src/v1.ts`),
+which opens nothing and is stored and served, never verified, by the server — a grant to every member whose key it anchors and always to itself, the members it cannot anchor as
 **pending** (`pendingUserIds`), for a tenant every open invite re-granted or declared pending, and, on a group only,
 optionally the member it removes — `removesUserId` on a tenant or personal scope is `400 invalid_request`: a tenant
 member leaves by the removal cascade, which also cuts their groups. Under the scope's row lock the server decides (`RotationPolicy`):
@@ -251,7 +263,36 @@ member leaves by the removal cascade, which also cuts their groups. Under the sc
 A removal-rotation deletes the membership, the member's own links in the group and, on request, every other link of
 the group in the same transaction as the epoch ([ADR 0075](../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md));
 a bare delete of a member with a grant is refused (`409 removal_requires_rotation`). After the commit the client raises
-its epoch floor for the scope.
+its epoch floor for the scope, and every node of the scope is due ([§ Re-keying the nodes](#re-keying-the-nodes)). A
+member the rotation declared pending reads **nothing** of the scope until a grant reaches them — the scope reads as
+*awaiting the current key* — since nothing stored opens under the key they hold (ADR 0115 decision 8).
+
+### The scope-level re-seal
+
+Before the commit the rotating client pages through every row sealed under the scope key (`stageScopeLevelRekey`,
+`src/web/src/features/spaces/scopeRekey.ts`), opens each with the old key, re-seals it under the new one at the new
+epoch, and stages it under its re-key id (`veyq_scope_rekey_stage`). Only a caller who may commit the rotation and
+holds the current grant reads and stages these rows (`RekeyAccess.checkRotator`). The commit swaps every staged value
+in, in the rotation's transaction (`ScopeRekeyCommit`), or nothing: a row without a staged value is `409
+rekey_parts_missing`, and every staged value names `replacedDigest`, the SHA-256 of the ciphertext it replaces (per
+member field for a profile), so a row written since it was read is `409 rekey_parts_stale` — at the stage or at the
+commit — and the client stages again, a bounded number of times (`REKEY_RESTAGES`). Every scope-level write states the
+epoch it seals under, and one at another is `409 stale_epoch`. The rows:
+
+| Row | Re-sealed as | Staged by |
+|---|---|---|
+| each scope-root node's entry, live and trashed | the node's current key re-wrapped, its name re-sealed and slug token recomputed, held by its placement revision | core |
+| a group's name, a space's icon | at the new epoch | core |
+| a pending group invitee's name key | sealed to the identity the rotation anchors for the invitee; **cleared** for one it holds as an anomaly or anchors no key for — the invitee sees the proposal unnamed, and nothing re-wraps it later | core |
+| each link's recovery copy | at the new epoch; the epoch the link was minted at stays beside it for the re-issue rule | core |
+| a tenant member's name, picture and join record; a tenant's verifications | under the new key, the signed statements inside unchanged | core |
+| a Memory's item marks | under the new key | Memories, through its `ScopeRekeyParticipant` |
+
+A profile field or a verification that does not open under the old key is staged as a seal of random bytes of the same
+length, which reads exactly as before, and an item-mark set that does not open as an empty set nobody owns, so one
+unreadable value stops no rotation. A `K_blob`, a member's own favorites
+and the moderation key's epochs are under other keys and stay. `scripts/validate_scope_rekey_arity.py` holds every seal
+purpose to one side of that line.
 
 ### When a scope rotates, per kind
 
@@ -263,7 +304,8 @@ its epoch floor for the scope.
 
 The policy is [ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md)'s for removals
 (`RemovalPolicy` in `src/backend/core/.../admin/tenant/`) and [ADR 0060](../decisions/0060-key-rotation-after-compromise.md)'s
-for a compromise. Revoking a link or a member invite rotates nothing. The server accepts a rotation of any kind from
+for a compromise. Revoking a member invite rotates nothing, and closing a link rotates nothing either: it re-keys the
+subtree below the link ([§ Re-keying the nodes](#re-keying-the-nodes)). The server accepts a rotation of any kind from
 an owner, and a removal only on a group; the client starts one in exactly four places: the group removal, the queued-rotation worker, the
 securing account's finish and an owner's re-key of a tenant or a group (`rekeySpace`, `src/web/src/features/spaces/members.ts`).
 
@@ -291,25 +333,35 @@ job only if the epoch was committed while the worker held the lease (`409 rotati
 
 ### Re-keying the nodes
 
-Every rotation re-keys every node of the scope, so nothing added inside an existing folder or Memory seals under a key
-the excluded party holds ([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)).
+A node is re-keyed when it is marked **due**, and two things mark: a rotation's commit marks every node of the scope
+([ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)), and the close of a `READ` or
+`READ_WRITE` link marks every node of its root's subtree, live and trashed, in the close's own transaction
+([ADR 0114](../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md); which events close a link is
+[en.sharing.public-link § Lifecycle](../features/sharing/enablers/en.sharing.public-link.md#lifecycle)). So nothing
+added inside an existing folder or Memory seals under a key the excluded party or a closed link holds. A scope is
+*re-keying* while any node is due (`ScopeRekeying`).
 
 - **A node's re-key is one commit, top-down** (`RekeyStore.commit`): a fresh key, the node's entry under its parent's
   current key, each child's entry re-sealed, the node's meta, every `K_blob` re-wrapped (nothing in the store is
-  re-encrypted), its drop key replaced, each share on it re-wrapped from its recovery copy. What an application seals
+  re-encrypted), its drop key replaced, each **open** link on it re-wrapped from its recovery copy — a closed one gets
+  nothing new, and a key staged for a link closed since is `409 rekey_parts_stale` — and every link's guest identities
+  re-sealed whatever its state. What an application seals
   under the node's key it re-keys in the same commit through its **re-key participant** (`NodeRekeyParticipant`):
   Memories its media's meta, EXIF, blob wraps and bucket names, Expenses a Pot's revision-key wraps and its receipts'
   `K_blob` wraps (no entry body changes, [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)).
-  The parent must already be at the current epoch. It fails closed: a child, blob, share, identity or participant row
-  without its staged part is `409 rekey_parts_missing`, a moved or changed one `409 rekey_parts_stale`. The node's epoch
-  becomes the scope's.
+  The node must be due and its parent not. It fails closed: a child, blob, share, identity or participant row
+  without its staged part is `409 rekey_parts_missing`, a moved or changed one `409 rekey_parts_stale`. The commit
+  raises the node's own epoch by one, sets its `scopeEpoch` to the scope's and clears the mark; a node's old key comes
+  from its parent's entry, so no re-keyer needs an old scope key.
 - **Any member holding the current grant re-keys** (`RekeyAccess`; a member behind gets `403 grant_behind`), of any
   scope kind — a re-key is not governance (ADR 0111 decision 11). **Owner-only** are a **drop box** (a node whose kind
   gets per-guest identity folders, Depot's `DEPOT_DROPBOX`), a guest's **identity folder** and every node below one
   (`OwnerOnlyRekey`, `403 not_scope_owner`; ADR 0080 Decision 11). A node that only carries a drop key — a Memory or
   Chapter with an uploader link — is any member's.
-- **Who runs it:** the client that committed the epoch, right away; then every member's scope-rotation worker in the
-  background, which resumes any scope its row marks *re-keying* (`resumeRekeys`) and skips the owner-only nodes.
+- **Who runs it:** the client that committed the epoch, right away, or the client that closed the link, in the
+  background (`rekeyPath(…, { subtree: true })`, `src/web/src/core/sharing/manageShares.ts`); then every member's
+  scope-rotation worker, which resumes any scope its row marks *re-keying* (`resumeRekeys`) and skips the owner-only
+  nodes. An end date's close is marked by the server's sweep and left to the workers.
 - **A member's write pulls its path forward.** A write into a node not yet re-keyed is `409 node_rekey_pending`; the
   client's one retry helper (`writeAtNodeEpoch`, `src/web/src/shared/rekeyRetry.ts`) re-keys that node and its lagging
   ancestors (`pullRekeyPath`) and retries, so for a member a write is delayed, not refused. A write that carries
@@ -387,8 +439,9 @@ ADR 0111 decisions 6–10). It is forward secrecy, not repair: what was read sta
 From the publish on, every scope the account was in holds its current epoch for the new identity, so a lost answer, a
 closed tab or a failed next epoch strands nothing. Other members' grants are untouched by the publish; they receive
 the next epoch from it. A pending group proposal keeps its grant, re-granted like every other, but not its name: its
-name key stays sealed to the old identity, nothing re-seals it, and the invitation shows as an unnamed group
-(`openInviteeName`, `src/web/src/features/spaces/inviteName.ts`; ADR 0060 § Consequences).
+name key stays sealed to the old identity until a rotation of the group re-seals it to the key it anchors, and the
+invitation shows as an unnamed group meanwhile (`openInviteeName`, `src/web/src/features/spaces/inviteName.ts`;
+ADR 0060 § Consequences).
 
 ## Trust: who is who
 
@@ -400,8 +453,8 @@ one the operator substituted (ADR 0111 decisions 12–17,
 | Record | Where | Written by | What it holds |
 |---|---|---|---|
 | **Key chain** | beside the identity (`veyq_key_chain_step`), served by `getKeyChain` | the person only | an unsigned **genesis** at birth (identity + proof key), then one doubly signed step per securing; its **head** is the hash of the newest step, the same in every tenant |
-| **Join record** | the tenant profile, sealed under a tenant epoch key | the person, through its invite | the identity and proof key it joined with, under the owner → invite → newcomer signatures |
-| **Verifications** | `veyq_verification`, one row per verifier and subject per tenant, sealed under a tenant epoch key | each verifier, into their own row only | "in this tenant, I at my head confirmed you at your head", signed by the verifier's identity |
+| **Join record** | the tenant profile, sealed under the tenant key | the person, through its invite | the identity and proof key it joined with, under the owner → invite → newcomer signatures |
+| **Verifications** | `veyq_verification`, one row per verifier and subject per tenant, sealed under the tenant key | each verifier, into their own row only | "in this tenant, I at my head confirmed you at your head", signed by the verifier's identity |
 | **Pin store** | per account, synced, sealed under the Master Key | the device | per person the highest key-chain head seen, its index, the identity fingerprint at it, the first-seen time and a *replaced* mark — no verdict |
 
 The chain is served to the person, to users who share a tenant with them, between two accepted moderators, and the
@@ -443,7 +496,7 @@ so the gate never fires for one, and it never blocks anybody's write.
   (`src/web/src/features/account/safetyCode.ts`). A step withheld from one side is a mismatch. A device shows its own
   chain code only once the served chain ends at the identity its vault holds.
 - **A match writes a verification** (`verifyPerson`): the statement names the tenant, both user ids and **both heads**,
-  signed by the verifier's identity, sealed as `member-verification` under a tenant epoch and written only into the
+  signed by the verifier's identity, sealed as `member-verification` under the tenant key and written only into the
   verifier's own row (`putMyVerification`); every member reads the tenant's rows (`listVerifications`). It **counts**
   while it names the subject's current head, verifies under the verifier's current key at the verifier's current head,
   and the verifier is anchored in the tenant (`countVerifications`). A contact's rotation moves their head, so every
@@ -461,13 +514,14 @@ so the gate never fires for one, and it never blocks anybody's write.
 The pin store is the device's memory of each contact's newest head, so a served head older than the pinned one is a
 rollback and an anomaly. The device also keeps its own **trust marks**, local and never synced
 (`src/web/src/features/account/trustMarks.ts`): the highest revision it opened of the pin store and of the device
-register, and an **epoch floor** per scope beside a commitment to the newest **epoch key it held** there. A store
+register, and an **epoch floor** per scope beside a commitment to the newest **scope key it held** there — that key's
+succession public key. A store
 served below its mark, or one that does not open, is refused (`trust_state_rolled_back`, `trust_state_unreadable`),
 never read as empty; the floor is what limits a grant signed by a retired key to the epochs from before its granter's
 rotation ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7), and the held key what a
-later epoch must link down to (ADR 0111 decision 23). Every grant the device opens, every epoch it commits, and the
-tenant key an accept checked or minted becomes the held key — the last so the accepting device's first open of the
-tenant takes no epoch that does not link down to what the accept vouched for; a new account holds it under the Master
+later epoch's succession statements must start from (ADR 0115 decision 5, ADR 0111 decision 23). Every grant the device
+opens, every epoch it commits, and the tenant key an accept checked or minted becomes the held key — the last so the
+accepting device's first open of the tenant takes no epoch that does not succeed what the accept vouched for; a new account holds it under the Master
 Key its birth hands back, before any vault holds one. Pairing carries the floors to a linked device, not the held keys.
 
 There is no Key Transparency log; a hash-chained key chain with one head per account, shown in the compare, is what
@@ -516,7 +570,9 @@ lacks it ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decisio
   [ADR 0104](../decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md) (the pin store),
   [ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) (the node re-key),
   [ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-  (invites, securing the account, the key chain and the anchor)
+  (invites, securing the account, the key chain and the anchor),
+  [ADR 0114](../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) (a link's close re-keys its subtree),
+  [ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md) (a scope key is replaced, never chained)
 - Enablers: [en.account.key-model](../features/account/enablers/en.account.key-model.md),
   [en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md),
   [en.spaces.scope-key-rotation](../features/spaces/enablers/en.spaces.scope-key-rotation.md),

@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-07-08
 - Model: [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)
-- Replaced in part: § 1, § 5 by ADR 0080 (built); § 6 by ADR 0075 (built); § 7 by ADR 0109 (built)
+- Replaced in part: § 1, § 5 by ADR 0080 (built); § 6 by ADR 0075 (built); § 7 by ADR 0109 and ADR 0114 (built)
 
 ## Context
 

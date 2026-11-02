@@ -243,10 +243,11 @@ what the server checks are [keys, grants and trust § Grants](keys-grants-and-tr
 ## Revocation & rotation
 
 Revoking a member is **two-layered** (detail in the [Security Model](security-model.md)):
-server-side membership invalidation is **instant** (no keys needed); **rotating `K_SC` forward into
-a new epoch** (granted to the remaining members, [ADR 0024](../decisions/0024-scope-key-rotation.md)) is
-the defense-in-depth. Already-read content cannot be retracted. **Switching off a link is the first layer only** — it
-rotates nothing; a link someone who left could rebuild comes back only by re-issue, with a fresh key
+server-side membership invalidation is **instant** (no keys needed); **replacing `K_SC` with a fresh key at
+a new epoch** (granted to the remaining members, everything scope-level re-sealed under it,
+[ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md)) is the defense-in-depth. Already-read content
+cannot be retracted. **Switching off a link** rotates no scope key but closes the link, which re-keys the subtree below
+its root; a link someone who left could rebuild comes back only by re-issue, with a fresh key
 ([en.sharing.public-link § Lifecycle](../features/sharing/enablers/en.sharing.public-link.md#lifecycle)).
 
 Who commits a rotation, per scope kind, and who re-keys the nodes: [keys, grants and trust § Rotating a scope](keys-grants-and-trust.md#rotating-a-scope).

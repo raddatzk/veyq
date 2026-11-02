@@ -47,7 +47,8 @@ The record, the key path and the link's lifecycle are [en.sharing.public-link](.
    it **iff the blob is attached under the shared subtree**, returns a **presigned store URL**, and the client
    fetches the bytes **directly from the object store** and decrypts them locally.
 5. **Manage / revoke.** The curator can list their shares and **revoke** one (`enabled = false`) or set an expiry;
-   the next visitor request then `404`s.
+   the next visitor request then `404`s. A revoke, and an expiry once it passes, **close** the link, and a close
+   re-keys every node below its root ([en.sharing.public-link § Lifecycle](../enablers/en.sharing.public-link.md#lifecycle)).
 
 ```mermaid
 ---
@@ -76,9 +77,11 @@ sequenceDiagram
 
 ## Alternate / exception flows
 
-- **A1 — expiry:** a share past its `expiresAt` resolves `404` (same shape as an unknown id — non-enumerable).
+- **A1 — expiry:** a share past its `expiresAt` resolves `404` (same shape as an unknown id — non-enumerable), and a
+  server sweep closes it, as a revoke does (A2).
 - **A2 — revoked:** `enabled = false` → the resolve **and** the gated blob endpoint `404`; a visitor who already
-  downloaded ciphertext can still replay *that*, but gets nothing new (no key rotation — see Quality notes).
+  downloaded ciphertext can still replay *that*, but gets nothing new: the close re-keys the subtree below the root,
+  so the old link's key opens nothing added after it, even in a dump (see Quality notes).
 - **A3 — public links switched off on the instance:** while `core.public-shares` is off, every link of every role
   answers the resolve, the blob endpoint and every other guest endpoint exactly as an unknown id — a `404`, before any
   password is asked — and serves again, unchanged, once it is back on ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md) A3, ADR 0088 decision 5).
@@ -106,13 +109,16 @@ sequenceDiagram
   JS that captures the fragment key). This is **not** shouted in the viewer; the page carries a **footer link to
   veyq's security documentation** (the single source of the trust model). For the **default self-hosted** case
   (operator = curator) the gap is **moot**; a foreign-operator-proof viewer needs the future trusted-web client.
-- **Revocation is soft (L1); already-read is not retractable.** Revoke/expiry stop *new* access (resolve + gated
-  blobs `404`), but content a visitor already downloaded cannot be pulled back — a stated limitation.
+- **Revocation closes the link; already-read is not retractable.** Revoke/expiry stop *new* access (resolve + gated
+  blobs `404`) and re-key the subtree below the root, so the link's key reads what existed at the close and nothing
+  added after — but content a visitor already downloaded cannot be pulled back, and a re-key re-wraps keys without
+  re-encrypting content (the residuals: [security model § Revocation](../../../crosscutting/security-model.md#revocation--two-layers)).
 - **Scope rotation ≠ share revocation.** A scope rotation does **not** close a link: the re-key re-wraps the root's
-  new key under the link's own key, so the link keeps working at the same address
-  ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 4). Switching it off or
-  renewing it closes it; a removal switches off the removed member's links
-  ([uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md)).
+  new key under an open link's own key, so the link keeps working at the same address
+  ([ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) point 4). Switching it off,
+  deleting or renewing it, or its end date passing closes it and re-keys its subtree; a removal switches off — closes —
+  the removed member's links ([uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md)). A pause (the root
+  trashed, a capability or requirement off, a moderation block) closes nothing.
 
 ## User impact
 

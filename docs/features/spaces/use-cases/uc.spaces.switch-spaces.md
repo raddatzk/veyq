@@ -18,8 +18,8 @@
 2. **Each avatar is decrypted on device.** `my-tenants` is **account**-scoped, not Host-scoped, so it carries per
    tenant — beside the cleartext name + domain — the caller's **own** `wrappedGrant` for that tenant's root scope
    and its `sealedIcon` + `iconEpoch` ([en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md), which owns
-   that read path and the reasoning for it). For each row the client opens the grant, peels the epoch chain to
-   `iconEpoch`, derives `K_icon`, decrypts the icon, and **zeroes that scope key immediately** — the same
+   that read path and the reasoning for it). For each row the client opens the grant, derives `K_icon` from the
+   scope key it carries (every rotation re-seals the icon at its new epoch), decrypts the icon, and **zeroes that scope key immediately** — the same
    transient open-decrypt-zero the group-name read already does. The result is the row's avatar; where no icon is
    set, or no grant is held (A2), the tenant's **initial** stands
    ([uc.spaces.set-space-icon](uc.spaces.set-space-icon.md)).
