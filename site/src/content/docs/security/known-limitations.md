@@ -32,7 +32,7 @@ operator is you, and the active-operator entries do not apply.
 | [Operator-served web is passive-only](#the-operator-served-web-client-is-passive-operator-only) | the operator who serves your client | ADR 0026 | serving your own client; [trusted third-party client](/veyq/security/roadmap/) |
 | [TOFU's first-use gap](#identity-keys-tofus-first-use-gap) | active operator | ADR 0028, ADR 0111 | a safety-number compare (built); [Key Transparency, strict mode](/veyq/security/roadmap/) |
 | [Freshness only where a device keeps a mark](#freshness-only-where-a-device-keeps-a-mark) | active operator | ADR 0072, ADR 0028 Decision 7 | nothing recorded beyond the three marks |
-| [Forks and queued rotations](#scope-rotation-forks-queued-rotations-and-an-invented-member) | active operator | ADR 0024 | nothing recorded |
+| [Forks and queued rotations](#scope-rotation-forks-queued-rotations-and-an-invented-member) | active operator; a rotator, to junk a value | ADR 0024, ADR 0115 | nothing recorded; a junked value is visible |
 | [A member the operator presents as an owner](#identity-keys-tofus-first-use-gap) | active operator | ADR 0111 | signed roles and removals, not designed (a non-owner without a join record is an anomaly, built) |
 | [QR reader who also runs the relay](#device-linking-an-attacker-who-reads-the-qr-and-runs-the-relay) | operator who also sees the QR | ADR 0059 §11 | nothing recorded |
 | [Item favorites' count](#item-favorites-a-count-as-honest-as-the-operator) | the operator; with a member, forged entries | ADR 0068, ADR 0115 | a freshness floor covering them (ADR 0068 §9) |
@@ -225,11 +225,11 @@ inherits the linker's marks inside the authenticated pairing envelope.
 ## Scope rotation: forks, queued rotations and an invented member
 
 Removing a member from a group replaces the scope key in the same request, wrapped only to the members the
-remover's own client picked, minus the one it removes; every scope-level row is re-sealed under it in the commit, and
-new content seals under it. Against an active operator, on a
+remover's own client picked, minus the one it removes; every scope-level value's own key is re-wrapped under it in the
+commit (a rotation never rewrites a value), and new content seals under it. Against an active operator, on a
 client it does not serve, this holds for content sealed by any client that has received the new epoch
 ([ADR 0024](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0024-scope-key-rotation.md) § Guarantee).
-Three things it does not cover:
+Four things it does not cover:
 
 - **A withheld rotation (a fork).** The operator can keep a member from ever learning of the new epoch. That
   member's client keeps writing under the old one, and nothing on the wire tells it otherwise; the epoch floor only
@@ -242,8 +242,17 @@ Three things it does not cover:
 - **A member the server adds to the list as an owner.** A rotation wraps only to members whose join record an
   anchored owner's invite rooted, and to owners without one, so a membership the operator writes as an owner before a
   rotation is re-granted by it (see [TOFU's first-use gap](#identity-keys-tofus-first-use-gap)).
+- **A rotator junking a value.** A rotation re-wraps each value's own key and never rewrites a value: the stage
+  carries wraps only, the server refuses one that writes a value, and a wrap of a key of the rotator's choosing opens
+  no value sealed under another, so a rotator — an owner, or a member securing their account — cannot forge a name, a
+  picture, a join record, a verification, an item mark, a group's name or icon, or a link's recovery copy. It can stage
+  a stand-in for a wrap it could open, which makes that value unreadable, and a junked recovery copy closes its link,
+  key lost: an insider's denial of service, visible as a missing value or a closed link, that reads nothing it could
+  not read already.
 
 **Decided in:** ADR 0024 § Guarantee;
+  [ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)
+  decision 2 (the junked value);
   [ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   § What stays open (the invented member).
 
@@ -268,9 +277,10 @@ and no maintained library ships.
 
 ## Item favorites: a count as honest as the operator
 
-A member's marks on individual media items (the gallery's shared favorites) are sealed under the scope key and
-re-sealed at every rotation like every scope-level row, so a member removed by a rotation reads no set from a dump
-taken after it. A tenant's routine removal does not rotate, and that member keeps the tenant key until an explicit
+A member's marks on individual media items (the gallery's shared favorites) are sealed under a value key of their own
+whose wrap the scope key holds, re-wrapped at every rotation like every scope-level value's, so a member removed by a
+rotation reads no set written after it from a dump taken after it — only one whose value key they extracted before,
+until that member writes it again. A tenant's routine removal does not rotate, and that member keeps the tenant key until an explicit
 re-key. Beyond that:
 
 - **The per-tile count is exactly as honest as the operator.** On its own the operator can withhold entries (down to
@@ -287,7 +297,7 @@ None of this reaches content confidentiality. The private node pin (the sidebar 
 sealed under the member's Master Key.
 
 **Decided in:** [ADR 0068](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0068-favorites-two-confidentiality-levels.md)
-  §9 and § Consequences; [ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2 (the re-seal).
+  §9 and § Consequences; [ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2 (the re-wrap).
 
 **Closed by:** ADR 0068 §9 names the condition for re-opening the count's design: marks no longer sealed under the
   first epoch, which holds, and a freshness floor covering them, which is not built.
@@ -356,7 +366,7 @@ the stored verifier can brute-force offline at one Argon2id per guess.
 
 Revocation has two layers. **Layer 1** is access control: the server stops honouring the membership or share and
 serves nothing further — instant, but a defence only against an honest operator. **Layer 2** replaces the scope key:
-a fresh one for the remaining members, every scope-level row re-sealed under it and every node re-keyed, so new content
+a fresh one for the remaining members, every scope-level value key re-wrapped under it and every node re-keyed, so new content
 is sealed out of the removed member's reach and their old key opens nothing in a dump taken after the rotation. Neither
 can retract content a recipient already downloaded and decrypted; rotation protects only future content.
 
@@ -370,6 +380,9 @@ can retract content a recipient already downloaded and decrypted; rotation prote
   - what existed at the rotation, in a dump from before it;
   - a blob whose `K_blob` they extracted, in a later dump too: a re-key re-wraps keys and re-encrypts no content
     ([ADR 0115](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) § Consequences);
+  - a scope-level value — a member's name, picture or join record, a verification, an item-mark set, a group's name or
+    icon, a link's recovery copy — whose value key `K_v` they extracted, in a later dump until its author writes it
+    again: the rotation re-wraps `K_v` and leaves the value;
   - every open link they could rebuild, until it is closed or re-issued: the re-key re-wraps it to the new key
     ([above](#departed-members-and-the-links-they-could-copy));
   - a drop box's guest identity from before: its `K_up` is re-sealed to the new drop key, not replaced (only the

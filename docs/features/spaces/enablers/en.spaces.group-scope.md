@@ -23,9 +23,9 @@
 - **Preconditions:** An **authenticated, unlocked** member of the active tenant (the identity **private**
   bundle is in the vault, so the client can seal/open a grant).
 - **Postconditions (success):** A `kind=GROUP` scope exists in the tenant with the creator's **self-grant**
-  (the scope key sealed to their own identity public key, `role=OWNER`) and its **name sealed under a derived
-  name-key `K_name_0`** (from the birth epoch, cr-0096/[ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md)),
-  at name-epoch 0; the client holds the opened scope key in memory and can browse the (initially empty) tree. The
+  (the scope key sealed to their own identity public key, `role=OWNER`) and its **name sealed under a value key of its
+  own** `K_v`, wrapped under the birth key (cr-0096/[ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md),
+  [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md)), at name-epoch 0; the client holds the opened scope key in memory and can browse the (initially empty) tree. The
   server never saw the scope key or the name.
 
 ## What's new vs. the personal scope
@@ -33,14 +33,15 @@
 A group reuses the personal scope's machinery — client-driven birth, the hybrid-KEM self-grant, open-by-unwrap
 — and adds exactly three things:
 
-1. **A name, sealed under a derived name-key.** A personal scope is anonymous (one per `(user, tenant)`); a group
-   needs a human name so members can tell groups apart in the switcher. The name is **ciphertext under `K_name`** —
-   a key derived from the name's content-epoch key (`K_name = HKDF(E_e, "group-name-key")`), sealed under a
-   purpose of its own ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) — so only members (and a
-   pending invitee handed `K_name`) read it and the server sees an **unnamed** group
-   ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md)). The derived key (vs sealing directly under
-   `K_SC`) makes the name **forward-secret** like node names and lets a consent-invitee read the *canonical* name
-   ([ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md)). Born at name-epoch 0.
+1. **A name, sealed under a value key of its own.** A personal scope is anonymous (one per `(user, tenant)`); a group
+   needs a human name so members can tell groups apart in the switcher. The name is **ciphertext under `K_v`** — a
+   random key minted at the birth and at every rename, wrapped under the scope key (`value-key`), the name sealed under
+   a purpose of its own ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) — so only members (and a
+   pending invitee handed `K_v`) read it and the server sees an **unnamed** group
+   ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md)). The value key (vs sealing directly under
+   `K_SC`) makes a rename **forward-secret**, lets a consent-invitee read the *canonical* name
+   ([ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md)) and leaves a rotation nothing to rewrite but
+   the wrap ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md)). Born at name-epoch 0.
 2. **Multi-member by design.** A personal scope has exactly one grant (its owner). A group is *built* to carry
    many — but **this enabler only mints the owner's self-grant**; other members' grants are the member-add slice
    ([uc.spaces.add-group-member](../use-cases/uc.spaces.add-group-member.md)), which reuses the shared
@@ -57,15 +58,16 @@ A group reuses the personal scope's machinery — client-driven birth, the hybri
 ## Main flow — create + open a group
 
 1. The unlocked member chooses **new group** and names it (plaintext, on device).
-2. The client **generates** the group's scope id and a random scope key `K_SC` (= the birth epoch `E_0`), derives
-   `K_name_0 = HKDF(E_0, "group-name-key")`, **seals the name** under `K_name_0` (`encryptedName`), and seals
-   `K_SC` to its **own** identity public key (purpose `scope-grant`), both bound to that scope id
-   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)); it signs the grant with its identity key.
-3. `POST /api/scopes/groups { scopeId, encryptedName, wrappedGrant }` → the server creates the `kind=GROUP`
+2. The client **generates** the group's scope id, a random scope key `K_SC` (= the birth epoch `E_0`) and a random
+   value key `K_v`, **seals the name** under `K_v` (`encryptedName`), wraps `K_v` under `E_0`
+   (`wrappedNameValueKey`), and seals `K_SC` to its **own** identity public key (purpose `scope-grant`), each bound to
+   that scope id ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)); it signs the grant with its identity key.
+3. `POST /api/scopes/groups { scopeId, encryptedName, wrappedNameValueKey, wrappedGrant }` → the server creates the `kind=GROUP`
    scope under that id in the Host's tenant + the caller's self-membership (`role=OWNER`), returns
    `{ scopeId, kind:GROUP }`.
 4. To **open** (now or a later launch): from `GET /api/scopes` take the group's `wrappedGrant`, `asymUnwrap` it
-   with the vaulted identity → `K_SC`; decrypt `encryptedName` → the group's name (for the switcher); browse its
+   with the vaulted identity → `K_SC`; open `K_v` from its wrap, decrypt `encryptedName` → the group's name (for the
+   switcher); browse its
    tree like any scope.
 
 ```mermaid
@@ -78,15 +80,15 @@ sequenceDiagram
   participant S as Server<br>(blind)
   U->>C: new group "Familie"
   C->>C: scopeId = uuid() #59; K_SC = random(32)  (= E_0)
-  C->>C: K_name0 = HKDF(E_0, "group-name-key") #59; encryptedName = seal("Familie", K_name0, scopeId)
+  C->>C: K_v = random(32) #59; encryptedName = seal("Familie", K_v, scopeId) #59; wrap = seal(K_v, E_0)
   C->>C: grant = seal K_SC to ownIdentityPub (scope-grant, scopeId, epoch 0) + sign
-  C->>S: POST /api/scopes/groups { scopeId, encryptedName, wrappedGrant: grant }
+  C->>S: POST /api/scopes/groups { scopeId, encryptedName, wrappedNameValueKey: wrap, wrappedGrant: grant }
   S->>S: create scope(scopeId, kind=GROUP, tenant=Host) + self-membership(role=OWNER)
   S-->>C: { scopeId, kind:GROUP }
   Note over U,S: open (now or next launch)
   C->>S: GET /api/scopes
-  S-->>C: [.., { id, kind:GROUP, tenantId, wrappedGrant, encryptedName, nameEpoch }]
-  C->>C: K_SC = asymUnwrap(identity, wrappedGrant) #59; name = open(encryptedName, HKDF(E_nameEpoch, "group-name-key"))
+  S-->>C: [.., { id, kind:GROUP, tenantId, wrappedGrant, encryptedName, wrappedNameValueKey, nameEpoch }]
+  C->>C: K_SC = asymUnwrap(identity, wrappedGrant) #59; K_v = open(wrap, K_SC) #59; name = open(encryptedName, K_v)
   Note right of C: server only ever saw ciphertext name + the scope row
 ```
 
@@ -114,8 +116,9 @@ sequenceDiagram
 - **No new crypto primitive.** The self-grant is the same hybrid KEM (`asymWrap`, X25519 + ML-KEM-768,
   [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md)) as the tenant/personal grant; the
   name uses the same AEAD seal as a node name under a purpose of its own
-  ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), keyed by the derived `K_name` rather than
-  `K_SC` directly ([ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md)).
+  ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), keyed by its own `K_v` rather than
+  `K_SC` directly ([ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md),
+  [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md)).
 - **Owner ≠ admin.** The creator is the group's `OWNER`; that is a per-scope role, independent of any tenant
   role ([ADR 0007](../../../decisions/0007-membership-role-grant-relation.md)).
 

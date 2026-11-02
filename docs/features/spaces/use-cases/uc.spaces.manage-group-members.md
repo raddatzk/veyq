@@ -21,7 +21,7 @@
    `K_SC`). Groups have only OWNER / MEMBER; **multiple owners allowed** ([ADR 0007](../../../decisions/0007-membership-role-grant-relation.md)).
 3. **Demote co-owner → member:** the OWNER's role becomes `MEMBER`. Blocked by the **last-owner guard** (below).
 4. **Remove a member — one request** ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 4):
-   - The owner's device mints a new key at the next epoch, re-seals every scope-level value under it
+   - The owner's device mints a new key at the next epoch, re-wraps every scope-level value's own key under it
      ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md)) and wraps it to the remaining
      members — the directory the owner **picked the member from**, minus that member, by the owner's own choice;
      never a list read after the removal. The request names the member it removes.

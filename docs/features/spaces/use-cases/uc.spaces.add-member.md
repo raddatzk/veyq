@@ -133,7 +133,7 @@ sequenceDiagram
   and the code never reach it; the sealed part of the link is mailed and dropped.
 - **Member identity ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md), cr-0083).** Each
   member shows a per-tenant **`username`** (plaintext handle, chosen at join, unique in the tenant) and their
-  **real name sealed under a field key derived from `K_tenant`** — decrypted on-device by any member, never seen by the server;
+  **real name sealed under a field key derived from its own value key, whose wrap `K_tenant` holds** — decrypted on-device by any member, never seen by the server;
   **`email` is owner-only** ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)).
 - **Auth ≠ content.** Onboarding makes someone a *member* (a role); only the identity-unwrapped grant yields the
   key ([ADR 0007](../../../decisions/0007-membership-role-grant-relation.md)). Every membership is now born with

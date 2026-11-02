@@ -13,14 +13,14 @@ acceptanceCriteria:
       web:
         unit: [src/features/account/profile/ProfilePanel.test.ts]
   - id: name-sealed-on-device-at-its-address
-    text: The real name is unsealed on the device on load and sealed on the device on save, under a field key derived from `K_tenant` at (tenant scope, the member's own user id); the server stores the blob verbatim and never opens it.
+    text: The real name is unsealed on the device on load and sealed on the device on save, under a field key derived from its own value key, whose wrap `K_tenant` holds at (tenant scope, the member's own user id); the server stores the blob verbatim and never opens it.
     coverage:
       backend:
         integration: [MemberIdentitySliceTest.profileOpRoundTripsUsernameAndSealedName]
       web:
         unit: [src/features/account/profile/profile.test.ts, src/features/account/profile/ProfilePanel.test.ts]
   - id: name-opens-across-a-rotation
-    text: A tenant rotation re-seals every member's name under the tenant's new key (ADR 0115 decision 2), so after it the name opens for every member holding the new key (the directory, the members list, the profile form) and the member is not asked to finish their profile; a name left under the replaced key opens for nobody, and a reader holding only the old key opens none of the re-sealed names. A save states the tenant epoch it is sealed under and is sealed once more after a `409 stale_epoch`; entering the tenant writes no profile.
+    text: A tenant rotation re-wraps every member's name's own value key under the tenant's new key and leaves the name byte-identical (ADR 0115 decision 2), so after it the name opens for every member holding the new key (the directory, the members list, the profile form) and the member is not asked to finish their profile; a wrap left under the replaced key opens for nobody, and a reader holding only the old key opens none of the re-wrapped keys. A save mints a fresh value key, states the tenant epoch its wrap is under and is sealed once more after a `409 stale_epoch`; entering the tenant writes no profile.
     coverage:
       web:
         unit:

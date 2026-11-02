@@ -16,14 +16,17 @@
   root ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md),
   [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md)).
 - **Preconditions:** The scope has just committed epoch `n+1` ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md)):
-  a fresh key, proven by a succession statement, that replaced the old one; the commit re-sealed every scope-level row
-  under it ([keys, grants and trust § The scope-level re-seal](../../../crosscutting/keys-grants-and-trust.md#the-scope-level-re-seal))
+  a fresh key, proven by a succession statement, that replaced the old one; the commit re-wrapped every scope-level
+  value's own key under it and re-sealed every scope-root entry, rewriting no value
+  ([keys, grants and trust § The scope-level re-seal](../../../crosscutting/keys-grants-and-trust.md#the-scope-level-re-seal))
   and marked every node of the scope **due**. The device holds the key of epoch `n+1`.
 - **Postconditions (success):** No row of the scope is under the old key. Every live and trashed node of the scope is
   re-keyed: a fresh random key, its own epoch one higher, its `scopeEpoch` `n+1`, no due mark, its entry under its
   parent's new key, and every field that was sealed under its old key re-sealed under the new
-  one. No store object was written. Each share on a re-keyed node opens the new key; each drop key is new. The
-  rotation reads *secured*. The server saw rewritten ciphertext in rows it already held, and nodes' epochs and due marks
+  one. No store object was written, and no scope-level value: a member's name, picture and join record, a
+  verification, an item mark, a group's name and icon and a link's recovery copy are byte-identical, each opening
+  through its key's new wrap. Each share on a re-keyed node opens the new key; each drop key is new. The rotation reads
+  *secured*. The server saw rewritten wraps and ciphertext in rows it already held, and nodes' epochs and due marks
   moving.
 
 ## Main flow
@@ -87,14 +90,17 @@
   epoch, re-opens the scope the same way. Below a drop box the write waits for an owner (E7); the refused pull still
   re-opens the scope, so the re-read after the wait opens the owner's re-key. Only when the waits run out is the run
   rolled back.
-- **E10 — the scope-level commit is refused.** A scope-level row without a staged value is `409 rekey_parts_missing`,
-  one written since the rotator read it `409 rekey_parts_stale` (each staged value names the digest of what it
-  replaces): nothing commits, and the rotator stages again, a bounded number of times. A scope-level write stating the
-  old epoch after the commit is `409 stale_epoch`. Only a caller who may commit the rotation and holds the current
-  grant reads and stages the scope-level rows.
-- **E11 — a row the rotator cannot re-seal.** A pending group invitee it cannot anchor gets its name key cleared (the
-  proposal stays, unnamed); a profile field or a verification that does not open under the old key is staged as random
-  bytes that read the same. The rotation commits.
+- **E10 — the scope-level commit is refused.** A wrap or a root entry without a staged replacement is `409
+  rekey_parts_missing`, one written since the rotator read it `409 rekey_parts_stale` (each staged wrap names the digest
+  of the wrap it replaces, and every write of a value mints a fresh one): nothing commits, and the rotator stages
+  again, a bounded number of times. A stage that writes a value's ciphertext rather than its key's wrap is `422
+  rekey_writes_value`, for an owner and a member rotator alike: a rotation never rewrites a value. A scope-level write
+  stating the old epoch after the commit is `409 stale_epoch`. Only a caller who may commit the rotation and holds the
+  current grant reads and stages the scope-level wraps.
+- **E11 — a wrap the rotator cannot open.** It is staged as a stand-in — a key nobody holds, wrapped at the same slot,
+  of the same length — so the value reads as unreadable, exactly as before; a recovery copy so lost closes its link,
+  key lost, at its root's re-key. A pending group invitee's name key is the name's own key, sealed to the invitee: the
+  rotation leaves it. The rotation commits.
 - **E12 — a member behind.** A member the rotation declared pending reads nothing of the scope — it reads as *awaiting
   the current key* — until a grant reaches them; a grant whose succession statements do not lead from the key their
   device held is refused (`epoch_unlinked`).
@@ -104,7 +110,10 @@
 - **Nothing in the store moves.** Each `K_blob` keeps encrypting its chunks; only its wrap changes. A Chapter of 1,000
   photos is about 5,000 symmetric seals, about 20 requests.
 - **What stays in the excluded party's reach:** a dump from before the rotation, the bytes of a `K_blob` they
-  extracted (a re-key re-wraps, it re-encrypts nothing), and open links until closed or re-issued (E4, E5).
+  extracted and the value of a scope-level `K_v` they extracted until its author writes it again (a re-key re-wraps,
+  it re-encrypts nothing), and open links until closed or re-issued (E4, E5).
+- **A rotator can junk a value, never forge one.** It stages wraps only; one it substitutes opens a key the value is
+  not sealed under, so the value reads as unreadable — an insider's denial of service, visible — never as another.
 - **Operator-blind.** No key reaches the server; it learns nothing it did not see from the epoch change.
 - **Honest-operator for the server's refusals, layer 2 for the floor.** The `409`s are layer 1; a client also seals
   nothing under a node key bound to an epoch below the highest it has held for the scope

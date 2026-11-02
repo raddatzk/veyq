@@ -326,12 +326,19 @@ flowchart TB
 - **A field seals under a key of its own.** Every text or icon field — a node's name and meta, a medium's two
   metadata tiers, a bucket's name, a guest's display name, a share's note, name and label, a member's name and
   picture — seals under `K_field = HKDF(K_parent, salt, "veyq/v1/field/<purpose>")`, where `K_parent` is the key the
-  field belongs under (the parent's `K_node` for a name, the node's own for its meta, `K_share`, `K_tenant`) and the
+  field belongs under (the parent's `K_node` for a name, the node's own for its meta, `K_share`, a member's value's own
+  `K_v`) and the
   16-byte salt is fresh per write and travels in the field's envelope (all the server learns: one random salt per
   write, nothing about a key). One revision's `K_field` opens that revision
   of that field and nothing else, which is what a report of a field will hand over
   ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 9,
   [en.platform.field-key](../features/platform/enablers/en.platform.field-key.md)).
+- **A scope-level value has a key of its own.** Every value an author writes at scope level — a member's tenant name,
+  picture and join record, a verification, a Memory's item marks, a group's name and a space's icon, a link's
+  recovery copy of `K_share` — is sealed under a value key `K_v`, 32 random bytes minted at every write, and only
+  `K_v` is sealed under the scope key (`value-key`, bound to the scope, the epoch and the value's address: SHA-256 of
+  its own seal context). A rotation re-wraps `K_v` and never rewrites the value, so a rotator can make a value
+  unreadable, never another one ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2).
 - The identity private key is protected by the **Master Key**, itself wrapped **separately by each
   unlock method**. Adding or removing a method changes one wrap, never the content.
 - The whole chain — which key opens which, who grants to whom, rotation and the node re-key, securing the account and
@@ -653,7 +660,7 @@ operator lacks can.
 | gets a removed group member re-granted by the removal's own rotation | **Cannot** — the removal and its rotation are one request, and the remover's client wraps the new epoch only to the members it picked from, minus the one it removes, however the server lists them afterwards. A rotation *queued* to another key-holder is outside this row (below) | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4 |
 | has a member seal new content under an epoch the removed member holds | **Cannot** once the member's device has held the newer epoch — each device remembers the highest epoch it has held for each scope and opens no older grant, whatever current epoch the operator pairs it with, and no newer one the served succession statements do not lead to from the key it held. A member who never learnt of the newer epoch is the fork (below) (`npx vitest run src/features/spaces/scopes.test.ts` from `src/web/`, the floor and succession cases) | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 6, ADR 0111 decision 23, [ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 5 |
 | has a member's device accept a successor key signed by a former key-holder — a removed member's old key, with the operator | **Cannot** on a device that held the epoch the rotation minted: the former key-holder signs a successor of the epoch it held, never of the one the rotation made, and the device verifies the statements from the newest key it held (`after a removal rotation this device committed, the removed member … cannot plant epoch 1`, `npx vitest run src/features/spaces/scopes.test.ts` from `src/web/`). **Can** on a device that held only the old epoch, or none — the fork and the first grant (below) | [ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 5 |
-| hands a removed group member, or an account's old identity after a rotation, anything stored — with a dump taken after the rotation | **Cannot**, except through a link made before, until it is closed or re-issued — the rotation's commit re-seals every scope-level row under the new key (a group's name and icon, the profiles, join records and verifications, the item marks, every recovery copy and scope-root entry), or commits nothing, and every live and trashed node of the scope is then re-keyed: a fresh key each, every field under the old one re-sealed, each `K_blob` re-wrapped. A write into a node not yet re-keyed is refused (`409 node_rekey_pending`, layer 1), and a member's device seals nothing under a node key bound to an epoch below the highest it has held for the scope (layer 2). A dump from **before** the rotation stays readable to them, and so do the bytes of a `K_blob` they extracted (§ Revocation); an open link keeps opening the new key, and its `K_share` is rebuildable from the recovery copy they could open (`./gradlew :core:test --tests '*ScopeRekeySliceTest' --tests '*ScopeKeyReplacedProbeSliceTest' --tests '*RekeyCoreSliceTest'` and `./gradlew :apps:memories:test --tests '*ItemFavoritesScopeRekeySliceTest'` from `src/backend/`) | [ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md), [ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md), [ADR 0075](../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) |
+| hands a removed group member, or an account's old identity after a rotation, anything stored — with a dump taken after the rotation | **Cannot**, except through a link made before, until it is closed or re-issued — the rotation's commit re-wraps every scope-level value's own key under the new key (a group's name and icon, the profiles, join records and verifications, the item marks, every recovery copy) and re-seals every scope-root entry, or commits nothing, and every live and trashed node of the scope is then re-keyed: a fresh key each, every field under the old one re-sealed, each `K_blob` re-wrapped. A write into a node not yet re-keyed is refused (`409 node_rekey_pending`, layer 1), and a member's device seals nothing under a node key bound to an epoch below the highest it has held for the scope (layer 2). A dump from **before** the rotation stays readable to them, and so do the bytes of a `K_blob` and the value of a `K_v` they extracted, until that value is written again (§ Revocation); an open link keeps opening the new key, and its `K_share` is rebuildable from the recovery copy they could open (`./gradlew :core:test --tests '*ScopeRekeySliceTest' --tests '*ScopeKeyReplacedProbeSliceTest' --tests '*RekeyCoreSliceTest'` and `./gradlew :apps:memories:test --tests '*ItemFavoritesScopeRekeySliceTest'` from `src/backend/`, `npx vitest run src/features/spaces/scopeRekey.test.ts src/features/spaces/valueKey.test.ts` from `src/web/`) | [ADR 0109](../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md), [ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md), [ADR 0075](../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) |
 | hands a closed viewer or contributor link what is added below its root after the close — with the link and a dump | **Cannot** on an honest server's timeline: the close and the due marks of every node below the root are one transaction, a due node takes no write, and its re-key seals nothing new under a closed link — a rotation's included — and refuses a key staged for it before the close (`./gradlew :core:test --tests '*LinkCloseRekeyCoreSliceTest' --tests '*LinkCloseRekeyProbeCoreSliceTest' --tests '*LinkCloseRaceCoreSliceTest'` from `src/backend/`). **Can** by rolling a member's view of the subtree back to before the re-key, so that member's device seals under the old key again: the device floor watches the scope's epoch, which a close does not move, and a per-node floor is not built. What the link read at its close, writes landing before an end date's sweep, and `WRITE_ONLY` guests' `K_up` stay in reach (§ Revocation) | [ADR 0114](../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md); the rollback: a per-device mark of the highest epoch opened per node, not built |
 | wipes or rolls back the pin store or the device register, so a detected key change becomes a silent first use | **Cannot** on a device that has held one — it keeps the highest revision it opened and refuses an older store, a missing one and one that does not open, before every read and every write; a linked device starts from its linker's marks. A device with no mark yet trusts the first store it is served (below). **Residual, consented:** a refused document's one way back is the user starting it over (empty) after a confirmation that names the cost — no server response reaches that write, but a server that keeps a document refused can wait for the user to press it; the downgrade is visible and consented now, not silent. On a client the operator serves, it could ship a client that writes the empty store itself ([ADR 0026](../decisions/0026-client-trust-tiers.md)) | [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7 |
 | reads an uploader link's Memory — with the link and a dump; no activity needed | **Cannot** — an uploader link carries no wrap of `K_node`, only the Memory's drop public key; its guests seal under keys of their own, wrapped to that drop key, so the link plus a dump reads what its guests uploaded and nothing else — no other media, no sibling share's key | [ADR 0031](../decisions/0031-uploader-public-share.md) point 7 |
@@ -695,8 +702,9 @@ operator lacks can.
   seals to unchecked: the moderation surface holds no pin store and may share no tenant with them, so there is nothing
   to anchor them by. An operator that substitutes a key reads that statement's facts text, beside the kind, target,
   ground and provision it reads anyway (ADR 0111 § What stays open);
-- item favorites ([ADR 0068](../decisions/0068-favorites-two-confidentiality-levels.md)), re-sealed under the scope's
-  current key at every rotation ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md)). Which entry
+- item favorites ([ADR 0068](../decisions/0068-favorites-two-confidentiality-levels.md)), each set under a value key
+  of its own whose wrap every rotation moves to the scope's current key
+  ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md)). Which entry
   is the caller's own is proven by a self-tag only their client computes (ADR 0068 §9), but the operator can still
   serve the caller an older genuine version of their own set (freshness), and it can inflate or deflate a node's mark
   count — withholding entries, serving stored sets again as extra entries on its own, forging entries with any present
@@ -714,9 +722,17 @@ operator lacks can.
   new drop key, not replaced (only the guest holds it), so whoever held the old drop key — a removed member, a closed
   viewer link's holder — reads what that guest adds afterwards, until the uploader link is re-issued (ADR 0109
   point 5, ADR 0114 § Consequences);
-- a pending group invitee whose name key a rotation cleared, because the rotator could not anchor them: they see the
-  proposal without the group's name for good, since nothing re-wraps a cleared name key
+- a pending group invitee whose name key a rename cleared, because the owner's device could not anchor them: they see
+  the proposal without the group's name until a rename by a device that anchors them hands them the new name's key.
+  A rotation leaves an invitee's name key, the name's own `K_v`, which opens that name until the next rename
   ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 8);
+- values rewritten by a member with the operator: a value key binds a value to its address, not to its author, so a
+  member who holds the scope key can seal a value of their choosing at any member's address, and an operator that
+  writes it into that member's row has every reader open it — the class a seal's binding leaves open
+  ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)); the join record, a verification and an item mark's
+  self-tag carry signatures or tags that a forged one lacks. What the value key closes is the rotation's path: a
+  rotation stages only wraps, and a wrap it substitutes opens a key the value is not sealed under, so the value reads
+  as unreadable, never as another ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2);
 - the names a Memory's guests gave, to an operator holding a viewer or contributor link of it. No link is served
   a guest's name, but the names stay sealed under field keys derived from `K_node` (a contributor's) or from an
   uploader's own key, which the
@@ -751,8 +767,9 @@ control, honest-operator; L2 crypto, the only real operator boundary), here appl
 1. **Server-side access invalidation — instant, no keys.** The server stops honoring the revoked share
    token / membership and serves no further blobs. This is access control, which the server is allowed
    to do (it reads no content). Effective immediately, no client required.
-2. **Key replacement — eventual, by a key-holder.** A client mints a fresh scope key at the next **epoch**, re-seals
-   every scope-level row under it in the rotation's commit, and grants it to the remaining parties
+2. **Key replacement — eventual, by a key-holder.** A client mints a fresh scope key at the next **epoch**, re-wraps
+   every scope-level value's own key (and re-seals every scope-root entry) under it in the rotation's commit, and
+   grants it to the remaining parties
    ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md), [ADR 0024](../decisions/0024-scope-key-rotation.md))
    — defense-in-depth against a revoked party who cached ciphertext *and* a **malicious operator** who would feed them
    post-removal ciphertext (an honest operator is already stopped by layer 1). May be queued until a key-holder is
@@ -780,19 +797,24 @@ protects only future content. Where layer 2 is policy-deferred (the tenant defau
 hoarded the key/ciphertext **and** colludes with a malicious operator retains that narrow residual until an explicit
 re-key — the same posture 1Password takes for shared vaults.
 
-**An old key opens only a dump from before.** A scope key is replaced, never chained: a rotation's commit re-seals
-every row sealed under the old key and every node is then re-keyed, so the live store holds nothing under the old key
-once the re-key is done — at scope level from the commit on
+**An old key opens only a dump from before.** A scope key is replaced, never chained: a rotation's commit moves
+everything under the old key to the new one — it re-wraps each scope-level value's own key and re-seals each
+scope-root entry — and every node is then re-keyed, so the live store holds nothing under the old key once the re-key
+is done — at scope level from the commit on
 ([ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md); `./gradlew :core:test --tests
 '*ScopeRekeySliceTest' --tests '*ScopeKeyReplacedProbeSliceTest'` from `src/backend/`, and `npx vitest run
-src/features/spaces/scopeRekey.test.ts src/features/spaces/epochs.replaced.probe.test.ts` from `src/web/`). Whoever
+src/features/spaces/scopeRekey.test.ts src/features/spaces/epochs.replaced.probe.test.ts
+src/features/spaces/valueKey.test.ts` from `src/web/`). Whoever
 obtains an old key later — a removed member's, a lost device's — opens what a dump taken **before** the rotation holds,
 that is an operator already malicious and archiving then; a later-turned operator, a backup taken after the rotation
 and a new operator hold nothing it opens. A member the rotation could not grant at once reads nothing of the scope
 until a grant reaches them. **The residual:** a re-key re-wraps keys and re-encrypts nothing, so a `K_blob` the party
 extracted while it held the key still opens that blob's bytes in a later dump — content they could read anyway; what is
-added after gets blob keys of its own. The same holds for a value whose own key a re-seal keeps (an Expenses
-revision's `K_rev`).
+added after gets blob keys of its own. The same holds for a value whose own key a re-key keeps (an Expenses
+revision's `K_rev`), and for a scope-level value's `K_v`: one extracted while the party held the scope key opens that
+value — a member's name, picture or join record, a verification, an item-mark set, a group's name or icon, a link's
+recovery copy — in a later dump until its author writes it again, which mints a fresh `K_v`; content they could read
+anyway.
 
 **A closed link's reach.** With a dump, a closed viewer or contributor link reads what existed below its root at the
 close, and nothing added after, on an honest server's timeline

@@ -50,20 +50,23 @@ Two properties make that field safe to keep inline:
    (`deriveImage`, called with its own spec — the seam `uploadCoverBlob` already uses) to the fixed 256×256
    box, then the encoded bytes are padded to the constant plaintext length. Quality steps down until the
    encode fits the pad target.
-4. **The client seals it under the current epoch.** `e = currentEpoch` (the scope key the grant carries);
-   `K_icon_e = hkdfSha256(E_e, salt = "", info = "veyq/v1/space-icon-key", 32)`;
-   `sealedIcon = b64std(seal(K_icon_e, paddedIcon, space-icon ‖ scopeId ‖ e))` — the repo's one symmetric seal
+4. **The client seals it under a value key of its own.** `e = currentEpoch` (the scope key `E_e` the grant carries);
+   a fresh value key `K_v` (32 random bytes, minted for this one write,
+   [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md));
+   `sealedIcon = b64std(seal(K_v, paddedIcon, space-icon ‖ scopeId ‖ e))` — the repo's one symmetric seal
    (`0x02 || nonce(12) || aead`) through the typed seal of `@veyq/crypto`, which draws its own nonce, with the
    `space-icon` purpose, the scope and the icon epoch as the AAD context
-   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)).
-   Sealing under the **current** epoch is what makes a replaced icon forward-secret — the same reason a rename
-   does it. (Note the sibling docs write this step as `symEncrypt(…)`; that is notation, not a symbol.)
-5. **POST the icon.** `POST /api/scopes/{scopeId}/icon { sealedIcon, iconEpoch: e }` — two opaque values.
+   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)); and `wrappedIconValueKey = seal(E_e, K_v,
+   value-key ‖ scopeId ‖ e ‖ SHA-256(the icon's seal context))`. A fresh `K_v` is what makes a replaced icon
+   forward-secret — the same reason a rename mints one. (Note the sibling docs write this step as `symEncrypt(…)`;
+   that is notation, not a symbol.)
+5. **POST the icon.** `POST /api/scopes/{scopeId}/icon { sealedIcon, iconEpoch: e, wrappedIconValueKey }` — opaque
+   values and the epoch.
 6. **The server writes the row (blind).** Owner-gated on the **scope row** (A3); it rejects a stale
-   `iconEpoch` (A1) and a pending-deletion scope (A2). Otherwise it overwrites `sealed_icon` + `icon_epoch`
-   and returns `204`. It never derives a key, decodes an image, or learns its size.
-7. **Members read it.** On their next list a member derives `K_icon_e` from the one scope key it holds — every
-   rotation re-seals the icon at its new epoch, so `iconEpoch` is the current one — decrypts + unpads, and renders it
+   `iconEpoch` (A1) and a pending-deletion scope (A2). Otherwise it overwrites `sealed_icon`, `icon_epoch` and the
+   wrap and returns `204`. It never sees a key, decodes an image, or learns its size.
+7. **Members read it.** On their next list a member opens `K_v` from its wrap with the one scope key it holds — a
+   rotation re-wraps `K_v` under its new key and leaves the icon and its `iconEpoch` — decrypts + unpads, and renders it
    through `TenantAvatar`'s existing
    `icon` prop over an object URL owned by `useObjectUrls`. In the **tenant overview** that same read runs
    once per tenant against that tenant's own grant — the widened read path
@@ -80,15 +83,15 @@ sequenceDiagram
   actor M as Member<br>(holds a grant)
   O->>O: pick image #59; frame 1:1 #59; bake the crop
   O->>O: re-encode to 256x256 #59; pad plaintext to a constant
-  O->>O: e = currentEpoch #59; K_icon_e = HKDF(E_e, "space-icon-key")
-  O->>O: sealedIcon = seal(paddedIcon, K_icon_e)
-  O->>S: POST /api/scopes/{id}/icon { sealedIcon, iconEpoch: e }
+  O->>O: e = currentEpoch #59; K_v = fresh random key
+  O->>O: sealedIcon = seal(paddedIcon, K_v) #59; wrap = seal(K_v, E_e)
+  O->>S: POST /api/scopes/{id}/icon { sealedIcon, iconEpoch: e, wrappedIconValueKey: wrap }
   S->>S: owner-gate on the scope row #59; active #59;<br>iconEpoch == currentEpoch ? else 409
-  S->>S: scope.sealed_icon = sealedIcon #59; scope.icon_epoch = e
+  S->>S: scope.sealed_icon = sealedIcon #59; scope.icon_epoch = e #59; its wrap
   S-->>O: 204
   M->>S: GET /api/scopes  (or /my-tenants, once per tenant)
-  S-->>M: { .., sealedIcon, iconEpoch, wrappedGrant }
-  M->>M: derive K_icon_e from the held key #59;<br>open + unpad → the image
+  S-->>M: { .., sealedIcon, wrappedIconValueKey, iconEpoch, wrappedGrant }
+  M->>M: open K_v from its wrap with the held key #59;<br>open + unpad → the image
   Note over S: every sealed_icon is the same length —<br>the operator cannot tell a logo from a photo
 ```
 
@@ -153,20 +156,20 @@ sequenceDiagram
   `veyq_scope_favorites.ciphertext` (core's since inbox #409) declares `65536` against a 65,535-byte column). The icon must not become
   the third — and because its plaintext is a constant, its `@Size` is the **exact computed base64 length** of
   the sealed constant: one number, provably inside `TEXT`, inherited from neither neighbour.
-- **A derived icon-key, like the name — and for the same reason.** `K_icon_e = HKDF(E_e, "space-icon-key")` is
-  one-way, so handing it out leaks **the icon and nothing else** — no content, no dedup key. Nothing needs
-  that today, and sealing directly under `E_e` would be equally forward-secret and simpler. It is chosen anyway
-  because the group slice's obvious next question already has its answer built:
-  [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md) hands a pending invitee a wrapped
-  `sealedNameKey` so they read the **canonical** name before accepting; an icon in that same preview is then a
-  second wrapped key rather than an impossibility
-  ([ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md)). The info string is **distinct** and is
-  pinned as a conformance vector
-  ([ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md)).
-- **`iconEpoch` follows the key.** An icon-set writes it, and every rotation re-seals the icon under the new key and
-  sets it to the new epoch in its commit (`ScopeRekeyCommit`,
+- **A value key of its own, like the name — and for the same reasons.** The icon's `K_v` is random and fresh at
+  every icon write, so handing it out leaks **this icon and nothing else** — no content, no dedup key, no earlier
+  or later icon — and a rotation re-wraps it and never rewrites the icon, so no rotator can replace it
+  ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2). The group slice's next
+  question then has its answer built: [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md) hands a pending
+  invitee the name's `K_v` so they read the **canonical** name before accepting; an icon in that same preview is a
+  second sealed key rather than an impossibility
+  ([ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md)). Its wrap's seal purpose, `value-key`, is
+  pinned as a conformance vector ([ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md)).
+- **`iconEpoch` follows the write.** An icon-set writes it, and a rotation leaves it: its commit re-wraps the icon's
+  `K_v` under the new key and never rewrites the icon (`ScopeRekeyCommit`,
   [ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 2) — so a reader needs only
-  the key it holds, and an icon sealed under a key a removed member kept is gone from the store after the rotation.
+  the key it holds, and no wrap under a key a removed member kept is left in the store after the rotation. The `K_v`
+  a removed member extracted opens this icon in a later dump until the next icon-set — an icon they could see anyway.
 - **The owner gate comes free — and it is the one already got wrong once.** The tenant **root** scope is keyed
   `id == tenantId`, so `isScopeOwner(caller, scopeId)` against a `kind=TENANT` row **is** the tenant-owner
   check: no new query, and no opening to re-introduce the `tenantId`-only gate cr-0163 fixed as a privilege
@@ -204,15 +207,15 @@ server never sees the image.
 - Feature: [Spaces (scopes)](../_index.md)
 - Enablers: [en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md) (the scope the v1 slice gives a
   face, and the owner of the widened cross-tenant read path),
-  [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (the rotation that re-seals the icon
-  under each new key),
+  [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (the rotation that re-wraps the icon's
+  key under each new one),
   [en.spaces.group-scope](../enablers/en.spaces.group-scope.md) (the identical field one level down, its
   name already sealed on the same row)
 - Use-cases: [uc.spaces.switch-spaces](uc.spaces.switch-spaces.md) (where the icon shows, and the widened
   `my-tenants` read), [uc.spaces.rename-group](uc.spaces.rename-group.md) (the sibling sealed-field write —
   same epoch rule, same owner gate, same stale-epoch `409`),
-  [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md) (the wrapped-key preview the derived
-  `K_icon` keeps open), [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (grant-delivery — why A4 is
+  [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md) (the wrapped-key preview the icon's own
+  `K_v` keeps open), [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (grant-delivery — why A4 is
   transient), [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) (why the tenant name is
   cleartext), [uc.memory.cover](../../memory/use-cases/uc.memory.cover.md) (the cropper + pixel stage this
   reuses, and the reference-vs-baked contrast)

@@ -33,11 +33,12 @@ belongs under; the AAD binds purpose and object as every seal does
 | `bucket-name` | a Memories bucket's name | the Memory's or chapter's `K_node`, or `K_up` |
 | `share-identity-name` | a guest's display name | the share root's `K_node`, or `K_up` |
 | `share-memory-name`, `share-note`, `share-name` | a share's root name, note and private label | `K_share` |
-| `member-name`, `member-avatar` | a member's real name and profile picture | `K_tenant` |
+| `member-name`, `member-avatar`, `member-join-record`, `member-verification` | a member's real name, profile picture and join record, a verification | the value's own `K_v`, fresh at every write and wrapped under `K_tenant` ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md)) |
 
-`group-name` and `space-icon` are **not** fields: they keep a key per (scope, epoch), `HKDF(E_e, "", label)`, so it
-opens every revision of that epoch. A pending invitee is handed `K_name`, which a per-write key would turn into a new
-wrap per invitee and rename; only the scope's members read either, and a group's name is not reportable (ADR 0093 § 1).
+`group-name` and `space-icon` are **not** fields: each is sealed directly under its own value key `K_v`, random and
+fresh at every write and wrapped under the scope key (ADR 0115), so a `K_v` already opens one revision only. A pending
+invitee is handed the name's `K_v`; only the scope's members read either, and a group's name is not reportable
+(ADR 0093 § 1).
 A blob's `blob-meta` is covered by its `K_blob`.
 
 ## The envelope

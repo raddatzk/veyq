@@ -7,7 +7,7 @@ title: Set your profile picture in a space
 # picture draws in the header, the popover, the profile page, the members list and the user menu were never seen by eye.
 acceptanceCriteria:
   - id: picture-sealed-on-device-constant-length
-    text: The picture is cropped 1:1, encoded to a 256 px WebP, padded to a constant length and sealed on the device under a field key derived from `K_tenant` with the `member-avatar` purpose at (tenant scope, own user id); the server stores the blob verbatim, every blob has the same length, and the contract `maxLength` equals that sealed constant.
+    text: The picture is cropped 1:1, encoded to a 256 px WebP, padded to a constant length and sealed on the device under a field key derived from its own value key, whose wrap `K_tenant` holds with the `member-avatar` purpose at (tenant scope, own user id); the server stores the blob verbatim, every blob has the same length, and the contract `maxLength` equals that sealed constant.
     coverage:
       backend:
         integration:
@@ -73,7 +73,7 @@ acceptanceCriteria:
           - src/views/TenantJoinView.member.test.ts
           - src/features/account/profile/FinishProfilePrompt.test.ts
   - id: picture-opens-across-a-rotation
-    text: A tenant rotation re-seals every member's picture under the tenant's new key at its constant length (ADR 0115 decision 2), so it opens for every member holding the new key and under the replaced key for nobody; a save states the tenant epoch it is sealed under and is sealed once more after a `409 stale_epoch`.
+    text: A tenant rotation re-wraps every member's picture's own value key under the tenant's new key and leaves the picture byte-identical at its constant length (ADR 0115 decision 2), so it opens for every member holding the new key and under the replaced key for nobody; a save mints a fresh value key, states the tenant epoch its wrap is under and is sealed once more after a `409 stale_epoch`.
     coverage:
       web:
         unit:
