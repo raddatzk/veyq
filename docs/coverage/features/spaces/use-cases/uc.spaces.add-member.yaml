@@ -165,10 +165,10 @@ acceptanceCriteria:
       web:
         unit: [src/features/spaces/scopes.test.ts]
   - id: a-pending-invite-joins-behind
-    text: A newcomer whose invite a rotation declared pending self-grants the epoch its invite holds and joins behind; the server accepts that self-grant below the current epoch, and the narrow grant delivery — for memberships behind the epoch only — brings it current, while a newcomer at the current epoch leaves nothing to deliver.
+    text: A newcomer whose invite a rotation declared pending holds only the epoch its invite carries, a key the rotation replaced — its join record sealed under it is refused stale_epoch with nothing born (ADR 0115 decisions 3 and 8) until the invite carries the current epoch; the narrow grant delivery — for memberships behind the epoch only — brings a behind membership current, while a newcomer at the current epoch leaves nothing to deliver.
     coverage:
       backend:
-        integration: [MemberAddSliceTest.aNewcomerOfAPendingInviteJoinsBehindAndIsDelivered, MemberAddSliceTest.memberRegisterJoinsWithItsSelfGrantAndNothingIsDelivered, TasksSliceTest.grantDeliveryOriginatedOnABehindMembershipThenClaimedAndCompletedIdempotently]
+        integration: [MemberAddSliceTest.aNewcomerOfAPendingInviteSealsNoJoinRecordUnderAReplacedKey, MemberAddSliceTest.memberRegisterJoinsWithItsSelfGrantAndNothingIsDelivered, TasksSliceTest.grantDeliveryOriginatedOnABehindMembershipThenClaimedAndCompletedIdempotently]
       web:
         unit: [src/features/tasks/grantDeliveryWorker.test.ts]
 gaps:

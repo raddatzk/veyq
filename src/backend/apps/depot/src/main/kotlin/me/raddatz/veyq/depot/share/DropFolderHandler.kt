@@ -43,7 +43,7 @@ class DropFolderHandler(
 ) {
     fun ensure(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, encryptedName: String,
-        slugToken: String, epoch: Int, wrappedContentKey: String, seen: ClientSeen?,
+        slugToken: String, scopeEpoch: Int, wrappedContentKey: String, seen: ClientSeen?,
     ): DropFolderOutcome {
         // The folder is a row a guest adds, so it spends the per-share upload budget, as a guest's create does.
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true, onlyRole = ShareEntity.WRITE_ONLY)) {
@@ -55,7 +55,7 @@ class DropFolderHandler(
         }
         applications.requireWritable(CapabilityIds.DEPOT, gated.scopeId) // switched off, read-only (uc.platform.switch-application-off)
         if (gated.rootKind != DepotNodeKinds.DROPBOX) return DropFolderOutcome.NotContributable
-        return when (val o = folders.ensure(gated, nodeId, encryptedName, slugToken, epoch, wrappedContentKey, seen)) {
+        return when (val o = folders.ensure(gated, nodeId, encryptedName, slugToken, scopeEpoch, wrappedContentKey, seen)) {
             is IdentityFolderOutcome.Folder -> DropFolderOutcome.Folder(o)
             IdentityFolderOutcome.NotFound -> DropFolderOutcome.NotFound
             IdentityFolderOutcome.NotContributable -> DropFolderOutcome.NotContributable

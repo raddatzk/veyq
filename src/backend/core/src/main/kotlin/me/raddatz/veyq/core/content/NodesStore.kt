@@ -21,7 +21,10 @@ data class NodeRow(
     val encryptedName: String,
     val slugToken: String,
     val orderIndex: Int,
+    /** The node's own key's epoch (ADR 0114 decision 3). */
     val epoch: Int,
+    /** The scope's epoch when the node's key was minted — what its entry's seals bind (ADR 0115 decision 4). */
+    val scopeEpoch: Int,
     /** Every node's content key, wrapped under its parent's (ADR 0080 Decision 1) — never null. */
     val wrappedContentKey: String,
     val wrappedMeta: String?,
@@ -49,6 +52,7 @@ data class TrashedNodeRow(
     val kind: String,
     val encryptedName: String,
     val epoch: Int,
+    val scopeEpoch: Int,
     /** The placement revision [encryptedName] is sealed at; a trash and a restore leave it alone. */
     val placementRevision: Long,
     val deletedAt: Instant,
@@ -192,11 +196,12 @@ class NodesStore(private val gate: NodeEpochGate) {
     fun idTaken(id: String): Boolean = NodeEntity.findById(id) != null
 
     /** Persist a node under the client-minted [id]; false — nothing written — if any node, live or trashed, in
-     *  any scope already holds it (ADR 0072: never overwrite, never substitute). */
+     *  any scope already holds it (ADR 0072: never overwrite, never substitute). Its key is minted under
+     *  [scopeEpoch] and its own epoch starts at 0 (ADR 0114 decision 3). */
     @Transactional
     fun create(
         id: String, scopeId: String, parentSlot: String, kind: String, encryptedName: String,
-        slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
+        slugToken: String, orderIndex: Int, scopeEpoch: Int, wrappedContentKey: String, wrappedMeta: String?,
         editor: PrincipalKey,
     ): Boolean {
         if (idTaken(id)) return false
@@ -208,7 +213,8 @@ class NodesStore(private val gate: NodeEpochGate) {
             this.encryptedName = encryptedName
             this.slugToken = slugToken
             this.orderIndex = orderIndex
-            this.epoch = epoch
+            this.epoch = 0
+            this.scopeEpoch = scopeEpoch
             this.wrappedContentKey = wrappedContentKey
             this.wrappedMeta = wrappedMeta
             nameWrittenBy(editor)
@@ -224,7 +230,7 @@ class NodesStore(private val gate: NodeEpochGate) {
         val wrapped = identityKeys(nodes.mapNotNull { it.shareIdentityId })
         return nodes.map {
             NodeRow(
-                it.id, it.parentId, it.kind, it.encryptedName, it.slugToken, it.orderIndex, it.epoch, it.wrappedContentKey,
+                it.id, it.parentId, it.kind, it.encryptedName, it.slugToken, it.orderIndex, it.epoch, it.scopeEpoch, it.wrappedContentKey,
                 it.wrappedMeta, it.sealedDropPrivateKey, it.metaRevision, it.placementRevision,
                 it.shareIdentityId, it.shareIdentityId?.let(wrapped::get), it.createdAt,
             )
@@ -266,7 +272,7 @@ class NodesStore(private val gate: NodeEpochGate) {
      *  [editor] is the caller — the identity itself, whose guest seals the name. */
     fun createIdentityFolder(
         id: String, scopeId: String, parentId: String, identityId: String, encryptedName: String, slugToken: String,
-        epoch: Int, wrappedContentKey: String, editor: PrincipalKey,
+        scopeEpoch: Int, wrappedContentKey: String, editor: PrincipalKey,
     ) {
         NodeEntity().apply {
             this.id = id
@@ -276,7 +282,8 @@ class NodesStore(private val gate: NodeEpochGate) {
             this.encryptedName = encryptedName
             this.slugToken = slugToken
             this.orderIndex = 0
-            this.epoch = epoch
+            this.epoch = 0
+            this.scopeEpoch = scopeEpoch
             this.wrappedContentKey = wrappedContentKey
             this.shareIdentityId = identityId
             nameWrittenBy(editor)
@@ -295,24 +302,24 @@ class NodesStore(private val gate: NodeEpochGate) {
         object SlugTaken : ApplyResult
         object StalePlacement : ApplyResult
         data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : ApplyResult
-        /** A stated node epoch is not the node's stored one (ADR 0109 point 6): the writer holds a key from before. */
+        /** A stated node epoch is not the node's stored one (ADR 0114 decision 3): the writer holds a replaced key. */
         object StaleEpoch : ApplyResult
-        /** A node the write seals under is not re-keyed since the scope's last rotation yet (ADR 0109 point 6). */
+        /** A node the write seals under is due for its re-key (ADR 0114 decision 3). */
         object RekeyPending : ApplyResult
     }
 
     /**
-     * One node epoch a write states (ADR 0109 point 6): the node whose key it seals under, as the writer read it, checked
-     * under that node's row lock ([NodeEpochGate]). [pendingRefuses] false only for a placement's own node off the scope
-     * root: its key is re-wrapped, not sealed under, so a node the re-key has not reached may still move — but the epoch
-     * it states must be its own.
+     * One node epoch a write states (ADR 0114 decision 3): the node whose key it seals under or re-wraps, its own epoch
+     * as the writer read it, checked under that node's row lock ([NodeEpochGate]). A due node refuses every claim — a
+     * placement's own node too: it re-wraps the node's key, which the node's re-key is about to replace (ADR 0114
+     * decision 4: a move waits while the node lags).
      */
-    data class EpochClaim(val nodeId: String, val stated: Int, val pendingRefuses: Boolean = true)
+    data class EpochClaim(val nodeId: String, val stated: Int)
 
     /**
      * A placement write (ADR 0080 Decision 3): every field of the node's directory entry and key wrap at once, built on
-     * [expectedRevision]. A placement never changes the node's epoch: it is the epoch the node's key was minted at (ADR
-     * 0109 point 6), and only a re-key moves it.
+     * [expectedRevision]. A placement never changes the node's epoch or its `scopeEpoch`: it keeps the node's key, and
+     * only a re-key replaces it (ADR 0114 decision 3).
      */
     data class Placement(
         val parentSlot: String,
@@ -373,14 +380,14 @@ class NodesStore(private val gate: NodeEpochGate) {
             }
             if (slugTaken(placement.parentSlot, placement.slugToken, exceptNodeId = nodeId)) return ApplyResult.SlugTaken
         }
-        // ADR 0109 point 6, under each node's row lock after the scope's (the re-key's commit order): no write lands
-        // under a key from before the rotation, and none into a node the re-key has not reached yet.
+        // ADR 0114 decision 3, under each node's row lock after the scope's (the re-key's commit order): no write lands
+        // under a replaced key, and none into a node that is due for its re-key.
         for (claim in epochs) {
             when (gate.check(scopeId, claim.nodeId, claim.stated)) {
                 NodeEpochGate.Verdict.OK -> Unit
                 NodeEpochGate.Verdict.MISSING -> return ApplyResult.Missing
                 NodeEpochGate.Verdict.STALE -> return ApplyResult.StaleEpoch
-                NodeEpochGate.Verdict.PENDING -> if (claim.pendingRefuses) return ApplyResult.RekeyPending
+                NodeEpochGate.Verdict.PENDING -> return ApplyResult.RekeyPending
             }
         }
         val sets = mutableListOf<String>()
@@ -518,9 +525,9 @@ class NodesStore(private val gate: NodeEpochGate) {
         // clearing it on its own would leave a live node hanging under a trashed one — visible in no listing at
         // all, because the client assembles the tree by parentId and the parent is filtered out.
         if (all.any { it.id == root.parentId && it.deletedAt != null }) return RestoreResult.NOT_FOUND
-        // ADR 0109 point 6: the token (and a re-sealed name) go under the key the entry lives under — the live parent's,
-        // or `K_SC` at the node's own epoch at the scope root — so the request states that node's epoch. A trashed node
-        // is re-keyed like a live one, so a restore never brings back a key from before the rotation.
+        // ADR 0114 decision 3: the token (and a re-sealed name) go under the key the entry lives under — the live
+        // parent's, or the scope key at the scope root, where the request states the restored node's own epoch. A
+        // trashed node is re-keyed like a live one, so a restore never brings back a key that was replaced.
         val entryNode = if (root.parentId == scopeId) root.id else root.parentId
         when (gate.check(scopeId, entryNode, entryEpoch)) {
             NodeEpochGate.Verdict.OK -> Unit
@@ -539,10 +546,9 @@ class NodesStore(private val gate: NodeEpochGate) {
         // whole subtree (nothing is live under a trashed parent), and with this root live it is a trash root again,
         // restorable on its own with a token the client derives under the live parent (inbox #357).
         val subtree = collectSubtree(all, nodeId) { it.slugToken == it.id }
-        // ADR 0109 point 1: a trashed node is re-keyed like a live one, and nothing comes back with a key from before the
-        // scope's current epoch — the restore waits until the re-key reached every node it would bring back.
-        val current = ScopeEntity.findById(scopeId)?.currentEpoch ?: 0
-        if (all.any { it.id in subtree && it.epoch < current }) return RestoreResult.REKEY_PENDING
+        // ADR 0109 point 1, ADR 0114 decision 4: a trashed node is re-keyed like a live one, and nothing comes back while
+        // due — the restore waits until the re-key reached every node it would bring back.
+        if (all.any { it.id in subtree && it.rekeyDue }) return RestoreResult.REKEY_PENDING
         for (n in all) {
             if (n.id in subtree) n.deletedAt = null
         }
@@ -567,7 +573,7 @@ class NodesStore(private val gate: NodeEpochGate) {
             .sortedWith(compareByDescending<NodeEntity> { it.deletedAt }.thenBy { it.id })
             .map {
                 TrashedNodeRow(
-                    it.id, it.parentId, it.kind, it.encryptedName, it.epoch, it.placementRevision, it.deletedAt!!,
+                    it.id, it.parentId, it.kind, it.encryptedName, it.epoch, it.scopeEpoch, it.placementRevision, it.deletedAt!!,
                     it.shareIdentityId, it.shareIdentityId?.let(wrapped::get), it.id in attached,
                 )
             }

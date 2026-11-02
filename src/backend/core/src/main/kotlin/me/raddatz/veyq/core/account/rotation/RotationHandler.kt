@@ -118,7 +118,7 @@ sealed interface StageEndorsementsOutcome {
     /** A profile whose join the caller did not root, or that holds no join record. */
     data object PlanChanged : StageEndorsementsOutcome, HttpFailure by Failures.rotationPlanChanged
 
-    /** An endorsement does not verify under the stage's identity over the stored sealed record. */
+    /** An endorsement does not verify under the stage's identity over the digest of the opened record it names. */
     data object JoinEndorsementInvalid : StageEndorsementsOutcome, HttpFailure by httpFailure("join_endorsement_invalid", UNPROCESSABLE)
 }
 
@@ -142,7 +142,7 @@ data class StagedModerationGrantInput(val epoch: Int, val sealedGrant: String?)
 data class StagedInviteInput(val inviteId: String, val anchorEpoch: Int, val inviteKeySignature: String?, val anchorGrantSignature: String?)
 
 /** One staged join-record entry as a chunk carries it: endorsed, or declared ([endorsement] null). */
-data class StagedEndorsementInput(val tenantId: String, val userId: String, val endorsement: String?)
+data class StagedEndorsementInput(val tenantId: String, val userId: String, val endorsement: String?, val recordDigest: String? = null)
 
 /** One staged self-grant as a chunk carries it. */
 data class StagedSelfGrantInput(
@@ -335,8 +335,10 @@ class RotationHandler(
      * Stage one chunk of join-record endorsements or declarations into [userId]'s open stage [stageId] (ADR 0111 decision 21):
      * every entry names a profile whose join the caller rooted and that holds a join record (else `409
      * rotation_plan_changed`); a non-null endorsement is the stage identity's `join-endorsement` signature over the
-     * record as stored, verified here (else `422 join_endorsement_invalid`). Each entry keeps the digest of the record it
-     * was staged against, so the publish refuses one a rejoin replaced since. All checked before anything is written.
+     * client's `recordDigest` — the opened record's, which the server cannot compute (ADR 0115 decision 8) — verified here
+     * (else `422 join_endorsement_invalid`; one without its digest verifies over nothing). Each entry keeps the digest of
+     * the stored ciphertext it was staged against, so the publish refuses one a rejoin replaced since — or a rotation
+     * re-sealed since, which the client re-stages. All checked before anything is written.
      */
     fun stageEndorsements(userId: String, stageId: String, entries: List<StagedEndorsementInput>): StageEndorsementsOutcome =
         QuarkusTransaction.requiringNew().call {
@@ -346,9 +348,7 @@ class RotationHandler(
             if (entries.any { (it.tenantId to it.userId) !in rooted }) return@call StageEndorsementsOutcome.PlanChanged
             val identity = stage.identityPublicKey
             val valid = entries.filter { it.endorsement != null }.all { e ->
-                JoinEndorsement.verifies(
-                    identity, e.tenantId, e.userId, userId, rooted.getValue(e.tenantId to e.userId).sealedJoinRecord, e.endorsement,
-                )
+                JoinEndorsement.verifies(identity, e.tenantId, e.userId, userId, e.recordDigest, e.endorsement)
             }
             if (!valid) return@call StageEndorsementsOutcome.JoinEndorsementInvalid
             stages.upsertEndorsements(stage.id, entries.associateBy { it.tenantId to it.userId }.values.map {
@@ -600,7 +600,7 @@ class RotationHandler(
         rows.mapNotNull { row ->
             val scope = scopes[row.scopeId] ?: return@mapNotNull null
             val blocked = blockOf(scope, tenants[scope.tenantId])
-            val facts = RegrantFacts(row.epochAtRotation, scope.currentEpoch, blocked, ScopeRekeying.lagsBelow(scope.id, scope.currentEpoch))
+            val facts = RegrantFacts(row.epochAtRotation, scope.currentEpoch, blocked, ScopeRekeying.lags(scope.id))
             RotationStateRow(scope.id, RotationScopeStates.state(facts), blocked)
         }.sortedBy { it.scopeId }
     }

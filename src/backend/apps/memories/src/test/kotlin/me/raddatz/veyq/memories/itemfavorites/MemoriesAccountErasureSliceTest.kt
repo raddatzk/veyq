@@ -87,6 +87,7 @@ class MemoriesAccountErasureSliceTest {
     private fun favorite(userId: String, scopeId: String, nodeId: String) {
         ItemFavoritesEntity().apply {
             id = "$userId|$scopeId|$nodeId"; this.userId = userId; this.scopeId = scopeId; this.nodeId = nodeId; ciphertext = "Yw=="
+            markId = UUID.randomUUID().toString()
         }.persist()
     }
 }

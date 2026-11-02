@@ -217,7 +217,7 @@ class ShareGuestStopsCoreSliceTest {
         val l = link(w, ShareEntity.READ) { enabled = false }
         CapabilityRequirementFixtures.with(instance = mapOf(LINK_PASSWORD to 1)) {
             assertEquals(listOf("revoked", "linkPassword"), stopsOnNode(w).getValue(l))
-            given().header("Authorization", bearer(w.space.userId)).`when`().post("/api/shares/$l/reactivate").then().statusCode(204)
+            given().header("Authorization", bearer(w.space.userId)).contentType(ContentType.JSON).body("""{"nodeEpoch":0}""").`when`().post("/api/shares/$l/reactivate").then().statusCode(204)
             assertEquals(listOf("linkPassword"), stopsOnNode(w).getValue(l))
             edit(w, l, PASSWORD_EDIT).then().statusCode(204)
             assertEquals(emptyList<String>(), stopsOnNode(w).getValue(l))

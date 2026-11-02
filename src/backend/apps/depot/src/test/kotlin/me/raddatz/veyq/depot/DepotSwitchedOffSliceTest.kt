@@ -87,7 +87,7 @@ class DepotSwitchedOffSliceTest {
         given().contentType(ContentType.JSON)
             .body(
                 """{"contributorToken":"${link.token}","nodeId":"${UUID.randomUUID()}","encryptedName":"bmFtZQ==",""" +
-                    """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcHBlZC11bmRlci1rdXA="}""",
+                    """"slugToken":"${GuestTreeShare.slug()}","scopeEpoch":0,"wrappedContentKey":"d3JhcHBlZC11bmRlci1rdXA="}""",
             )
             .`when`().post("/api/shares/${link.shareId}/files/drop-folder").then()
 

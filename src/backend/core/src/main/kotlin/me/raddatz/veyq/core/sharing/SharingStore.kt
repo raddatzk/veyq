@@ -35,8 +35,10 @@ data class ShareNodeRow(
     val parentId: String?,
     val kind: String,
     val orderIndex: Int,
-    /** The content-key epoch the node was sealed at — a descendant's content-key wrap is bound to it (ADR 0072). */
+    /** The node's own key's epoch (ADR 0114 decision 3) — what a guest's write under the node states. */
     val epoch: Int,
+    /** The scope's epoch when the node's key was minted — a descendant's content-key wrap is bound to its own (ADR 0072). */
+    val scopeEpoch: Int,
     /** A descendant's content key wrapped under its parent's; null at the root. */
     val wrappedContentKey: String?,
     /** A descendant's name sealed under its parent's content key; null at the root. */
@@ -184,6 +186,8 @@ class SharingStore(
             noteEditorUserId = ownerAccount.takeIf { sealedNote != null }
             this.sealedShareKey = sealedShareKey
             this.sealedShareKeyEpoch = sealedShareKeyEpoch
+            // ADR 0115 decision 2: the copy moves with every rotation, the mint's epoch stays for the re-issue rule.
+            this.mintedEpoch = sealedShareKeyEpoch.takeIf { sealedShareKey != null }
             this.sealedShareName = sealedShareName
             shareNameEditorUserId = ownerAccount.takeIf { sealedShareName != null }
             this.passwordRequired = passwordRequired // cr-0118 (ADR 0037): the access-control gate + reveal copy
@@ -476,6 +480,7 @@ class SharingStore(
                 kind = n.kind,
                 orderIndex = n.orderIndex,
                 epoch = n.epoch,
+                scopeEpoch = n.scopeEpoch,
                 wrappedContentKey = if (root) null else n.wrappedContentKey,
                 encryptedName = if (root) null else n.encryptedName,
                 placementRevision = if (root) null else n.placementRevision,

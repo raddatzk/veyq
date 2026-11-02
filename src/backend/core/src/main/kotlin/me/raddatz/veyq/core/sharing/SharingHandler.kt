@@ -64,7 +64,7 @@ sealed interface CreateShareOutcome {
     /** The recovery copy's epoch is not the scope's current one (ADR 0024 Decision 6), or `nodeEpoch` is not the shared
      *  node's stored one (ADR 0109 point 6) — a 409, nothing written. */
     object StaleEpoch : CreateShareOutcome, HttpFailure by Failures.staleEpoch
-    /** The shared node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — a 409, nothing written. */
+    /** The shared node is due for its re-key (ADR 0114 decision 3) — a 409, nothing written. */
     object RekeyPending : CreateShareOutcome, HttpFailure by Failures.nodeRekeyPending
     /** A WRITE_ONLY share brought a drop private key, but the node already has one — a 409, nothing written. */
     object DropKeyExists : CreateShareOutcome, HttpFailure by httpFailure("drop_key_exists", CONFLICT)
@@ -79,9 +79,11 @@ sealed interface ResolveShareOutcome {
         val share: ShareEntity,
         val nodes: List<ShareNodeRow>,
         val rootKind: String?,
-        /** The epoch the shared root's key was minted at (ADR 0109 point 6) — what a guest's write states as the root's;
+        /** The shared root's own key's epoch (ADR 0114 decision 3) — what a guest's write states as the root's;
          *  served for every unlocked role, null only when the root row is gone. */
         val rootEpoch: Int?,
+        /** The root's `scopeEpoch` — what a guest mints a new node's key under (ADR 0114 decision 3); null with [rootEpoch]. */
+        val rootScopeEpoch: Int?,
         /** What hangs off the served nodes — `node|slot|blob` per attachment: no part of the body, but a guest reads it
          *  beside the nodes (a file's blob, a cover), so the conditional resolve's tag covers it (ADR 0081). */
         val attachments: List<String> = emptyList(),
@@ -103,7 +105,7 @@ sealed interface CreateIdentityOutcome {
     object IdTaken : CreateIdentityOutcome, HttpFailure by Failures.idTaken
     /** `nodeEpoch` is not the shared root's stored epoch (ADR 0109 point 6) — a 409, nothing stored; the guest re-resolves. */
     object StaleEpoch : CreateIdentityOutcome, HttpFailure by Failures.staleEpoch
-    /** The shared root is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — a 409, nothing stored. */
+    /** The shared root is due for its re-key (ADR 0114 decision 3) — a 409, nothing stored. */
     object RekeyPending : CreateIdentityOutcome, HttpFailure by Failures.nodeRekeyPending
     /** A wrapped identity key that does not match the role: missing on WRITE_ONLY, present on READ_WRITE — a 400. */
     object InvalidRequest : CreateIdentityOutcome, HttpFailure by Failures.invalidRequest
@@ -227,7 +229,7 @@ sealed interface ReissueShareOutcome {
     object InvalidRequest : ReissueShareOutcome, HttpFailure by Failures.invalidRequest
     /** The recovery copy is not sealed at the scope's current epoch (ADR 0024 Decision 6) — a 409, nothing written. */
     object StaleEpoch : ReissueShareOutcome, HttpFailure by Failures.staleEpoch
-    /** The shared node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — a 409, nothing written. */
+    /** The shared node is due for its re-key (ADR 0114 decision 3) — a 409, nothing written. */
     object RekeyPending : ReissueShareOutcome, HttpFailure by Failures.nodeRekeyPending
     object IdTaken : ReissueShareOutcome, HttpFailure by Failures.idTaken
     /** The share is already deleted — re-issued once already (a concurrent re-issue won, or an earlier one ran) or
@@ -593,7 +595,8 @@ class SharingHandler(
         ReissuePolicy.required(
             reissueOnly = share.reissueOnly,
             ownerIsMember = ownerIsMember(share),
-            copyEpoch = share.sealedShareKeyEpoch,
+            // The epoch the link was minted at, not its copy's: a rotation moves the copy (ADR 0115 decision 2).
+            mintedEpoch = share.mintedEpoch.takeIf { share.sealedShareKey != null },
             currentEpoch = scope.currentEpoch,
             removalsAtMint = share.memberRemovalsAtMint,
             removals = scope.memberRemovals,
@@ -695,17 +698,21 @@ class SharingHandler(
         // the subtree. A trashed root names none, as it serves no node (`ShareDeletedNodeSliceTest`).
         val root = store.findNode(share.nodeId)
         val rootKind = root?.takeIf { it.deletedAt == null }?.kind
-        // ADR 0109 point 6: what a guest's write states as the root's epoch — every unlocked role, WRITE_ONLY included
-        // (its identity's `K_up` is wrapped to the root's drop key, which a re-key replaces).
+        // ADR 0114 decision 3: what a guest's write states as the root's epoch, and the scope epoch it mints a new
+        // node's key under — every unlocked role, WRITE_ONLY included (its identity's `K_up` is wrapped to the root's
+        // drop key, which a re-key replaces; its identity folder is minted under the root's scope epoch).
         val rootEpoch = root?.epoch
+        val rootScopeEpoch = root?.scopeEpoch
         if (ShareAccessPolicy.canView(share.role)) {
             val nodes = store.subtree(share.scopeId, share.nodeId)
-            return ResolveShareOutcome.Found(share, nodes, rootKind, rootEpoch, store.attachmentTags(share.scopeId, nodes.map { it.id }))
+            return ResolveShareOutcome.Found(
+                share, nodes, rootKind, rootEpoch, rootScopeEpoch, store.attachmentTags(share.scopeId, nodes.map { it.id }),
+            )
         }
         // WRITE_ONLY: the minimal capability — no nodes; only the root's kind. The client seals its uploads under its own
         // identity key, wrapped to the root node's drop public key (served sealed under `K_share` in place of the wrap, ADR
         // 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
-        return ResolveShareOutcome.Found(share, emptyList(), rootKind, rootEpoch)
+        return ResolveShareOutcome.Found(share, emptyList(), rootKind, rootEpoch, rootScopeEpoch)
     }
 
     /**

@@ -54,7 +54,8 @@ import me.raddatz.veyq.core.terms.toWire
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.generated.model.ServedMemberInvite
 import me.raddatz.veyq.core.generated.model.KeyChainStep
-import me.raddatz.veyq.core.generated.model.ScopeEpochLink
+import me.raddatz.veyq.core.spaces.scope.ScopeSuccession
+import me.raddatz.veyq.core.spaces.scope.toWire
 import me.raddatz.veyq.core.identity.keychain.KeyChainLink
 import me.raddatz.veyq.core.generated.model.InviteSelfGrant
 import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
@@ -324,7 +325,7 @@ class TenantsResource(
                     hasAccount = outcome.hasAccount,
                     role = InviteRole.decode(outcome.role),
                     handover = outcome.handover,
-                    invite = outcome.invite?.served(outcome.heads, outcome.signerChain, outcome.epochLinks),
+                    invite = outcome.invite?.served(outcome.heads, outcome.signerChain, outcome.successions),
                 ),
             ).build()
             is HttpFailure -> httpError(outcome)
@@ -349,6 +350,7 @@ class TenantsResource(
             acceptInviteRequest.username,
             acceptInviteRequest.sealedName,
             acceptInviteRequest.sealedAvatar,
+            acceptInviteRequest.epoch,
         )) {
             is AcceptOutcome.Activated ->
                 Response.ok(TenantActivated(UUID.fromString(outcome.tenantId), TenantStatus.ACTIVE)).build()
@@ -372,6 +374,7 @@ class TenantsResource(
             with(registerAndAcceptRequest) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
             with(registerAndAcceptRequest) { selfGrant.join(inviteProof, sealedJoinRecord, signerIdentityDigest) },
             registerAndAcceptRequest.username, registerAndAcceptRequest.sealedName, registerAndAcceptRequest.sealedAvatar,
+            registerAndAcceptRequest.epoch,
         )) {
             is RegisterAcceptOutcome.Activated -> Response.status(Response.Status.CREATED)
                 .entity(TenantActivatedWithUser(UUID.fromString(outcome.tenantId), TenantStatus.ACTIVE, UUID.fromString(outcome.userId)))
@@ -618,10 +621,10 @@ private fun InviteSelfGrant?.join(inviteProof: String?, sealedJoinRecord: String
     )
 
 /** A live MEMBER invite as its invitee reads it in the preview — null when it holds no key (none to check): its key,
- *  signer chain, anchor, carried grant and the epoch links between the two (ADR 0111
- *  decision 19). */
+ *  signer chain, anchor, carried grant and the succession statements between the two (ADR 0111 decision 19, ADR 0115
+ *  decision 5). */
 private fun TenantInviteEntity.served(
-    heads: Map<String, String>, signerChain: List<KeyChainLink>, epochLinks: List<Pair<Int, String>>,
+    heads: Map<String, String>, signerChain: List<KeyChainLink>, successions: List<ScopeSuccession>,
 ): ServedMemberInvite? = ServedMemberInvite(
     inviteId = UUID.fromString(id),
     invitePublicKey = invitePublicKey ?: return null,
@@ -645,5 +648,5 @@ private fun TenantInviteEntity.served(
     anchorEpoch = anchorEpoch ?: return null,
     anchorGrantSignature = anchorGrantSignature ?: return null,
     granterKeyChainHead = heads[granterUserId] ?: return null,
-    epochLinks = epochLinks.map { (epoch, wrappedPrev) -> ScopeEpochLink(epoch = epoch, wrappedPrev = wrappedPrev) },
+    successions = successions.map { it.toWire() },
 )

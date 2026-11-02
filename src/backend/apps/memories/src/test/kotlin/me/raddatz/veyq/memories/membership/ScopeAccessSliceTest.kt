@@ -101,7 +101,7 @@ class ScopeAccessSliceTest {
         asCreator().`when`().post("/api/shares/${w.deleting.shareId}/revoke").then().statusCode(204)
         asCreator().`when`().post("/api/shares/${w.deleting.shareId}/revoke").then().statusCode(204) // idempotent
         // every other link write is still refused there: turning it back on, editing it, renaming it, deleting it
-        asCreator().`when`().post("/api/shares/${w.deleting.shareId}/reactivate")
+        asCreator().contentType(ContentType.JSON).body("""{"nodeEpoch":0}""").`when`().post("/api/shares/${w.deleting.shareId}/reactivate")
             .then().statusCode(409).body("code", equalTo("scope_deleting"))
         asCreator().contentType(ContentType.JSON).body("{}").`when`().patch("/api/shares/${w.deleting.shareId}")
             .then().statusCode(409).body("code", equalTo("scope_deleting"))
@@ -117,7 +117,7 @@ class ScopeAccessSliceTest {
         asCreator().`when`().post("/api/scopes/${w.deleting.scopeId}/restore").then().statusCode(204)
         given().`when`().get("/api/shares/${w.deleting.shareId}").then().statusCode(404).body("code", equalTo("share_not_found"))
         // … until a member turns it on again in the live group (control: the 404 above is the revoke, not a broken link)
-        asCreator().`when`().post("/api/shares/${w.deleting.shareId}/reactivate").then().statusCode(204)
+        asCreator().contentType(ContentType.JSON).body("""{"nodeEpoch":0}""").`when`().post("/api/shares/${w.deleting.shareId}/reactivate").then().statusCode(204)
         given().`when`().get("/api/shares/${w.deleting.shareId}").then().statusCode(200)
     }
 

@@ -96,7 +96,7 @@ class MemberIdentitySliceTest {
 
         // Seal a name + change the handle.
         given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", "id-prof.example.com")
-            .contentType(ContentType.JSON).body("""{"username":"after","sealedName":"c2VhbGVkLW5hbWU="}""")
+            .contentType(ContentType.JSON).body("""{"username":"after","sealedName":"c2VhbGVkLW5hbWU=","epoch":0}""")
             .`when`().put("/api/account/profile")
             .then().statusCode(200)
             .body("username", equalTo("after")).body("sealedName", equalTo("c2VhbGVkLW5hbWU="))

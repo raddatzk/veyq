@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.spaces.scope.ScopeSuccession
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
@@ -96,8 +97,9 @@ sealed interface PreviewOutcome {
         val heads: Map<String, String> = emptyMap(),
         /** The invite signer's whole key chain, genesis first (ADR 0111 decision 19). */
         val signerChain: List<KeyChainLink> = emptyList(),
-        /** The tenant scope's epoch links for every epoch in `(anchorEpoch, grantedEpoch]`, ascending (ADR 0111 decision 19). */
-        val epochLinks: List<Pair<Int, String>> = emptyList(),
+        /** The tenant scope's succession statements for every epoch in `(anchorEpoch, grantedEpoch]`, ascending (ADR 0111
+         *  decision 19, ADR 0115 decision 5). */
+        val successions: List<ScopeSuccession> = emptyList(),
     ) : PreviewOutcome
     data object NotFound : PreviewOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
     data object NoLongerValid : PreviewOutcome, HttpFailure by httpFailure("invite_no_longer_valid", FailureStatus.GONE)
@@ -177,9 +179,9 @@ class TenantAcceptHandler(
             invite = served,
             heads = served?.let { store.keyChainHeads(listOfNotNull(it.signerUserId, it.granterUserId)) }.orEmpty(),
             signerChain = served?.signerUserId?.let { store.keyChainOf(it) }.orEmpty(),
-            epochLinks = served?.let { i ->
+            successions = served?.let { i ->
                 val anchor = i.anchorEpoch ?: return@let null
-                store.epochLinks(tenant.id, anchor, i.grantedEpoch ?: return@let null)
+                store.successions(tenant.id, anchor, i.grantedEpoch ?: return@let null)
             }.orEmpty(),
         )
     }
@@ -208,18 +210,21 @@ class TenantAcceptHandler(
 
     /** Existing-user accept: the caller (resolved from the session) must be the invited person. Role-branched
      *  (cr-0077): an OWNER accept cold-activates the tenant (grant required); a MEMBER accept joins the ACTIVE
-     *  tenant with the grant it gave itself, after its invite key's proof verified (ADR 0111 decision 3). */
+     *  tenant with the grant it gave itself, after its invite key's proof verified (ADR 0111 decision 3).
+     *  [profileEpoch] is the tenant epoch the join record, the name and the picture are sealed under ([profileSeal]). */
     fun accept(
         userId: String, bootstrapSecret: String, birth: OwnerBirth?, join: MemberJoin?, username: String, sealedName: String?,
-        sealedAvatar: String?,
-    ): AcceptOutcome =
-        createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) AcceptOutcome.UsernameTaken else null }) {
-            acceptOnce(userId, bootstrapSecret, birth, join, username, sealedName, sealedAvatar)
+        sealedAvatar: String?, profileEpoch: Int?,
+    ): AcceptOutcome {
+        if (profileSealUnstated(join, sealedName, sealedAvatar, profileEpoch)) return AcceptOutcome.MissingGrant
+        return createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) AcceptOutcome.UsernameTaken else null }) {
+            acceptOnce(userId, bootstrapSecret, birth, join, username, sealedName, sealedAvatar, profileEpoch)
         }
+    }
 
     private fun acceptOnce(
         userId: String, bootstrapSecret: String, birth: OwnerBirth?, join: MemberJoin?, username: String, sealedName: String?,
-        sealedAvatar: String?,
+        sealedAvatar: String?, profileEpoch: Int?,
     ): AcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return AcceptOutcome.NotFound
         if (!isLive(invite)) return AcceptOutcome.NoLongerValid
@@ -246,6 +251,7 @@ class TenantAcceptHandler(
                 JoinRefusal.STALE_EPOCH -> return AcceptOutcome.StaleEpoch
                 null -> Unit
             }
+            if (!profileSeal(profileEpoch, current)) return AcceptOutcome.StaleEpoch
             val j = join!!
             // Who rooted this join (ADR 0111 decision 21): read before the spend, which drops the invite's signer.
             val signer = invite.signerUserId!!
@@ -271,6 +277,8 @@ class TenantAcceptHandler(
         } else {
             val b = birth ?: return AcceptOutcome.MissingGrant
             if (!InviteAcceptProof.digestMatches(caller.identityPublicKey, b.recipientIdentityDigest)) return AcceptOutcome.RecipientKeyNotCurrent
+            // A tenant is born at epoch 0, so that is the one its first profile is sealed under.
+            if (!profileSeal(profileEpoch, 0)) return AcceptOutcome.StaleEpoch
             // An OWNER accept has no scope to lock yet: the spend alone serializes it.
             if (!store.consumeLiveInvite(invite.id)) return AcceptOutcome.NoLongerValid
             if (tenant.status != TenantEntity.PENDING) return unspend(AcceptOutcome.AlreadyActive)
@@ -287,15 +295,17 @@ class TenantAcceptHandler(
      *  Role-branched like [accept]: OWNER activates (grant required), MEMBER joins with its self-grant. */
     fun registerAndAccept(
         bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, join: MemberJoin?, username: String,
-        sealedName: String?, sealedAvatar: String?,
-    ): RegisterAcceptOutcome =
-        createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) RegisterAcceptOutcome.UsernameTaken else null }) {
-            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, join, username, sealedName, sealedAvatar)
+        sealedName: String?, sealedAvatar: String?, profileEpoch: Int?,
+    ): RegisterAcceptOutcome {
+        if (profileSealUnstated(join, sealedName, sealedAvatar, profileEpoch)) return RegisterAcceptOutcome.MissingGrant
+        return createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) RegisterAcceptOutcome.UsernameTaken else null }) {
+            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, join, username, sealedName, sealedAvatar, profileEpoch)
         }
+    }
 
     private fun registerAndAcceptOnce(
         bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, join: MemberJoin?, username: String,
-        sealedName: String?, sealedAvatar: String?,
+        sealedName: String?, sealedAvatar: String?, profileEpoch: Int?,
     ): RegisterAcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return RegisterAcceptOutcome.NotFound
         if (!isLive(invite)) return RegisterAcceptOutcome.NoLongerValid
@@ -308,6 +318,8 @@ class TenantAcceptHandler(
         if (!member && !InviteAcceptProof.digestMatches(account.identityPublicKey, birth!!.recipientIdentityDigest)) {
             return RegisterAcceptOutcome.RecipientKeyNotCurrent
         }
+        // A tenant is born at epoch 0, so that is the one its first profile is sealed under.
+        if (!member && !profileSeal(profileEpoch, 0)) return RegisterAcceptOutcome.StaleEpoch
         // A MEMBER takes the rotation's lock first and checks its join under it, as in [accept]; then the spend, before
         // anything is born.
         if (member) {
@@ -322,6 +334,7 @@ class TenantAcceptHandler(
                 JoinRefusal.STALE_EPOCH -> return RegisterAcceptOutcome.StaleEpoch
                 null -> Unit
             }
+            if (!profileSeal(profileEpoch, current)) return RegisterAcceptOutcome.StaleEpoch
         }
         // Who rooted a member's join (ADR 0111 decision 21): read before the spend, which drops the invite's signer.
         val signer = invite.signerUserId
@@ -385,6 +398,22 @@ class TenantAcceptHandler(
         if (j.epoch > current) return JoinRefusal.STALE_EPOCH
         return null
     }
+
+    /**
+     * Whether the profile fields an accept writes — a member's join record, the optional name and picture — come without
+     * the tenant epoch they are sealed under (the contract's `epoch`, required with any of them): a `400` before any
+     * answer about the instance's state.
+     */
+    private fun profileSealUnstated(join: MemberJoin?, sealedName: String?, sealedAvatar: String?, profileEpoch: Int?): Boolean =
+        (join != null || sealedName != null || sealedAvatar != null) && profileEpoch == null
+
+    /**
+     * ADR 0115 decision 3: the profile fields are sealed under the tenant key, which a rotation replaces and re-seals
+     * every profile under, so they land only at the tenant's [current] epoch — read under the tenant scope's lock, the
+     * rotation's. A newcomer that sealed under the epoch it previewed, which a rotation moved past since, is answered
+     * `stale_epoch` and seals again under the carried one (decision 8). No sealed field, nothing to judge.
+     */
+    private fun profileSeal(profileEpoch: Int?, current: Int): Boolean = profileEpoch == null || profileEpoch == current
 
     /**
      * The replay question of a join whose commit failed: does someone else now hold [username] in the invite's tenant,

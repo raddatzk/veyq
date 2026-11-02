@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.spaces.scope
 
 import me.raddatz.veyq.core.identity.TenantProfileEntity
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.membership.TestGrants
@@ -162,7 +163,7 @@ class GroupAddGrantSliceTest {
     /** The owner rotates the group to `E_1`, re-granting only itself. */
     private fun rotate(g: World) =
         given().header("Authorization", bearer(g.owner)).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"${g.owner}","wrappedGrant":"${TestGrants.WRAPPED}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(g.owner)}"}]}""")
+            .body("""{"epoch":1,${TestScopeRekey.rotationJson(g.groupId)},"grants":[{"userId":"${g.owner}","wrappedGrant":"${TestGrants.WRAPPED}",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(g.owner)}"}]}""")
             .`when`().post("/api/scopes/${g.groupId}/epochs")
 
     private fun membership(userId: String, scopeId: String): MembershipEntity? = QuarkusTransaction.requiringNew().call {

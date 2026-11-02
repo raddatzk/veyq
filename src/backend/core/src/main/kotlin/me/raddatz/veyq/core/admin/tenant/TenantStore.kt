@@ -11,7 +11,8 @@ import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.MembershipStore
 import me.raddatz.veyq.core.scope.ScopeEntity
-import me.raddatz.veyq.core.spaces.scope.ScopeEpochEntity
+import me.raddatz.veyq.core.spaces.scope.ScopeSuccession
+import me.raddatz.veyq.core.spaces.scope.ScopeSuccessionEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.tenant.TenantHostResolver
 import jakarta.enterprise.context.ApplicationScoped
@@ -320,11 +321,11 @@ class TenantStore(
      *  invitee's preview serves (ADR 0111 decision 19). */
     fun keyChainOf(userId: String): List<KeyChainLink>? = keyChain.chainOf(userId)
 
-    /** The tenant scope's epoch-chain links (ADR 0024) for every epoch in `(above, upTo]`, ascending — what peels a
-     *  carried grant's key down to an invite's anchor (ADR 0111 decision 19). */
-    fun epochLinks(tenantId: String, above: Int, upTo: Int): List<Pair<Int, String>> =
-        ScopeEpochEntity.find("scopeId = ?1 and epoch > ?2 and epoch <= ?3 order by epoch", tenantId, above, upTo).list()
-            .map { it.epoch to it.wrappedPrev }
+    /** The tenant scope's succession statements (ADR 0115 decision 5) for every epoch in `(above, upTo]`, ascending —
+     *  what leads from an invite's anchor epoch to the carried grant's key (ADR 0111 decision 19). */
+    fun successions(tenantId: String, above: Int, upTo: Int): List<ScopeSuccession> =
+        ScopeSuccessionEntity.find("scopeId = ?1 and epoch > ?2 and epoch <= ?3 order by epoch", tenantId, above, upTo).list()
+            .map { ScopeSuccession(it.epoch, it.successionPublicKey, it.successionSignature) }
 
     /**
      * The open MEMBER invites (ACTIVE, unexpired) [signerUserId] signed, in **every** tenant — what their securing

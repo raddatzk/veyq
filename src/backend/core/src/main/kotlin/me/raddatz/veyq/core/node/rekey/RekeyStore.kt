@@ -36,7 +36,9 @@ data class RekeyParts(
 /** What a node's commit carries besides its staged parts ([RekeyStore.commit]). */
 data class RekeyCommit(
     val nodeEpoch: Int,
-    val epoch: Int,
+    /** The scope's current epoch as the re-keyer read it: the node's `scopeEpoch` after the commit, which its new seals
+     *  bind (ADR 0114 decision 4). */
+    val scopeEpoch: Int,
     val parentId: String?,
     val parentEpoch: Int?,
     val placementRevision: Long,
@@ -49,9 +51,10 @@ data class RekeyCommit(
 )
 
 /**
- * The scope re-key's persistence (ADR 0109, uc.spaces.rekey-after-rotation): every node with its epoch, a node's core
- * parts, and the commit of one node in one transaction. Operator-blind: it rewrites ciphertext in rows it already holds
- * and moves a node's epoch to the scope's current one; no key, no name, no store object.
+ * The scope re-key's persistence (ADR 0109, uc.spaces.rekey-after-rotation; ADR 0114 decision 4): every node with its
+ * own epoch and its due mark, a node's core parts, and the commit of one due node in one transaction. Operator-blind: it
+ * rewrites ciphertext in rows it already holds, raises the node's own epoch and clears its mark; no key, no name, no
+ * store object.
  */
 @ApplicationScoped
 class RekeyStore(
@@ -125,7 +128,9 @@ class RekeyStore(
      * Commit one node's re-key (ADR 0109 point 2) in ONE transaction: the node gets the key the client minted — its
      * entry under its parent's current key, its meta and drop key re-sealed — and every value staged under [rekeyId]
      * is swapped in: each child's entry, each attachment blob's wrap, each share's wrap and drop public key, each guest
-     * identity's key and name, and every participant's rows. The node's epoch becomes the scope's current one.
+     * identity's key and name, and every participant's rows. The node's own epoch goes up by one, its `scopeEpoch`
+     * becomes the scope's current one, and its due mark is cleared (ADR 0114 decision 4) — the one commit both a
+     * rotation's and a link close's re-key run.
      *
      * **Lock order: the scope row, the links rooted on the node, each participant's own rows
      * ([NodeRekeyParticipant.lockRows], the applications' before the blob service's), the node row, then the rows it
@@ -148,14 +153,18 @@ class RekeyStore(
         for (p in participants) p.lockRows(scopeId, nodeId)
         val node = NodeEpochGate.lockNode(nodeId)?.takeIf { it.scopeId == scopeId } ?: return RekeyOutcome.NotFound
         val current = scope.currentEpoch
-        if (c.epoch != current || c.nodeEpoch != node.epoch || node.epoch >= current) return RekeyOutcome.Stale
-        // Top-down (ADR 0109 point 2): the entry goes under the parent's CURRENT key, so the parent comes first.
+        // A node is re-keyed only while due (ADR 0114 decision 4): one that is not has nothing left to re-key — another
+        // member's commit cleared it — and is a stale read, as a node whose own epoch moved since.
+        if (c.scopeEpoch != current || c.nodeEpoch != node.epoch || !node.rekeyDue) return RekeyOutcome.Stale
+        // Top-down (ADR 0109 point 2): the entry goes under the parent's CURRENT key, so the parent comes first — a
+        // parent still due is pending. The scope root's parent is the scope, whose key the rotation's commit replaced
+        // before it marked anything: never due.
         val atRoot = node.parentId == scopeId
         if (atRoot != (c.parentId == null) || (!atRoot && c.parentId != node.parentId)) return RekeyOutcome.InvalidRequest
         if (!atRoot) {
             val parent = NodeEntity.findById(node.parentId) ?: return RekeyOutcome.NotFound
             val stated = c.parentEpoch ?: return RekeyOutcome.InvalidRequest
-            when (NodeEpochGate.verdict(stated, parent.epoch, current)) {
+            when (NodeEpochGate.verdict(stated, parent.epoch, parent.rekeyDue)) {
                 NodeEpochGate.Verdict.STALE -> return RekeyOutcome.Stale
                 NodeEpochGate.Verdict.PENDING -> return RekeyOutcome.Pending
                 else -> Unit
@@ -186,10 +195,13 @@ class RekeyStore(
         }
         // The node's own row in ONE statement, every column the commit changes; the copy loaded under the lock is not
         // written back (nothing on it is dirty).
-        val sets = mutableListOf("wrappedContentKey = :wrap", "encryptedName = :name", "placementRevision = :placement", "epoch = :epoch")
+        val sets = mutableListOf(
+            "wrappedContentKey = :wrap", "encryptedName = :name", "placementRevision = :placement", "epoch = :epoch",
+            "scopeEpoch = :scopeEpoch", "rekeyDue = false",
+        )
         val params = mutableMapOf<String, Any>(
             "id" to nodeId, "wrap" to c.wrappedContentKey, "name" to c.encryptedName,
-            "placement" to c.placementRevision + 1, "epoch" to current,
+            "placement" to c.placementRevision + 1, "epoch" to node.epoch + 1, "scopeEpoch" to current,
         )
         if (!freedSlug) { sets += "slugToken = :slug"; params["slug"] = c.slugToken }
         c.wrappedMeta?.let { sets += listOf("wrappedMeta = :meta", "metaRevision = :metaRevision"); params["meta"] = it; params["metaRevision"] = c.metaRevision + 1 }

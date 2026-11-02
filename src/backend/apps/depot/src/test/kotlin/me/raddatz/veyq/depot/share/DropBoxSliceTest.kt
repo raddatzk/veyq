@@ -327,7 +327,7 @@ class DropBoxSliceTest {
         given().contentType(ContentType.JSON)
             .body(
                 """{"contributorToken":"${link.token}","nodeId":"${UUID.randomUUID()}","encryptedName":"bmFtZQ==",""" +
-                    """"slugToken":"${GuestTreeShare.slug()}","epoch":$epoch,"wrappedContentKey":"$wrap"}""",
+                    """"slugToken":"${GuestTreeShare.slug()}","scopeEpoch":$epoch,"wrappedContentKey":"$wrap"}""",
             )
             .`when`().post("/api/shares/${link.shareId}/files/drop-folder").then()
 
@@ -351,7 +351,7 @@ class DropBoxSliceTest {
 
     private fun memberCreate(t: Tree, parent: String, kind: String): ValidatableResponse =
         given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
-            .body("""{"parentId":"$parent","parentEpoch":0,"nodeId":"${UUID.randomUUID()}","kind":"$kind","encryptedName":"bmFtZQ==","slugToken":"${GuestTreeShare.slug()}","orderIndex":0,"epoch":0,"wrappedContentKey":"a21lbQ=="}""")
+            .body("""{"parentId":"$parent","parentEpoch":0,"nodeId":"${UUID.randomUUID()}","kind":"$kind","encryptedName":"bmFtZQ==","slugToken":"${GuestTreeShare.slug()}","orderIndex":0,"scopeEpoch":0,"wrappedContentKey":"a21lbQ=="}""")
             .`when`().post("/api/scopes/${t.scopeId}/nodes").then()
 
     private fun memberPlace(t: Tree, node: String, to: String, version: Long): ValidatableResponse =

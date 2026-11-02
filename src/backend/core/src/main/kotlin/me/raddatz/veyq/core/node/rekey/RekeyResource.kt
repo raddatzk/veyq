@@ -9,6 +9,15 @@ import me.raddatz.veyq.core.generated.model.RekeyIdentity
 import me.raddatz.veyq.core.generated.model.RekeyNode
 import me.raddatz.veyq.core.generated.model.RekeyNodeList
 import me.raddatz.veyq.core.generated.model.RekeyShare
+import me.raddatz.veyq.core.generated.model.ScopeRekeyGroupInvitee
+import me.raddatz.veyq.core.generated.model.ScopeRekeyGroupName
+import me.raddatz.veyq.core.generated.model.ScopeRekeyIcon
+import me.raddatz.veyq.core.generated.model.ScopeRekeyMember
+import me.raddatz.veyq.core.generated.model.ScopeRekeyParts
+import me.raddatz.veyq.core.generated.model.ScopeRekeyRootNode
+import me.raddatz.veyq.core.generated.model.ScopeRekeyShare
+import me.raddatz.veyq.core.generated.model.ScopeRekeyStage as ScopeRekeyStageRequest
+import me.raddatz.veyq.core.generated.model.ScopeRekeyVerification
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.http.httpStaleSealedMeta
@@ -31,7 +40,11 @@ import java.util.UUID
         "Authenticated, membership-gated re-key of one scope whose current grant the caller holds. Its volume is bounded by the " +
         "scope's own nodes, each staged at the contracts' caps; no anonymous surface and no external cost.",
 )
-class RekeyResource(private val handler: RekeyHandler, private val identity: SecurityIdentity) : RekeyApi {
+class RekeyResource(
+    private val handler: RekeyHandler,
+    private val scopeRekey: ScopeRekeyHandler,
+    private val identity: SecurityIdentity,
+) : RekeyApi {
 
     override fun listRekeyNodes(scopeId: UUID): Response {
         val sid = scopeId.toString()
@@ -93,7 +106,7 @@ class RekeyResource(private val handler: RekeyHandler, private val identity: Sec
         val r = commitNodeRekeyRequest
         val commit = RekeyCommit(
             nodeEpoch = r.nodeEpoch.validated(),
-            epoch = r.epoch.validated(),
+            scopeEpoch = r.scopeEpoch.validated(),
             parentId = r.parentId?.toString(),
             parentEpoch = r.parentEpoch,
             placementRevision = r.placementRevision.validated(),
@@ -110,10 +123,76 @@ class RekeyResource(private val handler: RekeyHandler, private val identity: Sec
         }
     }
 
+    override fun listScopeRekeyParts(scopeId: UUID, since: String?, limit: Int?): Response =
+        when (val o = scopeRekey.parts(identity.principal.name, scopeId.toString(), since, limit ?: SCOPE_PAGE)) {
+            is RekeyOutcome.ScopeParts -> Response.ok(o.page.toWire()).build()
+            else -> refused(o)
+        }
+
+    override fun stageScopeRekey(scopeId: UUID, rekeyId: UUID, scopeRekeyStage: ScopeRekeyStageRequest): Response {
+        val r = scopeRekeyStage
+        val sid = scopeId.toString()
+        val fields = buildList {
+            r.groupName?.let { add(ScopeRekeyField(ScopeRekeyCommit.GROUP_ITEM, ScopeRekeyCommit.GROUP_NAME, it.encryptedName)) }
+            r.icon?.let { add(ScopeRekeyField(ScopeRekeyCommit.ICON_ITEM, ScopeRekeyCommit.ICON, it.sealedIcon)) }
+            r.rootNodes.orEmpty().forEach { n ->
+                val id = n.nodeId.toString()
+                val revision = n.placementRevision.validated()
+                add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_WRAP, n.wrappedContentKey, revision))
+                add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_NAME, n.encryptedName, revision))
+                n.slugToken?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.ROOT_SLUG, it, revision)) }
+            }
+            r.groupInvitees.orEmpty().forEach { i ->
+                val id = i.userId.toString()
+                add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_KEY, i.sealedNameKey))
+                add(ScopeRekeyField(id, ScopeRekeyCommit.INVITEE_RECIPIENT, i.recipientIdentityDigest))
+            }
+            r.shares.orEmpty().forEach { add(ScopeRekeyField(it.shareId, ScopeRekeyCommit.SHARE_KEY, it.sealedShareKey)) }
+            r.members.orEmpty().forEach { m ->
+                val id = m.userId.toString()
+                m.sealedName?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_NAME, it)) }
+                m.sealedAvatar?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_AVATAR, it)) }
+                m.sealedJoinRecord?.let { add(ScopeRekeyField(id, ScopeRekeyCommit.MEMBER_JOIN, it)) }
+            }
+            r.verifications.orEmpty().forEach { v ->
+                add(ScopeRekeyField("${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION, v.sealedStatement))
+            }
+        }
+        return when (val o = scopeRekey.stage(identity.principal.name, sid, rekeyId.toString(), r.fromEpoch.validated(), fields)) {
+            RekeyOutcome.Staged -> Response.noContent().build()
+            else -> refused(o)
+        }
+    }
+
+    private fun ScopeRekeyPage.toWire() = ScopeRekeyParts(
+        currentEpoch = currentEpoch,
+        groupName = groupName?.let { (name, epoch) -> ScopeRekeyGroupName(name, epoch) },
+        icon = icon?.let { (sealed, epoch) -> ScopeRekeyIcon(sealed, epoch) },
+        rootNodes = rootNodes.map {
+            ScopeRekeyRootNode(
+                nodeId = UUID.fromString(it.id), trashed = it.deletedAt != null, placementRevision = it.placementRevision,
+                scopeEpoch = it.scopeEpoch, encryptedName = it.encryptedName, wrappedContentKey = it.wrappedContentKey,
+            )
+        },
+        groupInvitees = invitees.map { ScopeRekeyGroupInvitee(UUID.fromString(it.userId), it.sealedNameKey!!) },
+        shares = shares.map { ScopeRekeyShare(it.id, UUID.fromString(it.nodeId), it.sealedShareKey!!, it.sealedShareKeyEpoch ?: 0) },
+        members = members.map { ScopeRekeyMember(UUID.fromString(it.userId), it.sealedName, it.sealedAvatar, it.sealedJoinRecord) },
+        verifications = verifications.map {
+            ScopeRekeyVerification(UUID.fromString(it.verifierUserId), UUID.fromString(it.subjectUserId), it.epoch, it.sealedStatement)
+        },
+        more = more,
+        cursor = cursor,
+    )
+
     private fun refused(o: RekeyOutcome): Response = when (o) {
         is RekeyOutcome.StaleMeta -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaRevision)
         is HttpFailure -> httpError(o)
         else -> error("not a refusal: $o")
+    }
+
+    private companion object {
+        /** `listScopeRekeyParts`' default page, the stage's cap (the contract's `ScopeRekeyLimit`). */
+        const val SCOPE_PAGE = 256
     }
 
     private fun RekeyNodeRow.toWire(scopeId: String) = RekeyNode(
@@ -122,6 +201,8 @@ class RekeyResource(private val handler: RekeyHandler, private val identity: Sec
         trashed = trashed,
         ownerOnly = ownerOnly,
         epoch = node.epoch,
+        scopeEpoch = node.scopeEpoch,
+        due = node.rekeyDue,
         placementRevision = node.placementRevision,
         metaRevision = node.metaRevision,
         encryptedName = node.encryptedName,

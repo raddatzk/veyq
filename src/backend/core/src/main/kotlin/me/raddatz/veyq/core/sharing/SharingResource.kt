@@ -6,6 +6,7 @@ import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.generated.api.SharingApi
 import me.raddatz.veyq.core.generated.model.CreateShareIdentityRequest
 import me.raddatz.veyq.core.generated.model.CreateShareNodeRequest
+import me.raddatz.veyq.core.generated.model.ReactivateShareRequest
 import me.raddatz.veyq.core.generated.model.ShareNodeCreated
 import me.raddatz.veyq.core.generated.model.UpdateShareNodeRequest
 import me.raddatz.veyq.core.generated.model.CreateShareRequest
@@ -181,7 +182,9 @@ class SharingResource(
             is HttpFailure -> httpError(o)
         }
 
-    override fun reactivateShare(shareId: String): Response =
+    // ADR 0114 next step: the body (the root's key and name under the link's `K_share`, the root's own epoch) is accepted
+    // and not yet required or applied — re-activation keeps today's behaviour until a close clears the link's wrap.
+    override fun reactivateShare(shareId: String, reactivateShareRequest: ReactivateShareRequest): Response =
         when (val o = handler.reactivate(identity.principal.name, shareId)) {
             ReactivateShareOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
@@ -258,6 +261,7 @@ class SharingResource(
                     // ADR 0109 point 6: what a guest's write states as the root's epoch. In the body, so the tag below moves
                     // when a re-key reaches the root and an open page re-reads its keys.
                     rootEpoch = o.rootEpoch,
+                    rootScopeEpoch = o.rootScopeEpoch,
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = blocks.contentView(o.share.scopeId).let { view -> o.nodes.map { toShareNode(it, view.nodeBlocked(it.id)) } },
@@ -347,6 +351,7 @@ class SharingResource(
         parentId = n.parentId?.let(UUID::fromString),
         orderIndex = n.orderIndex,
         epoch = n.epoch,
+        scopeEpoch = n.scopeEpoch,
         wrappedContentKey = n.wrappedContentKey,
         encryptedName = n.encryptedName,
         placementRevision = n.placementRevision,
@@ -449,7 +454,7 @@ class SharingResource(
             encryptedName = createShareNodeRequest.encryptedName,
             slugToken = createShareNodeRequest.slugToken,
             orderIndex = createShareNodeRequest.orderIndex ?: 0,
-            epoch = createShareNodeRequest.epoch.validated(),
+            scopeEpoch = createShareNodeRequest.scopeEpoch.validated(),
             wrappedContentKey = createShareNodeRequest.wrappedContentKey,
             parentEpoch = createShareNodeRequest.parentEpoch.validated(),
             seen = client.seen(),

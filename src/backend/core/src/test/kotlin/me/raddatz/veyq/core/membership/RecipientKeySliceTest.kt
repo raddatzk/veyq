@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.membership
 
 import me.raddatz.veyq.core.admin.tenant.TenantStore
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.scope.ScopeEntity
@@ -160,7 +161,7 @@ class RecipientKeySliceTest {
     private fun rotate(caller: String, scope: String, grants: Map<String, String>, pending: List<String> = emptyList()) =
         given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":${TestGrants.epochOf(scope) + 1},"wrappedPrev":"cHJldg==","grants":[${
+                """{"epoch":${TestGrants.epochOf(scope) + 1},${TestScopeRekey.rotationJson(scope)},"grants":[${
                     grants.entries.joinToString(",") { (u, d) ->
                         """{"userId":"$u","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"$d"}"""
                     }

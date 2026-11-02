@@ -83,9 +83,16 @@ class ShareEntity : PanacheEntityBase {
     var sealedShareKey: String? = null
 
     /** The scope epoch [sealedShareKey] is sealed under — non-null exactly when it is; the scope's current epoch at
-     *  create (a stale one is refused `stale_epoch`, ADR 0024 Decision 6). */
+     *  create (a stale one is refused `stale_epoch`), and moved to every new epoch by the rotation that re-seals the
+     *  copy (ADR 0115 decision 2), so it is the scope's current epoch. */
     @Column(name = "sealed_share_key_epoch")
     var sealedShareKeyEpoch: Int? = null
+
+    /** The scope's epoch when this link was minted with its recovery copy (ADR 0115 decision 2), null for one minted
+     *  without: what the re-issue rule compares with the scope's current epoch (ADR 0075 point 4) now that a rotation
+     *  moves [sealedShareKeyEpoch] along. Stamped in the mint's transaction (`SharingStore.persistShare`), never changed. */
+    @Column(name = "minted_epoch")
+    var mintedEpoch: Int? = null
 
     /** The scope's removal counter when this share was minted (ADR 0075 point 4): below the scope's current count, a
      *  member has left since — one who could have rebuilt this link from its recovery copy. Stamped in the mint's

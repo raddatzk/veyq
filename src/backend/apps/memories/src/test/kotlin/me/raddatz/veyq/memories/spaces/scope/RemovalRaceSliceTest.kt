@@ -1,6 +1,8 @@
 package me.raddatz.veyq.memories.spaces.scope
 
 import me.raddatz.veyq.core.sharing.ShareEntity
+import me.raddatz.veyq.core.testing.TestScopeRekey
+import me.raddatz.veyq.core.spaces.scope.ScopeSuccession
 import me.raddatz.veyq.memories.itemfavorites.ItemFavoritesEntity
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.TestIds
@@ -134,13 +136,17 @@ class RemovalRaceSliceTest {
     /** The real removal-rotation of [member] out of [group], to epoch 1 — the one way a keyed member leaves. */
     private fun removeFromGroup(owner: String, group: String, member: String, round: Int) {
         val decision = scopes.rotate(
-            group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, GRANT, TestGrants.digestOf(owner))), emptyList(), emptySet(), removes = member,
+            group, 1, ScopeSuccession(1, TestScopeRekey.SUCCESSION_PUBLIC_KEY, TestGrants.SIGNATURE), TestScopeRekey.stageAll(group), owner, listOf(RotationGrant(owner, GRANT, TestGrants.digestOf(owner))),
+            emptyList(), emptySet(), removes = member,
         )
         assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
     }
 
     /** [nodeId]'s re-key reached [epoch]: its key is minted at it (the re-key's own commit is `RekeyCoreSliceTest`'s). */
-    private fun rekeyed(nodeId: String, epoch: Int) = tx { NodeEntity.findById(nodeId)!!.epoch = epoch }
+    /** The node's own commit, as the re-key leaves it (ADR 0114 decision 4): its own epoch [epoch], no longer due. */
+    private fun rekeyed(nodeId: String, epoch: Int) = tx {
+        NodeEntity.findById(nodeId)!!.apply { this.epoch = epoch; scopeEpoch = ScopeEntity.findById(scopeId)!!.currentEpoch; rekeyDue = false }
+    }
 
     private fun postShare(userId: String, nodeId: String, id: String, epoch: Int = 0, nodeEpoch: Int = 0): Int =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
@@ -154,7 +160,7 @@ class RemovalRaceSliceTest {
 
     private fun putItemFavorite(userId: String, scopeId: String, nodeId: String): Int =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"ciphertext":"$NAME"}""")
+            .body("""{"ciphertext":"$NAME","epoch":${TestGrants.epochOf(scopeId)}}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/item-favorites").statusCode()
 
     private fun <T> tx(body: () -> T): T = QuarkusTransaction.requiringNew().call(body)

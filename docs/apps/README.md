@@ -139,7 +139,9 @@ Core reaches application code only through interfaces each application implement
   (which blob roles a member's upload start may carry: a union, since a member's start names no node),
   `ApplicationBlobOwners` (the application's half of core's blob service, [below](#cores-blob-service): its roles with
   their count per owner and whether a guest adds one, and whether an owner may hold a blob of a node),
-  `NodeRekeyParticipant` (the application's rows sealed under a node's key, when that key is replaced).
+  `NodeRekeyParticipant` (the application's rows sealed under a node's key, when that key is replaced),
+  `ScopeRekeyParticipant` (the application's rows sealed under the scope key itself — Memories' item marks — which a
+  rotation's commit re-seals, fail closed, [ADR 0115](../decisions/0115-a-scope-key-is-replaced-never-chained.md)).
 - **Links and guests** — `ShareRoots` (which roles a node of the kind may be the root of a link with),
   `GuestNodeRules` (which tree operations a `READ_WRITE` guest may do inside a container of the kind; core allows them
   in a `FOLDER`, Memories none in a Memory or chapter), `WriteOnlyGuestKinds` (what a `WRITE_ONLY` guest may create in

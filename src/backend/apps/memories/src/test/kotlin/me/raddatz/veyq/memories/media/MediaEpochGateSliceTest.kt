@@ -132,9 +132,11 @@ class MediaEpochGateSliceTest {
     /** The Memory re-keyed to the scope's current epoch 1. */
     private fun rekeyed(w: World) = epochs(w, scope = 1, node = 1)
 
+    /** The scope at [scope], the Memory's own key at [node]: one below the scope's epoch is due, its key minted under
+     *  the epoch before (ADR 0114 decisions 3-4). */
     private fun epochs(w: World, scope: Int, node: Int) = QuarkusTransaction.requiringNew().run {
         ScopeEntity.findById(w.scopeId)!!.currentEpoch = scope
-        NodeEntity.findById(w.memory)!!.epoch = node
+        NodeEntity.findById(w.memory)!!.apply { epoch = node; scopeEpoch = minOf(node, scope); rekeyDue = node < scope }
     }
 
     // --- HTTP -------------------------------------------------------------------------------------------------------

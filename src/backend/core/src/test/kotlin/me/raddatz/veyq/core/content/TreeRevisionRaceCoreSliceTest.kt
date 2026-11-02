@@ -102,7 +102,7 @@ class TreeRevisionRaceCoreSliceTest {
 
     private fun createFolder(userId: String, scopeId: String): Int =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"YQ==","slugToken":"${GuestTreeShare.slug()}","orderIndex":0,"wrappedContentKey":"a21lbQ==","epoch":0}""")
+            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"YQ==","slugToken":"${GuestTreeShare.slug()}","orderIndex":0,"wrappedContentKey":"a21lbQ==","scopeEpoch":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes").statusCode()
 
     private fun revision(scopeId: String): Long = QuarkusTransaction.requiringNew().call { nodes.treeRevision(scopeId) }

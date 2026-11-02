@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.spaces.scope
 
 import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
@@ -88,7 +89,7 @@ class GroupRekeySliceTest {
     private fun rekey(caller: String, groupId: String, granted: List<String>, pending: List<String>) =
         given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":1,"wrappedPrev":"cHJldg==",""" +
+                """{"epoch":1,${TestScopeRekey.rotationJson(groupId)},""" +
                     """"grants":[${granted.joinToString(",") {
                         """{"userId":"$it","wrappedGrant":"$REGRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(it)}"}"""
                     }}],""" +

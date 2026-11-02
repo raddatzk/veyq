@@ -92,7 +92,7 @@ class DropFolderRaceSliceTest {
         val r = given().contentType(ContentType.JSON)
             .body(
                 """{"contributorToken":"${link.token}","nodeId":"${UUID.randomUUID()}","encryptedName":"bmFtZQ==",""" +
-                    """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA=="}""",
+                    """"slugToken":"${GuestTreeShare.slug()}","scopeEpoch":0,"wrappedContentKey":"d3JhcA=="}""",
             )
             .`when`().post("/api/shares/${link.shareId}/files/drop-folder").then().extract()
         return Triple(r.statusCode(), r.path<String?>("nodeId"), r.path<Boolean?>("created"))

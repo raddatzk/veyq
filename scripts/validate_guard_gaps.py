@@ -265,6 +265,12 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      the date-time sits deep. Before it only the API fuzzing noticed, and it found two such operations (4d3ad8a02)
   96 `reissueShare`'s `422` kept but no longer naming `date_time_out_of_range` — rejected: the 422 must name the code
      (read through its `$ref`), so a sibling refusal's 422 alone does not document it
+  98 a seal purpose added to `seal.ts`'s `SEAL_PURPOSES` and classified nowhere — rejected:
+     `validate_scope_rekey_arity` derives the purposes from the crypto package and holds each to a classification, so a
+     new seal under the scope key cannot land without a rotation re-sealing it (ADR 0115 decision 2)
+  99 the verification's re-seal assignment removed from `ScopeRekeyCommit` (its epoch still moved) — rejected: every
+     column a purpose under the scope key is stored in must be assigned by the rotation's scope commit or a participant,
+     so a row the commit forgets cannot stay under the replaced key unseen
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1518,6 +1524,27 @@ def forge_rekey_column_named_outside_the_prefixes(root: pathlib.Path) -> str:
     return "a ciphertext column named node_ciphertext that no re-key rewrites (must stay ACCEPTED — the gap is open)"
 
 
+SCOPE_REKEY_ARITY = "validate_scope_rekey_arity.py"
+
+
+def forge_seal_purpose_unclassified(root: pathlib.Path) -> str:
+    f = root / "src/packages/crypto/src/seal.ts"
+    anchor = "  'group-name': [['scopeId', 'id'], ['nameEpoch', 'uint']],\n"
+    if not f.is_file() or anchor not in f.read_text():
+        raise ForgeError("seal.ts: the group-name purpose line not found (moved or drifted?)")
+    f.write_text(f.read_text().replace(anchor, anchor + "  'scope-probe': [['scopeId', 'id']],\n", 1))
+    return "a seal purpose scope-probe added to SEAL_PURPOSES, classified nowhere (must be REJECTED)"
+
+
+def forge_scope_rekey_rewrite_dropped(root: pathlib.Path) -> str:
+    f = root / "src/backend/core/src/main/kotlin/me/raddatz/veyq/core/node/rekey/ScopeRekeyCommit.kt"
+    anchor = "v.sealedStatement = statement; v.epoch = epoch"
+    if not f.is_file() or anchor not in f.read_text():
+        raise ForgeError("ScopeRekeyCommit: the verification's re-seal not found (moved or drifted?)")
+    f.write_text(f.read_text().replace(anchor, "v.epoch = epoch", 1))
+    return "ScopeRekeyCommit no longer assigns a verification's sealedStatement (must be REJECTED)"
+
+
 DATE_TIME_422 = "validate_date_time_422.py"
 
 
@@ -1710,6 +1737,8 @@ CASES = [
     ("96", DATE_TIME_422, forge_date_time_422_code_unnamed, False),
     ("97", DATE_TIME_422, forge_date_time_query_parameter, True),
     ("93", "validate_node_rekey_arity.py", forge_rekey_column_named_outside_the_prefixes, True),
+    ("98", SCOPE_REKEY_ARITY, forge_seal_purpose_unclassified, False),
+    ("99", SCOPE_REKEY_ARITY, forge_scope_rekey_rewrite_dropped, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
     ("86", WEB_GUARD, forge_web_application_catalog_carries_another_namespace, False),
     ("87", WEB_GUARD, forge_web_catalog_root_imports_application_code, False),

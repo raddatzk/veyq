@@ -160,11 +160,15 @@ sealed interface RotateOutcome {
     object RemovedMemberGranted : RotateOutcome, HttpFailure by httpFailure("removed_member_granted", UNPROCESSABLE)
     /** `revokeLinks` without `removesUserId` (ADR 0075) — nothing stored. */
     object InvalidRequest : RotateOutcome, HttpFailure by Failures.invalidRequest
+    /** A row sealed under the old scope key has no value staged under `rekeyId` (ADR 0115 decision 2) — nothing stored. */
+    object PartsMissing : RotateOutcome, HttpFailure by httpFailure("rekey_parts_missing", CONFLICT)
+    /** A staged scope-level value is for a row that changed since it was staged — nothing stored; the client re-stages. */
+    object PartsStale : RotateOutcome, HttpFailure by httpFailure("rekey_parts_stale", CONFLICT)
 }
 
-/** Outcome of reading the epoch-chain links (cr-0088). */
+/** Outcome of reading the succession statements (ADR 0115 decision 5). */
 sealed interface EpochsOutcome {
-    data class Links(val links: List<Pair<Int, String>>) : EpochsOutcome
+    data class Successions(val successions: List<ScopeSuccession>) : EpochsOutcome
     object Suspended : EpochsOutcome, HttpFailure by Failures.tenantSuspended
     object NotKeyHolder : EpochsOutcome, HttpFailure by Failures.notKeyHolder
     object ScopeNotFound : EpochsOutcome, HttpFailure by Failures.scopeNotFound
@@ -364,8 +368,8 @@ class ScopesHandler(
      * the scope is being deleted, like every write (the gate). The client sealed the padded, constant-length
      * icon under `K_icon` of the **current** epoch and sends that epoch back; the server enforces `iconEpoch ==
      * currentEpoch` (`StaleEpoch` on a concurrent rotation) so a replace stays forward-secret, then overwrites the
-     * row's ciphertext icon + icon-epoch. (A GROUP rotates on member-removal, ADR 0024, so its `iconEpoch` may
-     * later sit below `currentEpoch` — the read peels the chain; a rotation never re-seals the icon here.) Guard
+     * row's ciphertext icon + icon-epoch. (Every rotation re-seals the icon at its new epoch in its own commit, ADR 0115
+     * decision 2, so `iconEpoch` is the current epoch whenever no rotation is in flight.) Guard
      * order is [renameGroup]'s exactly (access gate → kind → owner → epoch, ADR 0042). Operator-blind: the
      * server never sees a key or the image.
      */
@@ -595,9 +599,10 @@ class ScopesHandler(
     }
 
     /**
-     * Commit a scope-key rotation (cr-0088, ADR 0024 §4): commit the stated [epoch] iff it is the scope's next one,
-     * store the chain-link, re-grant the listed remaining members; any other epoch is `409 stale_epoch` with nothing
-     * stored. Every member is re-granted or declared pending ([pendingUserIds], `409 rotation_incomplete` otherwise), and
+     * Commit a scope-key rotation (cr-0088, ADR 0024 §4, ADR 0115): commit the stated [epoch] iff it is the scope's next
+     * one, store its [succession] statement, re-grant the listed remaining members and swap in every scope-level row
+     * staged under [rekeyId] (`409 rekey_parts_missing` / `rekey_parts_stale` otherwise, nothing stored); any other
+     * epoch is `409 stale_epoch` with nothing stored. Every member is re-granted or declared pending ([pendingUserIds], `409 rotation_incomplete` otherwise), and
      * every re-grant names its member's current identity (`409 recipient_key_not_current`). The client minted the new
      * epoch on-device (the server stores only ciphertext).
      *
@@ -613,7 +618,7 @@ class ScopesHandler(
      * (removals only) turns off every other link of the group in that same transaction too (ADR 0075).
      */
     fun rotateScope(
-        callerId: String, scopeId: String, epoch: Int, wrappedPrev: String,
+        callerId: String, scopeId: String, epoch: Int, succession: ScopeSuccession, rekeyId: String,
         grants: List<RotationGrant>, inviteGrants: List<InviteGrant>, pendingInviteIds: Set<String>, removes: String? = null,
         revokeLinks: Boolean = false, pendingUserIds: Set<String> = emptySet(),
     ): RotateOutcome {
@@ -630,7 +635,7 @@ class ScopesHandler(
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound
         return when (
             val d = store.rotate(
-                scopeId, epoch, wrappedPrev, callerId, grants, inviteGrants, pendingInviteIds, removes, revokeLinks, pendingUserIds,
+                scopeId, epoch, succession, rekeyId, callerId, grants, inviteGrants, pendingInviteIds, removes, revokeLinks, pendingUserIds,
                 regranted = !owner,
             )
         ) {
@@ -641,6 +646,8 @@ class ScopesHandler(
             RotationDecision.MemberNotFound -> RotateOutcome.MemberNotFound
             RotationDecision.LastOwner -> RotateOutcome.LastOwner
             RotationDecision.RemovedMemberGranted -> RotateOutcome.RemovedMemberGranted
+            RotationDecision.PartsMissing -> RotateOutcome.PartsMissing
+            RotationDecision.PartsStale -> RotateOutcome.PartsStale
         }
     }
 
@@ -715,7 +722,7 @@ class ScopesHandler(
     }
 
     /**
-     * The scope's epoch-chain links — any key-holder in the scope may read them (cr-0088, ADR 0024). The access
+     * The scope's succession statements — any key-holder in the scope may read them (ADR 0115 decision 5). The access
      * gate first (ADR 0042): a non-member gets the same 404 as a bogus id. A member without a grant gets 403 — they
      * already know the scope exists, so that discloses nothing. (Until cr-0162 this probed the epoch **before**
      * the gate, which made the 404-vs-403 split an existence oracle for a stranger.)
@@ -724,7 +731,7 @@ class ScopesHandler(
         access.check(callerId, scopeId, READ)
             .refusal(EpochsOutcome.ScopeNotFound, EpochsOutcome.Suspended)?.let { return it }
         if (!store.holdsGrant(callerId, scopeId)) return EpochsOutcome.NotKeyHolder
-        return EpochsOutcome.Links(store.epochLinks(scopeId))
+        return EpochsOutcome.Successions(store.successions(scopeId))
     }
 
     /** Every tenant the caller holds an accepted membership in (Host-independent) — the space switcher. */

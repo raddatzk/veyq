@@ -40,7 +40,7 @@ acceptanceCriteria:
     text: A write sealed under a node's key is refused 409 node_rekey_pending while that node is not yet re-keyed and 409 stale_epoch when it states the node's key from before; a guest's create under a parent not re-keyed yet, stating the parent's epoch as its own, is the parent's node_rekey_pending; a re-keyed node takes writes at once.
     coverage:
       backend:
-        unit: [NodeEpochGateTest.theStatedEpochMustBeTheStoredOneAndTheStoredOneCurrent]
+        unit: [NodeEpochGateTest.theStatedEpochMustBeTheNodesOwnAndTheNodeNotDue]
         integration:
           - RekeyCoreSliceTest.writesWaitPerNodeAndRefuseAKeyFromBefore
           - ShareEpochGateCoreSliceTest.aShareStatesItsNodesEpoch

@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.membership
 
 import me.raddatz.veyq.core.account.rotation.TestAccountKeys
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.account.rotation.TestRotation
 import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
@@ -100,7 +101,7 @@ class GrantWriterSnapshotSliceTest {
         }
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[
+                """{"epoch":1,${TestScopeRekey.rotationJson(tenantId)},"grants":[
                    {"userId":"$owner","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"},
                    {"userId":"$member","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(member)}"}],
                    ${TestGrants.openInvitesJson(tenantId)}}""",
@@ -186,7 +187,7 @@ class GrantWriterSnapshotSliceTest {
         }
         given().header("Authorization", bearer(rotator)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$rotator","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}],
+                """{"epoch":1,${TestScopeRekey.rotationJson(tenantId)},"grants":[{"userId":"$rotator","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(key)}"}],
                    "inviteGrants":[{"inviteId":"${invite.inviteId}","wrappedGrant":"$GRANT",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digest(invite.bundle)}"}]}""",
             )
             .`when`().post("/api/scopes/$tenantId/epochs").then().statusCode(201)

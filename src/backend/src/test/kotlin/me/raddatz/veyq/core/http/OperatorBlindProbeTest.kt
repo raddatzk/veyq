@@ -106,8 +106,17 @@ class OperatorBlindProbeTest {
         "commitNodeRekey" to Probe(Address.SCOPE) { s ->
             Call(
                 "POST", "/api/scopes/${s.scopeId}/rekey/nodes/${s.nodeId}/${UUID.randomUUID()}",
-                """{"nodeEpoch":0,"epoch":0,"placementRevision":0,"metaRevision":0,"encryptedName":"$B64","slugToken":"$slug","wrappedContentKey":"$B64"}""",
+                """{"nodeEpoch":0,"scopeEpoch":0,"placementRevision":0,"metaRevision":0,"encryptedName":"$B64","slugToken":"$slug","wrappedContentKey":"$B64"}""",
             )
+        },
+        // --- a rotation's scope-level re-seal (ADR 0115 decision 2): the control is the group's owner holding its grant ---
+        "listScopeRekeyParts" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/rekey/scope/parts") },
+        "stageScopeRekey" to Probe(Address.SCOPE) { s ->
+            Call("POST", "/api/scopes/${s.scopeId}/rekey/scope/${UUID.randomUUID()}/parts", """{"fromEpoch":0}""")
+        },
+        "listScopeItemFavoritesRekey" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/item-favorites-rekey") },
+        "stageScopeItemFavoritesRekey" to Probe(Address.SCOPE) { s ->
+            Call("POST", "/api/scopes/${s.scopeId}/item-favorites-rekey/${UUID.randomUUID()}", """{"fromEpoch":0}""")
         },
         "getFavorites" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/favorites") },
         "putFavorites" to Probe(Address.SCOPE) { s -> Call("PUT", "/api/scopes/${s.scopeId}/favorites", """{"ciphertext":"$B64"}""") },
@@ -120,7 +129,7 @@ class OperatorBlindProbeTest {
         },
         "getItemFavorites" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/item-favorites") },
         "putItemFavorites" to Probe(Address.SCOPE) { s ->
-            Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/item-favorites", """{"ciphertext":"$B64"}""")
+            Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/item-favorites", """{"ciphertext":"$B64","epoch":0}""")
         },
         // --- media ---
         "startBlobUploads" to Probe(Address.SCOPE) { s ->
@@ -224,7 +233,7 @@ class OperatorBlindProbeTest {
         "listScopeEpochs" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/epochs") },
         // Any member reads a TENANT's open invites (ADR 0111 decision 2); the control's live group holds none: `200 []`.
         "listOpenInvites" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/open-invites") },
-        "rotateScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/epochs", """{"epoch":1,"wrappedPrev":"$B64","grants":[]}""") },
+        "rotateScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/epochs", """{"epoch":1,"successionPublicKey":"$B64","successionSignature":"$B64","rekeyId":"${UUID.randomUUID()}","grants":[]}""") },
         "deleteGroup" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}") },
         "restoreGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/restore") },
         "revokeScopeShares" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/shares/revoke") },
@@ -249,7 +258,7 @@ class OperatorBlindProbeTest {
             Call("GET", "/api/shares?nodeId=${s.nodeId}")
         },
         "revokeShare" to Probe(Address.SHARE) { s -> Call("POST", "/api/shares/${s.shareId}/revoke") },
-        "reactivateShare" to Probe(Address.SHARE) { s -> Call("POST", "/api/shares/${s.shareId}/reactivate") },
+        "reactivateShare" to Probe(Address.SHARE) { s -> Call("POST", "/api/shares/${s.shareId}/reactivate", """{"nodeEpoch":0}""") },
         "updateShare" to Probe(Address.SHARE) { s -> Call("PATCH", "/api/shares/${s.shareId}", "{}") },
         "deleteShare" to Probe(Address.SHARE) { s -> Call("DELETE", "/api/shares/${s.shareId}") },
         "setShareSealedName" to Probe(Address.SHARE) { s -> Call("PUT", "/api/shares/${s.shareId}/sealed-name", """{"sealedName":"$B64"}""") },

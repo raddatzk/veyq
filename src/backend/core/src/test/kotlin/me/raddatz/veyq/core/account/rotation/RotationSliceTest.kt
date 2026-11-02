@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.account.rotation
 
 import me.raddatz.veyq.core.account.deviceregister.DeviceRegisterEntity
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.account.email.EmailChangeEntity
 import me.raddatz.veyq.core.account.erasure.AccountPurge
 import me.raddatz.veyq.core.identity.AccountErasureEntity
@@ -697,8 +698,8 @@ class RotationSliceTest {
         assertEquals("waiting", stateOf(rotation, world.tenantId))
 
         commit(rotation.userId, world.personal, 1, mapOf(rotation.userId to TestGrants.digest(rotation.next.bundle))).then().statusCode(201)
-        assertEquals("rekeying", stateOf(rotation, world.personal), "a node still carries epoch 0")
-        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1 where id = ?1", node) }
+        assertEquals("rekeying", stateOf(rotation, world.personal), "the rotation's commit left the node due")
+        QuarkusTransaction.requiringNew().run { NodeEntity.update("epoch = 1, scopeEpoch = 1, rekeyDue = false where id = ?1", node) }
         assertEquals("secured", stateOf(rotation, world.personal))
 
         QuarkusTransaction.requiringNew().run { TenantEntity.update("status = ?1 where id = ?2", TenantEntity.SUSPENDED, world.tenantId) }
@@ -820,7 +821,7 @@ class RotationSliceTest {
     private fun commit(caller: String, scope: String, epoch: Int, grants: Map<String, String>, removes: String? = null) =
         given().header("Authorization", TestFixtures.bearer(caller)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":$epoch,"wrappedPrev":"cHJldg==","grants":[${
+                """{"epoch":$epoch,${TestScopeRekey.rotationJson(scope)},"grants":[${
                     grants.entries.joinToString(",") { (u, d) ->
                         """{"userId":"$u","wrappedGrant":"Z3JhbnQ=",${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"$d"}"""
                     }

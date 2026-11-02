@@ -144,7 +144,7 @@ class ShareSealedNameCoreSliceTest {
         val shareId = createShare(w.owner, w.folder)
         given().header("Authorization", bearer(w.owner)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
         setName(w.member, shareId, newName).then().statusCode(204)
-        given().header("Authorization", bearer(w.member)).`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
+        given().header("Authorization", bearer(w.member)).contentType(ContentType.JSON).body("""{"nodeEpoch":0}""").`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
         resolvedName(shareId, newName)
     }
 

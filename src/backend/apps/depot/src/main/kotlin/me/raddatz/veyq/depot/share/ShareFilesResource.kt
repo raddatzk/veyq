@@ -42,12 +42,13 @@ class ShareFilesResource(
         return when (
             val o = dropFolders.ensure(
                 shareId, xSharePassword, r.contributorToken, r.nodeId.toString(), r.encryptedName, r.slugToken,
-                r.epoch.validated(), r.wrappedContentKey, client.seen(),
+                r.scopeEpoch.validated(), r.wrappedContentKey, client.seen(),
             )
         ) {
             is DropFolderOutcome.Folder -> Response.ok(
                 DropFolder(
-                    nodeId = UUID.fromString(o.folder.nodeId), epoch = o.folder.epoch, placementRevision = o.folder.placementRevision,
+                    nodeId = UUID.fromString(o.folder.nodeId), epoch = o.folder.epoch, scopeEpoch = o.folder.scopeEpoch,
+                    placementRevision = o.folder.placementRevision,
                     wrappedContentKey = o.folder.wrappedContentKey, created = o.folder.created,
                 ),
             ).build()

@@ -25,7 +25,7 @@ acceptanceCriteria:
           - VerificationSliceTest.theVerifierIsAlwaysTheCallerAndASecondPutReplacesTheFirst
           - VerificationSliceTest.aVerificationOfOneselfIsRefused
           - VerificationSliceTest.aSubjectWhoIsNoMemberOfTheTenantIs404MemberNotFound
-          - VerificationSliceTest.anEpochBeyondTheTenantScopesCurrentOneIs400
+          - VerificationSliceTest.anEpochOtherThanTheTenantScopesCurrentOneIsStale
           - VerificationSliceTest.aMissingEpochIs400AndNotEpochZero
           - VerificationSliceTest.anOutsiderGetsTheMembershipNotFoundOnReadAndOnWrite
   - id: verified-by-counts-for-every-member

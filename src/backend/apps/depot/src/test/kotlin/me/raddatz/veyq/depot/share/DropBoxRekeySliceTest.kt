@@ -86,13 +86,14 @@ class DropBoxRekeySliceTest {
         QuarkusTransaction.requiringNew().run {
             NodeEntity.findById(folder)!!.shareIdentityId = identityId
             ScopeEntity.findById(scopeId)!!.currentEpoch = 1
+            NodeEntity.update("rekeyDue = true where scopeId = ?1", scopeId) // as a rotation's commit leaves them (ADR 0114 decision 4)
             MembershipEntity.update("grantedEpoch = 1 where scopeId = ?1 and userId = ?2", scopeId, owner)
         }
         return World(owner, scopeId, box, folder, file)
     }
 
     private fun boxCommit(): String =
-        """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Ym94","slugToken":"${slug()}","wrappedContentKey":"Ym94LXdyYXA=","sealedDropPrivateKey":"bmV3LWRyb3AtcHJpdg=="}"""
+        """{"nodeEpoch":0,"scopeEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"Ym94","slugToken":"${slug()}","wrappedContentKey":"Ym94LXdyYXA=","sealedDropPrivateKey":"bmV3LWRyb3AtcHJpdg=="}"""
 
     private fun get(w: World, path: String, caller: String): ValidatableResponse =
         given().header("Authorization", bearer(caller)).`when`().get("/api/scopes/${w.scopeId}$path").then()

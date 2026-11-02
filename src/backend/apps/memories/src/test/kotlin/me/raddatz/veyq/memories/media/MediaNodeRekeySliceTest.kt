@@ -265,6 +265,7 @@ class MediaNodeRekeySliceTest {
             }.persist()
             bucket(scopeId, memory, rwPrimary, "share:$rwIdentityId", RW_NAME, primary = true)
             ScopeEntity.findById(scopeId)!!.currentEpoch = 1
+            NodeEntity.update("rekeyDue = true where scopeId = ?1", scopeId) // as a rotation's commit leaves them (ADR 0114 decision 4)
             MembershipEntity.update("grantedEpoch = 1 where scopeId = ?1 and userId = ?2", scopeId, owner)
         }
         return World(
@@ -337,7 +338,7 @@ class MediaNodeRekeySliceTest {
         val drop = if (sealedDropPrivateKey == null) "" else ",\"sealedDropPrivateKey\":\"$sealedDropPrivateKey\""
         return post(
             w, "/rekey/nodes/${w.memory}/$rekeyId",
-            """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LW1lbW9yeQ==","slugToken":"${slug()}","wrappedContentKey":"bmV3LWtleQ=="$drop}""",
+            """{"nodeEpoch":0,"scopeEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LW1lbW9yeQ==","slugToken":"${slug()}","wrappedContentKey":"bmV3LWtleQ=="$drop}""",
             caller,
         )
     }

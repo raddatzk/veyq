@@ -45,7 +45,7 @@ sealed interface CreateShareNodeOutcome {
     /** The epoch the guest sealed with is above the scope's current one (or the scope has none) — a 409, nothing
      *  stored (ADR 0080 Decision 6, the rule a member's placement off the root follows). */
     object StaleEpoch : CreateShareNodeOutcome, HttpFailure by Failures.staleEpoch
-    /** The parent is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing stored. */
+    /** The parent is due for its re-key (ADR 0114 decision 3) — nothing stored. */
     object RekeyPending : CreateShareNodeOutcome, HttpFailure by Failures.nodeRekeyPending
     /** The kind's application is switched off, or creating the kind needs a capability that is
      *  ([me.raddatz.veyq.core.node.NodeKindRules.applicationOf], [me.raddatz.veyq.core.node.NodeKindRules.capabilityToCreate],
@@ -72,7 +72,7 @@ sealed interface UpdateShareNodeOutcome {
     object StalePlacement : UpdateShareNodeOutcome, HttpFailure by Failures.stalePlacement
     /** `parentEpoch` is not the destination's stored epoch (ADR 0109 point 6) — nothing written; the guest re-resolves. */
     object StaleEpoch : UpdateShareNodeOutcome, HttpFailure by Failures.staleEpoch
-    /** The destination is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written. */
+    /** The destination is due for its re-key (ADR 0114 decision 3) — nothing written. */
     object RekeyPending : UpdateShareNodeOutcome, HttpFailure by Failures.nodeRekeyPending
     /** Unreachable through the API (every field is required there) — kept so no handler outcome is a 500. */
     object InvalidRequest : UpdateShareNodeOutcome, HttpFailure by Failures.invalidRequest
@@ -142,7 +142,7 @@ class ShareNodesHandler(
      *  transaction — a replay ([NodesHandler.createReplay]) stored nothing and records nothing. */
     fun create(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, parentId: String, kind: String,
-        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, parentEpoch: Int,
+        encryptedName: String, slugToken: String, orderIndex: Int, scopeEpoch: Int, wrappedContentKey: String, parentEpoch: Int,
         seen: ClientSeen?,
     ): CreateShareNodeOutcome {
         // A create adds a row, so it spends the upload budget (ADR 0051, `@RateLimit(key = SHARE)`) — after every check
@@ -181,13 +181,13 @@ class ShareNodesHandler(
             if (writeOnly && !WriteOnlyGuestKinds.allows(writeOnlyKinds, gated.rootKind, kind)) {
                 return@createOrConflict CreateShareNodeOutcome.IllegalScope
             }
-            // ADR 0109 point 6 (narrowing ADR 0080 decision 6): the new node's key is minted at the scope's CURRENT epoch,
-            // a guest's too, and its entry is sealed under the parent's key at the parent's stated epoch — both checked by
+            // ADR 0114 decision 3 (narrowing ADR 0080 decision 6): the new node's key is minted under the scope's CURRENT
+            // epoch, a guest's too, and its entry is sealed under the parent's key at the parent's stated own epoch — both checked by
             // `createInScope` under this scope lock and the parent's row lock. A guest whose page holds keys from before a
             // rotation is told `stale_epoch` and re-resolves the link, whose wrap opens the new key.
             fromNodes(
                 nodes.createInScope(
-                    scopeId, nodeId, parentId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey,
+                    scopeId, nodeId, parentId, kind, encryptedName, slugToken, orderIndex, scopeEpoch, wrappedContentKey,
                     wrappedMeta = null, parentEpoch = parentEpoch, editor = PrincipalKey.Share(gated.identityId),
                     boundary = SubtreeBoundary(root),
                     identityWriter = if (writeOnly) gated.identityId else null,

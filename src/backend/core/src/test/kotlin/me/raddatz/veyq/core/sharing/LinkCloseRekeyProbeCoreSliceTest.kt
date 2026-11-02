@@ -182,7 +182,7 @@ class LinkCloseRekeyProbeCoreSliceTest {
     private fun commitRoot(w: World, rekeyId: UUID): ValidatableResponse =
         given().header("Authorization", bearer(w.owner)).contentType(ContentType.JSON)
             .body(
-                """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXJvb3Q=",""" +
+                """{"nodeEpoch":0,"scopeEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXJvb3Q=",""" +
                     """"slugToken":"${slug()}","wrappedContentKey":"bmV3LXJvb3Qtd3JhcA=="}""",
             )
             .`when`().post("/api/scopes/${w.scopeId}/rekey/nodes/${w.root}/$rekeyId").then()

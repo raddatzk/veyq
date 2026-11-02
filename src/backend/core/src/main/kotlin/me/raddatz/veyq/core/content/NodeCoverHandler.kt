@@ -51,7 +51,7 @@ sealed interface NodeCoverOutcome {
     data class StaleMeta(val wrappedMeta: String?, val metaRevision: Long) : NodeCoverOutcome, HttpFailure by Failures.staleRevision
     /** `nodeEpoch` is not the node's stored epoch (ADR 0109 point 6) — nothing written, the upload still open. */
     object StaleEpoch : NodeCoverOutcome, HttpFailure by Failures.staleEpoch
-    /** The node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing written. */
+    /** The node is due for its re-key (ADR 0114 decision 3) — nothing written. */
     object RekeyPending : NodeCoverOutcome, HttpFailure by Failures.nodeRekeyPending
 }
 

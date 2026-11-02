@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.identity
 
+import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.util.UUID
@@ -117,6 +118,14 @@ class TenantProfileStore {
         }
     }
 
+    /**
+     * Whether [epoch] is the tenant scope's current epoch, under that scope's row lock taken here for the caller's
+     * transaction (ADR 0115 decision 3): a field sealed under the tenant key lands only at the epoch the rotation's
+     * commit, which holds the same lock, re-seals every profile to. The lock is the tenant scope's, the first a writer
+     * of these rows takes.
+     */
+    fun atCurrentEpoch(tenantId: String, epoch: Int): Boolean = ScopeEntity.lockRow(tenantId)?.currentEpoch == epoch
+
     /** Update the caller's profile in a tenant — change the username and/or the sealed name (each optional). */
     @Transactional
     fun update(userId: String, tenantId: String, username: String?, sealedName: String?) {
@@ -132,11 +141,18 @@ class TenantProfileStore {
      * whether the member has a profile in the tenant.
      */
     @Transactional
-    fun setAvatar(userId: String, tenantId: String, sealedAvatar: String): Boolean =
-        TenantProfileEntity.update(
+    fun setAvatar(userId: String, tenantId: String, sealedAvatar: String, epoch: Int): AvatarSet {
+        // Sealed under the tenant key at [epoch]: only while it is the current one, under the tenant scope's lock.
+        if (!atCurrentEpoch(tenantId, epoch)) return AvatarSet.STALE_EPOCH
+        val set = TenantProfileEntity.update(
             "sealedAvatar = ?1, avatarRevision = avatarRevision + 1 where userId = ?2 and tenantId = ?3",
             sealedAvatar, userId, tenantId,
         ) > 0
+        return if (set) AvatarSet.SET else AvatarSet.NO_PROFILE
+    }
+
+    /** What [setAvatar] did. */
+    enum class AvatarSet { SET, NO_PROFILE, STALE_EPOCH }
 
     /**
      * Remove the member's picture and bump the revision (a client holding the old one revalidates and finds none).

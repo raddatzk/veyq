@@ -42,9 +42,9 @@ class ReactivateShareCapabilitySliceTest {
         val auth = bearer(w.live.ownerId)
 
         capabilities.with(CapabilityIds.PUBLIC_SHARES_DROP_BOX) {
-            given().header("Authorization", auth).`when`().post("/api/shares/$uploader/reactivate")
+            given().header("Authorization", auth).contentType(ContentType.JSON).body("""{"nodeEpoch":0}""").`when`().post("/api/shares/$uploader/reactivate")
                 .then().statusCode(422).body("code", equalTo("capability_disabled"))
-            given().header("Authorization", auth).`when`().post("/api/shares/$viewer/reactivate").then().statusCode(204)
+            given().header("Authorization", auth).contentType(ContentType.JSON).body("""{"nodeEpoch":0}""").`when`().post("/api/shares/$viewer/reactivate").then().statusCode(204)
         }
     }
 

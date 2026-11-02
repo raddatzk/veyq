@@ -112,7 +112,7 @@ class ModerationMeasuresSliceTest {
         // The creator's list says why; the owner can neither reactivate nor re-issue it.
         given().header("Authorization", bearer(w.ownerId)).`when`().get("/api/shares?nodeId=${w.root}")
             .then().statusCode(200).body("find { it.shareId == '${link.shareId}' }.guestStops.reason", hasItem("operatorBlocked"))
-        given().header("Authorization", bearer(w.ownerId)).`when`().post("/api/shares/${link.shareId}/reactivate")
+        given().header("Authorization", bearer(w.ownerId)).contentType(ContentType.JSON).body("""{"nodeEpoch":0}""").`when`().post("/api/shares/${link.shareId}/reactivate")
             .then().statusCode(409).body("code", equalTo("share_blocked_by_operator"))
         assertEquals(ReissueShareOutcome.Blocked, reissue(w.ownerId, link.shareId).first)
         // Lifted, the same link serves again — nothing was written onto it.

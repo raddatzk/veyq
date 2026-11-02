@@ -196,6 +196,7 @@ class PotRekeySliceTest {
         append(owner, scopeId, pot, listOf(Rev(a, 2, body = body('C')))).statusCode(204)
         QuarkusTransaction.requiringNew().run {
             ScopeEntity.findById(scopeId)!!.currentEpoch = 1
+            NodeEntity.update("rekeyDue = true where scopeId = ?1", scopeId) // as a rotation's commit leaves them (ADR 0114 decision 4)
             MembershipEntity.update("grantedEpoch = 1 where scopeId = ?1 and userId = ?2", scopeId, owner)
         }
         return World(owner, scopeId, pot)
@@ -238,7 +239,7 @@ class PotRekeySliceTest {
 
     private fun commit(w: World, rekeyId: UUID, caller: String = w.owner): ValidatableResponse = post(
         w, "/rekey/nodes/${w.pot}/$rekeyId",
-        """{"nodeEpoch":0,"epoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXBvdA==","slugToken":"${slug()}","wrappedContentKey":"bmV3LWtleQ=="}""",
+        """{"nodeEpoch":0,"scopeEpoch":1,"placementRevision":0,"metaRevision":0,"encryptedName":"bmV3LXBvdA==","slugToken":"${slug()}","wrappedContentKey":"bmV3LWtleQ=="}""",
         caller,
     )
 

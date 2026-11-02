@@ -1,6 +1,8 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.testing.TestScopeRekey
+import me.raddatz.veyq.core.spaces.scope.ScopeSuccession
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.membership.TestInviteKey
 import me.raddatz.veyq.core.testing.TestFixtures.IDENTITY_PUBLIC_KEY
@@ -336,7 +338,7 @@ class MemberInviteManagementSliceTest {
     }
 
     private fun rotateTenant(tenantId: String, owner: String, inviteGrants: List<InviteGrant> = emptyList()) = scopes.rotate(
-        tenantId, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
+        tenantId, 1, ScopeSuccession(1, TestScopeRekey.SUCCESSION_PUBLIC_KEY, TestGrants.SIGNATURE), TestScopeRekey.stageAll(tenantId), owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestGrants.SIGNATURE), TestGrants.digestOf(owner))),
         inviteGrants, emptySet(),
     )
 

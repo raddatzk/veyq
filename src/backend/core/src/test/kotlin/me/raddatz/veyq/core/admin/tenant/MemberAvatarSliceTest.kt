@@ -212,9 +212,9 @@ class MemberAvatarSliceTest {
         put(t, nobody, "Zmlyc3Q=").then().statusCode(404).body("code", equalTo("profile_not_found"))
         delete(t, nobody).then().statusCode(404).body("code", equalTo("profile_not_found"))
         given().header("Authorization", bearer(t.member)).header("X-Forwarded-Host", "no-such-tenant.example.com")
-            .contentType(ContentType.JSON).body("""{"sealedAvatar":"Zmlyc3Q="}""")
+            .contentType(ContentType.JSON).body("""{"sealedAvatar":"Zmlyc3Q=","epoch":0}""")
             .`when`().put("/api/account/profile/avatar").then().statusCode(404).body("code", equalTo("profile_not_found"))
-        given().contentType(ContentType.JSON).body("""{"sealedAvatar":"Zmlyc3Q="}""")
+        given().contentType(ContentType.JSON).body("""{"sealedAvatar":"Zmlyc3Q=","epoch":0}""")
             .`when`().put("/api/account/profile/avatar").then().statusCode(401)
     }
 
@@ -304,7 +304,7 @@ class MemberAvatarSliceTest {
 
     private fun put(t: Tenant, caller: String, sealed: String) =
         given().header("Authorization", bearer(caller)).header("X-Forwarded-Host", t.domain)
-            .contentType(ContentType.JSON).body("""{"sealedAvatar":"$sealed"}""")
+            .contentType(ContentType.JSON).body("""{"sealedAvatar":"$sealed","epoch":0}""")
             .`when`().put("/api/account/profile/avatar")
 
     private fun delete(t: Tenant, caller: String) =

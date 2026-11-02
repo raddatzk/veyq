@@ -71,7 +71,7 @@ class ShareMediaRouteSliceTest {
             authed(w).`when`().post("/api/shares/${w.unknown}/revoke").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
         "reactivateShare" to Probe("POST", "/api/shares/{shareId}/reactivate") { w ->
-            authed(w).`when`().post("/api/shares/${w.unknown}/reactivate").then().statusCode(404).body("code", equalTo("share_not_found"))
+            authed(w).contentType(ContentType.JSON).body("""{"nodeEpoch":0}""").`when`().post("/api/shares/${w.unknown}/reactivate").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
         "reissueShare" to Probe("POST", "/api/shares/{shareId}/reissue") { w ->
             val id = TestIds.shareId()
@@ -115,7 +115,7 @@ class ShareMediaRouteSliceTest {
             // (GuestNodeRules), so only this handler answers `illegal_scope` here.
             val id = TestIds.uuid()
             given().contentType(ContentType.JSON).header("X-Contributor-Token", w.token)
-                .body("""{"parentEpoch":0,"nodeId":"$id","parentId":"${w.memory}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","epoch":0,"wrappedContentKey":"d3JhcA=="}""")
+                .body("""{"parentEpoch":0,"nodeId":"$id","parentId":"${w.memory}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","scopeEpoch":0,"wrappedContentKey":"d3JhcA=="}""")
                 .`when`().post("/api/shares/${w.shareId}/nodes").then().statusCode(422).body("code", equalTo("illegal_scope"))
         },
         "updateShareNode" to Probe("PATCH", "/api/shares/{shareId}/nodes/{nodeId}") { w ->

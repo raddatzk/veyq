@@ -174,9 +174,9 @@ class GuestWriteRecordCoreSliceTest {
     @Test
     fun aRefusedWriteAndAMembersWriteRecordNothing() {
         val t = tree()
-        // A refused create (an epoch above the scope's) wrote nothing and records nothing.
+        // A refused create (a scope epoch not the scope's) wrote nothing and records nothing.
         val refused = UUID.randomUUID().toString()
-        GuestTreeShare.create(t.link, t.a, NodeEntity.FOLDER, nodeId = refused, epoch = 9).statusCode(409)
+        GuestTreeShare.create(t.link, t.a, NodeEntity.FOLDER, nodeId = refused, scopeEpoch = 9).statusCode(409)
         assertEquals(0, seen(refused).size)
         // A member's create records nothing — control: the same create as a guest records one.
         val member = UUID.randomUUID().toString()
@@ -428,7 +428,7 @@ class GuestWriteRecordCoreSliceTest {
         if (portHeader != null) spec = spec.header(ClientAddress.PORT_HEADER, portHeader)
         spec.body(
             """{"nodeId":"$id","parentId":"${t.a}","parentEpoch":0,"kind":"FOLDER","encryptedName":"bmFtZQ==",""" +
-                """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA=="}""",
+                """"slugToken":"${GuestTreeShare.slug()}","scopeEpoch":0,"wrappedContentKey":"d3JhcA=="}""",
         ).`when`().post("/api/shares/${t.link.shareId}/nodes").then().statusCode(201)
         return id
     }
@@ -437,7 +437,7 @@ class GuestWriteRecordCoreSliceTest {
     private fun guestCreateRefused(t: Tree, xff: String) {
         given().contentType(ContentType.JSON).header("X-Contributor-Token", t.link.token).header("X-Forwarded-For", xff).body(
             """{"nodeId":"${UUID.randomUUID()}","parentId":"${t.a}","parentEpoch":0,"kind":"FOLDER","encryptedName":"bmFtZQ==",""" +
-                """"slugToken":"${GuestTreeShare.slug()}","epoch":0,"wrappedContentKey":"d3JhcA=="}""",
+                """"slugToken":"${GuestTreeShare.slug()}","scopeEpoch":0,"wrappedContentKey":"d3JhcA=="}""",
         ).`when`().post("/api/shares/${t.link.shareId}/nodes").then().statusCode(org.hamcrest.Matchers.not(201))
     }
 

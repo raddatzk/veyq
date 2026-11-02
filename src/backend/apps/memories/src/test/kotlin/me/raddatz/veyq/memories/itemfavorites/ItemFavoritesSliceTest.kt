@@ -45,7 +45,7 @@ class ItemFavoritesSliceTest {
 
     private fun put(userId: String, scopeId: String, nodeId: String, ciphertext: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"ciphertext":"$ciphertext"}""")
+            .body("""{"ciphertext":"$ciphertext","epoch":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/item-favorites")
             .then().statusCode(204)
 
@@ -159,7 +159,7 @@ class ItemFavoritesSliceTest {
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(200).body("[0].ciphertext", equalTo(atCap))
         val over = "A".repeat(262_145)
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"ciphertext":"$over"}""")
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"ciphertext":"$over","epoch":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$node/item-favorites").then().statusCode(400).body("code", equalTo("invalid_request"))
         // the refused write changed nothing
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
@@ -216,7 +216,7 @@ class ItemFavoritesSliceTest {
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
         given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
-            .body("""{"ciphertext":"$mine"}""")
+            .body("""{"ciphertext":"$mine","epoch":0}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
     }

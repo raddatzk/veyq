@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.testing.TestScopeRekey
 import me.raddatz.veyq.core.spaces.scope.ScopePurge
 import me.raddatz.veyq.core.tasks.CapabilityTags
 import me.raddatz.veyq.core.tasks.JobEntity
@@ -288,7 +289,7 @@ class MemberRemoveSliceTest {
         // requires — and completing then clears the job; none re-claimable.
         given().header("Authorization", bearer(keyholder)).contentType(ContentType.JSON)
             .body(
-                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$keyholder","wrappedGrant":"Z3JhbnQ=",""" +
+                """{"epoch":1,${TestScopeRekey.rotationJson(group)},"grants":[{"userId":"$keyholder","wrappedGrant":"Z3JhbnQ=",""" +
                     """${TestGrants.SIGNATURE_JSON},"recipientIdentityDigest":"${TestGrants.digestOf(keyholder)}"}],${TestGrants.openInvitesJson(group)}}""",
             )
             .`when`().post("/api/scopes/$group/epochs").then().statusCode(201)

@@ -39,7 +39,7 @@ sealed interface CompleteFileOutcome {
     object UploadMismatch : CompleteFileOutcome, HttpFailure by httpFailure("upload_mismatch", UNPROCESSABLE)
     /** `nodeEpoch` is not the file node's stored epoch (ADR 0109 point 6) — nothing attached; the caller re-reads. */
     object StaleEpoch : CompleteFileOutcome, HttpFailure by Failures.staleEpoch
-    /** The file node is not re-keyed since the scope's last rotation yet (ADR 0109 point 6) — nothing attached; retry. */
+    /** The file node is due for its re-key (ADR 0114 decision 3) — nothing attached; retry. */
     object RekeyPending : CompleteFileOutcome, HttpFailure by Failures.nodeRekeyPending
     /** The stored chunks failed declare-then-verify; the objects are on the reclaim list. */
     object Budget : CompleteFileOutcome, HttpFailure by httpFailure("budget_exceeded", BAD_REQUEST)

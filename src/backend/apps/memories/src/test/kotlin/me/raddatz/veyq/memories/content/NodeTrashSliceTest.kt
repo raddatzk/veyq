@@ -307,7 +307,7 @@ class NodeTrashSliceTest {
         // Keyed on the node, so the purge is the only thing that reaches them — the scope survives.
         for (n in listOf(memory, survivor)) {
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{"ciphertext":"bWFya3M="}""")
+                .body("""{"ciphertext":"bWFya3M=","epoch":0}""")
                 .`when`().put("/api/scopes/$scopeId/nodes/$n/item-favorites").then().statusCode(204)
         }
 
@@ -396,7 +396,7 @@ class NodeTrashSliceTest {
         val coverBlob = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Y292ZXI=", memory, "COVER"))
         for (n in listOf(memory, trashedControl, liveControl)) {
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{"ciphertext":"bWFya3M="}""")
+                .body("""{"ciphertext":"bWFya3M=","epoch":0}""")
                 .`when`().put("/api/scopes/$scopeId/nodes/$n/item-favorites").then().statusCode(204)
         }
         val controlMedia = listOf(trashedControl, liveControl).map { completeOne(userId, scopeId, it, "Y3RybA==") }

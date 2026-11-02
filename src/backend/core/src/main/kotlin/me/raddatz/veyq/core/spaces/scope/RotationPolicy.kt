@@ -46,6 +46,11 @@ sealed interface RotationDecision {
     object LastOwner : RotationDecision
     /** A removal-rotation's grants name the member it removes (`422 removed_member_granted`). */
     object RemovedMemberGranted : RotationDecision
+    /** A scope-level row sealed under the old key has no value staged under the rotation's re-key id (`409
+     *  rekey_parts_missing`, ADR 0115 decision 2) — decided by the commit after the policy, never by it. */
+    object PartsMissing : RotationDecision
+    /** A staged scope-level value was staged against a row that changed since (`409 rekey_parts_stale`). */
+    object PartsStale : RotationDecision
 }
 
 /**
@@ -55,10 +60,11 @@ sealed interface RotationDecision {
  * whether the rotation commits and what it writes.
  *
  * Four load-bearing rules — and the reason this is a security decision, not plumbing:
- * - **Only the next epoch commits** (ADR 0024 §4). The client builds its chain-link from its **own grant**, not from
- *   the scope's epoch, so a rotation that lost a race or rode a lagging grant links the new epoch to a key that is
- *   not its predecessor. Committed, every epoch skipped that way is unreachable for every member. Such a rotation
- *   states an epoch that is not `currentEpoch + 1`: stale, nothing stored.
+ * - **Only the next epoch commits** (ADR 0024 §4). The client signs the succession statement and re-seals every
+ *   scope-level row with the key of its **own grant** (ADR 0115 decisions 2 and 5), not the scope's epoch, so a
+ *   rotation that lost a race or rode a lagging grant would sign from a key that is not the predecessor and re-seal
+ *   from rows it opened under it. Such a rotation states an epoch that is not `currentEpoch + 1`: stale, nothing
+ *   stored.
  * - **No member is left behind silently** (ADR 0111 decision 9). The rotator grants every member whose key its client
  *   anchors and declares the rest pending ([pendingUserIds]); a request that does neither for any one member (the
  *   removed one aside) is refused, so a member left behind is always a declared one — its grant behind the current

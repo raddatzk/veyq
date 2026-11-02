@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core
 
 import me.raddatz.veyq.core.applicationblob.ApplicationBlobGuestIdentityUsage
+import me.raddatz.veyq.core.node.rekey.ScopeRekeyStageScopeEraser
 import me.raddatz.veyq.core.applicationblob.ApplicationBlobHeldUploaders
 import me.raddatz.veyq.core.applicationblob.ApplicationBlobNodeSubtreeEraser
 import me.raddatz.veyq.core.applicationblob.ApplicationBlobRekeyParticipant
@@ -186,9 +187,10 @@ class CoreAloneSliceTest {
         assertEquals(
             setOf(
                 AttachmentScopeEraser::class.java, FavoritesScopeEraser::class.java, NodeScopeEraser::class.java, ShareScopeEraser::class.java,
-                NodeRekeyStageScopeEraser::class.java, ApplicationBlobScopeEraser::class.java,
+                NodeRekeyStageScopeEraser::class.java, ApplicationBlobScopeEraser::class.java, ScopeRekeyStageScopeEraser::class.java,
             ),
-            classes(scopeErasers), "ScopeEraser: core's own six (its blob service's among them, ADR 0112), and no application's",
+            classes(scopeErasers),
+            "ScopeEraser: core's own seven (its blob service's and the scope re-key stage's among them, ADR 0112, ADR 0115), and no application's",
         )
         assertEquals(
             setOf(

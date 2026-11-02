@@ -89,7 +89,7 @@ class NodeCreatedAtCoreSliceTest {
     private fun create(userId: String, scopeId: String, extra: String = ""): String {
         val id = UUID.randomUUID().toString()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$id","kind":"FOLDER","encryptedName":"bg==","slugToken":"${slug()}","orderIndex":0,"wrappedContentKey":"a21lbQ==","epoch":0$extra}""")
+            .body("""{"nodeId":"$id","kind":"FOLDER","encryptedName":"bg==","slugToken":"${slug()}","orderIndex":0,"wrappedContentKey":"a21lbQ==","scopeEpoch":0$extra}""")
             .`when`().post("/api/scopes/$scopeId/nodes").then().statusCode(201)
         return id
     }
