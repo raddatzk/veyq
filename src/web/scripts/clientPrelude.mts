@@ -1,5 +1,5 @@
 // What Vite gives the web client and tsx does not, for a seeder that loads the client's own modules under Node
-// (`fuzz-seed.mts`). Imported FIRST: ESM evaluates imports in order, and `shared/state/capabilities.ts` reads the define
+// (`fuzz-seed.mts`, `bootstrap-user.mts`). Imported FIRST: ESM evaluates imports in order, and `shared/state/capabilities.ts` reads the define
 // at module load. The volume harness carries its own copy (`volumePrelude.mts`), deleted with that harness.
 import { readFileSync } from 'node:fs'
 

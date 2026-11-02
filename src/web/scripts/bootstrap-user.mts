@@ -20,6 +20,8 @@
 //    fail. It used to be written last, so a failure in the OPTIONAL user2 block destroyed the keys of a
 //    successfully-born owner: the account existed in the DB, its Secret Key existed only in this process, and
 //    .run/.env still held the previous run's. Anything after 4a therefore warns instead of exiting.
+// FIRST: the Vite define the client's modules read at load (`clientPrelude.mts`) - `memberInvite` reaches them.
+import './clientPrelude.mts'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { fromB64std } from '@veyq/crypto/base64'
