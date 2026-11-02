@@ -705,8 +705,12 @@ paths:
         ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4). With
         `revokeLinks=true` the same transaction also turns off **every** enabled public share of the **TENANT scope**,
         whoever created it, each then coming back only by re-issue (point 5) — not the co-shared groups', which the
-        tenant owner need not see. A refused removal (`not_tenant_owner`, `member_not_found`, `last_owner`) writes
-        nothing, the switch-off included.
+        tenant owner need not see. Every link the removal switches off — the removed member's own, and with
+        `revokeLinks` every one of the TENANT scope — is a **close**
+        ([ADR 0114](../../docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 1): the same
+        transaction marks every node below a READ or READ_WRITE link's root due for a re-key, which any member's
+        worker runs. A refused removal (`not_tenant_owner`, `member_not_found`, `last_owner`) writes nothing, the
+        switch-off included.
       security:
         - bearerAuth: []
       parameters:
@@ -831,7 +835,7 @@ paths:
         decisions 12–13): each a statement *"in this tenant, this verifier at this head of their key chain confirmed
         this subject at this head of theirs"*, signed by the verifier's identity and sealed under the tenant key
         (field `member-verification`, bound to the tenant, the verifier, the subject and the epoch it is sealed at). A
-        member's client opens each with that epoch's key from its chain and counts one only while it names the
+        member's client opens each with the tenant's one key and counts one only while it names the
         subject's current head and verifies under the verifier's current identity — so *verified by …* counts for every
         member of the tenant, and only there. The server stores and relays opaque rows and cannot tell which count.
 
@@ -915,8 +919,9 @@ paths:
         of the body — one row per (tenant, caller, subject), replaced by a newer one. A matching safety-number and
         chain-code compare writes it; a rotation of the caller re-signs each of the caller's rows with the new
         identity (decision 13). The server cannot open or check the statement; it checks only that the caller and the
-        subject are accepted members of the tenant, that they differ, and that `epoch` is one the tenant scope has
-        reached. Nothing here blocks anybody's write.
+        subject are accepted members of the tenant, that they differ, and that `epoch` is the tenant scope's current
+        one under its row lock (`409 stale_epoch`, ADR 0115 decision 3: a rotation re-seals every verification under
+        the one key, so none may land under an older one). Nothing here blocks anybody's write.
       security:
         - bearerAuth: []
       parameters:
@@ -937,10 +942,16 @@ paths:
           description: Stored — it replaced the caller's previous verification of that member, if any.
         "400":
           description: >
-            Malformed request — the body outside its contract or an epoch the tenant scope has not reached
-            (`invalid_request`), or the caller named as the subject (`verification_of_self`).
+            Malformed request — the body outside its contract (`invalid_request`), or the caller named as the subject
+            (`verification_of_self`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: verification_of_self } }
+        "409":
+          description: >
+            `epoch` is not the tenant scope's current epoch (`stale_epoch` — the tenant key was replaced since; re-open
+            it and re-seal, ADR 0115 decision 3). Nothing is written.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "401":
           description: Generic authentication failure.
@@ -2225,7 +2236,7 @@ paths:
         Returns what the invitee is asked to accept (tenant name, domain, the invited owner email) and
         whether that email already has an account — so the client picks the sign-in vs. register path — and, for
         a MEMBER invite, the invite key, its owner's signature and key chain, the owner's anchor grant, the grant the
-        invite carries now and the epoch links between the two (`invite`), which the invitee's client checks against
+        invite carries now and the succession statements between the two (`invite`), which the invitee's client checks against
         the link's sealed part before it trusts any of it (ADR 0111 decisions 1
         and 19). Serving the owner's chain here hands the holder of the token public keys and signatures, as
         `getKeyChain` serves them to a co-member.
@@ -2337,7 +2348,7 @@ paths:
           description: >
             A conflict — the tenant is already active (`tenant_not_pending`), the chosen `username` is already
             taken in this tenant (`username_taken`), the self-grant names an epoch above the tenant scope's current
-            one (`stale_epoch`), or its (or an OWNER invite's tenant birth's) `recipientIdentityDigest` is not the caller's current identity key
+            one or `epoch` (the profile fields' seal) is not the current one (`stale_epoch`), or its (or an OWNER invite's tenant birth's) `recipientIdentityDigest` is not the caller's current identity key
             (`recipient_key_not_current`), or a MEMBER invite's `signerIdentityDigest` is not the invite's stored signer
             key (`invite_changed`: its owner secured their account since the client checked it — re-read the preview,
             re-check, accept again). The specific case is in the response `code`.
@@ -2483,7 +2494,7 @@ paths:
           description: >
             A conflict — the invited email already has an account (`email_taken`, use the sign-in accept), the
             chosen `username` is already taken in this tenant (`username_taken`), the `userId` is already taken
-            (`id_taken`), the self-grant names an epoch above the tenant scope's current one (`stale_epoch`), or its (or an OWNER invite's tenant birth's)
+            (`id_taken`), the self-grant names an epoch above the tenant scope's current one or `epoch` (the profile fields' seal) is not the current one (`stale_epoch`), or its (or an OWNER invite's tenant birth's)
             `recipientIdentityDigest` is not the new account's identity key (`recipient_key_not_current`), or a MEMBER
             invite's `signerIdentityDigest` is not the invite's stored signer key (`invite_changed`: its owner secured
             their account since the client checked it — re-read the preview, re-check, accept again). The specific
@@ -3623,8 +3634,8 @@ components:
         (`checkInvite`, ADR 0111 decision 19): the invite key must be the one the link's seed
         derives; the signer's chain must pass through the head inside the link's seal and end at the served signer key,
         which must have signed the invite key and the anchor; and the tenant key the grant carries must be the anchor's
-        or one the epoch links peel down to it.
-      required: [inviteId, invitePublicKey, inviteKeySignature, expiresAt, signerUserId, signerIdentityPublicKey, signerKeyChain, anchorWrappedGrant, anchorEpoch, anchorGrantSignature, wrappedGrant, grantedEpoch, grantSignature, granterUserId, granterIdentityPublicKey, granterKeyChainHead, epochLinks]
+        or one the succession statements lead to from the anchor's (ADR 0115 decision 5).
+      required: [inviteId, invitePublicKey, inviteKeySignature, expiresAt, signerUserId, signerIdentityPublicKey, signerKeyChain, anchorWrappedGrant, anchorEpoch, anchorGrantSignature, wrappedGrant, grantedEpoch, grantSignature, granterUserId, granterIdentityPublicKey, granterKeyChainHead, successions]
       properties:
         inviteId:
           x-veyq-visibility: id
@@ -3729,7 +3740,7 @@ components:
           type: string
           description: >
             The granter's identity public bundle as it signed. A grant above the anchor must verify under it; the key
-            needs no anchor of its own, because the epoch links tie the grant's key to the owner's anchor.
+            needs no anchor of its own, because the succession statements tie the grant's key to the owner's anchor.
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
@@ -3738,18 +3749,20 @@ components:
           description: >
             The head of the granter's key chain now (ADR 0111 decision 7) — what an invitee that already pinned this
             granter walks its chain to (a key the chain does not reach, or a retired one, refuses the invite). A granter
-            it never met is not pinned from here: the epoch links, not the granter's key, vouch for the grant.
+            it never met is not pinned from here: the succession statements, not the granter's key, vouch for the grant.
           contentEncoding: base64
           maxLength: 64
           example: a2V5LWNoYWluLWhlYWQta2V5LWNoYWluLWhlYWQtMDI=
-        epochLinks:
+        successions:
           type: array
           description: >
-            The tenant scope's epoch-chain links (ADR 0024) for every epoch in `(anchorEpoch, grantedEpoch]`, ascending —
-            empty when the grant is the anchor. The invitee peels them from the carried grant's key down to
-            `anchorEpoch` and takes the key only if that yields exactly the anchor's (`epoch_unlinked`): the operator
-            holds no `E_a`, so no link it makes ends there.
-          items: { $ref: "scopes.openapi.yaml#/components/schemas/ScopeEpochLink" }
+            The tenant scope's succession statements (ADR 0115 decision 5) for every epoch in `(anchorEpoch,
+            grantedEpoch]`, ascending — empty when the grant is the anchor. The invitee derives the anchor epoch's
+            succession public key from the anchor's key, verifies each statement from there, and takes the carried key
+            only if the last public key is the one derived from it (`epoch_unlinked`): the operator holds no `E_a`, so it
+            signs no statement that starts there. The anchor's key opens only a dump from before the rotation that moved
+            past it, since every row is re-sealed since.
+          items: { $ref: "scopes.openapi.yaml#/components/schemas/ScopeSuccession" }
 
     AcceptOwnershipRequest:
       type: object
@@ -3889,6 +3902,18 @@ components:
           maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The tenant epoch whose key seals `sealedJoinRecord`, `sealedName` and `sealedAvatar` (ADR 0115 decision 3) —
+            required with any of them (else `400 invalid_request`). It must be the tenant scope's current epoch, under
+            its row lock (`409 stale_epoch`): a rotation re-seals every profile under the one key, so none may land
+            under an older one. A MEMBER invite's newcomer seals under the key its self-grant carries; an OWNER
+            invite's birth is epoch 0.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
     InviteSelfGrant:
       type: object
@@ -3941,8 +3966,8 @@ components:
           format: int32
           minimum: 0
           description: >
-            The tenant scope's epoch whose key seals `sealedStatement` — bound into its seal, so a reader takes that
-            epoch's key from its chain. At most the scope's current epoch.
+            The tenant scope's epoch whose key seals `sealedStatement` — bound into its seal. Must be the scope's
+            current epoch (`409 stale_epoch`): the tenant has one key at a time (ADR 0115 decision 1).
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         sealedStatement:
@@ -3978,7 +4003,7 @@ components:
           type: integer
           format: int32
           minimum: 0
-          description: The tenant epoch whose key seals the row, as it was written.
+          description: The tenant epoch whose key seals the row — the current one, since every rotation re-seals it (ADR 0115 decision 2).
           example: 0
         sealedStatement:
           type: string
@@ -4188,6 +4213,18 @@ components:
           maxLength: 21908
           example: c2VhbGVkLWF2YXRhcg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 21908) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The tenant epoch whose key seals `sealedJoinRecord`, `sealedName` and `sealedAvatar` (ADR 0115 decision 3) —
+            required with any of them (else `400 invalid_request`). It must be the tenant scope's current epoch, under
+            its row lock (`409 stale_epoch`): a rotation re-seals every profile under the one key, so none may land
+            under an older one. A MEMBER invite's newcomer seals under the key its self-grant carries; an OWNER
+            invite's birth is epoch 0.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
     AccountRegistration:
       type: object

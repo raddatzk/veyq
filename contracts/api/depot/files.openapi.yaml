@@ -177,7 +177,7 @@ paths:
           description: >
             The slot does not hold `expectedBlobId` (`stale_file`): nothing was attached, the upload was spent and
             reclaimed, and `currentBlobId` is what the slot holds now (null: empty). Or the space is being deleted
-            and read-only (`scope_deleting`, uc.spaces.delete-group A4), or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6) — both carry `code` alone.
+            and read-only (`scope_deleting`, uc.spaces.delete-group A4), or `nodeEpoch` not the node's stored epoch (`stale_epoch` — re-read) or a node due for its re-key (`node_rekey_pending` — retry; ADR 0114 decision 3) — both carry `code` alone.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/FileConflict" }
@@ -304,7 +304,7 @@ paths:
         "409":
           description: >
             The slot does not hold `expectedBlobId` (`stale_file`): nothing was attached, the upload was spent and
-            reclaimed, and `currentBlobId` is what the slot holds now (null: empty). Or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6), which carries
+            reclaimed, and `currentBlobId` is what the slot holds now (null: empty). Or `nodeEpoch` not the node's stored epoch (`stale_epoch` — re-read) or a node due for its re-key (`node_rekey_pending` — retry; ADR 0114 decision 3), which carries
             `code` alone; the upload stays open.
           content:
             application/json:
@@ -384,8 +384,9 @@ paths:
         `WRITE_ONLY` guest writes only inside its own identity folder. Core's guest gate runs first (`ShareGuestGate`:
         an active share → the password → the mode → the contributor token → the per-share upload budget, which a
         create spends). **The server opens nothing:** it stores the ciphertext, the identity it was asked by (the
-        folder's `shareIdentityId`), and checks structure only. **Epoch:** off the scope root, at or below the scope's
-        current epoch, stored as sent (a write-only link serves no epoch; the client seals at 0). A member reads the
+        folder's `shareIdentityId`), and checks structure only. **Epoch:** the folder's key is minted under the scope's
+        current epoch (`scopeEpoch`, the root's `PublicShare.rootScopeEpoch`, ADR 0114 decision 3), else `409
+        stale_epoch`; its own epoch starts at 0. A member reads the
         folder through the drop box's key: drop private key → the identity's `K_up` → the folder's entry.
         **Password-protected shares (ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong token → `403
         share_password_incorrect`.
@@ -402,7 +403,7 @@ paths:
               nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               encryptedName: ZW5jcnlwdGVkLW5hbWU=
               slugToken: c2x1Zy10b2tlbi1iYXNlNjQ=
-              epoch: 0
+              scopeEpoch: 0
               wrappedContentKey: d3JhcHBlZC1rLW1lbQ==
       responses:
         "200":
@@ -427,7 +428,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
-          description: The `nodeId` is already taken, in any scope (`id_taken`), another child of the drop box holds the `slugToken` (`slug_taken` — only a crafted request meets it, since each identity keys its tokens under its own `K_up`), or the `epoch` is not the scope's current one (`stale_epoch` — the folder's key is minted at the current epoch, ADR 0109 point 6) — nothing stored.
+          description: The `nodeId` is already taken, in any scope (`id_taken`), another child of the drop box holds the `slugToken` (`slug_taken` — only a crafted request meets it, since each identity keys its tokens under its own `K_up`), or the `scopeEpoch` is not the scope's current one (`stale_epoch` — the folder's key is minted at the current epoch, ADR 0114 decision 3) — nothing stored.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -509,8 +510,8 @@ components:
           type: [integer, "null"]
           description: >
             The file node's epoch as the client read it: the content blob's key is wrapped under the file node's key.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -679,8 +680,8 @@ components:
           type: [integer, "null"]
           description: >
             The file node's epoch as the client read it: the content blob's key is wrapped under the file node's key.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -719,7 +720,7 @@ components:
 
     DropFolderRequest:
       type: object
-      required: [contributorToken, nodeId, encryptedName, slugToken, epoch, wrappedContentKey]
+      required: [contributorToken, nodeId, encryptedName, slugToken, scopeEpoch, wrappedContentKey]
       description: >
         The folder a drop-box guest's identity gets on its first call, sealed under the guest's identity key `K_up` —
         never under a key of the drop box, which the guest does not hold. Ignored when the identity has its folder.
@@ -739,7 +740,7 @@ components:
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         encryptedName:
           type: string
-          description: The folder's name (the guest's display name) sealed under a field key derived from `K_up` (seal purpose `node-name`, bound to scope, node, `epoch` and placement revision 0; opaque base64).
+          description: The folder's name (the guest's display name) sealed under a field key derived from `K_up` (seal purpose `node-name`, bound to scope, node, `scopeEpoch` and placement revision 0; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -751,17 +752,19 @@ components:
           maxLength: 128
           example: c2x1Zy10b2tlbi1iYXNlNjQ=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        epoch:
+        scopeEpoch:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0 (src/backend/CLAUDE.md)
           type: [integer, "null"]
-          description: The epoch the seals bind (off the scope root; at or below the scope's current one, stored as sent).
+          description: >
+            The scope epoch the folder's new key is minted under — its `scopeEpoch`, which the seals bind; the scope's
+            current one (`PublicShare.rootScopeEpoch`), else `409 stale_epoch` (ADR 0114 decision 3).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         wrappedContentKey:
           type: string
-          description: The folder's fresh random content key wrapped under `K_up` (seal purpose `content-key`, bound to scope, node, `epoch` and placement revision 0; opaque base64).
+          description: The folder's fresh random content key wrapped under `K_up` (seal purpose `content-key`, bound to scope, node, `scopeEpoch` and placement revision 0; opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
@@ -772,12 +775,20 @@ components:
       description: >
         A drop-box guest's own folder as stored: what the guest opens its key from (under `K_up`) and creates its files
         under. Ids, numbers and the guest's own ciphertext only.
-      required: [nodeId, epoch, placementRevision, wrappedContentKey, created]
+      required: [nodeId, epoch, scopeEpoch, placementRevision, wrappedContentKey, created]
       properties:
         nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         epoch:
           x-veyq-visibility: structure
           type: integer
+          description: The folder's own key's epoch (as `NodeSummary.epoch`) — what a guest's create below it states as `parentEpoch`.
+          minimum: 0
+          example: 0
+        scopeEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: As `NodeSummary.scopeEpoch` — what the folder's entry seals bind.
+          minimum: 0
           example: 0
         placementRevision:
           x-veyq-visibility: structure

@@ -101,8 +101,9 @@ paths:
           description: >
             The `shareId` is already taken or was ever used — by a live, a deleted or an erased link (`id_taken`),
             the `sealedShareKeyEpoch` is not the scope's current epoch
-            (`stale_epoch` — the caller's scope key lags a rotation; re-open it and re-seal, ADR 0024 Decision 6), or
-            the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4), or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6). For WRITE_ONLY: the
+            (`stale_epoch` — the caller's scope key was replaced by a rotation; re-open it and re-seal, ADR 0115
+            decision 3), or
+            the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4), or `nodeEpoch` not the node's stored epoch (`stale_epoch` — re-read) or a node due for its re-key (`node_rekey_pending` — retry; ADR 0114 decision 3). For WRITE_ONLY: the
             request carries a drop private key the
             shared node already has one of (`drop_key_exists`), or carries none while the node has none
             (`drop_key_missing`) — nothing is written in either case. A taken `shareId` answers `id_taken` before
@@ -178,13 +179,20 @@ paths:
       operationId: revokeShare
       summary: Revoke a share (soft — the next guest request 404s).
       description: >
-        Disables the share (`enabled = false`). The next `resolve` + gated blob GET then `404`. Idempotent — an
+        Disables the share (`enabled = false`). The next `resolve` + gated blob GET then `404`. It is a **close**
+        ([ADR 0114](../../docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 1): for a READ or READ_WRITE link the same transaction clears its `wrap` and
+        marks every node of its root's subtree, live and trashed, **due** for a re-key, so nothing is written under the
+        old keys from then on (`node_rekey_pending`); the closing device then re-keys the subtree in the background and
+        any member's worker finishes it (decision 9). A WRITE_ONLY link's close clears its sealed drop public key and
+        re-keys nothing — its `K_share` opens only that public key and its guest's own `K_up` (decision 2). An already
+        closed link marks nothing again. Idempotent — an
         already-disabled share the caller owns still returns 204; a missing or deleted one is `404`. Only its creator, and only while they
         are still a member of its space (uc.sharing.share-shared-scope A3). It is the one link write a space in its
         deletion grace allows (uc.spaces.scope-access A1): switching a link off only closes exposure, and the link
         stays off if the deletion is stopped — so a revoke there is a `204`, never `409 scope_deleting`, while
         creating, editing, re-activating, re-issuing and deleting a link stay refused. Soft (L1) revocation: already-
-        downloaded ciphertext and a saved fragment link cannot be retracted (ADR 0029 §7, a stated limitation).
+        downloaded ciphertext and a saved fragment link cannot be retracted (ADR 0029 §7, a stated limitation); what
+        is added after the close, the re-key keeps from the old link's key even with a database dump.
       security:
         - bearerAuth: []
       parameters:
@@ -210,28 +218,49 @@ paths:
     post:
       tags: [sharing]
       operationId: reactivateShare
-      summary: Re-activate a soft-revoked share and adopt its ownership.
+      x-veyq-concurrency:
+        mode: node-epoch
+        epochs:
+          - field: nodeEpoch
+      summary: Re-activate a soft-revoked share and adopt its ownership — carrying the root's key back to the link.
       description: >
-        Re-enables a disabled share (`enabled = true`) and transfers `owner_account` to the caller. Any **current
+        Re-enables a disabled share (`enabled = true`) and transfers `owner_account` to the caller. **The reopen
+        carries the key** ([ADR 0114](../../docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 7): the close took the root's key from the link and its re-key
+        sealed nothing new under it, so the member opens `K_share` from the share's recovery copy and sends the root's
+        current key under it (`wrap`, READ / READ_WRITE) or the root's drop public key sealed under it
+        (`sealedDropPublicKey`, WRITE_ONLY) and the root's current name under it (`sealedName`), stating the root's own
+        epoch (`nodeEpoch`). Without them it is `422 link_key_required`; a share with no recovery copy comes back only by
+        a re-issue. A reopen hands the old `K_share` everything added while the link was closed: it is the very link
+        turned back on, and the close's re-key was its price. Any **current
         member** of the share's scope may adopt it, and the **same** link resolves again — which is why a link a
         departed member may hold is never re-activated
         ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4): when a
         bulk switch-off turned the share off (`revokeScopeShares`, or a removal's `revokeLinks`), when its owner is no
-        longer a member of its scope, or when it carries a recovery copy and either that copy is sealed below the
-        scope's current epoch or the scope has lost an accepted member since the share was minted (every member then
+        longer a member of its scope, or when it carries a recovery copy and either the link was minted at an epoch below the
+        scope's current one (the epoch kept beside the recovery copy, which every rotation re-seals, ADR 0115 decision
+        2) or the scope has lost an accepted member since the share was minted (every member then
         could rebuild the link, one since removed included), the answer is `409 reissue_required`, nothing written,
         and the caller re-issues it (`reissueShare`) instead — the same predicate the list's `reissueRequired`
         carries. A share with no recovery copy is judged by the switch-off and its owner's membership alone.
-        Idempotent for a share the caller may already adopt. Re-activating is a publication like creating, so it passes the same checks: a current member outside
+        Idempotent for a share the caller may already adopt: an open one is answered `204` and keeps its keys. Re-activating is a publication like creating, so it passes the same checks: a current member outside
         the space's deletion grace, and the instance's sharing capability for the share's role
         (uc.sharing.share-shared-scope A2).
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/ShareId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReactivateShareRequest" }
+            example:
+              nodeEpoch: 1
+              wrap: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
+              sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
       responses:
         "204":
-          description: The share is enabled and now owned by the caller.
+          description: The share is enabled, carries the root's current key and name, and is now owned by the caller.
         "400":
           description: Malformed request — a parameter or the body outside its contract.
           content:
@@ -248,18 +277,23 @@ paths:
         "409":
           description: >
             A departed member may hold this link (`reissue_required`, nothing written — a bulk switch-off turned it
-            off, its owner is no longer a member of the scope, or its recovery copy predates the scope's current
-            epoch or its last member removal; re-issue it, ADR 0075), the space is being deleted and read-only
-            (`scope_deleting`, uc.spaces.delete-group A4), or a moderator blocked the link or a guest uploader who came
+            off, its owner is no longer a member of the scope, or it was minted before the scope's current epoch or its
+            last member removal; re-issue it, ADR 0075), the space is being deleted and read-only
+            (`scope_deleting`, uc.spaces.delete-group A4), a moderator blocked the link or a guest uploader who came
             through it (`share_blocked_by_operator`, uc.moderation.take-a-measure — it stays off until a moderator lifts
-            the block).
+            the block), `nodeEpoch` is not the root's own stored epoch (`stale_epoch` — the root's key was replaced
+            since; re-read and rebuild the wrap), or the root is due for its re-key (`node_rekey_pending` — retry once
+            it is re-keyed, ADR 0114 decision 3). Nothing is written in any case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: reissue_required } }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
             The instance capability this share's role needs is disabled (ADR 0032), or the root's application is
             switched off (uc.platform.switch-application-off) — the same checks `createShare` runs, since a
-            re-activation publishes the link again.
+            re-activation publishes the link again (`capability_disabled`); or the reopen lacks the key or the name its
+            role needs — `wrap` for READ / READ_WRITE, `sealedDropPublicKey` for WRITE_ONLY, and `sealedName`
+            (`link_key_required`, ADR 0114 decision 7). A key the role does not take is `400 invalid_request`.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
 
@@ -275,7 +309,9 @@ paths:
       description: >
         Creates a **new** share with a fresh client-minted `shareId` and a fresh `K_share`, carrying the old one's
         settings, and **deletes** the old one (a tombstone, as `deleteShare`) in the **same transaction** — what cuts a departed
-        member off a link they could copy
+        member off a link they could copy. Deleting the old link is a close ([ADR 0114](../../docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 1): an open
+        READ or READ_WRITE one marks its root's subtree due in that transaction, and the new link follows the new key —
+        the re-key wraps the root's next key under it like under any open link
         ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). The client
         opens the old share through its recovery copy, re-seals its note, label and password under the new
         `K_share` (the password with a fresh salt) and seals the new recovery copy at the scope's current epoch.
@@ -338,10 +374,10 @@ paths:
             The share is already deleted — re-issued once already, by a concurrent re-issue or an earlier one, or
             deleted (`share_deleted`; re-read the manage list, ADR 0075 point 1) — the new `shareId` is already taken
             (`id_taken`), the `sealedShareKeyEpoch` is not the scope's current epoch (`stale_epoch` — re-open the
-            scope key and re-seal, ADR 0024 Decision 6), the space is being deleted and read-only
+            scope key and re-seal, ADR 0115 decision 3), the space is being deleted and read-only
             (`scope_deleting`), or a moderator blocked the link itself (`share_blocked_by_operator` — a re-issue would
             serve the blocked content under a new id; a link blocked only with a guest uploader may be re-issued,
-            uc.moderation.take-a-measure), or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6). Nothing is written in any case.
+            uc.moderation.take-a-measure), or `nodeEpoch` not the node's stored epoch (`stale_epoch` — re-read) or a node due for its re-key (`node_rekey_pending` — retry; ADR 0114 decision 3). Nothing is written in any case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -374,8 +410,9 @@ paths:
         share's owner: `updateShare` stays owner-gated
         ([ADR 0036](../../docs/decisions/0036-editable-share-note-recoverable-share-key.md) point 3) and replaces
         all of its fields, so it cannot carry this write. Changes `sealedName` and nothing else — note, label,
-        role, expiry, password, keys and the enabled state are untouched. A revoked (disabled) share is renamed
-        too, so a later re-activation shows the current name; a deleted one is `404`. Operator-blind: the server
+        role, expiry, password, keys and the enabled state are untouched. The renaming client re-seals the name
+        under **open** links only (ADR 0114 decision 5): nothing new is sealed under a closed one's `K_share`, and its
+        reopen carries the current name (`reactivateShare`, `updateShare`); a deleted one is `404`. Operator-blind: the server
         stores the ciphertext opaquely and never opens it.
       security:
         - bearerAuth: []
@@ -474,7 +511,10 @@ paths:
           One writer: a share is edited only by its owner_account (uc.sharing.share-note), so two members
           never collide; the loss is between that member's own devices, and the form shows every field it
           sends.
-      summary: Edit a share in place — note / name / role (owner-gated).
+        epochs:
+          - field: nodeEpoch
+            requiredWith: [wrap, sealedDropPublicKey, sealedName]
+      summary: Edit a share in place — note / name / role / end date (owner-gated); a reopen carries the root's key.
       description: >
         Edits an existing share **without minting a new link** (cr-0115/cr-0116/cr-0119, ADR 0036). Sets the
         `K_share`-sealed **note** (`sealedNote`) + **private name** (`sealedShareName`) — the caller recovers
@@ -485,6 +525,15 @@ paths:
         `422`). Owner-gated: only the share's `owner_account` may edit, and only while still a member of its space —
         anything else is a non-enumerable `404` (like revoke). Operator-blind: opaque ciphertext in, opaque ciphertext out; no key
         crosses the boundary.
+
+        **An end date is a close, and moving it back is a reopen** ([ADR 0114](../../docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decisions 6 and 7). A
+        passed end date closes the link like a revoke (a server sweep marks its subtree due), so an edit of an enabled
+        link whose end date has passed that moves the date into the future or clears it reopens it, and carries what
+        `reactivateShare` carries: the root's current key under `K_share` (`wrap`, or `sealedDropPublicKey` for
+        WRITE_ONLY), the root's current name under it (`sealedName`) and the root's own epoch (`nodeEpoch`) — else `422
+        link_key_required`, nothing written. Setting an end date that has already passed closes the link at once, as a
+        revoke does. A password change, a role change between READ and READ_WRITE, a note or a label leave the link
+        open and re-key nothing (decision 1).
       security:
         - bearerAuth: []
       parameters:
@@ -511,11 +560,19 @@ paths:
           description: No such share owned by the caller, or it was deleted (non-enumerable).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409":
+          description: >
+            The space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4); or, on a reopen,
+            `nodeEpoch` is not the root's own stored epoch (`stale_epoch` — its key was replaced since; re-read and
+            rebuild) or the root is due for its re-key (`node_rekey_pending` — retry once re-keyed, ADR 0114 decision 3).
+            Nothing is written.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_deleting } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
-            Unprocessable. Its codes: `invalid_role_change` (cr-0119) — `role = WRITE_ONLY`, a role change on a share
+            Unprocessable. Its codes: `link_key_required` — the edit reopens a link whose end date has passed and lacks
+            the key or the name its role needs (ADR 0114 decision 7); `invalid_role_change` (cr-0119) — `role = WRITE_ONLY`, a role change on a share
             whose current role is WRITE_ONLY, or a role the shared node's kind may not be a share root with
             (`ShareRoots`, ADR 0080); the write-only drop-box is a separate action and its role is not editable in
             place. `capability_disabled` — a change INTO a role whose instance capability is not active (READ →
@@ -543,7 +600,10 @@ paths:
         uploads ([ADR 0031](../../docs/decisions/0031-uploader-public-share.md) point 7) — goes only once the
         applications hold nothing of theirs any more (`GuestIdentityUsage`). Nothing is reclaimed from the store.
 
-        The share's **owner** deletes it at any time — an enabled share is turned off in the same transaction.
+        The share's **owner** deletes it at any time — an enabled share is turned off in the same transaction. Deleting
+        an open READ or READ_WRITE link is a close (ADR 0114 decision 1): its root's subtree is marked due in that
+        transaction, as by `revokeShare`; a link already closed was marked at its close. A WRITE_ONLY link's delete
+        re-keys nothing.
         **Another member** of its scope deletes it only once its owner is no longer a member of the scope (the
         orphan a removal leaves); a co-member's link whose owner is still here is theirs, note and password copy
         included. The list's `deletable` carries this same answer. Not idempotent on the wire: an unknown or
@@ -818,7 +878,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
-          description: The `identityId` is already taken (`id_taken`), or `nodeEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6) — nothing stored.
+          description: The `identityId` is already taken (`id_taken`), or `nodeEpoch` not the node's stored epoch (`stale_epoch` — re-read) or a node due for its re-key (`node_rekey_pending` — retry; ADR 0114 decision 3) — nothing stored.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -976,10 +1036,11 @@ paths:
         (`GuestNodeRules`: core for a `FOLDER`, which admits a `FOLDER` and a kind its own application declares
         guest-creatable — `GuestCreatableKinds`, Files' `FILE` — and never a Memory, a drop box or another application's
         node; a container kind no owner declares allows nothing — either refusal is `422 illegal_scope`); the
-        slug is free under the parent (`409 slug_taken`). **Epoch:** the request carries the epoch the guest sealed
-        with (ADR 0080 Decision 6) — the name and the wrap are bound to scope, node, that epoch and placement revision
-        0, so the server stores it as sent; a guest never writes at the scope root, so the server checks it as a
-        member's placement off the root: at or below the scope's current epoch, else `409 stale_epoch`. No `wrappedMeta`:
+        slug is free under the parent (`409 slug_taken`). **Epoch:** the request carries the scope epoch the new key
+        is minted under (`scopeEpoch`, ADR 0080 Decision 6, ADR 0114 decision 3) — the name and the wrap are bound to
+        scope, node, that epoch and placement revision 0 — which must be the scope's current one (a parent that is not
+        due carries it as its `scopeEpoch`, `PublicShare.rootScopeEpoch` for the root), else `409 stale_epoch`; and the
+        parent's own epoch (`parentEpoch`). No `wrappedMeta`:
         a node's payload is its application's content, never a core tree operation's.
         **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
         token → `403 share_password_incorrect`.
@@ -1000,7 +1061,7 @@ paths:
               encryptedName: ZW5jcnlwdGVkLW5hbWU=
               slugToken: c2x1Zy10b2tlbi1iYXNlNjQ=
               orderIndex: 0
-              epoch: 0
+              scopeEpoch: 0
               wrappedContentKey: d3JhcHBlZC1rLW1lbQ==
       responses:
         "201":
@@ -1023,8 +1084,8 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
           description: >
-            A sibling under the parent already has that slug (`slug_taken`), the `nodeId` is already taken, in any scope (`id_taken`), the `epoch` is not the scope's current one (`stale_epoch` — a new node's key is minted at the current epoch, ADR 0109
-            point 6), or `parentEpoch` below the parent's stored epoch (`stale_epoch`) or a parent not re-keyed since the last rotation
+            A sibling under the parent already has that slug (`slug_taken`), the `nodeId` is already taken, in any scope (`id_taken`), the `scopeEpoch` is not the scope's current one (`stale_epoch` — a new node's key is minted at the current epoch, ADR 0114
+            decision 3), or `parentEpoch` not the parent's own stored epoch (`stale_epoch` — its key was replaced since) or a parent due for its re-key
             (`node_rekey_pending`) — nothing stored.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
@@ -1062,8 +1123,10 @@ paths:
         budget; only a **READ_WRITE** link takes it. The request carries the destination `parentId`, the node's
         content key re-wrapped under the destination's key (`wrappedContentKey`), the name and the slug token
         re-sealed under it, and the `placementRevision` it was built on; the wrap and the name are bound to scope,
-        node, the node's stored epoch and `placementRevision + 1`. **No `epoch`:** a guest's node never moves into or
-        out of the scope root, so it keeps its stored epoch. **Structure only:** the node lies strictly inside the
+        node, the node's `scopeEpoch` and `placementRevision + 1`. **No `epoch` of the node:** a placement keeps the
+        node's key and its `scopeEpoch`, and a key replaced since the guest read it moved the node's
+        `placementRevision` too (every re-key commit does), so the compare-and-set refuses it (`409 stale_placement`).
+        **Structure only:** the node lies strictly inside the
         share's subtree — the root is never moved or renamed by a guest, nor is a guest's identity folder in a drop box
         or anything inside one: only a member moves out of a drop box (ADR 0080 Decision 11; `422 illegal_structure`,
         known by the node's identity column, whatever the kinds), a node outside is `404 node_not_found`; the destination is a live node inside the subtree, the root included, not the node
@@ -1114,7 +1177,7 @@ paths:
           description: >
             A sibling at the destination already has that slug (`slug_taken`), or the node was moved or renamed since
             the stated `placementRevision` (`stale_placement` — nothing was written; the client re-reads the share and
-            rebuilds the placement, ADR 0080 Decision 3), or `parentEpoch` below the node's stored epoch (`stale_epoch` — re-read) or a node not re-keyed since the last rotation (`node_rekey_pending` — retry; ADR 0109 point 6).
+            rebuilds the placement, ADR 0080 Decision 3), or `parentEpoch` not the destination parent's own stored epoch (`stale_epoch` — re-read) or a node due for its re-key (`node_rekey_pending` — retry; ADR 0114 decision 3).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_placement } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -1437,8 +1500,8 @@ components:
           description: >
             The shared node's epoch as the client read it: the share wraps the node's key, and a WRITE_ONLY link's drop
             private key is sealed under it.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -1544,8 +1607,9 @@ components:
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
           description: >
-            The scope content-key epoch `sealedShareKey` is sealed under (ADR 0024). Required (else `400`), and must
-            be the scope's **current** epoch (else `409 stale_epoch`, nothing stored).
+            The scope epoch `sealedShareKey` is sealed under — also the epoch the link is minted at, which the re-issue
+            rule keeps beside the recovery copy when a rotation re-seals it (ADR 0115 decision 2, ADR 0075 point 4).
+            Required (else `400`), and must be the scope's **current** epoch (else `409 stale_epoch`, nothing stored).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
@@ -1607,7 +1671,9 @@ components:
         **omitted** leaves the password untouched — all in place, the link/`K_share` untouched.
         `expiresAt` is a **full replace** like `sealedNote`/`sealedShareName` (cr-share-link-expiry-edit): the new
         instant, or `null`/absent to clear the expiry — the manage UI holds the current value and re-sends it, so an
-        unrelated edit must include it to preserve it.
+        unrelated edit must include it to preserve it. An edit that reopens a link whose end date has passed carries
+        `nodeEpoch`, `sealedName` and the role's key (`wrap` or `sealedDropPublicKey`), as `ReactivateShareRequest`
+        (ADR 0114 decision 7) — else `422 link_key_required`; any other edit sends none of them.
       properties:
         sealedNote:
           type: [string, "null"]
@@ -1657,6 +1723,91 @@ components:
           maxLength: 512
           example: c2VhbGVkLXBhc3N3b3Jk
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        nodeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            A reopen only (ADR 0114 decision 7), with `sealedName` and the role's key: the root's own epoch as read —
+            another than the stored one is `409 stale_epoch`, a root due for its re-key `409 node_rekey_pending`.
+          minimum: 0
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        wrap:
+          type: [string, "null"]
+          description: >
+            A reopen of a READ or READ_WRITE link only: the root's current content key under the link's `K_share`
+            (`symWrap(K_share, content key)`, opaque base64), which the close cleared. Absent otherwise.
+          contentEncoding: base64
+          maxLength: 256
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedDropPublicKey:
+          type: [string, "null"]
+          description: >
+            A reopen of a WRITE_ONLY link only: the root's drop public key sealed under `K_share` (AAD `drop-public-key`,
+            opaque base64), which the close cleared. Absent otherwise.
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedName:
+          type: [string, "null"]
+          description: >
+            A reopen only: the root's current name under a field key derived from `K_share` (seal purpose
+            `share-memory-name`, opaque base64) — a closed link's name was not kept current (ADR 0114 decision 5).
+          contentEncoding: base64
+          maxLength: 4096
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ReactivateShareRequest:
+      type: object
+      required: [nodeEpoch]
+      description: >
+        What a reopen carries (ADR 0114 decision 7): the root's current key under the link's `K_share` — `wrap` for a
+        READ or READ_WRITE link, `sealedDropPublicKey` for a WRITE_ONLY one, the other absent — and the root's current
+        name under it, stating the root's own epoch. The member opens `K_share` from the share's recovery copy. The role
+        is the share's own, so the schema cannot say which key: a missing key or name is `422 link_key_required`, a key
+        the role does not take `400 invalid_request`.
+      properties:
+        nodeEpoch:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
+          type: [integer, "null"]
+          description: >
+            The root's own epoch as the member read it: the wrap is of the root's current key. Another than the stored
+            epoch is `409 stale_epoch` (the key was replaced since); a root due for its re-key is `409
+            node_rekey_pending` (ADR 0114 decision 3).
+          minimum: 0
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
+        wrap:
+          type: [string, "null"]
+          description: >
+            READ / READ_WRITE: the root's current content key under `K_share` (`symWrap(K_share, content key)`, opaque
+            base64). Required for those roles (else `422 link_key_required`), absent for WRITE_ONLY.
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedDropPublicKey:
+          type: [string, "null"]
+          description: >
+            WRITE_ONLY: the root's drop public key sealed under `K_share` (AAD `drop-public-key`, opaque base64). Required
+            for that role (else `422 link_key_required`), absent otherwise.
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedName:
+          type: [string, "null"]
+          description: >
+            The root's current name under a field key derived from `K_share` (seal purpose `share-memory-name`, opaque
+            base64) — what `resolveShare` serves as the title again. Required (else `422 link_key_required`).
+          contentEncoding: base64
+          maxLength: 4096
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ReissueShareRequest:
       type: object
@@ -1673,8 +1824,8 @@ components:
           type: [integer, "null"]
           description: >
             The shared node's epoch as the client read it: the new link wraps the node's key.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -1748,7 +1899,7 @@ components:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
           type: [integer, "null"]
-          description: The scope epoch `sealedShareKey` is sealed under — must be the scope's **current** one (else `409 stale_epoch`, nothing written).
+          description: The scope epoch `sealedShareKey` is sealed under, and the new link's minted-at epoch — must be the scope's **current** one (else `409 stale_epoch`, nothing written).
           minimum: 0
           example: 1
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
@@ -1870,7 +2021,7 @@ components:
         sealedShareKeyEpoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
-          description: The scope content-key epoch `sealedShareKey` is sealed under (ADR 0024) — null exactly when `sealedShareKey` is.
+          description: The scope epoch `sealedShareKey` is sealed under — the current one, since every rotation re-seals the copy (ADR 0115 decision 2); null exactly when `sealedShareKey` is.
           minimum: 0
           example: null
         passwordRequired:
@@ -1890,7 +2041,7 @@ components:
         enabled:
           x-veyq-visibility: flag
           type: boolean
-          description: False once revoked — the guest resolve + blob GET then `404`.
+          description: False once revoked — the guest resolve + blob GET then `404`. A revoke closes the link (ADR 0114 decision 1); re-enabling it carries the root's key (`reactivateShare`).
           example: true
         mine:
           x-veyq-visibility: flag
@@ -1905,8 +2056,8 @@ components:
           type: boolean
           description: >
             True when a departed member may hold this link, so it comes back only by `reissueShare`, never
-            `reactivateShare` — a bulk switch-off turned it off, its owner has left the scope, or its recovery copy
-            predates the scope's current epoch or its last member removal (ADR 0075 point 4). The server computes it
+            `reactivateShare` — a bulk switch-off turned it off, its owner has left the scope, or it was minted before
+            the scope's current epoch or its last member removal (ADR 0075 point 4). The server computes it
             with the same predicate the re-activation refusal runs, so the manage panel's hint and the refusal cannot
             disagree.
           example: false
@@ -2066,9 +2217,18 @@ components:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            The epoch the shared root's key was minted at (ADR 0109 point 6) — what a guest's write states as the root's
-            epoch (`nodeEpoch` / `parentEpoch`). Served for every unlocked role, WRITE_ONLY included; null in a locked
+            The shared root's own key's epoch (ADR 0114 decision 3) — what a guest's write states as the root's epoch
+            (`nodeEpoch` / `parentEpoch`). Served for every unlocked role, WRITE_ONLY included; null in a locked
             response.
+          minimum: 0
+          example: 0
+        rootScopeEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The shared root's `scopeEpoch` — the scope's epoch when its key was minted, the scope's current one while the
+            root is not due. What a guest mints a new node's key under (`scopeEpoch` of its create), WRITE_ONLY included,
+            which is served no node. Null in a locked response.
           minimum: 0
           example: 0
         rootKind:
@@ -2107,7 +2267,7 @@ components:
         Decision 2), so whoever holds the root's key opens every name below it. Nothing of the root's own
         placement is served: no parent id, no `encryptedName` (both belong to the parent's key, which the guest
         does not hold, ADR 0080 Decision 9) — the root's name comes from the share's `sealedName`.
-      required: [id, kind, epoch, blockedByOperator]
+      required: [id, kind, epoch, scopeEpoch, blockedByOperator]
       properties:
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         parentId:
@@ -2126,7 +2286,13 @@ components:
         epoch:
           x-veyq-visibility: structure
           type: integer
-          description: The content-key epoch the node was sealed at (as `NodeSummary.epoch`) — a descendant's `wrappedContentKey` and `encryptedName` are bound to it (ADR 0072).
+          description: As `NodeSummary.epoch` — the node's own key's epoch, what a guest's write under the node states.
+          minimum: 0
+          example: 0
+        scopeEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: As `NodeSummary.scopeEpoch` — a descendant's `wrappedContentKey` and `encryptedName` are bound to it (ADR 0072).
           minimum: 0
           example: 0
         placementRevision:
@@ -2148,7 +2314,7 @@ components:
           x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
           description: >
             A descendant's name, AEAD-sealed under a field key derived from its **parent's** content key (seal purpose `node-name`, bound to
-            scope, node, epoch and placement revision; opaque base64) — the same value as `NodeSummary.encryptedName`, which the viewer
+            scope, node, `scopeEpoch` and placement revision; opaque base64) — the same value as `NodeSummary.encryptedName`, which the viewer
             opens with the key chain it derives from the root. Omitted at the root: its name is sealed under a key
             above the share (ADR 0080 Decision 9); the root's title is the share's `sealedName`.
           contentEncoding: base64
@@ -2336,10 +2502,10 @@ components:
 
     CreateShareNodeRequest:
       type: object
-      required: [nodeId, parentId, kind, encryptedName, slugToken, epoch, wrappedContentKey, parentEpoch]
+      required: [nodeId, parentId, kind, encryptedName, slugToken, scopeEpoch, wrappedContentKey, parentEpoch]
       description: >
         A READ_WRITE guest's create inside the shared subtree (`createShareNode`): the member's `CreateNodeRequest`
-        with a required `epoch` checked as off the scope root (a guest never writes there) and without
+        with a required `scopeEpoch` (a guest never writes at the scope root) and without
         `wrappedMeta` (a node's payload is its application's content, not a core tree operation's). The parent is
         always a node of the subtree.
       properties:
@@ -2347,9 +2513,9 @@ components:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            The parent's epoch as the guest read it (`ShareNode.epoch`): the new node's entry is sealed under the parent's key.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            The parent's own epoch as the guest read it (`ShareNode.epoch`): the new node's entry is sealed under the parent's key.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -2372,7 +2538,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under a field key derived from the parent's content key (seal purpose `node-name`), bound to scope, node, `epoch` and placement revision 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
+          description: The node name, AEAD-sealed under a field key derived from the parent's content key (seal purpose `node-name`), bound to scope, node, `scopeEpoch` and placement revision 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -2390,21 +2556,21 @@ components:
           format: int32
           description: Ordering among siblings (default 0 / append).
           example: 0
-        epoch:
+        scopeEpoch:
           x-veyq-visibility: structure
           # nullable type + @NotNull: a required primitive binds a missing field to 0 (src/backend/CLAUDE.md)
           type: [integer, "null"]
           description: >
-            The scope content-key epoch the guest sealed the name and the wrap with (ADR 0024, ADR 0080 Decision 6).
-            Every seal binds it, so the server stores it as sent and a reader opens at it. The entry is under the
-            parent's key, never `K_SC`, so an epoch below the current one is accepted; one above the scope's current
-            epoch is `409 stale_epoch`, nothing stored (the rule of a member's placement off the root).
+            The scope epoch the guest mints the node's key under (ADR 0080 Decision 6, ADR 0114 decision 3) — the
+            node's `scopeEpoch`, which the name's and the wrap's seals bind. It must be the scope's current one (the
+            parent's `ShareNode.scopeEpoch` while it is not due, `PublicShare.rootScopeEpoch` for the root), else `409
+            stale_epoch`, nothing stored.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         wrappedContentKey:
           type: string
-          description: The node's content key — a fresh random key the guest mints, wrapped under the parent's content key (seal purpose `content-key`), bound to scope, node, `epoch` and placement revision 0 (ADR 0080 Decision 1; opaque base64).
+          description: The node's content key — a fresh random key the guest mints, wrapped under the parent's content key (seal purpose `content-key`), bound to scope, node, `scopeEpoch` and placement revision 0 (ADR 0080 Decision 1; opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
@@ -2425,16 +2591,16 @@ components:
       required: [parentId, encryptedName, slugToken, wrappedContentKey, placementRevision, parentEpoch]
       description: >
         A READ_WRITE guest's placement write (`updateShareNode`) — every field of the node's directory entry and key
-        wrap at once, as the placement half of the member's `UpdateNodeRequest`, without `epoch` (the node keeps its
-        stored one) and without the reorder and the payload re-seal.
+        wrap at once, as the placement half of the member's `UpdateNodeRequest`, without the node's `epoch` (its
+        `placementRevision` already moves with every re-key) and without the reorder and the payload re-seal.
       properties:
         parentEpoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            The destination parent's epoch as the guest read it: the entry is sealed under its key.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            The destination parent's own epoch as the guest read it: the entry is sealed under its key.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -2446,7 +2612,7 @@ components:
           example: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
         encryptedName:
           type: string
-          description: The name re-sealed under a field key derived from the destination parent's content key (seal purpose `node-name`), bound to scope, node, the node's stored epoch and `placementRevision + 1` (ADR 0072, ADR 0080 Decision 3; opaque base64).
+          description: The name re-sealed under a field key derived from the destination parent's content key (seal purpose `node-name`), bound to scope, node, the node's `scopeEpoch` and `placementRevision + 1` (ADR 0072, ADR 0080 Decision 3; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: cmVuYW1lZA==
@@ -2460,7 +2626,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedContentKey:
           type: string
-          description: The node's own content key (unchanged) re-wrapped under the destination parent's content key (seal purpose `content-key`), bound to scope, node, the node's stored epoch and `placementRevision + 1` (opaque base64). A rename re-wraps too.
+          description: The node's own content key (unchanged) re-wrapped under the destination parent's content key (seal purpose `content-key`), bound to scope, node, the node's `scopeEpoch` and `placementRevision + 1` (opaque base64). A rename re-wraps too.
           contentEncoding: base64
           maxLength: 256
           example: cmUtd3JhcHBlZC1rLW1lbQ==
@@ -2499,10 +2665,10 @@ components:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            The shared root's epoch as the guest read it (`PublicShare.rootEpoch`): a READ_WRITE guest's name is sealed
+            The shared root's own epoch as the guest read it (`PublicShare.rootEpoch`): a READ_WRITE guest's name is sealed
             under the root's key, a WRITE_ONLY guest's `K_up` to the root's drop public key, which a re-key replaces.
-            Below the stored epoch is `409 stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation
-            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `409 stale_epoch` (the caller re-reads); a node due for its re-key
+            is `409 node_rekey_pending` (it retries once the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'

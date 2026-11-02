@@ -103,9 +103,9 @@ paths:
         "409":
           description: >
             The space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4). An item whose
-            `nodeEpoch` the node refuses is reported per item and never fails the batch: `stale_epoch` (below the node's
-            stored epoch — the client re-reads) or `node_rekey_pending` (the node is not re-keyed since the last rotation
-            — it retries; ADR 0109 point 6). Either way the item stored nothing and its uploads stay open.
+            `nodeEpoch` the node refuses is reported per item and never fails the batch: `stale_epoch` (not the node's
+            stored epoch — the client re-reads) or `node_rekey_pending` (the node is due for its re-key
+            — it retries; ADR 0114 decision 3). Either way the item stored nothing and its uploads stay open.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_deleting } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -234,7 +234,7 @@ paths:
         medium's `K_blob` wraps are staged through core's `stageNodeRekey` (ADR 0113).
         Nothing staged is served before core's `commitNodeRekey` under the same `rekeyId`, whose transaction swaps it in
         through Memories' participant. A value staged twice is replaced; an unclaimed stage expires after a day.
-        `fromEpoch` is the node's epoch as read; a node re-keyed since is `409 stale_epoch`.
+        `fromEpoch` is the node's own epoch as read; a node re-keyed since is `409 stale_epoch`.
       security:
         - bearerAuth: []
       parameters:
@@ -266,7 +266,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
-          description: The node's epoch is no longer `fromEpoch`, or it does not lag the scope's current one (`stale_epoch` — nothing to stage), or the space is being deleted and read-only (`scope_deleting`).
+          description: The node's epoch is no longer `fromEpoch`, or it is not due (`stale_epoch` — nothing to stage), or the space is being deleted and read-only (`scope_deleting`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -358,8 +358,8 @@ paths:
         "409":
           description: >
             The `bucketId` is already taken (`id_taken`); the space is being deleted and read-only (`scope_deleting`,
-            uc.spaces.delete-group A4); `nodeEpoch` is below the node's stored epoch (`stale_epoch` — the caller re-reads)
-            or the node is not re-keyed since the last rotation (`node_rekey_pending` — it retries; ADR 0109 point 6).
+            uc.spaces.delete-group A4); `nodeEpoch` is not the node's stored epoch (`stale_epoch` — the caller re-reads)
+            or the node is due for its re-key (`node_rekey_pending` — it retries; ADR 0114 decision 3).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -419,9 +419,9 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: bucket_not_found } }
         "409":
           description: >
-            The space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4), or `nodeEpoch` is below the node's stored epoch (`stale_epoch` — the caller holds the key from before a
-            rotation and re-reads) or the node is not re-keyed since the last rotation (`node_rekey_pending` — it retries
-            once the re-key reached the node; ADR 0109 point 6). Nothing was written.
+            The space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4), or `nodeEpoch` is not the node's stored epoch (`stale_epoch` — the caller holds a key that was replaced
+            since and re-reads) or the node is due for its re-key (`node_rekey_pending` — it retries
+            once the re-key reached the node; ADR 0114 decision 3). Nothing was written.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_deleting } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -600,9 +600,9 @@ paths:
         "409":
           description: >
             The media's `wrappedMeta` moved since the stated `metaRevision` (`stale_revision`, with the current blob
-            and revision — nothing was written, ADR 0077); `nodeEpoch` is below the node's stored epoch (`stale_epoch` —
-            the caller re-reads) or the node is not re-keyed since the last rotation (`node_rekey_pending` — it retries;
-            ADR 0109 point 6); or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+            and revision — nothing was written, ADR 0077); `nodeEpoch` is not the node's stored epoch (`stale_epoch` —
+            the caller re-reads) or the node is due for its re-key (`node_rekey_pending` — it retries;
+            ADR 0114 decision 3); or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_revision, wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0, metaRevision: 2 } }
         "413": { $ref: "../_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -801,8 +801,8 @@ components:
           type: [integer, "null"]
           description: >
             The epoch of `nodeId` as the client read it: every wrap and seal of the item is under that node's key.
-            Below the stored epoch is `stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation is
-            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `stale_epoch` (the caller re-reads); a node due for its re-key is
+            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -889,7 +889,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists, `shared_source_invalid` = `originalShared` names no blob the node holds, or its id is taken, `invalid_request` = neither or both of `originalUploadId` and `originalShared`, `stale_epoch` / `node_rekey_pending` = the item's `nodeEpoch` was refused, ADR 0109 point 6); null on success.
+          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists, `shared_source_invalid` = `originalShared` names no blob the node holds, or its id is taken, `invalid_request` = neither or both of `originalUploadId` and `originalShared`, `stale_epoch` / `node_rekey_pending` = the item's `nodeEpoch` was refused, ADR 0114 decision 3); null on success.
           maxLength: 64
           example: null
 
@@ -1166,8 +1166,8 @@ components:
           type: [integer, "null"]
           description: >
             The epoch of the medium's node as the client read it: the blob is sealed under its key.
-            Below the stored epoch is `stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation is
-            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `stale_epoch` (the caller re-reads); a node due for its re-key is
+            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -1297,8 +1297,8 @@ components:
           type: [integer, "null"]
           description: >
             The epoch of the Memory as the client read it: the name is sealed under its key.
-            Below the stored epoch is `stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation is
-            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `stale_epoch` (the caller re-reads); a node due for its re-key is
+            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -1333,8 +1333,8 @@ components:
           type: [integer, "null"]
           description: >
             The epoch of the Memory as the client read it: the name is sealed under its key.
-            Below the stored epoch is `stale_epoch` (the caller re-reads); a node not re-keyed since the last rotation is
-            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0109 point 6.
+            Not the stored epoch — the key was replaced since — is `stale_epoch` (the caller re-reads); a node due for its re-key is
+            `node_rekey_pending` (the caller retries after the re-key reached it) — ADR 0114 decision 3.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -1448,7 +1448,7 @@ components:
         fromEpoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
-          description: The node's epoch as the re-keyer read it.
+          description: The node's own epoch as the re-keyer read it (core's `RekeyNode.epoch`).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'

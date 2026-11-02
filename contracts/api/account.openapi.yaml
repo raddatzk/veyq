@@ -210,8 +210,10 @@ paths:
       description: >
         Updates the caller's per-tenant profile in the Host tenant: change the `username` (re-checked unique in
         the tenant → `409 username_taken`) and/or store the `sealedName` blob (real name sealed under a field key derived from `K_tenant`,
-        opaque ciphertext). Either field may be omitted to leave it unchanged. Operator-blind: the server never
-        sees the plaintext name.
+        opaque ciphertext). Either field may be omitted to leave it unchanged. A `sealedName` states the tenant epoch it
+        is sealed under (`epoch`), which must be the tenant scope's current one (`409 stale_epoch`, ADR 0115 decision 3):
+        a rotation re-seals every profile under the one key, so none may land under an older one. Operator-blind: the
+        server never sees the plaintext name.
       security:
         - bearerAuth: []
       requestBody:
@@ -222,6 +224,7 @@ paths:
             example:
               username: kevin
               sealedName: c2VhbGVkLW5hbWU=
+              epoch: 0
       responses:
         "200":
           description: The updated profile.
@@ -247,7 +250,9 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: profile_not_found }
         "409":
-          description: The chosen username is already taken in this tenant.
+          description: >
+            The chosen username is already taken in this tenant (`username_taken`), or `epoch` is not the tenant scope's
+            current epoch (`stale_epoch` — the tenant key was replaced since; re-open it and re-seal). Nothing is written.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -270,7 +275,8 @@ paths:
         one opaque, constant-length ciphertext (a 256 px WebP padded to 16 KiB, sealed under a field key derived from `K_tenant` with the
         `member-avatar` purpose bound to the tenant scope and the caller's own user id). The server stores it verbatim,
         overwrites any earlier one and bumps the profile's `avatarRevision`; it never sees the image, its size or its
-        type. Other tenants' profiles of the same account are untouched.
+        type. Other tenants' profiles of the same account are untouched. It states the tenant epoch it is sealed under
+        (`epoch`), which must be the current one (`409 stale_epoch`, ADR 0115 decision 3).
       security:
         - bearerAuth: []
       requestBody:
@@ -278,7 +284,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/SetAvatarRequest" }
-            example: { sealedAvatar: c2VhbGVkLWF2YXRhcg== }
+            example: { sealedAvatar: c2VhbGVkLWF2YXRhcg==, epoch: 0 }
       responses:
         "204":
           description: The picture is stored and `avatarRevision` bumped.
@@ -300,6 +306,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: profile_not_found }
+        "409":
+          description: >
+            `epoch` is not the tenant scope's current epoch (`stale_epoch` — the tenant key was replaced since; re-open it
+            and re-seal, ADR 0115 decision 3). Nothing is written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: stale_epoch }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
     delete:
       tags: [account-profile]
@@ -1133,8 +1147,8 @@ paths:
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422":
           description: >
-            An endorsement does not verify under the identity the stage declares, over the statement the server rebuilt
-            from the stored sealed record (`join_endorsement_invalid`). Nothing of the chunk was written.
+            An endorsement does not verify under the identity the stage declares, over the statement built from its
+            `recordDigest` (`join_endorsement_invalid`). Nothing of the chunk was written.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2011,8 +2025,13 @@ components:
     ProfileUpdateRequest:
       type: object
       description: >
-        A profile change — set the `username` (re-checked unique in the tenant), the `sealedName` blob, and/or
-        the account-global `requireGroupAddConsent` preference. Omit a field to leave it unchanged.
+        A profile change — set the `username` (re-checked unique in the tenant), the `sealedName` blob with the
+        `epoch` it is sealed under, and/or the account-global `requireGroupAddConsent` preference. Omit a field to
+        leave it unchanged.
+      # A `sealedName` brings its `epoch` (ProfileHandler's shape check, 400 before any answer about the instance's
+      # state). The generators ignore the keyword (content's UpdateNodeRequest note); Schemathesis reads it.
+      dependentRequired:
+        sealedName: [epoch]
       properties:
         username:
           x-veyq-visibility: pii
@@ -2037,6 +2056,15 @@ components:
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            With `sealedName` (required there, else `400 invalid_request`): the tenant epoch whose key seals it — the
+            tenant scope's current one, else `409 stale_epoch` (ADR 0115 decision 3). Ignored without it.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         requireGroupAddConsent:
           x-veyq-visibility: flag
           type: [boolean, "null"]
@@ -2048,8 +2076,18 @@ components:
 
     SetAvatarRequest:
       type: object
-      required: [sealedAvatar]
+      required: [sealedAvatar, epoch]
       properties:
+        epoch:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
+          type: [integer, "null"]
+          description: >
+            The tenant epoch whose key seals `sealedAvatar` — the tenant scope's current one, else `409 stale_epoch`
+            (ADR 0115 decision 3).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
         sealedAvatar:
           type: string
           description: >
@@ -2869,12 +2907,24 @@ components:
         endorsement:
           type: [string, "null"]
           description: >
-            The stage identity's signature over the `join-endorsement` statement for the stored sealed record — verified at
-            upload (`422 join_endorsement_invalid`); `null` declares the record, and the publish clears its endorsement.
+            The stage identity's signature over the `join-endorsement` statement for the **opened** record (its
+            `recordDigest` the SHA-256 of the record's plaintext, never of its envelope, so a rotation's re-seal leaves it
+            valid — ADR 0115 decision 8) — verified at upload over `recordDigest` (`422 join_endorsement_invalid`); `null`
+            declares the record, and the publish clears its endorsement.
           contentEncoding: base64
           maxLength: 128
           example: c2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recordDigest:
+          type: [string, "null"]
+          description: >
+            SHA-256 of the opened join record the endorsement signs (base64), required with `endorsement`. The server
+            cannot open the record, so it checks only that the signature verifies over this digest; a reader that opens the
+            record checks the digest against it.
+          contentEncoding: base64
+          maxLength: 44
+          example: ZGlnZXN0LWRpZ2VzdC1kaWdlc3QtZGlnZXN0LWRpZ2U=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotationStageModerationGrants:
       type: object

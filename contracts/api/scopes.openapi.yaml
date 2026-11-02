@@ -532,12 +532,16 @@ paths:
     get:
       tags: [scopes]
       operationId: listScopeEpochs
-      summary: The scope's epoch-chain links, so a member peels down to read older epochs.
+      summary: The scope's succession statements, so a member checks that a newer epoch's key is genuine.
       description: >
-        Returns the scope's **epoch-chain links** (ADR 0024): for each epoch `n ≥ 1`, `wrappedPrev` =
-        `symWrap(E_n, E_{n-1})` (opaque base64) — so a member who holds the latest epoch (via their grant) derives
-        every earlier one and reads content of any epoch. Epoch 0 has no predecessor. Operator-blind: opaque
-        ciphertext only, never a key. Any key-holder may read it. Membership is the **first** gate (ADR 0042):
+        Returns the scope's **succession statements** ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md) decision 5): for each epoch `n ≥ 1`, the
+        epoch's succession public key (Ed25519, derived from `E_n` as `HKDF(E_n, "veyq/v1/scope-succession")`) and
+        the signature of epoch `n - 1`'s succession key over the `scope-succession` statement `(scopeId, n,
+        successionPublicKey)`. A holder of epoch `k` derives `pk_k` from the key it holds, verifies the statements
+        from there up to the epoch a grant carries, and takes the grant's key only if the last public key is the one
+        derived from it — the operator never held an epoch key, so it can sign no successor. Nothing in a statement
+        opens anything: a scope has one key at a time, and no older key is readable from a newer one. Epoch 0 has
+        none. Operator-blind: public keys and signatures only. Any key-holder may read it. Membership is the **first** gate (ADR 0042):
         a non-member gets `404 scope_not_found`, identical to the answer for a scope id that does not exist.
       security:
         - bearerAuth: []
@@ -545,26 +549,38 @@ paths:
         - { name: scopeId, in: path, required: true, description: Opaque id of the scope., schema: { type: string, format: uuid } }
       responses:
         "200":
-          description: The epoch-chain links (ascending by epoch).
+          description: The succession statements (ascending by epoch).
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/ScopeEpochLink" } }
+              schema: { type: array, items: { $ref: "#/components/schemas/ScopeSuccession" } }
               example:
-                - { epoch: 1, wrappedPrev: AQ== }
+                - { epoch: 1, successionPublicKey: c3VjY2Vzc2lvbi1wdWJsaWMta2V5LTMyLWJ5dGVzLTE=, successionSignature: c2lnbmF0dXJl }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member but holds no grant in this scope (`not_key_holder`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_key_holder } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
     post:
       tags: [scopes]
       operationId: rotateScope
-      summary: Commit a scope-key rotation — a new epoch + re-grants to the remaining members.
+      summary: Commit a scope-key rotation — a new epoch replacing the old key, its re-sealed rows and the re-grants.
       description: >
-        Commits a forward rotation of the scope content key (ADR 0024 §4): commits the stated `epoch` **iff** it is
-        the scope's current epoch + 1, stores the chain-link `wrappedPrev` = `symWrap(E_new, E_{prev})` at it, and
-        applies the `grants` (each remaining member's `wrappedGrant` re-wrapped to the **new** epoch, updating their
-        granted-epoch). Any other `epoch` means the rotation was built on a superseded epoch — it lost a race, or the
+        Commits a rotation of the scope key ([ADR 0115](../../docs/decisions/0115-a-scope-key-is-replaced-never-chained.md)): commits the stated `epoch` **iff** it is
+        the scope's current epoch + 1, stores its succession statement (`successionPublicKey`, `successionSignature`,
+        decision 5), swaps in every value staged under `rekeyId` — core's (`stageScopeRekey`) and each application's —
+        and applies the `grants` (each remaining member's `wrappedGrant` of the **new** epoch, updating their
+        granted-epoch), in one transaction under the scope's row lock.
+
+        **The old key is replaced, never chained** (decision 1): nothing seals it under the new one, and after the
+        commit no scope-level row is under it. **Fail closed** (decision 2): every row sealed under the scope key — each
+        scope-root node's entry (live and trashed), the group's name and icon, each pending invitee's name key, each
+        link's recovery copy, each tenant member's profile and verification, and each application's rows (its
+        participant) — must have a staged value, else `409 rekey_parts_missing`; a row whose ciphertext changed since
+        its value was staged (the stage keeps the digest it replaces) is `409 rekey_parts_stale`. Either way nothing is
+        written, and the client stages those again. The commit then marks every node of the scope **due** for its own
+        re-key ([ADR 0114](../../docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 4), which
+        any member holding the current grant runs. A recovery copy keeps the epoch its link was minted at beside it, for
+        the re-issue rule (ADR 0075 point 4). Any other `epoch` means the rotation was built on a superseded epoch — it lost a race, or the
         caller's grant lags the scope — and is `409 stale_epoch` with nothing stored; the client re-opens its grant
-        and rebuilds once from a **fresh** key. The client mints the new epoch on-device; the server stores only
+        and rebuilds once from a **fresh** key, re-staging what it staged. The client mints the new epoch on-device; the server stores only
         ciphertext.
 
         **Who may commit.** An owner of the scope; and a member who is not an owner only while their own account
@@ -593,7 +609,7 @@ paths:
 
         **The caller must be a current key-holder.** After the commit gate, under the scope's row lock, a caller whose
         own grant is behind the scope's current epoch, or absent, is refused `409 stale_epoch` — the server does not
-        take the client's word for the grant it built the chain-link from. Nothing is stored. A commit that lands also
+        take the client's word for the key it opened the staged rows and signed the succession with. Nothing is stored. A commit that lands also
         marks every `scope-rotation` job of the scope leased to the caller as rotated, which is what lets that job
         complete; and since the scope's epoch moved past every pending re-key row's `epoch_at_rotation`, no such row
         opens the commit gate again.
@@ -601,14 +617,15 @@ paths:
         **A removal-rotation** names the member it removes (`removesUserId`, ADR 0024 Decision 4), on a GROUP scope
         only — a tenant member leaves by `removeTenantMember`'s cascade (ADR 0025) and a personal scope's one member is
         its owner, so `removesUserId` on a TENANT or PERSONAL scope is `400 invalid_request`, nothing stored. The server
-        deletes that membership — with the per-member rows the applications keep for it and the public shares it created in the group — and
+        deletes that membership — with the per-member rows the applications keep for it and the public shares it created in the group, each a close (ADR 0114 decision 1) — and
         commits the epoch in **one transaction**, so a removal never ends without its rotation and a failed one
         leaves the member in place. The request's grants must not name that member (`422
         removed_member_granted`, nothing stored); the last-owner guard applies (`409 last_owner`). With
         `revokeLinks: true` the same transaction also turns off **every** enabled public share of the group, whoever
         created it — a link the removed member could have copied from the manage panel then `404`s, and each
         share's owner re-issues the ones they still want
-        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). `revokeLinks`
+        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). Each is a close
+        (ADR 0114 decision 1); the rotation marks every node of the scope due anyway, so its marks add nothing. `revokeLinks`
         without `removesUserId` is `400 invalid_request`, nothing stored.
       security:
         - bearerAuth: []
@@ -621,7 +638,9 @@ paths:
             schema: { $ref: "#/components/schemas/RotateScopeRequest" }
             example:
               epoch: 1
-              wrappedPrev: AQ==
+              successionPublicKey: c3VjY2Vzc2lvbi1wdWJsaWMta2V5LTMyLWJ5dGVzLTE=
+              successionSignature: c2lnbmF0dXJl
+              rekeyId: 6c7c3f0e-2a9b-1d4a-6e8b-2c1f2d3e4a5b
               grants: [{ userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, wrappedGrant: AQ==, grantSignature: c2lnbmF0dXJl, recipientIdentityDigest: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk= }]
               pendingUserIds: [5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a]
               removesUserId: 4e2a9b1d-8b2c-4f2d-9e4a-5b6c7c3f0e2a
@@ -632,11 +651,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ScopeRotated" }
               example: { epoch: 1 }
-        "400": { description: "Malformed (missing/invalid link or grant), `revokeLinks` without `removesUserId`, or `removesUserId` on a scope that is no GROUP (`invalid_request`, nothing stored). Invite grants or pending invite ids on a scope that is no TENANT are ignored: such a scope has no open invites.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
+        "400": { description: "Malformed (missing/invalid succession statement, re-key id or grant), `revokeLinks` without `removesUserId`, or `removesUserId` on a scope that is no GROUP (`invalid_request`, nothing stored). Invite grants or pending invite ids on a scope that is no TENANT are ignored: such a scope has no open invites.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is neither an OWNER of the scope nor a member whose account rotation left a pending re-key row for it at its current epoch, or is such a member and names `removesUserId` (`not_scope_owner`, nothing stored); or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042); or `removesUserId` names no member of the group (`member_not_found`, nothing stored).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), `grants`, `pendingUserIds` and `removesUserId` together do not cover exactly the scope's memberships, or a TENANT rotation's `inviteGrants` and `pendingInviteIds` are not exactly the open invites (`rotation_incomplete`, nothing stored — re-read the members and `listOpenInvites` and rebuild), a grant's `recipientIdentityDigest` is not its member's (or invite's) current key (`recipient_key_not_current`, nothing stored — re-read the members and rebuild), `removesUserId` is the last remaining accepted OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), `grants`, `pendingUserIds` and `removesUserId` together do not cover exactly the scope's memberships, or a TENANT rotation's `inviteGrants` and `pendingInviteIds` are not exactly the open invites (`rotation_incomplete`, nothing stored — re-read the members and `listOpenInvites` and rebuild), a grant's or a staged invitee name key's `recipientIdentityDigest` is not its member's (or invite's) current key (`recipient_key_not_current`, nothing stored — re-read the members and rebuild), a row sealed under the scope key has no value staged under `rekeyId` (`rekey_parts_missing`, nothing stored — stage it and commit again), a row changed since its value was staged (`rekey_parts_stale`, nothing stored — re-read it, re-stage, commit again), `removesUserId` is the last remaining accepted OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
         "422": { description: "The grants name the member `removesUserId` removes (`removed_member_granted`, nothing stored) — the new epoch is never wrapped to the member the rotation removes.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: removed_member_granted } } } }
 
@@ -716,7 +735,7 @@ paths:
         Soft-deletes a GROUP scope (uc.spaces.delete-group, cr-0090, ADR 0014 §6): sets the scope's `deletedAt`
         marker, so it enters a **grace period** (`purgeAfter = deletedAt + retention`, 30 days). During grace the
         group stays listed + readable but **read-only** and marked as deleting; a scheduled job hard-erases it
-        (nodes + blob objects + memberships + epoch links + the scope) after `purgeAfter`. Grants/memberships are
+        (nodes + blob objects + memberships + succession statements + the scope) after `purgeAfter`. Grants/memberships are
         untouched, so **any owner** who still belongs to the tenant may {@link restoreGroup} in-window.
         Access-gated first (a non-member gets `404 scope_not_found`; an already-deleting group answers
         `409 scope_deleting` like any other write, uc.spaces.scope-access), then **GROUP-only** (`409 not_group`),
@@ -768,7 +787,10 @@ paths:
         so it comes back only through `reissueShare` — a new id and a new `K_share` — never `reactivateShare`
         ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5). A
         switch-off says "a link may have leaked", and a link with no recovery copy leaks like any other, so the mark
-        holds for every share it turns off. A share minted afterwards is untouched. Answers how many links it turned
+        holds for every share it turns off. A share minted afterwards is untouched. Each switch-off is a **close**
+        ([ADR 0114](../../docs/decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md) decision 1): in the same
+        transaction every node below a READ or READ_WRITE link's root is marked due for a re-key, which the caller's
+        device starts and any member's worker finishes; a WRITE_ONLY link's close re-keys nothing. Answers how many links it turned
         off; idempotent — a second call answers `revoked: 0`. Membership-gated first (a non-member gets the same
         `404` as an unknown scope, ADR 0042), then owner-gated. No body.
       security:
@@ -817,7 +839,8 @@ paths:
         `K_name` derived from the scope's **current** content-key epoch (`K_name = HKDF(E_currentEpoch,
         "group-name-key")`) and posts the opaque `encryptedName` + the `nameEpoch` it sealed under. The server
         overwrites the scope's `encrypted_name` + `name_epoch` — **only** when `nameEpoch == currentEpoch` (else
-        `409 stale_epoch`: a concurrent rotation advanced the epoch under the caller, refetch + retry) and the group
+        `409 stale_epoch`: a concurrent rotation advanced the epoch under the caller, refetch + retry — or, while a
+        rotation stages, its commit refuses the stale stage, `rekey_parts_stale`) and the group
         is not being deleted (else `409 scope_deleting`, like every write during the grace period). Sealing under
         the **current** epoch makes the rename **forward-secret** — a member removed at an earlier epoch cannot
         derive the new `K_name`. **Name-only**: no `K_SC` rotation, no re-grant. Membership-gated first (a
@@ -861,9 +884,9 @@ paths:
         concurrent rotation advanced the epoch under the caller, refetch + retry) and the scope is not being deleted
         (else `409 scope_deleting`). Sealing under the current epoch makes a replaced icon forward-secret. The
         scope must be a **TENANT** or a **GROUP** — a **PERSONAL** scope has no icon (nothing to tell it apart
-        from) and answers `404`. For a GROUP the `iconEpoch` may sit below `currentEpoch` (a group rotates its
-        content-key on member-removal, ADR 0024, but a rotation never re-seals the icon), so a reader peels the
-        epoch chain down to `iconEpoch` to derive `K_icon`. Membership-gated first (a
+        from) and answers `404`. Every rotation re-seals the icon at its new epoch (ADR 0115 decision 2), so
+        `iconEpoch` is the scope's current epoch and a reader derives `K_icon` from the one key it holds.
+        Membership-gated first (a
         non-member gets `404 scope_not_found`, ADR 0042), then owner-gated (`403 not_scope_owner`; ADR 0007 — the
         owner gate keys on the root scope; a GROUP co-owner is an OWNER too). Because every `sealedIcon` is padded to an identical length, the
         server cannot tell one icon image from another. Operator-blind — the server never sees a key or the image
@@ -1240,7 +1263,7 @@ components:
           description: >
             The content-key epoch the client sealed `encryptedName` under — must equal the scope's **current** epoch
             (the server rejects a stale value with `409 stale_epoch`). The server writes it to the scope's
-            `name_epoch` so members peel to it and derive `K_name` (cr-0097/ADR 0027).
+            `name_epoch`; members derive `K_name` from the scope's one key (cr-0097/ADR 0027, ADR 0115 decision 1).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
@@ -1271,7 +1294,7 @@ components:
           description: >
             The content-key epoch the client sealed `sealedIcon` under — must equal the scope's **current** epoch
             (the server rejects a stale value with `409 stale_epoch`). The server writes it to the scope's
-            `icon_epoch` so members peel to it and derive `K_icon` (uc.spaces.set-space-icon).
+            `icon_epoch`; members derive `K_icon` from the scope's one key (uc.spaces.set-space-icon).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
@@ -1374,27 +1397,40 @@ components:
           enum: [OWNER, MEMBER]
           example: OWNER
 
-    ScopeEpochLink:
+    ScopeSuccession:
       # `title` names the type a spec that $refs this schema from another file generates (tenants' ServedMemberInvite):
       # without it both generators inline it under a name of their own (ADR 0111 decision 19).
-      title: ScopeEpochLink
+      title: ScopeSuccession
       type: object
-      required: [epoch, wrappedPrev]
+      description: >
+        One epoch's succession statement (ADR 0115 decision 5): its succession public key, signed by the previous
+        epoch's succession key over `scope-succession` `(scopeId, epoch, successionPublicKey)`. It proves the new
+        key's minter held the previous one; it opens nothing.
+      required: [epoch, successionPublicKey, successionSignature]
       properties:
         epoch:
           x-veyq-visibility: structure
           type: integer
-          description: The epoch index `n` (≥ 1) this link belongs to.
+          description: The epoch `n` (≥ 1) the statement introduces.
           minimum: 1
           example: 1
-        wrappedPrev:
+        successionPublicKey:
           type: string
           description: >
-            `symWrap(E_n, E_{n-1})` — the previous epoch key sealed under this epoch's key (opaque base64). Lets a
-            holder of `E_n` derive `E_{n-1}`, chaining down to `E_0` (ADR 0024).
+            Epoch `n`'s succession public key — the 32-byte Ed25519 public key of the seed `HKDF(E_n,
+            "veyq/v1/scope-succession")` (opaque base64). A holder of `E_n` derives the same one.
           contentEncoding: base64
-          maxLength: 8192
-          example: AQ==
+          maxLength: 44
+          example: c3VjY2Vzc2lvbi1wdWJsaWMta2V5LTMyLWJ5dGVzLTE=
+        successionSignature:
+          type: string
+          description: >
+            Epoch `n - 1`'s succession key's 64-byte Ed25519 signature over the `scope-succession` statement `(scopeId, n,
+            successionPublicKey)` (the `scope_succession` crypto vector; opaque base64). The server stores and serves it,
+            never verifies it.
+          contentEncoding: base64
+          maxLength: 88
+          example: c2lnbmF0dXJl
 
     ScopeGrantEntry:
       type: object
@@ -1472,7 +1508,7 @@ components:
 
     RotateScopeRequest:
       type: object
-      required: [epoch, wrappedPrev, grants]
+      required: [epoch, successionPublicKey, successionSignature, rekeyId, grants]
       # `revokeLinks` belongs to a removal-rotation (ScopesHandler.rotateScope): with it true, `removesUserId` is
       # required and not null — the schema's own rule (inbox #507). Under `dependentSchemas`, never at the top, where an
       # `if` turns a sibling-annotated `$ref` to this schema into `Any`; there both generators ignore it (measured on
@@ -1488,22 +1524,40 @@ components:
           x-veyq-visibility: structure
           type: integer
           description: >
-            The epoch this rotation creates — the caller's own granted epoch + 1, since `wrappedPrev` wraps that
-            grant's key. The server commits it only if it is the scope's **current** epoch + 1 (else
-            `409 stale_epoch`, nothing stored), so a link can never chain to a key that is not its predecessor
-            (ADR 0024 §4). Mirrors `ScopeRotated.epoch`.
+            The epoch this rotation creates — the caller's own granted epoch + 1, since the succession statement is
+            signed with that grant's key and every staged row was opened with it. The server commits it only if it is
+            the scope's **current** epoch + 1 (else `409 stale_epoch`, nothing stored), so a statement is always signed
+            by the epoch it succeeds. Mirrors `ScopeRotated.epoch`.
           minimum: 1
           example: 1
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
-        wrappedPrev:
+        successionPublicKey:
           type: string
           description: >
-            `symWrap(E_new, E_prev)` — the just-superseded epoch key sealed under the freshly-minted one (the new
-            chain-link, opaque base64).
+            The new epoch's succession public key (`ScopeSuccession.successionPublicKey`): the 32-byte Ed25519 public
+            key of `HKDF(E_new, "veyq/v1/scope-succession")`, opaque base64 (ADR 0115 decision 5).
           contentEncoding: base64
-          maxLength: 8192
-          example: AQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          maxLength: 44
+          example: c3VjY2Vzc2lvbi1wdWJsaWMta2V5LTMyLWJ5dGVzLTE=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        successionSignature:
+          type: string
+          description: >
+            The previous epoch's succession key's 64-byte Ed25519 signature over `scope-succession` `(scopeId, epoch,
+            successionPublicKey)` (`signSuccession`; opaque base64). The server stores it and never verifies it: a
+            member's device does, from the epoch it held up.
+          contentEncoding: base64
+          maxLength: 88
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 88) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        rekeyId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The re-key id the rotator staged the scope-level rows under (`stageScopeRekey`, and each application's
+            stage): the commit swaps those values in, or refuses (`409 rekey_parts_missing` / `rekey_parts_stale`).
+          example: 6c7c3f0e-2a9b-1d4a-6e8b-2c1f2d3e4a5b
         grants:
           type: array
           description: >
@@ -1634,8 +1688,8 @@ components:
           x-veyq-visibility: structure
           type: integer
           description: >
-            The content-key epoch `sealedIcon` was sealed under — the client peels the tenant's epoch-chain to it
-            and derives `K_icon`. 0 when no icon is set.
+            The epoch `sealedIcon` was sealed under — the tenant's current one, since every rotation re-seals the icon
+            (ADR 0115 decision 2); the client derives `K_icon` from the key its grant carries. 0 when no icon is set.
           minimum: 0
           example: 0
         memberInviteTtlSeconds:
@@ -2003,7 +2057,8 @@ components:
             For a `GROUP` scope: the group's name sealed under its **derived name-key `K_name`** (opaque base64,
             cr-0096/ADR 0027), decrypted locally so the client can label the group in the switcher. The client
             derives `K_name = HKDF(E_e, "veyq/v1/group-name-key")` from the key of the name's epoch (`nameEpoch`,
-            peeled from the chain). `null` for `TENANT` / `PERSONAL` scopes, which carry no per-scope sealed name.
+            the current one: every rotation re-seals the name). `null` for `TENANT` / `PERSONAL` scopes, which carry no
+            per-scope sealed name.
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
@@ -2012,15 +2067,16 @@ components:
           type: integer
           description: >
             For a `GROUP` scope: the content-key epoch the `encryptedName` was sealed under (cr-0096/ADR 0027) — 0
-            at birth, bumped only by a rename (a plain rotation leaves the name on its epoch). The client peels the
-            epoch-chain to that epoch's key and derives `K_name` from it. 0 for `TENANT` / `PERSONAL` scopes.
+            at birth, moved by a rename and by every rotation, which re-seals the name at its new epoch (ADR 0115
+            decision 2) — so it is the scope's current epoch, whose key derives `K_name`. 0 for `TENANT` / `PERSONAL`
+            scopes.
           minimum: 0
           example: 0
         sealedIcon:
           type: [string, "null"]
           description: >
             The scope's icon (uc.spaces.set-space-icon): the padded, constant-length image sealed under `K_icon =
-            HKDF(E_e, "veyq/v1/space-icon-key")` for the icon's epoch (`iconEpoch`, peeled from the chain) — opaque
+            HKDF(E_e, "veyq/v1/space-icon-key")` for the icon's epoch (`iconEpoch`, the current one) — opaque
             base64 the client opens + unpads on-device. `null` when the scope has no icon (the client renders the
             initial). `PERSONAL` scopes never carry one.
           contentEncoding: base64
@@ -2030,17 +2086,18 @@ components:
           x-veyq-visibility: structure
           type: integer
           description: >
-            The content-key epoch `sealedIcon` was sealed under (uc.spaces.set-space-icon) — 0 until an icon is set,
-            bumped only by an icon-set (a plain rotation leaves it). The client peels the epoch-chain to that
-            epoch's key and derives `K_icon`. 0 when no icon is set.
+            The epoch `sealedIcon` was sealed under (uc.spaces.set-space-icon) — moved by an icon-set and by every
+            rotation, which re-seals the icon (ADR 0115 decision 2), so the scope's current epoch, whose key derives
+            `K_icon`. 0 when no icon is set.
           minimum: 0
           example: 0
         currentEpoch:
           x-veyq-visibility: structure
           type: integer
           description: >
-            The scope's **current content-key epoch** (ADR 0024) — 0 until the first rotation. New content seals
-            under this epoch; the client peels the epoch-chain (`GET …/epochs`) to read older ones.
+            The scope's **current epoch** — 0 until the first rotation. The scope has one key at a time (ADR 0115
+            decision 1): everything sealed under the scope key is under this epoch's, and a newer grant's key is
+            checked through the succession statements (`GET …/epochs`).
           minimum: 0
           example: 0
         grantedEpoch:

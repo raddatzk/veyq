@@ -284,7 +284,7 @@ paths:
         not have written anything yet — a blob completed before its record is erased after the trash retention unless
         the record keeps it. The node must be live, of a kind whose application stores an item of its own through the
         service (a kind whose blobs are all its owners' content completes them in its own record operation, ADR 0113:
-        `node_not_found` here); every write states `nodeEpoch` (ADR 0109 point 6).
+        `node_not_found` here); every write states `nodeEpoch` (ADR 0114 decision 3).
       security:
         - bearerAuth: []
       parameters:
@@ -327,9 +327,9 @@ paths:
         "409":
           description: >
             `id_taken` — `id` is taken, or the application refuses the owner in this node. `too_many_blobs` — the owner
-            holds the application's count of unreleased blobs already. `stale_epoch` — `nodeEpoch` is below the node's
-            stored epoch (re-read); `node_rekey_pending` — the node is not re-keyed since the last rotation (retry; ADR
-            0109 point 6) — the upload stays open for all four. `scope_deleting` — the space is being deleted and
+            holds the application's count of unreleased blobs already. `stale_epoch` — `nodeEpoch` is not the node's
+            stored epoch (re-read); `node_rekey_pending` — the node is due for its re-key (retry; ADR
+            0114 decision 3) — the upload stays open for all four. `scope_deleting` — the space is being deleted and
             read-only.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
@@ -509,7 +509,7 @@ paths:
           description: >
             `id_taken` — `id` is taken, or the application refuses the owner in this node. `too_many_blobs` — the owner
             holds the application's count of unreleased blobs already. `stale_epoch` / `node_rekey_pending` — the node's
-            key epoch (ADR 0109 point 6); the upload stays open.
+            key epoch (ADR 0114 decision 3); the upload stays open.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
@@ -892,9 +892,8 @@ components:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            The node's epoch as the client read it: the blob's `K_blob` is wrapped under the node's key. Below the stored
-            epoch is `409 stale_epoch`; a node not re-keyed since the last rotation is `409 node_rekey_pending` — ADR 0109
-            point 6. The upload stays open for both.
+            The node's epoch as the client read it: the blob's `K_blob` is wrapped under the node's key. Not the stored epoch — the key was replaced since — is `409 stale_epoch`; a node due for its re-key is `409 node_rekey_pending` — ADR 0114
+            decision 3. The upload stays open for both.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
@@ -928,7 +927,7 @@ components:
         nodeEpoch:
           x-veyq-visibility: structure
           type: [integer, "null"]
-          description: The node's epoch as the guest read it (ADR 0109 point 6), as for a member's completion.
+          description: The node's epoch as the guest read it (ADR 0114 decision 3), as for a member's completion.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Min(0)'
