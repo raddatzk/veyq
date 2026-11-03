@@ -1,54 +1,58 @@
 #!/usr/bin/env python3
-"""Every npm install a build of this repository runs is held to the deprecation gate — directly, or by a gated job
-that installed the same lockfile first.
+"""Every package install a build of this repository runs is held to the deprecation gate — directly, or by a gated job
+that installed the same lockfile first — and runs the one pinned pnpm.
 
-**What it asserts.** The gate is `scripts/npm_ci_no_deprecated.py` (root CLAUDE.md: no deprecated dependencies).
-  1. **Workflows.** No `run:` step in a tracked `.github/workflows/*.y(a)ml` invokes npm's install family itself —
-     `ci`, `install` and every alias npm resolves to one of them (`i`, `add`, `clean-install`, `ic`, `it`, `cit`,
-     the `isnt…` typo aliases, …). An install there goes through the gate, which runs `npm ci` and is red on a
-     deprecation warning, so a bare one is an install the gate never sees. At least one step must call the
-     gate — the positive control that this guard is anchored on the right name.
+**What it asserts.** The gate is `scripts/pnpm_install_no_deprecated.py` (root CLAUDE.md: no deprecated dependencies).
+  0. **One pnpm.** The root `package.json` pins pnpm exactly in `packageManager` (`pnpm@<x.y.z>`), every other tracked
+     `package.json` that names a `packageManager` names the same, and every place a build installs pnpm itself — the
+     one npm install this repository runs, `npm install -g pnpm@<x.y.z>`, in a workflow step or a Dockerfile `RUN` —
+     names that version. pnpm then installs the lockfile with the version that wrote it, and pnpm's own executables
+     are verified against the integrity the lockfile's first document pins for them.
+  1. **Workflows.** No `run:` step in a tracked `.github/workflows/*.y(a)ml` invokes pnpm's install family itself
+     (`install`, `i`, `add`, `update`, `import`, `dedupe`, …) nor npm's (`ci`, `install`, every alias npm resolves to
+     one of them) other than that pnpm bootstrap. An install there goes through the gate, which runs `pnpm install
+     --frozen-lockfile` and is red on a deprecated package, so a bare one is an install the gate never sees. At least
+     one step must call the gate — the positive control that this guard is anchored on the right name.
   2. **Dockerfiles.** Every tracked Dockerfile (found by name in the index, never listed) is read for its `RUN`
-     instructions. One that runs the resolving half of the family (`npm install`, `npm i`, …) is red: it does not
-     install the lockfile, so no earlier scan of the lockfile speaks for it. One that runs `npm ci` is accepted
-     **without** running the gate itself, on two premises this guard checks rather than trusts: (a) the stage
-     `COPY`s the root `package-lock.json` before that `RUN` — so it installs the file the gate scanned — and (b)
-     no image built from it is published before the gate passed on the same commit: every workflow job that builds
-     the Dockerfile (a job carrying its path as a value, e.g. a matrix `dockerfile:` entry) runs the gate itself or
-     `needs:`, transitively, a job that does — or, when it starts beside the gate instead (ADR 0091 decision 2: the
-     build does not wait for the tests), it has jobs that need it, the ones that turn its build into a published
-     artifact, and every one of them needs a gating job. A Dockerfile with an `npm ci` that no workflow job builds
-     is red too: nothing then covers its install.
-  3. **Exactly one gated install per lockfile asks the registry** (inbox #312). The gate's registry half — the
-     locked packages an install skipped, i.e. other platforms' bindings — depends only on the lockfile, so every
-     gated call of the same lockfile but one passes `--skip-registry-check`. Which lockfile a call installs is read
-     from its `--package-dir <dir>` (`<dir>/package-lock.json`; none is the root's). Red when none asks for a
-     lockfile (nothing would look at another platform's bindings) or more than one does (the same queries repeated
-     per commit). The one that asks must cover the others of its lockfile: its workflow fires on every
-     `push`/`pull_request` branch the other workflows gating that lockfile fire on (a missing `branches:` is every
-     branch) and its path filter admits the lockfile's path; and for the root lockfile, every job that builds a
-     Dockerfile `needs:` it, or is needed only by jobs that do (premise (b)'s rule) — the arm64 image is where those
-     bindings are actually installed.
-  4. **Every tracked `package-lock.json` is installed through the gate** by some workflow step — the root's and
-     each package directory's outside the root workspace (`site/`, ADR 0087) — and every `--package-dir` a step
-     names holds a tracked lockfile. A lockfile no gated step installs is a dependency tree nobody looks at.
+     instructions. One that runs a resolving install (`pnpm install` without `--frozen-lockfile`, `pnpm add`, any
+     `npm` install but the bootstrap) is red: it does not install the lockfile, so no earlier scan of the lockfile
+     speaks for it. One that runs `pnpm install --frozen-lockfile` is accepted **without** running the gate itself, on
+     two premises this guard checks rather than trusts: (a) the stage `COPY`s the root `pnpm-lock.yaml` before that
+     `RUN` — so it installs the file the gate scanned — and (b) no image built from it is published before the gate
+     passed on the same commit: every workflow job that builds the Dockerfile (a job carrying its path as a value,
+     e.g. a matrix `dockerfile:` entry) runs the gate itself or `needs:`, transitively, a job that does — or, when it
+     starts beside the gate instead (ADR 0091 decision 2: the build does not wait for the tests), it has jobs that
+     need it, the ones that turn its build into a published artifact, and every one of them needs a gating job. A
+     Dockerfile with such an install that no workflow job builds is red too: nothing then covers its install.
+  3. **Exactly one gated install per lockfile asks the registry** (inbox #312). The gate's registry half depends only
+     on the lockfile, so every gated call of the same lockfile but one passes `--skip-registry-check`. Which lockfile a
+     call installs is read from its `--package-dir <dir>` (`<dir>/pnpm-lock.yaml`; none is the root's). Red when none
+     asks for a lockfile (nothing would look at what was deprecated after the lock was written) or more than one does
+     (the same queries repeated per commit). The one that asks must cover the others of its lockfile: its workflow
+     fires on every `push`/`pull_request` branch the other workflows gating that lockfile fire on (a missing
+     `branches:` is every branch) and its path filter admits the lockfile's path; and for the root lockfile, every job
+     that builds a Dockerfile `needs:` it, or is needed only by jobs that do (premise (b)'s rule).
+  4. **Every tracked `pnpm-lock.yaml` is installed through the gate** by some workflow step — the root's and each
+     package directory's outside the root workspace (`site/`, ADR 0087) — every `--package-dir` a step names holds a
+     tracked lockfile, and no `package-lock.json` is tracked: the repository installs with pnpm, so one would be a
+     second dependency tree nothing installs or scans.
 Why the Dockerfiles are covered by (b) and not by calling the gate inside the image (inbox #294): the gate is
 Python, so the image would need either a Python toolchain added to two build stages or a second copy of the gate's
 logic in shell — both to scan a lockfile the gating job has already scanned at the same commit.
 
 **The defect that bought it — no incident.** Built 2026-10-03 for inbox #293 and extended for #294, both left by
-#232: the gate existed, all four workflow installs called it, and nothing would have noticed a fifth that did not —
-the gate's own docstring said so as its limit. The two Dockerfiles' `npm ci` were, by the same docstring,
-"ungated", which on reading turned out to be true of the image step and false of the lockfile: the image workflow's
-(then `container.yml`) `build` job `needs: test`, and `test` installs through the gate. That argument was prose;
-this makes it a check. When the build stopped waiting for the tests (ADR 0091, 2026-10-16), the premise moved from
-"before the build starts" to "before the build is published": a dry-run build that installed a lockfile the gate
-then refuses ships nothing, because the publish needs the gate.
+#232 (then for npm): the gate existed, all four workflow installs called it, and nothing would have noticed a fifth
+that did not — the gate's own docstring said so as its limit. The two Dockerfiles' installs were, by the same
+docstring, "ungated", which on reading turned out to be true of the image step and false of the lockfile: the image
+workflow's `build` job `needs: test`, and `test` installs through the gate. That argument was prose; this makes it a
+check. When the build stopped waiting for the tests (ADR 0091, 2026-10-16), the premise moved from "before the build
+starts" to "before the build is published". Moved to pnpm 2026-11-03, when assertion 0 was added: the pnpm a build
+installs is a second pin, and two Dockerfiles plus every workflow job naming it by hand drift without one.
 
 **Its limits — what a green run does NOT prove.**
-  - **Spellings it does not parse.** An install reached through `npx`, `yarn`/`pnpm`, a shell variable or alias, a
+  - **Spellings it does not parse.** An install reached through `npx`, `pnpm dlx`, `yarn`, a shell variable or alias, a
     nested `sh -c '…'` string, a heredoc `RUN`, or a third-party `uses:` action that installs on its own is
-    invisible; so is one in a script a step calls. Two tracked scripts run npm's install: the gate, and
+    invisible; so is one in a script a step calls. Two tracked scripts run pnpm's install: the gate, and
     `run_web_e2e.py --upgrade`, which installs a PREDECESSOR's lockfile in a worktree of that older commit - one the
     gate passed when it was the candidate, deliberately not gated again (a package deprecated since would turn the
     upgrade proof red for a reason that is not the upgrade; its `prepare_predecessor` says so).
@@ -60,12 +64,15 @@ then refuses ships nothing, because the publish needs the gate.
     an expression is counted as running (only a literal `false` is not), and a build job that checks out a
     different ref than the gating job is not detected. There is no remote, so no CI run has executed either.
   - **Trigger coverage (3) is compared by spelling.** Branch patterns are matched as exact strings (`release/**`
-    on both sides, not glob containment), the path filter only against the one name `package-lock.json` with
+    on both sides, not glob containment), the path filter only against the one name `pnpm-lock.yaml` with
     `fnmatch` (close to, not identical with, GitHub's glob), and `workflow_dispatch` and other events are not
     compared. A skipping run on a commit that left the lockfile alone relies on the asking job's run at the
     commit that last changed it, so a package deprecated in between is caught by the asking workflow's next run.
+  - **The pnpm pin (0) is a version, not a checksum.** The bootstrap trusts the registry's integrity for the pnpm
+    package it fetches; what pins pnpm's bytes is the lockfile's `packageManagerDependencies` document, which pnpm
+    reads when it switches to the pinned version — this guard does not check that document.
   - **What the gate itself cannot see** stays out of reach — its own docstring states that (registry-marked
-    deprecation only, the npm tree only, install time only).
+    deprecation only, the pnpm tree only, install time only).
 
 Buildless and diff-free, so it belongs in the trust-chain glob.
 """
@@ -87,23 +94,27 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     sys.exit(2)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-GATE = "scripts/npm_ci_no_deprecated.py"
+GATE = "scripts/pnpm_install_no_deprecated.py"
 SKIP_REGISTRY = "--skip-registry-check"  # the gate's opt-out of its registry half (inbox #312)
 PACKAGE_DIR = "--package-dir"  # the gate's option naming a package directory with its own lockfile (ADR 0087)
 GATE_CALL = re.compile(r"(?:^|[\s;&|(])(?:\S*/)?python3?\s+" + re.escape(GATE) + r"(?:\s|$)", re.MULTILINE)
 WORKFLOW_NAME = re.compile(r"^\.github/workflows/[^/]+\.ya?ml$")
 DOCKERFILE_NAME = re.compile(r"(^|/)[^/]*dockerfile[^/]*$", re.IGNORECASE)
-LOCKFILE = "package-lock.json"
+LOCKFILE = "pnpm-lock.yaml"
+NPM_LOCKFILE = "package-lock.json"
+PACKAGE_MANAGER = re.compile(r"^pnpm@(\d+\.\d+\.\d+)$")
 
 # npm's install family, by what it installs from (npm's own alias table, `npm help install` / `npm help ci`).
-# The lockfile-faithful half: `ci` and its aliases, and `install-ci-test` (`ci` then `test`).
-LOCKFILE_INSTALLS = {"ci", "clean-install", "ic", "install-clean", "isntall-clean", "install-ci-test", "cit"}
-# The resolving half: `install` and its aliases, and `install-test` (`install` then `test`).
-RESOLVING_INSTALLS = {"install", "i", "in", "ins", "inst", "insta", "instal", "isnt", "isnta", "isntal",
-                      "isntall", "add", "install-test", "it"}
-# Global options that take their value as the NEXT token (`npm --prefix src/web ci`); everything else starting with `-`
-# is a flag or carries its value after `=`.
-VALUE_OPTIONS = {"--prefix", "-C", "--workspace", "-w", "--userconfig", "--cache", "--registry", "--loglevel"}
+NPM_INSTALLS = {"ci", "clean-install", "ic", "install-clean", "isntall-clean", "install-ci-test", "cit",
+                "install", "i", "in", "ins", "inst", "insta", "instal", "isnt", "isnta", "isntal", "isntall", "add",
+                "install-test", "it"}
+NPM_VALUE_OPTIONS = {"--prefix", "-C", "--workspace", "-w", "--userconfig", "--cache", "--registry", "--loglevel"}
+# pnpm's install family (`pnpm help`): what writes node_modules or the lockfile.
+PNPM_INSTALLS = {"install", "i", "add", "update", "up", "upgrade", "import", "dedupe", "install-test", "it",
+                 "fetch", "ci", "clean-install", "ic"}
+PNPM_VALUE_OPTIONS = {"--dir", "-C", "--filter", "-F", "--loglevel", "--reporter", "--workspace-root-dir"}
+# Only `install`/`i` with `--frozen-lockfile` installs the lockfile as it is.
+PNPM_LOCKFILE_INSTALLS = {"install", "i"}
 
 errors: list[str] = []
 
@@ -116,24 +127,59 @@ def tracked() -> list[str]:
     return out.stdout.splitlines()
 
 
-def npm_installs(command: str) -> list[str]:
-    """The npm install-family subcommands a shell command line invokes, e.g. ['ci']."""
+def tokenize(command: str) -> list[str]:
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     try:
-        tokens = list(lexer)
+        return list(lexer)
     except ValueError:  # an unbalanced quote: fall back to whitespace, which over- rather than under-reports
-        tokens = command.split()
-    found: list[str] = []
+        return command.split()
+
+
+def subcommand(tokens: list[str], i: int, value_options: set[str]) -> tuple[int, str]:
+    """The index and name of the subcommand after the tool at `tokens[i]`, global options skipped."""
+    j = i + 1
+    while j < len(tokens) and tokens[j].startswith("-"):
+        j += 2 if tokens[j] in value_options else 1
+    return j, (tokens[j] if j < len(tokens) else "")
+
+
+def command_end(tokens: list[str], start: int) -> int:
+    end = start
+    while end < len(tokens) and tokens[end] not in {"&&", "||", ";", "|", "&", "(", ")"}:
+        end += 1
+    return end
+
+
+def installs(command: str) -> list[tuple[str, str, list[str]]]:
+    """(tool, subcommand, its arguments) for each npm or pnpm install-family invocation on a shell command line."""
+    tokens = tokenize(command)
+    found: list[tuple[str, str, list[str]]] = []
     for i, token in enumerate(tokens):
-        if token != "npm" and not token.endswith("/npm"):
-            continue
-        j = i + 1
-        while j < len(tokens) and tokens[j].startswith("-"):
-            j += 2 if tokens[j] in VALUE_OPTIONS else 1
-        if j < len(tokens) and tokens[j] in LOCKFILE_INSTALLS | RESOLVING_INSTALLS:
-            found.append(tokens[j])
+        tool = token.rsplit("/", 1)[-1]
+        if tool == "npm":
+            j, sub = subcommand(tokens, i, NPM_VALUE_OPTIONS)
+            if sub in NPM_INSTALLS:
+                found.append(("npm", sub, tokens[i + 1:command_end(tokens, j)]))
+        elif tool == "pnpm":
+            j, sub = subcommand(tokens, i, PNPM_VALUE_OPTIONS)
+            if sub in PNPM_INSTALLS:
+                found.append(("pnpm", sub, tokens[i + 1:command_end(tokens, j)]))
     return found
+
+
+def pnpm_bootstrap(tool: str, args: list[str]) -> str:
+    """The pnpm version an `npm install -g pnpm@<version>` installs, or "" when the npm install is anything else."""
+    if tool != "npm" or not ({"-g", "--global"} & set(args)):
+        return ""
+    targets = [a for a in args if not a.startswith("-") and a not in NPM_INSTALLS]
+    if len(targets) != 1 or not targets[0].startswith("pnpm@"):
+        return ""
+    return targets[0][len("pnpm@"):] or "?"
+
+
+def frozen(args: list[str]) -> bool:
+    return "--frozen-lockfile" in args or "--frozen-lockfile=true" in args
 
 
 def tokens_of(command: str) -> list[str]:
@@ -144,7 +190,7 @@ def tokens_of(command: str) -> list[str]:
 
 
 def gated_lockfile(line: str) -> str:
-    """The lockfile a gate call on this line installs: `<dir>/package-lock.json` for `--package-dir <dir>`, the root's
+    """The lockfile a gate call on this line installs: `<dir>/pnpm-lock.yaml` for `--package-dir <dir>`, the root's
     otherwise. The gate refuses the `--package-dir=<dir>` spelling, so a step written that way is red in CI."""
     tokens = tokens_of(line)
     start = next((i for i, t in enumerate(tokens) if t == GATE or t.endswith("/" + GATE)), len(tokens))
@@ -166,8 +212,43 @@ def scalars(node) -> list[str]:
     return [node] if isinstance(node, str) else []
 
 
-# --- 1. workflows -------------------------------------------------------------------------------------------
 files = tracked()
+
+# --- 0. one pnpm --------------------------------------------------------------------------------------------
+def package_manager(rel: str) -> str | None:
+    try:
+        return json.loads((ROOT / rel).read_text()).get("packageManager")
+    except (OSError, ValueError) as e:
+        errors.append(f"{rel} does not load ({e}) — its packageManager could not be checked")
+        return None
+
+
+pinned = ""
+root_pm = package_manager("package.json") if "package.json" in files else None
+m = PACKAGE_MANAGER.match(root_pm or "")
+if m:
+    pinned = m.group(1)
+else:
+    errors.append(f"the root package.json pins no exact pnpm in `packageManager` (found {root_pm!r}; want "
+                  f"`pnpm@<x.y.z>`) — every install would run whichever pnpm the machine has")
+for rel in sorted(f for f in files if posixpath.basename(f) == "package.json" and f != "package.json"):
+    pm = package_manager(rel)
+    if pm is not None and pm != root_pm:
+        errors.append(f"{rel} pins `packageManager: {pm}`, the root pins `{root_pm}` — one pnpm installs every lockfile")
+
+
+def check_bootstrap(where: str, tool: str, args: list[str]) -> bool:
+    """True when this npm install is the pnpm bootstrap (red here if its version is not the pinned one)."""
+    version = pnpm_bootstrap(tool, args)
+    if not version:
+        return False
+    if version != pinned:
+        errors.append(f"{where} installs `pnpm@{version}`, but the root package.json pins `pnpm@{pinned}` in "
+                      f"`packageManager` — install the pinned one")
+    return True
+
+
+# --- 1. workflows -------------------------------------------------------------------------------------------
 workflows: dict[str, dict] = {}
 for rel in sorted(f for f in files if WORKFLOW_NAME.match(f)):
     try:
@@ -182,6 +263,7 @@ gating: dict[str, dict[str, set[str]]] = {}
 # lockfile -> (workflow, job, step label) of each gate call of that lockfile that asks the registry
 asking: dict[str, list[tuple[str, str, str]]] = {}
 gate_calls = 0
+bootstraps = 0
 for rel, doc in workflows.items():
     for job_id, job in (doc.get("jobs") or {}).items():
         if not isinstance(job, dict):
@@ -192,10 +274,14 @@ for rel, doc in workflows.items():
             run = step["run"].replace("\\\n", " ")
             label = f"{rel}: job `{job_id}`, step {index + 1} ({step.get('name', 'unnamed')!r})"
             for line in run.splitlines():
-                for sub in npm_installs(line):
+                for tool, sub, args in installs(line):
+                    if check_bootstrap(label, tool, args):
+                        bootstraps += 1
+                        continue
                     errors.append(
-                        f"{label} runs `npm {sub}` directly — install through `python3 {GATE}` (it runs `npm ci` "
-                        f"and is red on a deprecated package), or this install is one the gate never sees."
+                        f"{label} runs `{tool} {sub}` directly — install through `python3 {GATE}` (it runs `pnpm "
+                        f"install --frozen-lockfile` and is red on a deprecated package), or this install is one the "
+                        f"gate never sees."
                     )
             if GATE_CALL.search(run):
                 gate_calls += 1
@@ -269,7 +355,7 @@ def run_command(args: str) -> str:
 
 dockerfiles = [f for f in files if DOCKERFILE_NAME.search(f)]
 image_installs = 0
-npm_images: set[str] = set()  # Dockerfiles that run `npm ci`
+pnpm_images: set[str] = set()  # Dockerfiles that run `pnpm install --frozen-lockfile`
 for rel in sorted(dockerfiles):
     lock_copied = False
     for number, keyword, args in instructions((ROOT / rel).read_text()):
@@ -279,28 +365,32 @@ for rel in sorted(dockerfiles):
             sources = [t for t in args.split() if not t.startswith("--")][:-1]
             lock_copied = lock_copied or LOCKFILE in sources
         elif keyword == "RUN":
-            for sub in npm_installs(run_command(args)):
+            for tool, sub, sub_args in installs(run_command(args)):
                 where = f"{rel}:{number}"
-                if sub in RESOLVING_INSTALLS:
-                    errors.append(f"{where} runs `npm {sub}`, which resolves versions instead of installing the "
-                                  f"lockfile — no gate's scan of the lockfile covers it; use `npm ci`")
+                if check_bootstrap(where, tool, sub_args):
+                    bootstraps += 1
+                    continue
+                if tool != "pnpm" or sub not in PNPM_LOCKFILE_INSTALLS or not frozen(sub_args):
+                    errors.append(f"{where} runs `{tool} {sub}`{'' if tool == 'npm' else ' without --frozen-lockfile'}, "
+                                  f"which does not install the lockfile as it is — no gate's scan of the lockfile covers "
+                                  f"it; use `pnpm install --frozen-lockfile`")
                     continue
                 image_installs += 1
-                npm_images.add(rel)
+                pnpm_images.add(rel)
                 if not lock_copied:
-                    errors.append(f"{where} runs `npm {sub}` in a stage that has not copied the root `{LOCKFILE}` "
+                    errors.append(f"{where} runs `pnpm {sub}` in a stage that has not copied the root `{LOCKFILE}` "
                                   f"before it — so it is not the lockfile the gate scanned")
                 builders = [(wf, job_id) for wf, doc in workflows.items()
                             for job_id, job in (doc.get("jobs") or {}).items()
                             if isinstance(job, dict) and rel in scalars(job)]
                 if not builders:
-                    errors.append(f"{where} runs `npm {sub}`, but no workflow job builds `{rel}` — so no gated job "
+                    errors.append(f"{where} runs `pnpm {sub}`, but no workflow job builds `{rel}` — so no gated job "
                                   f"runs before it and nothing covers this install")
                 for wf, job_id in builders:
                     jobs = workflows[wf].get("jobs") or {}
                     if not gated_before_published(jobs, job_id, gating.get(LOCKFILE, {}).get(wf, set())):
                         errors.append(
-                            f"{where} runs `npm {sub}`, and `{wf}` job `{job_id}` builds it without running "
+                            f"{where} runs `pnpm {sub}`, and `{wf}` job `{job_id}` builds it without running "
                             f"`{GATE}` itself or `needs:`-ing a job that does, and is needed by no job that "
                             f"publishes only after one does — so an image of a lockfile no gate has scanned on that "
                             f"commit can be published"
@@ -330,7 +420,7 @@ for lockfile in sorted(asking):
     if len(calls) != 1:
         if not calls:
             errors.append(f"no gated install of `{lockfile}` asks the registry — every `{GATE}` call of it passes "
-                          f"`{SKIP_REGISTRY}`, so no job looks at the locked packages another platform installs")
+                          f"`{SKIP_REGISTRY}`, so no job looks at what was deprecated after the lock was written")
         else:
             errors.append(f"{len(calls)} gated installs of `{lockfile}` ask the registry, but its answer depends only "
                           f"on that lockfile — pass `{SKIP_REGISTRY}` on all but one: "
@@ -362,13 +452,12 @@ for lockfile in sorted(asking):
     for wf, doc in workflows.items():
         jobs = doc.get("jobs") or {}
         for job_id, job in jobs.items():
-            if not isinstance(job, dict) or not any(rel in scalars(job) for rel in npm_images):
+            if not isinstance(job, dict) or not any(rel in scalars(job) for rel in pnpm_images):
                 continue
             if wf != asking_wf or not gated_before_published(jobs, job_id, {asking_job}):
                 errors.append(f"`{wf}` job `{job_id}` builds an image, and neither it nor every job that publishes "
                               f"its build `needs:` the one registry-asking install ({asking_label}) — the locked "
-                              f"packages that image installs and the gating platform skipped are then unasked "
-                              f"before it ships")
+                              f"packages that image installs are then unasked before it ships")
 
 
 # --- 4. every tracked lockfile is installed through the gate -------------------------------------------------
@@ -381,15 +470,19 @@ for lockfile in sorted(lockfiles - set(gating)):
 for lockfile in sorted(set(gating) - lockfiles):
     errors.append(f"a workflow step installs `{lockfile}` through `{GATE}`, but no such lockfile is tracked — the "
                   f"`{PACKAGE_DIR}` it names installs nothing the repository pins")
+for stray in sorted(f for f in files if posixpath.basename(f) == NPM_LOCKFILE):
+    errors.append(f"`{stray}` is tracked, but the repository installs with pnpm — a second dependency tree nothing "
+                  f"installs or scans; delete it")
 
 if errors:
-    print("NPM INSTALLS GATED VALIDATION FAILED:")
+    print("PNPM INSTALLS GATED VALIDATION FAILED:")
     for e in errors:
         print("  -", e)
     sys.exit(1)
 
 askers = "; ".join(f"{lockfile} by {calls[0][0]} job `{calls[0][1]}`" for lockfile, calls in sorted(asking.items()))
-print(f"npm installs gated OK: {gate_calls} workflow step(s) install through {GATE} and none bypasses it; "
-      f"{image_installs} Dockerfile `npm ci` install the scanned lockfile, published only behind a gated job; every tracked lockfile "
-      f"is installed through the gate, and each is asked of the registry by exactly one install ({askers}), which "
-      f"covers the others")
+print(f"pnpm installs gated OK: pnpm@{pinned} pinned, and the {bootstraps} place(s) that install pnpm install it; "
+      f"{gate_calls} workflow step(s) install through {GATE} and none bypasses it; {image_installs} Dockerfile "
+      f"`pnpm install --frozen-lockfile` install the scanned lockfile, published only behind a gated job; every tracked "
+      f"lockfile is installed through the gate, and each is asked of the registry by exactly one install ({askers}), "
+      f"which covers the others")
