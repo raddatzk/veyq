@@ -1,14 +1,32 @@
 // The entry editor's form against contracts/expenses/v1-vectors.json: every vector entry — all rest, items with splits by
-// equal, shares and percent, a rest by shares, two payers, a foreign currency with a typed rate, a transfer, a refund with
-// receivers and an item, exact amounts as one item each — goes through the form as a person would edit it and comes out as
-// the very body, and the Pot written from those forms through the real write path computes the vectors' balances and
-// settle-up. A form that does not add up is refused before anything is sealed.
+// equal, shares, percent and amounts, a rest by shares or amounts, two payers, a foreign currency with a typed rate, a
+// transfer, a refund with receivers and an item, exact amounts as one item each — goes through the form as a person would
+// edit it and comes out as the very body, and the Pot written from those forms through the real write path computes the
+// vectors' balances and settle-up; each invalid entry of the vectors, opened in the form, is refused for its reason at its
+// split. A form that does not add up is refused before anything is sealed, and says at which field.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
-import { contentOf, emptyForm, emptyItem, equalSplit, formOf, parsePercent, payersTotal, problemKey, restLeft, withCurrency, withKind } from './entryForm'
+import {
+  amountsTotal,
+  contentOf,
+  emptyForm,
+  emptyItem,
+  equalSplit,
+  everyoneEqually,
+  formOf,
+  parsePercent,
+  payersTotal,
+  problemKey,
+  restLeft,
+  splitRow,
+  withCurrency,
+  withKind,
+  type FormSplit,
+  type SplitMode,
+} from './entryForm'
 import type { MoneyContent } from './domain/format'
 import { buildLedger } from './domain/ledger'
 import { sealPotWrites, type PotWrite } from './domain/potApi'
@@ -20,6 +38,7 @@ type VectorPot = {
   base: { currency: string; minorUnits: number }
   participants: { id: string; name: string; joined: number }[]
   entries: { id: string; body: MoneyContent }[]
+  invalid?: { id: string; body: MoneyContent; problem: string }[]
   expected: { balances: Record<string, number>; settleUp: { from: string; to: string; amount: number }[] }
 }
 const vectors = JSON.parse(readFileSync(resolve(__dirname, '../../../../../contracts/expenses/v1-vectors.json'), 'utf8')) as { pots: VectorPot[] }
@@ -37,6 +56,12 @@ describe.each(vectors.pots.map((p) => [p.name, p] as const))('the vector Pot "%s
         expect(out, `${e.body.kind} ${locale}`).toEqual({ content: e.body })
       }
     }
+  })
+
+  it.each((pot.invalid ?? []).map((e) => [e.body.title ?? e.id, e] as const))('"%s", opened in the form, is refused for its reason at its split', (_, e) => {
+    const out = contentOf(formOf(e.body, pot.base, people, 'de'), isParticipant)
+    expect(out).toMatchObject({ problem: e.problem })
+    expect('at' in out && (out.at === 'rest' || typeof out.at === 'number')).toBe(true)
   })
 
   it('the Pot written from those forms computes the vectors\' balances and settle-up', () => {
@@ -63,6 +88,12 @@ describe.each(vectors.pots.map((p) => [p.name, p] as const))('the vector Pot "%s
 const [A, B, C] = ['0e000000-0000-4000-8000-000000000001', '0e000000-0000-4000-8000-000000000002', '0e000000-0000-4000-8000-000000000003']
 const EUR = { currency: 'EUR', minorUnits: 2 }
 
+/** A split as rows: [mode], each person with what was typed for them in that mode (shares default to 1). */
+function rows(mode: SplitMode, typed: [string, string][]): FormSplit {
+  const key = { shares: 'shares', percent: 'percent', amounts: 'amount' } as const
+  return { mode, rows: typed.map(([id, v]) => ({ ...splitRow(id), [key[mode]]: v })), expanded: true }
+}
+
 describe('the form as a person fills it', () => {
   const dinner = () => {
     const form = { ...emptyForm(EUR, [A, B, C]), title: 'Dinner', date: '2026-07-01', category: 'food' }
@@ -71,6 +102,7 @@ describe('the form as a person fills it', () => {
   }
 
   it('a new expense: the first person paying what they typed, no items, the whole amount split equally among everyone offered', () => {
+    expect(dinner().rest).toEqual({ mode: 'shares', rows: [splitRow(A), splitRow(B), splitRow(C)], expanded: false }) // its one line
     expect(contentOf(dinner())).toEqual({
       content: {
         kind: 'expense', title: 'Dinner', category: 'food', date: '2026-07-01', currency: 'EUR', minorUnits: 2, rate: '1', amount: 10000, receipts: [],
@@ -90,15 +122,17 @@ describe('the form as a person fills it', () => {
     const form = dinner()
     form.items = [
       { ...emptyItem([A, B, C]), label: 'Wine', amount: '30' },
-      { label: 'Cake', amount: '10,5', split: { mode: 'percent', equal: [], shares: {}, percent: { [A]: '33,33', [B]: '66.67', [C]: '' } } },
+      { label: 'Cake', amount: '10,5', split: rows('percent', [[A, '33,33'], [B, '66.67']]) },
+      { label: 'Cheese', amount: '5', split: rows('amounts', [[A, '1,50'], [C, '3.5']]) },
     ]
-    form.rest = { mode: 'shares', equal: [A], shares: { [A]: '2', [C]: '1' }, percent: {} }
-    expect(restLeft(form)).toBe(5950n)
+    form.rest = rows('shares', [[A, '2'], [C, '1']])
+    expect(restLeft(form)).toBe(5450n)
     const out = contentOf(form)
     expect('content' in out && out.content.kind === 'expense' && out.content.allocation).toEqual({
       items: [
         { label: 'Wine', amount: 3000, split: { mode: 'equal', participants: [A, B, C] } },
         { label: 'Cake', amount: 1050, split: { mode: 'percent', percents: [{ participant: A, percent: 3333 }, { participant: B, percent: 6667 }] } },
+        { label: 'Cheese', amount: 500, split: { mode: 'amounts', amounts: [{ participant: A, amount: 150 }, { participant: C, amount: 350 }] } },
       ],
       rest: { mode: 'shares', shares: [{ participant: A, shares: 2 }, { participant: C, shares: 1 }] },
     })
@@ -108,6 +142,38 @@ describe('the form as a person fills it', () => {
     expect('content' in filled && filled.content.kind === 'expense' && filled.content.allocation).toEqual({
       items: [{ label: 'Ben', amount: 7000, split: { mode: 'equal', participants: [B] } }, { label: 'Cleo', amount: 3000, split: { mode: 'equal', participants: [C] } }],
     })
+  })
+
+  it('shares of 1 each are sealed as `equal` — everyone or some; one share above 1 makes it `shares` (control)', () => {
+    const sealed = (rest: FormSplit) => {
+      const out = contentOf({ ...dinner(), rest })
+      return 'content' in out && out.content.kind === 'expense' ? out.content.allocation.rest : null
+    }
+    expect(sealed(rows('shares', [[A, '1'], [B, '1'], [C, '1']]))).toEqual({ mode: 'equal', participants: [A, B, C] })
+    expect(sealed(rows('shares', [[C, '1'], [A, '1']]))).toEqual({ mode: 'equal', participants: [C, A] })
+    expect(sealed(rows('shares', [[A, '1'], [B, '2']]))).toEqual({ mode: 'shares', shares: [{ participant: A, shares: 1 }, { participant: B, shares: 2 }] })
+  })
+
+  it('an entry opens as one line where a split is equal over everyone offered, and as rows otherwise', () => {
+    const body = (rest: object, items: object[] = []) =>
+      ({ kind: 'expense', title: 'X', date: '2026-07-01', category: 'other', currency: 'EUR', minorUnits: 2, rate: '1', amount: 900, payers: [{ participant: A, amount: 900 }], allocation: { items, rest }, receipts: [] }) as MoneyContent
+    const opened = (c: MoneyContent) => formOf(c, EUR, [A, B, C], 'de')
+    expect(opened(body({ mode: 'equal', participants: [C, A, B] })).rest.expanded).toBe(false) // everyone, in any order
+    expect(opened(body({ mode: 'equal', participants: [A, B] })).rest).toEqual({ mode: 'shares', rows: [splitRow(A), splitRow(B)], expanded: true })
+    expect(opened(body({ mode: 'shares', shares: [{ participant: A, shares: 2 }, { participant: B, shares: 1 }, { participant: C, shares: 1 }] })).rest.expanded).toBe(true)
+    const amounts = opened(body({ mode: 'amounts', amounts: [{ participant: A, amount: 450 }, { participant: B, amount: 450 }] })).rest
+    expect(amounts).toEqual({ mode: 'amounts', rows: [{ ...splitRow(A), amount: '4,50' }, { ...splitRow(B), amount: '4,50' }], expanded: true })
+    const item = opened(body({ mode: 'equal', participants: [A] }, [{ label: 'Wine', amount: 300, split: { mode: 'equal', participants: [A, B, C] } }]))
+    expect(item.items[0]!.split.expanded).toBe(false)
+  })
+
+  it('"split equally among all" puts every active person on it at 1 share, keeping what was typed for them otherwise', () => {
+    const typed = rows('percent', [[B, '60'], [C, '40']])
+    expect(everyoneEqually(typed, [A, B])).toEqual({ mode: 'shares', rows: [splitRow(A), { ...splitRow(B), percent: '60' }], expanded: true })
+  })
+
+  it('an amounts split adds up what was typed for the people on it', () => {
+    expect(amountsTotal(rows('amounts', [[A, '1,50'], [B, 'x'], ['', '3']]), 2)).toBe(150n)
   })
 
   it('a percent takes at most two decimals and at most 100 %', () => {
@@ -126,35 +192,46 @@ describe('the form as a person fills it', () => {
     const yen = withCurrency(emptyForm(EUR, [A, B]), 'JPY', EUR)
     expect([yen.minorUnits, yen.rate]).toEqual([0, ''])
     const ramen = { ...yen, title: 'Ramen', payers: [{ participant: A, amount: '5000' }] }
-    expect(contentOf(ramen)).toEqual({ problem: 'rate' })
+    expect(contentOf(ramen)).toEqual({ problem: 'rate', at: 'rate' })
     const typed = contentOf({ ...ramen, rate: '0,0061234' })
     expect('content' in typed && [typed.content.amount, typed.content.rate, typed.content.minorUnits]).toEqual([5000, '0.0061234', 0])
     expect(withCurrency(yen, 'EUR', EUR)).toMatchObject({ minorUnits: 2, rate: '1' })
   })
 
-  it('refuses what does not add up — never saved (owner 2026-10-24) — and names what to fix', () => {
+  it('refuses what does not add up — never saved (owner 2026-10-24) — and names what to fix, and where', () => {
     const base = { ...emptyForm(EUR, [A, B]), title: 'Taxi', payers: [{ participant: A, amount: '10' }] }
     const item = (amount: string, split = equalSplit([A])) => ({ label: 'Wine', amount, split })
-    expect(contentOf({ ...base, title: ' ' })).toEqual({ problem: 'title' })
-    expect(contentOf({ ...base, payers: [{ participant: A, amount: '10.001' }] })).toEqual({ problem: 'payers' })
-    expect(contentOf({ ...base, payers: [{ participant: A, amount: '4' }, { participant: B, amount: '' }] })).toEqual({ problem: 'payers' })
+    expect(contentOf({ ...base, title: ' ' })).toEqual({ problem: 'title', at: 'title' })
+    expect(contentOf({ ...base, payers: [{ participant: A, amount: '10.001' }] })).toEqual({ problem: 'payers', at: 'payers' })
+    expect(contentOf({ ...base, payers: [{ participant: A, amount: '4' }, { participant: B, amount: '' }] })).toEqual({ problem: 'payers', at: 'payers' })
     expect(contentOf({ ...base, payers: [{ participant: A, amount: '4' }, { participant: B, amount: '6' }] })).toHaveProperty('content') // control
-    expect(contentOf({ ...base, items: [item('11')] })).toEqual({ problem: 'items-above-total' })
+    expect(contentOf({ ...base, payers: [{ participant: A, amount: '4' }, { participant: A, amount: '6' }] })).toEqual({ problem: 'named-twice', at: 'payers' })
+    expect(contentOf({ ...base, items: [item('11')] })).toEqual({ problem: 'items-above-total', at: 'items' })
     expect(contentOf({ ...base, items: [item('10')] })).toHaveProperty('content') // control: at the amount
-    expect(contentOf({ ...base, items: [item('4', equalSplit([]))] })).toEqual({ problem: 'items' })
-    expect(contentOf({ ...base, items: [{ ...item('4'), label: ' ' }] })).toEqual({ problem: 'items' })
-    expect(contentOf({ ...base, rest: equalSplit([]) })).toEqual({ problem: 'split' })
+    expect(contentOf({ ...base, items: [item('4', equalSplit([]))] })).toEqual({ problem: 'items', at: 0 })
+    expect(contentOf({ ...base, items: [item('4'), { ...item('4'), label: ' ' }] })).toEqual({ problem: 'items', at: 1 })
+    expect(contentOf({ ...base, rest: equalSplit([]) })).toEqual({ problem: 'split', at: 'rest' })
+    expect(contentOf({ ...base, rest: rows('shares', [['', '1']]) })).toEqual({ problem: 'split', at: 'rest' }) // a row with no person picked names no one
     expect(contentOf({ ...base, items: [item('10')], rest: equalSplit([]) })).toHaveProperty('content') // control: no rest, no split asked
-    expect(contentOf({ ...base, rest: { ...equalSplit([]), mode: 'percent', percent: { [A]: '50', [B]: '49,99' } } })).toEqual({ problem: 'percent-unbalanced' })
-    expect(contentOf({ ...base, rest: { ...equalSplit([]), mode: 'shares', shares: { [A]: '1,5' } } })).toEqual({ problem: 'split' })
-    expect(contentOf({ ...base, kind: 'transfer', amount: '10', from: A, to: A })).toEqual({ problem: 'transfer' })
-    expect(contentOf({ ...base, kind: 'transfer', amount: '', from: A, to: B })).toEqual({ problem: 'amount' })
-    expect(contentOf(base, (id) => id === A)).toEqual({ problem: 'unknown-participant' })
+    expect(contentOf({ ...base, rest: rows('percent', [[A, '50'], [B, '49,99']]) })).toEqual({ problem: 'percent-unbalanced', at: 'rest' })
+    expect(contentOf({ ...base, rest: rows('shares', [[A, '1,5']]) })).toEqual({ problem: 'split-shares', at: 'rest' })
+    expect(contentOf({ ...base, rest: rows('shares', [[A, '']]) })).toEqual({ problem: 'split-shares', at: 'rest' }) // a person on it has a value
+    expect(contentOf({ ...base, rest: rows('percent', [[A, '100,001']]) })).toEqual({ problem: 'split-percents', at: 'rest' })
+    expect(contentOf({ ...base, rest: rows('amounts', [[A, '10.001']]) })).toEqual({ problem: 'split-amounts', at: 'rest' })
+    expect(contentOf({ ...base, rest: rows('amounts', [[A, '6'], [B, '3,99']]) })).toEqual({ problem: 'amounts-unbalanced', at: 'rest' })
+    expect(contentOf({ ...base, rest: rows('amounts', [[A, '6'], [B, '4']]) })).toHaveProperty('content') // control: they make the rest
+    expect(contentOf({ ...base, items: [item('4'), item('3', rows('amounts', [[B, '2']]))] })).toEqual({ problem: 'amounts-unbalanced', at: 1 })
+    expect(contentOf({ ...base, items: [item('4', rows('shares', [[A, '1'], [A, '2']]))] })).toEqual({ problem: 'named-twice', at: 0 })
+    expect(contentOf({ ...base, kind: 'transfer', amount: '10', from: A, to: A })).toEqual({ problem: 'transfer', at: 'transfer' })
+    expect(contentOf({ ...base, kind: 'transfer', amount: '', from: A, to: B })).toEqual({ problem: 'amount', at: 'amount' })
+    expect(contentOf(base, (id) => id === A)).toEqual({ problem: 'unknown-participant', at: 'rest' })
+    expect(contentOf(base, (id) => id === B)).toEqual({ problem: 'unknown-participant', at: 'payers' })
   })
 
   it('every problem it or the write path can name has a sentence in both languages', () => {
-    const reasons = ['title', 'date', 'amount', 'rate', 'payers', 'split', 'items', 'transfer', 'payers-unbalanced', 'receivers-unbalanced', 'items-above-total',
-      'rest-unallocated', 'percent-unbalanced', 'named-twice', 'unknown-participant', 'record-twice', 'erasure-through-append', 'not-a-participant', 'not-settled', 'joined-moved', 'empty', 'receipt-dropped-and-kept']
+    const reasons = ['title', 'date', 'amount', 'rate', 'payers', 'split', 'split-shares', 'split-percents', 'split-amounts', 'items', 'transfer', 'payers-unbalanced',
+      'receivers-unbalanced', 'items-above-total', 'rest-unallocated', 'percent-unbalanced', 'amounts-unbalanced', 'named-twice', 'unknown-participant', 'record-twice',
+      'erasure-through-append', 'not-a-participant', 'not-settled', 'joined-moved', 'empty', 'receipt-dropped-and-kept']
     for (const locale of ['en', 'de'] as const) {
       const sentences = expensesMessages[locale].expenses.entry.problem as Record<string, string>
       expect(reasons.map(problemKey).filter((k) => !sentences[k])).toEqual([])
