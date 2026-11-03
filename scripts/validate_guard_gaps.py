@@ -289,6 +289,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   106 `ScopeRekeyRewrap` keeping `additionalProperties: false` but losing its `UnknownFieldsRefused` class annotation —
      rejected: `validate_request_bounds` rule 7. Jackson drops an unknown field unless the class refuses it, so a value
      field sent into a rotation's stage read as staged when nothing of it was (ADR 0115 decision 2)
+  107 a `features/expenses` file importing core's `NodeHeader.vue` — rejected: `validate_web_core_imports_no_applications`'
+     header rule. Core draws every node page's header (ADR 0110 decision 10); an application's own header compiles and its
+     page renders, and could leave out core's Report or link a person on a share page
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1172,6 +1175,16 @@ def forge_web_application_imports_application_client(root: pathlib.Path) -> str:
             "Memories', derived from contracts/api/memories/)")
 
 
+def forge_web_application_draws_node_header(root: pathlib.Path) -> str:
+    if not (root / "src" / "web" / "src" / "features" / "expenses").is_dir():
+        raise ForgeError("src/web/src/features/expenses is gone — re-anchor this forgery on another application directory")
+    if not (root / "src" / "web" / "src" / "core" / "node" / "components" / "NodeHeader.vue").is_file():
+        raise ForgeError("core's NodeHeader.vue moved — re-anchor this forgery and the guard's CORE_HEADER on it")
+    _plant_web(root, "features/expenses/components/guardGapProbe.ts",
+               "import NodeHeader from '../../../core/node/components/NodeHeader.vue'\nexport const h = NodeHeader\n")
+    return "a features/expenses file importing core's NodeHeader.vue (must be REJECTED — core draws every node page's header)"
+
+
 def forge_web_core_imports_second_application(root: pathlib.Path) -> str:
     _plant_depot(root, "core/node/guardGapProbe.ts", "export { FILE_KIND } from '../../features/depot/kinds'\n")
     return "a core/node file re-exporting features/depot/kinds (must be REJECTED — core depends on no application)"
@@ -1848,6 +1861,7 @@ CASES = [
     ("104", SCOPE_REKEY_ARITY, forge_value_key_purpose_dropped, False),
     ("105", SCOPE_REKEY_ARITY, forge_root_entry_reseal_writes_a_value, False),
     ("106", "validate_request_bounds.py", forge_request_closed_object_unenforced, False),
+    ("107", WEB_GUARD, forge_web_application_draws_node_header, False),
     ("100", LINK_CLOSE_ARITY, forge_link_closed_outside_the_body, False),
     ("101", LINK_CLOSE_ARITY, forge_link_closed_by_a_bulk_update, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
