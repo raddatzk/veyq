@@ -68,7 +68,7 @@ acceptanceCriteria:
     text: The Memory page's header action and its cover tile open core's one dialog - the gallery lightbox offers no "Set as cover" and the dialog no other source; the Memory adds only `cover.findStored`, which names the PREVIEW of a gallery medium whose original equals the picked image, so core sends a shared row in place of an upload (a failure to look is no match; a kind without the seam never looks); a stored photo reference reads as no cover (the icon), kept untouched by every other writer; the Memory's rows draw the cover core resolved.
     coverage:
       web:
-        unit: [src/features/memories/components/MemoryDetailHost.cover.test.ts, src/features/memories/components/MemoryDetail.rights.test.ts, src/features/memories/useMemoryCover.test.ts, src/features/memories/memoryCover.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/coverStore.test.ts, src/features/memories/storedMatch.test.ts, src/features/memories/levelRows.test.ts, src/features/memories/levelRows.guest.test.ts]
+        unit: [src/features/memories/components/MemoryDetailHost.cover.test.ts, src/features/memories/components/MemoryDetail.rights.test.ts, src/features/memories/memoryCover.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/coverStore.test.ts, src/features/memories/storedMatch.test.ts, src/features/memories/levelRows.test.ts, src/features/memories/levelRows.guest.test.ts]
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/memories/memories-styles.spec.ts`) drives `dialog-crops-and-saves-one-write` as

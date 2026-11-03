@@ -200,7 +200,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
       const w = await mountPage(head(role))
       await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
       expect(w.find('.share-view-unavailable').exists()).toBe(false)
-      expect(w.find('.memory-detail .veyq-node-header-title').text()).toBe('Rom 2026')
+      expect(w.find('.veyq-node-page:has(.memory-detail) .veyq-node-header-title').text(), 'core\'s header above the Memory').toBe('Rom 2026')
       expect(w.find('.markdown-body').text()).toContain('Curator note')
       expect(w.find('.share-folder-badge').text()).toBe(t(role === ShareRole.Read ? 'share.readonly' : 'share.contributorBadge'))
       expect(w.findAll('a.veyq-breadcrumb__link').map((a) => a.text())).toEqual(['Rom 2026'])

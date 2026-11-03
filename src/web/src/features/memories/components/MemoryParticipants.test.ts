@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
-// The Memory header's participants row (ADR 0083, uc.memory.participants): overlapping avatars (three at most, past three
-// the third slot is "+N"), a popover with every name that links a member to their profile, a greyed "Former member"
-// without a link, nothing at all with no participant, the picker (checkboxes, search) over the scope's CURRENT members -
-// opened through the exposed `openPicker` the header's "Participants" action calls (`MemoryDetail.rights.test.ts` clicks
-// that action) - and - the member / guest difference - nothing at all (not even a request for the members) where the
-// right is off.
+// A Memory's participants (ADR 0083, uc.memory.participants): the people fact core's header draws (every participant by
+// the directory's name, a "Former member" for one who left, the loading and failed states, nothing at all with no
+// participant - core's `PersonGroup.test.ts` holds how they are drawn and linked), the picker (checkboxes, search) over the
+// scope's CURRENT members - opened through the exposed `openPicker` the header's "Participants" action calls
+// (`MemoryDetail.rights.test.ts` clicks that action) - and - the member / guest difference - nothing at all (not even a
+// request for the members) where the right is off.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -21,6 +21,7 @@ import type { ContentApi } from '../../../api/generated/content'
 import { memberMemorySource, type NodeMetaDoor } from '../source'
 import { sealNodeMeta, unsealNodeMeta } from '../../../core/node/nodeMeta'
 import { MAX_PARTICIPANTS } from '../memoryParticipants'
+import type { NodeHeaderPeopleFact } from '../../../core/node/nodeHeader'
 import { treeNode } from '../../../test/models'
 import { realI18n } from '../../../test/i18n'
 
@@ -64,11 +65,6 @@ beforeEach(() => {
   people.mockResolvedValue([person(A, 'Anna'), person(B, 'Ben'), person(C, 'Carl'), person(D, 'Dora'), person(E, 'Élodie')])
 })
 
-const group = (w: VueWrapper) => w.get('[data-testid="participants-group"]')
-const openPopover = async (w: VueWrapper) => {
-  await group(w).trigger('click')
-  await flushPromises()
-}
 const saveButton = () => [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('Save'))!
 const rows = () => [...document.body.querySelectorAll<HTMLElement>('.memory-participants-option')]
 /** The layer's checkboxes (ADR 0107): Reka `role="checkbox"` buttons, ticked when `aria-checked` is "true". */
@@ -81,119 +77,58 @@ const openPicker = async (w: VueWrapper) => {
 }
 const canEdit = (w: VueWrapper) => (w.vm as unknown as { canEdit: boolean }).canEdit
 
-describe('MemoryParticipants: the avatars in the header', () => {
-  it.each([
-    [1, 1],
-    [2, 2],
-    [3, 3],
-  ])('%i participant(s) show %i avatar(s) and no "+N"', async (n, avatars) => {
-    const w = await mountRow({ ids: [A, B, C].slice(0, n) })
-    expect(w.findAll('[data-testid="participant-avatar"]')).toHaveLength(avatars)
-    expect(w.find('[data-testid="participant-overflow"]').exists()).toBe(false)
+/** The people fact the row hands core's header (`MemoryDetail` contributes it; core's `PersonGroup` draws it). */
+const fact = (w: VueWrapper) => (w.vm as unknown as { fact: NodeHeaderPeopleFact | null }).fact
+
+describe('MemoryParticipants: the people fact core\'s header draws', () => {
+  it('names every participant by the directory, in the stored order - a member by id, one who left as a former member', async () => {
+    const w = await mountRow({ ids: [A, GONE, B] })
+    expect(fact(w)).toEqual({
+      kind: 'people',
+      label: 'Participants',
+      people: [
+        { userId: A, name: 'Anna', former: false },
+        { userId: GONE, name: 'Former member', former: true },
+        { userId: B, name: 'Ben', former: false },
+      ],
+    })
+    // The row itself draws nothing: no avatars, no names - core's header does.
+    expect(w.text()).toBe('')
   })
 
-  it.each([
-    [4, '+2'],
-    [5, '+3'],
-  ])('%i participants show two avatars and the third slot as "%s"', async (n, label) => {
-    const w = await mountRow({ ids: [A, B, C, D, E].slice(0, n) })
-    expect(w.findAll('[data-testid="participant-avatar"]')).toHaveLength(2)
-    expect(w.get('[data-testid="participant-overflow"]').text()).toBe(label)
+  it('says the names are loading while the directory is read, and that it failed when it did', async () => {
+    let resolve: (v: Awaited<ReturnType<typeof loadScopePeople>>) => void = () => {}
+    people.mockReturnValueOnce(new Promise((r) => (resolve = r)))
+    const w = await mountRow({ ids: [A] })
+    expect(fact(w)).toMatchObject({ people: [], status: 'Loading…' })
+    resolve([person(A, 'Anna')])
+    await flushPromises()
+    expect(fact(w)).toMatchObject({ people: [{ userId: A, name: 'Anna' }] })
+    expect(fact(w)?.status).toBeUndefined()
+    people.mockRejectedValueOnce(new Error('offline'))
+    const failed = await mountRow({ ids: [B] })
+    expect(fact(failed)).toMatchObject({ people: [], status: 'Could not load the members. Please try again.' })
   })
 
-  it('prints no names inline: the names wait in the popover, and the group is a labelled button naming everybody', async () => {
-    const w = await mountRow({ ids: [A, B, C, D] })
-    expect(w.text()).not.toContain('Anna')
-    const g = group(w)
-    expect(g.element.tagName).toBe('BUTTON')
-    expect(g.attributes('aria-haspopup')).toBe('dialog')
-    expect(g.attributes('aria-expanded')).toBe('false')
-    expect(g.attributes('aria-label')).toBe('Participants (4): Anna, Ben, Carl, Dora')
-  })
-
-  // Owner decision 2026-10-14: the way in is the header's action, so an empty list draws NOTHING here - no "nobody yet"
-  // text, no add link, no element at all - while the picker stays reachable through the action.
-  it('with no participant the row renders nothing at all, and the picker still opens', async () => {
+  // Owner decision 2026-10-14: the way in is the header's action, so an empty list offers NO fact - no "nobody yet" text, no
+  // add link - while the picker stays reachable through the action.
+  it('with no participant there is no fact at all, and the picker still opens', async () => {
     const empty = await mountRow()
-    expect(empty.find('[data-testid="memory-participants"]').exists(), 'the row').toBe(false)
+    expect(fact(empty)).toBeNull()
     expect(empty.find('button').exists(), 'a control').toBe(false)
-    expect(empty.text()).toBe('')
     expect(people).not.toHaveBeenCalled() // nobody to name, nothing to look up until the picker opens
     expect(canEdit(empty)).toBe(true)
     await openPicker(empty)
     expect(document.body.querySelector('[data-testid="participants-search"]'), 'the picker').not.toBeNull()
-    const filled = await mountRow({ ids: [A] })
-    expect(filled.find('[data-testid="memory-participants"]').exists()).toBe(true)
+    expect(fact(await mountRow({ ids: [A] }))).not.toBeNull()
   })
 
-  it('without the right to write the meta (pending deletion) the avatars stay and the picker is not offered', async () => {
+  it('without the right to write the meta (pending deletion) the people stay and the picker is not offered', async () => {
     const w = await mountRow({ ids: [A], write: null })
-    expect(w.findAll('[data-testid="participant-avatar"]')).toHaveLength(1)
+    expect(fact(w)?.people).toHaveLength(1)
     expect(canEdit(w)).toBe(false)
     await openPicker(w)
     expect(document.body.querySelector('[data-testid="participants-search"]')).toBeNull()
-  })
-})
-
-describe('MemoryParticipants: the popover', () => {
-  it('lists every participant with a link to the profile, and a greyed former member without one', async () => {
-    const w = await mountRow({ ids: [A, GONE, B, C, D] }) // five: the popover lists all, not only the avatars
-    await openPopover(w)
-    expect(group(w).attributes('aria-expanded')).toBe('true')
-    const links = w.findAll('[data-testid="participant-link"]')
-    expect(links.map((l) => l.get('.memory-participant-name').text())).toEqual(['Anna', 'Ben', 'Carl', 'Dora'])
-    expect(links.map((l) => l.attributes('href'))).toEqual([`/#people/${A}`, `/#people/${B}`, `/#people/${C}`, `/#people/${D}`])
-    expect(links[0].attributes('aria-label')).toBe('Open the profile of Anna')
-    const former = w.findAll('[data-testid="participant-former"]')
-    expect(former).toHaveLength(1)
-    expect(former[0].get('.memory-participant-name').text()).toBe('Former member')
-    expect(former[0].element.tagName).toBe('SPAN') // not an anchor: nothing to open
-    expect(former[0].attributes('href')).toBeUndefined()
-    expect(former[0].find('a').exists()).toBe(false)
-  })
-
-  it('opens on keyboard focus after the intent delay and closes on Escape, handing focus back', async () => {
-    vi.useFakeTimers()
-    const w = await mountRow({ ids: [A, B] })
-    expect(w.find('[data-testid="participants-list"]').exists()).toBe(false)
-    ;(group(w).element as HTMLElement).focus()
-    await group(w).trigger('focus')
-    await vi.advanceTimersByTimeAsync(200)
-    expect(w.find('[data-testid="participants-list"]').exists()).toBe(true)
-    expect(group(w).attributes('aria-expanded')).toBe('true')
-    await w.get('[data-testid="participant-link"]').trigger('keydown', { key: 'Escape', code: 'Escape' })
-    await vi.advanceTimersByTimeAsync(400)
-    expect(w.find('[data-testid="participants-list"]').exists()).toBe(false)
-    expect(group(w).attributes('aria-expanded')).toBe('false')
-  })
-
-  it('opens on hover after the intent delay, not at once, and stays through the close grace period', async () => {
-    vi.useFakeTimers()
-    const w = await mountRow({ ids: [A, B] })
-    // the hover card's trigger is the avatar button, and it follows the pointer (a mouse's, not a touch's)
-    await group(w).trigger('pointerenter', { pointerType: 'mouse' })
-    expect(w.find('[data-testid="participants-list"]').exists()).toBe(false)
-    await vi.advanceTimersByTimeAsync(200)
-    expect(w.find('[data-testid="participants-list"]').exists()).toBe(true)
-    await group(w).trigger('pointerleave', { pointerType: 'mouse' })
-    // ... and moves on, away from the card: an open card closes once the pointer leaves the corridor to it
-    document.body.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', clientX: 500, clientY: 500 }))
-    await vi.advanceTimersByTimeAsync(100)
-    expect(w.find('[data-testid="participants-list"]').exists()).toBe(true) // inside the grace period: no flicker
-    await vi.advanceTimersByTimeAsync(400)
-    expect(w.find('[data-testid="participants-list"]').exists()).toBe(false)
-  })
-
-  it('a click toggles it (touch has no hover)', async () => {
-    vi.useFakeTimers()
-    const w = await mountRow({ ids: [A] })
-    await group(w).trigger('click')
-    await vi.advanceTimersByTimeAsync(10)
-    expect(w.find('[data-testid="participants-list"]').exists()).toBe(true)
-    await vi.advanceTimersByTimeAsync(500)
-    await group(w).trigger('click')
-    await vi.advanceTimersByTimeAsync(400)
-    expect(w.find('[data-testid="participants-list"]').exists()).toBe(false)
   })
 })
 
@@ -308,10 +243,10 @@ describe('MemoryParticipants: the picker', () => {
 })
 
 describe('MemoryParticipants: no right (a share guest)', () => {
-  it('renders nothing and reads nothing, even though the sealed meta carries participants', async () => {
+  it('offers no fact and reads nothing, even though the sealed meta carries participants', async () => {
     const w = await mountRow({ ids: [A, B], show: false })
     expect(w.element.parentElement?.textContent ?? '').toBe('')
-    expect(w.find('[data-testid="memory-participants"]').exists()).toBe(false)
+    expect(fact(w)).toBeNull()
     expect(canEdit(w)).toBe(false)
     expect(people).not.toHaveBeenCalled()
   })

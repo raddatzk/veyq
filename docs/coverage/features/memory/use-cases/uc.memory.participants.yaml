@@ -34,11 +34,12 @@ acceptanceCriteria:
           - src/features/memories/components/MemoryParticipants.test.ts
           - src/features/memories/components/MemoryDetail.rights.test.ts
   - id: header-chips-and-picker
-    text: A member sees the participants as overlapping letter avatars (up to three; past three the third slot is a "+N") and, in a popover opened by hover, focus or tap, every participant by name (real name, else username, read from the tenant's member list) linking to the profile - a former member greyed without a link - and - where the meta may be written, never during a pending scope deletion, in a personal scope or on a chapter - a "Participants" action (`users`) in the header (a button where the row has room, else an entry of its ⋯ menu) that opens a picker (checkboxes with a name search) over the scope's current members; with no participant the line under the title renders nothing (no text, no link).
+    text: A member sees the participants in core's header - one as their avatar and name linking to the profile, several as overlapping letter avatars (up to three; past three the third slot is a "+N") and, in a popover opened by hover, focus or tap, every participant by name (real name, else username, read from the tenant's member list) linking to the profile - a former member greyed without a link - and - where the meta may be written, never during a pending scope deletion, in a personal scope or on a chapter - a "Participants" action (`users`) in the header (a button where the row has room, else an entry of its ⋯ menu) that opens a picker (checkboxes with a name search) over the scope's current members; with no participant the line under the title renders nothing (no text, no link).
     coverage:
       web:
         unit:
           - src/features/memories/components/MemoryParticipants.test.ts
+          - src/core/people/PersonGroup.test.ts
           - src/features/memories/components/MemoryDetail.rights.test.ts
           - src/core/people/directory.test.ts
   - id: participants-at-creation
@@ -55,6 +56,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memories/components/MemoryParticipants.test.ts
+          - src/core/people/PersonGroup.test.ts
   - id: profile-route
     text: A member opens `#people/<userId>` (the reader also takes `#/people/<userId>`), token-less, in the tenant scope's shell; `people` is a reserved route segment (no application can claim it, a folder, file or drop box called "People" at a scope root is numbered `people-2`) and a foreign `~username` stays a personal-scope token.
     coverage:

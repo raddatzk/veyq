@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // A Memory's banner on screen (uc.memory.banner, ADR 0102 decisions 6-7): one image or one video above
-// the Memory's header row. The frame is the screen's, not the medium's: 16:9 where the Memory's column is wide, 1:1 where it
-// is narrow, never taller than 60 % of the viewport - a container query on `.memory-detail` (already an `inline-size`
-// container). Its space is reserved as soon as the sealed meta names a banner, so nothing below it jumps when the bytes
+// the Memory's header row - core draws it there, as `MemoryDetail` contributes it (ADR 0110 decision 10). The frame is the
+// screen's, not the medium's: 16:9 where the page is wide, 1:1 where it is narrow, never taller than 60 % of the viewport - a
+// container query on core's page (`.veyq-node-page`, an `inline-size` container). Its space is reserved as soon as the sealed meta names a banner, so nothing below it jumps when the bytes
 // arrive; a banner whose picture fails draws nothing at all (E5: the header row moves up).
 //
 // The WHOLE medium, never cropped: it is contained in the frame, and where it does not fill it - left and right for a
@@ -212,7 +212,7 @@ onBeforeUnmount(stop)
   border-radius: var(--app-radius);
   background: var(--app-control-bg);
 }
-@container memory-detail-surface (max-width: 720px) {
+@container veyq-node-page (max-width: 720px) {
   .memory-banner {
     aspect-ratio: 1 / 1;
   }

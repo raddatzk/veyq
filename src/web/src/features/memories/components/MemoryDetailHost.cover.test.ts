@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The Memory page's cover is core's (inbox #411, follow-up 2026-10-12): the header action (id `cover`, Set/Change) and the cover
-// tile open core's cover DIALOG - the one a folder and a drop box get - and a cover is set only by an upload there (the lightbox
+// visual in core's header open core's cover DIALOG - the one a folder and a drop box get - and a cover is set only by an upload there (the lightbox
 // offers no "Set as cover"). The Memory's one seam is `cover.findStored`: an uploaded image equal to a gallery photo shares that
 // photo's PREVIEW (ADR 0013 § 5). Saving is core's one atomic write; removal lives in the dialog. A share guest's page shows the
 // cover and carries no action.
@@ -108,9 +108,9 @@ describe('the Memory page\'s cover action opens core\'s dialog', () => {
     expect(dialogButton(t('node.cover.remove'))).toBeUndefined()
   })
 
-  it('the cover tile opens the very same dialog', async () => {
+  it('the cover in core\'s header - the icon tile without one - opens the very same dialog', async () => {
     const w = await mountHost(writer())
-    await w.find('.memory-cover-preview').trigger('click')
+    await w.get('.veyq-node-header-leading [data-testid="node-header-cover"]').trigger('click')
     await vi.waitFor(() => expect(dialog()).not.toBeNull())
     expect(dialog()!.textContent).toContain(t('node.cover.copy'))
   })
@@ -174,9 +174,9 @@ describe('who gets the action', () => {
     const w = await mountHost(guestAccessOf(role), uploadCover())
     expect(action(w, 'cover').exists()).toBe(false)
     expect(w.find('[data-action^="cover"]').exists()).toBe(false)
-    expect(w.find('.memory-cover-preview').exists()).toBe(true) // the cover is shown...
-    expect((w.find('.memory-cover-preview').element as HTMLButtonElement).disabled).toBe(true) // ...but is no way in
-    await w.find('.memory-cover-preview').trigger('click')
+    expect(w.find('.veyq-node-header-leading').exists()).toBe(true) // the visual is shown...
+    expect(w.find('[data-testid="node-header-cover"]').exists()).toBe(false) // ...but is no way in
+    await w.get('.veyq-node-header-leading > *').trigger('click')
     await flushPromises()
     expect(dialog()).toBeNull()
     expect(writeNodeCover).not.toHaveBeenCalled()
@@ -186,6 +186,6 @@ describe('who gets the action', () => {
   it('a pending deletion offers none (the space is read-only)', async () => {
     const w = await mountHost(memberAccessOf({ scopeId: SCOPE, epochs: {} as ScopeKey, readonly: true }))
     expect(action(w, 'cover').exists()).toBe(false)
-    expect((w.find('.memory-cover-preview').element as HTMLButtonElement).disabled).toBe(true)
+    expect(w.find('[data-testid="node-header-cover"]').exists()).toBe(false)
   })
 })

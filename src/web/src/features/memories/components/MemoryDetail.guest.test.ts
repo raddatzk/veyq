@@ -168,13 +168,15 @@ function expectGuestOnly(w: Page) {
   }
   expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters')]) // no contributions organizer, no media trash
   expect(w.find('.gallery-mark-filter').exists(), 'the mark filter').toBe(false)
-  expect(w.find('.memory-cover-preview').attributes('disabled'), 'the cover').toBeDefined()
-  expect(w.find('.memory-date-chip').attributes('disabled'), 'the date').toBeDefined()
-  expect(w.find('.memory-location-chip').attributes('disabled'), 'the place').toBeDefined()
-  // ADR 0083 decision 4: the interface shows a guest no participants - no section, no chip, no control, no link to a profile -
+  // Core's header heads the guest's page too (ADR 0110 decision 10): the Memory's visual with no cover button, the chips greyed.
+  expect(w.find('.veyq-node-header-leading').exists(), 'control: the header\'s visual').toBe(true)
+  expect(w.find('[data-testid="node-header-cover"]').exists(), 'the cover is no button').toBe(false)
+  expect(w.find('.veyq-node-header-chip[data-fact="date"]').attributes('disabled'), 'the date').toBeDefined()
+  expect(w.find('.veyq-node-header-chip[data-fact="place"]').attributes('disabled'), 'the place').toBeDefined()
+  // ADR 0083 decision 4: the interface shows a guest no participants - no people, no control, no link to a profile -
   // though the sealed meta the share serves lists them (see the residual test below).
-  expect(w.find('[data-testid="memory-participants"]').exists(), 'the participants row').toBe(false)
-  expect(w.find('.memory-participant-chip').exists(), 'a participant chip').toBe(false)
+  expect(w.find('[data-fact="people"]').exists(), 'the participants').toBe(false)
+  expect(w.find('[data-testid="person-group"]').exists(), 'any people').toBe(false)
   expect(w.find('[data-action="participants"]').exists(), 'the header\'s participants action').toBe(false)
   expect(w.find('.memory-participants-dialog').exists(), 'the picker').toBe(false)
   expect(w.find('a[href*="people/"]').exists(), 'a profile link').toBe(false)

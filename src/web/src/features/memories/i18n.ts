@@ -46,8 +46,6 @@ const en = {
       former: 'Former member',
       search: 'Search members',
       noMatches: 'No member matches your search.',
-      summary: 'Participants ({count}): {names}',
-      open: 'Open the profile of {name}',
       saveFailed: 'Could not save the participants. Please try again.',
     },
     // A person's profile page: Memories' section (ADR 0083 decision 6).
@@ -322,8 +320,6 @@ const de: typeof en = {
       former: 'Ehemaliges Mitglied',
       search: 'Mitglieder suchen',
       noMatches: 'Kein Mitglied passt zu deiner Suche.',
-      summary: 'Beteiligte ({count}): {names}',
-      open: 'Profil von {name} öffnen',
       saveFailed: 'Die Beteiligten konnten nicht gespeichert werden. Bitte versuche es erneut.',
     },
     // Das Profil einer Person: der Abschnitt der Erinnerungen (ADR 0083 Entscheidung 6).

@@ -26,9 +26,9 @@ import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode, memberMemoryRights, guestAccessOf } from '../../../test/models'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
-import { headerActionLabels, headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
+import { headerActionLabels, headerButtonIds, headerMenuIds, mountWithHeader } from '../../../test/nodeHeader'
 import type { CoreHeaderAction } from '../../../core/node/nodeHeader'
-import { coreActionsStandIn } from '../../../test/nodePage'
+import { coreActionsStandIn, coverStandIn } from '../../../test/nodePage'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -66,10 +66,10 @@ async function seedDated(memoryKey: Uint8Array) {
 }
 
 async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean; coreActions?: CoreHeaderAction[]; canSetCover?: boolean } = {}) {
-  const w = mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: { epoch: 0, key: v1.randomBytes(32) }, personalScope: o.personalScope ?? false, chapters: [chapter], rights, canSetCover: o.canSetCover ?? false },
-    // Core's actions come from the view around the header (`NodePage`); a stand-in supplies the given ones.
-    global: { plugins: [realI18n()], provide: coreActionsStandIn(o.coreActions ?? []) },
+  const w = mountWithHeader(MemoryDetail, {
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: { epoch: 0, key: v1.randomBytes(32) }, personalScope: o.personalScope ?? false, chapters: [chapter], rights },
+    // Core's page draws the header; core's actions and its cover come from the view around it, a stand-in here.
+    global: { plugins: [realI18n()], provide: coreActionsStandIn(o.coreActions ?? [], coverStandIn({ canSet: o.canSetCover ?? false })) },
     ...(o.attach ? { attachTo: document.body } : {}),
   })
   await flushPromises()
@@ -102,9 +102,9 @@ describe('MemoryDetail follows rights', () => {
     expect(await header(w)).toEqual([...HEADER])
     expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.buckets.title'), t('memory.trash.title')])
     expect(w.find('input[type="file"]').exists()).toBe(true)
-    expect(disabled(w, '.memory-cover-preview')).toBe(false)
-    expect(disabled(w, '.memory-date-chip')).toBe(false)
-    expect(disabled(w, '.memory-location-chip')).toBe(false)
+    expect(w.find('[data-testid="node-header-cover"]').exists(), 'core\'s cover button, where its right says so').toBe(true)
+    expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(false)
+    expect(disabled(w, '.veyq-node-header-chip[data-fact="place"]')).toBe(false)
     expect(getItemFavorites, 'the marks of this Memory are read').toHaveBeenCalled()
     await w.findAll('[role="tab"]')[1].trigger('mousedown')
     await flushPromises()
@@ -116,9 +116,9 @@ describe('MemoryDetail follows rights', () => {
     expect(await header(w)).toEqual([])
     expect(tabs(w)).toEqual([t('memory.gallery')])
     expect(w.find('input[type="file"]').exists()).toBe(false)
-    expect(disabled(w, '.memory-cover-preview')).toBe(true)
-    expect(disabled(w, '.memory-date-chip')).toBe(true)
-    expect(disabled(w, '.memory-location-chip')).toBe(true)
+    expect(w.find('[data-testid="node-header-cover"]').exists(), 'no cover button').toBe(false)
+    expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(true)
+    expect(disabled(w, '.veyq-node-header-chip[data-fact="place"]')).toBe(true)
     expect(getItemFavorites).not.toHaveBeenCalled()
   })
 
@@ -142,21 +142,26 @@ describe('MemoryDetail follows rights', () => {
     expect(updateNode).toHaveBeenCalled()
   })
 
-  // The cover is edited in core's dialog, which the host mounts (inbox #411): this page only ASKS for it, from its tile, and only
-  // where core's cover right grants it (`coverRights`, the host's `canSetCover`). A cover is set only by an upload there: the lightbox offers no way in.
-  it('the cover tile asks for the dialog only with the core cover right; this page writes no cover itself', async () => {
+  // The cover is core's (inbox #411, ADR 0110 decision 10): core's header shows it and opens core's dialog from it, where core's
+  // cover right grants it (`coverRights`). The Memory draws no cover control of its own and writes no cover; the lightbox offers
+  // no way in.
+  it('the cover is core\'s: core\'s header opens core\'s dialog with the core cover right; this page draws and writes none', async () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
     for (const setCover of [false, true]) {
       updateNode.mockClear()
-      const w = mount(MemoryDetail, {
-        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false }, canSetCover: setCover },
-        global: { plugins: [realI18n()] },
+      const open = vi.fn()
+      const w = mountWithHeader(MemoryDetail, {
+        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false } },
+        global: { plugins: [realI18n()], provide: coreActionsStandIn([], coverStandIn({ canSet: setCover, open })) },
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
-      await w.find('.memory-cover-preview').trigger('click')
+      expect(w.view.find('.veyq-node-header-leading, [data-testid="node-header-cover"]').exists(), 'no cover of the Memory\'s own').toBe(false)
+      const cover = w.find('[data-testid="node-header-cover"]')
+      expect(cover.exists(), `core's cover button, canSet ${setCover}`).toBe(setCover)
+      if (setCover) await cover.trigger('click')
       await flushPromises()
-      expect(w.emitted('editCover')?.length ?? 0, `tile, canSetCover ${setCover}`).toBe(setCover ? 1 : 0)
+      expect(open.mock.calls.map(([n]) => n.id), `core's dialog, canSet ${setCover}`).toEqual(setCover ? [NODE_ID] : [])
       expect(updateNode, 'this page writes no cover itself').not.toHaveBeenCalled()
       w.unmount()
     }
@@ -168,7 +173,7 @@ describe('MemoryDetail follows rights', () => {
     await seedDated(memoryKey)
     const dialog = () => document.body.querySelector('.banner-dialog')
     for (const setBanner of [false, true]) {
-      const w = mount(MemoryDetail, {
+      const w = mountWithHeader(MemoryDetail, {
         props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta: false, setBanner } },
         global: { plugins: [realI18n()] },
         attachTo: document.body,
@@ -222,7 +227,7 @@ describe('MemoryDetail follows rights', () => {
   it('a pending deletion: share stays, every write goes', async () => {
     const w = await mountDetail(memberMemoryRights({ readonly: true }))
     expect(await header(w)).toEqual(['share.share', 'share.uploadRequest'])
-    expect(disabled(w, '.memory-date-chip')).toBe(true)
+    expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(true)
     await w.findAll('[role="tab"]')[1].trigger('mousedown')
     await flushPromises()
     expect(w.find('.memory-card-grid').exists(), 'control: the chapters grid renders').toBe(true)
