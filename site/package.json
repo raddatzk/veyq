@@ -15,10 +15,12 @@
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
+  "//dependencies": "sharp is declared although nothing here imports it: Astro's image service loads it at build time from the built chunks, and Astro asks for it only as an optional dependency. npm hoisted it to node_modules/sharp; pnpm links only what this package declares, and without it `astro build` fails with MissingSharp (measured 2026-11-03).",
   "dependencies": {
     "@astrojs/starlight": "^0.42.6",
     "astro": "^7.3.8",
-    "mermaid": "^12.2.0"
+    "mermaid": "^12.2.0",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
