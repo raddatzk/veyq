@@ -1,7 +1,56 @@
 // Test helpers for core's node header (`core/node/components/NodeHeader.vue`, ADR 0110): its buttons, and its ⋯ menu — a
 // real click on the ⋯ opens the popup `VeyqMenu` (portalled to the body), a real click on an entry runs it. Unmeasured, as
 // in every unit test, each action that may be a button is one, so the menu holds the menu-only ones: report and delete.
-import { flushPromises, type VueWrapper } from '@vue/test-utils'
+// And `mountWithHeader`: a kind's view mounted under core's header as core's page draws it, for a test of what the view
+// contributes to that header without the page's doors and core actions (`src/test/nodePage.ts` mounts the real page).
+import { defineComponent, h, type Component } from 'vue'
+import { flushPromises, mount, type MountingOptions, type VueWrapper } from '@vue/test-utils'
+import NodeHeader from '../core/node/components/NodeHeader.vue'
+import { provideNodeHeader } from '../core/node/nodeHeaderContribution'
+import { registry } from '../core/applications/registry'
+import type { TreeNode } from '../core/node/tree'
+
+/**
+ * Mount `view` (its `node` prop names the node) under core's header, drawn as `NodePage` draws it: the kind's icon, cover and
+ * order from the registry, and what `view` contributes (`contributeNodeHeader`) - its banner above. People link as on a
+ * member's page unless `linkPeople` is false. The answer is the stand-in page's wrapper (`find` sees the header and the
+ * view), with `emitted` reading the VIEW's events and `view` its own wrapper.
+ */
+export function mountWithHeader(
+  view: Component,
+  options: {
+    props?: Record<string, unknown>
+    global?: MountingOptions<Record<string, unknown>>['global']
+    attachTo?: MountingOptions<Record<string, unknown>>['attachTo']
+    linkPeople?: boolean
+  } = {},
+) {
+  const { linkPeople = true, props, global, attachTo } = options
+  const Page = defineComponent({
+    name: 'NodePageStandIn',
+    inheritAttrs: false,
+    setup(_, { attrs }) {
+      const header = provideNodeHeader()
+      return () => {
+        const node = attrs.node as TreeNode
+        const d = registry.kind(node.kind)
+        const kind = d.supported ? d : null
+        const banner = header.value.banner
+        return h('div', { class: 'veyq-node-page' }, [
+          banner ? h(banner.component, banner.props ?? {}) : null,
+          h(NodeHeader, {
+            node, title: node.name, icon: kind?.icon, cover: !!kind?.cover, order: kind?.header?.order, linkPeople,
+            subtitle: header.value.subtitle, actions: header.value.actions, facts: header.value.facts,
+          }),
+          h(view, attrs),
+        ])
+      }
+    },
+  })
+  const w = mount(Page, { attrs: props, global, attachTo })
+  const inner = w.findComponent(view) as VueWrapper
+  return Object.assign(w, { view: inner, emitted: inner.emitted.bind(inner) as VueWrapper['emitted'] })
+}
 
 const MORE = '.veyq-node-header-more'
 const ENTRY = '.veyq-node-header-menu-item'

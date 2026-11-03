@@ -1,7 +1,11 @@
 // What core's `NodeHeader` (`core/node/components/NodeHeader.vue`) is fed: the data of ONE header row. Every node page and
-// level header — a folder's, a file's, a drop box's, a Memory's — is that one component; an application only says WHAT
-// is in it (a leading icon or image, a title, a subtitle, a meta row, its actions and their order) and core decides the
-// look, the spacing, which actions are buttons, the keyboard and the dark mode (owner design 2026-10-12, inbox #406).
+// level header — a folder's, a file's, a drop box's, a Memory's, a Pot's — is that one component, and core draws it: the
+// folder level (`LevelView`) and core's node page (`NodePage`) mount it, never an application (owner 2026-11-03, ADR 0110
+// decision 10). The kind's icon, whether it takes a cover and its priority (`order`) are its descriptor's
+// (`KindDescriptor.icon`, `.cover`, `.header`); what depends on the page - a subtitle, the application's actions, its
+// FACTS (a date, a place, people, a line of text) and a banner - the page's detail contributes as data
+// (`nodeHeaderContribution.ts`). Core decides the look, the spacing, which actions are buttons, the keyboard and the dark
+// mode (owner design 2026-10-12, inbox #406).
 //
 // **As many actions as fit are buttons, the rest one menu** (ADR 0110): the page that draws the header names its kind's
 // priority as an id list (`order`), core measures the row and {@link fitHeaderActions} says how many of the actions that
@@ -15,8 +19,78 @@
 // build: the header takes them for its `node` from the view around it (`coreNodeActions.ts`). A share guest gets the same header as a member with fewer actions (inbox #401) —
 // there is no guest-only header.
 
+import type { Component } from 'vue'
 import type { VeyqIconName } from '../../shared/ui/icons'
 import type { NodeRights } from '../access'
+
+/** A fact under the name in core's chip look: a date or a place (the kind picks the icon), a button where `onClick` is given
+ *  (the application's own editor), else plain text. Consecutive chips share one row. */
+export interface NodeHeaderChipFact {
+  kind: 'date' | 'place'
+  /** What the chip reads (already translated): the value, or the application's words for its absence. */
+  label: string
+  /** No value yet: drawn muted. */
+  empty?: boolean
+  /** What a click opens (the application's editor). Omitted: plain text. */
+  onClick?: () => void
+  /** The button's accessible name and tooltip ("Edit date"); default `label`. */
+  actionLabel?: string
+  /** Rendered but not clickable (keys still loading, no right to edit). */
+  disabled?: boolean
+}
+
+/** One person of a {@link NodeHeaderPeopleFact}. */
+export interface NodeHeaderPerson {
+  /** A member's id: their picture and their profile link (`#people/<id>`), on a member's page only. Null: a person with no
+   *  member identity (a guest), drawn by name alone. */
+  userId: string | null
+  /** How the interface names them (already translated where it is a placeholder, "Former member"). */
+  name: string
+  /** No longer a member of the space: greyed, no link, no picture. */
+  former?: boolean
+}
+
+/** People under the name (who was there, who uploaded the file): one person by avatar and name, several as overlapping
+ *  avatars (three, or two and "+N") whose hover card lists everyone. Core draws them and decides the links: a profile link and a
+ *  member's picture only where the header's `linkPeople` says so (a member's page), never on a share page. */
+export interface NodeHeaderPeopleFact {
+  kind: 'people'
+  /** The group's accessible name ("Participants", "Uploaded by"). */
+  label: string
+  people: readonly NodeHeaderPerson[]
+  /** Visible words before the people ("Uploaded by"). Omitted: none. */
+  caption?: string
+  /** A muted line beside them (loading the names, a read that failed). */
+  status?: string
+}
+
+/** A plain line of text under the name. */
+export interface NodeHeaderTextFact {
+  kind: 'text'
+  text: string
+}
+
+/** What a page's detail may show under the header's name, in its order: core draws each in one look. A fact the node does not
+ *  have is left out (never a placeholder), unless the application's placeholder is itself the way in (Memories' "Add date"). */
+export type NodeHeaderFact = NodeHeaderChipFact | NodeHeaderPeopleFact | NodeHeaderTextFact
+
+/** A component core draws above the header row of a node's page (Memories' banner): the application's own presentation, with
+ *  its props. Core gives it the page's width; it brings its own frame. */
+export interface NodeHeaderBanner {
+  component: Component
+  props?: Record<string, unknown>
+}
+
+/** The facts as the header lays them out: consecutive chips share one row, every other fact has a row of its own. */
+export function factRows(facts: readonly NodeHeaderFact[]): NodeHeaderFact[][] {
+  const rows: NodeHeaderFact[][] = []
+  for (const f of facts) {
+    const last = rows.at(-1)
+    if (f.kind !== 'people' && f.kind !== 'text' && last && last[0]!.kind !== 'people' && last[0]!.kind !== 'text') last.push(f)
+    else rows.push([f])
+  }
+  return rows
+}
 
 /** One button of the header's action row. */
 export interface NodeHeaderAction {

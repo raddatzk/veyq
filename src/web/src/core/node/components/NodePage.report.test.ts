@@ -47,6 +47,7 @@ import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 import { chooseHeaderEntry, headerMenuIds } from '../../../test/nodeHeader'
 import { mountNodePage } from '../../../test/nodePage'
 import { hostFor } from '../../../test/nodeHost'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const EPOCHS = epochsOf(new Uint8Array(32).fill(4))
@@ -115,6 +116,37 @@ describe('Report on every node\'s page (a legal duty, DSA Art. 16)', () => {
       expect(vi.mocked(openReport), `${kind}: the report opens`).toHaveBeenCalledOnce()
       expect(vi.mocked(openReport).mock.calls[0]![0].targets.map((x) => [x.kind, 'id' in x ? x.id : null]), kind).toEqual([['NODE', nodeOf(kind).id]])
       w.unmount()
+    }
+  })
+
+  // ADR 0110 decision 10 (owner 2026-11-03): core draws every node page's header, from the kind's descriptor and what the
+  // detail contributes as data - so no kind can leave Report out by drawing a header of its own. The detail itself draws none:
+  // mounted bare, without core's page, there is no header at all (and the guard keeps `NodeHeader.vue` out of every
+  // application, `validate_web_core_imports_no_applications.py`'s `header` rule).
+  it('every kind\'s header is core\'s: drawn by the page around the detail from the descriptor, and none by the detail', async () => {
+    for (const kind of pageKinds()) {
+      const d = registry.kind(kind)
+      if (!d.supported || !d.detail) throw new Error(`${kind} has no page`)
+      const w = await mountPage(kind)
+      expect(w.findAll('.veyq-node-header'), `${kind}: one header`).toHaveLength(1)
+      expect(w.findComponent(d.detail).find('.veyq-node-header').exists(), `${kind}: not the detail's`).toBe(false)
+      expect(w.get('.veyq-node-header-title').text(), kind).toBe(nodeOf(kind).name)
+      // the leading visual is the kind's icon (no cover resolved here), the descriptor's, not a page's own
+      expect(w.get('.veyq-node-header-leading').findComponent(VeyqIcon).props('name'), kind).toBe(d.icon)
+      w.unmount()
+
+      const bare = mount(d.detail, {
+        props: {
+          node: nodeOf(kind), scopeId: SCOPE, epochs: EPOCHS, contentKey: KEY, children: { folders: [], byKind: new Map() },
+          access: member(), tree: { ...memberTreeOf(() => [FOLDER, nodeOf(kind)], { scopeId: SCOPE, epochs: EPOCHS }), keyOf: () => KEY },
+        },
+        global: { plugins: [realI18n()], provide: hostFor(member()).provide },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      expect(bare.find('.veyq-node-header').exists(), `${kind} mounted bare draws no header`).toBe(false)
+      expect(bare.text().length, `${kind}: control, the bare detail rendered its body`).toBeGreaterThan(0)
+      bare.unmount()
     }
   })
 

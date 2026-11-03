@@ -458,10 +458,11 @@ watch(levelItems, (now) => selection.retain(now.keys()))
 // its delete alone (`blockedItem`), core's default or the application's own.
 const coreRowActions = (item: Item): CoreRowAction[] => (item.unsupported || item.node.blockedByOperator ? [] : coreActions.row(item.node))
 // The folder on screen is a node too: its header carries the same core actions, which `NodeHeader` takes for its `node` from
-// this view (the scope root is no node and has none). Its priority (ADR 0110): what is first a button — favorite, then
-// sharing, its content, its look, then editing and moving it; delete and report are always the ⋯ menu's last entries.
-const FOLDER_HEADER_ORDER = ['favorite', 'share', 'download', 'cover', 'rename', 'move', 'copy'] as const
-const folderCover = computed(() => (props.folder ? (cover.covers.value.get(props.folder.id) ?? null) : null))
+// this view (the scope root is no node and has none), and is drawn from FOLDER's descriptor as every kind's page header is
+// (ADR 0110 decision 10): its icon, its cover - the leading visual, which opens this view's cover dialog where the member may
+// set it - and its priority, `header.order` (core's pre-registration).
+const folderKind = registry.kind(FOLDER_KIND)
+const folderHeader = folderKind.supported ? { icon: folderKind.icon, cover: !!folderKind.cover, order: folderKind.header?.order } : null
 const itemMode = computed<'grid' | 'list'>(() => (mode.value === 'list' ? 'list' : 'grid'))
 
 // The application's own presentation of the mode (Memories' map), in place of the list.
@@ -562,12 +563,15 @@ async function onDrop(e: DragEvent): Promise<void> {
          the reading order. -->
     <div v-if="folder || spaceName || hasToolbar" class="veyq-level-head" :class="{ 'has-header': !!(folder || spaceName) }">
       <!-- The folder's header, core's one (`NodeHeader`): a container kind's detail opens with it too. -->
-      <NodeHeader v-if="folder" :node="folder" icon="folder" :title="folderName ?? folder.name" :actions="folderActions" :order="FOLDER_HEADER_ORDER">
-        <!-- The folder's cover (inbox #411) in the header's leading slot; the folder icon stays the default without one. -->
-        <template v-if="folderCover" #leading>
-          <span class="veyq-node-header-cover"><NodeCoverImage :src="folderCover.url" :crop="folderCover.crop" /></span>
-        </template>
-      </NodeHeader>
+      <NodeHeader
+        v-if="folder"
+        :node="folder"
+        :icon="folderHeader?.icon"
+        :cover="folderHeader?.cover"
+        :title="folderName ?? folder.name"
+        :actions="folderActions"
+        :order="folderHeader?.order"
+      />
       <!-- The space's top level: core's header with the space's name and nothing to act on (the space is no node). -->
       <NodeHeader v-else-if="spaceName" :node="null" :title="spaceName" />
       <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own. Hidden

@@ -1556,6 +1556,9 @@ const en = {
     retry: 'Try again',
     formerMember: 'Former member',
     formerMemberHint: 'No longer in this space.',
+    // People under a node's name in its header (core's `PersonGroup`): the group's summary and a person's profile link.
+    groupSummary: '{label} ({count}): {names}',
+    open: 'Open the profile of {name}',
   },
   // The safety number on a member's profile (uc.spaces.enforce-verified-identities, ADR 0028 Decision 3): my own with its QR,
   // another member's with the scan / digit compare that marks them verified.
@@ -3567,6 +3570,8 @@ const de: typeof en = {
     retry: 'Erneut versuchen',
     formerMember: 'Ehemaliges Mitglied',
     formerMemberHint: 'Nicht mehr in diesem Bereich.',
+    groupSummary: '{label} ({count}): {names}',
+    open: 'Profil von {name} öffnen',
   },
   safety: {
     mineTitle: 'Deine Sicherheitsnummer',
