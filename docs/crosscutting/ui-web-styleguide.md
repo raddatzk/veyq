@@ -153,6 +153,25 @@ or a one-off `1rem` label sitting in them.
 - **Badges:** `.veyq-badge.success|.warning|.muted` for status; no one-off pills.
 - **Forms:** `.veyq-form`, `.veyq-form-grid`, `.veyq-form-copy`; full-width inputs; concise labels;
   muted helper text that explains *consequences*, not the label.
+- **One field box:** every one-line field — text, password, select, date field, the console's combobox — is one box of
+  `--veyq-field-height` (`shared/ui/layer.css`), weight 400 and one radius (6px, `--app-radius-sm` inside a
+  `.veyq-form`), so fields side by side line up, their labels with them, and an empty select keeps its height. A new
+  field kind joins that rule; it never brings a height of its own.
+- **An icon button inside a field** is `.veyq-field-action` (the password's eye, the date field's calendar, the Secret
+  Key's upload/scan/eye): its look — size, colour, hover, focus — is that class; the field's own rule only places it.
+- **A raw `<button>` sets its `font-size`.** A button does not inherit the font, and `.veyq-icon` is sized in `em`, so a
+  button whose rule sets none draws its icon at the browser's 13.33px beside a 16px one (the Secret Key's icons did).
+  A layer class (`.veyq-field-action`, `.veyq-icon-button`, `VeyqButton`) already carries it — reuse one.
+- **A shared container styles its parts by class, never by element.** `.veyq-section-header span` greyed every span in a
+  header, a primary button's label and icon included; a header's quiet fact (a count) is `.veyq-section-meta`.
+- **A card step that is no form** — a result, a note and the button that goes on — is `.veyq-stack`: one gap between
+  them, as a form's fields have; a card's content has no layout of its own, so without it they touch. A button in it
+  keeps its own width.
+- **A row that leads with a picture or icon** (a person's avatar) is `.veyq-list-row.has-leading`: the visual, the name
+  beside it, then the actions. Never the visual in the row's wide first column — that pushed the name to the far end.
+- **A node header's leading visual is as tall as the rows beside it** — core's icon tile (a 4rem square) and core's
+  cover (16:9, 4rem tall) span the name row and the subtitle, as the Memory's cover spans its four rows. A kind whose
+  header has more rows brings its own visual and its own `--veyq-node-header-leading-wide`; it never shrinks core's.
 - **Empty/loading:** `.veyq-empty`, `.veyq-loading` — concise and action-oriented, not marketing copy.
 - **The UI layer** ([ADR 0107](../decisions/0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md)):
   a button, field, dialog, menu, select, tabs, toast, tooltip, date field or icon is a `Veyq*` component of
