@@ -27,6 +27,7 @@ vi.mock('./cases', () => ({
 }))
 
 import CaseDetail from './CaseDetail.vue'
+import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
 import {
   barReporter,
   decideObjection,
@@ -130,6 +131,17 @@ const stubs = {
   VeyqMessage: { template: '<div class="msg"><slot /></div>' },
   VeyqDateField: { name: 'VeyqDateField', props: ['modelValue'], emits: ['update:modelValue'], template: '<input class="datepicker" />' },
   AuthoritySection: { props: ['current', 'busy'], template: '<div class="authority-section-stub" />' },
+}
+
+/** The layer's select whose field carries `id`: its options offered, its value, and a pick. (A generic component's
+ *  wrapper types its props as nothing, hence the read through one named shape.) */
+type SelectProps = { inputId?: string; modelValue?: string; options: { value: string }[] }
+const selectProps = (c: VueWrapper) => c.props() as unknown as SelectProps
+const select = (w: VueWrapper, id: string) => w.findAllComponents(VeyqSelect).find((c) => selectProps(c).inputId === id)!
+const offeredIn = (w: VueWrapper, id: string) => selectProps(select(w, id)).options.map((o) => o.value)
+async function pick(w: VueWrapper, id: string, value: string) {
+  select(w, id).vm.$emit('update:modelValue', value)
+  await flushPromises()
 }
 
 async function mountCase(c: ModerationCase = caseOf()): Promise<VueWrapper> {
@@ -251,8 +263,7 @@ describe('CaseDetail', () => {
     const until = new Date(2027, 2, 1)
     vi.mocked(extendHold).mockResolvedValue(caseOf({ category: 'CHILD_SEXUAL_ABUSE', hold: { endsAt: until, trigger: 'EXTENDED', floorUntil: undefined } }))
     const w = await mountCase(caseOf({ category: 'CHILD_SEXUAL_ABUSE' }))
-    const offered = w.findAll('.moderation-extend-type option').map((o) => o.attributes('value')).filter((v) => v)
-    expect(offered).toEqual(['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS'])
+    expect(offeredIn(w, 'moderation-extend-type')).toEqual(['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS'])
     w.findComponent({ name: 'VeyqDateField' }).vm.$emit('update:modelValue', '2027-03-01')
     await w.find('.moderation-extend-reason').setValue('BKA asked to keep it')
     // Without the kind it is not sent, and says why.
@@ -260,7 +271,7 @@ describe('CaseDetail', () => {
     await flushPromises()
     expect(extendHold).not.toHaveBeenCalled()
     expect(w.find('.moderation-case-error').text()).toBe(t('moderation.errors.extendTypeRequired'))
-    await w.find('.moderation-extend-type').setValue('AUTHORITY_REFERENCE')
+    await pick(w, 'moderation-extend-type', 'AUTHORITY_REFERENCE')
     await w.find('.moderation-extend').trigger('submit')
     await flushPromises()
     expect(extendHold).toHaveBeenCalledWith(CASE, until, 'BKA asked to keep it', 'AUTHORITY_REFERENCE')
@@ -268,8 +279,7 @@ describe('CaseDetail', () => {
 
   it('on another case every kind of reason is offered, and the kind is optional', async () => {
     const w = await mountCase()
-    const offered = w.findAll('.moderation-extend-type option').map((o) => o.attributes('value')).filter((v) => v)
-    expect(offered).toEqual(['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS', 'OBJECTION', 'LAWYERS_LETTER', 'LAWSUIT'])
+    expect(offeredIn(w, 'moderation-extend-type')).toEqual(['AUTHORITY_REFERENCE', 'ART18_REPORT_IN_PROGRESS', 'OBJECTION', 'LAWYERS_LETTER', 'LAWSUIT'])
   })
 
   it('an extension without a reason is not sent', async () => {
@@ -356,8 +366,9 @@ describe('CaseDetail', () => {
       vi.mocked(reporterNoticesOf).mockReturnValue([{ reportId: REPORT, address: 'r@example.org' }])
       const w = await mountCase(caseOf())
       expect(w.find('label[for="moderation-statement-facts"]').text()).toBe(t('moderation.decide.facts'))
-      expect((w.find('.moderation-statement-ground').element as HTMLSelectElement).value).toBe('TERMS_BREACH')
-      await w.find('.moderation-statement-ground').setValue('ILLEGAL_CONTENT')
+      expect(selectProps(select(w, 'moderation-statement-ground')).modelValue).toBe('TERMS_BREACH')
+      expect(w.find('#moderation-statement-ground').text()).toBe(t('report.categories.TERMS_BREACH'))
+      await pick(w, 'moderation-statement-ground', 'ILLEGAL_CONTENT')
       await w.find('.moderation-statement-provision').setValue('§ 86a StGB')
       await w.find('.moderation-statement-facts').setValue('the facts')
       await click(w, '.moderation-block-content')

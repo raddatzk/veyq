@@ -34,14 +34,6 @@
   color: var(--app-muted);
   font-size: 0.82rem;
 }
-.share-name-card input {
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--app-line);
-  border-radius: 8px;
-  background: var(--app-surface);
-  color: var(--app-text);
-  font: inherit;
-}
 .share-name-submit {
   margin-top: 0.4rem;
   padding: 0.6rem 1rem;

@@ -3,13 +3,16 @@
 // zone, exactly what a Memory's date range and an expiry store; a caller holding a `Date` converts through
 // `shared/isoDate`. The day is typed into segments - day, month and year, each a spinbutton typed as digits or stepped
 // by the arrow keys - in the order and with the separators of the language (`tt.mm.jjjj` in German, `mm/dd/yyyy` in
-// English; ADR 0107 § Behaviour changed on purpose). The calendar opens from its button and, as before, when the field
+// English; ADR 0107 § Behaviour changed on purpose). `granularity="minute"` makes it a date and time field: the model is
+// local wall-clock time as `YYYY-MM-DDTHH:mm` (the value form of a native `datetime-local`, no zone), with hour and
+// minute segments after the day, in the language's clock (24 hours in German, AM/PM in English); a day picked in the
+// calendar keeps the time. The calendar opens from its button and, as before, when the field
 // gets focus; it steps by month, its week starts on the catalog's first day, and days outside `minDate`/`maxDate`
 // (ISO too) cannot be picked or typed. `inputId` names the field for a `<label for>`. Sheets reach it by
 // `veyq-date-field`, a segment by `veyq-date-field__segment` and its calendar by `veyq-date-panel` (styled below).
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { parseDate, type DateValue } from '@internationalized/date'
+import { parseDate, parseDateTime, type DateValue } from '@internationalized/date'
 import {
   DatePickerCalendar,
   DatePickerCell,
@@ -39,17 +42,23 @@ const props = defineProps<{
   disabled?: boolean
   minDate?: string
   maxDate?: string
+  granularity?: 'day' | 'minute'
 }>()
 
 const { t, locale } = useI18n()
 
+const withTime = computed(() => props.granularity === 'minute')
 function dayOf(iso: string | undefined): DateValue | undefined {
   if (!iso) return undefined
   try {
-    return parseDate(iso)
+    return withTime.value ? parseDateTime(iso) : parseDate(iso)
   } catch {
     return undefined
   }
+}
+/** A day as `YYYY-MM-DD`; a date and time as `YYYY-MM-DDTHH:mm` - its own `toString` adds the seconds. */
+function isoOf(day: DateValue): string {
+  return withTime.value ? day.toString().slice(0, 16) : day.toString()
 }
 
 const minValue = computed(() => dayOf(props.minDate))
@@ -75,24 +84,33 @@ const value = computed<DateValue | undefined>({
       return
     }
     refused = false
-    model.value = day ? day.toString() : ''
+    model.value = day ? isoOf(day) : ''
   },
 })
 const language = computed(() => (locale.value === 'de' ? 'de-DE' : 'en-US'))
 const weekStartsOn = computed(() => Number(t('ui.firstDayOfWeek')) as 0 | 1 | 2 | 3 | 4 | 5 | 6)
 
-/** Reka writes day and month without a leading zero and names the segments in English; the field shows `12.05.2026`
- *  as before and says "Tag", "Monat", "Jahr" (an attribute passed here wins over Reka's). An empty segment shows the
- *  language's placeholder (`tt`, `mm`, `jjjj`), which is no number. */
-const SEGMENT_NAMES: Record<string, string> = { day: 'ui.dateSegment.day', month: 'ui.dateSegment.month', year: 'ui.dateSegment.year' }
+/** Reka writes day, month and hour without a leading zero and names the segments in English; the field shows
+ *  `12.05.2026 09:05` as a native field did and says "Tag", "Monat", "Jahr", "Stunde", "Minute" (an attribute passed
+ *  here wins over Reka's). An empty number segment shows the language's placeholder (`tt`, `mm`, `jjjj`, `––`), which is
+ *  no number; the AM/PM segment is a word either way and keeps Reka's own reading. */
+const SEGMENT_NAMES: Record<string, string> = {
+  day: 'ui.dateSegment.day',
+  month: 'ui.dateSegment.month',
+  year: 'ui.dateSegment.year',
+  hour: 'ui.dateSegment.hour',
+  minute: 'ui.dateSegment.minute',
+  dayPeriod: 'ui.dateSegment.dayPeriod',
+}
+const PADDED = new Set(['day', 'month', 'hour', 'minute'])
 const isNumber = (text: string) => /^\d+$/.test(text)
 function shown(part: string, text: string): string {
-  return (part === 'day' || part === 'month') && isNumber(text) ? text.padStart(2, '0') : text
+  return PADDED.has(part) && isNumber(text) ? text.padStart(2, '0') : text
 }
 function segmentNames(part: string, text: string): Record<string, string> {
   const names: Record<string, string> = {}
   if (SEGMENT_NAMES[part]) names['aria-label'] = t(SEGMENT_NAMES[part])
-  if (!isNumber(text)) names['aria-valuetext'] = t('ui.dateSegment.empty')
+  if (part !== 'dayPeriod' && !isNumber(text)) names['aria-valuetext'] = t('ui.dateSegment.empty')
   return names
 }
 
@@ -168,7 +186,7 @@ onMounted(() => {
     fixed-weeks
     :disabled="disabled"
     :required="required"
-    granularity="day"
+    :granularity="withTime ? 'minute' : 'day'"
     :modal="false"
   >
     <DatePickerField
@@ -183,7 +201,8 @@ onMounted(() => {
       @click.capture="onFieldClick"
     >
       <span class="veyq-date-field__segments">
-        <template v-for="item in segments" :key="item.part">
+        <!-- the literals share one part name, so their key is their place: the languages differ in how many there are -->
+        <template v-for="(item, i) in segments" :key="item.part === 'literal' ? `literal-${i}` : item.part">
           <DatePickerInput v-if="item.part === 'literal'" :part="item.part" class="veyq-date-field__literal">{{ item.value }}</DatePickerInput>
           <DatePickerInput v-else :part="item.part" class="veyq-date-field__segment" v-bind="segmentNames(item.part, item.value)">{{ shown(item.part, item.value) }}</DatePickerInput>
         </template>

@@ -10,6 +10,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
+import VeyqTextarea from '../../../shared/ui/VeyqTextarea.vue'
 import { guestStatementFor, guestStatements, loadGuestStatements, loadStatements, objectionFailure, objectTo, openFacts, statementFor, type GuestStatement } from './statements'
 import { renderStatement } from './template'
 
@@ -124,7 +125,7 @@ onMounted(() => {
     </template>
     <form v-else-if="statement.canObject" class="veyq-form statement-objection" @submit.prevent="submit">
       <label :for="`statement-objection-${statement.id}`">{{ t('statement.objectLabel') }}</label>
-      <textarea :id="`statement-objection-${statement.id}`" v-model="text" class="statement-objection-text" rows="4" maxlength="2000" :disabled="busy" />
+      <VeyqTextarea :id="`statement-objection-${statement.id}`" v-model="text" class="statement-objection-text" rows="4" maxlength="2000" :disabled="busy" />
       <span class="veyq-form-copy">{{ t('statement.objectHint') }}</span>
       <VeyqButton type="submit" class="statement-objection-submit" icon="send" :label="t('statement.objectSubmit')" :loading="busy" />
     </form>

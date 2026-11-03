@@ -14,6 +14,7 @@ import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
+import VeyqTextarea from '../../shared/ui/VeyqTextarea.vue'
 import VeyqToggleGroup from '../../shared/ui/VeyqToggleGroup.vue'
 import { ReportCategory, type ReportReceipt } from '../../api/generated/moderation'
 import { PRIVACY_ANCHOR, privacyLink } from '../privacy/privacyNotice'
@@ -146,7 +147,7 @@ async function send(): Promise<void> {
         <VeyqMessage v-if="csam" tone="info" class="veyq-report-csam">{{ t('report.csamNote') }}</VeyqMessage>
 
         <label for="veyq-report-reason">{{ t('report.reason') }}</label>
-        <textarea id="veyq-report-reason" v-model="reason" class="veyq-report-reason" rows="5" maxlength="2000" required :disabled="loading" />
+        <VeyqTextarea id="veyq-report-reason" v-model="reason" class="veyq-report-reason" rows="5" maxlength="2000" required :disabled="loading" />
         <span class="veyq-report-hint">{{ t('report.reasonHint') }}</span>
 
         <div class="veyq-report-good-faith">
@@ -175,15 +176,6 @@ async function send(): Promise<void> {
 .veyq-report-intro,
 .veyq-report-count {
   margin: 0;
-}
-.veyq-report-reason {
-  width: 100%;
-  font: inherit;
-  padding: 0.5rem;
-  border: 1px solid var(--app-line);
-  border-radius: var(--app-radius);
-  background: var(--app-surface);
-  color: var(--app-text);
 }
 .veyq-report-hint {
   font-size: 0.85rem;

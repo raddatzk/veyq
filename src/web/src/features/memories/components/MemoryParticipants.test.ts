@@ -302,7 +302,7 @@ describe('MemoryParticipants: the picker', () => {
     // The layer's checkbox is a Reka button with no input of its own, so `.veyq-form input` has nothing to stretch...
     expect(first.querySelectorAll('input')).toHaveLength(0)
     // ...and the box itself is none of what that rule (`styles/ui.css`) makes full width.
-    expect(box!.matches(".veyq-form .veyq-input, .veyq-form .veyq-password, .veyq-form .veyq-select, .veyq-form .veyq-date-field, .veyq-form input:not([type='radio']):not([type='checkbox']), .veyq-form select, .veyq-form textarea")).toBe(false)
+    expect(box!.matches(".veyq-form .veyq-input, .veyq-form .veyq-password, .veyq-form .veyq-select, .veyq-form .veyq-date-field, .veyq-form input:not([type='radio']):not([type='checkbox'])")).toBe(false)
     void w
   })
 })

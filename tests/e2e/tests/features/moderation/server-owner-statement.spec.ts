@@ -213,7 +213,7 @@ test(
     await expect(proposal).toHaveCount(1, { timeout: 60_000 })
     await proposal.locator('.mod-proposal__block').click()
     // A proposal is over content: its statement — the ground starts at the case's category.
-    await expect(proposal.locator('.step-statement__ground')).toHaveValue('TERMS_BREACH')
+    await expect(proposal.locator('.step-statement__ground')).toHaveText('A breach of the terms') // the layer's select shows the name
     await proposal.locator('.step-statement__provision').fill(provision)
     await proposal.locator('.step-statement__facts').fill(facts)
     // The instance mail is set up (instance-mail.spec.ts), so the fields warn of nothing.

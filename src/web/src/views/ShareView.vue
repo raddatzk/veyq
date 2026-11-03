@@ -66,6 +66,7 @@ import ShareReview from '../features/moderation/review/ShareReview.vue'
 import OperatorSectionView from '../core/terms/OperatorSectionView.vue'
 import { pairKey, pairOf, type OperatorSection } from '../core/terms/operatorSection'
 import VeyqIcon from '../shared/ui/VeyqIcon.vue'
+import VeyqInput from '../shared/ui/VeyqInput.vue'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -370,7 +371,7 @@ onMounted(() => {
         <h1>{{ t('share.passwordTitle') }}</h1>
         <p class="share-name-intro">{{ t('share.passwordIntro') }}</p>
         <label for="share-password-input">{{ t('share.passwordLabel') }}</label>
-        <input
+        <VeyqInput
           id="share-password-input"
           v-model="pwInput"
           type="password"

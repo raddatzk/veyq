@@ -2,6 +2,10 @@ import pluginVue from 'eslint-plugin-vue'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 import { argonThroughTheWorker } from '@veyq/crypto/eslint-argon-door'
 import { plugin as featureMocks } from './eslint/featureMocks.js'
+import { plugin as formControls } from './eslint/formControls.js'
+
+// The local rules, as ONE plugin: flat config refuses a second, different object under a plugin name it already has.
+const veyqWeb = { meta: { name: 'veyq-web' }, rules: { ...featureMocks.rules, ...formControls.rules } }
 
 // `veyq/one-settings-door` below: every static spelling of a navigation to the settings hub, as AST selectors.
 // Shared by the script rule and its template twin, because a template expression parses into the same node types.
@@ -187,6 +191,19 @@ export default defineConfigWithVueTs(
     },
   },
   {
+    // A form control is a layer component (ADR 0107): outside `src/shared/ui/` no template writes a native `<select>`,
+    // `<textarea>` or text-like `<input>` - each drew its own box beside the layer's one field box (a select of another
+    // shape was what the owner saw). Only `type="file" | "checkbox" | "radio" | "range" | "hidden"` stays native. The
+    // rule, its reasons and its LIMIT are in eslint/formControls.js, its bite in formControls.test.mjs.
+    name: 'veyq/controls-through-the-layer',
+    files: ['src/**/*.vue'],
+    ignores: [UI_LAYER],
+    plugins: { 'veyq-web': veyqWeb },
+    rules: {
+      'veyq-web/controls-through-the-layer': 'error',
+    },
+  },
+  {
     // Starting a refused trust document over (ADR 0028 Decision 7's way back, inbox #192) writes the EMPTY pin
     // store or device register — exactly what Decision 7 refuses to read a refused document as — so the whole
     // defence is who can cause it: the server can cause the refusal, never this write. So the reset module is
@@ -297,7 +314,7 @@ export default defineConfigWithVueTs(
     // annotates its return type with the model).
     name: 'veyq/api-mocks-typed-by-the-contract',
     files: ['src/**/*.test.ts'],
-    plugins: { 'veyq-web': featureMocks },
+    plugins: { 'veyq-web': veyqWeb },
     rules: {
       'no-restricted-syntax': ['error', ...REAL_CATALOG_SYNTAX, ...API_MOCKS_SYNTAX],
       'veyq-web/feature-mocks-bare-fn': 'error', // S6

@@ -789,16 +789,6 @@ a.lightbox-icon-button,
   font-size: 0.8rem;
 }
 
-.media-lightbox-date-form input {
-  width: 100%;
-  min-width: 0;
-  padding: 0.5rem;
-  border: 1px solid var(--app-line);
-  border-radius: 8px;
-  background: var(--app-surface);
-  color: var(--app-text);
-}
-
 .media-lightbox-date-actions {
   display: flex;
   gap: 0.5rem;
@@ -951,8 +941,7 @@ a.lightbox-icon-button,
     color: var(--app-text);
   }
 
-  .veyq-icon-button.lightbox-nav,
-  .media-lightbox-date-form input {
+  .veyq-icon-button.lightbox-nav {
     background: var(--app-surface);
     color: var(--app-text);
   }

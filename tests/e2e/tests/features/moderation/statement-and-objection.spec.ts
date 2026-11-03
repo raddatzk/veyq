@@ -175,7 +175,8 @@ test(
     // Every statement asks for the facts (one form on every instance): without them the block is not sent.
     await page.locator('.moderation-block-content').click()
     await expect(page.locator('.moderation-case-error')).toHaveText('Write what you found: a block’s statement must state the facts.')
-    await expect(page.locator('#moderation-statement-ground')).toHaveValue('ILLEGAL_CONTENT')
+    // The ground is the layer's select: its field shows the picked ground's name, not a value.
+    await expect(page.locator('#moderation-statement-ground')).toHaveText('Other illegal content')
     await page.locator('#moderation-statement-facts').fill(recordTyped(facts))
     // ... and the law or the clause the ground relies on (DSA Art. 17(3)(d), (e)): without it the block is not sent either.
     await page.locator('.moderation-block-content').click()

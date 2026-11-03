@@ -53,6 +53,7 @@ vi.mock('../../../shared/state/useToast', () => ({
 import { reactive } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import MediaLightbox from './MediaLightbox.vue'
+import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import { addMedia, listMedia, type MediaDeriver, type MediaExif, type MediaItem } from '../media'
 import { readExifTags, type ExifTags } from '../../../shared/image/exifTags'
 import { blobApi } from '../../../api/client'
@@ -940,6 +941,13 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
 })
 
 describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
+  /** The capture-time field is the layer's date field at minute granularity, bound as `YYYY-MM-DDTHH:mm`. */
+  const capturedAt = (w: ReturnType<typeof mountLightbox>) => w.findComponent(VeyqDateField)
+  async function typeCapturedAt(w: ReturnType<typeof mountLightbox>, value: string) {
+    capturedAt(w).vm.$emit('update:modelValue', value)
+    await flushPromises()
+  }
+
   async function seedOne(memoryKey: Uint8Array, exifTags: ExifTags | undefined) {
     vi.mocked(readExifTags).mockResolvedValue(exifTags)
     const store = galleryFakeStore()
@@ -961,7 +969,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
 
     // open the editor, set a corrected date, save
     await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
-    await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
+    await typeCapturedAt(wrapper, '2019-08-15T08:30')
     await wrapper.find('.media-lightbox-date-form').trigger('submit')
     await flushPromises()
 
@@ -981,6 +989,28 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     expect(wrapper.text()).not.toContain(t('media.capturedAtCorrected'))
   })
 
+  // The date field takes the arrows (segment to segment) and Backspace (clear a segment): on the window they page and
+  // cull, so a key typed in the field is the field's, as a key in a dialog over the lightbox is that dialog's.
+  it('a key typed into the capture-time field is the field\'s, never the culling hotkey or paging', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedOne(memoryKey, { DateTimeOriginal: Date.UTC(2021, 4, 1, 10, 0, 0) })
+    const wrapper = mount(MediaLightbox, {
+      props: { memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', ...memberProps(memoryKey) },
+      global: { plugins: [realI18n()] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    const segment = wrapper.find('.veyq-date-field__segment').element
+    for (const key of ['Backspace', 'Delete', 'ArrowRight', 'ArrowLeft', 'Escape']) segment.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+    expect(wrapper.emitted('delete')).toBeFalsy()
+    expect(wrapper.emitted('close')).toBeFalsy()
+    // control: the same key outside the field is the hotkey
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace' }))
+    expect(wrapper.emitted('delete')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId })
+    wrapper.unmount()
+  })
+
   it('lets a user SET a date on a media that has no EXIF at all', async () => {
     const memoryKey = v1.randomBytes(32)
     const { store, items } = await seedOne(memoryKey, undefined) // no readable EXIF
@@ -992,7 +1022,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     expect(wrapper.findAll('.media-lightbox-metadata dt').map((d) => d.text())).not.toContain(t('media.captured'))
 
     await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
-    await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
+    await typeCapturedAt(wrapper, '2019-08-15T08:30')
     await wrapper.find('.media-lightbox-date-form').trigger('submit')
     await flushPromises()
 
@@ -1021,14 +1051,14 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
     await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
-    await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
+    await typeCapturedAt(wrapper, '2019-08-15T08:30')
     await wrapper.find('.media-lightbox-date-form').trigger('submit')
     await flushPromises()
 
     expect(store.api.updateMediaMeta).toHaveBeenCalledTimes(1) // no retry over the peer's own field
     expect(wrapper.text()).toContain(t('media.capturedAtConflict'))
     expect(wrapper.find('#captured-at-input').exists()).toBe(true) // the editor is still open…
-    expect(new Date((wrapper.find('#captured-at-input').element as HTMLInputElement).value).getTime()).toBe(PEER) // …on theirs
+    expect(new Date(capturedAt(wrapper).props('modelValue') as string).getTime()).toBe(PEER) // …on theirs
     expect(wrapper.emitted('updated')?.at(-1)?.[0]).toEqual({ mediaId: items[0].mediaId, wrappedMeta: peers, metaRevision: 1 })
   })
 
@@ -1044,7 +1074,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     const wrapper = mountLightbox(memoryKey, [damaged], 0)
     await flushPromises()
     await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
-    await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
+    await typeCapturedAt(wrapper, '2019-08-15T08:30')
     await wrapper.find('.media-lightbox-date-form').trigger('submit')
     await flushPromises()
 

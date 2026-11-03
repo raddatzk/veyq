@@ -63,7 +63,7 @@ const en = {
     prevMonth: 'Previous month',
     nextMonth: 'Next month',
     firstDayOfWeek: '0',
-    dateSegment: { day: 'Day', month: 'Month', year: 'Year', empty: 'Empty' },
+    dateSegment: { day: 'Day', month: 'Month', year: 'Year', hour: 'Hour', minute: 'Minute', dayPeriod: 'AM/PM', empty: 'Empty' },
     removeTag: 'Remove {label}',
   },
   // The PDF renderer's own texts (`shared/pdf/PdfPages.vue`): its toolbar and its pages, read wherever an application draws a PDF.
@@ -2129,7 +2129,7 @@ const de: typeof en = {
     prevMonth: 'Vorheriger Monat',
     nextMonth: 'Nächster Monat',
     firstDayOfWeek: '1',
-    dateSegment: { day: 'Tag', month: 'Monat', year: 'Jahr', empty: 'Leer' },
+    dateSegment: { day: 'Tag', month: 'Monat', year: 'Jahr', hour: 'Stunde', minute: 'Minute', dayPeriod: 'AM/PM', empty: 'Leer' },
     removeTag: '{label} entfernen',
   },
   pdf: {
