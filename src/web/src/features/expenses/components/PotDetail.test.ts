@@ -8,7 +8,7 @@
 // the settings are a change re-run on the meta the writer reads, the base currency fixed once an entry exists;
 // Expenses switched off leaves the page read-only.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, type VueWrapper } from '@vue/test-utils'
 
 const server = vi.hoisted(() => ({ current: null as unknown as import('../potTestUtil').PotServer, appends: [] as unknown[] }))
 vi.mock('../receipts', async (orig) => ({ ...(await orig<object>()), readMemberReceipts: vi.fn() }))
@@ -60,18 +60,20 @@ import { setAccountUserId } from '../../../app/account'
 import { loadScopePeople, type Person } from '../../../core/people/directory'
 import { whoAmIBase } from '../whoAmI'
 import { hostFor } from '../../../test/nodeHost'
+import { mountNodePage } from '../../../test/nodePage'
 
 const DINNER = '0e000000-0000-4000-9000-000000000001'
 let node: ReturnType<typeof potNode>
 
 function mountPot(access = memberAccessOf({ scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)) })): VueWrapper {
-  return mount(PotDetail, {
+  return mountNodePage(PotDetail, {
     props: {
       node, scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), contentKey: server.current.potKey,
       children: { byKind: {}, folders: [] } as unknown as NodeDetailProps['children'], access, tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
     },
-    // Mounted as the member's page mounts it: with the page's doors.
-    global: { plugins: [realI18n()], provide: hostFor(access).provide },
+    // Mounted as the member's page mounts it: under core's page (its header), with the page's doors.
+    global: { plugins: [realI18n()] },
+    host: hostFor(access),
 
     attachTo: document.body,
   })

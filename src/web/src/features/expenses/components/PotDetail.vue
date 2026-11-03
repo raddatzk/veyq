@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// An opened Pot (ADR 0108, docs/apps/expenses.md): core's `NodeHeader` with the Pot's share, rename, move and delete
-// (ADR 0110's priority), the ledger notice when the check finds a revision missing, and the tabs Entries / Balances /
+// An opened Pot (ADR 0108, docs/apps/expenses.md): the body under core's header (core's page draws it, ADR 0110 decision 10;
+// this contributes the Pot's share, rename, move and delete and its currency as the subtitle), the ledger notice when the check finds a revision missing, and the tabs Entries / Balances /
 // Overview / People — and Settings for whoever may change the Pot's meta. Every control is `../rights.ts`' answer for the
 // viewer: a member and a share guest of a `READ` or `READ_WRITE` link get this very page with functions removed (inbox
 // #401) — a guest sees no Settings, manages no people beyond adding and renaming, and reads no writer names (its read has
@@ -17,8 +17,8 @@ import VeyqTabPanels from '../../../shared/ui/VeyqTabPanels.vue'
 import VeyqTabPanel from '../../../shared/ui/VeyqTabPanel.vue'
 import type { NodeDetailProps } from '../../../core/applications/registry'
 import { hostHandlers, hostRights, injectNodeHost } from '../../../core/node/nodeHost'
-import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
+import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { canReport, nodeTarget } from '../../../core/report/reportActions'
 import { useReportOffered } from '../../../core/report/report'
 import { loadScopePeople, loadTenantPeople, type Person } from '../../../core/people/directory'
@@ -70,21 +70,19 @@ onMounted(() => {
   }
 })
 
-// Core's own actions of the Pot (the heart, "Copy to…", the download, Report) come with core's header for this node
-// (`NodeHeader`'s `node`); this page offers Report for an entry and a receipt on its own, by the same rule.
+// Core's own actions of the Pot (the heart, "Copy to…", the download, Report) come with core's header for this node; this
+// page offers Report for an entry and a receipt on its own, by the same rule.
 const reportOn = useReportOffered()
-/** The Pot header's priority (ADR 0110): favorite, sharing (a Pot is kept together), its download, then rename, move, copy;
- *  delete and report are the ⋯ menu's last entries. */
-const POT_HEADER_ORDER = ['favorite', 'share', 'download', 'rename', 'move', 'copy'] as const
 const headerActions = computed(() =>
   standardNodeActions(
     t,
     { ...hostRights(rights.value, host), deleteLabel: t('expenses.delete') },
     hostHandlers(host, () => props.node, () => ({ contribute: rights.value.shareContribute })),
-
   ),
 )
 const subtitle = computed(() => (meta.value ? t('expenses.inCurrency', { currency: meta.value.base.currency }) : undefined))
+// The header is core's (its order is the kind's `header.order`); the Pot adds its actions and its currency.
+contributeNodeHeader(() => ({ subtitle: subtitle.value, actions: headerActions.value }))
 
 const tab = ref('entries')
 const editing = ref<{ entryId: string | null } | null>(null)
@@ -119,8 +117,6 @@ function receiptSource(receipt: HeldReceipt) {
 
 <template>
   <div class="veyq-level-view expenses-pot">
-    <NodeHeader :node="node" icon="wallet" :title="node.name" :subtitle="subtitle" :actions="headerActions" :order="POT_HEADER_ORDER" />
-
     <VeyqMessage v-if="loaded && !check.complete" tone="warn" class="expenses-ledger-notice">
       {{ t('expenses.ledger.missing') }}
       <ul>

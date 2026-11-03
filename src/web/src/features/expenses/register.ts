@@ -43,6 +43,8 @@ export function registerExpenses(registry: Registry): void {
   const app = registry.registerApplication({ id: EXPENSES, name: 'expenses.title' })
   app.kind(POT_KIND, {
     icon: 'wallet',
+    // The header's priority (ADR 0110): favorite, sharing (a Pot is kept together), its download, then rename, move, copy.
+    header: { order: ['favorite', 'share', 'download', 'rename', 'move', 'copy'] },
     detail: PotDetail,
     shareDialog: PotShareDialog,
     deleteTitle: 'expenses.delete',
