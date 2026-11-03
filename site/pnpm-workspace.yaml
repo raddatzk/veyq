@@ -1,0 +1,11 @@
+# The docs site's own pnpm root (ADR 0087): deliberately NOT a member of the repository's workspace (site/package.json
+# `//` says why), so it carries its own lockfile and this file, where pnpm reads its overrides.
+#
+# postcss-nested: @astrojs/starlight -> astro-expressive-code -> @expressive-code/core@0.44.2 asks postcss-nested
+# ^6.0.1, whose 6.2.0 pins postcss-selector-parser ^6.1.1 - and every postcss-selector-parser below 7.1.6 carries
+# GHSA-rj75-hqrm-r3gf (quadratic selector parsing, CPU exhaustion). An audit's own fix is a downgrade of Starlight to
+# 0.21. The path only parses expressive-code's own CSS at build time, so it is unreachable from content, but a
+# knowingly-vulnerable dependency is not something we keep (the root pnpm-workspace.yaml's overrides). postcss-nested
+# 8 depends on postcss-selector-parser ^7.1.4. Drop this once @expressive-code/core asks for postcss-nested >= 7.
+overrides:
+  postcss-nested: ^8.0.1

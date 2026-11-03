@@ -12,12 +12,13 @@
     "list": "playwright test --list",
     "spec-urls": "node --test spec-urls.test.mjs",
     "shards": "node --test shards.test.mjs",
-    "check": "npm run lint && npm run typecheck && npm run spec-urls && npm run shards && npm run list"
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run spec-urls && pnpm run shards && pnpm run list"
   },
   "dependencies": {
-    "@veyq/crypto": "*"
+    "@veyq/crypto": "workspace:*"
   },
   "devDependencies": {
+    "@noble/ciphers": "^2.2.0",
     "@playwright/test": "1.64.1",
     "@types/node": "^22.0.0",
     "eslint": "^10.7.0",

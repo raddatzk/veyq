@@ -23,7 +23,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "mutation": "stryker run stryker.config.mjs",
-    "check": "npm run lint && npm run typecheck && npm run test"
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
     "@noble/ciphers": "^2.2.0",
