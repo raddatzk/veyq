@@ -4,7 +4,8 @@
 // arithmetic; `ledger.test.ts` runs every case of it through this file.
 //
 // **The unbalanced-entry rule** (owner 2026-10-24): an entry whose sums do not add up — payers' or receivers' amounts
-// beside the total, items above it, a rest above zero with no split, percents beside 100.00 %, a person named twice — is
+// beside the total, items above it, a rest above zero with no split, percents beside 100.00 %, a split's amounts beside the
+// amount of the part they split, a person named twice — is
 // never saved by this client
 // ({@link entryProblem}, which the write path asks first), and one that arrives anyway counts in NO balance, NO overview
 // and NO settle-up, and is shown as invalid. So is one naming a person who is not a participant of the Pot: it has no
@@ -39,6 +40,7 @@ export type EntryProblem =
   | 'items-above-total'
   | 'rest-unallocated'
   | 'percent-unbalanced'
+  | 'amounts-unbalanced'
   | 'named-twice'
   | 'unknown-participant'
 
@@ -106,7 +108,11 @@ export function namedParticipants(c: MoneyContent): string[] {
 /** The splits an allocation holds: each item's, then the rest's where one is sealed (checked even at a zero rest). */
 const splitsOf = (a: Allocation): Split[] => [...a.items.map((i) => i.split), ...(a.rest ? [a.rest] : [])]
 
-/** The people a split names, beside their weights (1 each, their shares, their basis points), in the split's order. */
+const total = (xs: readonly { amount: number }[]): bigint => xs.reduce((acc, x) => acc + BigInt(x.amount), 0n)
+const twice = (ids: readonly string[]): boolean => new Set(ids).size !== ids.length
+
+/** The people a split names, beside their weights (1 each, their shares, their basis points, their amounts), in the
+ *  split's order. */
 function splitWeights(s: Split): { id: string; weight: bigint }[] {
   switch (s.mode) {
     case 'equal':
@@ -115,17 +121,33 @@ function splitWeights(s: Split): { id: string; weight: bigint }[] {
       return s.shares.map((x) => ({ id: x.participant, weight: BigInt(x.shares) }))
     case 'percent':
       return s.percents.map((x) => ({ id: x.participant, weight: BigInt(x.percent) }))
+    case 'amounts':
+      return s.amounts.map((x) => ({ id: x.participant, weight: BigInt(x.amount) }))
   }
 }
 
-const splitPeople = (s: Split): string[] => splitWeights(s).map((w) => w.id)
+/** The people a split names, in its order. */
+export const splitPeople = (s: Split): string[] => splitWeights(s).map((w) => w.id)
+
+/**
+ * Whether one split breaks [rule]: names a person twice, has percents beside 100.00 %, or amounts beside [part] — the
+ * amount of the part it splits (null: it splits nothing, a rest split sealed at a zero rest, held to no sum).
+ * {@link entryProblem} asks it of every split; the editor (`../entryForm.ts`) asks it to say which split is wrong.
+ */
+export function splitBreaks(rule: 'named-twice' | 'percent-unbalanced' | 'amounts-unbalanced', s: Split, part: bigint | null): boolean {
+  switch (rule) {
+    case 'named-twice':
+      return twice(splitPeople(s))
+    case 'percent-unbalanced':
+      return s.mode === 'percent' && s.percents.reduce((acc, x) => acc + x.percent, 0) !== PERCENT_WHOLE
+    case 'amounts-unbalanced':
+      return s.mode === 'amounts' && part !== null && total(s.amounts) !== part
+  }
+}
 
 function allocationPeople(a: Allocation): string[] {
   return [...new Set(splitsOf(a).flatMap(splitPeople))]
 }
-
-const total = (xs: readonly { amount: number }[]): bigint => xs.reduce((acc, x) => acc + BigInt(x.amount), 0n)
-const twice = (ids: readonly string[]): boolean => new Set(ids).size !== ids.length
 
 /** `amount - sum(items)`: what the rest split gets (negative: items above the total). */
 export const restOf = (c: { amount: number; allocation: Allocation }): bigint => BigInt(c.amount) - total(c.allocation.items)
@@ -140,12 +162,13 @@ export function entryProblem(c: MoneyContent, isParticipant?: (id: string) => bo
     if (twice(contributors.map((p) => p.participant))) return 'named-twice'
     if (total(contributors) !== BigInt(c.amount)) return c.kind === 'expense' ? 'payers-unbalanced' : 'receivers-unbalanced'
     const splits = splitsOf(c.allocation)
-    if (splits.some((s) => twice(splitPeople(s)))) return 'named-twice'
-    const percentOff = (s: Split) => s.mode === 'percent' && s.percents.reduce((acc, x) => acc + x.percent, 0) !== PERCENT_WHOLE
-    if (splits.some(percentOff)) return 'percent-unbalanced'
+    if (splits.some((s) => splitBreaks('named-twice', s, null))) return 'named-twice'
+    if (splits.some((s) => splitBreaks('percent-unbalanced', s, null))) return 'percent-unbalanced'
     const rest = restOf(c)
     if (rest < 0n) return 'items-above-total'
     if (rest > 0n && !c.allocation.rest) return 'rest-unallocated'
+    const parts = [...c.allocation.items.map((i) => [i.split, BigInt(i.amount)] as const), ...(c.allocation.rest ? [[c.allocation.rest, rest > 0n ? rest : null] as const] : [])]
+    if (parts.some(([s, part]) => splitBreaks('amounts-unbalanced', s, part))) return 'amounts-unbalanced'
   }
   if (isParticipant && namedParticipants(c).some((id) => !isParticipant(id))) return 'unknown-participant'
   return null

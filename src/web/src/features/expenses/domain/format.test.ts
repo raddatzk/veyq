@@ -9,7 +9,9 @@ import { expensesMessages } from '../i18n'
 
 const contracts = resolve(__dirname, '../../../../../../contracts/expenses')
 const schema = JSON.parse(readFileSync(resolve(contracts, 'entry.v1.schema.json'), 'utf8'))
-const vectors = JSON.parse(readFileSync(resolve(contracts, 'v1-vectors.json'), 'utf8')) as { pots: { participants: { id: string; name: string; joined: number }[]; entries: { body: object }[] }[] }
+const vectors = JSON.parse(readFileSync(resolve(contracts, 'v1-vectors.json'), 'utf8')) as {
+  pots: { participants: { id: string; name: string; joined: number }[]; entries: { body: object }[]; invalid?: { body: object }[] }[]
+}
 const defs = schema.$defs
 
 describe('the reader is the schema', () => {
@@ -28,12 +30,14 @@ describe('the reader is the schema', () => {
     for (const locale of ['en', 'de'] as const) expect(Object.keys(expensesMessages[locale].expenses.category)).toEqual([...DEFAULT_CATEGORIES])
   })
 
-  it('knows the schema\'s allocation: items with a split each, an optional rest split, and the three split modes', () => {
+  it('knows the schema\'s allocation: items with a split each, an optional rest split, and the four split modes', () => {
     expect(defs.allocation.required).toEqual(['items'])
     expect(defs.allocation.properties.rest.$ref).toBe('#/$defs/split')
     expect(defs.allocation.properties.items.items.required).toEqual(['label', 'amount', 'split'])
-    expect(defs.split.oneOf.map((s: { properties: { mode: { const: string } } }) => s.properties.mode.const)).toEqual(['equal', 'shares', 'percent'])
+    expect(defs.split.oneOf.map((s: { properties: { mode: { const: string } } }) => s.properties.mode.const)).toEqual(['equal', 'shares', 'percent', 'amounts'])
     expect(defs.split.oneOf[2].properties.percents.items.properties.percent.maximum).toBe(PERCENT_WHOLE)
+    expect(defs.split.oneOf[3].properties.amounts.items.required).toEqual(['participant', 'amount'])
+    expect(defs.split.oneOf[3].properties.amounts.items.properties.amount.$ref).toBe('#/$defs/minor')
   })
 })
 
@@ -50,7 +54,8 @@ describe('reading a body', () => {
   it('reads every body of the vectors, and every participant as a record', () => {
     let n = 0
     for (const pot of vectors.pots) {
-      for (const e of pot.entries) expect(() => readRevisionBody({ v: 1, heads: [], ...e.body }), String(n++)).not.toThrow()
+      // an invalid entry is a valid v1 body whose sums do not add up: the reader reads it, the ledger refuses to count it
+      for (const e of [...pot.entries, ...(pot.invalid ?? [])]) expect(() => readRevisionBody({ v: 1, heads: [], ...e.body }), String(n++)).not.toThrow()
       for (const p of pot.participants) expect(readRevisionBody({ v: 1, heads: [], kind: 'participant', name: p.name, active: true, joined: p.joined }).kind).toBe('participant')
     }
     expect(n).toBeGreaterThan(10)
@@ -95,6 +100,10 @@ describe('reading a body', () => {
     ['a percent of zero', withItem({ mode: 'percent', percents: [{ participant: P, percent: 0 }] }), '/allocation/items/0/split/percents/0/percent'],
     ['a percent above 100.00 %', withItem({ mode: 'percent', percents: [{ participant: P, percent: 10001 }] }), '/allocation/items/0/split/percents/0/percent'],
     ['a fractional percent', withItem({ mode: 'percent', percents: [{ participant: P, percent: 33.5 }] }), '/allocation/items/0/split/percents/0/percent'],
+    ['an amount of zero in an amounts split', withItem({ mode: 'amounts', amounts: [{ participant: P, amount: 0 }] }), '/allocation/items/0/split/amounts/0/amount'],
+    ['a fractional amount in an amounts split', withItem({ mode: 'amounts', amounts: [{ participant: P, amount: 0.5 }] }), '/allocation/items/0/split/amounts/0/amount'],
+    ['an amounts split naming no one', withItem({ mode: 'amounts', amounts: [] }), '/allocation/items/0/split/amounts'],
+    ['an amounts split whose person is no uuid', withItem({ mode: 'amounts', amounts: [{ participant: 'ada', amount: 1 }] }), '/allocation/items/0/split/amounts/0/participant'],
     ['a rest split of an unknown mode', { ...expense, allocation: { items: [], rest: { mode: 'proportional' } } }, '/allocation/rest/mode'],
     ['a receipt twice', { ...expense, receipts: [P, P] }, '/receipts'],
     ['a participant without a join time', { v: 1, heads: [], kind: 'participant', name: 'Ada', active: true }, '/joined'],
@@ -105,6 +114,13 @@ describe('reading a body', () => {
     ['a member whose user id is no uuid', { v: 1, heads: [], kind: 'participant', name: 'Ada', active: true, joined: 1, member: { userId: 'u-ada' } }, '/member/userId'],
     ['not an object', [expense], ''],
   ]
+
+  it('reads a split by amounts and round-trips it through the bytes (control for the refusals of it below)', () => {
+    const split = { mode: 'amounts', amounts: [{ participant: P, amount: 1 }, { participant: Q, amount: 2 }] }
+    const body = readRevisionBody({ ...expense, allocation: { items: [{ label: 'x', amount: 3, split }] } })
+    expect(body.kind === 'expense' && body.allocation.items[0]!.split).toEqual(split)
+    expect(decodeRevisionBody(encodeRevisionBody(body))).toEqual(body)
+  })
 
   it.each(refused)('refuses %s', (_, body, path) => {
     let thrown: unknown

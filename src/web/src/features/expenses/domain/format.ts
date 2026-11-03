@@ -5,8 +5,8 @@
 // `v` is one this client cannot read.
 //
 // What the schema cannot say, and `ledger.ts` decides: whether the amounts add up (the unbalanced-entry rule: payers to the
-// amount, items within it, a split for a rest above zero, percents to 100.00 %) and whether the participants an entry names
-// exist. A body valid here may still count in no balance.
+// amount, items within it, a split for a rest above zero, percents to 100.00 %, a split's amounts to its part's amount) and
+// whether the participants an entry names exist. A body valid here may still count in no balance.
 import { RATE } from './money'
 
 export const FORMAT_VERSION = 1
@@ -20,11 +20,13 @@ export type Head = { entryId: string; revision: number; digest: string }
 
 export type Contribution = { participant: string; amount: number }
 
-/** Who one part of an entry is for: each person 1, their shares, or their percent in basis points (10000 = 100.00 %). */
+/** Who one part of an entry is for: each person 1, their shares, their percent in basis points (10000 = 100.00 %), or a
+ *  fixed amount each in the entry's currency, summing to the part's amount. */
 export type Split =
   | { mode: 'equal'; participants: string[] }
   | { mode: 'shares'; shares: { participant: string; shares: number }[] }
   | { mode: 'percent'; percents: { participant: string; percent: number }[] }
+  | { mode: 'amounts'; amounts: { participant: string; amount: number }[] }
 
 /** An item of an entry: an exact amount in the entry's currency, with its own split. */
 export type Item = { label: string; amount: number; split: Split }
@@ -135,6 +137,14 @@ function split(v: unknown, path: string): Split {
         percents: arr(o.percents, `${path}/percents`, 1, MAX_LIST).map((x, i) => {
           const s = obj(x, `${path}/percents/${i}`)
           return { participant: uuid(s.participant, `${path}/percents/${i}/participant`), percent: int(s.percent, `${path}/percents/${i}/percent`, 1, PERCENT_WHOLE) }
+        }),
+      }
+    case 'amounts':
+      return {
+        mode: 'amounts',
+        amounts: arr(o.amounts, `${path}/amounts`, 1, MAX_LIST).map((x, i) => {
+          const s = obj(x, `${path}/amounts/${i}`)
+          return { participant: uuid(s.participant, `${path}/amounts/${i}/participant`), amount: minor(s.amount, `${path}/amounts/${i}/amount`) }
         }),
       }
     default:
