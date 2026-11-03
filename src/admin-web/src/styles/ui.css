@@ -64,6 +64,8 @@
 
 .veyq-form .veyq-input,
 .veyq-form .veyq-password__input,
+.veyq-form .veyq-select,
+.veyq-form .veyq-combobox,
 .veyq-form input:not([type='radio']):not([type='checkbox']),
 .veyq-form select,
 .veyq-form textarea {

@@ -5,6 +5,15 @@
    packages (ADR 0065). It loads after the console's sheets (`main.ts` imports it after `style.css`), so a console rule
    that adjusts a layer component wins by specificity, never by order. */
 
+/* ── Field box ────────────────────────────────────────────────────────────────────────────────────────────────── */
+/* Every one-line field is one box of one height - a text field, a password, a select, a date field - so fields side
+   by side line up (and their labels with them), and an empty select keeps its height instead of collapsing to its
+   padding. 2.625rem is what a text field measures on its own (1rem text, 0.5rem padding, 1px border). */
+:root {
+  --veyq-field-height: 2.625rem;
+}
+
+
 /* ── Icon ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
 .veyq-icon {
   display: inline-block;
@@ -221,6 +230,7 @@
 
 /* ── Text field ───────────────────────────────────────────────────────────────────────────────────────────────── */
 .veyq-input {
+  min-height: var(--veyq-field-height);
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--app-control-line);
   border-radius: 6px;
@@ -287,11 +297,19 @@
   position: absolute;
   top: 50%;
   inset-inline-end: 0.45rem;
+  margin-top: -0.8rem;
+}
+
+/* ── Field action ─────────────────────────────────────────────────────────────────────────────────────────────── */
+/* The one look of an icon button inside a field (the password's eye, the date field's calendar, the Secret Key's
+   upload, scan and eye): where it sits is its field's rule, how it looks is this one. `font-size` is set because the
+   icon is sized in `em` and a button does not inherit the font: without it the icon takes the browser's 13.33px. */
+.veyq-field-action {
   display: inline-grid;
+  flex-shrink: 0;
   place-items: center;
   width: 1.6rem;
   height: 1.6rem;
-  margin-top: -0.8rem;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -301,13 +319,17 @@
   cursor: pointer;
 }
 
-.veyq-password__toggle:hover:not(:disabled) {
+.veyq-field-action:hover:not(:disabled) {
   color: var(--app-control-text);
 }
 
-.veyq-password__toggle:focus-visible {
+.veyq-field-action:focus-visible {
   outline: 1px solid var(--app-focus);
   outline-offset: 1px;
+}
+
+.veyq-field-action:disabled {
+  cursor: default;
 }
 
 /* ── Message ──────────────────────────────────────────────────────────────────────────────────────────────────── */
@@ -647,6 +669,7 @@
   align-items: center;
   justify-content: space-between;
   min-width: 0;
+  min-height: var(--veyq-field-height);
   padding: 0;
   border: 1px solid var(--app-control-line);
   border-radius: 6px;
@@ -654,6 +677,7 @@
   color: var(--app-control-text);
   font-family: inherit;
   font-size: 1rem;
+  font-weight: 400;
   text-align: start;
   box-shadow: var(--app-shadow-sm);
   cursor: pointer;
@@ -857,6 +881,7 @@
   border-radius: 50%;
   background: transparent;
   color: inherit;
+  font-size: 1rem; /* a button does not inherit the font: the em-sized icon would take the browser's 13.33px */
   cursor: pointer;
 }
 
@@ -887,7 +912,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 2.5rem;
+  min-height: var(--veyq-field-height);
   border: 1px solid var(--app-control-line);
   border-radius: 6px;
   background: var(--app-field);
@@ -930,7 +955,8 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--app-muted);
+  color: var(--app-control-line);
+  font-size: 1rem; /* a button does not inherit the font: the em-sized icon would take the browser's 13.33px */
   cursor: pointer;
 }
 
