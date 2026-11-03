@@ -1,25 +1,35 @@
 <script setup lang="ts">
 // The header of every node page and level (owner design 2026-10-12, inbox #406): ONE core component, so a folder, a file,
-// a drop box and a Memory open the same way. A LEADING VISUAL (the `leading` slot — an application's cover image — or, by
-// default, the kind's `icon`) beside the NAME (`title`, at most two lines, optionally a `subtitle` and a `meta` slot), and
-// the ACTIONS (`NodeHeaderAction`, `../nodeHeader.ts`). The application feeds data, its rights answers and its kind's
-// priority (`order`); core owns the look, the spacing, the keyboard (every button a real, labelled `<button>`, the ⋯ the
-// layer's menu) and the dark mode (`styles/ui.css` tokens). It decides nothing about what is offered: an action not
-// `shown` is not rendered (fail closed is the caller's rights function), and a guest sees this very header with fewer
-// actions (inbox #401).
+// a drop box, a Memory and a Pot open the same way. **Core draws it, never an application** (owner 2026-11-03, ADR 0110
+// decision 10): the folder level (`../LevelView.vue`) and core's node page (`NodePage.vue`) mount it from the kind's
+// descriptor - its `icon`, whether it takes a `cover`, its priority `order` - and from what the page's detail contributes as
+// data (`../nodeHeaderContribution.ts`: a subtitle, its actions, its facts, and a banner the page draws above). A LEADING
+// VISUAL beside the NAME (`title`, then the `subtitle` and the `facts`), and the ACTIONS (`NodeHeaderAction`,
+// `../nodeHeader.ts`). Core owns the look, the spacing, the keyboard (every button a real, labelled `<button>`, the ⋯ the
+// layer's menu) and the dark mode (`styles/ui.css` tokens). It decides nothing about what is offered: an action not `shown`
+// is not rendered (fail closed is the caller's rights function), and a guest sees this very header with fewer actions
+// (inbox #401).
 //
-// **Core's actions come centrally** (owner 2026-11-01, ADR 0110): the page names the `node` the header heads, and the header
-// asks the view around it (`../coreNodeActions.ts`: core's node page `NodePage.vue`, the level `LevelView.vue`) for core's
-// own actions of that node - the heart, the cover, "Copy to…", the download, Report - each gated by its core rights
-// function, and merges them with the application's (`mergeHeaderActions`). No page builds or forwards one, so none can
-// leave Report out. A kind's `order` may still name a core id for its priority.
+// **The leading visual is core's** (inbox #411): a kind that takes a cover shows the node's cover - 244 px wide and 16:9 on a
+// wide header, 64 px compact - or, without one, the kind's icon tile (4rem; 42 px compact). Where whoever looks may set the
+// cover (`coverRights`, through the view's cover, `../coreNodeActions.ts`) the visual is a button that opens core's cover
+// dialog, with its hint on hover and keyboard focus. A kind without a cover shows its icon tile.
+//
+// **Facts** (`NodeHeaderFact`): a date or a place in one chip look (consecutive chips share a row), people
+// (`core/people/PersonGroup.vue`) and a line of text, each a row of its own, under the subtitle. People link to a profile and
+// show a member's picture only where `linkPeople` says so - a member's page; it defaults to false, so a share page cannot.
+//
+// **Core's actions come centrally** (owner 2026-11-01, ADR 0110): the header asks the view around it
+// (`../coreNodeActions.ts`: core's node page `NodePage.vue`, the level `LevelView.vue`) for core's own actions of the `node`
+// it heads - the heart, the cover, "Copy to…", the download, Report - each gated by its core rights function, and merges them
+// with the application's (`mergeHeaderActions`). No page builds or forwards one, so none can leave Report out. A kind's
+// `order` may still name a core id for its priority.
 //
 // **Two layouts, picked by the header's own width** (ADR 0110 decisions 1 and 8): `headerLayout` answers `wide` while the
 // leading visual's wide width, the name's minimum, the floor's buttons and the ⋯ fit in one row, else `compact`. Its inputs
 // are the header's width and sizes no layout changes — the leading visual's `--veyq-node-header-leading-wide` and the
 // header's `--veyq-node-header-name-min` (registered lengths, `styles/ui.css`), the gaps, one button — never the name or
-// the layout in force, so it cannot flip. The answer is the header's `is-compact` class and the `leading` slot's
-// `compact`, so an application's leading visual sizes itself from it without core importing the application.
+// the layout in force, so it cannot flip. The answer is the header's `is-compact` class, which sizes the leading visual.
 //
 // **As many as fit, the rest in one menu** (ADR 0110): the actions that may be buttons are buttons in `order` as far as
 // the row has room — measured on mount and on every resize, `fitHeaderActions` — and the rest are entries of one ⋯ menu,
@@ -31,8 +41,8 @@
 // first two), and the name is shortened only below that.
 //
 // The title is its page's one `h1` (owner 2026-10-24, `docs/crosscutting/ui-web-styleguide.md` § Heading levels): every
-// header opens the page of the node it names — a Memory's, a file's, a drop box's, and a folder's level view.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
+// header opens the page of the node it names — a Memory's, a file's, a drop box's, a Pot's, and a folder's level view.
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
@@ -40,8 +50,11 @@ import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
 import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import type { VeyqIconName } from '../../../shared/ui/icons'
 import type { VeyqMenuItem } from '../../../shared/ui/menu'
+import NodeCoverImage from '../cover/components/NodeCoverImage.vue'
+import PersonGroup from '../../people/PersonGroup.vue'
 import { actionMenuItems } from '../actionMenu'
 import {
+  factRows,
   fitHeaderActions,
   headerFloor,
   headerLayout,
@@ -49,8 +62,10 @@ import {
   orderHeaderActions,
   partitionHeaderActions,
   type NodeHeaderAction,
+  type NodeHeaderChipFact,
+  type NodeHeaderFact,
 } from '../nodeHeader'
-import { useCoreHeaderActions } from '../coreNodeActions'
+import { injectCoreNodeActions, useCoreHeaderActions } from '../coreNodeActions'
 import type { TreeNode } from '../tree'
 
 const props = withDefaults(
@@ -59,20 +74,38 @@ const props = withDefaults(
     /** The node this header heads, whose core actions it shows - required, so a page says which (null only for the
      *  space's top level, which is no node and has none). */
     node: TreeNode | null
-    /** The icon of the leading visual when no `leading` slot is given. */
+    /** The kind's icon (`KindDescriptor.icon`): the leading visual without a cover. */
     icon?: VeyqIconName
+    /** The kind takes a cover (`KindDescriptor.cover`): the node's cover is the leading visual where it has one. */
+    cover?: boolean
     subtitle?: string
     actions?: readonly NodeHeaderAction[]
     /** The kind's priority: the ids of the actions that come first, in that order (core's included); an unlisted one follows. */
     order?: readonly string[]
+    /** What the page's detail shows under the name (`NodeHeaderFact`), in order. */
+    facts?: readonly NodeHeaderFact[]
+    /** A member's page: people link to their profile and show their picture. Default false (fail closed: a share page). */
+    linkPeople?: boolean
   }>(),
-  { icon: undefined, subtitle: undefined, actions: () => [], order: () => [] },
+  { icon: undefined, cover: false, subtitle: undefined, actions: () => [], order: () => [], facts: () => [], linkPeople: false },
 )
-const slots = useSlots()
 const { t } = useI18n()
+const view = injectCoreNodeActions()
 const coreActions = useCoreHeaderActions(() => props.node)
 const parts = computed(() => partitionHeaderActions(orderHeaderActions(mergeHeaderActions(coreActions.value, props.actions).filter((a) => a.shown), props.order)))
-const hasLeading = computed(() => !!slots.leading || !!props.icon)
+
+// The leading visual: the node's cover where the kind takes one and the view resolved it, else the icon tile - a button that
+// opens core's cover dialog where whoever looks may set the cover (the same answer as core's cover action).
+const coverOf = computed(() => (props.cover && props.node ? (view?.cover.covers.value.get(props.node.id) ?? null) : null))
+const coverEditable = computed(() => !!(props.cover && props.node && view?.cover.canSet(props.node)))
+const coverLabel = computed(() => (props.node && view?.cover.has(props.node.id) ? t('node.cover.change') : t('node.cover.set')))
+const hasLeading = computed(() => !!coverOf.value || !!props.icon)
+function editCover() {
+  if (props.node && coverEditable.value) view?.cover.open(props.node)
+}
+
+const rows = computed(() => factRows(props.facts))
+const CHIP_ICONS: Record<NodeHeaderChipFact['kind'], VeyqIconName> = { date: 'calendar', place: 'map-marker' }
 
 const floor = computed(() => headerFloor(parts.value.buttons.length))
 
@@ -150,8 +183,8 @@ async function measure() {
 
 // Measured before the first paint (a mount runs before it), then again on every change of the header's or the name's size
 // and on a new name, one measurement per frame. The header's width is the only input of the layout; the name's box changes
-// with a rename or a late web font, which moves the wide row's fit. Neither depends on how many buttons are drawn, so this
-// settles.
+// with a rename or a late web font, which moves the wide row's fit; a cover that arrives or goes changes the leading
+// visual's wide width. Neither depends on how many buttons are drawn, so this settles.
 let observer: ResizeObserver | null = null
 let frame = 0
 function schedule() {
@@ -161,7 +194,7 @@ function schedule() {
     void measure()
   })
 }
-watch(() => props.title, schedule)
+watch([() => props.title, () => !!coverOf.value], schedule)
 onMounted(() => {
   void measure()
   if (typeof ResizeObserver === 'undefined' || !header.value) return
@@ -176,9 +209,28 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header ref="header" class="veyq-node-header" :class="{ 'has-visual': !!slots.leading, 'has-leading': hasLeading, 'is-compact': compact }" :data-layout-width="layoutWidth ?? undefined">
+  <header ref="header" class="veyq-node-header" :class="{ 'has-visual': !!coverOf, 'has-leading': hasLeading, 'is-compact': compact }" :data-layout-width="layoutWidth ?? undefined">
     <div v-if="hasLeading" class="veyq-node-header-leading">
-      <slot name="leading" :compact="compact"><VeyqIcon v-if="icon" :name="icon" class="veyq-node-header-icon" /></slot>
+      <!-- The visual's first element carries its wide width (`--veyq-node-header-leading-wide`), which the layout answer reads. -->
+      <button
+        v-if="coverEditable"
+        type="button"
+        class="veyq-node-header-visual-button"
+        :class="coverOf ? 'veyq-node-header-cover' : 'veyq-node-header-icon'"
+        :aria-label="coverLabel"
+        :title="coverLabel"
+        data-testid="node-header-cover"
+        @click="editCover"
+      >
+        <NodeCoverImage v-if="coverOf" :src="coverOf.url" :crop="coverOf.crop" :alt="title" />
+        <VeyqIcon v-else-if="icon" :name="icon" />
+        <span class="veyq-node-header-cover-hint">
+          <VeyqIcon name="image" />
+          <span class="veyq-node-header-cover-hint-label">{{ coverLabel }}</span>
+        </span>
+      </button>
+      <span v-else-if="coverOf" class="veyq-node-header-cover"><NodeCoverImage :src="coverOf.url" :crop="coverOf.crop" :alt="title" /></span>
+      <VeyqIcon v-else-if="icon" :name="icon" class="veyq-node-header-icon" />
     </div>
     <div class="veyq-node-header-body">
       <div ref="titleRow" class="veyq-node-header-titlerow">
@@ -217,7 +269,42 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <p v-if="subtitle" class="veyq-node-header-subtitle">{{ subtitle }}</p>
-      <slot name="meta" />
+      <!-- The facts: consecutive chips one row, people and text a row each. -->
+      <div v-for="(row, r) in rows" :key="r" class="veyq-node-header-facts">
+        <template v-for="(f, i) in row" :key="i">
+          <template v-if="f.kind === 'date' || f.kind === 'place'">
+            <button
+              v-if="f.onClick"
+              type="button"
+              class="veyq-node-header-chip"
+              :class="{ 'is-empty': f.empty }"
+              :data-fact="f.kind"
+              :disabled="f.disabled"
+              :aria-label="f.actionLabel ?? f.label"
+              :title="f.actionLabel ?? f.label"
+              @click="f.onClick()"
+            >
+              <VeyqIcon :name="CHIP_ICONS[f.kind]" />
+              <span>{{ f.label }}</span>
+            </button>
+            <span v-else class="veyq-node-header-chip is-static" :class="{ 'is-empty': f.empty }" :data-fact="f.kind">
+              <VeyqIcon :name="CHIP_ICONS[f.kind]" />
+              <span>{{ f.label }}</span>
+            </span>
+          </template>
+          <PersonGroup
+            v-else-if="f.kind === 'people'"
+            class="veyq-node-header-people"
+            data-fact="people"
+            :label="f.label"
+            :people="f.people"
+            :caption="f.caption"
+            :status="f.status"
+            :link="linkPeople"
+          />
+          <p v-else-if="f.kind === 'text'" class="veyq-node-header-text" data-fact="text">{{ f.text }}</p>
+        </template>
+      </div>
     </div>
   </header>
 </template>

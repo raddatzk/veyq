@@ -7,8 +7,12 @@
 // Ported presentation from the design source (legacy/frontend-noe2ee); only the data layer is ours. Decrypted
 // thumbnails become object URLs that are **revoked** on reload / unmount (no lingering plaintext blob URLs).
 // Tabs: the Gallery, the Chapters (each opens to the same detail under its own `K_node`), the Contributions organizer
-// (buckets) and the media Trash — the last two a member's only; the header carries upload, the share actions, the pin,
-// rename and delete, the cover, date and place. Journal, tracks and playlists are not built.
+// (buckets) and the media Trash — the last two a member's only. Journal, tracks and playlists are not built.
+//
+// **The header is core's** (owner 2026-11-03, ADR 0110 decision 10): core's page draws it above this body, the cover
+// included, and this view contributes data to it (`contributeNodeHeader`): the item count as the subtitle, its actions
+// (upload, the share actions, participants, the banner, rename, move, delete), its facts - the date and the place, whose
+// chips open this view's editors, and the participants (`MemoryParticipants`' fact) - and the banner core draws above the row.
 //
 // **One view for a member and a share guest** (inbox #401). It reads and writes only through `source` — Memories' data
 // source (`../source.ts`), the member's or the guest's, fixed by the host at mount — and offers what `rights` grants
@@ -36,7 +40,6 @@ import { hasDerivatives, mediaTypeOf, isVideoMediaType, type MediaItem } from '.
 import { openedBlobMeta } from '../openedListing'
 import { useMemoryDate } from '../useMemoryDate'
 import { useMemoryLocation } from '../useMemoryLocation'
-import { useMemoryCover } from '../useMemoryCover'
 import { useMediaTrash } from '../useMediaTrash'
 import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
@@ -51,10 +54,9 @@ import MemoryDateEditor from './MemoryDateEditor.vue'
 import MemoryLocationEditor from './MemoryLocationEditor.vue'
 import MemoryParticipants from './MemoryParticipants.vue'
 import { useUploaderNames } from '../useUploaderNames'
-import MemoryCoverImage from './MemoryCoverImage.vue'
 import MemoryCard from './MemoryCard.vue'
-import NodeHeader from '../../../core/node/components/NodeHeader.vue'
-import { standardNodeActions, type NodeHeaderAction } from '../../../core/node/nodeHeader'
+import { standardNodeActions, type NodeHeaderAction, type NodeHeaderFact } from '../../../core/node/nodeHeader'
+import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -89,9 +91,6 @@ const props = defineProps<{
   source: MemorySource
   /** Core's cover dialog is open over this page (the host mounts it): the lightbox then leaves the keyboard to it. */
   coverEditing?: boolean
-  /** The cover tile may open core's cover dialog: core's `coverRights` for this node, the host's answer (inbox #411).
-   *  Absent: it may not (fail closed). */
-  canSetCover?: boolean
   /** The lightbox offers "Report" (uc.moderation.report): the host's answer, core's rule (`canReport`). */
   canReport?: boolean
 }>()
@@ -104,8 +103,6 @@ const emit = defineEmits<{
   share: [offer: NodeShareOffer]
   shareUpload: []
   metaUpdated: [NodeMetaUpdate]
-  /** The cover tile: open core's cover dialog (the host mounts it). */
-  editCover: []
   /** The lightbox's "Report": the host opens core's report dialog for this medium. */
   reportMedium: [item: MediaItem]
 }>()
@@ -171,14 +168,12 @@ onBeforeUnmount(() => {
   stickyObserver?.disconnect()
 })
 provideMemoryView({ source: props.source, rights: can })
-/** The participants row under the title (who was there): it owns the picker the header's action opens. */
+/** Who was there: the participants' model and picker, whose fact the header shows and whose picker the header's action opens. */
 const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null)
 
-/** The Memory header's priority (owner, 2026-10-23, ADR 0110): what is first a button. Delete and report are always the ⋯
- *  menu's last entries. */
-const MEMORY_HEADER_ORDER = ['favorite', 'upload', 'share', 'shareUpload', 'participants', 'download', 'cover', 'banner', 'rename', 'move', 'copy'] as const
-/** The header's actions (core's `NodeHeader`): each is shown only where `can` grants it; a share guest gets the same list
- *  with fewer entries. The uploader (drop-box) link is its own action with its own dialog (no role switcher). */
+/** The header's actions (core's header; their priority is the kind's `header.order`): each is shown only where `can` grants
+ *  it; a share guest gets the same list with fewer entries. The uploader (drop-box) link is its own action with its own
+ *  dialog (no role switcher). */
 const headerActions = computed<NodeHeaderAction[]>(() => [
   { id: 'upload', label: t('media.upload'), icon: 'cloud-upload', severity: 'primary', shown: can.value.upload, disabled: !props.memoryKey, onClick: () => triggerUpload() },
   { id: 'share', label: t('share.share'), icon: 'share-alt', shown: can.value.share, disabled: !props.memoryKey, onClick: () => emit('share', { contribute: can.value.shareContribute }) },
@@ -377,14 +372,23 @@ const {
   onMetaUpdated: (payload) => emit('metaUpdated', payload),
 })
 
-// --- Memory cover (uc.memory.cover) → `useMemoryCover`. An uploaded image + a 16:9 crop, sealed in the SAME node
-// `wrappedMeta` blob as the date/location (read-modify-write); its blob is decrypted on demand (the composable owns that
-// object-URL's lifecycle incl. unmount cleanup). Props passed as getters.
-const { storedCover, coverSrc } = useMemoryCover({
-  scopeId: () => props.scopeId,
-  node: () => props.node,
-  memoryKey: () => props.memoryKey,
-  loaders: props.source.loaders,
+// --- what core's header shows under the name (ADR 0110 decision 10): the date and the place as chips that open this view's
+// editors (greyed where the meta may not be written: a guest, a pending deletion, keys not loaded), then who was there. The
+// cover is core's own (the kind's `cover`; core's page resolves and shows it, and opens core's dialog from it).
+const headerFacts = computed<NodeHeaderFact[]>(() => {
+  const locked = !props.memoryKey || !can.value.editMeta
+  const people = participantsRow.value?.fact
+  return [
+    {
+      kind: 'date', label: dateLabel.value || t('memory.date.noDate'), empty: !dateLabel.value, disabled: locked,
+      actionLabel: t('memory.date.edit'), onClick: () => (dateEditorOpen.value = true),
+    },
+    {
+      kind: 'place', label: locationLabel.value || t('memory.place.set'), empty: !locationResolved.value, disabled: locked,
+      actionLabel: locationResolved.value ? t('memory.place.edit') : t('memory.place.set'), onClick: () => openLocationEditor(),
+    },
+    ...(people ? [people] : []),
+  ]
 })
 
 const bannerEditor = useBannerEditor({
@@ -396,7 +400,23 @@ const bannerEditor = useBannerEditor({
   onMetaUpdated: (update) => emit('metaUpdated', update),
 })
 
-// The cover is EDITED in core's dialog (inbox #411), mounted by the host: the tile asks for it. Only an upload there sets it.
+// Core's header of this page: the count, the actions, the facts, and the banner above it - the same for a member and a guest
+// (the banner offers no action of its own).
+contributeNodeHeader(() => ({
+  subtitle: t('media.itemCount', { count: items.value.length }, items.value.length),
+  actions: headerActions.value,
+  facts: headerFacts.value,
+  banner: {
+    component: MemoryBanner,
+    props: {
+      banner: memoryBanner.banner.value,
+      pictureUrl: memoryBanner.pictureUrl.value,
+      status: memoryBanner.status.value,
+      videoChunks: memoryBanner.videoChunks,
+      videoBytes: memoryBanner.videoBytes,
+    },
+  },
+}))
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
  *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the
@@ -593,85 +613,28 @@ watch(
 
 <template>
   <div ref="detailEl" class="memory-route-surface memory-detail" :style="{ '--media-grid-occluded-top': `${occludedTop}px` }">
-    <!-- The banner (uc.memory.banner): above the header row, scrolling away with it while the tab row below sticks. -->
-    <MemoryBanner
-      :banner="memoryBanner.banner.value"
-      :picture-url="memoryBanner.pictureUrl.value"
-      :status="memoryBanner.status.value"
-      :video-chunks="memoryBanner.videoChunks"
-      :video-bytes="memoryBanner.videoBytes"
+    <!-- The picker the header's upload action opens (`triggerUpload`): a plain file input, out of sight. -->
+    <input
+      v-if="can.upload"
+      ref="fileInput"
+      type="file"
+      multiple
+      accept="image/*,video/*,.heic,.heif,.mov,.m4v,.mkv,.avi,.tif,.tiff"
+      class="visually-hidden"
+      @change="onFilesPicked"
     />
-    <!-- Core's header (`NodeHeader`, inbox #406): the cover is the leading visual — it IS the "set / edit cover" button —
-         the count is the subtitle, the date and place chips the meta row, and the actions are the rights answers
-         below (`headerActions`), the same list a share guest gets with fewer entries. -->
-    <NodeHeader :node="node" :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :actions="headerActions" :order="MEMORY_HEADER_ORDER">
-      <template #leading="{ compact }">
-        <button
-          type="button"
-          class="memory-cover-preview"
-          :class="{ 'is-empty': !coverSrc, 'is-compact': compact }"
-          :disabled="!memoryKey || !canSetCover"
-          :aria-label="storedCover ? t('node.cover.change') : t('node.cover.set')"
-          :title="storedCover ? t('node.cover.change') : t('node.cover.set')"
-          @click="emit('editCover')"
-        >
-          <MemoryCoverImage :src="coverSrc" :crop="storedCover?.crop ?? null" :alt="node.name" />
-          <span class="memory-cover-preview-hint">
-            <VeyqIcon name="image" />
-            <span>{{ storedCover ? t('node.cover.change') : t('node.cover.set') }}</span>
-          </span>
-        </button>
-      </template>
-      <template #meta>
-        <input
-          v-if="can.upload"
-          ref="fileInput"
-          type="file"
-          multiple
-          accept="image/*,video/*,.heic,.heif,.mov,.m4v,.mkv,.avi,.tif,.tiff"
-          class="visually-hidden"
-          @change="onFilesPicked"
-        />
-        <div class="memory-meta-row">
-          <button
-            type="button"
-            class="memory-date-chip"
-            :class="{ 'is-empty': !dateLabel }"
-            :disabled="!memoryKey || !can.editMeta"
-            :aria-label="t('memory.date.edit')"
-            :title="t('memory.date.edit')"
-            @click="dateEditorOpen = true"
-          >
-            <VeyqIcon name="calendar" />
-            <span>{{ dateLabel || t('memory.date.noDate') }}</span>
-          </button>
-          <button
-            type="button"
-            class="memory-date-chip memory-location-chip"
-            :class="{ 'is-empty': !locationResolved }"
-            :disabled="!memoryKey || !can.editMeta"
-            :aria-label="locationResolved ? t('memory.place.edit') : t('memory.place.set')"
-            :title="locationResolved ? t('memory.place.edit') : t('memory.place.set')"
-            @click="openLocationEditor"
-          >
-            <VeyqIcon name="map-marker" />
-            <span>{{ locationLabel || t('memory.place.set') }}</span>
-          </button>
-        </div>
-        <!-- Who was there (ADR 0083): a member's alone - `can.participants` is false for every share role, so a guest's view
-             mounts the component with `show` false and it renders nothing. A personal scope has nobody to name. With no
-             participant the row renders nothing either; its picker opens from the header's "Participants" action. -->
-        <MemoryParticipants
-          ref="participantsRow"
-          :scope-id="scopeId"
-          :node="node"
-          :memory-key="memoryKey"
-          :show="can.participants && !personalScope"
-          :write="can.editMeta && !personalScope ? (source.nodeMeta ?? null) : null"
-          @meta-updated="emit('metaUpdated', $event)"
-        />
-      </template>
-    </NodeHeader>
+    <!-- Who was there (ADR 0083): a member's alone - `can.participants` is false for every share role, so a guest's view
+         mounts the component with `show` false and it offers no fact. A personal scope has nobody to name. It draws only its
+         picker, which opens from the header's "Participants" action; core's header draws the people (its `fact`). -->
+    <MemoryParticipants
+      ref="participantsRow"
+      :scope-id="scopeId"
+      :node="node"
+      :memory-key="memoryKey"
+      :show="can.participants && !personalScope"
+      :write="can.editMeta && !personalScope ? (source.nodeMeta ?? null) : null"
+      @meta-updated="emit('metaUpdated', $event)"
+    />
 
     <!-- Tabbed detail (cr-0061, ported from the design source): Gallery (the media grid) + Chapters (the
          nested Memories). Other design tabs — journal / map / playlists — arrive with their features. -->
@@ -1037,11 +1000,6 @@ watch(
 .gallery-sort-toggle .veyq-icon {
   font-size: 0.9rem;
 }
-/* Query container on the detail surface so the header responds to its OWN width (not the viewport — the sidebar
-   eats ~230px, so a viewport media query stacks too late). The banner's frame reads it too (16:9 wide, 1:1 narrow). */
-.memory-detail {
-  container: memory-detail-surface / inline-size;
-}
 /* The tab row sticks below the shell's sticky chrome (`--app-sticky-top`: the top bar, the compact header on a phone,
    0 on a share page) while the banner and the header row scroll away (uc.memory.banner, owner's Q3). The page scrolls
    the WINDOW, and so does the gallery's windowing (`MediaGrid` takes the nearest scrolling ancestor, which is the window
@@ -1053,113 +1011,6 @@ watch(
   z-index: 6;
   background: var(--app-bg);
 }
-/* The Memory cover (cr-0072): a 16:9 tile showing the chosen, cropped cover (or the placeholder). It IS the
-   "set/edit cover" button — clicking it opens the crop dialog. A hint label sits over it (always when empty,
-   on hover once a cover is set). Its wide width is the node header's `--veyq-node-header-leading-wide`, which core reads
-   to pick the header's layout (ADR 0110 decision 8): one number, no import of this application into core. 244 px wide makes
-   it as tall as the header's four rows — the name, the count, date and place, the people (owner 2026-11-01); a fixed
-   number, since the width the header's layout reads cannot follow the rows' height. */
-.memory-cover-preview {
-  --veyq-node-header-leading-wide: 244px;
-  position: relative;
-  flex: 0 0 auto;
-  width: var(--veyq-node-header-leading-wide);
-  aspect-ratio: 16 / 9;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--app-line);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-surface);
-  cursor: pointer;
-}
-.memory-cover-preview:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-.memory-cover-preview-hint {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  padding: 0.3rem;
-  background: color-mix(in srgb, var(--app-backdrop-strong) 62%, transparent);
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 600;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-.memory-cover-preview.is-empty .memory-cover-preview-hint,
-.memory-cover-preview:hover .memory-cover-preview-hint,
-.memory-cover-preview:focus-visible .memory-cover-preview-hint {
-  opacity: 1;
-}
-.memory-cover-preview-hint .veyq-icon {
-  font-size: 0.85rem;
-}
-/* On a compact header (the slot's `compact`, core's answer from the header's width) the cover is a 64 × 36 px tile beside the
-   name (ADR 0110 decision 1); the hint over an empty cover is its icon alone there — the words stay the button's
-   accessible name and tooltip. */
-.memory-cover-preview.is-compact {
-  width: 64px;
-}
-.memory-cover-preview.is-compact .memory-cover-preview-hint {
-  inset-block-start: 0;
-  padding: 0;
-}
-.memory-cover-preview.is-compact .memory-cover-preview-hint > span {
-  display: none;
-}
-
-/* Date + location under the title, side by side (cr-0067/0069). A light metadata row rather than bordered pills:
-   each is a borderless button (accent icon + label) that opens its editor, with a subtle hover so it still reads
-   as clickable. The "set / pending / no-location" placeholder states render muted via `.is-empty`. */
-.memory-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.2rem 0.4rem;
-  /* Pull left by the chip's horizontal padding so the first chip's CONTENT (not its padded box) starts flush with
-     the title + count above — the chips still keep their hover/tap padding. */
-  margin-left: -0.45rem;
-}
-.memory-date-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0.45rem;
-  border: none;
-  border-radius: var(--app-radius-sm);
-  background: transparent;
-  color: var(--app-text);
-  font-size: 0.9rem;
-  font-weight: 600;
-  white-space: nowrap; /* the label (e.g. "Kein Ort erkannt") stays on one line, never breaks mid-phrase */
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.memory-date-chip:hover:not(:disabled) {
-  background: var(--app-hover);
-}
-.memory-date-chip:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-.memory-date-chip.is-empty {
-  color: var(--app-muted);
-  font-weight: 500;
-}
-.memory-date-chip .veyq-icon {
-  font-size: 0.95rem;
-  color: var(--app-accent);
-}
-.memory-date-chip.is-empty .veyq-icon {
-  color: var(--app-muted);
-}
-
 /* The Chapters tab's view toggle, right-aligned above the card grid. */
 .chapters-toolbar {
   display: flex;

@@ -37,13 +37,26 @@ describe('node header styles', () => {
     expect(rule('.veyq-node-header', css)).toMatch(/--veyq-node-header-name-min:\s*12rem/)
   })
 
-  it('core\'s leading visuals are as tall as the name row and the subtitle (4rem) and size themselves from their wide width', () => {
-    // a 16:9 cover 4rem tall is 7.125rem wide; the icon tile is a 4rem square
-    expect(rule('.veyq-node-header-cover', css)).toMatch(/--veyq-node-header-leading-wide:\s*7\.125rem;[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
+  it('every cover in a header is 244 px wide and 16:9, the icon tile a 4rem square, each sized from the wide width core reads', () => {
+    // The owner's rule (2026-11-03): the Memory's cover size, for every kind that takes a cover. Without the property the
+    // layout answer would read 0 and put the cover beside a name squeezed below its minimum.
+    expect(rule('.veyq-node-header-cover', css)).toMatch(/--veyq-node-header-leading-wide:\s*244px;[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
     expect(rule('.veyq-node-header-cover', css)).toMatch(/aspect-ratio:\s*16 \/ 9/)
     const icon = rule('.veyq-node-header .veyq-node-header-icon', css)
     expect(icon).toMatch(/--veyq-node-header-leading-wide:\s*4rem;[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
     expect(icon).toMatch(/height:\s*4rem/)
+    // No visual sizes itself by a query of its own: the header's `is-compact` answer is the only switch.
+    expect(css).not.toMatch(/@container[^{]*\{[^}]*\.veyq-node-header/)
+  })
+
+  it('the cover button\'s hint shows on hover and keyboard focus; its words only on a wide cover', () => {
+    expect(rule('.veyq-node-header-visual-button:hover .veyq-node-header-cover-hint,\n.veyq-node-header-visual-button:focus-visible .veyq-node-header-cover-hint', css)).toMatch(/opacity:\s*1/)
+    expect(rule('.veyq-node-header-cover-hint', css)).toMatch(/opacity:\s*0/)
+    expect(rule('.veyq-node-header-icon .veyq-node-header-cover-hint-label,\n.veyq-node-header.is-compact .veyq-node-header-cover-hint-label', css)).toMatch(/display:\s*none/)
+  })
+
+  it('core\'s page is the inline-size container an application\'s banner answers to', () => {
+    expect(rule('.veyq-node-page', css)).toMatch(/container:\s*veyq-node-page \/ inline-size/)
   })
 
   it('compact, the cover is 64 px wide and the icon tile 42 px', () => {

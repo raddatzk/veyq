@@ -21,9 +21,7 @@ import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
 import { canReport, reportScope } from '../../../core/report/reportActions'
 import { openReport, useReportOffered } from '../../../core/report/report'
 import { mediumReportKeys, type MediaItem } from '../media'
-import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import { injectCoreNodeActions } from '../../../core/node/coreNodeActions'
-import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
 import { patchNodeMeta } from '../../../core/node/treeStore'
 import { memoryRights } from '../rights'
 import { targetOf } from '../../../core/access'
@@ -57,13 +55,12 @@ const itemMarkKey = computed<ScopeKey | null>(() => {
   return eks ? { epoch: eks.epoch, key: eks.key } : null
 })
 const personalScope = computed(() => !guest && activeSpace.kind === 'PERSONAL')
-// Core's own actions (the heart, the cover, "Copy to…", the download, Report) come with core's header for this node
-// (`MemoryDetail` hands `NodeHeader` its `node`). The cover tile - the header's leading visual - opens core's cover DIALOG
-// too, the page's one (core's frame `NodePage` mounts it; mounted bare, this view has its own, `CoverEditor` below): a
-// cover is set only by an upload there. The Memory only says where an equal picture is already stored (its descriptor's
-// `cover.findStored`), so the cover shares it.
+// Core's page draws the header above this (ADR 0110 decision 10) with core's own actions (the heart, the cover, "Copy to…",
+// the download, Report) and the cover - its leading visual, which opens core's cover DIALOG, the page's one: a cover is set
+// only by an upload there. The Memory only says where an equal picture is already stored (its descriptor's
+// `cover.findStored`), so the cover shares it. While that dialog is open the lightbox leaves the keyboard to it.
 const page = injectCoreNodeActions()
-const cover = page?.cover ?? useNodeCover(() => props.access, () => props.tree, () => [props.node])
+const coverEditing = computed(() => (page?.cover.editor.value ?? null) !== null)
 const reportOn = useReportOffered()
 // Core's "Report" (uc.moderation.report) for one medium in the lightbox, beside the header's for the Memory itself: the
 // medium is this application's item, so its keys are Memories' to name (`mediumReportKeys`).
@@ -91,8 +88,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     :memory-key="contentKey"
     :scope-key="itemMarkKey"
     :personal-scope="personalScope"
-    :cover-editing="cover.editor.value !== null"
-    :can-set-cover="cover.canSet(node)"
+    :cover-editing="coverEditing"
     :can-report="reportsMedia"
     :chapters="chapters"
     :rights="rights"
@@ -104,10 +100,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     @open-chapter="host.open?.($event)"
     @share="host.share?.(node, $event)"
     @share-upload="host.share?.(node, { contribute: false, uploader: true })"
-
     @meta-updated="onMetaUpdated"
-    @edit-cover="cover.open(node)"
     @report-medium="onReportMedium"
   />
-  <CoverEditor v-if="!page" :cover="cover" />
 </template>

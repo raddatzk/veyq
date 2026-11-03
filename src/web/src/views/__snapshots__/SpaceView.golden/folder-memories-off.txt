@@ -8,9 +8,18 @@ div.veyq-node-host
     div.has-header.veyq-level-head
       header.has-leading.veyq-node-header
         div.veyq-node-header-leading
-          span.veyq-icon.veyq-node-header-icon
-            svg.lucide.lucide-folder.veyq-icon__svg
-              path
+          button.veyq-node-header-icon.veyq-node-header-visual-button [aria-label="Set cover"]
+            span.veyq-icon
+              svg.lucide.lucide-folder.veyq-icon__svg
+                path
+            span.veyq-node-header-cover-hint
+              span.veyq-icon
+                svg.lucide.lucide-image.veyq-icon__svg
+                  rect
+                  circle
+                  path
+              span.veyq-node-header-cover-hint-label
+                "Set cover"
         div.veyq-node-header-body
           div.veyq-node-header-titlerow
             h1.veyq-node-header-title

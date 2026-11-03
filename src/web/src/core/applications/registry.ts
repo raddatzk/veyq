@@ -161,8 +161,13 @@ export interface KindDescriptor {
    *  folders and a Memory's new chapters arrive as rows, and a key re-derived from a re-read tree is the same object, so
    *  nothing keyed on it reloads. What lives beside the tree (a Memory's gallery, ADR 0033) the page polls itself. */
   detail?: Component
-  /** The icon core draws next to a node of this kind (e.g. the trash list). */
+  /** The icon core draws next to a node of this kind (e.g. the trash list), and its header's icon tile (without a cover). */
   icon: VeyqIconName
+  /** What core's header of a node of this kind needs that never changes per node (owner 2026-11-03, ADR 0110 decision 10):
+   *  core draws every node page's header (`core/node/components/NodePage.vue`, the folder level for FOLDER), from this,
+   *  the `icon`, the `cover` and what the page's detail contributes (`core/node/nodeHeaderContribution.ts`). Omitted: no
+   *  priority, the actions in their merge order. */
+  header?: KindHeader
   /** The i18n key of the title core's delete question (`core/node/components/DeleteNodesDialog.vue`, one node's) shows for a node of
    *  this kind, e.g. Memories' "Delete Memory". Omitted: the neutral `node.delete`. Core serves every application's
    *  nodes and so names none in its own strings (inbox #375): a kind's noun comes from the kind. */
@@ -270,6 +275,14 @@ export interface KindDescriptor {
   copyLosses?: readonly string[]
 }
 
+/** A kind's header (ADR 0110 decisions 5 and 10). */
+export interface KindHeader {
+  /** The kind's priority: the ids of the header's actions that come first as buttons, in that order (core's included -
+   *  `favorite`, `cover`, `copy`, `download`); an unlisted one follows, never vanishes. Delete and report are always the ⋯
+   *  menu's last entries, whatever this says. */
+  order?: readonly string[]
+}
+
 /** What a kind that carries a cover may add to core's mechanism (inbox #411). A cover is set only by an upload in core's
  *  dialog; a kind whose nodes already store pictures may say where an equal one is, so the cover shares it. */
 export interface KindCover {
@@ -367,9 +380,10 @@ export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: f
  *  content schema's version alone (the application is the registrar's). */
 export type KindRegistration = Omit<KindDescriptor, 'kind' | 'contentSchema'> & { contentSchema?: { version: number } }
 
-/** The generic context the host hands the `detail` component of an opened node, always through core's frame
- *  `core/node/components/NodePage.vue`, which supplies core's own header actions of the node (the heart, the cover, copy,
- *  download, Report - `core/node/coreNodeActions.ts`) to the `NodeHeader` the detail draws with this `node`. What the detail
+/** The generic context the host hands the `detail` component of an opened node, always through core's page
+ *  `core/node/components/NodePage.vue`, which draws the node's header above it (core's `NodeHeader`, with core's own actions
+ *  of the node - the heart, the cover, copy, download, Report, `core/node/coreNodeActions.ts`); the detail is the body and
+ *  contributes to that header only as data (`contributeNodeHeader`, `core/node/nodeHeaderContribution.ts`). What the detail
  *  asks of the page - rename, move, delete, share, a child's create, opening a node - goes through the page's doors, which
  *  it injects (`core/node/nodeHost.ts` `injectNodeHost`: the very doors a row factory is handed; an absent one is an
  *  action not offered). The application's own host component maps it to whatever its detail view takes. What the detail
@@ -616,7 +630,9 @@ export function createRegistry(): Registry {
   const kinds = new Map<NodeKind, KindDescriptor>([
     // A folder lives at the root or in another folder (the server's `FolderNodeRules`).
     [FOLDER_KIND, {
-      kind: FOLDER_KIND, icon: 'folder', shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
+      // The folder header's priority (ADR 0110): favorite, then sharing, its content, its look, then editing and moving it.
+      kind: FOLDER_KIND, icon: 'folder', header: { order: ['favorite', 'share', 'download', 'cover', 'rename', 'move', 'copy'] },
+      shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
       placement: { root: true, parents: [FOLDER_KIND] }, cover: {}, copyLosses: ['node.copy.lossFolderCover'],
       rekeyContent: nothingOfItsOwnToRekey,
     }],

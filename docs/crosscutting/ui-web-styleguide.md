@@ -143,8 +143,9 @@ or a one-off `1rem` label sitting in them.
   `.veyq-create-card` (Memories' chapter card wears it too) and `.veyq-danger-action` (`styles/ui.css`, end of sheet; dark
   twins in `dark.css`); `.memory-card-grid` is Memories' twin of the grid (in Memories' own `memories.css`). Creation lives in the level toolbar's "New" menu
   (`.veyq-new-menu-button`), not in tiles. **Node header:** every node page and level opens with `.veyq-node-header`
-  (core's `NodeHeader`, [ADR 0110](../decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md): the
-  leading visual beside the name, then subtitle and meta, in one of two layouts the header picks by its own width — wide: the
+  (core's `NodeHeader`, [ADR 0110](../decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md), drawn
+  by core for every kind — an application contributes data, never markup: the
+  leading visual beside the name, then subtitle and facts, in one of two layouts the header picks by its own width — wide: the
   full leading visual, the name in one line and the actions in its row, the name first down to the kind's first two actions,
   then shortened with an ellipsis; compact (`.is-compact`): a small leading visual, the name in two lines at most, the actions
   in a row of their own; as many actions as fit are buttons in the kind's priority and the rest one ⋯ menu, delete and report
@@ -175,9 +176,10 @@ or a one-off `1rem` label sitting in them.
   keeps its own width.
 - **A row that leads with a picture or icon** (a person's avatar) is `.veyq-list-row.has-leading`: the visual, the name
   beside it, then the actions. Never the visual in the row's wide first column — that pushed the name to the far end.
-- **A node header's leading visual is as tall as the rows beside it** — core's icon tile (a 4rem square) and core's
-  cover (16:9, 4rem tall) span the name row and the subtitle, as the Memory's cover spans its four rows. A kind whose
-  header has more rows brings its own visual and its own `--veyq-node-header-leading-wide`; it never shrinks core's.
+- **Every cover in a node header is 244 px wide, 16:9; the icon tile a 4rem square** — one size for every kind, as tall
+  as a Memory's four rows beside it (64 px and 42 px compact). Where the cover may be set it is the button that opens
+  core's cover dialog, its hint (`.veyq-node-header-cover-hint`) shown on hover and focus. **A fact under the name** is
+  core's look too: a date or place a borderless chip (`.veyq-node-header-chip`), people core's `PersonGroup`.
 - **Empty/loading:** `.veyq-empty`, `.veyq-loading` — concise and action-oriented, not marketing copy.
 - **The UI layer** ([ADR 0107](../decisions/0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md)):
   a button, field, dialog, menu, select, tabs, toast, tooltip, date field or icon is a `Veyq*` component of

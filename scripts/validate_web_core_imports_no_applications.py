@@ -15,7 +15,7 @@ whose spec lies in an application's directory is that application's (today `api/
 `api/generated/media` and `api/generated/share-media`, all Memories', `api/generated/depot` and `api/generated/expenses`;
 the node pins' `api/generated/favorites` is core's), so a new application client is covered the day
 its line lands. Core's own clients (`blob`, `content`, …) stay core's: importing them is the point of generating them.
-Dependencies run application → core, never back, and never application → application. Six rules:
+Dependencies run application → core, never back, and never application → application. Seven rules:
 - **import** (core): no core file names an application by an import specifier — `from '…'` (so also
   `export … from '…'`), `import('…')`, or a bare `import '…'`. A relative specifier is resolved against the importing
   file and tested for landing inside an application or one of its generated clients, so `'../../memories/memoryNodes'`
@@ -27,6 +27,12 @@ Dependencies run application → core, never back, and never application → app
   applications share belongs in core (ADR 0079 Decision 4, the backend's rule (b) in
   `validate_backend_module_graph.py`). Nor does it read another application's i18n namespace (a quoted key, as the
   i18n rule below reads core): Depot borrowing `media.*` would be the same edge, spelled as a string.
+- **header** (every application): no file of an application imports core's node header,
+  `core/node/components/NodeHeader.vue` (`CORE_HEADER`), by the same specifier reading. Core draws every node page's header
+  (ADR 0110 decision 10): its node page from the kind's descriptor and what the detail contributes as data
+  (`core/node/nodeHeaderContribution.ts`), the level for a folder. An application that drew one of its own could leave out
+  core's actions - Report among them, a legal duty - or link a person on a share page; `NodePage.report.test.ts` walks the
+  registered kinds for the first, this rule holds the door shut for the next kind that is written.
 - **glob** (core): no file contains `import.meta.glob`. Discovery by glob would hide an edge from the rules above,
   and ADR 0079 Decision 5 says what runs is what was reviewed.
 - **kind** (core): no file names an application's node kind — `NodeKind.Memory`, `NodeKind.Chapter`,
@@ -125,7 +131,9 @@ APPLICATION_CATALOG = "i18n.ts"  # an application's own catalog: features/<owner
 GENERATED = ("api", "generated")  # untracked client; defines the kinds, so it names them
 
 RULE_IMPORT, RULE_APPLICATION, RULE_GLOB, RULE_KIND, RULE_I18N = "import", "application", "glob", "kind", "i18n"
-RULE_CATALOG_ROOT = "catalog-root"
+RULE_CATALOG_ROOT, RULE_HEADER = "catalog-root", "header"
+# Core's node header, which only core mounts (the `header` rule): relative to src/web/src.
+CORE_HEADER = ("core", "node", "components", "NodeHeader.vue")
 
 # `from '…'` covers import/export-from, also across lines; `import('…')` and a bare `import '…'` the others.
 SPECIFIER = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])([^'"\n]+)\1""")
@@ -260,6 +268,8 @@ def violations(rel: pathlib.PurePosixPath, text: str,
         others = anchors_of(other_owners, clients)
         if any(reaches(rel, m.group(2), others) for m in SPECIFIER.finditer(text)):
             found.add(RULE_APPLICATION)
+        if any(reaches(rel, m.group(2), [CORE_HEADER]) for m in SPECIFIER.finditer(text)):
+            found.add(RULE_HEADER)
         if other_owners and i18n_key(n for o in other_owners for n in I18N_NAMESPACES[o]).search(text):
             found.add(RULE_I18N)
         return found
@@ -284,6 +294,8 @@ MESSAGES = {
                  "piece into core (ADR 0079)",
     RULE_APPLICATION: "it imports another application or one of its generated clients; an application depends on "
                       "core only — move what both need into core (ADR 0079 Decision 4)",
+    RULE_HEADER: "it imports core's node header; core draws every node page's header - contribute its subtitle, actions, "
+                 "facts and banner through `contributeNodeHeader` (core/node/nodeHeaderContribution.ts, ADR 0110 decision 10)",
     RULE_GLOB: "`import.meta.glob` hides edges from this guard; register applications by a static import in "
                f"{SRC_REL}/applications.ts",
     RULE_KIND: "it names an application's node kind; ask the registry what to render for a kind",

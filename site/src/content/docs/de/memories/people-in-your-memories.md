@@ -13,8 +13,8 @@ eine Person öffnen, um alle Erinnerungen zu sehen, an denen sie beteiligt war.
 
 - **Personen nennen.** Öffne eine Erinnerung und wähle **Beteiligte** – die Schaltfläche mit zwei Personen in der Reihe
   der Schaltflächen oben in der Erinnerung oder ein Eintrag im **⋯**-Menü dahinter. Du wählst aus den Mitgliedern des Bereichs, in dem die Erinnerung
-  liegt. Sie erscheinen als Reihe kleiner Avatare in der Kopfzeile der
-  Erinnerung (bis zu drei; bei mehr zeigt der letzte „+2“, „+3“ und so weiter) – fahre darüber oder tippe darauf, um alle mit
+  liegt. Sie erscheinen in der Kopfzeile der Erinnerung: eine Person mit Bild und Namen, mehrere als Reihe kleiner
+  Avatare (bis zu drei; bei mehr zeigt der letzte „+2“, „+3“ und so weiter) – fahre darüber oder tippe darauf, um alle mit
   Namen zu sehen. In der Auswahl kannst du die Mitglieder nach Namen suchen. Eine Erinnerung kann bis zu 100 Personen nennen.
 - **„Ich war dabei“ beim Anlegen einer Erinnerung.** In einem gemeinsamen Bereich (nicht in deinem persönlichen) bietet
   der Dialog für eine neue Erinnerung **Ich war dabei** an, angehakt, solange du den Haken nicht entfernst. Mit Haken bist

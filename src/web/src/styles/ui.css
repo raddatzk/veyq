@@ -579,8 +579,18 @@
   height: 42px;
 }
 
+/* Core's page of an opened node (core/node/components/NodePage.vue, ADR 0110 decision 10): the banner an application
+   contributes, core's header, then the kind's body, one gap apart. An inline-size container, so what is drawn in it answers
+   to the page's own width, not the viewport's (the sidebar takes ~230px): Memories' banner frames 1:1 below 720px. */
+.veyq-node-page {
+  container: veyq-node-page / inline-size;
+  display: grid;
+  min-width: 0;
+  gap: 1.45rem;
+}
+
 /* The node header (core/node/components/NodeHeader.vue, inbox #406, ADR 0110): the leading visual beside the name, then
-   subtitle and meta, in one of two layouts the component picks from the header's own width (`headerLayout`, no viewport
+   subtitle and facts, in one of two layouts the component picks from the header's own width (`headerLayout`, no viewport
    query). WIDE: the leading visual at its full size, the name in ONE line and the actions at the right end of its row —
    the name takes its natural width and the actions yield to the ⋯ menu down to the kind's first two, only then is the name
    shortened with an ellipsis. COMPACT (`.is-compact`): a small leading visual, the name in two lines at most, the actions
@@ -619,20 +629,67 @@
   align-items: center;
 }
 
-/* The leading visual is as tall as the rows beside it, as the Memory's cover is (owner 2026-11-03): the name row - its
-   height is the action buttons' 2.55rem - and the subtitle under it, 4rem. A fixed number, as the Memory's: the width the
-   layout answer reads cannot follow the rows' height. A kind whose header has more rows brings its own visual (Memories). */
-
-/* A node's cover in the header's leading slot (inbox #411): a 16:9 frame 4rem tall; the kind's icon tile is the default
-   without one. */
+/* Every cover in a header is 244 px wide, 16:9 (owner 2026-11-03): as tall as the four rows a Memory's header holds beside
+   it - the name, the count, date and place, the people. The kind's icon tile, the default without a cover, is the 4rem
+   square below. Fixed numbers: the width the layout answer reads cannot follow the rows' height. */
 .veyq-node-header-cover {
-  --veyq-node-header-leading-wide: 7.125rem;
+  --veyq-node-header-leading-wide: 244px;
   display: block;
   width: var(--veyq-node-header-leading-wide);
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: 10px;
   background: var(--app-info-soft);
+}
+
+/* The leading visual as the button that opens core's cover dialog (where whoever looks may set the cover): the cover or the
+   icon tile it is, with the hint over its foot on hover and keyboard focus - the words on a cover, the icon alone on the
+   icon tile and on a compact header (the words stay its accessible name and tooltip). */
+.veyq-node-header-visual-button {
+  position: relative;
+  padding: 0;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.veyq-node-header-visual-button:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.veyq-node-header-cover-hint {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  background: color-mix(in srgb, var(--app-backdrop-strong) 62%, transparent);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.veyq-node-header-visual-button:hover .veyq-node-header-cover-hint,
+.veyq-node-header-visual-button:focus-visible .veyq-node-header-cover-hint {
+  opacity: 1;
+}
+
+.veyq-node-header-icon .veyq-node-header-cover-hint,
+.veyq-node-header.is-compact .veyq-node-header-cover-hint {
+  inset-block-start: 0;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.veyq-node-header-icon .veyq-node-header-cover-hint-label,
+.veyq-node-header.is-compact .veyq-node-header-cover-hint-label {
+  display: none;
 }
 
 /* Two classes on purpose: the layer's own `.veyq-icon` (display, font-size) is loaded after this sheet and would otherwise win,
@@ -690,6 +747,74 @@
   color: var(--app-muted);
   font-size: 0.9rem;
   font-weight: 700;
+}
+
+/* The facts under the subtitle (`NodeHeaderFact`): a row of chips, or one of people or text. A chip is a light, borderless
+   button (an accent icon and the value) that opens the application's editor, with a subtle hover so it still reads as
+   clickable; an absent value is muted (`.is-empty`). Pulled left by a chip's padding so its CONTENT starts flush with the
+   name above. */
+.veyq-node-header-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.4rem;
+  margin-left: -0.45rem;
+}
+
+.veyq-node-header-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.45rem;
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap; /* the label (e.g. "Kein Ort erkannt") stays on one line, never breaks mid-phrase */
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.veyq-node-header-chip.is-static {
+  cursor: default;
+}
+
+.veyq-node-header-chip:hover:not(:disabled, .is-static) {
+  background: var(--app-hover);
+}
+
+.veyq-node-header-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.veyq-node-header-chip:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.veyq-node-header-chip.is-empty {
+  color: var(--app-muted);
+  font-weight: 500;
+}
+
+.veyq-node-header-chip .veyq-icon {
+  color: var(--app-accent);
+  font-size: 0.95rem;
+}
+
+.veyq-node-header-chip.is-empty .veyq-icon {
+  color: var(--app-muted);
+}
+
+/* Text has no padding of its own to pull: it starts flush with the name. */
+.veyq-node-header-text {
+  margin: 0 0 0 0.45rem;
+  color: var(--app-muted);
+  font-size: 0.9rem;
 }
 
 .veyq-node-header-actions {

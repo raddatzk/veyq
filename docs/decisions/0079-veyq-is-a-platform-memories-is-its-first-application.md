@@ -43,7 +43,9 @@ a node's cover and the counters a live list of records polls are core's, and an 
 
 **Around a node is core's, behind it the application's** (owner, 2026-11-01). Everything around a node is core's:
 create, rename, move, delete, trash and purge, its key, the rights that are not an application's own, links and
-sharing, cover, favorite, report, the export envelope, the live tree, the host doors and dialogs, registration.
+sharing, cover, favorite, report, the export envelope, the live tree, the host doors and dialogs, the node page's header
+(an application contributes its actions, facts and banner to it as data, [ADR 0110](0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md)
+decision 10), registration.
 Everything behind a node is its application's: its data model, tables, formats, records and their revisions,
 operations, screens, validation and arithmetic — shared with no other application, not even as a core template. One
 exception: **data management is core's.** The blobs an application stores are managed by a core service that carries

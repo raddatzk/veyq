@@ -19,7 +19,8 @@ vi.mock('../../../shared/image/exifTags', () => ({ readExifTags: vi.fn(async () 
 // Keep the real defaultLevel/nameAtLevel helpers (the self-heal picks a level from the mocked hierarchy).
 vi.mock('../geocode', async (orig) => ({ ...(await orig<typeof import('../geocode')>()), reverseGeocode: vi.fn() }))
 
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
+import { mountWithHeader } from '../../../test/nodeHeader'
 import { readExifTags } from '../../../shared/image/exifTags'
 import MemoryDetail from './MemoryDetail.vue'
 import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
@@ -67,7 +68,7 @@ function stubDeriver(): MediaDeriver {
 }
 
 function mountDetail(memoryKey: Uint8Array, props: Partial<Record<string, unknown>> = {}) {
-  return mount(MemoryDetail, {
+  return mountWithHeader(MemoryDetail, {
     props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }), canSetCover: true, ...props },
     global: { plugins: [realI18n()] },
   })
@@ -408,7 +409,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     for (let i = 0; i < 3; i++) {
       await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(i) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
     }
-    const wrapper = mount(MemoryDetail, {
+    const wrapper = mountWithHeader(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
       global: { plugins: [realI18n()] },
       attachTo: document.body,
@@ -510,7 +511,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
     emptyStore()
     const wrapper = mountDetail(v1.randomBytes(32))
     await flushPromises()
-    expect(wrapper.find('.memory-date-chip').text()).toContain(t('memory.date.noDate'))
+    expect(wrapper.find('.veyq-node-header-chip[data-fact="date"]').text()).toContain(t('memory.date.noDate'))
     expect(updateNode).not.toHaveBeenCalled() // absent meta already == empty auto; nothing to seal
   })
 
@@ -520,7 +521,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
     const sealed = sealMemoryDate(memoryKey, THIS_NODE, { mode: 'single', from: '2026-06-15', to: '2026-06-15' })
     const wrapper = mountDetail(memoryKey, { node: node('Rom 2026', sealed) })
     await flushPromises()
-    expect(wrapper.find('.memory-date-chip').text()).toContain('06/15/2026')
+    expect(wrapper.find('.veyq-node-header-chip[data-fact="date"]').text()).toContain('06/15/2026')
     expect(updateNode).not.toHaveBeenCalled() // a manual date is never auto-reconciled
   })
 
@@ -566,12 +567,12 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
       emits: ['save', 'close'],
       template: `<button class="stub-save" @click="$emit('save', { mode: 'single', from: '2026-06-15', to: '2026-06-15' })" />`,
     }
-    const wrapper = mount(MemoryDetail, {
+    const wrapper = mountWithHeader(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
       global: { plugins: [realI18n()], stubs: { MemoryDateEditor: DateEditorStub } },
     })
     await flushPromises()
-    await wrapper.find('.memory-date-chip').trigger('click') // open the editor
+    await wrapper.find('.veyq-node-header-chip[data-fact="date"]').trigger('click') // open the editor
     await flushPromises()
     await wrapper.find('.stub-save').trigger('click')
     await flushPromises()
@@ -603,7 +604,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   }
   function mountWithLocationStub(memoryKey: Uint8Array, wrappedMeta: string | null) {
     setMapsConsent(true) // skip the consent dialog — go straight into the (stubbed) editor
-    return mount(MemoryDetail, {
+    return mountWithHeader(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
       global: { plugins: [realI18n()], stubs: { MemoryLocationEditor: LocationEditorStub } },
     })
@@ -613,7 +614,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     emptyStore()
     const wrapper = mountWithLocationStub(v1.randomBytes(32), null)
     await flushPromises()
-    expect(wrapper.find('.memory-location-chip').text()).toContain(t('memory.place.set'))
+    expect(wrapper.find('.veyq-node-header-chip[data-fact="place"]').text()).toContain(t('memory.place.set'))
   })
 
   it('renders the stored location name in the chip', async () => {
@@ -622,7 +623,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const sealed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: GEOCODED })
     const wrapper = mountWithLocationStub(memoryKey, sealed)
     await flushPromises()
-    expect(wrapper.find('.memory-location-chip').text()).toContain('Teneriffa')
+    expect(wrapper.find('.veyq-node-header-chip[data-fact="place"]').text()).toContain('Teneriffa')
   })
 
   it('saving a location read-modify-writes the blob — the sibling date is preserved', async () => {
@@ -633,7 +634,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const wrapper = mountWithLocationStub(memoryKey, sealed)
     await flushPromises()
 
-    await wrapper.find('.memory-location-chip').trigger('click') // maps consented → editor opens
+    await wrapper.find('.veyq-node-header-chip[data-fact="place"]').trigger('click') // maps consented → editor opens
     await flushPromises()
     await wrapper.find('.loc-save').trigger('click')
     await flushPromises()
@@ -652,7 +653,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const wrapper = mountWithLocationStub(memoryKey, sealed)
     await flushPromises()
 
-    await wrapper.find('.memory-location-chip').trigger('click')
+    await wrapper.find('.veyq-node-header-chip[data-fact="place"]').trigger('click')
     await flushPromises()
     await wrapper.find('.loc-remove').trigger('click')
     await flushPromises()
@@ -749,7 +750,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const wrapper = mountWithLocationStub(memoryKey, pending)
     await flushPromises()
     // No GPS media ⇒ the armed auto place can never resolve, so the chip says so rather than imply an in-progress lookup.
-    expect(wrapper.find('.memory-location-chip').text()).toContain(t('memory.place.none'))
+    expect(wrapper.find('.veyq-node-header-chip[data-fact="place"]').text()).toContain(t('memory.place.none'))
   })
 
   it('shows the “pending” placeholder for an armed auto location while a geotagged medium exists but no name yet', async () => {
@@ -765,7 +766,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const wrapper = mountWithLocationStub(memoryKey, pending)
     await flushPromises()
     await flushPromises()
-    expect(wrapper.find('.memory-location-chip').text()).toContain(t('memory.place.pending'))
+    expect(wrapper.find('.veyq-node-header-chip[data-fact="place"]').text()).toContain(t('memory.place.pending'))
   })
 
   it('materializes a pending auto location — geocodes the medoid name on the first geotagged media (self-heal)', async () => {
@@ -797,12 +798,12 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     emptyStore()
     setMapsConsent(false)
     const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dlg"><slot /></div>' }
-    const wrapper = mount(MemoryDetail, {
+    const wrapper = mountWithHeader(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), rights: memberMemoryRights({ publicShares: false }) },
       global: { plugins: [realI18n()], stubs: { MemoryLocationEditor: LocationEditorStub, VeyqDialog: DialogStub } },
     })
     await flushPromises()
-    await wrapper.find('.memory-location-chip').trigger('click')
+    await wrapper.find('.veyq-node-header-chip[data-fact="place"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('.loc-editor').exists()).toBe(false) // no editor
     expect(wrapper.find('.dlg').text()).toContain(t('memory.place.consentBody')) // the consent dialog body
@@ -833,13 +834,13 @@ describe('MemoryDetail (a place on a server without a map, #458)', () => {
     return store
   }
   function mountReal(memoryKey: Uint8Array, wrappedMeta: string | null = null) {
-    return mount(MemoryDetail, {
+    return mountWithHeader(MemoryDetail, {
       props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
       global: { plugins: [realI18n()], stubs: { VeyqDialog: DialogStub } },
     })
   }
   async function nameAndSave(wrapper: ReturnType<typeof mountReal>, name: string) {
-    await wrapper.find('.memory-location-chip').trigger('click')
+    await wrapper.find('.veyq-node-header-chip[data-fact="place"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('.memory-location-editor').exists()).toBe(true) // the editor, not the consent dialog
     expect(wrapper.text()).not.toContain(t('memory.place.consentBody'))
@@ -881,7 +882,7 @@ describe('MemoryDetail (a place on a server without a map, #458)', () => {
     const wrappedMeta = updateNode.mock.calls.at(-1)![0].updateNodeRequest.wrappedMeta as string
     const reopened = mountReal(memoryKey, wrappedMeta)
     await flushPromises()
-    expect(reopened.find('.memory-location-chip').text()).toContain('At grandma’s')
+    expect(reopened.find('.veyq-node-header-chip[data-fact="place"]').text()).toContain('At grandma’s')
     expect(reverseGeocode).not.toHaveBeenCalled()
     expect(offHosts()).toEqual([])
   })

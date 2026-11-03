@@ -12,7 +12,7 @@ took part in.
 ## What you can do
 
 - **Name the people.** Open a Memory and choose **Participants** — the button with two people in the row of buttons at
-  the top of the Memory, or an entry of the **⋯** menu at its end. You pick from the members of the space the Memory lives in. They appear as a row of small avatars in the Memory's header (up to three; with more, the last one shows "+2", "+3" and so on) — hover over them, or tap them, to see everyone by name. In the picker you can search the members by name. A Memory can name up to 100 people.
+  the top of the Memory, or an entry of the **⋯** menu at its end. You pick from the members of the space the Memory lives in. They appear in the Memory's header: one person with their picture and name, several as a row of small avatars (up to three; with more, the last one shows "+2", "+3" and so on) — hover over them, or tap them, to see everyone by name. In the picker you can search the members by name. A Memory can name up to 100 people.
 - **"I was there" when you create a Memory.** In a shared space (not in your personal one) the dialog for a new Memory
   has **I was there**, ticked unless you untick it. Ticked, you are the Memory's first participant from the start;
   unticked, it starts with nobody. It means "I was there", not "I made this" — so it is your choice each time.

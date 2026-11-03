@@ -7,6 +7,7 @@
 // button; a measured row moves what does not fit into the menu (the count itself is `../nodeHeader.test.ts`'s).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import NodeHeader from './NodeHeader.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { mergeHeaderActions, standardNodeActions, type CoreHeaderAction, type NodeHeaderAction } from '../nodeHeader'
@@ -16,6 +17,8 @@ import type { TreeNode } from '../tree'
 import { treeNode } from '../../../test/models'
 import { realI18n, t } from '../../../test/i18n'
 import { chooseHeaderEntry, headerButtonIds, headerMenuIds, openHeaderMenu } from '../../../test/nodeHeader'
+import { coreActionsStandIn, coverStandIn } from '../../../test/nodePage'
+import PersonAvatar from '../../people/PersonAvatar.vue'
 
 const mounted: VueWrapper[] = []
 afterEach(() => {
@@ -54,12 +57,105 @@ describe('NodeHeader', () => {
     expect(w.findComponent(VeyqIcon).props('name')).toBe('folder')
   })
 
-  it('the leading slot replaces the icon (a cover), the meta slot sits under the name', () => {
-    const w = mountHeader({ title: 'Rome', icon: 'images' }, { leading: '<img class="cover">', meta: '<i class="chips" />' })
-    expect(w.find('.veyq-node-header-leading .cover').exists()).toBe(true)
-    expect(w.find('.veyq-node-header-icon').exists()).toBe(false)
-    expect(w.find('.veyq-node-header').classes()).toContain('has-visual')
-    expect(w.find('.veyq-node-header-body .chips').exists()).toBe(true)
+  describe('the cover is core\'s (inbox #411, owner 2026-11-03)', () => {
+    const COVER = { url: 'blob:cover', crop: { x: 0, y: 0, width: 1, height: 1 } }
+    const withCover = (opts: Parameters<typeof coverStandIn>[0]) => {
+      const w = mount(NodeHeader, {
+        props: { node: NODE, title: 'Rome', icon: 'images', cover: true },
+        global: { plugins: [realI18n()], provide: coreActionsStandIn([], coverStandIn(opts)) },
+        attachTo: document.body,
+      })
+      mounted.push(w)
+      return w
+    }
+
+    it('a kind that takes a cover shows the node\'s cover, its name at the cover\'s size; without one, its icon tile', () => {
+      const w = withCover({ covers: new Map([[NODE.id, COVER]]) })
+      expect(w.find('.veyq-node-header-leading .veyq-node-header-cover img').attributes('src')).toBe('blob:cover')
+      expect(w.find('.veyq-node-header-icon').exists()).toBe(false)
+      expect(w.find('.veyq-node-header').classes()).toContain('has-visual')
+      // A view with nothing resolved for the node: the kind's icon, no cover's size.
+      const bare = withCover({})
+      expect(bare.find('.veyq-node-header-cover').exists()).toBe(false)
+      expect(bare.findComponent(VeyqIcon).classes()).toContain('veyq-node-header-icon')
+      expect(bare.find('.veyq-node-header').classes()).not.toContain('has-visual')
+    })
+
+    it('a kind without a cover never shows one, whatever the view resolved', () => {
+      const w = mount(NodeHeader, {
+        props: { node: NODE, title: 'Rome', icon: 'file' },
+        global: { plugins: [realI18n()], provide: coreActionsStandIn([], coverStandIn({ covers: new Map([[NODE.id, COVER]]), canSet: true })) },
+      })
+      mounted.push(w)
+      expect(w.find('.veyq-node-header-cover').exists()).toBe(false)
+      expect(w.find('[data-testid="node-header-cover"]').exists()).toBe(false)
+      expect(w.find('.veyq-node-header-icon').exists()).toBe(true)
+    })
+
+    it('where the cover may be set, the visual is a labelled button that opens core\'s dialog for THIS node', async () => {
+      const open = vi.fn()
+      const empty = withCover({ canSet: true, open })
+      const button = empty.find('button[data-testid="node-header-cover"]')
+      // Without a cover the button IS the icon tile, named "Set cover".
+      expect(button.classes()).toContain('veyq-node-header-icon')
+      expect(button.attributes('aria-label')).toBe(t('node.cover.set'))
+      expect(button.find('.veyq-node-header-cover-hint').exists()).toBe(true)
+      await button.trigger('click')
+      expect(open).toHaveBeenCalledWith(NODE)
+      // With one, it is the cover, named "Change cover".
+      const set = withCover({ canSet: true, covers: new Map([[NODE.id, COVER]]) })
+      expect(set.find('button[data-testid="node-header-cover"]').classes()).toContain('veyq-node-header-cover')
+      expect(set.find('button[data-testid="node-header-cover"]').attributes('aria-label')).toBe(t('node.cover.change'))
+    })
+
+    it('without the right, the visual is no button and opens nothing', () => {
+      const open = vi.fn()
+      const w = withCover({ canSet: false, open, covers: new Map([[NODE.id, COVER]]) })
+      expect(w.find('button').exists()).toBe(false)
+      expect(w.find('.veyq-node-header-cover img').exists()).toBe(true)
+    })
+  })
+
+  describe('the facts under the name', () => {
+    it('chips share one row - a button that opens the application\'s editor, greyed where disabled; plain text without a click', async () => {
+      const edit = vi.fn()
+      const w = mountHeader({
+        title: 'Rome',
+        facts: [
+          { kind: 'date', label: '06/15/2026', actionLabel: 'Edit date', onClick: edit },
+          { kind: 'place', label: 'Set place', empty: true, onClick: edit, disabled: true },
+          { kind: 'text', text: 'In EUR' },
+          { kind: 'date', label: 'Spring', empty: true },
+        ],
+      })
+      const rows = w.findAll('.veyq-node-header-facts')
+      expect(rows.map((r) => r.findAll('[data-fact]').map((f) => f.attributes('data-fact')))).toEqual([['date', 'place'], ['text'], ['date']])
+      const date = w.find('button[data-fact="date"]')
+      expect(date.attributes('aria-label')).toBe('Edit date')
+      expect(date.text()).toBe('06/15/2026')
+      await date.trigger('click')
+      expect(edit).toHaveBeenCalledOnce()
+      const place = w.find('button[data-fact="place"]')
+      expect(place.classes()).toContain('is-empty')
+      expect(place.attributes('disabled')).toBeDefined()
+      expect(rows[2]!.find('[data-fact="date"]').element.tagName).toBe('SPAN')
+      expect(w.find('[data-fact="text"]').text()).toBe('In EUR')
+    })
+
+    it('people link to a profile only on a member\'s page (`linkPeople`); by default - a share page - no link and no picture', async () => {
+      const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
+      await router.push('/')
+      const facts = [{ kind: 'people' as const, label: 'Uploaded by', caption: 'Uploaded by', people: [{ userId: 'u-anna', name: 'Anna' }] }]
+      const member = mount(NodeHeader, { props: { node: null, title: 'f', facts, linkPeople: true }, global: { plugins: [realI18n(), router] } })
+      const guest = mount(NodeHeader, { props: { node: null, title: 'f', facts }, global: { plugins: [realI18n(), router] } })
+      mounted.push(member, guest)
+      expect(member.find('[data-testid="person-link"]').attributes('href')).toContain('#people/u-anna')
+      expect(member.find('.veyq-person-group-caption').text()).toBe('Uploaded by')
+      expect(guest.find('[data-testid="person-link"]').exists()).toBe(false)
+      expect(guest.find('a').exists()).toBe(false)
+      expect(guest.findComponent(PersonAvatar).props('userId')).toBeNull()
+      expect(guest.text()).toContain('Anna')
+    })
   })
 
   it('renders only the shown actions, labelled, in order — and no empty action row', () => {
@@ -158,7 +254,7 @@ describe('NodeHeader', () => {
         .veyq-node-header { --veyq-node-header-name-min: 192px; column-gap: 16px }
         .veyq-node-header-titlerow { column-gap: 16px }
         .veyq-node-header-actions { column-gap: 7px }
-        .lead { --veyq-node-header-leading-wide: 180px }`
+        .veyq-node-header-icon { --veyq-node-header-leading-wide: 180px }`
       document.head.appendChild(sheet)
     })
     afterEach(() => sheet.remove())
@@ -174,7 +270,7 @@ describe('NodeHeader', () => {
         return 0
       })
       vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
-        if (this.classList.contains('lead')) return compactNow(this) ? 64 : 180
+        if (this.classList.contains('veyq-node-header-icon')) return compactNow(this) ? 64 : 180
         return this.matches('.veyq-node-header-action, .veyq-node-header-more') ? 41 : 0
       })
       vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
@@ -182,21 +278,19 @@ describe('NodeHeader', () => {
       })
     }
     const memoryActions = () => ['favorite', 'upload', 'share', 'request', 'people', 'download', 'cover', 'banner', 'rename', 'move', 'copy'].map((id) => act(id))
-    const leading = { leading: '<span class="lead" :class="{ small: params.compact }" :data-compact="String(params.compact)"></span>' }
-    const mountMemory = (title: string) => mountHeader({ title, actions: [...memoryActions(), act('delete', { severity: 'danger' })] }, leading)
+    // The leading visual is the icon tile here, given the 180 px wide width above (a cover's is 244 px in the sheet).
+    const mountMemory = (title: string) => mountHeader({ title, icon: 'images', actions: [...memoryActions(), act('delete', { severity: 'danger' })] })
 
-    it('compact below the switch, wide at it: the header\'s class and the leading slot\'s `compact` follow the answer', async () => {
+    it('compact below the switch, wide at it: the header\'s class follows the answer', async () => {
       layoutWidths(540)
       const narrow = mountMemory('Rom 2026')
       await flushPromises()
       expect(narrow.find('.veyq-node-header').classes()).toContain('is-compact')
-      expect(narrow.find('.lead').attributes('data-compact')).toBe('true')
       vi.restoreAllMocks()
       layoutWidths(541)
       const wide = mountMemory('Rom 2026')
       await flushPromises()
       expect(wide.find('.veyq-node-header').classes()).not.toContain('is-compact')
-      expect(wide.find('.lead').attributes('data-compact')).toBe('false')
     })
 
     it('a short and a very long name at the same width get the same layout', async () => {
