@@ -47,6 +47,10 @@ here; the server is blind.
   `src/test/guestMode.ts`'s `guardedClients` (`vi.mock('…/api/client', async (o) => (await import('…/test/guestMode'))
   .guardedClients(await o()))` — the public factories become `vi.fn`s to stub, every other one throws and is recorded)
   and assert `authenticatedCalls` stayed empty; a call is then red even where the view swallowed the error.
+- **Moving markup silently disarms every negative assertion that names it.** `find(old).exists()).toBe(false)` stays green
+  on a selector nothing draws any more: when Depot's uploader line moved into core's header, `FileDetail.guest.test.ts`'
+  absence of `data-testid="file-uploader"` passed while asserting nothing (2026-11-03). After a move, grep the old test ids
+  and classes across the tests and re-point each negative at the new markup, beside a positive control.
 - **`vi.mock` resolves by path, so moving a module silently disarms every mock of it.** A mock left on the old
   path stubs nothing and the real module runs — and a passthrough mock (`withRefresh: (f) => f()`) is green
   either way, so no red announces it. After a move, prove the new mocks bite by sabotaging the *real* module
@@ -191,28 +195,42 @@ here; the server is blind.
   (`ShareView.memory.test.ts` records every export of the cache and the directory). Draw a person with `core/people/PersonAvatar.vue`
   (`:user-id`), never a bare `VeyqAvatar`. Name and picture are edited by ONE model + component (`useNameAndPicture` /
   `NamePictureFields`) in Settings > Your profile and on one's OWN profile page only - no edit control on another person's page.
-  **One header for every node (inbox #406, [ADR 0110](../../docs/decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md)).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box and a
-  Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button) beside the title (the page's one `h1`,
-  a folder's level view included, and a space's top level is headed by the space's name, `LevelView`'s `spaceName` — styleguide § Heading levels; the full name its tooltip), an optional `subtitle` and `meta` slot, and the actions. **Two layouts,
+  **One header for every node (inbox #406, [ADR 0110](../../docs/decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md)).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box, a
+  Memory and a Pot, and **core draws it, never an application** (owner 2026-11-03, decision 10; `validate_web_core_imports_no_applications.py`'s
+  `header` rule keeps `NodeHeader.vue` out of `features/<owner>`): `NodePage` (a `.veyq-node-page`, the inline-size container an application's
+  banner answers to) draws it above the kind's `detail` from the descriptor (`registry.kind(node.kind)`: `icon`, `cover`, `header.order` -
+  `KindHeader`; FOLDER's pre-registered, which `LevelView` reads for the folder's) and from what the detail CONTRIBUTES as data, `contributeNodeHeader(() =>
+  ({ subtitle?, actions?, facts?, banner? }))` (`core/node/nodeHeaderContribution.ts`; a no-op without core's page, so a detail mounted bare draws no
+  header; the page re-reads the builder as the detail's state moves, and shows it one render after the detail mounted - a test waits a tick). A
+  FACT (`NodeHeaderFact`, `core/node/nodeHeader.ts`) is a `date`/`place` chip (`label`, `empty`, `onClick` = the application's editor, `actionLabel`,
+  `disabled`; consecutive chips one row), `people` (`label`, `people: { userId | null, name, former? }[]`, `caption`, `status`; drawn by
+  `core/people/PersonGroup.vue` - one person avatar + name, several three overlapping avatars or two + "+N" with a hover card listing everyone)
+  or `text`; a BANNER is `{ component, props }`, drawn above the row (Memories'). **People link to `#people/<id>` and show a member's picture only
+  where `linkPeople` says so** - `NodePage` sets it for a member's access alone, the prop's default is false, so a share page links nobody
+  whatever an application hands it. The leading visual is core's: a kind with a `cover` shows the node's cover (`NodeCoverImage`, the view's
+  resolved covers) or, without one, the icon tile, and where `cover.canSet(node)` it is the button that opens core's cover dialog (hint on hover and
+  focus); a kind without one, the icon tile. Then the title (the page's one `h1`,
+  a folder's level view included, and a space's top level is headed by the space's name, `LevelView`'s `spaceName` — styleguide § Heading levels; the full name its tooltip), the subtitle and the facts, and the actions. **Two layouts,
   picked by the header's own width** (`headerLayout`, `core/node/nodeHeader.ts`; no viewport query): **wide** while the leading visual's wide width,
   the name's minimum (12rem), the floor's two buttons and the ⋯ fit in one row — the name ONE line at its natural width, the actions at the right end
   of its row, yielding to the ⋯ down to the kind's first two shown actions (`headerFloor`), only then the name shortened with "…" — else **compact**
-  (`.is-compact`; the leading slot gets `compact`): a 64 px cover beside a name of two lines at most, the actions in a row of their own. The answer
-  reads sizes no layout changes — the leading visual's registered `--veyq-node-header-leading-wide` (core's icon tile and cover, Memories' cover set
-  it; core reads the number, never imports the application), `--veyq-node-header-name-min`, the column gaps — never the name or the layout in force,
+  (`.is-compact`): a 64 px cover (or a 42 px icon tile) beside a name of two lines at most, the actions in a row of their own. The answer
+  reads sizes no layout changes — the leading visual's registered `--veyq-node-header-leading-wide` (every cover 244 px, the icon tile 4rem,
+  `styles/ui.css`), `--veyq-node-header-name-min`, the column gaps — never the name or the layout in force,
   so it cannot flip. The application only feeds data: its action list
   (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown` - REQUIRED, so an
   action nobody gated does not compile, and a row's `LevelRowAction` inherits it -,
   `disabled`, `pressed`, `menuOnly`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions
   (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four - core's defaults, which
   every kind's page takes from it with its rights answer as the flags (a kind with its own implementation passes its own
-  action of that id instead, as the row's rule below); and its kind's priority, `order` (the
+  action of that id instead, as the row's rule below); and its kind's priority, the descriptor's `header.order` (the
   ids first as buttons, core's included; an unlisted one follows, never vanishes). **As many as fit are buttons, the rest one ⋯ menu:** core
   measures the row (on mount, on each resize of the header or the name, `fitHeaderActions` the pure count; unmeasured, as in every unit test, the
   header is wide and each action that may be a button is one; an e2e spec reaches an action through `tests/e2e/src/header.ts`, never a button by name) and puts the rest, then the menu-only ones (a `danger` action is one, core's report sets `menuOnly`: report, then delete) behind
   a separator, into one `VeyqMenu` (`actionMenuItems`, `core/node/actionMenu.ts`, the entries the level rows share). Delete and report are never
   buttons. Core owns the look, the fit, the keyboard (real labelled buttons, the layer's menu) and the dark mode (tokens). Tests reach the two
-  halves through `src/test/nodeHeader.ts` (`headerButtonIds`, `headerMenuIds`, `chooseHeaderEntry`). **Core's own actions come
+  halves through `src/test/nodeHeader.ts` (`headerButtonIds`, `headerMenuIds`, `chooseHeaderEntry`; `mountWithHeader` mounts a detail under core's
+  header as `NodePage` draws it, with `emitted` reading the detail's events). **Core's own actions come
   centrally** (owner 2026-11-01, ADR 0110 decision 9): the heart, the cover, "Copy to…", the ZIP download and Report of every
   node are built in ONE place, `core/node/coreNodeActions.ts` (`useCoreNodeActions`: each gated by its core rights function,
   fail closed; `copy` / `download` are the page's doors, an absent door is an action not offered), which a core view
@@ -222,8 +240,8 @@ here; the server is blind.
   `NodeHeader` takes the REQUIRED `node` it heads (null only for the space's top level) and merges core's actions for it
   (`CoreHeaderAction`, `placement` before|after|{after: id}, `mergeHeaderActions`) with the application's; a page builds,
   lists and forwards none, so it cannot leave Report out (a legal duty) - `NodePage.report.test.ts` walks every
-  registered kind's page and the folder level. A test of what core adds to a page mounts it through `src/test/nodePage.ts`
-  (`mountNodePage`; `coreActionsStandIn` for a header test). A kind's `order` may still name a core id. Deleting from a
+  registered kind's page and the folder level, and that a detail mounted bare draws no header. A test of what core adds to a page mounts it through `src/test/nodePage.ts`
+  (`mountNodePage`; `coreActionsStandIn` + `coverStandIn` for a header test). A kind's `order` may still name a core id. Deleting from a
   header is a row's delete: the host asks core's `DeleteNodesDialog` for the one node (its kind's question,
   `core/node/deleteQuestion.ts`, and the one Undo) and leaves the page for its parent once the node went.
 
@@ -302,15 +320,14 @@ here; the server is blind.
   it opens THE dialog, `components/CoverDialog.vue` (choose an image, the shared 16:9 `ImageCropper`, re-crop of the current cover with its
   stored crop, Remove where a cover exists, Save/Cancel; a non-image, empty or over-40-MB file is refused inside it, `pickImage.ts`
   `coverFileProblem`), which each view mounts once beside its content as `<CoverEditor :cover="cover" />` (`LevelView`, and `NodePage` for
-  a node's page, whose ONE cover a kind's page takes for its own cover control or image, `injectCoreNodeActions`: the drop
-  box's leading visual, the Memory's cover tile). Save is `useNodeCover.save(node, intent)` for every kind: the intents are `upload` (a job of the core upload queue + the
+  a node's page, whose ONE cover core's header shows and opens for every kind - no kind draws a cover control of its own). Save is `useNodeCover.save(node, intent)` for every kind: the intents are `upload` (a job of the core upload queue + the
   one `setNodeCover` write), `keep` (the stored value with only its crop moved) and `remove`. A cover is set only by an upload in that
   dialog (the lightbox offers no "Set as cover"); a kind whose nodes already store pictures may add one seam to its descriptor,
   `cover.findStored` (`KindCover`; Memories: the PREVIEW of a gallery photo whose original equals the picked file), so the cover shares
   that blob instead of storing it again (ADR 0013 § 5). The level
   resolves every node's cover once and hands it to the row factories (`LevelRowsHost.covers`, `ensureCovers`). Display: the row/tile leading
-  visual (`NodeCoverImage`; the Memory's page draws `MemoryCoverImage` - the same `coverImageStyle` formula, pinned identical by a parity
-  test), the header's leading slot, the sidebar's Favorites; the icon is the default and a cover without a stored crop is a centred fit.
+  visual (`NodeCoverImage`; Memories' cards and map draw `MemoryCoverImage` - the same `coverImageStyle` formula, pinned identical by a parity
+  test), core's header (244 px wide on every kind), the sidebar's Favorites; the icon is the default and a cover without a stored crop is a centred fit.
 
   **Favorites are core's (inbox #409, [ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose
@@ -320,7 +337,7 @@ here; the server is blind.
   placed before the application's own) and `PinnedNodes.vue` (the sidebar section: every kind's pinned node with its registry icon and
   name, opened by `hashForNode`; an id that does not resolve or a kind this client cannot draw is skipped). `LevelView` contributes the
   heart to every row (not the unsupported ones) and to the folder header, and core's node page to every node page's header
-  (`core/node/coreNodeActions.ts`), so an application that draws `NodeHeader` adds no heart of its own. `app/activeSpace` clears and loads the set with the scope and `rotateKeys` re-seals it - both directly, not
+  (`core/node/coreNodeActions.ts`), so an application adds no heart of its own. `app/activeSpace` clears and loads the set with the scope and `rotateKeys` re-seals it - both directly, not
   through an application's lifecycle hook. A share guest's list is empty and the store is never read for it. The item MARKS inside a
   Memory stay Memories' (`features/memories/itemFavorites*`, `generated/item-favorites`).
 
@@ -341,7 +358,8 @@ here; the server is blind.
   core), so no list of an application's kinds exists beside its registrations, and `app.id` is the one place the id is
   written on the web side - a kind's `contentSchema` gives its version only (`{ version }`), the registry fills its
   application in from the registrar. The registrar's doors:
-  `app.kind(kind, descriptor)` per node kind (`KindRegistration`: detail component, icon, `deleteTitle` - the i18n key core's delete dialog
+  `app.kind(kind, descriptor)` per node kind (`KindRegistration`: detail component - the BODY of the node's page, under core's header, to
+  which it contributes data only (above) -, icon, `header` - `{ order }`, its header's priority -, `deleteTitle` - the i18n key core's delete dialog
   titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence - `nounWithArticle`, the noun core's
   create and rename dialogs name a colliding sibling of the kind with ("There is already a file named ...", else "an item") - `emptyInTrash`, the note core's
   trash shows on a node of the kind that holds no attachment - `renameSelectionEnd`, where core's rename dialog ends the
@@ -459,7 +477,7 @@ here; the server is blind.
   and only ANDs its own conditions onto it (Depot's drop box is never renamed, a guest moves no Pot); its
   `rights.test.ts` asserts it is never wider over every access shape (`src/test/nodeRightsShapes.ts`). A row's
   `standard` and `selection` come from one answer (`rowRightsOf`), and a header passes the same object to
-  `standardNodeActions`; the cover is core's `coverRights`, which a kind's own cover control reads too
+  `standardNodeActions`; the cover is core's `coverRights`, which core's header reads for its cover button too
   (`useNodeCover().canSet`).
   **A share view is the member view with a source and rights — never add a guest-only UI** (owner principle
   2026-10-09, inbox #401). A guest's function goes into the member's component as a door of the application's data

@@ -32,7 +32,8 @@ big cover are date, place and participants*; *and on a desktop the title and the
    - **Compact** (a phone): a small leading visual — a Memory's or a folder's cover a 16:9 tile of 64 × 36 px, the icon
      tile its 42 px —, the name beside it in **at most two lines**, the actions in a row of their own, the header's full
      width, below them; then subtitle and meta.
-   - **Wide** (a desktop): today's sizes (the Memory's 180 px cover, a folder's 5.5 rem cover, the 42 px icon tile), and
+   - **Wide** (a desktop): the full sizes - **every cover 244 px wide, 16:9** (as tall as a Memory's four rows beside it:
+     the name, the count, date and place, the people; owner 2026-11-03), the icon tile a 4rem square -, and
      the name and the actions **always one row** — the name **one line**, because the lines beside a big cover belong to
      the subtitle and the meta (a Memory's date, place and participants). The actions never get a row of their own here.
 2. **The full name is the title's tooltip** in both layouts, and the DOM keeps all of it. A longer text belongs in a
@@ -69,11 +70,29 @@ big cover are date, place and participants*; *and on a desktop the title and the
    offered on whatever a person sees ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
    § 1) — is on every node's header by construction, and a test walks every registered kind's page to prove it. A
    kind's order (decision 5) may still name a core action's id for its priority.
+10. **Core draws the header; an application contributes data** (owner 2026-11-03: generalise into core whatever takes no
+    function away from an application). The header row is the same for every application: core's node page draws it for
+    every kind, the level for a folder. What never changes per node is the kind's descriptor - its icon, whether it takes
+    a cover, its priority (decision 5). What depends on the page the page's detail contributes as data: a subtitle, its
+    own actions, its **facts** - a date, a place, people, a line of text, each a feature any application may use (Memories
+    a date, a place and who was there, Depot who uploaded a file) - and a **banner** core draws above the row (Memories').
+    Core draws the facts in one look. **The cover is core's for every kind that takes one:** core shows it (decision 1's
+    sizes), the icon tile without one, and opens core's cover dialog from it where whoever looks may set it. People link
+    to a profile and show a member's picture on a member's page only - the header's default is a share page's, so no
+    application can link a person for a guest. The body below the header is the application's own, to present itself.
+    No application imports the header component (a guard), so none can draw a header of its own beside core's.
 
 ## Consequences
 
 - The header and the level rows split their actions by two rules: the header by its measured width, a row by its fixed
   two `first` actions. They share the menu's entries (label, icon, disabled, danger) and nothing else.
+- Decision 10 makes the covers one size: a folder's and a drop box's cover grew from a 4rem-tall tile to the Memory's
+  244 px, and a Memory without a cover shows its icon tile, no longer an empty 244 px frame. What a detail contributes
+  reaches the header one render after the detail mounts (the same frame in a browser; a unit test waits a tick).
+- **Rejected — slots in the header for an application's own visual and meta row** (the build before decision 10): each
+  application drew what it liked there - Memories its own cover button, chips and avatar row, Depot its own uploader
+  line - so the same fact looked different per application, and keeping a person unlinked on a share page was each
+  application's to remember.
 - On a wide screen a Memory with a short name shows nearly all its actions as buttons; with a long name it shows its
   floor, favorite and upload, and the name ends in an ellipsis on one line. Just above the switch to compact the wide
   layout's row is as short as it gets: the floor.
@@ -92,11 +111,11 @@ big cover are date, place and participants*; *and on a desktop the title and the
 - **Rejected — the cover above the name on a phone** (the former stacking): it pushes the content a screen down and is
   what the owner asked to change.
 - **Rejected — a viewport breakpoint for the layout** (the first build, 540 px): it ignores what the header holds — a
-  Memory's 180 px cover and an icon tile switch at the same width — and it jumped from 9 buttons to 1 one pixel past the
+  Memory's cover and an icon tile switch at the same width — and it jumped from 9 buttons to 1 one pixel past the
   breakpoint. The header's own width, read against what it must fit, decides instead.
 - **Rejected — the actions first on a wide header, the name at a fixed minimum** (the first build): a long name squeezed
   to 12rem in two lines beside the buttons; the owner put the name first.
-- **Rejected — two lines of name on a wide header:** beside a 180 px cover those lines are the date, place and
+- **Rejected — two lines of name on a wide header:** beside a big cover those lines are the date, place and
   participants.
 - **Rejected — a name minimum in characters (10ch):** it scales with the font, but at 119 px for the 1.15 rem names it
   switches a folder to the wide layout on a 375 px phone, with three buttons instead of six; 12rem keeps every phone

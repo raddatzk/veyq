@@ -161,7 +161,7 @@ reads).
   restore stays offered (inbox #391). A failure the same file has since been uploaded over is no longer shown. A
   replace keeps the file's name (the opened file's action says so in its tooltip); a rename selects the name without its extension (`register.ts`
   `renameSelectionEnd`).
-- **The opened file names its uploader** for a member (ADR 0083 Decision 8, `uploader.ts`): the header's meta line reads
+- **The opened file names its uploader** for a member (ADR 0083 Decision 8, `uploader.ts`): a people fact it contributes to core's header reads
   "Uploaded by" with the person's avatar and display name (core's `core/people` directory, the scope's current members),
   a real link to `#people/<id>`; a member who left reads a greyed "former member" without a link; a guest by its name
   without a link (`guestUploaderName`, inbox #431: inside a drop box the identity folder of that identity, else the
@@ -466,8 +466,8 @@ Depot kind) - no drop key, no links, no identities, because nothing can rebuild 
 **A drop box carries a cover** (inbox #411, core's feature - [uc.platform.node-cover](../features/platform/use-cases/uc.platform.node-cover.md)):
 Depot opts it in (`DepotNodeKindRules.takesCover`, `register.ts` `cover: {}`), nothing else - the action, the dialog (choose, crop, remove), the upload, the
 write and the display are core's, the image is the box's own blob in the `COVER` slot (not a file in it), and a **`FILE` takes none**
-(its one blob is its content; a file's own thumbnail is a different idea, deferred). The header's leading slot shows it
-(`DropBoxDetail.vue`), the row/tile and the sidebar's Favorites too; a guest of a link above sees it and sets none.
+(its one blob is its content; a file's own thumbnail is a different idea, deferred). Core's header shows it as the box's
+leading visual (ADR 0110 decision 10), the row/tile and the sidebar's Favorites too; a guest of a link above sees it and sets none.
 
 - **The keys.** The drop box's drop key pair is core's (`veyq_node.sealed_drop_private_key` under the drop box's key,
   the public half per link under `K_share`, set with the first link exactly as for a Memory's uploader link,
