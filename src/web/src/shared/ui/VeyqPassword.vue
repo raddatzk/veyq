@@ -6,7 +6,7 @@
 // content, so a toggle inside the caller's `<label>` would add "Show password" to the field's name: the input therefore
 // names itself with the label's visible text, read again when the language changes. Sheets reach it by `veyq-password`,
 // its input by `veyq-input` (as every text field) or `veyq-password__input`, and the toggle by `veyq-password__toggle`
-// (styled in `layer.css`).
+// (its place; its look is every field's `veyq-field-action`, both in `layer.css`).
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqIcon from './VeyqIcon.vue'
@@ -52,7 +52,7 @@ watch(locale, () => void nextTick(readLabel))
     />
     <button
       type="button"
-      class="veyq-password__toggle"
+      class="veyq-password__toggle veyq-field-action"
       :aria-label="revealed ? t('ui.hidePassword') : t('ui.showPassword')"
       :aria-pressed="revealed"
       :disabled="disabled"

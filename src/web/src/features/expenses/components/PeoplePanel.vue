@@ -130,7 +130,7 @@ async function erase(p: Participant) {
   <section class="expenses-people">
     <h2>{{ t('expenses.tabs.people') }}</h2>
     <ul class="veyq-list">
-      <li v-for="p in shown" :key="p.id" class="veyq-list-row expenses-static-row" :data-person="p.id">
+      <li v-for="p in shown" :key="p.id" class="veyq-list-row expenses-static-row" :class="{ 'has-leading': editing !== p.id }" :data-person="p.id">
         <span v-if="editing === p.id" class="expenses-inline-form">
           <VeyqInput v-model="editName" autocomplete="off" :aria-label="t('expenses.people.nameLabel')" @keydown.enter.prevent="rename(p)" />
           <VeyqButton :label="t('common.save')" size="small" :loading="busy" @click="rename(p)" />

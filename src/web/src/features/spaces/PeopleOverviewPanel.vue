@@ -96,7 +96,7 @@ watch(() => activeSpace.tenantId, () => void load())
           <div
             v-for="p in view.people"
             :key="p.userId"
-            class="veyq-list-row member-row"
+            class="veyq-list-row has-leading member-row"
             :data-testid="`who-${p.userId}`"
           >
             <PersonAvatar :name="nameOf(p)" :user-id="p.userId" class="member-avatar" />
@@ -151,17 +151,6 @@ watch(() => activeSpace.tenantId, () => void load())
 
 <style scoped>
 /* A person's row leads with their avatar, as in the members list: one more grid column in front of the shared three. */
-.member-row {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-}
-@media (max-width: 820px) {
-  .member-row {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .member-row .management-actions {
-    grid-column: 1 / -1;
-  }
-}
 .who-name {
   color: inherit;
   text-decoration: none;

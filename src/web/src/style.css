@@ -36,43 +36,24 @@
   font-size: 0.85em;
 }
 
-/* Secret-Key unlock field: upload / scan / show-hide as in-field trailing icons (E2EE-specific). */
+/* Secret-Key unlock field: upload / scan / show-hide as in-field trailing icons (E2EE-specific). Where they sit is this
+   rule; how each looks is every field's `veyq-field-action` (`shared/ui/layer.css`), the password's eye included. */
 .secret-field {
   position: relative;
   min-width: 0;
 }
 .secret-field .veyq-input {
   width: 100%;
-  padding-right: calc(var(--secret-icons, 2) * 2.25rem + 0.25rem);
+  padding-right: calc(var(--secret-icons, 2) * 1.75rem + 0.45rem);
 }
 .secret-icons {
   position: absolute;
   top: 50%;
-  right: 0.25rem;
+  right: 0.45rem;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
-}
-.secret-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  border-radius: 6px;
-  color: var(--app-muted);
-  cursor: pointer;
-}
-.secret-icon:hover {
-  color: var(--app-text);
-  background: var(--app-hover);
-}
-.secret-icon:focus-visible {
-  outline: 2px solid var(--app-focus);
-  outline-offset: -2px;
+  gap: 0.15rem;
 }
 
 .visually-hidden {

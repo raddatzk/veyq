@@ -136,7 +136,7 @@ watch(model, (value) => {
     <span class="secret-icons">
       <button
         type="button"
-        class="secret-icon"
+        class="veyq-field-action"
         :aria-label="t('unlock.upload')"
         :title="t('unlock.upload')"
         :disabled="disabled"
@@ -147,7 +147,7 @@ watch(model, (value) => {
       <button
         v-if="scanSupported"
         type="button"
-        class="secret-icon"
+        class="veyq-field-action"
         :aria-label="t('unlock.scan')"
         :title="t('unlock.scan')"
         :disabled="disabled"
@@ -157,7 +157,7 @@ watch(model, (value) => {
       </button>
       <button
         type="button"
-        class="secret-icon"
+        class="veyq-field-action"
         :aria-label="t(showSecret ? 'common.hide' : 'common.show')"
         :title="t(showSecret ? 'common.hide' : 'common.show')"
         :disabled="disabled"

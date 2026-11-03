@@ -189,7 +189,7 @@ onMounted(() => {
         </template>
       </span>
       <DatePickerTrigger
-        class="veyq-date-field__trigger"
+        class="veyq-date-field__trigger veyq-field-action"
         :aria-label="t('ui.chooseDate')"
         @pointerdown="noteTriggerPress"
         @keydown.enter.space="noteTriggerPress"
@@ -241,13 +241,14 @@ onMounted(() => {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 2.75rem;
-  padding: 0.5rem 2.75rem 0.5rem 0.75rem;
+  min-height: var(--veyq-field-height);
+  padding: 0.5rem 2.5rem 0.5rem 0.75rem;
   border: 1px solid var(--app-control-line);
-  border-radius: var(--app-radius-sm);
+  border-radius: 6px;
   background: var(--app-field);
   color: var(--app-control-text);
   font-size: 1rem;
+  font-weight: 400;
   box-shadow: var(--app-shadow-sm);
   transition: border-color 0.2s;
 }
@@ -294,31 +295,12 @@ onMounted(() => {
   color: var(--app-muted);
 }
 
+/* Its place; its look is every field's `veyq-field-action` (`layer.css`). */
 .veyq-date-field__trigger {
   position: absolute;
   top: 50%;
   inset-inline-end: 0.45rem;
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  margin-top: -1rem;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--app-muted);
-  font-size: 1rem;
-  cursor: pointer;
-}
-
-.veyq-date-field__trigger:hover:not(:disabled) {
-  color: var(--app-control-text);
-}
-
-.veyq-date-field__trigger:focus-visible {
-  outline: 1px solid var(--app-focus);
-  outline-offset: 1px;
+  margin-top: -0.8rem;
 }
 
 .veyq-date-panel {

@@ -37,10 +37,20 @@ describe('node header styles', () => {
     expect(rule('.veyq-node-header', css)).toMatch(/--veyq-node-header-name-min:\s*12rem/)
   })
 
-  it('core\'s leading visuals size themselves from their wide width; the cover is 64 px wide when compact', () => {
-    expect(rule('.veyq-node-header-cover', css)).toMatch(/--veyq-node-header-leading-wide:\s*5\.5rem;[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
-    expect(rule('.veyq-node-header .veyq-node-header-icon', css)).toMatch(/--veyq-node-header-leading-wide:\s*42px;[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
+  it('core\'s leading visuals are as tall as the name row and the subtitle (4rem) and size themselves from their wide width', () => {
+    // a 16:9 cover 4rem tall is 7.125rem wide; the icon tile is a 4rem square
+    expect(rule('.veyq-node-header-cover', css)).toMatch(/--veyq-node-header-leading-wide:\s*7\.125rem;[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
+    expect(rule('.veyq-node-header-cover', css)).toMatch(/aspect-ratio:\s*16 \/ 9/)
+    const icon = rule('.veyq-node-header .veyq-node-header-icon', css)
+    expect(icon).toMatch(/--veyq-node-header-leading-wide:\s*4rem;[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
+    expect(icon).toMatch(/height:\s*4rem/)
+  })
+
+  it('compact, the cover is 64 px wide and the icon tile 42 px', () => {
     expect(rule('.veyq-node-header.is-compact .veyq-node-header-cover', css)).toMatch(/width:\s*64px/)
+    const icon = rule('.veyq-node-header.is-compact .veyq-node-header-icon', css)
+    expect(icon).toMatch(/width:\s*42px/)
+    expect(icon).toMatch(/height:\s*42px/)
   })
 
   it('wide, the name is one line with an ellipsis at its natural width; the title row does not wrap', () => {

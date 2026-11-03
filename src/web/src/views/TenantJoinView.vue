@@ -519,11 +519,11 @@ async function mapError(e: unknown): Promise<string> {
                       :disabled="!usernameReady || password.length === 0" />
             </form>
           </template>
-          <template v-else>
+          <div v-else class="veyq-stack">
             <p class="veyq-form-copy">{{ jcopy('signinReadySub', { email: ownerEmail }) }}</p>
             <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
             <VeyqButton :label="jcopy('join')" icon="check" :loading="busy" :disabled="!usernameReady" @click="acceptDirect" />
-          </template>
+          </div>
         </template>
 
         <!-- Cold path: locked vault or a different account signed in → full sign-in + unlock. -->
@@ -542,13 +542,13 @@ async function mapError(e: unknown): Promise<string> {
         </template>
       </template>
 
-      <template v-else-if="phase === 'done'">
+      <div v-else-if="phase === 'done'" class="veyq-stack">
         <VeyqMessage tone="success">{{ jcopy('done', { tenant: tenantName }) }}</VeyqMessage>
         <p class="veyq-form-copy">{{ jcopy('doneNote') }}</p>
         <!-- A handover leaves this browser signed in and unlocked on the space it now owns: open it. -->
         <VeyqButton v-if="handover" :label="t('tenant.join.openSpace')" icon="arrow-right" @click="router.push('/')" />
         <VeyqButton v-else :label="t('login.title')" icon="sign-in" @click="router.push({ name: 'login' })" />
-      </template>
+      </div>
     </template>
   </VeyqCard>
 </template>

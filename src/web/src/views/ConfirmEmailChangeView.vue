@@ -109,8 +109,8 @@ onUnmounted(() => window.removeEventListener('hashchange', consumeFragment))
       <p v-if="phase === 'noLink'" class="veyq-form-copy">{{ t('emailChange.noLink') }}</p>
       <p v-if="phase === 'confirming'" class="veyq-form-copy">{{ t('emailChange.confirming') }}</p>
 
-      <template v-if="phase === 'done'">
-        <VeyqMessage tone="success" class="form-message" data-testid="change-email-done">{{ t('emailChange.done') }}</VeyqMessage>
+      <div v-if="phase === 'done'" class="veyq-stack">
+        <VeyqMessage tone="success" data-testid="change-email-done">{{ t('emailChange.done') }}</VeyqMessage>
         <p class="veyq-form-copy">{{ t('emailChange.doneNote') }}</p>
 
         <section v-if="newEmail" class="kit-offer" data-testid="change-email-kit">
@@ -140,12 +140,12 @@ onUnmounted(() => window.removeEventListener('hashchange', consumeFragment))
         </section>
 
         <VeyqButton :label="t('emailConfirm.toSettings')" icon="cog" @click="router.push('/settings/security')" />
-      </template>
+      </div>
 
-      <template v-if="phase === 'signInFirst'">
-        <VeyqMessage tone="info" class="form-message">{{ t('emailConfirm.signInFirst') }}</VeyqMessage>
+      <div v-if="phase === 'signInFirst'" class="veyq-stack">
+        <VeyqMessage tone="info">{{ t('emailConfirm.signInFirst') }}</VeyqMessage>
         <VeyqButton :label="t('emailConfirm.toSignIn')" icon="sign-in" @click="router.push({ name: 'login' })" />
-      </template>
+      </div>
 
       <VeyqMessage v-if="phase === 'invalid'" tone="error" class="form-message">{{ t('emailChange.invalid') }}</VeyqMessage>
       <VeyqMessage v-if="phase === 'notMember'" tone="error" class="form-message">{{ t('emailConfirm.notMember') }}</VeyqMessage>

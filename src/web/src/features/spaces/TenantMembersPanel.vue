@@ -469,7 +469,7 @@ async function revoke(invite: PendingMemberInvite) {
 
       <div v-else class="veyq-list management-list">
         <div class="veyq-list management-list-items">
-          <div v-for="member in members" :key="member.userId" class="veyq-list-row member-row">
+          <div v-for="member in members" :key="member.userId" class="veyq-list-row has-leading member-row">
             <PersonAvatar :name="fullName(member.userId) || member.username" :user-id="member.userId" class="member-avatar" />
             <div class="veyq-row-main">
               <strong class="veyq-row-title">{{ fullName(member.userId) || '@' + member.username }}</strong>
@@ -635,18 +635,6 @@ async function revoke(invite: PendingMemberInvite) {
 </template>
 
 <style scoped>
-/* A member's row leads with their avatar (picture, else the letter): one more grid column in front of the shared three. */
-.member-row {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-}
-@media (max-width: 820px) {
-  .member-row {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .member-row .management-actions {
-    grid-column: 1 / -1;
-  }
-}
 
 .reissue-progress {
   display: flex;

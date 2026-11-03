@@ -43,7 +43,9 @@
   font-size: 1.12rem;
 }
 
-.veyq-section-header span {
+/* A header's quiet fact beside its title (a count). A class, never `.veyq-section-header span`: a header also holds
+   buttons and badges, whose label and icon are spans too - that selector greyed a primary button's label out. */
+.veyq-section-meta {
   color: var(--app-muted);
   font-size: 0.9rem;
 }
@@ -175,6 +177,20 @@
   line-height: 1.5;
 }
 
+/* A step of a card that is no form - a result, a note, the one button that goes on: a message, its copy and the
+   button, one gap apart, as a .veyq-form's fields are. A card's content has no layout of its own, so without this they
+   touch. Everything takes the row but a button, which keeps its own width. */
+.veyq-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.veyq-stack > .veyq-button {
+  align-self: flex-start;
+}
+
 /* A labeled field block inside a .veyq-form: label text + control + optional hint (cr-0154). */
 .veyq-form-field {
   display: grid;
@@ -215,6 +231,8 @@
 
 .veyq-form .veyq-input,
 .veyq-form .veyq-password__input,
+.veyq-form .veyq-select,
+.veyq-form .veyq-date-field,
 .veyq-form input:not([type='radio']):not([type='checkbox']),
 .veyq-form select,
 .veyq-form textarea {
@@ -241,6 +259,13 @@
   border-radius: var(--app-radius-sm);
   background: var(--app-surface);
   color: var(--app-text);
+}
+
+/* A row that leads with a picture or an icon (a person's avatar): the visual, then the name beside it, then the actions.
+   One more column in front of the shared three, never the visual in the row's wide first column - that pushed the
+   name to the far end. */
+.veyq-list-row.has-leading {
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .veyq-row-main {
@@ -390,6 +415,16 @@
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
   }
+
+  /* The visual stays beside the name; what follows takes a row of its own. */
+  .veyq-list-row.has-leading {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .veyq-list-row.has-leading > :nth-child(n + 3) {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 720px) {
@@ -432,7 +467,7 @@
    markup's `memory-folder-*`/`memory-create-card`/`memory-card-grid` rules lived, with the same declarations in
    the same order. They sit at the END of this sheet on purpose: in `memory.css` they came after every rule of
    `ui.css`, `layout.css` and `forms.css`, and some of those tie with them on specificity and lose by source order
-   (`.veyq-section-header h2`/`span` against the overview card's `h2`; `.veyq-card` against the cards' own
+   (`.veyq-section-header h2` against the overview card's `h2`; `.veyq-card` against the cards' own
    declarations). Nothing in `layout.css`/`forms.css` matches these elements, so the end of `ui.css` is the same
    cascade position. `.veyq-create-card` is also Memories' New Memory / Add chapter card (inbox #375 merged its
    `memory.css` twin, the same declarations in the same order): Memories adds only `.memory-create-card-memory` and
@@ -588,9 +623,14 @@
   align-items: center;
 }
 
-/* A node's cover in the header's leading slot (inbox #411): a 16:9 frame; the kind's icon tile is the default without one. */
+/* The leading visual is as tall as the rows beside it, as the Memory's cover is (owner 2026-11-03): the name row - its
+   height is the action buttons' 2.55rem - and the subtitle under it, 4rem. A fixed number, as the Memory's: the width the
+   layout answer reads cannot follow the rows' height. A kind whose header has more rows brings its own visual (Memories). */
+
+/* A node's cover in the header's leading slot (inbox #411): a 16:9 frame 4rem tall; the kind's icon tile is the default
+   without one. */
 .veyq-node-header-cover {
-  --veyq-node-header-leading-wide: 5.5rem;
+  --veyq-node-header-leading-wide: 7.125rem;
   display: block;
   width: var(--veyq-node-header-leading-wide);
   aspect-ratio: 16 / 9;
@@ -600,18 +640,18 @@
 }
 
 /* Two classes on purpose: the layer's own `.veyq-icon` (display, font-size) is loaded after this sheet and would otherwise win,
-   leaving a 16 px glyph in the corner of a tile that is meant to centre a 20 px one (seen in a real browser). One size in
-   both layouts. */
+   leaving a 16 px glyph in the corner of a tile that is meant to centre a larger one (seen in a real browser). A 4rem
+   square, its glyph half of it; compact, 42 px beside the name's two lines. */
 .veyq-node-header .veyq-node-header-icon {
-  --veyq-node-header-leading-wide: 42px;
+  --veyq-node-header-leading-wide: 4rem;
   display: grid;
   place-items: center;
   width: var(--veyq-node-header-leading-wide);
-  height: 42px;
-  border-radius: 10px;
+  height: 4rem;
+  border-radius: 12px;
   background: var(--app-info-soft);
   color: var(--app-info-text);
-  font-size: 1.25rem;
+  font-size: 2rem;
 }
 
 .veyq-node-header-body {
@@ -713,6 +753,13 @@
 /* A cover is a 64 × 36 px tile beside the name (ADR 0110 decision 1); its wide width stays what the answer reads. */
 .veyq-node-header.is-compact .veyq-node-header-cover {
   width: 64px;
+}
+
+.veyq-node-header.is-compact .veyq-node-header-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  font-size: 1.25rem;
 }
 
 .veyq-danger-action.veyq-button,

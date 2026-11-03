@@ -138,7 +138,7 @@ async function removeFolder(folder: TreeNode, label: string) {
     <section class="veyq-section dropbox-detail">
       <div class="veyq-section-header">
         <h2>{{ t('node.folders') }}</h2>
-        <span>{{ folders.length }}</span>
+        <span class="veyq-section-meta">{{ folders.length }}</span>
       </div>
       <!-- A guest's words: it opens and downloads, only the owner deletes or moves; nobody sent anything (no link to share). -->
       <p>{{ guest ? t('depot.dropBox.sharedHint') : t('depot.dropBox.readOnlyHint') }}</p>
