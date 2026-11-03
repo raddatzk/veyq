@@ -588,7 +588,7 @@ class Client:
     """src/web/scripts/measure-volume.mts as a child: signed in once, one call per command (its header says the protocol)."""
 
     def __init__(self, inst: Instance, axis: str):
-        self.proc = subprocess.Popen(["npx", "tsx", "scripts/measure-volume.mts", axis], cwd=WEB, env=inst.env(),
+        self.proc = subprocess.Popen(["pnpm", "exec", "tsx", "scripts/measure-volume.mts", axis], cwd=WEB, env=inst.env(),
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
         self.ready = self._read()
         if not self.ready.get("ready"):
@@ -1088,7 +1088,7 @@ def _group_gone_within(proc: subprocess.Popen, seconds: float) -> bool:
 
 def stop_group(proc: subprocess.Popen) -> None:
     """End the child's whole process group and wait for it, bounded: SIGTERM, `SEEDER_GRACE`, SIGKILL,
-    `SEEDER_KILL_WAIT`. The seeder is `npx` -> `tsx` -> node, and killing `npx` alone (what `subprocess.run` does when
+    `SEEDER_KILL_WAIT`. The seeder is `pnpm exec` -> `tsx` -> node, and killing `pnpm` alone (what `subprocess.run` does when
     its wait is interrupted) left the node grandchild sending requests for ~5 s after `invites_raised` had put the limit
     back, into the app's restart, as 502s (heavy stage H1b, 2026-10-24). SIGTERM and SIGINT are held while it waits, so
     a second one cannot cut the wait short; they arrive once it is over."""
@@ -1121,7 +1121,7 @@ def run_child(cmd: list[str], **kw: Any) -> int:
 
 
 def run_seeder(inst: Instance, seed_args: list[str]) -> int:
-    return run_child(["npx", "tsx", "scripts/seed-volume.mts", *seed_args], cwd=WEB, env=inst.env())
+    return run_child(["pnpm", "exec", "tsx", "scripts/seed-volume.mts", *seed_args], cwd=WEB, env=inst.env())
 
 
 def seed(inst: Instance, seed_args: list[str]) -> int:

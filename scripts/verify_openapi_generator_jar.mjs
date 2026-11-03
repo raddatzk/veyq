@@ -2,14 +2,14 @@
 // Puts the OpenAPI generator JAR in place and proves it is the pinned one — before the generator runs.
 //
 // Run by `generate:api` in src/web/ and src/admin-web/ (one copy, reached as ../scripts/ from both, and COPY'd into both
-// image builders before their `npm ci`). @openapitools/openapi-generator-cli downloads its JAR with no checksum
+// image builders before their `pnpm install`). @openapitools/openapi-generator-cli downloads its JAR with no checksum
 // and treats any file already at <storageDir>/<version>.jar as installed, so a poisoned download — or a file
 // planted in the storage dir — would run as our code generator, and its output (the untracked generated client)
 // is never reviewed. This script closes that: it downloads the pinned version from Maven Central when the file is
 // absent, and ALWAYS hashes the file against scripts/openapi_generator_jar.sha256, including when it was already
 // there. Anything else fails closed; it never deletes a mismatching file (it is the evidence).
 //
-// Node, not Python (the repo rule), because it runs inside `npm ci`'s `prepare` in the node:22-bookworm-slim
+// Node, not Python (the repo rule), because it runs inside `pnpm install`'s `prepare` in the node:22-bookworm-slim
 // builder stages, which carry no python3 (measured 2026-09-27: `command -v python3` → nothing).
 
 import { createHash } from "node:crypto";
@@ -68,7 +68,7 @@ if (!existsSync(jar)) {
   const url = `${CENTRAL}/${version}/openapi-generator-cli-${version}.jar`;
   mkdirSync(storage, { recursive: true });
   // A per-process partial file renamed into place only after it matched: src/web/ and src/admin-web/ can run this at the
-  // same time during one `npm ci`, and neither may ever see a half-written or unverified <version>.jar.
+  // same time during one `pnpm install`, and neither may ever see a half-written or unverified <version>.jar.
   const partial = path.join(storage, `.${version}.jar.${process.pid}.partial`);
   let response;
   try {

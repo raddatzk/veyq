@@ -5,14 +5,14 @@ The owner supplies the screenshots (ADR 0087 §1), one per language, as `site/sr
 until a file is there the page renders a placeholder that names the id and what the shot must show
 (`site/src/components/Screenshot.astro`). This prints that to-do list: per id the English page it sits on, what it
 must show, and which language files exist — then any image file no page places. It reads the `.mdx` sources, not a
-build, so it needs no `npm ci`.
+build, so it needs no `pnpm install`.
 
 A report, not a guard: it exits 0 with placeholders open. It exits 1 only when it cannot read a tag — an `id` or
 `shows` that is not a plain string literal, the form the component asks for — since a list that silently skips a tag
 would hide a to-do. It also says where the English and German page of a pair place different ids, which leaves one
 language without a shot the other has.
 
-    npm run shots            (in site/)
+    pnpm run shots            (in site/)
     python3 scripts/site_shots.py
 """
 from __future__ import annotations

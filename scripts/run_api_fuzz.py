@@ -82,7 +82,7 @@ worktree's (`VEYQ_JAR`), as that script's `compose_up` explains; `run_pipeline.p
 each later fresh set of objects about 10 s; public-positive 23-31 s (54 GETs), public-negative 67-87 s (182 operations),
 public-writes 75-129 s (112), public-stateful 49-53 s (40 of 165 operations reached through an inferred link), admin
 positive 2-3 s (17), admin-negative 13-19 s (61) — 343-438 s in all, against 159 s for the first slice alone. With the
-jar build, `npm ci` and the image build before it the job still fits its 15 minutes on that machine, with less room; a
+jar build, `pnpm install` and the image build before it the job still fits its 15 minutes on that machine, with less room; a
 CI runner has fewer cores, and its first run replaces these numbers (ADR 0091 decision 1). `MAX_EXAMPLES` is the knob if
 it does not.
 
@@ -91,7 +91,7 @@ Usage:
     python3 scripts/run_api_fuzz.py --baseline-update    # also merge this run's failures into tests/fuzz/baseline.json
     python3 scripts/run_api_fuzz.py --only <spec-key>    # one spec file (a local debugging convenience)
 
-Prerequisite: the fast-jar (`cd src/backend && ./gradlew quarkusBuild`) and web's dependencies (`npm ci` at the root, which
+Prerequisite: the fast-jar (`cd src/backend && ./gradlew quarkusBuild`) and web's dependencies (`pnpm install` at the root, which
 generates web's API client). A stale jar answers for code the run never saw (`run_web_e2e.py`'s docstring).
 
 Environment (all optional):
@@ -442,7 +442,7 @@ def drop_run_state(database: str, bucket: str) -> None:
 
 
 def seed_cmd(workdir: Path, *extra: str) -> list[str]:
-    return ["npx", "tsx", "scripts/fuzz-seed.mts", "--out", str(workdir), *extra]
+    return ["pnpm", "exec", "tsx", "scripts/fuzz-seed.mts", "--out", str(workdir), *extra]
 
 
 def seed_env() -> dict[str, str]:

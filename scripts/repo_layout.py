@@ -67,7 +67,7 @@ CHART_DIR = KUBERNETES_DIR / "charts/veyq"
 # be of either layout (ADR 0106 decision 3).
 LEGACY_CHART_PATH = "charts/veyq"
 
-# The test harnesses: the browser suite (the npm workspace `@veyq/e2e`), lane L1's Compose overlay, the API fuzzer.
+# The test harnesses: the browser suite (the pnpm workspace member `@veyq/e2e`), lane L1's Compose overlay, the API fuzzer.
 TESTS_DIR = ROOT / "tests"
 E2E_DIR = TESTS_DIR / "e2e"
 E2E_STACK_DIR = E2E_DIR / "stack"

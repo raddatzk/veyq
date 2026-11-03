@@ -23,7 +23,7 @@ The defects that bought it:
   The guard was called `validate_adr_citations.py` until the second shape joined.
 
 Scope — the surfaces where an id is *always a live citation*, so "must resolve" is unambiguous:
-  `contracts/`, every `.kt` under `src/backend/` (all Gradle modules), the `src/` of every npm workspace (read from the root `package.json`, so a new
+  `contracts/`, every `.kt` under `src/backend/` (all Gradle modules), the `src/` of every pnpm workspace member (read from `pnpm-workspace.yaml`, so a new
   package is scanned the day it is added — the hard-coded list this replaced named `src/web/src` alone and missed
   `src/admin-web/src` and `src/packages/crypto/src` for as long as they existed), `docs/features/`,
   `docs/crosscutting/`, and the ADR bodies `docs/decisions/*.md`.
@@ -49,7 +49,6 @@ A `validate_*.py`, so the trust-chain glob runs it on every push with no build. 
 """
 from __future__ import annotations
 
-import json
 import pathlib
 import re
 import sys
@@ -65,9 +64,20 @@ CODE_SUFFIXES = {".ts", ".vue", ".js", ".mjs"}
 
 
 def workspace_srcs() -> list[pathlib.Path]:
-    """Every npm workspace's `src/`, from the root manifest — the scan follows the package list, not a copy of it."""
-    manifest = json.loads((ROOT / "package.json").read_text())
-    return [ROOT / ws / "src" for ws in manifest.get("workspaces", [])]
+    """Every pnpm workspace member's `src/`, from `pnpm-workspace.yaml` — the scan follows the package list, not a copy
+    of it. The members are listed one per line (`  - <dir>`) under `packages:`, never globbed, so a line read is enough."""
+    members: list[str] = []
+    in_packages = False
+    for line in (ROOT / "pnpm-workspace.yaml").read_text().splitlines():
+        if line and not line.startswith((" ", "#")):
+            in_packages = line.split("#", 1)[0].strip() == "packages:"
+            continue
+        item = re.match(r"^\s+-\s+['\"]?([^'\"#\s]+)", line)
+        if in_packages and item:
+            members.append(item.group(1))
+    if not members:
+        sys.exit("pnpm-workspace.yaml lists no `packages:` member — this guard would scan no workspace source")
+    return [ROOT / ws / "src" for ws in members]
 
 
 # Load-bearing surfaces: a directory root + the file suffixes to read under it.

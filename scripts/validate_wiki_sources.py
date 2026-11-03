@@ -28,7 +28,7 @@ Its limit — what a green run does NOT prove: that the page and the doc **claim
 not have caught the sentence above; what it buys is an address, so a change to a doc shows the published pages to
 re-read. Pinned open in `validate_guard_gaps.py`. Also unchecked: that the declared set is complete (a doc a page
 restates but does not declare is invisible here), and the reverse direction — a doc that links a page without
-being declared by it. Links between the pages themselves are the site's own check (`npm run check` in `site/`).
+being declared by it. Links between the pages themselves are the site's own check (`pnpm run check` in `site/`).
 
 A `validate_*.py`, so the trust-chain glob runs it on every push with no build. Runnable locally:
 

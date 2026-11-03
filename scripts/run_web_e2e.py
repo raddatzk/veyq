@@ -37,7 +37,7 @@ capability token the run handled, read out of the HTTP recording by the contract
 
 **The upgrade proof — two builds in one run** (ADR 0057 Decision 7, `--upgrade` / `--upgrade-from <ref>`). The
 `upgrade` group's first member, the SEEDER, runs from a detached worktree of a PREDECESSOR ref built in the run
-directory ([prepare_predecessor]: its own `npm ci`, which generates its client, and its own fast-jar) and boots on the
+directory ([prepare_predecessor]: its own lockfile install, which generates its client, and its own fast-jar) and boots on the
 predecessor's jar; the group's hook captures that instance, destroys it and restores it onto a target installed by THIS
 checkout's jar ([upgrade_hook]); the READER, this tree's last member of the group, boots on this jar — which migrates
 the predecessor's schema up — and must read `configSecretState: OK` before it asserts every item of the record the
@@ -95,7 +95,7 @@ new migration never applies. Both look like a broken suite. The tell is in the b
 migrations, now at version vN` names the schema the jar carries, so compare it against the highest
 `V<yyyymmddHHMM>__*.sql` in the tree before believing a failure. Rebuild after ANY backend change; `./gradlew check` does
 not do it for you (it builds test classes, not the fast-jar). The web mirror of this trap is in `src/web/CLAUDE.md`
-— `npm run check` not regenerating the API client — and it is the same failure in both directions: a green or
+— `pnpm run check` not regenerating the API client — and it is the same failure in both directions: a green or
 red that was measured against code the run never saw.
 
 **The run directory survives the run** (`.e2e-out/<stamp>/`, gitignored). It holds each boot's log, its
@@ -1790,9 +1790,12 @@ def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
     installed (which generates its client — `web`'s `prepare`) and its fast-jar built. Its suites run from there, never
     from this tree ([Build]); [remove_predecessor] deletes it once the group has run.
 
-    The install is a plain `npm ci` of the predecessor's lockfile, not `npm_ci_no_deprecated.py`: that lockfile passed
-    the gate when it was the candidate, and a package deprecated SINCE would turn an upgrade proof red for a reason
-    that is not the upgrade. Its output goes to `predecessor-npm.log` / `predecessor-gradle.log` in the run directory.
+    The install is a plain install of the predecessor's lockfile, not `pnpm_install_no_deprecated.py`: that lockfile
+    passed the gate when it was the candidate, and a package deprecated SINCE would turn an upgrade proof red for a
+    reason that is not the upgrade. It is the predecessor's own package manager: `pnpm install --frozen-lockfile` where
+    it carries a `pnpm-lock.yaml`, `npm ci` where it predates the move to pnpm (2026-11-03) and carries a
+    `package-lock.json` — so a proof across that move installs each side as its own CI did. Its output goes to
+    `predecessor-install.log` / `predecessor-gradle.log` in the run directory.
     """
     asked, commit = resolve_predecessor(ref)
     tree = workdir / "predecessor"
@@ -1803,7 +1806,9 @@ def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
     atexit.register(remove_worktree, tree)
     # The predecessor's surfaces where ITS layout puts them, which may be the one before ADR 0106 stage 2.
     backend, web = repo_layout.surface_in(tree, repo_layout.BACKEND), repo_layout.surface_in(tree, repo_layout.WEB)
-    for label, cmd, cwd in (("npm", ["npm", "ci", "--no-audit", "--no-fund"], tree),
+    install = (["pnpm", "install", "--frozen-lockfile"] if (tree / "pnpm-lock.yaml").is_file()
+               else ["npm", "ci", "--no-audit", "--no-fund"])
+    for label, cmd, cwd in (("install", install, tree),
                             ("gradle", ["./gradlew", "--no-daemon", "--console=plain", "quarkusBuild"], backend)):
         out = workdir / f"predecessor-{label}.log"
         log(f"upgrade proof: building the predecessor ({' '.join(cmd)}) -> {shown(out)}")
@@ -1972,7 +1977,7 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
             # of the Memory to reopen, the bytes to compare) goes through a directory that outlives the boot.
             env["VEYQ_GROUP_DIR"] = str(group_dir)
         result = subprocess.run(
-            ["npx", "vitest", "run", rel, "--testTimeout", TEST_MS],
+            ["pnpm", "exec", "vitest", "run", rel, "--testTimeout", TEST_MS],
             cwd=str(build.web), env=env,
         )
         if result.returncode != 0:
@@ -2114,7 +2119,7 @@ def main(argv: list[str]) -> int:
     atexit.register(lambda: live_mark.unlink(missing_ok=True))
     log(f"run artifacts (boot logs, canary files) land in {workdir.relative_to(REPO)}/")
 
-    # The upgrade proof's predecessor is built BEFORE the statement log opens — minutes of npm and Gradle that a failed build
+    # The upgrade proof's predecessor is built BEFORE the statement log opens — minutes of installs and Gradle that a failed build
     # should not spend holding the shared database's statement log open — and removed after its group ran.
     predecessor = prepare_predecessor(upgrade_from, workdir) if upgrade else None
     builds: list[list[Build] | None] = [None] * len(groups)

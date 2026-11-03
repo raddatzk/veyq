@@ -42,7 +42,7 @@ What it asserts:
      spec-root `security` and every operation's. Each spec is generated on its own, and a generator meets an
      undeclared name with no error: it simply attaches no credential. Bought by cr-moderation-review-and-measures:
      `memories/share-media.openapi.yaml` named `bearerAuth` on its moderation reads without declaring it, so the
-     generated web client sent no bearer and the server answered 401 — `./gradlew check` and `npm run check` were
+     generated web client sent no bearer and the server answered 401 — `./gradlew check` and `pnpm run check` were
      green; only the L1 browser suite caught it, and finding why cost a day. **Its limit:** the name only — never that the
      declared scheme is the right kind (rule 1 holds `bearerAuth`'s copies alike, nothing holds a scheme of
      another name), never a requirement's scopes, and never the converse defect: an operation the server guards
