@@ -7,7 +7,7 @@
 //      the CLI needs no crypto path of its own. Measured on Node 23: ~1s per derivation, resolving correctly.
 //   2. `@veyq/crypto` is consumed as TypeScript SOURCE with extensionless relative imports, so plain `node`
 //      cannot import it even with type-stripping — only a bundler resolves it. That is why the CLI ships as
-//      an esbuild bundle (`npm run build:cli`) and never as loose files.
+//      an esbuild bundle (`pnpm run build:cli`) and never as loose files.
 //
 // Fresh login per invocation, nothing written to disk (ADR 0065): no token cache, no refresh across runs, no
 // "remember me". (Within one run the clients are the console's, so a run that outlives its 15-minute access token

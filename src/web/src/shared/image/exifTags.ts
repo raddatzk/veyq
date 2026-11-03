@@ -10,7 +10,7 @@
 // How the library is called binds four things, which is why no other module imports it:
 // 1. **Its ES module source, `exifreader/src/exif-reader.js`, never the package's main entry.** That entry is a webpack
 //    UMD with literal `require('@xmldom/xmldom')`, `require('fs')`, `require('http')`, `require('https')` in it, which a
-//    bundler follows: wherever the optional `@xmldom/xmldom` is installed (a plain `npm ci` installs it) it would be
+//    bundler follows: wherever the optional `@xmldom/xmldom` is installed (a plain `pnpm install` installs it) it would be
 //    bundled. The source names none of them; it parses XMP with the browser's own `DOMParser`.
 // 2. **Loaded on first use**, so the initial chunk does not carry it.
 // 3. **Never the whole file.** At pick time every picked photo is read at once (`useOptimisticTiles`' probe), so what one

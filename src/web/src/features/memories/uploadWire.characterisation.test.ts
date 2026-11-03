@@ -36,7 +36,7 @@
 // scheduling rather than on the code.
 //
 // **Updating it deliberately.** A change that is MEANT to alter the wire (a new header, a new field, another frame
-// size) updates the snapshots with `npx vitest run -u src/features/memories/uploadWire.characterisation.test.ts` and
+// size) updates the snapshots with `pnpm exec vitest run -u src/features/memories/uploadWire.characterisation.test.ts` and
 // the diff of `__snapshots__/uploadWire.*.json` is reviewed as part of that change. A move that is meant to change
 // nothing (B1) must leave them untouched.
 //

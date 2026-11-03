@@ -40,7 +40,7 @@ The line that actually holds:
 `not_tenant_owner` — not which directory the file happens to sit in.
 
 ## Two artifacts, one package
-The Vite build is not the only output any more: `npm run build:cli` bundles `src/cli/` into
+The Vite build is not the only output any more: `pnpm run build:cli` bundles `src/cli/` into
 `dist-cli/cli.js`, the `veyq-admin` CLI the image installs on `PATH` (ADR 0065). It is the same generated
 client and the same feature facades the views call — its own code is argument parsing and output formatting,
 nothing else. **A command that needs a rule of its own means the rule belongs in the facade**, where the UI
@@ -54,20 +54,20 @@ the CLI signs in through the app's own `login()` and that reaches `app/session.t
 1.5 MB of dead weight traded for there being exactly one sign-in path, which is the trade ADR 0065 wants.
 
 ## Run it locally
-`./gradlew admin:run` from the repo root (the launcher, [`infra/README.md`](../../infra/README.md)), or `npm run dev`
+`./gradlew admin:run` from the repo root (the launcher, [`infra/README.md`](../../infra/README.md)), or `pnpm run dev`
 here: Vite on `VITE_ADMIN_PORT` (5174) with `/api` proxied to `VEYQ_API_TARGET` (`http://127.0.0.1:8090`, the
 backend's **admin listener** — its public port 404s every Server-Owner operation) — the same single-origin shape
 nginx gives the container, so the refresh cookie behaves identically either way. **On a fresh instance this is the
 surface you open first**: first-run setup lives here, so the app at `veyq.localhost` has no Server Owner to log in
-as yet (ADR 0065). `./gradlew admin:bootstrap` (`npm run generate:api`) regenerates this package's untracked client
+as yet (ADR 0065). `./gradlew admin:bootstrap` (`pnpm run generate:api`) regenerates this package's untracked client
 after a contracts change.
 
 ## Prove your work
-- `npm run check` (lint + typecheck + test + build + build:cli). `npm ci` runs from the **repo root** (npm
-  workspaces). The CLI bundle is in `check` on purpose — an import that only the CLI reaches is otherwise
+- `pnpm run check` (lint + typecheck + test + build + build:cli). The install runs from the **repo root** (the pnpm
+  workspace, `pnpm-workspace.yaml`). The CLI bundle is in `check` on purpose — an import that only the CLI reaches is otherwise
   proven by nothing until the image build.
-- API client is **generated** and **not tracked** — `npm run generate:api` from `../../contracts/api/*.openapi.yaml`
-  (and automatically on install via `prepare`). Never hand-write it. As in `src/web/`, **`npm run check` does not
+- API client is **generated** and **not tracked** — `pnpm run generate:api` from `../../contracts/api/*.openapi.yaml`
+  (and automatically on install via `prepare`). Never hand-write it. As in `src/web/`, **`pnpm run check` does not
   regenerate**: change a contract and a green check is a green run against stale code.
 - The root **Server-Owner gate** (`src/app/serverRole.ts` + `AdminConsoleView`) is a courtesy over an
   authority that lives server-side. It decides which of three honest screens to show; it never decides
@@ -87,11 +87,13 @@ after a contracts change.
   Vite's `?raw`, which the CLI's bare esbuild bundle cannot resolve. The kit module is the
   **write half only** — no `importKitFromFile`, and therefore no `jsqr`, which `src/web/CLAUDE.md` carries as a
   single argued exception to the no-unmaintained-dependency rule. An exception earned once does not travel.
-- **A green `npm run check` here does NOT prove this package's dependencies are declared.** npm workspaces
-  hoist, so an import satisfied by `src/web/`'s copy in the root `node_modules` resolves locally and fails only
-  in `docker build -f src/admin-web/Dockerfile .`, which never sees `src/web/`. Measured: `jsqr` built green here and
-  red in the container. Run the container build before believing an added import — and that now covers the
-  CLI bundle too, which the image builds from its own install, one that has never seen `src/web/`.
+- **An undeclared import fails here, not only in the container.** pnpm links only the dependencies a package declares
+  into its `node_modules`, so an import satisfied by `src/web/`'s copy no longer resolves in this package. Under npm
+  workspaces it did: `jsqr` built green here and red in `docker build -f src/admin-web/Dockerfile .`, which never sees
+  `src/web/`. One hole stays: Node walks up from the importing file, so in a worktree nested inside the main checkout
+  (`.claude/worktrees/…`) an undeclared import can still resolve from the main checkout's `node_modules` (measured
+  2026-11-03, ADR 0116). The container build — or a checkout outside the repository — stays the proof that this package
+  declares what it imports, and it also builds the CLI bundle.
 - i18n is this package's own catalog (EN + DE) in `src/i18n/index.ts`, lifted from `src/web/`'s for the strings
   that moved with their views.
 

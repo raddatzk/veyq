@@ -10,7 +10,7 @@ import { beforeEach, afterEach } from 'vitest'
 // **The defect that bought it happened in `src/web/`, not here** — `AppSidebar.test.ts` stubbed the tenant list
 // its component fetches `onMounted` and missed the profile call beside it, so 14 real requests left that
 // suite per run for as long as nobody looked; the suite stayed green because the component catches its own
-// failure. **This package is clean today** (measured: `npx vitest run` → 18 files, 104 tests, zero connection
+// failure. **This package is clean today** (measured: `pnpm exec vitest run` → 18 files, 104 tests, zero connection
 // attempts) and the net is here because the *shape* is: `AdminConsoleView.vue`'s `onMounted` is async and
 // fetches, which is exactly the shape that bit the other side. The ui-web-styleguide's rule about this copy
 // applies — nothing is automatically true of both packages, so it is carried over by hand or not at all.

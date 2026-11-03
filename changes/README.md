@@ -62,7 +62,7 @@ avoids this and no reason to want one.
 
 **The clients are in the same position, and there the trigger is any request shape change.** A generated
 TypeScript client turns a new required field into a missing-property error and a removed one into an
-excess-property error at every call site that builds the request, so after `npm run generate:api` a contracts
+excess-property error at every call site that builds the request, so after `pnpm run generate:api` a contracts
 phase that reshapes a request is red in `src/web/` and `src/admin-web/` until the client phase lands.
 `cr-cold-credential-proves-the-secret-key` wrote "`npm run check` (web and admin-web) green" into exactly such a
 phase; the Done-when for it is `generate:api` plus the contracts guards. **A removed *response* field is the
@@ -72,7 +72,7 @@ green" for a contracts phase that added `metaVersion` (now `metaRevision`) to `N
 `NodeSummary(...)` construction stopped compiling.
 `cr-guest-names-for-members-only` predicted a red at the fixture that served the removed field and got a green,
 because that fixture reached the code cast `as unknown as` (165 such casts, inbox #195). So a phase that predicts
-a client red names the typed line it expects to fail — and runs `npm run check` once to see it.
+a client red names the typed line it expects to fail — and runs `pnpm run check` once to see it.
 **And a new model's property names are the generator's to keep or change**: cr-bucket-reconcile's `keys` became
 `propertyKeys` in the Kotlin model (a name the generator reserves), found only when phase 2 wrote the first constructor
 call, so the contract was renamed after its phase had committed. A contracts phase that adds a schema writes one use of
@@ -84,7 +84,7 @@ happen to overwrite `OperatorSection` with the right names, and nothing did for 
 skipped, so the backend phase found it and gave the notice a text type of its own; one constructor call would have. And cr-identity-pins-per-entry met both generators' reserved property names a phase
 later: Kotlin reserves `entries` (the field is `propertyEntries` there) and TypeScript `delete` (`_delete`, in a model
 that did not even compile), so the write's `delete` became `remove` in the backend phase.
-a client red names the typed line it expects to fail — and runs `npm run check` once to see it. **It finds those lines
+a client red names the typed line it expects to fail — and runs `pnpm run check` once to see it. **It finds those lines
 by the request's newest existing field, grepped across the whole tree, not by the operation's name:**
 `cr-instance-contact-and-provider-identification` grepped `createServerOwner` in admin-web and predicted one red; the
 dev seeder, web's e2e harness and two backend tests also build that request, and `moderationEpoch` named all of them.
@@ -109,7 +109,7 @@ the generated interfaces and is red on any operation nobody classified — `cr-e
 contracts phase predicted green and got exactly that one red. So the contracts phase classifies its new
 operations there (a probe, or an exclusion with its reason), which is a decision, not a stub.
 Its "Done when" is therefore the checks that *can* run
-(`npm run generate:api` + `npm run check`, the contracts guards), stated as exactly that; do not reach for a
+(`pnpm run generate:api` + `pnpm run check`, the contracts guards), stated as exactly that; do not reach for a
 stub implementation in the contracts commit to make `./gradlew check` green, which buys a green tick by adding
 a second thing to remember to delete.
 
@@ -1487,7 +1487,7 @@ cr-statement-legal-gaps' harness deleted the class's `TEST-*.xml` before every r
 `scripts/` guard that somebody already bit. A CR whose real gate is something built for that CR — a probe, a
 diff, a rewriter — carries an assertion nobody has ever tested, and a green from it reads exactly like a green
 from a gate that works. `cr-delete-the-inherited-stylesheets` had no automatic gate at all (nothing in
-`npm run check` renders a pixel, and Vite neither purges nor validates CSS), so its gate was a computed-style
+`pnpm run check` renders a pixel, and Vite neither purges nor validates CSS), so its gate was a computed-style
 fingerprint plus a CSS rewriter. Both were wrong on the first try and both said so only when bitten:
 
 - The **rewriter** was checked by *"every declaration belonging to a surviving selector must still be present
@@ -1599,7 +1599,7 @@ than adding the working-tree file.
 invocation lives in a `package.json` script, so the shell ate a layer of quoting and
 `--define:process.env.NODE_ENV=\"production\"` reached esbuild as a bare identifier. esbuild accepted it —
 defining a symbol to another symbol is legal — bundled cleanly, printed its size, exited 0. The artifact then
-died on its first line with `ReferenceError: production is not defined`. Nothing in `npm run check` would ever
+died on its first line with `ReferenceError: production is not defined`. Nothing in `pnpm run check` would ever
 have caught it; only `node dist-cli/cli.js` did. So the "Done when" for any phase that emits a runnable
 artifact (a bundle, a binary, a container) names **running it**, never just building it — and shell quoting
 inside a JSON string is a specific place to look first, because it fails silently in exactly this way.
@@ -1675,7 +1675,7 @@ dev data to get. A database of its own on the same compose stack leaves theirs a
 (root credential as in `scripts/run_web_e2e.py`), boot the fast-jar under `-Dquarkus.profile=e2e` with
 `QUARKUS_DATASOURCE_JDBC_URL` pointed at it, its own `VEYQ_SECURITY_CONFIG_SECRET_FILE`, and
 `VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT` set to the browsed origin (the old `VEYQ_BLOB_STORE_…` name is read by nothing
-any more, so a boot that sets it signs for the store's own endpoint and the seeder's store check fails), then `npm run bootstrap:user` — which writes `.run/.env`
+any more, so a boot that sets it signs for the store's own endpoint and the seeder's store check fails), then `pnpm run bootstrap:user` — which writes `.run/.env`
 back, so that file is snapshotted first and restored byte-equal after. A CR that changes a stored format names this
 instance in its browser pass.
 So does a migration baseline reset on `main` that the shared dev database has not followed yet:
@@ -2016,7 +2016,7 @@ way a caller can name it.
 ### A done-when that names a gate records that gate's exit code on `main`, measured at refine
 
 A gate is a claim about the whole tree, not about the CR's files, so "green" in a done-when silently assumes a
-green baseline. cr-emergency-kit-codec-in-crypto asked for `npm run mutation` in `packages/crypto` with no survivor
+green baseline. cr-emergency-kit-codec-in-crypto asked for `pnpm run mutation` in `packages/crypto` with no survivor
 in the new file; the file reached 100 %, and the run still exited 1 because `v1.ts` scored 78 % on untouched code
 (the manifest's `_comment` said 100 %, measured before the package split). Run the gate once during refine; if it
 is already red, the done-when names the scope it can honestly promise and the red goes to the inbox.
@@ -2209,7 +2209,7 @@ the method answered itself showed it.
 
 The paragraphs on contracts phases above let a *branch* be red between the contracts phase and the client phase; they
 do not let `main` be. cr-scope-rotation-rekeys-nodes merged its contracts and backend phases while its web phase was
-still open, and the contract had made `nodeEpoch` required on twenty writes: until the web phase landed, `npm run check`
+still open, and the contract had made `nodeEpoch` required on twenty writes: until the web phase landed, `pnpm run check`
 in `src/web/` was red on `main` (24 call sites) and every sealed write from a web client built from `main` was a `400`
 against a backend built from `main` — the owner's dev loop and every session working on `main` with it. Contracts →
 backend → web is the order the *work* is done in, not the order it may *merge* in: a CR whose contract makes a field the
@@ -2262,7 +2262,7 @@ Tests green across the listed platforms, AND `docs/coverage/` updated for each `
 (every new acceptance criterion covered by a test or an explicit gap) with
 `python3 scripts/validate_coverage.py` green. If the CR rests on a structural invariant, its proof is
 promoted to a permanent guard (or the CR notes why a one-shot check suffices). The docs site's pages that speak
-for what changed are updated (EN+DE for Use pages) and `npm run check` in `site/` is green — or the CR says why no
+for what changed are updated (EN+DE for Use pages) and `pnpm run check` in `site/` is green — or the CR says why no
 page was affected.
 
 ## Retrospective

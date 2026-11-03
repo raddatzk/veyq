@@ -14,8 +14,8 @@
 // Web also writes `.veyq-light` and `data-theme`; nothing in either package reads them, so they did not travel.
 //
 // Keep this module reachable from `main.ts` only. It imports SVGs with Vite's `?raw`, which the CLI's bare
-// esbuild bundle (`npm run build:cli`) cannot resolve — that bundle entering here would be a build failure,
-// which is exactly why `build:cli` sits inside `npm run check`.
+// esbuild bundle (`pnpm run build:cli`) cannot resolve — that bundle entering here would be a build failure,
+// which is exactly why `build:cli` sits inside `pnpm run check`.
 import logoDarkSvg from '../../assets/brand/logo-dark.svg?raw'
 import logoLightSvg from '../../assets/brand/logo-light.svg?raw'
 

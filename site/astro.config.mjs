@@ -206,7 +206,7 @@ export default defineConfig({
           ],
         },
       ],
-      // Fails the build on a broken internal link or anchor — the link check of `npm run check`. A link to a
+      // Fails the build on a broken internal link or anchor — the link check of `pnpm run check`. A link to a
       // fallback page is valid: Run and Security are English-only by design. Not checked: a German page linking
       // the English URL instead of its /de/ counterpart — the plugin's `errorOnInconsistentLocale` matches `/de/`
       // at the start of the link, so behind this `base` it never fires (bitten 2026-10-15: green on such a link).

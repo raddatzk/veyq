@@ -74,8 +74,8 @@ What a green run proves today stops short of what a Server Owner runs:
    `ctypes`. A Chrome `CACertificates` policy file is not read by Playwright's Chromium.
 
 4. **The driver is Playwright, in a workspace package `tests/e2e/`.** TypeScript like both surfaces, Apache-2.0, actively
-   maintained, its own `npm run check`. It sees src/web/ and src/admin-web/ only as a browser does and imports neither; it
-   may import `@veyq/crypto` (the reason it joins the npm workspace, as ADR 0065 allows for that one package — it
+   maintained, its own `pnpm run check`. It sees src/web/ and src/admin-web/ only as a browser does and imports neither; it
+   may import `@veyq/crypto` (the reason it joins the pnpm workspace, as ADR 0065 allows for that one package — it
    reads the Secret Key back out of the Emergency Kit with the shared `veyqkit:` codec). The library is pinned
    **exactly** to the image's browser, since the browser is baked into the image and a library one patch apart fails
    at launch. The container installs nothing: it mounts the checkout, and the root install that went through the

@@ -2,7 +2,7 @@
 // One screenshot on a Use page (ADR 0087 §1): `<Screenshot id="share-dialog" shows="The share dialog, …" />` on an
 // `.mdx` page. It renders `src/assets/screenshots/<id>.<en|de>.png` for the page's language when that file exists,
 // and otherwise a visible placeholder naming the id and what the shot must show: the owner supplies the images, so a
-// missing one is a to-do on `npm run shots`, never a broken build. The English and German page use the same id.
+// missing one is a to-do on `pnpm run shots`, never a broken build. The English and German page use the same id.
 // `shows` describes the picture in the page's language and doubles as its alt text. Pass both as plain string
 // literals — the shot list reads them from the page source, not from a render.
 import { Image } from 'astro:assets';

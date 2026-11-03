@@ -30,7 +30,7 @@
 //   python3 scripts/run_web_e2e.py src/web/src/features/memories/shareContributor.e2e.test.ts
 //
 // is the only supported way to run it: the orchestrator gives this file its own database and sweeps that database
-// for the plaintext recorded below. A hand run (`VEYQ_E2E=1 npx vitest run shareContributor.e2e` against a FRESH
+// for the plaintext recorded below. A hand run (`VEYQ_E2E=1 pnpm exec vitest run shareContributor.e2e` against a FRESH
 // instance) works too, minus the sweep.
 import { describe, it, expect } from 'vitest'
 import { b64url } from '@veyq/crypto/base64'

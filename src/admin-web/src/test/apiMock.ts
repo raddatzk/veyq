@@ -1,6 +1,6 @@
 // The one way a unit test hands the code a generated `…Api` (inbox #195).
 //
-// admin-web's own copy of `src/web/src/test/apiMock.ts`, kept identical below this paragraph: the npm workspace exists
+// admin-web's own copy of `src/web/src/test/apiMock.ts`, kept identical below this paragraph: the pnpm workspace exists
 // for `@veyq/crypto` alone (ADR 0065), so a test helper is not shared between the two packages.
 //
 // A test that wrote `vi.mocked(xApi).mockReturnValue({ m: vi.fn().mockResolvedValue(p) } as unknown as

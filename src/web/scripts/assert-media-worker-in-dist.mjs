@@ -19,7 +19,7 @@
 // `mediaDeriveWorker.ts`'s one-time console warning is what makes either failure visible in a running page.
 //
 // Bite (snapshot-and-restore, never `git checkout`): split the constructor in mediaDeriveWorker.ts as above, run
-// `npm run build`, and this goes RED on (i); restore, and it goes green.
+// `pnpm run build`, and this goes RED on (i); restore, and it goes green.
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'

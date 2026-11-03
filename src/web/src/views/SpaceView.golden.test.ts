@@ -13,7 +13,7 @@
 // hiding of the folder card's actions was CSS-only and found in a real browser), the dialogs a click opens, and
 // covers (no cover is sealed here, so every card shows its placeholder).
 //
-// Updating it deliberately: `npx vitest run -u src/views/SpaceView.golden.test.ts`, then READ the diff of
+// Updating it deliberately: `pnpm exec vitest run -u src/views/SpaceView.golden.test.ts`, then READ the diff of
 // `__snapshots__/SpaceView.golden/` — a re-cut that claims "no visible change" may only move class names (P4d).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'

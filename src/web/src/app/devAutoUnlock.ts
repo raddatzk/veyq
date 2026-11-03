@@ -12,7 +12,7 @@
 //
 // It uses the app's REAL `login` + `unlockMasterKey` (the same flow the e2e tests use) — no new crypto, nothing the
 // password path couldn't already do. Opt-in only: it fires solely when `?devlogin` is present (then persisted to a
-// localStorage flag for in-app navigations), so a plain `npm run dev` is unchanged. NEVER remove the DEV gate.
+// localStorage flag for in-app navigations), so a plain `pnpm run dev` is unchanged. NEVER remove the DEV gate.
 import { login } from '../features/account/login/login'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { unlockMasterKey } from '../features/account/unlock/unlock'

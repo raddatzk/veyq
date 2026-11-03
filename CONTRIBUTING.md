@@ -33,7 +33,7 @@ A pull request whose commits lack it is not merged until they have it.
 ## Before you open the pull request
 
 Each surface proves itself with its own check, named in its `CLAUDE.md`: `./gradlew check` in
-[`backend/`](src/backend/CLAUDE.md), `npm run check` in [`web/`](src/web/CLAUDE.md) and [`admin-web/`](src/admin-web/CLAUDE.md).
+[`backend/`](src/backend/CLAUDE.md), `pnpm run check` in [`web/`](src/web/CLAUDE.md) and [`admin-web/`](src/admin-web/CLAUDE.md).
 A change to `docs/` or `contracts/` also runs the trust chain — every `scripts/validate_*.py` — which CI runs on
 each pull request. The API contracts in `contracts/` are the source of truth: change the spec, never a generated
 type. Conventions are in the [developer styleguide](docs/crosscutting/developer-styleguide.md).

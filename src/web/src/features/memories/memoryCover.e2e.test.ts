@@ -17,11 +17,11 @@ import { unsealNodeMeta } from '../../core/node/nodeMeta'
  * Opt-in live smoke for the Memory cover (cr-0072) — the one path the API-mocked unit tests cannot cover: the
  * sealed `cover` sub-object round-tripping through the **real** operator-blind backend (`setNodeCover` → `listNodes`)
  * beside the sibling date + location, read back from the SERVER-returned `wrappedMeta`. Gated on `VEYQ_E2E=1`;
- * default `npm run check` skips it. The instance is cold-birthed over the real API by `src/test/e2eBootstrap.ts`,
+ * default `pnpm run check` skips it. The instance is cold-birthed over the real API by `src/test/e2eBootstrap.ts`,
  * so this needs a FRESH instance and no seeder.
  *
  *   docker compose -f infra/docker/docker-compose.yml --profile s3 up -d
- *   VEYQ_E2E=1 npx vitest run memoryCover.e2e
+ *   VEYQ_E2E=1 pnpm exec vitest run memoryCover.e2e
  *
  * Or `python3 scripts/run_web_e2e.py`, which is what CI runs.
  */

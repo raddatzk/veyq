@@ -26,7 +26,7 @@
 // `--objects` makes the owner a fresh Memory, medium, bucket and link and rewrites their ids in `seed.json` — the runner
 // calls it before each later positive invocation, so none reads objects an earlier one trashed, revoked or purged.
 //
-// Usage (from src/web/): npx tsx scripts/fuzz-seed.mts --out <dir> [--login | --objects]
+// Usage (from src/web/): pnpm exec tsx scripts/fuzz-seed.mts --out <dir> [--login | --objects]
 // Environment: VEYQ_BASE / VEYQ_ADMIN_BASE (apiTransport.mts), VEYQ_HOST (the tenant's domain; default veyq.localhost),
 // VEYQ_MAILPIT (src/test/mailpit.ts).
 import './clientPrelude.mts'

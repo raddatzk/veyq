@@ -1,7 +1,7 @@
 // Bootstrap User — create the local dev principal from .run/.env and record its derived key material back into
 // the same file. Births it through the shared cold birth (instanceBirth.mts — the real client crypto) and calls the API through the generated
 // clients (apiTransport.mts), so it is operator-blind — only ciphertext + public keys are POSTed; the password never
-// leaves this process — and a contract change turns it red at `npm run typecheck`, not at its next run.
+// leaves this process — and a contract change turns it red at `pnpm run typecheck`, not at its next run.
 //
 // The human fills the inputs in .run/.env (copy from .run/.env.example):
 //   VEYQ_USERNAME, VEYQ_PASSWORD, VEYQ_EMAIL, VEYQ_TENANT, VEYQ_TENANT_DOMAIN, and the optional
@@ -56,7 +56,7 @@ function readEnv(): Record<string, string> {
 function writeEnv(fields: Record<string, string>): void {
   const order = ['VEYQ_USERNAME', 'VEYQ_EMAIL', 'VEYQ_PASSWORD', 'VEYQ_FIRST_NAME', 'VEYQ_LAST_NAME', 'VEYQ_SECRET_KEY', 'VEYQ_WRAPPED_MASTERKEY', 'VEYQ_TENANT', 'VEYQ_TENANT_DOMAIN', 'VEYQ_USER2_USERNAME', 'VEYQ_USER2_EMAIL', 'VEYQ_USER2_PASSWORD', 'VEYQ_USER2_SECRET_KEY', 'VEYQ_USER2_WRAPPED_MASTERKEY']
   const body = order.map((k) => `${k}=${fields[k] ?? ''}`).join('\n')
-  writeFileSync(ENV_FILE, `# Local dev principal (gitignored). Inputs filled by you; SECRET_KEY + WRAPPED_MASTERKEY\n# filled by \`npm run bootstrap:user\`. Throwaway dev creds for a local instance — never committed.\n${body}\n`)
+  writeFileSync(ENV_FILE, `# Local dev principal (gitignored). Inputs filled by you; SECRET_KEY + WRAPPED_MASTERKEY\n# filled by \`pnpm run bootstrap:user\`. Throwaway dev creds for a local instance — never committed.\n${body}\n`)
 }
 
 // --- API calls: the generated clients, over the three channels apiTransport.mts configures ----------------------

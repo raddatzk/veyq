@@ -58,7 +58,7 @@ each one runs](#where-and-when-each-stage-runs) follows it.
 |---|---|---|---|
 | **Guards** (`scripts/validate_*.py`) | The tree keeps its written rules: every reference resolves, every contract field declares what the server may read, every image is pinned by digest, the production recipe is hardened. | That what a reference points at carries weight — a cited test that asserts nothing passes. | Built. |
 | **Guard gaps** (`validate_guard_gaps.py`) | The guards still reject the forgeries they claim to reject, and their documented limits are still exactly where they are written. | A guard's limit that was never documented. | Built. |
-| **Surface checks** (`./gradlew check`, `npm run check` per package, the chart check) | Each part's unit and integration tests: the backend against an in-memory database and in-process fakes, the web client, the admin console and the crypto package in their test runners; the Helm chart's renders keep the production recipe's structural rules, and an upgrade from the previous chart changes no field Kubernetes refuses to change. | The real database, the real object store, the real browser. | Built. |
+| **Surface checks** (`./gradlew check`, `pnpm run check` per package, the chart check) | Each part's unit and integration tests: the backend against an in-memory database and in-process fakes, the web client, the admin console and the crypto package in their test runners; the Helm chart's renders keep the production recipe's structural rules, and an upgrade from the previous chart changes no field Kubernetes refuses to change. | The real database, the real object store, the real browser. | Built. |
 | **Crypto conformance** | The bytes of the cryptographic suite cannot move silently: every primitive is pinned to published test vectors. | Whether a correct primitive is used correctly. | Built, inside the surface checks; see [Verify it yourself](/veyq/security/verify-it-yourself/). |
 | **Mutation** | The tests of the scoped crypto and policy files fail when that code changes; on the backend, each scoped class also on its own, within a budget of one surviving change, so a weak class cannot pass on the score of the others. | Files outside the scope. | Built. |
 | **Races on MariaDB** | Concurrent writes behave on the production database as they do in the in-memory one. | Races no test provokes. | Built. |
@@ -184,7 +184,7 @@ triggers.
 | Surface checks, crypto conformance | `ci.yml › backend` (`./gradlew check`), `› frontend` (crypto, web, admin-web), `› chart`; every commit | 15 min each | backend 8.1 min, frontend 5.0, chart 0.4 |
 | Races on MariaDB | `ci.yml › backend-races`, every commit | 10 min | 9.5 min beside the backend's check, 7.0 alone; once, under a heavier load, over its budget beside it. Locally the jobs share one machine; in CI each has its own runner |
 | API end-to-end | `ci.yml › web-e2e`, every commit | 15 min | 9.2 min for its 26 suites, run directly (2026-10-15); 13.8 min in the local pipeline, all 27 suites green, run alone while other work kept the machine busy (2026-10-16) |
-| API fuzzing | `ci.yml › api-fuzz`, every commit | 15 min | 5.7 to 7.3 min for a whole run with the image already built, the jar and `npm ci` not counted (2026-10-19, with writes, sequences and the second member) |
+| API fuzzing | `ci.yml › api-fuzz`, every commit | 15 min | 5.7 to 7.3 min for a whole run with the image already built, the jar and the dependency install not counted (2026-10-19, with writes, sequences and the second member) |
 | Image build | `ci.yml › build`, every image (app, admin, tools) on amd64 and arm64, every commit; it writes to a registry only on a publish | 15 min | the app image 2.5–4.6 min uncached on arm64; **the amd64 legs have never run** |
 | Stack lane L1 | `ci.yml › stack`, per architecture after the image build, in one leg per domain of the suite (account, Depot, Expenses, Memories, moderation, platform), each with an instance of its own: a push on both architectures, a pull request on amd64 only; on a publish it installs the images the build pushed, pulled by digest | 15 min per leg | 2026-10-26, the images built, arm64: the slowest leg 4.0 min (Depot, its browser 3.5 min), the fastest 2.9 min (Memories), 20.9 min for the six together — each runs first run, the round trip and the instance-wide scenarios; the whole suite in one run 14.0 min (13.3, 165 tests); **the local pipeline cannot run this job** (below) |
 | Mutation | `mutation.yml` when a push or pull request to `main` changes the crypto package or web's sources, `mutation-backend.yml` when one changes a scoped backend file or its test; both when their own configuration changes, and by hand | 30 min per gate, an estimate | not timed as a whole; an incremental run on a pull request is estimated at 1–3 min |
@@ -224,7 +224,7 @@ The `stack` job came after that run. The local pipeline cannot run it on any one
 image build, and one machine builds only its own architecture.
 
 `api-fuzz` came after that run too. Run through it alone (`--job api-fuzz`, 2026-10-19), it was green but for the
-one step only GitHub runs, the check of the Gradle wrapper: 4.2 minutes with the jar build and `npm ci` — before its
+one step only GitHub runs, the check of the Gradle wrapper: 4.2 minutes with the jar build and the dependency install — before its
 writes, sequences and second member were added the same day, which made the run itself 3 to 4.5 minutes longer.
 
 ## How a release will be gated
@@ -267,9 +267,9 @@ Every built stage runs from a checkout with the repository's own commands. The p
 the job that needs the local compose stack and reports it as not run). Stage by stage: the guards with
 `for f in scripts/validate_*.py; do python3 "$f"; done`, the guard gaps with
 `python3 scripts/validate_guard_gaps.py --force`, each part's tests with `./gradlew check` in `src/backend/` and
-`npm run check` in `src/web/`, `src/admin-web/` and `src/packages/crypto/`, the end-to-end suites with
+`pnpm run check` in `src/web/`, `src/admin-web/` and `src/packages/crypto/`, the end-to-end suites with
 `python3 scripts/run_web_e2e.py` (Docker required), and lane L1 with
-`python3 scripts/run_stack_e2e.py --app <app image> --admin <admin image>` (Docker, the repository's `npm ci`, and
+`python3 scripts/run_stack_e2e.py --app <app image> --admin <admin image>` (Docker, the repository's `pnpm install`, and
 ports 80 and 443 free), and the profile with
 `python3 scripts/profile_hot_paths.py --app <app image> --admin <admin image>` (the same, ffmpeg on the path for the
 synthetic photos, and a machine whose one-minute load is at most 3). How to reproduce the security-specific checks, and what each pins,

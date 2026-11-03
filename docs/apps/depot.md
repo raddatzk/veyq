@@ -228,7 +228,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     (~1.3 MB) are a chunk of their own that loads on the first PDF opened, never before. The worker is a hashed
     same-origin asset (`pdfjsRuntime.ts` imports it with `?url`; `vite.config.ts` emits it as `assets/pdf.worker.min-<hash>.js`,
     a `.js` name so the backend's static handler serves a script MIME type to a module worker under `nosniff`), which is
-    what `worker-src 'self'` admits. `npm run verify:pdf-worker` (in `npm run check`) fails the build unless the worker and
+    what `worker-src 'self'` admits. `pnpm run verify:pdf-worker` (in `pnpm run check`) fails the build unless the worker and
     the runtime chunk exist, the runtime names the worker, the runtime is reached by a dynamic `import()` and by no static
     one, the entry chunks hold none of pdf.js, neither file contains `new Function(`/`eval(`, no `.wasm` shipped, and the
     runtime data below is emitted.

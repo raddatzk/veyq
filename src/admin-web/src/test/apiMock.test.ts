@@ -1,5 +1,5 @@
 // The type properties this package's copy of apiMock.ts exists for, each pinned by a `@ts-expect-error`: if the
-// helper stops refusing one, the directive is unused and `npm run typecheck` fails (TS2578).
+// helper stops refusing one, the directive is unused and `pnpm run typecheck` fails (TS2578).
 import { describe, it, expect, vi } from 'vitest'
 import type { TenantInviteState, TenantsApi } from '../api/generated/tenants'
 import { fakeApi, stubApi } from './apiMock'

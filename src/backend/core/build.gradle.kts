@@ -10,7 +10,7 @@ plugins {
     // WITHOUT the archived `pitest/pitest-kotlin` mutators (read-only since 2023, successor is the commercial arcmutate
     // → both barred by CLAUDE.md's no-unmaintained-deps + self-hostability invariants). The spike measures whether a
     // pure policy over non-null types needs that Kotlin noise filter at all. NOT wired into `check`: a heavier, scoped,
-    // opt-in `./gradlew pitest` — mirrors web's `npm run mutation` staying out of `npm run check`. Every class it
+    // opt-in `./gradlew pitest` — mirrors web's `pnpm run mutation` staying out of `pnpm run check`. Every class it
     // mutates is core's, so the plugin, its scope file and its history live in this module.
     id("info.solidsoft.pitest")
     // The test helpers this module's tests, every application's and the root's share live in `src/testFixtures`

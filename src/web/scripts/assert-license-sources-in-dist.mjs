@@ -5,7 +5,7 @@
 // turns this red instead of shipping a notice without sources.
 //
 // Bite (snapshot-and-restore, never `git checkout`): drop `licenseSourcesPlugin()` from vite.config.ts's plugin list,
-// `npm run build`, and this goes RED; restore, and it goes green.
+// `pnpm run build`, and this goes RED; restore, and it goes green.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 

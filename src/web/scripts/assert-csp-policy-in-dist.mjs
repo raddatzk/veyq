@@ -5,7 +5,7 @@
 // and a missing file means a shell with no policy at all.
 //
 // Bite (snapshot-and-restore, never `git checkout`): re-add a `transformIndexHtml` that injects the <meta> in
-// vite.config.ts's cspPlugin, `npm run build`, and this goes RED; restore, and it goes green.
+// vite.config.ts's cspPlugin, `pnpm run build`, and this goes RED; restore, and it goes green.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
@@ -31,7 +31,7 @@ const policy = read(POLICY_FILE)
 if (policy === null || policy.trim() === '') failures.push(`dist/${POLICY_FILE} is missing or empty`)
 // Every worker the app starts is a same-origin hashed module (Argon2, the media pixel stage, the gallery's listing
 // opener, pdf.js): the policy must admit 'self' as a worker source and nothing wider (no blob:, no data:, no host).
-// Bite: drop 'self' from `worker-src` in src/shared/security/csp.ts, `npm run build`, and this goes RED.
+// Bite: drop 'self' from `worker-src` in src/shared/security/csp.ts, `pnpm run build`, and this goes RED.
 else if (!/(^|;)\s*worker-src 'self'\s*(;|$)/.test(policy)) failures.push(`dist/${POLICY_FILE} does not carry exactly "worker-src 'self'"`)
 
 if (failures.length) {

@@ -94,7 +94,7 @@ export const ENVELOPE_VOCABULARY: ReadonlySet<string> = new Set([
  *
  * Rewrites the whole accumulated set on every call rather than appending, so a suite that dies mid-way still
  * leaves on disk exactly what it had recovered up to that point. A no-op when `VEYQ_CANARY_FILE` is unset,
- * which is what keeps a hand-run `VEYQ_E2E=1 npx vitest run memoryCover.e2e` working with no orchestrator.
+ * which is what keeps a hand-run `VEYQ_E2E=1 pnpm exec vitest run memoryCover.e2e` working with no orchestrator.
  */
 export function recordCanaries(...values: unknown[]): void {
   const found = new Set<string>()

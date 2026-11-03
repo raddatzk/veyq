@@ -22,7 +22,7 @@ is the server.
 veyq was imported into a fresh repository on 2026-08-06 and has had no remote since
 ([ADR 0040](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md)),
 so no workflow has executed in it. Two jobs have never run anywhere: `packages/crypto`'s and `admin-web`'s
-`npm run check`
+`pnpm run check`
 ([architecture § 11](https://github.com/raddatzk/veyq/blob/main/docs/architecture/README.md#11-risks-and-technical-debt)).
 No release has been built or published
 ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md)).
@@ -82,21 +82,21 @@ Consequences).
 
 ## Running the conformance tests
 
-The npm workspace is installed once, from the repository root. Then each package proves itself with its own
+The pnpm workspace is installed once, from the repository root (pnpm at the version `package.json` pins in `packageManager`). Then each package proves itself with its own
 check (lint, typecheck, tests):
 
 ```sh
 # from the repository root
-npm ci
+pnpm install --frozen-lockfile
 
 cd src/packages/crypto
-npm run check
+pnpm run check
 ```
 
 The web client's conformance tests run in its own check, from `src/web/`:
 
 ```sh
-npm run check
+pnpm run check
 ```
 
 The backend's tests run from `src/backend/`, on in-memory H2:
@@ -105,7 +105,7 @@ The backend's tests run from `src/backend/`, on in-memory H2:
 ./gradlew check
 ```
 
-`packages/crypto`'s `npm run check` has **never run in CI**. Its suites pass locally, and the use-cases they would
+`packages/crypto`'s `pnpm run check` has **never run in CI**. Its suites pass locally, and the use-cases they would
 cover name them as `gaps`, not as coverage
 ([ADR 0040](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
 To keep that from leaving the profile unpinned, the Argon2id parameters web writes are also pinned against the
@@ -122,7 +122,7 @@ own line with its measured reason, so a margin would buy only blindness. The rea
 From `src/packages/crypto/` (and again from `src/web/`, which has its own scope):
 
 ```sh
-npm run mutation
+pnpm run mutation
 ```
 
 Stryker mutates the source files **in place** and restores them on exit, so do nothing else in the tree while a
@@ -180,7 +180,7 @@ The sweep needs Docker and a built backend fast-jar. It brings up the bundled st
 [`infra/docker/docker-compose.yml`](https://github.com/raddatzk/veyq/blob/main/infra/docker/docker-compose.yml) (MariaDB,
 Garage, Traefik, Mailpit), gives each suite file its own database and a fresh backend boot, and sweeps after
 each one. With the
-workspace installed (`npm ci` above), build the jar first:
+workspace installed (`pnpm install` above), build the jar first:
 
 ```sh
 cd src/backend && ./gradlew quarkusBuild
