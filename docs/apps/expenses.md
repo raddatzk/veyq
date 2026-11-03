@@ -81,11 +81,22 @@ The amount of an expense or a refund is never typed: the editor shows the payers
   the rest, split equally among the Pot's active participants, who are sealed by name in that split (a later participant
   is on no earlier entry). Items above the amount do not save; the editor says by how much. At a rest of zero no rest
   split is sealed.
-- **A split** is **equal** (each person once), **by shares** (whole numbers) or **by percent** (basis points, at most two
-  decimals, adding up to exactly 100 %).
+- **A split** is **equal** (each person once), **by shares** (whole numbers), **by percent** (basis points, at most two
+  decimals, adding up to exactly 100 %) or **by amount** (`amounts`: each person a fixed amount in the entry's currency,
+  adding up to exactly the amount of the part it splits — the item's, or the rest's).
 
-So the whole amount equally or by shares is the rest's split alone; exact amounts per person are one item each, filling
-the amount; a bill with a tip is its items plus a rest.
+So the whole amount equally or by shares is the rest's split alone; exact amounts per person are the rest's split by
+amount (or one item each, filling the amount); a bill with a tip is its items plus a rest.
+
+**The editor** (`features/expenses/components/EntryEditor.vue`, owner 2026-11-03) shows a split that is everyone offered,
+equally — a new entry's rest, a new item, or a split opened equal over everyone offered — as one line ("All 3 people,
+equally") with **Adjust**. Adjusted, a split is **by shares**, **by percent** or **by amount**, its people one row each:
+a person picked per row, as **Paid by** does, with their value, **Add another person**, a button per row that takes the
+person off, and, by shares, **Split equally among all** (every active person at 1 share). There is no "equally" mode:
+shares of 1 each are sealed as `equal` — the same weights, and the form an entry opened again shows as its one line when
+it names everyone offered. Percents or amounts that do not make what they must, and items above the amount, are said in
+red under their split as they are typed; what the save finds wrong is said in red at its field (the title, **Paid by**, a
+split), and the message at the bottom keeps only what belongs to no field.
 
 **Rounding** is part of the entry format, so every device computes the same balance. The format is
 `contracts/expenses/entry.v1.schema.json`, and `contracts/expenses/v1-vectors.json` holds the cases every client must
@@ -100,11 +111,12 @@ compute alike:
   within one allocation nobody is more than one cent off their share.
 - An entry is rounded **part by part**: its base total is first allocated to its parts — each item in its order, then
   the rest — by their amounts (in the base currency every part gets exactly its own amount), then each part among its
-  split's people by their weights (1 each, the shares, the basis points). A person's share is the sum of their parts,
+  split's people by their weights (1 each, the shares, the basis points, the amounts — so by amount in the base currency
+  every person gets exactly their amount). A person's share is the sum of their parts,
   so each item's shares add up to that item exactly; a person on several parts can end up to one cent per part off
   their exact share, never more.
 - An entry that does not add up (payers' amounts beside the total, items above it, a rest with no split, percents beside
-  100 %, a person named twice) is not saved; one that arrives anyway counts nowhere and is shown as invalid. So does an entry that
+  100 %, a split's amounts beside the amount of its part, a person named twice) is not saved; one that arrives anyway counts nowhere and is shown as invalid. So does an entry that
   names someone who is no participant of the Pot: it has no place in the join order the rounding breaks ties by.
 
 **Reading a Pot.** Where the schema leaves a reader a choice, every client chooses alike:
