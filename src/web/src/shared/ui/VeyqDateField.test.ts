@@ -1,21 +1,22 @@
 // @vitest-environment happy-dom
 // The layer's date field (ADR 0107 § Behaviour changed on purpose): segments in the language's order with a
 // leading zero and the language's names, a typed day outside min/max refused (the model never holds it, and leaving
-// the field shows the day it held on entry), and a `<label>` around it meaning its first segment, not its button.
+// the field shows the day it held on entry), and a `<label>` around it meaning its first segment, not its button; and
+// at minute granularity a date and time in the language's clock, bound as `YYYY-MM-DDTHH:mm`.
 import { describe, it, expect } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, ref } from 'vue'
 import VeyqDateField from './VeyqDateField.vue'
 import { realI18n } from '../../test/i18n'
 
-function host(start: string, maxDate?: string) {
+function host(start: string, maxDate?: string, granularity?: 'day' | 'minute') {
   const day = ref(start)
   const Host = defineComponent({
     setup() {
       return () => [
         h('label', { class: 'wrap' }, [
           h('span', { class: 'caption' }, 'From'),
-          h(VeyqDateField, { modelValue: day.value, 'onUpdate:modelValue': (v: string) => (day.value = v), ariaLabel: 'From', maxDate }),
+          h(VeyqDateField, { modelValue: day.value, 'onUpdate:modelValue': (v: string) => (day.value = v), ariaLabel: 'From', maxDate, granularity }),
         ]),
         h('button', { class: 'after', type: 'button' }, 'Next'),
       ]
@@ -91,6 +92,44 @@ describe('VeyqDateField', () => {
     document.querySelectorAll<HTMLElement>('.veyq-date-panel__nav')[1]!.click() // March
     await flushPromises()
     expect(weeks()).toBe(6)
+    wrapper.unmount()
+  })
+
+  it('at minute granularity writes the time after the day, in the language\'s clock, with named segments', async () => {
+    const { wrapper } = host('2026-05-03T09:05', undefined, 'minute')
+    await flushPromises()
+    expect(shown().trim()).toBe('05/03/2026, 09:05\u202fAM') // the language's narrow space before AM/PM
+    expect(segments().map((s) => s.getAttribute('aria-label'))).toEqual(['Month', 'Day', 'Year', 'Hour', 'Minute', 'AM/PM'])
+    const { i18n } = await import('../../i18n')
+    i18n.global.locale.value = 'de'
+    await flushPromises()
+    expect(shown().trim()).toBe('03.05.2026, 09:05')
+    expect(segments().map((s) => s.getAttribute('aria-label'))).toEqual(['Tag', 'Monat', 'Jahr', 'Stunde', 'Minute'])
+    i18n.global.locale.value = 'en'
+    wrapper.unmount()
+  })
+
+  it('at minute granularity binds a typed minute as YYYY-MM-DDTHH:mm', async () => {
+    const { day, wrapper } = host('2026-05-03T09:05', undefined, 'minute')
+    await flushPromises()
+    const minute = segments()[4]!
+    minute.focus()
+    await type(minute, '42')
+    expect(day.value).toBe('2026-05-03T09:42')
+    wrapper.unmount()
+  })
+
+  it('at minute granularity keeps the time when a day is picked in the calendar', async () => {
+    const { day, wrapper } = host('2026-05-03T21:30', undefined, 'minute')
+    await flushPromises()
+    const trigger = document.querySelector<HTMLElement>('.veyq-date-field__trigger')!
+    trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    trigger.click()
+    await flushPromises()
+    const tenth = [...document.querySelectorAll<HTMLElement>('.veyq-date-panel__day')].find((d) => d.textContent?.trim() === '10' && !d.hasAttribute('data-outside-view'))!
+    tenth.click()
+    await flushPromises()
+    expect(day.value).toBe('2026-05-10T21:30')
     wrapper.unmount()
   })
 
