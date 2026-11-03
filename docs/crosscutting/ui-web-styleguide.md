@@ -157,6 +157,12 @@ or a one-off `1rem` label sitting in them.
   `--veyq-field-height` (`shared/ui/layer.css`), weight 400 and one radius (6px, `--app-radius-sm` inside a
   `.veyq-form`), so fields side by side line up, their labels with them, and an empty select keeps its height. A new
   field kind joins that rule; it never brings a height of its own.
+- **A form control is a layer component:** a text field is `VeyqInput` (`VeyqPassword`, `VeyqSearchField`), several
+  lines `VeyqTextarea`, a drop-down `VeyqSelect`, a date — or a date and time, `granularity="minute"` — `VeyqDateField`,
+  a tick `VeyqCheckbox`. Outside `shared/ui/` no template writes a native `<select>`, `<textarea>` or text-like
+  `<input>`; only `type="file"` (a hidden picker), `"checkbox"`, `"radio"`, `"range"` and `"hidden"` stay native. Lint
+  holds it (`veyq/controls-through-the-layer` in `src/web/`, `veyq-admin/controls-through-the-layer` in
+  `src/admin-web/`, whose console keeps a date and time as `VeyqInput type="datetime-local"`: it has no date field).
 - **An icon button inside a field** is `.veyq-field-action` (the password's eye, the date field's calendar, the Secret
   Key's upload/scan/eye): its look — size, colour, hover, focus — is that class; the field's own rule only places it.
 - **A raw `<button>` sets its `font-size`.** A button does not inherit the font, and `.veyq-icon` is sized in `em`, so a
