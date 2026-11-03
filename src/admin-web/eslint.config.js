@@ -2,6 +2,10 @@ import pluginVue from 'eslint-plugin-vue'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 import { argonThroughTheWorker } from '@veyq/crypto/eslint-argon-door'
 import { plugin as featureMocks } from './eslint/featureMocks.js'
+import { plugin as formControls } from './eslint/formControls.js'
+
+// The local rules, as ONE plugin: flat config refuses a second, different object under a plugin name it already has.
+const veyqAdmin = { meta: { name: 'veyq-admin' }, rules: { ...featureMocks.rules, ...formControls.rules } }
 
 // `veyq-admin/api-mocks-typed-by-the-contract` below — the same selectors as web's block of that name.
 const API_MOCK_HELPER = 'Mock a generated …Api through stubApi()/fakeApi() from src/test/apiMock, which type each payload by its model.'
@@ -114,6 +118,19 @@ export default defineConfigWithVueTs(
       ],
     },
   },
+  {
+    // A form control is a layer component (ADR 0107), as in src/web/: outside `src/shared/ui/` no template writes a
+    // native `<select>`, `<textarea>` or text-like `<input>`; only `type="file" | "checkbox" | "radio" | "range" |
+    // "hidden"` stays native. The rule, its reasons and its LIMIT are in eslint/formControls.js, its bite in
+    // formControls.test.mjs.
+    name: 'veyq-admin/controls-through-the-layer',
+    files: ['src/**/*.vue'],
+    ignores: ['src/shared/ui/**'],
+    plugins: { 'veyq-admin': veyqAdmin },
+    rules: {
+      'veyq-admin/controls-through-the-layer': 'error',
+    },
+  },
   // Argon2id only through @veyq/crypto/argonWorker — the rule, its exemptions and its limit live with the crypto
   // package (eslint-argon-door.js), written once for the three configs that include it.
   argonThroughTheWorker,
@@ -126,7 +143,7 @@ export default defineConfigWithVueTs(
     // annotates its return type with the model).
     name: 'veyq-admin/api-mocks-typed-by-the-contract',
     files: ['src/**/*.test.ts'],
-    plugins: { 'veyq-admin': featureMocks },
+    plugins: { 'veyq-admin': veyqAdmin },
     rules: {
       'no-restricted-syntax': ['error', ...API_MOCKS_SYNTAX],
       'veyq-admin/feature-mocks-bare-fn': 'error', // S6
