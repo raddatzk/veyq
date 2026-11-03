@@ -207,7 +207,7 @@ const en = {
       byPerson: 'By person',
       person: 'Person',
       paid: 'Paid',
-      share: 'Share',
+      share: 'Consumed',
       total: 'Total',
     },
     people: {
@@ -457,7 +457,7 @@ const de: typeof en = {
       byPerson: 'Nach Person',
       person: 'Person',
       paid: 'Bezahlt',
-      share: 'Anteil',
+      share: 'Verbraucht',
       total: 'Summe',
     },
     people: {
