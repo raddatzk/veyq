@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://veyq.dev/contracts/expenses/entry.v1.schema.json",
   "title": "Expenses revision, format v1",
-  "description": "The plaintext of one revision of an Expenses record (ADR 0108 decisions 3-5, docs/apps/expenses.md): an expense, a refund, a transfer or a participant, a deletion of one of them, or a participant's erasure. Compact UTF-8 JSON, padded to the smallest size class that carries it (`u32be(len) || bytes || zeros` to 512, 2048, 8192 or 16384 bytes, `@veyq/crypto`'s `padToClass`) and sealed under the revision's own K_rev with the `expense-entry` field seal, bound to (scope, Pot node, entry id, revision); K_rev is wrapped under the Pot's key by `expense-entry-key` (contracts/crypto/vectors/v1.json). The server sees none of it. Readers ignore unknown fields: a field added later under `v: 1` is additive, and a change an older reader would misread is `v: 2`. Arithmetic (part of the version, ADR 0108 decision 9): amounts are integers in the minor unit of their currency (`minorUnits` digits, ISO 4217); a `rate` is a decimal string and every computation is exact. Every allocation below is the largest-remainder rule: an integer total T by weights w, each person's exact `T * w / sum(w)` rounded down, the units left over handed one each to the largest cut-off remainders, ties by the order given. An entry's `amount` is the sum of its payers' (a refund: receivers') amounts. Its total converts once into the Pot's base currency, `round_half_away_from_zero(amount * rate * 10^(baseMinorUnits - minorUnits))`. That base total is allocated to the payers (receivers) by their amounts, in join order; and to the entry's parts — each item in its order, then the rest `amount - sum(items)` when it is above zero — by their amounts in the entry's currency, in that order (where the currency is the base, every part gets exactly its own amount). Each part's base amount is then allocated among the people of its split, in join order, by 1 each (`equal`), their shares (`shares`) or their basis points (`percent`); a person's share of the entry is the sum of their parts. Join order is the participants' `joined`, then their id. A revision whose amounts do not add up (payers' or receivers' amounts not summing to `amount`, items above it, a rest above zero with no split, percents not summing to 10000, a person named twice among the payers or receivers or within one split) is invalid: a reader counts it nowhere and shows it as invalid. contracts/expenses/v1-vectors.json pins every rule with worked cases.",
+  "description": "The plaintext of one revision of an Expenses record (ADR 0108 decisions 3-5, docs/apps/expenses.md): an expense, a refund, a transfer or a participant, a deletion of one of them, or a participant's erasure. Compact UTF-8 JSON, padded to the smallest size class that carries it (`u32be(len) || bytes || zeros` to 512, 2048, 8192 or 16384 bytes, `@veyq/crypto`'s `padToClass`) and sealed under the revision's own K_rev with the `expense-entry` field seal, bound to (scope, Pot node, entry id, revision); K_rev is wrapped under the Pot's key by `expense-entry-key` (contracts/crypto/vectors/v1.json). The server sees none of it. Readers ignore unknown fields: a field added later under `v: 1` is additive, and a change an older reader would misread is `v: 2`. The `amounts` split mode joined after the first revisions were written and is not additive (a reader that predates it refuses the split's mode); it stays `v: 1` because no release exists yet (scripts/applied_migrations.sha256's `release:` is `none`), so no reader of the earlier v1 is in anyone's hands, and every revision written before it reads unchanged. Arithmetic (part of the version, ADR 0108 decision 9): amounts are integers in the minor unit of their currency (`minorUnits` digits, ISO 4217); a `rate` is a decimal string and every computation is exact. Every allocation below is the largest-remainder rule: an integer total T by weights w, each person's exact `T * w / sum(w)` rounded down, the units left over handed one each to the largest cut-off remainders, ties by the order given. An entry's `amount` is the sum of its payers' (a refund: receivers') amounts. Its total converts once into the Pot's base currency, `round_half_away_from_zero(amount * rate * 10^(baseMinorUnits - minorUnits))`. That base total is allocated to the payers (receivers) by their amounts, in join order; and to the entry's parts — each item in its order, then the rest `amount - sum(items)` when it is above zero — by their amounts in the entry's currency, in that order (where the currency is the base, every part gets exactly its own amount). Each part's base amount is then allocated among the people of its split, in join order, by 1 each (`equal`), their shares (`shares`), their basis points (`percent`) or their amounts in the entry's currency (`amounts`: the part's base amount allocated by those amounts as weights, so where the currency is the base every person gets exactly their amount); a person's share of the entry is the sum of their parts. Join order is the participants' `joined`, then their id. A revision whose amounts do not add up (payers' or receivers' amounts not summing to `amount`, items above it, a rest above zero with no split, percents not summing to 10000, the amounts of a split not summing to the amount of the part it splits — an item's amount, or the rest while it is above zero (a rest split sealed at a zero rest splits nothing and is held to no sum) —, a person named twice among the payers or receivers or within one split) is invalid: a reader counts it nowhere and shows it as invalid. contracts/expenses/v1-vectors.json pins every rule with worked cases.",
   "type": "object",
   "required": ["v", "kind", "heads"],
   "properties": {
@@ -106,7 +106,7 @@
       "items": { "$ref": "#/$defs/uuid" }
     },
     "split": {
-      "description": "Who one part of an entry (an item, or the rest) is for, and by which weights: each person 1 (`equal`), their shares (`shares`), or their percent in basis points, 1 to 10000 summing to exactly 10000 = 100.00 % (`percent`; a sum other than 10000 makes the entry invalid, a rule the schema cannot state).",
+      "description": "Who one part of an entry (an item, or the rest) is for, and by which weights: each person 1 (`equal`), their shares (`shares`), their percent in basis points, 1 to 10000 summing to exactly 10000 = 100.00 % (`percent`), or a fixed amount each in the entry's currency, summing to exactly the part's amount (`amounts`). A sum other than 10000, or other than the part's amount, makes the entry invalid — rules the schema cannot state.",
       "oneOf": [
         {
           "type": "object",
@@ -151,6 +151,26 @@
                 "properties": {
                   "participant": { "$ref": "#/$defs/uuid" },
                   "percent": { "type": "integer", "minimum": 1, "maximum": 10000, "description": "Basis points: 2550 is 25.50 %." }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode", "amounts"],
+          "properties": {
+            "mode": { "const": "amounts" },
+            "amounts": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 200,
+              "items": {
+                "type": "object",
+                "required": ["participant", "amount"],
+                "properties": {
+                  "participant": { "$ref": "#/$defs/uuid" },
+                  "amount": { "$ref": "#/$defs/minor", "description": "In the entry's currency; a split's amounts sum to the amount of the part it splits." }
                 }
               }
             }

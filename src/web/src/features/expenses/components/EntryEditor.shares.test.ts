@@ -76,9 +76,9 @@ async function typeDinner() {
   const item = dialog().querySelector('.expenses-item:not(.expenses-rest)') as HTMLElement
   await type(item.querySelector(`input[aria-label="${t('expenses.entry.itemLabel')}"]`) as HTMLInputElement, 'Wine')
   await type(item.querySelector(`input[aria-label="${t('expenses.entry.itemAmount')}"]`) as HTMLInputElement, '4')
-  const sharesMode = [...item.querySelectorAll('.veyq-toggle-group__item')].find((b) => b.textContent?.trim() === t('expenses.split.shares')) as HTMLElement
-  await click(sharesMode)
-  await type(item.querySelector(`input[aria-label="${t('expenses.entry.sharesOf', { name: 'Anna' })}"]`) as HTMLInputElement, '1')
+  // the item starts as its one line, everyone equally: adjusted, it is by shares, everyone at 1
+  await click([...item.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('expenses.split.adjust'))!)
+  await click(item.querySelector(`button[aria-label="${t('expenses.split.removePerson', { name: 'Cleo' })}"]`) as HTMLElement)
   await type(item.querySelector(`input[aria-label="${t('expenses.entry.sharesOf', { name: 'Ben' })}"]`) as HTMLInputElement, '2')
 }
 

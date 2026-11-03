@@ -23,12 +23,12 @@ acceptanceCriteria:
       - surface: backend
         reason: "The race refs are green on H2 and in a local run of scripts/run_backend_races_on_mariadb.py on MariaDB (2026-10-25, inbox #544); CI's backend-races job, which would make that a standing claim, has not run yet (no remote, #317)."
   - id: allocation-and-rounding-are-exact-and-equal-everywhere
-    text: "An entry's amount is its payers' (receivers') sum; its items, each an exact amount with its own split (equal, shares, percent), and the rest with a split of its own are computed in minor units with exact arithmetic: the total converted once, allocated to the parts by their amounts and each part among its people by largest remainder with ties by join order, so every device computes the same shares; a conformance table of entries and expected shares pins it; the editor shows each person's share in the base currency, computed by the same ledger code over what the save seals, and seals what it shows."
+    text: "An entry's amount is its payers' (receivers') sum; its items, each an exact amount with its own split (equal, shares, percent, amounts), and the rest with a split of its own are computed in minor units with exact arithmetic: the total converted once, allocated to the parts by their amounts and each part among its people by largest remainder with ties by join order, so every device computes the same shares; a conformance table of entries and expected shares pins it; the editor shows each person's share in the base currency, computed by the same ledger code over what the save seals, and seals what it shows."
     coverage:
       web:
         unit: [src/features/expenses/domain/money.test.ts, src/features/expenses/domain/ledger.test.ts, src/features/expenses/entryForm.test.ts, src/features/expenses/components/EntryEditor.split.test.ts, src/features/expenses/components/EntryEditor.shares.test.ts]
   - id: an-entry-that-does-not-add-up-is-not-saved
-    text: "Payers' amounts that differ from the total, items above it (the editor says by how much), a rest no one shares, percents that do not make 100 %, or a revision above 16 KiB are refused by the editor before anything is sent."
+    text: "Payers' amounts that differ from the total, items above it (the editor says by how much), a rest no one shares, percents that do not make 100 %, a split's amounts that do not make what it divides, or a revision above 16 KiB are refused by the editor before anything is sent, each said at its field."
     coverage:
       backend:
         integration: [PotSliceTest.aBatchOutsideItsContractIsRefusedWhole_andARecordBelongsToOnePot]

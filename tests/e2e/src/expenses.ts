@@ -40,8 +40,10 @@ export const LABELS = {
       addAsName: (n: string) => `Add “${n}” as a name`,
       tabs: { entries: 'Entries', balances: 'Balances', overview: 'Overview', people: 'People', settings: 'Settings' },
       kind: { expense: 'Expense', refund: 'Refund', transfer: 'Transfer' },
-      split: { equal: 'Equally', shares: 'By shares', percent: 'By percent' },
-      sharesOf: (n: string) => `Shares of ${n}`, percentOf: (n: string) => `Percent of ${n}`,
+      split: { shares: 'By shares', percent: 'By percent', amounts: 'By amount' },
+      everyone: (n: number) => `All ${n} people, equally`, adjust: 'Adjust', splitPerson: 'Person in the split',
+      offSplit: (n: string) => `Take ${n} off the split`,
+      sharesOf: (n: string) => `Shares of ${n}`, percentOf: (n: string) => `Percent of ${n}`, amountOf: (n: string) => `Amount of ${n}`,
       category: { food: 'Food & drink', groceries: 'Groceries', leisure: 'Leisure', transport: 'Transport', other: 'Other' } as Record<string, string>,
       addEntry: 'Add entry', editEntry: 'Edit entry', viewEntry: 'Entry',
       title: 'Title', note: 'Note (optional)', amount: 'Amount', currency: /^Currency/, category_: /^Category/,
@@ -98,8 +100,10 @@ export const LABELS = {
       addAsName: (n: string) => `„${n}“ als Namen hinzufügen`,
       tabs: { entries: 'Einträge', balances: 'Salden', overview: 'Überblick', people: 'Personen', settings: 'Einstellungen' },
       kind: { expense: 'Ausgabe', refund: 'Erstattung', transfer: 'Überweisung' },
-      split: { equal: 'Zu gleichen Teilen', shares: 'Nach Anteilen', percent: 'Nach Prozent' },
-      sharesOf: (n: string) => `Anteile von ${n}`, percentOf: (n: string) => `Prozent von ${n}`,
+      split: { shares: 'Nach Anteilen', percent: 'Nach Prozent', amounts: 'Nach Betrag' },
+      everyone: (n: number) => `Alle ${n} Personen zu gleichen Teilen`, adjust: 'Anpassen', splitPerson: 'Person der Aufteilung',
+      offSplit: (n: string) => `${n} aus der Aufteilung nehmen`,
+      sharesOf: (n: string) => `Anteile von ${n}`, percentOf: (n: string) => `Prozent von ${n}`, amountOf: (n: string) => `Betrag von ${n}`,
       category: { food: 'Essen & Trinken', groceries: 'Einkäufe', leisure: 'Freizeit', transport: 'Transport', other: 'Sonstiges' } as Record<string, string>,
       addEntry: 'Eintrag hinzufügen', editEntry: 'Eintrag bearbeiten', viewEntry: 'Eintrag',
       title: 'Titel', note: 'Notiz (optional)', amount: 'Betrag', currency: /^Währung/, category_: /^Kategorie/,
@@ -139,6 +143,7 @@ type VectorSplit =
   | { mode: 'equal'; participants: string[] }
   | { mode: 'shares'; shares: { participant: string; shares: number }[] }
   | { mode: 'percent'; percents: { participant: string; percent: number }[] }
+  | { mode: 'amounts'; amounts: { participant: string; amount: number }[] }
 export interface VectorEntry {
   id: string
   body: {
@@ -318,25 +323,40 @@ async function allocate(dialog: Locator, L: Labels, lang: Lang, b: VectorEntry['
     const row = dialog.locator('.expenses-item:not(.expenses-rest)').nth(i)
     await row.getByRole('textbox', { name: L.pot.item, exact: true }).fill(recordTyped(itemLabel(item.label)))
     await row.getByRole('textbox', { name: L.pot.itemAmount, exact: true }).fill(typed(item.amount, b.minorUnits, lang))
-    await split(row, L, lang, item.split, names)
+    await split(row, L, lang, item.split, names, b.minorUnits)
   }
   const rest = dialog.locator('.expenses-rest')
-  if (a.rest) await split(rest, L, lang, a.rest, names)
+  if (a.rest) await split(rest, L, lang, a.rest, names, b.minorUnits)
   else await expect(rest, 'the items fill the amount: no rest').toHaveCount(0)
 }
 
-/** One split in [scope] (an item or the rest): its mode, then who is on it — a checkbox each, or a field each. */
-async function split(scope: Locator, L: Labels, lang: Lang, s: VectorSplit, names: Map<string, string>): Promise<void> {
-  if (s.mode !== 'equal') await scope.getByRole('button', { name: L.pot.split[s.mode], exact: true }).click()
-  await expect(scope.getByRole('button', { name: L.pot.split[s.mode], exact: true })).toHaveAttribute('aria-pressed', 'true')
+/**
+ * One split in [scope] (an item or the rest). A new split is one line, everyone equally: a vector split equal over every
+ * person of the Pot stays that line; any other is adjusted — its mode (equal over some is by shares, 1 each), then
+ * everyone not on it taken off its rows (which start as every person, in join order, as the vector lists them), then a
+ * value each.
+ */
+async function split(scope: Locator, L: Labels, lang: Lang, s: VectorSplit, names: Map<string, string>, minorUnits: number): Promise<void> {
   const person = (id: string) => names.get(id)!
-  if (s.mode === 'equal') {
-    const sharing = new Set(s.participants.map(person))
-    for (const n of names.values()) await scope.getByRole('checkbox', { name: n, exact: true }).setChecked(sharing.has(n))
-  } else if (s.mode === 'shares') {
+  if (s.mode === 'equal' && s.participants.length === names.size) {
+    await expect(scope.getByText(L.pot.everyone(names.size), { exact: true })).toBeVisible()
+    return
+  }
+  await scope.getByRole('button', { name: L.pot.adjust, exact: true }).click()
+  const mode = s.mode === 'equal' ? 'shares' : s.mode
+  if (mode !== 'shares') await scope.getByRole('button', { name: L.pot.split[mode], exact: true }).click()
+  await expect(scope.getByRole('button', { name: L.pot.split[mode], exact: true })).toHaveAttribute('aria-pressed', 'true')
+  const on =
+    s.mode === 'equal' ? s.participants : s.mode === 'shares' ? s.shares.map((x) => x.participant) : s.mode === 'percent' ? s.percents.map((x) => x.participant) : s.amounts.map((x) => x.participant)
+  const sharing = new Set(on.map(person))
+  for (const n of names.values()) if (!sharing.has(n)) await scope.getByRole('button', { name: L.pot.offSplit(n), exact: true }).click()
+  await expect(scope.getByRole('combobox', { name: L.pot.splitPerson, exact: true })).toHaveCount(sharing.size)
+  if (s.mode === 'shares') {
     for (const x of s.shares) await scope.getByRole('textbox', { name: L.pot.sharesOf(person(x.participant)), exact: true }).fill(String(x.shares))
-  } else {
+  } else if (s.mode === 'percent') {
     for (const x of s.percents) await scope.getByRole('textbox', { name: L.pot.percentOf(person(x.participant)), exact: true }).fill(typed(x.percent, 2, lang))
+  } else if (s.mode === 'amounts') {
+    for (const x of s.amounts) await scope.getByRole('textbox', { name: L.pot.amountOf(person(x.participant)), exact: true }).fill(typed(x.amount, minorUnits, lang))
   }
 }
 

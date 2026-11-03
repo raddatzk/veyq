@@ -287,12 +287,18 @@ function receiptsProblem(carried: unknown, listed: readonly string[], seen: Set<
 export function remapEntry(c: MoneyContent, id: (old: string) => string, receipt: (old: string) => string): MoneyContent {
   const base = { ...c, receipts: c.receipts.map(receipt) }
   if (c.kind === 'transfer') return { ...base, kind: 'transfer', from: id(c.from), to: id(c.to) } as MoneyContent
-  const split = (s: Split): Split =>
-    s.mode === 'equal'
-      ? { mode: 'equal', participants: s.participants.map(id) }
-      : s.mode === 'shares'
-        ? { mode: 'shares', shares: s.shares.map((x) => ({ ...x, participant: id(x.participant) })) }
-        : { mode: 'percent', percents: s.percents.map((x) => ({ ...x, participant: id(x.participant) })) }
+  const split = (s: Split): Split => {
+    switch (s.mode) {
+      case 'equal':
+        return { mode: 'equal', participants: s.participants.map(id) }
+      case 'shares':
+        return { mode: 'shares', shares: s.shares.map((x) => ({ ...x, participant: id(x.participant) })) }
+      case 'percent':
+        return { mode: 'percent', percents: s.percents.map((x) => ({ ...x, participant: id(x.participant) })) }
+      case 'amounts':
+        return { mode: 'amounts', amounts: s.amounts.map((x) => ({ ...x, participant: id(x.participant) })) }
+    }
+  }
   const a = c.allocation
   const allocation: Allocation = { items: a.items.map((i) => ({ ...i, split: split(i.split) })), ...(a.rest ? { rest: split(a.rest) } : {}) }
   if (c.kind === 'expense') return { ...base, kind: 'expense', payers: c.payers.map((p) => ({ ...p, participant: id(p.participant) })), allocation } as MoneyContent

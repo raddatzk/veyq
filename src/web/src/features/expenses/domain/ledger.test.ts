@@ -13,6 +13,8 @@ type VectorPot = {
   base: BaseCurrency
   participants: { id: string; name: string; joined: number }[]
   entries: { id: string; body: MoneyContent }[]
+  /** Entries every client counts nowhere and shows as invalid, each with the reason this client names. */
+  invalid?: { id: string; body: MoneyContent; problem: string }[]
   expected: {
     joinOrder: string[]
     entries: Record<string, { base: number; paid?: Record<string, number>; received?: Record<string, number>; shares?: Record<string, number> }>
@@ -58,6 +60,16 @@ describe.each(vectors.pots.map((p) => [p.name, p] as const))('the vector Pot "%s
     expect(asNumbers(entry.effect!.paid)).toEqual(want.paid ?? {})
     expect(asNumbers(entry.effect!.received)).toEqual(want.received ?? {})
     expect(asNumbers(entry.effect!.shares)).toEqual(want.shares ?? {})
+  })
+
+  it.each((pot.invalid ?? []).map((e) => [e.body.title ?? e.id, e] as const))('counts "%s" nowhere and names why', (_, e) => {
+    const withInvalid = buildLedger(potOf(pot, [...pot.entries, e]), pot.base)
+    const entry = withInvalid.entries.find((x) => x.id === e.id)!
+    expect(entry.status).toBe('invalid')
+    expect(entry.problem).toBe(e.problem)
+    expect(entry.effect).toBeNull()
+    expect(entryProblem(e.body)).toBe(e.problem) // the write path refuses it before sealing
+    expect(asNumbers(withInvalid.balances)).toEqual(pot.expected.balances)
   })
 
   it('balances to the vectors, and to zero in sum', () => {
@@ -106,6 +118,7 @@ const all: Split = { mode: 'equal', participants: [ANNA, BEN, CLEO] }
 const item = (label: string, amount: number, split: Split) => ({ label, amount, split })
 const equal = (...participants: string[]): Split => ({ mode: 'equal', participants })
 const percent = (...p: [string, number][]): Split => ({ mode: 'percent', percents: p.map(([participant, n]) => ({ participant, percent: n })) })
+const amounts = (...p: [string, number][]): Split => ({ mode: 'amounts', amounts: p.map(([participant, n]) => ({ participant, amount: n })) })
 const expense = (over: Partial<Extract<MoneyContent, { kind: 'expense' }>>): MoneyContent => ({
   kind: 'expense', title: 'Odd', date: '2026-07-09', category: 'other', currency: 'EUR', minorUnits: 2, rate: '1', amount: 900,
   payers: [{ participant: ANNA, amount: 900 }], allocation: { items: [], rest: all }, receipts: [], ...over,
@@ -151,6 +164,18 @@ const CASES: { name: string; bad: MoneyContent; good: MoneyContent; problem: str
     bad: expense({ allocation: { items: [], rest: percent([BEN, 10000], [CLEO, 1]) } }),
     good: expense({ allocation: { items: [], rest: percent([BEN, 9999], [CLEO, 1]) } }),
     problem: 'percent-unbalanced',
+  },
+  {
+    name: "an item's amounts beside the item's amount",
+    bad: expense({ allocation: { items: [item('A', 900, amounts([BEN, 500], [CLEO, 401]))] } }),
+    good: expense({ allocation: { items: [item('A', 900, amounts([BEN, 500], [CLEO, 400]))] } }),
+    problem: 'amounts-unbalanced',
+  },
+  {
+    name: "the rest's amounts beside the rest",
+    bad: expense({ allocation: { items: [item('A', 300, equal(BEN))], rest: amounts([ANNA, 300], [CLEO, 299]) } }),
+    good: expense({ allocation: { items: [item('A', 300, equal(BEN))], rest: amounts([ANNA, 300], [CLEO, 300]) } }),
+    problem: 'amounts-unbalanced',
   },
   {
     name: 'a payer named twice',
@@ -221,6 +246,13 @@ describe('an entry whose sums do not add up counts nowhere and is shown as inval
     expect(entryProblem(expense({ allocation: { items: [item('A', 900, equal(BEN))] } }))).toBeNull()
     const sealed = withEntry(expense({ allocation: { items: [item('A', 900, equal(BEN))], rest: equal(CLEO) } }))
     expect(asNumbers(sealed.entries.find((e) => e.id === ODD)!.effect!.shares)).toEqual({ [BEN]: 900 })
+  })
+
+  it('a rest split by amounts sealed at a zero rest splits nothing, so no sum holds it (control: above zero it must add up)', () => {
+    const sealed = expense({ allocation: { items: [item('A', 900, equal(BEN))], rest: amounts([CLEO, 1]) } })
+    expect(entryProblem(sealed)).toBeNull()
+    expect(asNumbers(withEntry(sealed).entries.find((e) => e.id === ODD)!.effect!.shares)).toEqual({ [BEN]: 900 })
+    expect(entryProblem(expense({ allocation: { items: [item('A', 899, equal(BEN))], rest: amounts([CLEO, 2]) } }))).toBe('amounts-unbalanced')
   })
 
   it('a rest split sealed at a zero rest is still held to the rules: a stranger in it makes the entry invalid', () => {

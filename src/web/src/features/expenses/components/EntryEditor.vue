@@ -22,6 +22,12 @@
 // Under an expense or a refund that adds up, **Shares** shows each person's share in the base currency (in a foreign
 // currency also what each payer gave, and the converted total): `sharesPreview` runs the ledger's `entryEffect` over the
 // content the save would seal, so the editor shows what is saved and holds no arithmetic of its own.
+//
+// What the save finds wrong is said in red at its field (owner 2026-11-03): under the title, the rate, the date, "Paid by"
+// (who paid how much), a transfer's two ends, or the split of the item or rest it is in (`entryForm.ts`' `ProblemAt`); the
+// message at the bottom keeps only what belongs to no field (a failed save, a blocked Pot, a receipt, a refusal of the write
+// path). What is checked as typed stays live: items above the amount, and a split's percents or amounts beside what they
+// must make (`EntrySplit`), each red where it is; the save then adds no second line for it.
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -38,7 +44,24 @@ import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import { namedParticipants, type PotLedger } from '../domain/ledger'
 import { PotWriteRefused, StaleRevisionError } from '../domain/potApi'
 import type { PotSession } from '../potSession'
-import { contentOf, emptyForm, emptyItem, formOf, payersTotal, problemKey, restLeft, sharesPreview, today, withCurrency, withKind, type EntryForm, type EntryKind, type FormProblem } from '../entryForm'
+import {
+  contentOf,
+  emptyForm,
+  emptyItem,
+  formOf,
+  itemAmount,
+  payersTotal,
+  problemKey,
+  restLeft,
+  sharesPreview,
+  today,
+  withCurrency,
+  withKind,
+  type EntryForm,
+  type EntryKind,
+  type FormProblem,
+  type ProblemAt,
+} from '../entryForm'
 import { crossRate, dayTable } from '../exchangeRates'
 import { formatMoney, knownCurrencies } from '../amounts'
 import { offeredPeople, personLabel, type MemberDirectory } from '../people'
@@ -104,7 +127,10 @@ function showCurrent(carryOwn = false) {
   shownRevision.value = entry.value?.revision
 }
 const busy = ref(false)
+/** What went wrong that belongs to no field: said at the bottom. */
 const error = ref<string | null>(null)
+/** What the last save found wrong with a field, and which: said in red there until the next save. */
+const fieldProblem = ref<{ problem: FormProblem; at: ProblemAt } | null>(null)
 const stale = ref(false)
 const showHistory = ref(false)
 const editable = computed(() => props.canWrite && !deleted.value && !busy.value)
@@ -122,6 +148,8 @@ const personOptions = computed(() => offered.value.map((p) => ({ label: personLa
 const label = (id: string) => personLabel(props.ledger, id, t, props.directory ?? null)
 
 const offeredIds = computed(() => offered.value.map((p) => p.id))
+/** The active people offered: "Split equally among all" puts each of them on a split. */
+const everyoneIds = computed(() => offered.value.filter((p) => p.active && !p.erased).map((p) => p.id))
 const kindOptions = computed(() => (['expense', 'refund', 'transfer'] as const).map((k) => ({ label: t(`expenses.kind.${k}`), value: k })))
 const own = computed(() => ownCategoryNames(props.meta))
 const categoryOptions = computed(() => {
@@ -209,6 +237,15 @@ const showRest = computed(() => rest.value > 0n || form.value.items.length === 0
 const money = (amount: bigint) => formatMoney(amount, form.value.currency, form.value.minorUnits, locale.value)
 
 const problemText = (p: FormProblem | PotWriteRefused['reason']) => t(`expenses.entry.problem.${problemKey(p)}`)
+
+/** Problems a live line already says where they are as they are typed (items above the amount, a split's percents or
+ *  amounts beside what they must make): the save adds no second line for them. */
+const SAID_LIVE: ReadonlySet<FormProblem> = new Set(['items-above-total', 'percent-unbalanced', 'amounts-unbalanced'])
+/** What the last save found wrong at [at], as its sentence, or null. */
+function errorAt(at: ProblemAt): string | null {
+  const found = fieldProblem.value
+  return found && found.at === at && !SAID_LIVE.has(found.problem) ? problemText(found.problem) : null
+}
 
 /** The other writer's version, after a stale save: the form shows it, and the next save goes on top. */
 watch(
@@ -311,9 +348,12 @@ function shownRevisionFacts(): { receipts: readonly string[]; createdAt: Date } 
 function save() {
   const result = contentOf(form.value, isParticipant)
   if ('problem' in result) {
-    error.value = problemText(result.problem)
+    // at its field where it has one; at the bottom only where it belongs to none
+    fieldProblem.value = result.at === undefined ? null : { problem: result.problem, at: result.at }
+    error.value = result.at === undefined ? problemText(result.problem) : null
     return
   }
+  fieldProblem.value = null
   stale.value = false
   void run(async () => {
     const noRoom = await uploadPicked()
@@ -361,24 +401,27 @@ function restore() {
 
       <label>
         {{ form.kind === 'transfer' ? t('expenses.entry.noteLabel') : t('expenses.entry.titleLabel') }}
-        <VeyqInput v-model="form.title" autocomplete="off" :disabled="!editable" />
+        <VeyqInput v-model="form.title" autocomplete="off" :invalid="!!errorAt('title')" :disabled="!editable" />
       </label>
+      <p v-if="errorAt('title')" class="veyq-form-error">{{ errorAt('title') }}</p>
       <div class="expenses-entry-row">
         <label v-if="form.kind === 'transfer'">
           {{ t('expenses.entry.amountLabel') }}
-          <VeyqInput v-model="form.amount" inputmode="decimal" autocomplete="off" :disabled="!editable" />
+          <VeyqInput v-model="form.amount" inputmode="decimal" autocomplete="off" :invalid="!!errorAt('amount')" :disabled="!editable" />
         </label>
         <label>
           {{ t('expenses.entry.currencyLabel') }}
           <VeyqSelect :model-value="form.currency" :options="currencyOptions" :disabled="!editable" @update:model-value="setCurrency" />
         </label>
       </div>
+      <p v-if="errorAt('amount')" class="veyq-form-error">{{ errorAt('amount') }}</p>
       <label v-if="foreign">
         {{ t('expenses.entry.rateLabel', { from: form.currency, to: base.currency }) }}
-        <VeyqInput v-model="form.rate" inputmode="decimal" autocomplete="off" :disabled="!editable" />
+        <VeyqInput v-model="form.rate" inputmode="decimal" autocomplete="off" :invalid="!!errorAt('rate')" :disabled="!editable" />
         <span v-if="rateNote" class="veyq-form-copy">{{ rateNote }}</span>
         <span class="veyq-form-copy">{{ t('expenses.entry.rateHint') }}</span>
       </label>
+      <p v-if="foreign && errorAt('rate')" class="veyq-form-error">{{ errorAt('rate') }}</p>
       <div class="expenses-entry-row">
         <label>
           {{ t('expenses.entry.dateLabel') }}
@@ -389,6 +432,7 @@ function restore() {
           <VeyqSelect v-model="form.category" :options="categoryOptions" :disabled="!editable" />
         </label>
       </div>
+      <p v-if="errorAt('date')" class="veyq-form-error">{{ errorAt('date') }}</p>
 
       <template v-if="form.kind === 'transfer'">
         <div class="expenses-entry-row">
@@ -401,6 +445,7 @@ function restore() {
             <VeyqSelect v-model="form.to" :options="personOptions" :disabled="!editable" />
           </label>
         </div>
+        <p v-if="errorAt('transfer')" class="veyq-form-error">{{ errorAt('transfer') }}</p>
       </template>
 
       <div v-else class="expenses-entry-columns">
@@ -427,6 +472,7 @@ function restore() {
             />
           </div>
           <VeyqButton v-if="editable && form.payers.length < offered.length" :label="t('expenses.entry.addPayer')" icon="plus" variant="secondary" appearance="text" size="small" @click="addPayer" />
+          <p v-if="errorAt('payers')" class="veyq-form-error">{{ errorAt('payers') }}</p>
           <p class="expenses-entry-total">
             <span>{{ t('expenses.entry.amountLabel') }}</span>
             <output>{{ money(total) }}</output>
@@ -450,7 +496,17 @@ function restore() {
                 @click="form.items.splice(i, 1)"
               />
             </div>
-            <EntrySplit v-model="item.split" :people="offeredIds" :label="label" :editable="editable" />
+            <EntrySplit
+              v-model="item.split"
+              :people="offeredIds"
+              :everyone="everyoneIds"
+              :label="label"
+              :editable="editable"
+              :part="itemAmount(form, item)"
+              :minor-units="form.minorUnits"
+              :money="money"
+              :error="errorAt(i)"
+            />
           </div>
           <VeyqButton v-if="editable" :label="t('expenses.entry.addItem')" icon="plus" variant="secondary" appearance="text" size="small" @click="addItem" />
           <div v-if="showRest" class="expenses-item expenses-rest">
@@ -458,9 +514,20 @@ function restore() {
               <span>{{ form.items.length ? t('expenses.entry.restLabel') : t('expenses.entry.wholeLabel') }}</span>
               <output>{{ money(rest > 0n ? rest : 0n) }}</output>
             </p>
-            <EntrySplit v-model="form.rest" :people="offeredIds" :label="label" :editable="editable" />
+            <EntrySplit
+              v-model="form.rest"
+              :people="offeredIds"
+              :everyone="everyoneIds"
+              :label="label"
+              :editable="editable"
+              :part="rest > 0n ? rest : 0n"
+              :minor-units="form.minorUnits"
+              :money="money"
+              :error="errorAt('rest')"
+            />
           </div>
-          <VeyqMessage v-if="rest < 0n" tone="warn">{{ t('expenses.entry.itemsOver', { amount: money(-rest) }) }}</VeyqMessage>
+          <p v-if="rest < 0n" class="veyq-form-error">{{ t('expenses.entry.itemsOver', { amount: money(-rest) }) }}</p>
+          <p v-if="errorAt('items')" class="veyq-form-error">{{ errorAt('items') }}</p>
         </fieldset>
       </div>
 

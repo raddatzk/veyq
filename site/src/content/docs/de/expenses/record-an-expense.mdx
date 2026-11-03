@@ -21,19 +21,23 @@ import Screenshot from '../../../../components/Screenshot.astro';
 2. Gib an, wer bezahlt hat, mit wie viel. Eine Rechnung kann mehrere Zahlende haben; der Betrag des Eintrags ist, was
    sie zusammen bezahlt haben. Bei einer Erstattung gib an, wer das Geld bekommen hat, mit wie viel.
 3. Gib an, wie aufgeteilt wird. Ohne weitere Angaben wird der ganze Betrag zu gleichen Teilen auf alle in der Kasse
-   verteilt, der übliche Fall. Um einen Teil der Rechnung anders aufzuteilen, füge Posten hinzu:
-   - Jeder **Posten** hat einen Namen, einen Betrag und eine eigene Aufteilung: **Zu gleichen Teilen** unter den
-     Personen, die du ankreuzt, **Nach Anteilen**, etwa zwei Anteile für ein Paar und einer für eine einzelne Person,
-     oder **Nach Prozent**, mit bis zu zwei Nachkommastellen und zusammen 100 %.
-   - Was die Rechnung über die Posten hinaus enthält, etwa ein Trinkgeld oder was alle geteilt haben, ist **der Rest**.
-     Er steht unter den Posten und hat eine eigene Aufteilung.
-   - Um jeder Person einen genauen Betrag zuzuordnen, füge je Person einen Posten hinzu.
+   verteilt, der übliche Fall: Der Editor zeigt das als eine Zeile, etwa „Alle 3 Personen zu gleichen Teilen“. Um anders
+   aufzuteilen, wähle **Anpassen**:
+   - **Nach Anteilen**, etwa zwei Anteile für ein Paar und einer für eine einzelne Person; **Auf alle gleich verteilen**
+     gibt allen wieder einen Anteil. **Nach Prozent**, mit bis zu zwei Nachkommastellen und zusammen 100 %. **Nach
+     Betrag**, ein genauer Betrag je Person, zusammen so viel, wie aufgeteilt wird.
+   - Jede Person ist eine Zeile: Wähle, wer es ist, gib ihren Wert ein und nimm heraus, wer nicht dabei ist. **Weitere
+     Person hinzufügen** fügt eine Zeile hinzu.
+   - Um einen Teil der Rechnung anders aufzuteilen, füge **Posten** hinzu. Jeder hat einen Namen, einen Betrag und eine
+     eigene Aufteilung. Was die Rechnung über die Posten hinaus enthält, etwa ein Trinkgeld oder was alle geteilt haben,
+     ist **der Rest**, mit einer eigenen Aufteilung.
 4. Speichere.
 
 <Screenshot id="expenses-entry-editor" shows="Der Eintragseditor für eine Ausgabe: Titel, Datum, Währung und Kategorie oben; links die zahlende Person mit ihrem Betrag und darunter die Summe; rechts zwei Posten mit ihrer Aufteilung und der Rest zu gleichen Teilen" />
 
 Ein Eintrag, der nicht aufgeht, lässt sich nicht speichern, etwa wenn die Posten mehr ausmachen als der Betrag (der
-Editor sagt, um wie viel) oder die Prozente einer Aufteilung nicht 100 % ergeben. Der Editor sagt, was nicht stimmt.
+Editor sagt, um wie viel) oder die Prozente oder Beträge einer Aufteilung nicht ergeben, was sie müssen. Der Editor sagt
+in Rot dort, wo es ist, was nicht stimmt.
 Sobald der Eintrag aufgeht, zeigt **Anteile** darunter, was jeder Anteil in der Basiswährung der Kasse ausmacht, genau so,
 wie er gespeichert wird.
 
