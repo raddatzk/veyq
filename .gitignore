@@ -2,7 +2,7 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=git,intellij+all,vue,vuejs,gradle,kotlin,macos,windows,linux
 
 # Local dev principal (cr-0075): throwaway creds + derived key material for a local instance, filled by
-# `npm run bootstrap:user`. Never committed; `.run/.env.example` is the tracked template.
+# `pnpm run bootstrap:user`. Never committed; `.run/.env.example` is the tracked template.
 .run/.env
 
 ### Git ###
@@ -194,7 +194,7 @@ Temporary Items
 
 node_modules/
 dist/
-# The admin CLI bundle (ADR 0065) — built by `npm run build:cli`, next to but not inside `dist/`,
+# The admin CLI bundle (ADR 0065) — built by `pnpm run build:cli`, next to but not inside `dist/`,
 # because it is a Node program and not part of the static site nginx serves.
 dist-cli/
 npm-debug.log

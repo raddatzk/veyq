@@ -1,7 +1,7 @@
 // One fact, stated once: Argon2id at production params (`v1.ARGON` — t=3, m=32 MiB) costs ~0.8s per
 // derivation, and a test running several of them under vitest's parallel workers exceeds the 5000ms default
 // `testTimeout` on a loaded machine. Measured 2026-08-04 on a 14-core Mac: 823ms/derivation unloaded, ~1.2s
-// under contention — so `npm run check` failed intermittently, never on the same set of tests twice, while a
+// under contention — so `pnpm run check` failed intermittently, never on the same set of tests twice, while a
 // re-run with a raised timeout was fully green. A timing problem, not a correctness one.
 //
 // Two remedies, and WHICH ONE APPLIES IS DECIDED BY WHO OWNS THE DERIVATION — never by which test failed today:

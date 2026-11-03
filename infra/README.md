@@ -10,22 +10,22 @@ for the `veyq-tools` image only the chart runs), built from the repo root.
 ## The launcher: `./gradlew <surface>:<verb>`
 
 The repo root is a Gradle build whose only job is to **trigger** what this file and the surfaces' own docs
-describe — the compose lines below, the npm scripts, the backend's own `./gradlew` — from a terminal or from
+describe — the compose lines below, the package scripts, the backend's own `./gradlew` — from a terminal or from
 IntelliJ's Gradle tool window (link the root `settings.gradle.kts` as a Gradle project beside `src/backend/`, which
 stays its own). It replaces the IntelliJ run configurations `.run/` used to carry. It is not an orchestrator: it
 holds no surface's build, and no task aggregates their checks — each still proves itself with its own
-`npm run check` / `./gradlew check` (the tasks live in `launcher/<surface>/build.gradle.kts`; no task is named
+`pnpm run check` / `./gradlew check` (the tasks live in `launcher/<surface>/build.gradle.kts`; no task is named
 `check`, `test` or `clean`, so a bare `./gradlew check` aggregates nothing).
 
 | Task | Runs |
 |---|---|
 | `infra:up` · `infra:down` · `infra:wipe` | the compose lines below with `--profile s3 --profile mail` (`up -d`, then waiting on MariaDB's healthcheck) · `down` · `down -v` — **wipe deletes the dev database and every blob** |
-| `web:bootstrap` | `npm install` in `src/web/` — the workspace install, and its `prepare` regenerates web's API client |
-| `admin:bootstrap` | `npm install` in `src/admin-web/` — the same workspace install, and its `prepare` regenerates admin-web's API client |
-| `site:bootstrap` | `npm install` in `site/` (outside the workspace) |
+| `web:bootstrap` | `pnpm install` in `src/web/` — the workspace install — then `pnpm run generate:api`, which regenerates web's API client (the install's `prepare` does so only when the install changed something) |
+| `admin:bootstrap` | `pnpm install` in `src/admin-web/` — the same workspace install — then `pnpm run generate:api` for admin-web's API client |
+| `site:bootstrap` | `pnpm install` in `site/` (outside the workspace) |
 | `backend:run` · `web:run` · `admin:run` · `site:run` | `quarkusDev` · Vite on 8081 · Vite on 5174 · Astro on 4321 |
-| `backend:seed` | `npm run bootstrap:user` in `src/web/` ([§ Seeding](#seeding-the-local-dev-principal)) |
-| `backend:build` · `web:build` · `admin:build` · `site:build` | `quarkusBuild` (no tests) · `npm run build` in each |
+| `backend:seed` | `pnpm run bootstrap:user` in `src/web/` ([§ Seeding](#seeding-the-local-dev-principal)) |
+| `backend:build` · `web:build` · `admin:build` · `site:build` | `quarkusBuild` (no tests) · `pnpm run build` in each |
 | `backend:image` · `admin:image` | `docker build` of `src/backend/Dockerfile` (the app image, web's SPA baked in) · of `src/admin-web/Dockerfile`, context the repo root as CI builds them; both tagged `local`, a tag no publish emits, so it is never one to deploy |
 
 A cold start is `infra:up` → `backend:run` → `web:run` (and `admin:run` for first-run setup) → `backend:seed`, then
@@ -39,7 +39,7 @@ is given (`backend:run web:run --parallel` ran both, measured).
 
 `./gradlew tasks --all --group veyq` lists every task with its description; without `--all`, Gradle folds the
 same verb across projects into one row (`run`, `build`, … with one surface's description), so it is no task list.
-A task finds `npm`, `node` and `docker` in `veyq.toolPath` (`local.properties` or `-P`, a PATH-style list), then the
+A task finds `pnpm`, `node` and `docker` in `veyq.toolPath` (`local.properties` or `-P`, a PATH-style list), then the
 Gradle daemon's `PATH`, then `/opt/homebrew/bin` and `/usr/local/bin`, and hands the process that list as its `PATH`: a
 daemon IntelliJ starts has only macOS' minimal `PATH`, not the shell environment IntelliJ loads (`settings.gradle.kts`
 says why). A command found nowhere fails naming the list it searched. IntelliJ's project-interpreter setting, which the
@@ -171,7 +171,7 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
   (`GET http://localhost:18025/api/v1/messages`). **The host must be a dotted name** — `TenantMailSettingsUpdate.host`
   is pinned to `^([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$`, so a bare `localhost` is a `400`, while any `*.localhost`
   resolves to loopback and passes. Leave `username` unset unless you want to exercise SMTP AUTH: it is what keys
-  the sealed-password path, so an auth-less send needs neither a stored password nor an openable KEK. `npm run
+  the sealed-password path, so an auth-less send needs neither a stored password nor an openable KEK. `pnpm run
   bootstrap:user` writes exactly these settings for the dev tenant, so a hand-seeded instance can invite members
   out of the box. Sealing the SMTP password needs the **config-secret KEK**
   ([ADR 0050](../docs/decisions/0050-operator-config-secret-encryption.md)): the server **generates
@@ -318,7 +318,7 @@ This file keeps the development stack and how a release is cut.
 
 ## Seeding the local dev principal
 
-`npm run bootstrap:user` (`./gradlew backend:seed`) births one user who is Server Owner **and** owner of a
+`pnpm run bootstrap:user` (`./gradlew backend:seed`) births one user who is Server Owner **and** owner of a
 `*.localhost` tenant with a personal scope, over the real API, and writes its key material back into `.run/.env`
 ([`src/web/CLAUDE.md`](../src/web/CLAUDE.md) § Prove your work owns the inputs and the cold start):
 

@@ -9,7 +9,7 @@ interrupted or exits must still see the restore — the bite is removing the `fi
 every one of those red.
 
 The process-tree cases (H1b) run a real seeder stand-in through `run_child`: a Python child that starts a grandchild
-and waits, as `npx` -> `tsx` -> node does. The recorder notes, at the moment of the restore, whether the grandchild is
+and waits, as `pnpm exec` -> `tsx` -> node does. The recorder notes, at the moment of the restore, whether the grandchild is
 still alive — it must not be, on a SIGTERM (a real one, to this process, under `main`'s handler), on a grandchild that
 ignores SIGTERM (the SIGKILL after the grace), and on a seeder that exits leaving one behind. The bite is `run_child`
 on `subprocess.run` again, which kills only the direct child: all three turn red.

@@ -1,0 +1,50 @@
+# The pnpm workspace (root package.json `//` says why it exists: one @veyq/crypto on disk, ADR 0065). Members are
+# listed, never globbed, so a new package is a decision. site/ is deliberately NOT a member (ADR 0087): it has its
+# own pnpm-workspace.yaml and lockfile.
+packages:
+  - src/packages/crypto
+  - src/web
+  - src/admin-web
+  - tests/e2e
+
+# pnpm reads `overrides` only from the workspace root, so these hold for every member.
+#
+# qs: @stryker-mutator/core@9 -> typed-rest-client@~2.3.0 (2.3.1) pins qs at EXACTLY 6.15.1. That exact pin — not a
+# range — is why an audit fix cannot resolve it without forcing. The floor has moved with the advisories: 6.15.1
+# carried GHSA-q8mj-m7cp-5q26 (qs.stringify DoS, fixed 6.15.2); then GHSA-x5fp-wj9c-mxmx (array-limit bypass,
+# <=6.15.3) and GHSA-4mjr-xmp4-gh2g (isBuffer DoS, <6.16.0) made 6.16.0 the first clean one (inbox #403); then
+# GHSA-6pq8-jhm2-2vcw (stringify arrayFormat 'comma' TypeError DoS, <=6.16.0) made it 6.16.1 (inbox #805,
+# 2026-10-30). The vulnerable path is unreachable here (typed-rest-client only serves Stryker's dashboard reporter,
+# which stryker.config.mjs does not enable), but a knowingly-vulnerable dependency is not something we keep. Drop this
+# override once Stryker depends on a typed-rest-client that requires qs >= 6.16.1 (none does yet, measured 2026-10-30:
+# Stryker 9.6.1 and 10.1.1 still pin typed-rest-client ~2.3.0, and even typed-rest-client 3.1.2 asks only qs ^6.16.0,
+# which still admits the vulnerable 6.16.0).
+#
+# basic-ftp (added 2026-10-30, inbox #805): @openapitools/openapi-generator-cli@2.41.0 and 2.42.0 pin proxy-agent at
+# EXACTLY 8.0.2 -> pac-proxy-agent 9.1.0 -> get-uri EXACTLY 8.0.1 (the latest) -> basic-ftp ^5.3.1, and every 5.x
+# carries GHSA-c475-qrg2-pj4r (Client.list() directory-listing parser quadratic-time DoS, <=6.2.0, fixed 6.2.1) — so
+# only an override reaches the fix. It is a major: basic-ftp 6.0.0 refuses a separate transfer host by default (FTP
+# bounce protection); every Client call get-uri makes (access, lastMod, list, downloadTo, close) keeps its 5.x
+# signature, and the path is unreachable here anyway (get-uri's ftp: scheme serves a PAC file fetched over ftp://,
+# which no generator run configures). Drop this override once get-uri depends on basic-ftp >= 6.2.1 and the
+# generator's proxy-agent pin reaches that get-uri.
+overrides:
+  basic-ftp: ^6.2.1
+  qs: ^6.16.1
+
+# Which dependencies may run their own install scripts. pnpm runs none it is not told to, and refuses an install
+# that meets an undecided one (ERR_PNPM_IGNORED_BUILDS) — so a new dependency with a script is a decision here, not a
+# silent `postinstall`. Every one below is refused, because none is needed (measured 2026-11-03: every surface's
+# check and the admin image build green with all four refused):
+#   - @openapitools/openapi-generator-cli: `opencollective || exit 0`, a donation banner. The generator JAR is
+#     fetched and checked by generate:api (scripts/verify_openapi_generator_jar.mjs), never by this script.
+#   - core-js: a donation banner (`node -e "try{require('./postinstall')}catch(e){}"`).
+#   - esbuild: `node install.js` checks the platform binary; the binary itself is the optional
+#     @esbuild/<platform> package, which esbuild finds without it.
+#   - exifreader: `node bin/build.js --only-with-config`, a custom build that runs only with a config in the
+#     dependant's package.json, which src/web/ does not carry.
+allowBuilds:
+  '@openapitools/openapi-generator-cli': false
+  core-js: false
+  esbuild: false
+  exifreader: false

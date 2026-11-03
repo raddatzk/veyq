@@ -10,7 +10,7 @@ re-implements GitHub's runner, and its arm64, cache and registry gaps would surf
 **What it does.** It reads the workflow from the commit it runs (`--rev`, default `HEAD`; uncommitted edits are not
 in the run, as they are in no CI run), expands each job's matrix and keeps the legs of this host's architecture,
 resolves `needs`, and runs every job the host can run — independent jobs in parallel (`--max-parallel`), each in
-its own clone of the commit (as each CI job has its own checkout: two jobs' `npm ci` or Gradle builds in one tree
+its own clone of the commit (as each CI job has its own checkout: two jobs' `pnpm install` or Gradle builds in one tree
 would trample each other), each under its `timeout-minutes`. It runs the `run:` steps with the host's own Java,
 Node, Python and Docker, evaluating the GitHub expressions in them (`github`, `runner`, `env`, `matrix`, `needs`,
 `steps`, `inputs`; the status functions) against a simulated `push` (or `--event pull_request`) to the current

@@ -102,12 +102,12 @@ in the job's own steps, which the CI log times.
 the instance's home (`home/`: `.env` with every secret of an instance that no longer exists, `state.json`, the
 override file, `releases/<release>/`), `pebble.env`, Pebble's root, `install.log`, `compose.log`, `ps.json`, and the
 browser's: `stack.json`, `browser.log`, `junit.xml`, `report/` (Playwright's HTML report), `playwright/` (a trace per
-test, or per failed test under `CI=true`; `npx playwright show-trace <zip>`), `instance.json` (the owner's credentials and Secret Key, the invite link);
+test, or per failed test under `CI=true`; `pnpm exec playwright show-trace <zip>`), `instance.json` (the owner's credentials and Secret Key, the invite link);
 and the sweeps': `canaries-<spec>.json` and their union `swept-canaries.json`, `database-veyq.sql` (the dump the
 database sweep read), `container-<service>.log`, `mariadb-general.log` (the window's statements), and a mirror of the
 bucket only where the store sweep found something.
 
-**Not a `validate_*` guard.** It needs Docker, two images, host ports 80 and 443 and the root `npm ci`, so it
+**Not a `validate_*` guard.** It needs Docker, two images, host ports 80 and 443 and the root `pnpm install`, so it
 cannot join the buildless trust-chain glob; lane L1 calls it directly. Nothing is verified: the images are local
 builds, so `install` runs `--unsigned-local` and says so on every line — a published candidate's signatures are
 `veyqctl verify`'s, which this lane does not exercise.
@@ -169,7 +169,8 @@ OVERLAY = repo_layout.E2E_STACK_DIR / "docker-compose.e2e.yml"
 RELEASE_ASSETS = ROOT / "scripts" / "release_assets.py"
 RUN_ROOT = ROOT / ".e2e-stack-out"
 E2E_PACKAGE = repo_layout.E2E_DIR / "package.json"
-INSTALLED_PLAYWRIGHT = ROOT / "node_modules" / "@playwright" / "test" / "package.json"
+# pnpm links a package only into the node_modules of the workspace member that declares it — tests/e2e/ here.
+INSTALLED_PLAYWRIGHT = repo_layout.E2E_DIR / "node_modules" / "@playwright" / "test" / "package.json"
 # What the browser container is told it may reach (tests/e2e/src/stack.ts). Paths are the container's: the run directory
 # is mounted at /out.
 ADMIN_UPSTREAM = "admin:8080"
@@ -308,7 +309,7 @@ def browser_pins() -> None:
     """The browser is baked into the pinned Playwright image; the library that drives it is the host's install."""
     pinned = json.loads(E2E_PACKAGE.read_text(encoding="utf-8"))["devDependencies"]["@playwright/test"]
     if not INSTALLED_PLAYWRIGHT.is_file():
-        raise Red("@playwright/test is not installed — run `python3 scripts/npm_ci_no_deprecated.py` at the repository "
+        raise Red("@playwright/test is not installed — run `python3 scripts/pnpm_install_no_deprecated.py` at the repository "
                   "root first (the browser container installs nothing; it mounts that install read-only)")
     installed = json.loads(INSTALLED_PLAYWRIGHT.read_text(encoding="utf-8"))["version"]
     image = overlay_image("browser")

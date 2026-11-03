@@ -72,7 +72,7 @@ gaps:
     anything, and never at the notices' cost), Server → Mail (`InstanceMailPanel.test.ts`: the write-only password, the
     code entry and its refusal, the key state), the nav (`AdminConsoleView.test.ts`) and `veyq-admin release` /
     `release check on|off` (`cli.test.ts`) live in `admin-web` (ADR 0065); their suites exist and pass under
-    `npm run check`, and wait until admin-web's CI job has executed (ADR 0040), as uc.admin.switch-capabilities' do.
+    `pnpm run check`, and wait until admin-web's CI job has executed (ADR 0040), as uc.admin.switch-capabilities' do.
   web: "No web surface: the Server Owner's client is admin-web (ADR 0065), where this use-case lives."
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/instance/instance-mail.spec.ts`) drives

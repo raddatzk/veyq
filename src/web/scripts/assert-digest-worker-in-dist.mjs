@@ -15,7 +15,7 @@
 // (`worker-src 'self'`, which `verify:csp` asserts the emitted policy carries).
 //
 // Bite (snapshot-and-restore, never `git checkout`): split the constructor in digestWorker.ts into
-// `const url = new URL(…)` + `new Worker(url, …)`, run `npm run build`, and this goes RED on (i); restore, and it goes green.
+// `const url = new URL(…)` + `new Worker(url, …)`, run `pnpm run build`, and this goes RED on (i); restore, and it goes green.
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'

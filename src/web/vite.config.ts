@@ -5,13 +5,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Plugin } from 'vite'
 // `vitest/config`'s defineConfig extends Vite's with the `test` block (setupFiles below) while staying a valid
-// Vite config for `npm run dev`/`build`.
+// Vite config for `pnpm run dev`/`build`.
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { buildCsp, CSP_POLICY_FILE } from './src/shared/security/csp.ts'
 import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIGIN } from './src/shared/state/mapDefaults.ts'
 
-// Vite dev-server config. `npm run dev` works with the defaults below; the env vars only matter for special
+// Vite dev-server config. `pnpm run dev` works with the defaults below; the env vars only matter for special
 // setups (the IntelliJ run configs, the media live-smoke). In production the backend's app shell serves the built
 // app (ADR 0069), so the dev proxy does not apply there — but the CSP (below) travels with the build, so it does.
 
@@ -36,7 +36,7 @@ const smokeHost = process.env.VEYQ_SMOKE_HOST
 // boot, extends with the store origin (only known at runtime) and sends on every shell response. A <meta> would
 // intersect with that header and block the store on its own origin again, so the build injects none — and the
 // backend refuses to boot a shell whose index.html carries one, or whose policy file is missing (the file name is
-// `AppShell.POLICY_FILE` there; `npm run verify:csp` checks both properties of dist before an image is built).
+// `AppShell.POLICY_FILE` there; `pnpm run verify:csp` checks both properties of dist before an image is built).
 // The built policy names no outside service: the map tiles, the geocoder, the breached-password check and the exchange
 // rates are the Server Owner's settings, and the backend appends the origins of those in use per response (ADR 0088
 // decision 7). The dev server serves the app itself, so its header allows the reference providers a new instance is
@@ -204,7 +204,7 @@ function devSeedCredentialsPlugin(): Plugin {
       server.middlewares.use((req, res, next) => {
         if ((req.url ?? '').split('?')[0] !== '/__dev/seed-credentials') return next()
         try {
-          // `.run/.env` lives at the repo root, written by `npm run bootstrap:user`.
+          // `.run/.env` lives at the repo root, written by `pnpm run bootstrap:user`.
           const raw = readFileSync(envFile, 'utf8')
           const val = (key: string) => {
             const line = raw.split('\n').find((l) => l.startsWith(key + '='))

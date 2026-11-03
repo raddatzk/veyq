@@ -135,7 +135,7 @@ caught inside the refine that wrote 0045, and its corrections are in the doc):
 | CI shape: PR, path-gated, report-before-gate | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 4 + `mutation.yml`, `mutation-backend.yml` |
 | the total-vs-per-glob meta-check asymmetry | `scripts/mutation_meta_check.py` + `scripts/mutation_meta_check_backend.py` docstrings |
 | KAT-beats-mutation finding; blind spots | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Context + Consequences |
-| operational: `npm run mutation` PR-only; in-place footgun | [`src/web/CLAUDE.md`](../../src/web/CLAUDE.md) |
+| operational: `pnpm run mutation` PR-only; in-place footgun | [`src/web/CLAUDE.md`](../../src/web/CLAUDE.md) |
 
 The residual non-restate value of either — a trigger at the work's start and one ordered checklist — rests on an
 **unmeasured** failure (a session skipping the canonical entry), so it stays deferred until such a failure is

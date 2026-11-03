@@ -24,7 +24,7 @@ sealed interface AppShell {
          * carries a CSP `<meta>`, refuses to start rather than boot quietly. The first would serve an
          * operator-blind client with no backstop at all; the second would intersect with the header and block
          * every store fetch on its own origin again (the Kubernetes target), which no CI run would notice.
-         * `npm run verify:csp` checks the same two properties of `dist` before an image is built, so this is
+         * `pnpm run verify:csp` checks the same two properties of `dist` before an image is built, so this is
          * the last line, not the first.
          */
         fun from(indexHtml: ByteArray?, policy: String?, storeOrigin: String?): AppShell {

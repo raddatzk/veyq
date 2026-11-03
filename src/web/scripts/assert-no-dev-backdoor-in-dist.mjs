@@ -4,7 +4,7 @@
 // (tree-shaken from prod). This proves it rather than trusting inspection, because it guards a security backdoor.
 //
 // Bite (snapshot-and-restore, never `git checkout`): remove the `if (import.meta.env.DEV)` gate in
-// src/app/devAutoUnlock.ts, `npm run build`, and this goes RED; restore, and it goes green.
+// src/app/devAutoUnlock.ts, `pnpm run build`, and this goes RED; restore, and it goes green.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'

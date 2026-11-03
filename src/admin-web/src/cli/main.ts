@@ -1,7 +1,7 @@
 // The bundle's entry point, and nothing else — `cli.ts` holds the logic and stays importable by its tests
 // without running anything. `process.exitCode` rather than `process.exit()`: stdout may still be draining.
 //
-// This file is what `npm run build:cli` hands to esbuild, so the flags it is built with belong here:
+// This file is what `pnpm run build:cli` hands to esbuild, so the flags it is built with belong here:
 //   --platform=node --format=esm  ESM because this file uses top-level await, and because `@veyq/crypto`'s
 //                                 worker module carries an `import.meta.url` that CJS cannot express. The
 //                                 output lands in `src/admin-web/dist-cli/`, whose nearest package.json is this

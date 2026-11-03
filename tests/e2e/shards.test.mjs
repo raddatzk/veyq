@@ -13,7 +13,7 @@
 //      domain whole, and nothing of another domain.
 // The checks are a pure function over what the listing and the files say (`problems`), bitten below with a spec outside
 // a domain folder, a spec in two projects, a folder missing from the matrix and a matrix leg with no folder.
-// `npm run check` runs this file, and `ci.yml`'s frontend job runs that on every commit.
+// `pnpm run check` runs this file, and `ci.yml`'s frontend job runs that on every commit.
 //
 // Its limit: it proves the split, not that a feature spec reads nothing another feature spec left — that is
 // playwright.config.ts's rule for the domains, kept by each spec, and a breach shows only as a red leg.
@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = fileURLToPath(new URL('.', import.meta.url))
 const FEATURES = join(ROOT, 'tests', 'features')
 const CI = fileURLToPath(new URL('../../.github/workflows/ci.yml', import.meta.url))
-const CLI = fileURLToPath(new URL('../../node_modules/@playwright/test/cli.js', import.meta.url))
+const CLI = fileURLToPath(new URL('./node_modules/@playwright/test/cli.js', import.meta.url))
 const WHOLE = ['setup', 'scenarios', 'instance']
 const INSTANCE = 'instance'
 

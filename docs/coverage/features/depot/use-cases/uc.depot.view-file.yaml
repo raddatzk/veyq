@@ -68,7 +68,7 @@ acceptanceCriteria:
       web: { unit: [src/shared/pdf/pdfEngine.real.test.ts, src/features/depot/components/FileViewer.pdf.test.ts, src/shared/security/csp.test.ts] }
     gaps:
       - surface: web
-        reason: The lazy chunk, the worker, the absence of eval and WebAssembly and the runtime data are pinned by the build check `npm run verify:pdf-worker` (src/web/scripts/assert-pdf-worker-in-dist.mjs, in `npm run check`), which is not a test file and so no coverage ref; and no check proves that a browser starts the worker - that was observed once by hand (a local server sending the built header), not in CI.
+        reason: The lazy chunk, the worker, the absence of eval and WebAssembly and the runtime data are pinned by the build check `pnpm run verify:pdf-worker` (src/web/scripts/assert-pdf-worker-in-dist.mjs, in `pnpm run check`), which is not a test file and so no coverage ref; and no check proves that a browser starts the worker - that was observed once by hand (a local server sending the built header), not in CI.
   - id: reading-starts-with-the-page-and-stops-with-it
     text: The file is read when its page opens (not for a list row), with a busy state and a Stop; unmounting or moving to another file aborts the read in flight and drops a late result; a failed read is an error with Try again, never an unhandled rejection.
     coverage:

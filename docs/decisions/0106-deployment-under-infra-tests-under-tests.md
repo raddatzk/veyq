@@ -9,7 +9,7 @@
 
 The repository root had grown to seventeen peers that are not peers: two deployment targets in three places, the app
 image's `Dockerfile` loose at the root, three test harnesses in two places, and the code surfaces beside all of them. A
-move touches every reader of a path — Dockerfiles, Compose mounts, workflows, the npm workspace, guards, coverage, ADRs,
+move touches every reader of a path — Dockerfiles, Compose mounts, workflows, the package workspace, guards, coverage, ADRs,
 the published site — and conflicts with every branch that touches the moved files. The layout itself is the root
 `CLAUDE.md` § Repository shape and `scripts/repo_layout.py`; this ADR keeps why it is so.
 

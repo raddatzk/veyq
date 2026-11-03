@@ -11,7 +11,7 @@ name: Mutation (crypto)
 # no source change) is caught here, which a file-level git-diff scope would have missed.
 #
 # Not in ci.yml's `frontend` job: mutation is a heavier, path-gated job, kept off every push's critical path
-# (CLAUDE.md / ADR 0045 §4 — `npm run check` stays lint+typecheck+unit+build).
+# (CLAUDE.md / ADR 0045 §4 — `pnpm run check` stays lint+typecheck+unit+build).
 
 on:
   pull_request:
@@ -25,7 +25,7 @@ on:
       - "src/web/stryker.mutate.json"
       - "src/web/package.json"
       - "package.json"
-      - "package-lock.json"
+      - "pnpm-lock.yaml"
       - "scripts/mutation_meta_check.py"
       - "scripts/mutation_meta_check_selftest.py"
       - ".github/workflows/mutation.yml"
@@ -42,7 +42,7 @@ on:
       - "src/web/stryker.mutate.json"
       - "src/web/package.json"
       - "package.json"
-      - "package-lock.json"
+      - "pnpm-lock.yaml"
       - "scripts/mutation_meta_check.py"
       - "scripts/mutation_meta_check_selftest.py"
       - ".github/workflows/mutation.yml"
@@ -72,8 +72,13 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
+
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
+      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
+      # switches itself to the pinned version.
+      - name: Install pnpm
+        if: runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.16.1
 
       # The incremental report is the CI cache (ADR 0045 §4): Stryker re-tests only mutants whose code or
       # covering tests changed since the cached run. Restored best-effort (restore-keys), a fresh copy saved
@@ -89,11 +94,11 @@ jobs:
             stryker-incremental-
 
       - name: Install dependencies
-        # From the workspace root: one `npm ci` links `@veyq/crypto` into src/web/ and runs each workspace's
+        # From the workspace root: one `pnpm install` links `@veyq/crypto` into src/web/ and runs each workspace's
         # `prepare` -> `generate:api`, so the generated API client the full dry-run suite imports exists
         # (mirrors ci.yml's frontend job). openapi-generator needs Java, pre-installed on ubuntu-latest.
-        # The registry half (other platforms' bindings) is asked once per commit, by ci.yml's `frontend` job.
-        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+        # The registry half is asked once per commit, by ci.yml's `frontend` job.
+        run: python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
 
       # TWO gates, not one, since the suite was split across packages (cr-admin-web-extraction, ADR 0065).
       # Stryker's test runner is the project's own vitest and neither project collects the other's suites, so
@@ -103,11 +108,11 @@ jobs:
         working-directory: src/packages/crypto
         # Full scope, incremental-accelerated. stryker.config.mjs breaks the build below the calibrated break
         # threshold — that is the gate.
-        run: npm run mutation
+        run: pnpm run mutation
 
       - name: Run web crypto-logic mutation gate (the six files that stayed in src/web/)
         working-directory: src/web
-        run: npm run mutation
+        run: pnpm run mutation
 
       - name: Meta-check selftest (the total-vs-per-glob asymmetry is as documented)
         # Pins the two meta-checks' asymmetry (inbox #109) with fabricated fixtures — no real report needed, so

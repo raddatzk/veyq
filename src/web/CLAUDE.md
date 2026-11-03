@@ -4,14 +4,14 @@ The web client. Loaded in addition to the root `CLAUDE.md` when working here. Al
 here; the server is blind.
 
 ## Prove your work
-- `npm run check` (lint + typecheck + test + build).
-- API client is **generated** and **not tracked** (gitignored, mirrors the backend) — `npm run generate:api`
+- `pnpm run check` (lint + typecheck + test + build).
+- API client is **generated** and **not tracked** (gitignored, mirrors the backend) — `pnpm run generate:api`
   from the specs under `../../contracts/api/` (core's at its top level, the Memories ones in `memories/`, one client
   directory per spec) produces it (and runs automatically on install via `prepare`). Never
   hand-write the client.
-- **`npm run check` does NOT regenerate the client — so on its own it proves nothing about a contract change.**
+- **`pnpm run check` does NOT regenerate the client — so on its own it proves nothing about a contract change.**
   It runs lint/typecheck/test/build over whatever `src/api/generated/` already holds, which is the *previous*
-  spec. Change `contracts/api/` and a green `check` is a green run against stale code: run **`npm run
+  spec. Change `contracts/api/` and a green `check` is a green run against stale code: run **`pnpm run
   generate:api` first**, then `check`. **Authoring the change is not the only trigger — any time the spec moves
   under you, it counts**: merging a contracts-phase CR, switching branches, or checking out a fresh worktree
   (each worktree has its own untracked `src/api/generated/`). Merging `cr-favorites-two-objects` into a main
@@ -56,7 +56,7 @@ here; the server is blind.
   either way, so no red announces it. After a move, prove the new mocks bite by sabotaging the *real* module
   (make the export throw): every suite that mocks it must stay green, and the module's own test must go red.
 - **Dev credentials come from the seeder — never hardcode or guess them.**
-  - **`npm run bootstrap:user` (the local principal).** Inputs live in **`<repo-root>/.run/.env`**
+  - **`pnpm run bootstrap:user` (the local principal).** Inputs live in **`<repo-root>/.run/.env`**
     (gitignored — note it is at the **repo root**, not `src/web/.run/`; template `<repo-root>/.run/.env.example`):
     `VEYQ_EMAIL` / `VEYQ_PASSWORD` / `VEYQ_TENANT` / `VEYQ_TENANT_DOMAIN`, and the seeder writes back
     `VEYQ_SECRET_KEY` + `VEYQ_WRAPPED_MASTERKEY`. It creates ONE user that is Server Owner AND tenant owner
@@ -64,7 +64,7 @@ here; the server is blind.
     from the repo root) — the tenant is **`veyq.localhost`** (e.g. "Familie Raddatz"), so **live-verify browses
     `veyq.localhost:<viteport>`** and logs in with the `.run/.env` creds/secret key. **Cold start (fresh/empty
     DB):** the `.run/.env` key material is stale after a `docker compose … down -v` (it was written against the
-    old DB), so **re-run `npm run bootstrap:user`** against the fresh backend first — it reseeds
+    old DB), so **re-run `pnpm run bootstrap:user`** against the fresh backend first — it reseeds
     `veyq.localhost`, points the tenant at Mailpit so member invites can actually be sent, and rewrites
     `WRAPPED_MASTERKEY` — then browse `veyq.localhost:<viteport>`. **`SECRET_KEY` is re-used, not re-minted**,
     when `.run/.env` already holds a usable one, so the kit you copied into a browser survives a re-seed
@@ -73,7 +73,7 @@ here; the server is blind.
     identity) — not a crypto bug; re-seed a fresh instance.
     - **It is an API client like any other** and calls the backend through the generated `…Api` clients, built in
       `scripts/apiTransport.mts` — the one file under `scripts/` that may use `fetch` or `node:http` (lint:
-      `veyq/seeders-use-the-generated-client`), and `npm run typecheck` covers `scripts/` (`tsconfig.scripts.json`).
+      `veyq/seeders-use-the-generated-client`), and `pnpm run typecheck` covers `scripts/` (`tsconfig.scripts.json`).
       When it hand-wrote its bodies, login verify gained `nonce`, the seeder kept the old shape and failed its own
       login with 400. Tenant-scoped calls go over `node:http` as the client's `fetchApi`, because the backend
       resolves the tenant from `Host` and fetch drops a hand-set one; that works for any domain, resolvable or not.
@@ -95,9 +95,9 @@ here; the server is blind.
       `login`+`unlockMasterKey` (then enrols the device key, so later loads restore without the param). For a phone,
       or an agent barred from entering credentials into a field. **Strictly dev-only:** the creds come from an
       `apply:'serve'` Vite middleware (`/__dev/seed-credentials`, never built) and the consumer is
-      `import.meta.env.DEV`-gated (tree-shaken); `npm run verify:no-backdoor` fails the build if either sentinel
-      reaches `dist/`. A plain `npm run dev` (no `?devlogin`) is unchanged. **Never remove the DEV gate.**
-- **Run the Memory shell locally (cr-0030):** `npm run dev` (Vite proxies `/api` → `127.0.0.1:8080`). The active
+      `import.meta.env.DEV`-gated (tree-shaken); `pnpm run verify:no-backdoor` fails the build if either sentinel
+      reaches `dist/`. A plain `pnpm run dev` (no `?devlogin`) is unchanged. **Never remove the DEV gate.**
+- **Run the Memory shell locally (cr-0030):** `pnpm run dev` (Vite proxies `/api` → `127.0.0.1:8080`). The active
   tenant is resolved server-side from the **Host** (port stripped); the signed-in user must belong to it. The
   default flow: browse `veyq.localhost:<viteport>` → the tenant `bootstrap:user` created → login → unlock and the
   browse renders. If no tenant claims the Host you get the *“no space”* state (expected).
@@ -131,17 +131,17 @@ here; the server is blind.
   transport encoding, but `accountBirth` needs it, and a second copy of the encoder is exactly the drift its
   own header warns about. Import via the package (`@veyq/crypto/v1`, `/accountBirth`, `/emergencyKit`,
   `/base64`, `/argonWorker`, `/testArgon`) — never by a relative path back into it. Its check is its own:
-  `cd ../packages/crypto && npm run check`, and `npm ci` runs from the **repo root**, not from `src/web/`.
-  **`npm run mutation`** is the assertion-strength gate over the curated crypto-logic scope (StrykerJS, [ADR 0045](../../docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md))
-  — a heavier PR-only crypto job, **not** part of `npm run check`; scope (the single source of truth, an explicit
+  `cd ../packages/crypto && pnpm run check`, and `pnpm install` runs from the **repo root**, not from `src/web/`.
+  **`pnpm run mutation`** is the assertion-strength gate over the curated crypto-logic scope (StrykerJS, [ADR 0045](../../docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md))
+  — a heavier PR-only crypto job, **not** part of `pnpm run check`; scope (the single source of truth, an explicit
   per-file list) + config in `stryker.mutate.json` + `stryker.config.mjs`, gated in CI by
   [`mutation.yml`](../../.github/workflows/mutation.yml). **There are TWO of those pairs since the package split**
   — `src/web/`'s (the six crypto-logic files that stayed) and `src/packages/crypto/`'s (the shared suite);
   run both, because Stryker's runner is the project's own vitest and neither project sees the other's suites.
   With no remote, that CI job has never run, so **a commit that touches `src/packages/crypto/src` records the
-  package gate's exit code** (`npm run mutation -- --force`) in its message. **Footgun: it mutates the real source files _in place_**
+  package gate's exit code** (`pnpm run mutation -- --force`) in its message. **Footgun: it mutates the real source files _in place_**
   (originals backed up to `.stryker-tmp/backup-*`, restored on exit), so mid-run `git status` shows hundreds of
-  transient `M` files + stray `stryker-setup-*.js` — never run other `src/web/` work (git ops, `npm run check`, an
+  transient `M` files + stray `stryker-setup-*.js` — never run other `src/web/` work (git ops, `pnpm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
   **A change to the bytes a seal writes** (another envelope, a salt, one more random draw) also moves
   `features/memories/uploadWire.characterisation.test.ts`'s snapshots, whose randomness is ONE pinned stream: re-bless
@@ -544,7 +544,7 @@ here; the server is blind.
   viewer: `frame-src`/`object-src` stay `'none'` and **the CSP is unchanged** (widening it is the owner's decision). The rules
   (core's `shared/pdf/`, so any application draws a PDF through it - Depot's viewer is the first; `docs/apps/depot.md` § The viewer): `pdfEngine.ts` is the only seam and reaches pdf.js through a
   **dynamic** `import('./pdfjsRuntime')` - the one file that imports it, never imported statically (a source test and
-  `npm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
+  `pnpm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
   Function` in the emitted files, no `.wasm`); `pdfOptions.ts` is the option set - the document is `{data}` (never a URL),
   `useWasm: false` (the WASM decoders need `'wasm-unsafe-eval'`, which the policy does not grant: JBIG2/JPEG 2000 scan
   images render blank - a documented gap, a policy decision to change), `enableXfa: false`, no scripting, no annotation

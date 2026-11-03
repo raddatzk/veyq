@@ -7,7 +7,7 @@
 // `python3 scripts/run_web_e2e.py` (what CI runs) gives this file its own database.
 //
 //   docker compose -f infra/docker/docker-compose.yml --profile s3 up -d
-//   VEYQ_E2E=1 npx vitest run files.e2e
+//   VEYQ_E2E=1 pnpm exec vitest run files.e2e
 //
 // A file's type, uploaded name and modified time are its BLOB's sealed meta (`wrappedBlobMeta` under `K_blob`, declared
 // with the upload — inbox #397): the suite reads them back from the listed blob, sees the replace bring its own, and

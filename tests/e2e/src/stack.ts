@@ -1,6 +1,6 @@
 // What the orchestrator booted, read from the one file it writes before it starts Playwright (ADR 0090). The suite
 // never guesses an address or a credential: everything it may reach is named here, and `egress.ts` refuses the rest.
-// Read lazily, so `npm run check` can list the tests without a stack; a test that touches it without one is told
+// Read lazily, so `pnpm run check` can list the tests without a stack; a test that touches it without one is told
 // how the suite is meant to be started.
 import { readFileSync } from 'node:fs'
 

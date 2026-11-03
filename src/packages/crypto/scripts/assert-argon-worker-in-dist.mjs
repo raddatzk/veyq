@@ -19,7 +19,7 @@
 // failure visible in a running page.
 //
 // Bite (snapshot-and-restore, never `git checkout`): split the constructor in src/argonWorker.ts as above, run the
-// consumer's `npm run build`, and this goes RED on (i); restore, and it goes green.
+// consumer's `pnpm run build`, and this goes RED on (i); restore, and it goes green.
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 

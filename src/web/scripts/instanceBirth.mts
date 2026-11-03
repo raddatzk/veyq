@@ -1,7 +1,7 @@
 // One cold birth of a dev/test instance, shared by the seeders that need one (ADR 0065: one cold birth): the local dev
 // principal (`bootstrap-user.mts`) and the API fuzzing's seed (`fuzz-seed.mts`). Each step is the real client crypto
 // (`@veyq/crypto`) over the generated clients (`apiTransport.mts`), so it is operator-blind — only ciphertext and public
-// keys leave this process — and a contract change turns every seeder red at `npm run typecheck`.
+// keys leave this process — and a contract change turns every seeder red at `pnpm run typecheck`.
 //
 // Every step THROWS with what the backend answered; the caller decides whether that ends its run (`bootstrap-user`'s
 // steps before its owner is persisted) or is downgraded to a warning.

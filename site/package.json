@@ -3,7 +3,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
-  "//": "The published documentation (ADR 0087): Use, Run and Security, built by Astro + Starlight to static files in dist/. Deliberately OUTSIDE the root npm workspace, with its own package-lock.json: the workspace exists for @veyq/crypto alone, and the site shares no code with src/web/ or src/admin-web/. Installed through the same deprecated-package gate as every npm package: `python3 scripts/npm_ci_no_deprecated.py --package-dir site` from the repo root.",
+  "//": "The published documentation (ADR 0087): Use, Run and Security, built by Astro + Starlight to static files in dist/. Deliberately OUTSIDE the root pnpm workspace, with its own pnpm-workspace.yaml (its overrides) and pnpm-lock.yaml: the workspace exists for @veyq/crypto alone, and the site shares no code with src/web/ or src/admin-web/. Installed through the same deprecated-package gate as every package: `python3 scripts/pnpm_install_no_deprecated.py --package-dir site` from the repo root. `packageManager` is the root's pin (scripts/validate_pnpm_installs_gated.py holds the two equal).",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
@@ -11,22 +11,21 @@
     "check": "astro check && astro build",
     "shots": "python3 ../scripts/site_shots.py"
   },
-  "//engines": "The Node the site's tree supports: astro >=22.12.0 and postcss-nested 8 (the override below) ^22.0.0 || ^24.0.0 || >=26.0.0, so an odd, non-LTS release such as 23 is outside it. CI runs Node 22, as for the root workspace.",
+  "//engines": "The Node the site's tree supports: astro >=22.12.0 and postcss-nested 8 (the override in pnpm-workspace.yaml) ^22.0.0 || ^24.0.0 || >=26.0.0, so an odd, non-LTS release such as 23 is outside it. CI runs Node 22, as for the root workspace.",
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
+  "//dependencies": "sharp is declared although nothing here imports it: Astro's image service loads it at build time from the built chunks, and Astro asks for it only as an optional dependency. npm hoisted it to node_modules/sharp; pnpm links only what this package declares, and without it `astro build` fails with MissingSharp (measured 2026-11-03).",
   "dependencies": {
     "@astrojs/starlight": "^0.42.6",
     "astro": "^7.3.8",
-    "mermaid": "^12.2.0"
+    "mermaid": "^12.2.0",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "starlight-links-validator": "^0.27.0",
     "typescript": "^6.0.3"
   },
-  "//overrides": "postcss-nested: @astrojs/starlight -> astro-expressive-code -> @expressive-code/core@0.44.2 asks postcss-nested ^6.0.1, whose 6.2.0 pins postcss-selector-parser ^6.1.1 - and every postcss-selector-parser below 7.1.6 carries GHSA-rj75-hqrm-r3gf (quadratic selector parsing, CPU exhaustion). npm audit's own fix is a downgrade of Starlight to 0.21. The path only parses expressive-code's own CSS at build time, so it is unreachable from content, but a knowingly-vulnerable dependency is not something we keep (root package.json //overrides). postcss-nested 8 depends on postcss-selector-parser ^7.1.4. Drop this once @expressive-code/core asks for postcss-nested >= 7.",
-  "overrides": {
-    "postcss-nested": "^8.0.1"
-  }
+  "packageManager": "pnpm@12.16.1"
 }

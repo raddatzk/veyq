@@ -128,7 +128,7 @@ while a phone uploads — the CAX run should watch the app there first.
 
 **The procedure, exactly as it ran** (`I` = an instance directory outside git; the readings go to `.run/measurements/`):
 1. Images from the tree: `docker build -f src/backend/Dockerfile -t veyq-vol:local .` and `docker build -f src/admin-web/Dockerfile -t
-   veyq-admin-vol:local .` (after a merge, `npm run generate:api` in `src/web/` first, or the seeders do not compile).
+   veyq-admin-vol:local .` (after a merge, `pnpm run generate:api` in `src/web/` first, or the seeders do not compile).
 2. `python3 scripts/measure_volume.py --instance I fixtures` (ImageMagick), `… boot --app veyq-vol:local --admin
    veyq-admin-vol:local` (lane L1's own install stages; ports 80/443/18081 free; recipe on vCPUs 2,3, doubles and
    browsers on 6–13), `… seed birth` (`birthInstance`; the generated owner credentials land in `I/accounts.json`).
@@ -192,7 +192,7 @@ owner's to give with the server.
 - [ ] **5 remove** (#489's reading, the harness's last use outside this CR, was taken at the V1 heavy stage on 2026-10-24): delete the harness (`src/web/scripts/seed-volume.mts`, `src/web/scripts/measure-volume.mts`,
   `scripts/measure_volume.py`, `scripts/measure_volume_selftest.py`, `tests/e2e/measure/`, the bench files, the `.gitignore` line for `.run/measurements/`);
   the owner deletes the server and the DNS record. · Done when: `git ls-files` shows none of the harness files;
-  `npm run check` in `src/web/` green; the owner confirms the server is gone.
+  `pnpm run check` in `src/web/` green; the owner confirms the server is gone.
 
 ## Definition of done
 

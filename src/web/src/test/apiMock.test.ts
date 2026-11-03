@@ -1,5 +1,5 @@
 // The type properties src/test/apiMock.ts exists for, each pinned by a `@ts-expect-error`: if the helper stops
-// refusing one, the directive is unused and `npm run typecheck` fails (TS2578). The runtime half checks that what
+// refusing one, the directive is unused and `pnpm run typecheck` fails (TS2578). The runtime half checks that what
 // the helper installs is what the code under test gets back from the factory.
 import { describe, it, expect, vi } from 'vitest'
 import type { PublicShare, SharingApi } from '../api/generated/sharing'

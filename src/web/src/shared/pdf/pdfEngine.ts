@@ -1,7 +1,7 @@
 // The PDF engine the viewer talks to (inbox #412): `openPdf(bytes)` -> a `PdfDocument` that reports its page count, the size
 // of a page and draws a page onto a canvas, and is destroyed when the viewer lets go. It is the seam: the viewer and its
 // tests know this interface, only this file knows pdf.js, and pdf.js itself is loaded on the first PDF, never before
-// (`pdfjsRuntime.ts`, a dynamic `import()` - the lazy chunk `npm run verify:pdf-worker` checks).
+// (`pdfjsRuntime.ts`, a dynamic `import()` - the lazy chunk `pnpm run verify:pdf-worker` checks).
 //
 // No pdf.js type is exported: the interface below is structural, so nothing here pulls pdf.js into a bundle by its types.
 // Rendering draws the page's content and the annotations that have an appearance (a stamp, a form field's text, a link's

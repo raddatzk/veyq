@@ -1,6 +1,6 @@
 // The member directory's client crypto at volume (cr-volume-measurement-local): every member's sealed name
 // opened through its value key's wrap under `K_tenant`, as `directory.ts` does for the whole tenant roster, at the member axis' three stages.
-// `npx vitest bench src/core/people/directory.bench.ts`; `vitest run` does not collect bench files, so `npm run check`
+// `pnpm exec vitest bench src/core/people/directory.bench.ts`; `vitest run` does not collect bench files, so `pnpm run check`
 // is unchanged. TEMPORARY: `cr-volume-measurement-cax` deletes it with the rest of the harness.
 import { bench, describe, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'

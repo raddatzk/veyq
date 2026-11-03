@@ -9,40 +9,46 @@
 # --- build ------------------------------------------------------------------------------------------------
 # Mirrors the app image Dockerfile's frontend-build stage, including its two hard-won details: the OpenAPI client is
 # GENERATED and never tracked (so the stage needs a JRE for openapi-generator), and the specs must land BEFORE
-# `npm ci` because `prepare` runs generate:api during the install.
+# the install because `prepare` runs generate:api during it.
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
 WORKDIR /repo/src/admin-web
 RUN apt-get update \
     && apt-get install -y --no-install-recommends default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
+# pnpm itself, at exactly the version the root package.json pins in `packageManager` — the one npm install this image
+# runs (scripts/validate_pnpm_installs_gated.py holds the two equal). A layer of its own, above every COPY, so only a
+# pnpm bump rebuilds it.
+RUN npm install -g pnpm@12.16.1
 COPY contracts/api /repo/contracts/api
-# The generator JAR's verifier and its pin, before `npm ci` for the same reason as the specs: `prepare` runs
+# The generator JAR's verifier and its pin, before the install for the same reason as the specs: `prepare` runs
 # generate:api, which runs ../../scripts/verify_openapi_generator_jar.mjs first (ADR 0057 §6).
 COPY scripts/verify_openapi_generator_jar.mjs scripts/openapi_generator_jar.sha256 /repo/scripts/
 # Every manifest the workspace resolution reads, and nothing else, so a source edit does not bust the install
 # layer. src/packages/crypto/ is copied WHOLE rather than manifest-only: it is consumed as TypeScript source (no
-# build step), and npm links it into node_modules at install time, so the sources have to be there already.
-COPY package.json package-lock.json /repo/
+# build step), and pnpm links it into node_modules at install time, so the sources have to be there already.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /repo/
 COPY src/packages/crypto /repo/src/packages/crypto
-# openapitools.json travels with the manifest: `prepare` runs generate:api during `npm ci`, and both the JAR
+# openapitools.json travels with the manifest: `prepare` runs generate:api during the install, and both the JAR
 # verifier and the generator read the pinned version from it (without it the verifier fails the install).
 COPY src/admin-web/package.json src/admin-web/openapitools.json ./
-# Plain `npm ci`, and NOT `--omit=optional`: rolldown (Vite 8's bundler) ships its native binding as an
+# A frozen install, and NOT one without optionals: rolldown (Vite 8's bundler) ships its native binding as an
 # optional platform dependency, so omitting optionals produces an install that resolves and then dies with
 # "Cannot find native binding" at the first `vite build`. Measured here, on the first build of this file.
-# src/web/'s manifest is deliberately absent from the context — npm skips the workspace it cannot see, and this
-# image has no business carrying the app's dependencies.
-# Not run through scripts/npm_ci_no_deprecated.py, and covered anyway: this installs the root lockfile that
+# src/web/'s manifest is deliberately absent from the context — pnpm skips the workspace project it cannot see
+# (measured: "Scope: all 3 workspace projects"), and this image has no business carrying the app's dependencies.
+# This is also the proof that admin-web declares what it imports: pnpm links only a package's declared dependencies
+# into its node_modules, so an undeclared import fails `vite build` here.
+# Not run through scripts/pnpm_install_no_deprecated.py, and covered anyway: this installs the root lockfile that
 # ci.yml's `frontend` job scans through it on the same commit, and every job that publishes the image needs that
 # job (ADR 0091 decision 2: the build itself no longer waits for the tests, so the premise is "before published").
-# scripts/validate_npm_installs_gated.py holds both premises — keep `npm ci` (never `npm install`) and the COPY.
-RUN npm ci
+# scripts/validate_pnpm_installs_gated.py holds both premises — keep `--frozen-lockfile` and the COPY.
+RUN pnpm install --frozen-lockfile
 COPY src/admin-web/ ./
 # Two artifacts out of one install: the static site nginx serves, and the `veyq-admin` CLI bundle — the
 # same generated client, reached from a Node entry point instead of a browser one (ADR 0065). Bundled
 # HERE, at image build time, and never transpiled at container runtime: a shipped feature must not make
 # TypeScript tooling part of what the image runs.
-RUN npm run build && npm run build:cli
+RUN pnpm run build && pnpm run build:cli
 
 # --- runtime ----------------------------------------------------------------------------------------------
 # nginx, pinned by minor: serving static files and proxying one path is the entirety of what this ORIGIN

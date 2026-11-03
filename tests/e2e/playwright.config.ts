@@ -20,7 +20,7 @@ import { readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { stack } from './src/stack'
 
-// `npm run check` lists the tests with no stack booted; everything that needs one reads it at run time.
+// `pnpm run check` lists the tests with no stack booted; everything that needs one reads it at run time.
 const booted = process.env.VEYQ_STACK_FILE !== undefined
 const outDir = booted ? stack().outDir : 'test-results'
 // The instance-wide state other feature scenarios read, set up in every leg: the folder `features/instance/` is the

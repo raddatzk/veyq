@@ -53,9 +53,9 @@ copy (the drift the wiki's source guard was built after), and it lives only on G
      its ADR before the page that explains it.
 
    The repository becomes public; GitHub Pages on the free plan requires it.
-2. **The site is Astro with Starlight**, in its own package `site/`, **outside** the npm workspace (the workspace
+2. **The site is Astro with Starlight**, in its own package `site/`, **outside** the pnpm workspace (the workspace
    exists for `@veyq/crypto` alone and the site shares no code), with its own lockfile and its own
-   `npm run check`, installed through the same deprecated-package gate as every other npm package. English is
+   `pnpm run check`, installed through the same deprecated-package gate as every other package. English is
    the root locale and German lives under `/de/`. A German page is the English page's translation at the
    **same path**, which is how Starlight pairs them, so file names and URLs are English in both locales. A page
    with no translation falls back to English with Starlight's notice; that is how Run and Security appear under

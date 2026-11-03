@@ -21,10 +21,10 @@ tasks.register<Exec>("run") {
 
 tasks.register<Exec>("seed") {
     group = "veyq"
-    description = "Births the local dev principal from .run/.env against the running backend (npm run bootstrap:user " +
+    description = "Births the local dev principal from .run/.env against the running backend (pnpm run bootstrap:user " +
         "in src/web/; src/web/CLAUDE.md owns its inputs). Re-running needs a fresh instance: infra:wipe, backend:run, then this."
     workingDir = rootDir.resolve("src/web")
-    commandLine("npm", "run", "bootstrap:user")
+    commandLine("pnpm", "run", "bootstrap:user")
     ports["backendPort"]?.let { environment("VEYQ_BASE", "http://localhost:$it") }
     ports["backendAdminPort"]?.let { environment("VEYQ_ADMIN_BASE", "http://127.0.0.1:$it") }
 }

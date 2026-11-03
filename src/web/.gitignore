@@ -1,5 +1,5 @@
 # The OpenAPI client is generated from ../../contracts/api/*.openapi.yaml — not tracked (mirrors the backend,
-# which generates into build/). Produced by `npm run generate:api`; run automatically on install via the
+# which generates into build/). Produced by `pnpm run generate:api`; run automatically on install via the
 # `prepare` script. Regenerate after a contract change; never hand-edit.
 src/api/generated/
 

@@ -54,7 +54,7 @@ export default defineConfigWithVueTs(
     name: 'veyq-admin/ignores',
     ignores: [
       'dist/**',
-      // The CLI bundle (`npm run build:cli`) — generated, never hand-edited, and a lint run over a bundled
+      // The CLI bundle (`pnpm run build:cli`) — generated, never hand-edited, and a lint run over a bundled
       // copy of every dependency reports on code this repo does not own.
       'dist-cli/**',
       'node_modules/**',

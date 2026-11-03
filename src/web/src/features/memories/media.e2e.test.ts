@@ -12,10 +12,10 @@ import { ScopeKind } from '../../api/generated/scopes'
  * Opt-in web byte-transport e2e (cr-0028, ADR 0013) — the one path the mocked media.test.ts cannot cover:
  * real `fetch` PUT/GET against **real presigned URLs** (and the store's CORS) on a **live instance** with the
  * bundled Garage store (a byte-path store is a hard instance requirement, cr-0105). Gated on `VEYQ_E2E=1`;
- * default `npm run check` skips it.
+ * default `pnpm run check` skips it.
  *
  *   docker compose -f infra/docker/docker-compose.yml --profile s3 up -d   # backend + store behind Traefik
- *   VEYQ_E2E=1 npx vitest run media.e2e                             # against a FRESH instance
+ *   VEYQ_E2E=1 pnpm exec vitest run media.e2e                             # against a FRESH instance
  *
  * Or `python3 scripts/run_web_e2e.py`, which brings the stack up and gives this file its own database — that is
  * what CI runs. The instance is cold-birthed over the real API by `src/test/e2eBootstrap.ts`: no credentials to

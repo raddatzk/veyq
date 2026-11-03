@@ -1,7 +1,7 @@
 // The tree's client cost at volume (cr-volume-measurement-local): `openTree` over synthetic sealed rows in
 // the two shapes the volume harness seeds — the realistic one (Folders : Memories : Chapters ≈ 1 : 5 : 20) at 500 and
 // at 5,000, and the wide one (2,000 Chapters under one Memory), the worst case for the per-sibling list building.
-// `npx vitest bench src/core/node/tree.bench.ts`; `vitest run` does not collect bench files, so `npm run check` is
+// `pnpm exec vitest bench src/core/node/tree.bench.ts`; `vitest run` does not collect bench files, so `pnpm run check` is
 // unchanged. TEMPORARY: `cr-volume-measurement-cax` deletes it with the rest of the harness.
 //
 // The control: if the realistic shape costs about 10x as much at 5,000 as at 500, the quadratic terms

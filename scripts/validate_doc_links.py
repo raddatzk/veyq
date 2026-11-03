@@ -14,7 +14,7 @@ contract and is cited from four other files, so a rename would have rotted those
 joined with cr-wiki-pages-name-their-source: the published pages carried 36 relative links between themselves
 that no run read, so the one surface strangers see was the one whose links nothing checked. When the wiki became
 the Starlight site (ADR 0087) its pages stopped linking each other relatively — a link between them is a site URL
-under `/veyq/`, which the site's own `npm run check` resolves (starlight-links-validator), so this guard skips it.
+under `/veyq/`, which the site's own `pnpm run check` resolves (starlight-links-validator), so this guard skips it.
 What a site page links in the repository is a GitHub URL (`https://github.com/raddatzk/veyq/blob/main/<path>`, the
 Security area's whole reading path), and that is read here as the repository path it names: a moved or deleted
 doc would otherwise leave a dead link in front of exactly the readers who follow them. The walk was three named trees

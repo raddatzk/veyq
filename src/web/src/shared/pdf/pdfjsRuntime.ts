@@ -1,6 +1,6 @@
 // pdf.js itself - the ONE module that imports it, and so the root of the lazy chunk: `pdfEngine.ts` reaches this file only
 // through a dynamic `import()`, so neither pdf.js (~0.5 MB) nor its worker (~1.3 MB) is in the entry bundle or in any page
-// that never opens a PDF (`npm run verify:pdf-worker` pins both). Do not import this file statically from anywhere.
+// that never opens a PDF (`pnpm run verify:pdf-worker` pins both). Do not import this file statically from anywhere.
 //
 // The LEGACY build on purpose: the modern one assumes very recent engine features (`Map.getOrInsertComputed`,
 // `Promise.try`, `Float16Array` ...) that a self-hosted family's older phone or tablet may lack; the legacy build carries its

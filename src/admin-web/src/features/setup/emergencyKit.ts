@@ -14,9 +14,9 @@
 // a single, argued exception (HEAD from 2021). An exception earned once is not a licence to spread it to a
 // second package for a code path that has no caller.
 //
-// Measured, not assumed: the local `npm run build` was GREEN with `jsqr` undeclared, because npm workspaces
+// Measured, not assumed: under npm, the local `npm run build` was GREEN with `jsqr` undeclared, because npm workspaces
 // hoisted `src/web/`'s copy into the root `node_modules`. Only the container build — which never sees `src/web/` —
-// failed to resolve it. A workspace hides an undeclared dependency from every check that runs in the repo.
+// failed to resolve it. pnpm links only declared dependencies into a package's `node_modules`, so that hiding is gone.
 
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
 

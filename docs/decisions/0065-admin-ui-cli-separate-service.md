@@ -40,7 +40,7 @@ Forces:
 **The admin surface is its own container (`admin`), a pure client of the backend Admin API — no direct database or
 KEK access. The backend answers that API only through it (the *admin channel*, below).**
 
-- **Web UI — its own package, sharing only crypto with `src/web/` through a minimal npm workspace.** `src/admin-web/`
+- **Web UI — its own package, sharing only crypto with `src/web/` through a minimal workspace (pnpm since 2026-11-03).** `src/admin-web/`
   has its own build, its own narrow generated API client and its own router, state and UI. The **one** shared thing is
   `@veyq/crypto` (`src/packages/crypto/`): the `v1` suite, the account birth and the Emergency Kit codec — the one place
   duplication would be a security defect rather than a maintenance nuisance. Nothing else is shared on purpose: the

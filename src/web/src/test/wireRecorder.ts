@@ -89,7 +89,7 @@ function responseHeadersOf(response: Response): Record<string, string | string[]
 /**
  * Wrap `globalThis.fetch` so every call lands in `VEYQ_HTTP_RECORD_FILE` as one JSON line.
  *
- * A no-op when the variable is unset — which is what keeps a hand-run `VEYQ_E2E=1 npx vitest run media.e2e`
+ * A no-op when the variable is unset — which is what keeps a hand-run `VEYQ_E2E=1 pnpm exec vitest run media.e2e`
  * working with no orchestrator, and what keeps this out of every unit test's way. Appended per call rather
  * than rewritten, so a suite that dies mid-flow still leaves on disk exactly what it had sent up to then.
  *

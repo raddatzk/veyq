@@ -13,7 +13,7 @@
 // plaintexts it sealed go to `recordCanaries` (ADR 0053).
 //
 // UNVERIFIED when written: run — the worktree that wrote it may not run the orchestrator (the main checkout does); it is
-// compiled (`npm run typecheck`) and lint-clean only.
+// compiled (`pnpm run typecheck`) and lint-clean only.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { b64url } from '@veyq/crypto/base64'
 import { birthInstance } from '../../test/e2eBootstrap'

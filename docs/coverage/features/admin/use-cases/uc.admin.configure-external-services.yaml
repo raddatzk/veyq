@@ -36,5 +36,5 @@ gaps:
     The console's Server → External services panel and `veyq-admin services list | set <id> | unset <id>` live in
     `admin-web` (ADR 0065); their suites (`ExternalServicesPanel.test.ts` for the rows, the attribution field, the save
     and the asked-for removal; `cli.test.ts` for the commands; `AdminConsoleView.test.ts` for the nav; admin-web's
-    `passwordWarning.test.ts` for its first-run check following the manifest) exist and pass under `npm run check`, and
+    `passwordWarning.test.ts` for its first-run check following the manifest) exist and pass under `pnpm run check`, and
     wait until admin-web's CI job has executed (ADR 0040), as uc.admin.switch-capabilities' do.

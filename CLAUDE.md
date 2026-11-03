@@ -51,7 +51,7 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   Every infra-level decision has an answer on both, and a change to one checks the other; the docs site's Run area
   (`site/src/content/docs/run/`) owns the operator commands for both, and `infra/README.md` the dev stack and cutting
   a release. A script learns these paths from `scripts/repo_layout.py`, never by spelling them.
-- `tests/` — the harnesses no surface owns: `tests/e2e/` (lane L1's browser suite, the npm workspace `@veyq/e2e`, with
+- `tests/` — the harnesses no surface owns: `tests/e2e/` (lane L1's browser suite, the pnpm workspace member `@veyq/e2e`, with
   its compose overlay in `tests/e2e/stack/`, [ADR 0090](docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md))
   and `tests/fuzz/` (the API fuzzer, [ADR 0091](docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)).
 - `settings.gradle.kts` + `launcher/` — the **dev launcher**: `./gradlew <surface>:<verb>` (`infra:up`,
@@ -60,13 +60,14 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   orchestrator: it includes no surface's build (`src/backend/` is run through its own wrapper, never `includeBuild` —
   its verification metadata would be ignored) and aggregates no check. `infra/README.md` § The launcher holds the
   task list and the per-worktree ports.
-- `src/packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
+- `src/packages/crypto/` — the one internal workspace package (`@veyq/crypto`): the conformance-pinned crypto
   suite + the cold account birth + the Emergency Kit codec that carries its Secret Key + the wire base64,
   shared by `src/web/` and `src/admin-web/` (and read by `tests/e2e/`, with the wire assertion's canary collision rule, ADR 0090)
   ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). The workspace exists **for that one
   package** — duplicating key-material logic would be a security defect, not a maintenance nuisance. Nothing
-  else is shared: no UI, no router, no state. `npm ci` runs from the repo root; each package still proves
-  itself with its own `npm run check`.
+  else is shared: no UI, no router, no state. The workspace is **pnpm** ([ADR 0116](docs/decisions/0116-the-javascript-packages-are-installed-by-pnpm.md);
+  `pnpm-workspace.yaml`, the version pinned in `package.json` `packageManager`): `pnpm install` runs from the repo root, and its strict `node_modules` links each package
+  only what it declares; each package still proves itself with its own `pnpm run check`.
 - `src/tools/` — the two operator tools a release ships as assets: `veyqctl` (installs, upgrades and backs up a
   Compose instance from its releases, [ADR 0096](docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md))
   and `instance_backup.py` (the backup tool it runs, and the `veyq-tools` image's entrypoint, whose `Dockerfile` is
@@ -74,7 +75,7 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 - `docs/` — internal engineering state (English) + working flow (`ai/`, `inbox.md`).
 - `scripts/` — what the repository runs on itself, in Python: the guards (`validate_*.py`, the trust chain below),
   the e2e orchestrators and the release producer.
-- `site/` — the **published** documentation site (Astro Starlight, GitHub Pages; its own package outside the npm
+- `site/` — the **published** documentation site (Astro Starlight, GitHub Pages; its own package outside the pnpm
   workspace, [ADR 0087](docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)):
   **Use** (plain language, **EN+DE**, for users and space owners), **Run** (EN, for Server Owners) and
   **Security** (EN, for researchers). Each page names the `docs/` it speaks for in `sources:`. Its root is the
@@ -103,7 +104,8 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   archived, or abandoned by its maintainers, or whose only living successor is commercial/closed (that breaks
   *self-hostable by default*). Prefer the **actively-maintained, vendor-neutral standard** over a single
   vendor's client. When a dep we rely on becomes deprecated, replacing it is **in-scope now**, not someday.
-  The npm half is a gate: CI installs through `scripts/npm_ci_no_deprecated.py`, red on `npm warn deprecated`.
+  The JavaScript half is a gate: CI installs through `scripts/pnpm_install_no_deprecated.py`, red on any locked
+  package the lockfile or the registry marks deprecated.
   (E.g. MinIO's OSS server was archived in 2026 and its successor AIStor is commercial — so the bundled store
   stays a generic **S3-compatible OSS** one, and the backend signs via the vendor-neutral **AWS S3 SDK**,
   never a MinIO-locked client.)
@@ -113,6 +115,6 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 
 ## Prove your work
 Each surface's own `CLAUDE.md` names its check: [`src/backend/CLAUDE.md`](src/backend/CLAUDE.md) (`./gradlew check`),
-[`src/web/CLAUDE.md`](src/web/CLAUDE.md) (`npm run check`), [`src/tools/CLAUDE.md`](src/tools/CLAUDE.md) (the two
+[`src/web/CLAUDE.md`](src/web/CLAUDE.md) (`pnpm run check`), [`src/tools/CLAUDE.md`](src/tools/CLAUDE.md) (the two
 selftests). The doc trust chain is the `trust-chain` CI job
 (`scripts/validate_*.py`); run it before claiming a doc change is sound.

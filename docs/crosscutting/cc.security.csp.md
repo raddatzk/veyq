@@ -114,7 +114,7 @@ origin, next to the keys. Its threat note, and what keeps it inside the policy a
   holds only the drawing onto a canvas. A worker has no DOM and no access to the page's memory, but it shares the origin,
   so this is containment of a crash and of CPU, not a sandbox against a pdf.js defect.
 - **No code from strings:** the CSP has no `'unsafe-eval'`; the emitted pdf.js files contain no `new Function(`/`eval(`
-  (`npm run verify:pdf-worker` fails the build otherwise), and pdf.js 6 has no eval path to switch off.
+  (`pnpm run verify:pdf-worker` fails the build otherwise), and pdf.js 6 has no eval path to switch off.
 - **No WebAssembly:** `useWasm: false`, the `.wasm` decoders are not shipped (`verify:pdf-worker` fails on a `.wasm` or a
   `wasm/` directory), because compiling them needs `'wasm-unsafe-eval'`. Cost: JBIG2 and JPEG 2000 images (scans) and ICC
   transforms do not render; the page shows gaps. Granting `'wasm-unsafe-eval'` is the owner's decision.
@@ -212,12 +212,12 @@ every header of the admin origin.
   - `frame-ancestors 'none'` in dev and production alike.
   Bitten 2026-10-23: the old `style-src 'self' 'unsafe-inline'`, an emptied hash list and a probe component importing
   `ScrollAreaViewport` each turn it red.
-- [`src/web/scripts/assert-pdf-worker-in-dist.mjs`](../../src/web/scripts/assert-pdf-worker-in-dist.mjs) (`npm run verify:pdf-worker`,
-  in `npm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval, no WASM
+- [`src/web/scripts/assert-pdf-worker-in-dist.mjs`](../../src/web/scripts/assert-pdf-worker-in-dist.mjs) (`pnpm run verify:pdf-worker`,
+  in `pnpm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval, no WASM
   (§ *A dependency that parses untrusted bytes*). **Run in a real browser 2026-10-12** against a local server sending the
   built header: the worker started, pages drew, a standard font loaded from the same origin, no violation fired.
 - [`src/web/scripts/assert-csp-policy-in-dist.mjs`](../../src/web/scripts/assert-csp-policy-in-dist.mjs)
-  (`npm run verify:csp`, run by `npm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
+  (`pnpm run verify:csp`, run by `pnpm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
   has no emitted policy or whose `index.html` carries a CSP `<meta>`.
 - The backend's app shell (`src/backend/core/src/main/kotlin/me/raddatz/veyq/core/appshell/`):
   - `AppShellTest` compares the appended store origin, per signing mode, with the origin of a URL the signer

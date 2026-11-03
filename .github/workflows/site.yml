@@ -3,7 +3,7 @@ name: Site
 # The published documentation site (ADR 0087): `check` proves site/ on every push and pull request that touches it,
 # and on `main` the build it checked is what `deploy` publishes to GitHub Pages — so nothing is deployed that the
 # link check has not seen, and site/'s lockfile is installed exactly once per run. That one install is therefore
-# the one that asks the registry (scripts/validate_npm_installs_gated.py § 3, per lockfile).
+# the one that asks the registry (scripts/validate_pnpm_installs_gated.py § 3, per lockfile).
 #
 # Prerequisite, once, in the repository settings: Pages → Build and deployment → Source "GitHub Actions". There is
 # no remote yet, so the first deploy is unproven until the first push.
@@ -14,7 +14,7 @@ on:
     paths:
       - "site/**"
       - "contracts/platform/capabilities.json"
-      - "scripts/npm_ci_no_deprecated.py"
+      - "scripts/pnpm_install_no_deprecated.py"
       - ".github/workflows/site.yml"
   pull_request:
     branches:
@@ -22,7 +22,7 @@ on:
     paths:
       - "site/**"
       - "contracts/platform/capabilities.json"
-      - "scripts/npm_ci_no_deprecated.py"
+      - "scripts/pnpm_install_no_deprecated.py"
       - ".github/workflows/site.yml"
   workflow_dispatch:
 
@@ -42,18 +42,23 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: site/package-lock.json
+
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
+      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
+      # switches itself to the pinned version.
+      - name: Install pnpm
+        if: runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.16.1
 
       # site/ is outside the root workspace with a lockfile of its own; this is its only install, so it asks the
       # registry (no --skip-registry-check).
       - name: Install dependencies
-        run: python3 scripts/npm_ci_no_deprecated.py --package-dir site
+        run: python3 scripts/pnpm_install_no_deprecated.py --package-dir site
 
       # astro check + astro build; the build fails on a broken internal link (starlight-links-validator).
       - name: Run site checks
         working-directory: site
-        run: npm run check
+        run: pnpm run check
 
       - name: Keep the built site for Pages
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

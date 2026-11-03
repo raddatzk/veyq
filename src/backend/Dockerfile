@@ -18,38 +18,42 @@ WORKDIR /repo/src/web
 RUN apt-get update \
     && apt-get install -y --no-install-recommends default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
-# The specs must land BEFORE `npm ci`: src/web/package.json has `"prepare": "npm run generate:api"`, which npm
+# pnpm itself, at exactly the version the root package.json pins in `packageManager` — the one npm install this image
+# runs (scripts/validate_pnpm_installs_gated.py holds the two equal). A layer of its own, above every COPY, so only a
+# pnpm bump rebuilds it.
+RUN npm install -g pnpm@12.16.1
+# The specs must land BEFORE the install: src/web/package.json has `"prepare": "pnpm run generate:api"`, which pnpm
 # runs as part of the install, and generate:api reads `../../contracts/api/*.openapi.yaml` relative to src/web/.
-# (Measured the hard way — with this COPY below the install, `npm ci` fails with "spec file is not found".)
+# (Measured the hard way, under npm — with this COPY below the install, it fails with "spec file is not found".)
 COPY contracts/api /repo/contracts/api
-# The generator JAR's verifier and its pin, before `npm ci` for the same reason as the specs: `prepare` runs
+# The generator JAR's verifier and its pin, before the install for the same reason as the specs: `prepare` runs
 # generate:api, which runs ../../scripts/verify_openapi_generator_jar.mjs first (ADR 0057 §6).
 COPY scripts/verify_openapi_generator_jar.mjs scripts/openapi_generator_jar.sha256 /repo/scripts/
 # Every manifest the workspace resolution reads, and nothing else, so a source edit does not bust the install
 # layer. src/packages/crypto/ is copied WHOLE rather than manifest-only: it is consumed as TypeScript source (no
-# build step), and npm links it into node_modules at install time, so the sources have to be there already.
-COPY package.json package-lock.json /repo/
+# build step), and pnpm links it into node_modules at install time, so the sources have to be there already.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /repo/
 COPY src/packages/crypto /repo/src/packages/crypto
-# openapitools.json travels with the manifest: `prepare` runs generate:api during `npm ci`, and both the JAR
+# openapitools.json travels with the manifest: `prepare` runs generate:api during the install, and both the JAR
 # verifier and the generator read the pinned version from it (without it the verifier fails the install).
 COPY src/web/package.json src/web/openapitools.json ./
-# Not run through scripts/npm_ci_no_deprecated.py, and covered anyway: this installs the root lockfile that
+# Not run through scripts/pnpm_install_no_deprecated.py, and covered anyway: this installs the root lockfile that
 # ci.yml's `frontend` job scans through it on the same commit, and every job that publishes the image needs that
 # job (ADR 0091 decision 2: the build itself no longer waits for the tests, so the premise is "before published").
-# scripts/validate_npm_installs_gated.py holds both premises — keep `npm ci` (never `npm install`) and the COPY.
-RUN npm ci
+# scripts/validate_pnpm_installs_gated.py holds both premises — keep `--frozen-lockfile` and the COPY.
+RUN pnpm install --frozen-lockfile
 COPY src/web/ ./
 # The platform's one major: vite.config.ts compiles the web gate's EXPECTED_MAJOR from the repository's `VERSION`,
 # found by walking up from the client (ADR 0085 decision 1), so the build fails without it. After the install, so a
 # new major does not bust that layer.
 COPY VERSION /repo/VERSION
-# verify:no-backdoor is the prod guard from `npm run check` that asserts the dev auto-unlock seam
+# verify:no-backdoor is the prod guard from `pnpm run check` that asserts the dev auto-unlock seam
 # (__dev/seed-credentials) never reaches dist/. A release image is exactly where that must hold. verify:csp is
 # its sibling for ADR 0069: the policy file exists and index.html has no CSP <meta> — the two things the
 # backend's app shell refuses to boot without, caught here rather than at a self-hoster's first start.
 # verify:license-sources holds that the bundle's licence file names each package's source (MPL-2.0 §3.2), which the
 # runtime stage copies out of this dist.
-RUN npm run build && npm run verify:no-backdoor && npm run verify:csp && npm run verify:license-sources
+RUN pnpm run build && pnpm run verify:no-backdoor && pnpm run verify:csp && pnpm run verify:license-sources
 
 # --- backend (JVM) ---------------------------------------------------------------------------------------
 FROM eclipse-temurin:21-jdk-jammy@sha256:c7d5863b5dd8f26b90c64f1d80cc2b0e5a5e4642f8db9955a370d348edd8f438 AS backend-build-base

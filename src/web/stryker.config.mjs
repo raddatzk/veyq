@@ -3,8 +3,8 @@
 //
 // Mutates the pure crypto unit layer and measures whether the tests' assertions actually PIN the output
 // — the trust chain's last, otherwise-unmeasured link (validate_coverage.py proves a ref resolves; it
-// cannot prove `seal(k,s)=s` would fail the test). Not folded into `npm run check`: this is a heavier
-// PR-only job, run via `npm run mutation`.
+// cannot prove `seal(k,s)=s` would fail the test). Not folded into `pnpm run check`: this is a heavier
+// PR-only job, run via `pnpm run mutation`.
 //
 // WHAT is mutated lives in stryker.mutate.json (the canonical scope, shared with the CI meta-check so the
 // two never drift): the pure crypto-logic files that stayed in src/web/. v1.ts and the rest of the primitive
