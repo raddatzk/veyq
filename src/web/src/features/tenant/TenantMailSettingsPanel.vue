@@ -15,6 +15,7 @@ import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqSwitch from '../../shared/ui/VeyqSwitch.vue'
+import VeyqTextarea from '../../shared/ui/VeyqTextarea.vue'
 import { getTenantMailSettings, updateTenantMailSettings, type TenantMailSettings, type TenantMailSettingsUpdate } from './tenantMailSettings'
 import { activeSpace } from '../../app/activeSpace'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
@@ -250,7 +251,7 @@ async function save() {
         </label>
         <label>
           <span>{{ t('mail.body') }}</span>
-          <textarea v-model="bodyTemplate" rows="8" :placeholder="t('mail.bodyPlaceholder', TEMPLATE_TOKENS)"></textarea>
+          <VeyqTextarea v-model="bodyTemplate" class="mail-body-template" rows="8" :placeholder="t('mail.bodyPlaceholder', TEMPLATE_TOKENS)" />
         </label>
 
         <div class="mail-actions">
@@ -301,10 +302,9 @@ async function save() {
   gap: 0.15rem;
   cursor: pointer;
 }
-.settings-form textarea {
+.mail-body-template {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.85em;
-  line-height: 1.5;
 }
 .mail-actions {
   display: flex;

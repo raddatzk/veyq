@@ -22,6 +22,7 @@ vi.mock('../geocode', async (orig) => ({ ...(await orig<typeof import('../geocod
 import { mount, flushPromises } from '@vue/test-utils'
 import { readExifTags } from '../../../shared/image/exifTags'
 import MemoryDetail from './MemoryDetail.vue'
+import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import { memberMemorySource } from '../source'
 import { addMedia, MEDIA_PAGE_LIMIT, type MediaDeriver } from '../media'
 import { GETS_IN_FLIGHT, PRESIGN_BATCH_MAX } from '../../../core/blob/readScheduler'
@@ -289,7 +290,9 @@ describe('MemoryDetail (gallery grid + header)', () => {
     await flushPromises()
     expect(wrapper.text()).not.toContain(t('media.capturedAtCorrected'))
     await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
-    await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
+    // the layer's date field, at minute granularity
+    wrapper.findAllComponents(VeyqDateField).find((c) => c.props('inputId') === 'captured-at-input')!.vm.$emit('update:modelValue', '2019-08-15T08:30')
+    await flushPromises()
     await wrapper.find('.media-lightbox-date-form').trigger('submit')
     await flushPromises()
     expect(wrapper.text()).toContain(t('media.capturedAtCorrected'))

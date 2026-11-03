@@ -260,10 +260,9 @@ function endOfDay(d: Date): Date {
     <template v-if="link">
       <p class="share-created-copy">{{ t('share.linkReady') }}</p>
       <div class="share-link-row">
-        <input
+        <VeyqInput
           class="share-link-input"
-          type="text"
-          :value="link"
+          :model-value="link"
           readonly
           :aria-label="t('share.linkLabel')"
           @focus="($event.target as HTMLInputElement).select()"
@@ -498,11 +497,5 @@ function endOfDay(d: Date): Date {
 .share-link-input {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0.45rem 0.6rem;
-  border: 1px solid var(--app-line);
-  border-radius: 8px;
-  background: var(--app-surface);
-  color: var(--app-text);
-  font: inherit;
 }
 </style>

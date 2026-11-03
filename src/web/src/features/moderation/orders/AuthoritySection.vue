@@ -10,6 +10,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import VeyqTextarea from '../../../shared/ui/VeyqTextarea.vue'
 import type { ModerationCase, ModerationCaseExport, ModerationHandoverKindEnum } from '../../../api/generated/moderation'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { getExport, recordHandover } from '../cases'
@@ -109,7 +110,7 @@ async function handover(kind: ModerationHandoverKindEnum) {
           <span class="veyq-row-subtitle">{{ o.reference ?? t('moderation.orders.referenceSealed') }} · {{ t('moderation.authority.orderOf', { time: formTime(o.order.receivedAt) }) }}</span>
           <p v-if="o.order.blockedAt" class="veyq-form-copy">{{ t('moderation.orders.blocked', { time: formTime(o.order.blockedAt) }) }}</p>
           <template v-if="o.annex">
-            <textarea class="moderation-case-order-text" :value="o.annex" rows="10" readonly />
+            <VeyqTextarea class="moderation-case-order-text" :model-value="o.annex" rows="10" readonly />
             <VeyqButton variant="secondary" class="moderation-case-order-copy" icon="copy" :label="copied === o.order.id ? t('moderation.orders.copied') : t('moderation.orders.copyText')" @click="copy(o.order.id, o.annex)" />
           </template>
         </div>
@@ -123,7 +124,7 @@ async function handover(kind: ModerationHandoverKindEnum) {
     <VeyqButton variant="secondary" class="moderation-export-prepare" icon="list" :label="t('moderation.authority.prepare')" :loading="working" :disabled="busy" @click="prepare" />
     <template v-if="exportText">
       <strong>{{ t('moderation.authority.exportTitle') }}</strong>
-      <textarea class="moderation-export-text" :value="exportText" rows="12" readonly />
+      <VeyqTextarea class="moderation-export-text" :model-value="exportText" rows="12" readonly />
       <VeyqButton variant="secondary" class="moderation-export-copy" icon="copy" :label="copied === 'export' ? t('moderation.authority.copied') : t('moderation.authority.copyText')" @click="copy('export', exportText)" />
     </template>
     <label for="moderation-handover-reference">{{ t('moderation.authority.handoverReference') }}</label>
@@ -139,7 +140,6 @@ async function handover(kind: ModerationHandoverKindEnum) {
 <style scoped>
 .moderation-case-order-text,
 .moderation-export-text {
-  width: 100%;
   font-family: var(--font-mono, monospace);
 }
 </style>

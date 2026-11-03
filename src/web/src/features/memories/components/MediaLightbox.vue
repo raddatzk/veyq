@@ -56,6 +56,7 @@ import { personHash } from '../../../core/node/location'
 import { usePanZoom } from '../../../shared/ui/usePanZoom'
 import { createVisibilityPoller } from '../../../shared/state/visibilityPoller'
 import { exceedsPreview, originalZoomable, previewDownscaled } from '../lightboxZoom'
+import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const props = defineProps<{
@@ -130,7 +131,7 @@ const exif = ref<MediaExif | null>(null)
 const isDetailsOpen = ref(false) // mobile bottom-sheet toggle (the design's swipe handle)
 // capturedAt override editor (cr-0065/0066)
 const isEditingCapturedAt = ref(false)
-const capturedAtInput = ref('') // bound to <input type="datetime-local">
+const capturedAtInput = ref('') // the date field's value at minute granularity: `YYYY-MM-DDTHH:mm`, local wall-clock
 const savingCapturedAt = ref(false)
 // Why the last capture-time save did not land: it failed, a peer corrected the time meanwhile (the editor re-opened
 // on theirs, ADR 0077), or the tier does not open and is never rebuilt from empty. Null = no message.
@@ -367,7 +368,7 @@ const isCapturedAtCorrected = computed(() => captured.value?.capturedAtOverride 
 // source carries the medium's meta door: a guest's has none (no guest route writes a medium's meta).
 const canEditCapturedAt = computed(() => !!item.value && !!props.mediaMeta)
 
-/** epoch-ms → the `<input type="datetime-local">` value (local wall-clock, minute precision). */
+/** epoch-ms → the date field's `YYYY-MM-DDTHH:mm` value (local wall-clock, minute precision; a datetime-local's form). */
 function msToDatetimeLocal(ms: number | undefined): string {
   if (ms === undefined || !Number.isFinite(ms)) return ''
   const d = new Date(ms)
@@ -673,6 +674,9 @@ function onKeydown(event: KeyboardEvent) {
   // A layer dialog opened over the lightbox without its parent knowing — core's report dialog, opened from here for a
   // medium — holds the focus, so its keys are its own: a Backspace in the report's reason is no culling hotkey.
   if (event.target instanceof Element && event.target.closest('.veyq-dialog')) return
+  // The capture-time field and its calendar own their keys too: an arrow moves between its segments, a Backspace
+  // clears one - neither pages nor culls the medium.
+  if (event.target instanceof Element && event.target.closest('.media-lightbox-date-form, .veyq-date-panel')) return
   if (zoomable.value && !isEditingCapturedAt.value && zoom.onKey(event.key)) return // + / - / 0, and the arrows' pan while zoomed
   if (event.key === 'Escape') {
     if (zoom.zoomed.value) zoom.reset() // Escape un-zooms first, then closes
@@ -878,7 +882,7 @@ onBeforeUnmount(() => {
 
         <form v-if="isEditingCapturedAt" class="media-lightbox-date-form" @submit.prevent="saveCapturedAt">
           <label for="captured-at-input">{{ t('media.captured') }}</label>
-          <input id="captured-at-input" v-model="capturedAtInput" type="datetime-local" :disabled="savingCapturedAt" />
+          <VeyqDateField v-model="capturedAtInput" input-id="captured-at-input" granularity="minute" :disabled="savingCapturedAt" />
           <div class="media-lightbox-date-actions">
             <button class="veyq-text-button lightbox-text-button" type="submit" :disabled="savingCapturedAt">
               {{ t('common.save') }}
@@ -1027,15 +1031,6 @@ onBeforeUnmount(() => {
 .media-lightbox-date-form label {
   color: var(--app-muted);
   font-size: 0.8rem;
-}
-.media-lightbox-date-form input {
-  width: 100%;
-  padding: 0.4rem 0.55rem;
-  border: 1px solid var(--app-line);
-  border-radius: 8px;
-  background: var(--app-surface);
-  color: var(--app-text);
-  font: inherit;
 }
 .media-lightbox-date-actions {
   display: flex;

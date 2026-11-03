@@ -11,6 +11,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
+import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
 import type { VeyqMenuItem } from '../../../shared/ui/menu'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -233,6 +234,8 @@ const moveTargets = computed<BucketRow[]>(() => {
   if (!active) return []
   return bucketRows.value.filter((b) => b.ownerKey === active.ownerKey && !b.virtual && b.id !== active.id)
 })
+/** A sub-bucket indented by one dash per level, as the tree shows it. */
+const moveTargetOptions = computed(() => moveTargets.value.map((b) => ({ label: `${'— '.repeat(b.depth)}${b.displayName}`, value: b.id })))
 
 // --- bucket actions ---------------------------------------------------------
 
@@ -532,7 +535,7 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
     <VeyqDialog v-model:visible="bucketDialog.open" :header="bucketDialog.mode === 'create' ? t('memory.buckets.bucketDialogCreate') : t('memory.buckets.bucketDialogRename')" class="veyq-dialog-panel">
       <form class="veyq-form bucket-dialog-form" @submit.prevent="submitBucketDialog">
         <label for="bucket-name">{{ t('memory.buckets.bucketName') }}</label>
-        <input id="bucket-name" v-model="bucketDialog.name" type="text" autocomplete="off" />
+        <VeyqInput id="bucket-name" v-model="bucketDialog.name" autocomplete="off" />
         <p v-if="bucketDialog.error" class="veyq-form-error">{{ bucketDialog.error }}</p>
         <div class="veyq-dialog-action-row">
           <button class="veyq-dialog-button veyq-dialog-button-secondary" type="button" :disabled="bucketDialog.saving" @click="bucketDialog.open = false">
@@ -550,7 +553,7 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
       <form class="veyq-form bucket-dialog-form" @submit.prevent="confirmDeleteBucket">
         <p class="bucket-dialog-copy">{{ t('memory.buckets.deleteBucketCopy', { bucket: activeBucket?.displayName }) }}</p>
         <label for="bucket-del-name">{{ t('memory.buckets.deleteBucketNameLabel') }}</label>
-        <input id="bucket-del-name" v-model="deleteBucketDialog.typed" type="text" autocomplete="off" :placeholder="activeBucket?.displayName" />
+        <VeyqInput id="bucket-del-name" v-model="deleteBucketDialog.typed" autocomplete="off" :placeholder="activeBucket?.displayName" />
         <div class="veyq-dialog-action-row">
           <button class="veyq-dialog-button veyq-dialog-button-secondary" type="button" :disabled="deleteBucketDialog.saving" @click="deleteBucketDialog.open = false">
             <VeyqIcon name="times" /><span>{{ t('common.cancel') }}</span>
@@ -567,9 +570,7 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
       <form class="veyq-form bucket-dialog-form" @submit.prevent="submitMove">
         <label for="bucket-move-target">{{ t('memory.buckets.moveTarget') }}</label>
         <p v-if="!moveTargets.length" class="bucket-dialog-copy">{{ t('memory.buckets.moveEmpty') }}</p>
-        <select v-else id="bucket-move-target" v-model="moveDialog.target">
-          <option v-for="b in moveTargets" :key="b.id" :value="b.id">{{ '— '.repeat(b.depth) }}{{ b.displayName }}</option>
-        </select>
+        <VeyqSelect v-else v-model="moveDialog.target" input-id="bucket-move-target" :options="moveTargetOptions" />
         <div class="veyq-dialog-action-row">
           <button class="veyq-dialog-button veyq-dialog-button-secondary" type="button" :disabled="moveDialog.saving" @click="moveDialog.open = false">
             <VeyqIcon name="times" /><span>{{ t('common.cancel') }}</span>
@@ -615,10 +616,6 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
 /* Tiles are the shared MediaTile (cr-0125); its check/menu overlays use the global `.media-tile-*` classes. */
 .bucket-dialog-form { display: grid; gap: 0.7rem; }
 .bucket-dialog-copy { color: var(--app-muted); margin: 0; }
-.bucket-dialog-form input[type='text'], .bucket-dialog-form select {
-  width: 100%; padding: 0.5rem 0.65rem; border: 1px solid var(--app-line); border-radius: 8px;
-  background: var(--app-surface); color: inherit; font: inherit;
-}
 .veyq-dialog-button-danger { background: var(--app-danger); color: var(--app-on-fill); }
 @media (max-width: 760px) {
   .bucket-action-row { justify-content: flex-start; }

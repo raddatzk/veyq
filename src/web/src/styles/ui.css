@@ -222,9 +222,7 @@
 .veyq-form .veyq-password,
 .veyq-form .veyq-select,
 .veyq-form .veyq-date-field,
-.veyq-form input:not([type='radio']):not([type='checkbox']),
-.veyq-form select,
-.veyq-form textarea {
+.veyq-form input:not([type='radio']):not([type='checkbox']) {
   width: 100%;
   min-width: 0;
 }
@@ -233,9 +231,7 @@
 .veyq-form .veyq-password__input,
 .veyq-form .veyq-select,
 .veyq-form .veyq-date-field,
-.veyq-form input:not([type='radio']):not([type='checkbox']),
-.veyq-form select,
-.veyq-form textarea {
+.veyq-form input:not([type='radio']):not([type='checkbox']) {
   border-radius: var(--app-radius-sm);
 }
 

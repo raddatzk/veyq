@@ -15,7 +15,10 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqDateField from '../../shared/ui/VeyqDateField.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
+import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
+import VeyqTextarea from '../../shared/ui/VeyqTextarea.vue'
 import type {
   HoldExtensionReason,
   ModerationCase,
@@ -82,6 +85,8 @@ const SIX_WEEKS_DAYS = 42
 const deferMax = computed(() => new Date(Date.now() + SIX_WEEKS_DAYS * 24 * 60 * 60 * 1000))
 const csam = computed(() => current.value?.category === 'CHILD_SEXUAL_ABUSE')
 const extensionTypes = computed(() => (csam.value ? CSAM_EXTENSION_TYPES : EXTENSION_TYPES))
+const extendTypeOptions = computed(() => extensionTypes.value.map((r) => ({ label: t(`moderation.case.extendTypes.${r}`), value: r })))
+const groundOptions = computed(() => GROUNDS.map((g) => ({ label: t(`report.categories.${g}`), value: g })))
 
 const when = (d: Date) => d.toLocaleString(locale.value)
 const short = (id: string) => id.slice(0, 8)
@@ -376,12 +381,16 @@ onMounted(load)
           />
           <span class="veyq-form-copy">{{ t('moderation.case.extendUntilHint') }}</span>
           <label for="moderation-extend-type">{{ csam ? t('moderation.case.extendType') : t('moderation.case.extendTypeOptional') }}</label>
-          <select id="moderation-extend-type" v-model="extendType" class="moderation-extend-type" :disabled="busy">
-            <option value="" disabled>{{ t('moderation.case.extendTypePick') }}</option>
-            <option v-for="r in extensionTypes" :key="r" :value="r">{{ t(`moderation.case.extendTypes.${r}`) }}</option>
-          </select>
+          <VeyqSelect
+            v-model="extendType"
+            input-id="moderation-extend-type"
+            class="moderation-extend-type"
+            :options="extendTypeOptions"
+            :placeholder="t('moderation.case.extendTypePick')"
+            :disabled="busy"
+          />
           <label for="moderation-extend-reason">{{ t('moderation.case.extendReason') }}</label>
-          <textarea id="moderation-extend-reason" v-model="extendReason" class="moderation-extend-reason" rows="3" maxlength="2000" required :disabled="busy" />
+          <VeyqTextarea id="moderation-extend-reason" v-model="extendReason" class="moderation-extend-reason" rows="3" maxlength="2000" required :disabled="busy" />
           <span class="veyq-form-copy">{{ t(csam ? 'moderation.case.extendReasonHintCsam' : 'moderation.case.extendReasonHint') }}</span>
           <VeyqButton type="submit" variant="secondary" class="moderation-extend-submit" icon="clock" :label="t('moderation.case.extend')" :loading="busy" />
         </form>
@@ -426,7 +435,7 @@ onMounted(load)
                   @update:model-value="renewUntil[m.statement.id] = isoDateToLocalDate($event)"
                 />
                 <label :for="`moderation-renew-reason-${m.statement.id}`">{{ t('moderation.deferral.renewReason') }}</label>
-                <textarea :id="`moderation-renew-reason-${m.statement.id}`" v-model="renewReason[m.statement.id]" class="moderation-renew-reason" rows="2" maxlength="2000" :disabled="busy" />
+                <VeyqTextarea :id="`moderation-renew-reason-${m.statement.id}`" v-model="renewReason[m.statement.id]" class="moderation-renew-reason" rows="2" maxlength="2000" :disabled="busy" />
                 <VeyqButton type="submit" variant="secondary" class="moderation-renew-submit" icon="clock" :label="t('moderation.deferral.renew')" :loading="busy" />
               </form>
               <p v-if="openedFacts.get(m.id) !== undefined" class="veyq-form-copy moderation-measure-facts">
@@ -485,20 +494,18 @@ onMounted(load)
       <p v-if="closed" class="veyq-form-copy moderation-decide-closed">{{ t('moderation.decide.closed') }}</p>
       <div v-else class="veyq-form moderation-decide">
         <label for="moderation-decision-note">{{ t('moderation.decide.note') }}</label>
-        <textarea id="moderation-decision-note" v-model="note" class="moderation-decision-note" rows="3" maxlength="2000" :disabled="busy" />
+        <VeyqTextarea id="moderation-decision-note" v-model="note" class="moderation-decision-note" rows="3" maxlength="2000" :disabled="busy" />
         <span class="veyq-form-copy">{{ t('moderation.decide.noteHint') }}</span>
 
         <strong>{{ t('moderation.decide.statement') }}</strong>
         <p class="veyq-form-copy">{{ t('moderation.decide.statementCopy') }}</p>
         <label for="moderation-statement-ground">{{ t('moderation.decide.ground') }}</label>
-        <select id="moderation-statement-ground" v-model="ground" class="moderation-statement-ground" :disabled="busy">
-          <option v-for="g in GROUNDS" :key="g" :value="g">{{ t(`report.categories.${g}`) }}</option>
-        </select>
+        <VeyqSelect v-model="ground" input-id="moderation-statement-ground" class="moderation-statement-ground" :options="groundOptions" :disabled="busy" />
         <label for="moderation-statement-provision">{{ t('moderation.decide.provision') }}</label>
-        <input id="moderation-statement-provision" v-model="provision" class="moderation-statement-provision" type="text" maxlength="200" :disabled="busy" />
+        <VeyqInput id="moderation-statement-provision" v-model="provision" class="moderation-statement-provision" maxlength="200" :disabled="busy" />
         <span class="veyq-form-copy">{{ t('moderation.decide.provisionHint') }}</span>
         <label for="moderation-statement-facts">{{ t('moderation.decide.facts') }}</label>
-        <textarea id="moderation-statement-facts" v-model="facts" class="moderation-statement-facts" rows="4" maxlength="2000" :disabled="busy" />
+        <VeyqTextarea id="moderation-statement-facts" v-model="facts" class="moderation-statement-facts" rows="4" maxlength="2000" :disabled="busy" />
         <span class="veyq-form-copy">{{ t('moderation.decide.factsHint') }}</span>
         <label class="moderation-defer-ask">
           <input v-model="deferAsked" type="checkbox" class="moderation-defer-toggle" :disabled="busy" />
@@ -514,7 +521,7 @@ onMounted(load)
             :disabled="busy"
           />
           <label for="moderation-defer-reason">{{ t('moderation.deferral.reason') }}</label>
-          <textarea id="moderation-defer-reason" v-model="deferReason" class="moderation-defer-reason" rows="2" maxlength="2000" :disabled="busy" />
+          <VeyqTextarea id="moderation-defer-reason" v-model="deferReason" class="moderation-defer-reason" rows="2" maxlength="2000" :disabled="busy" />
           <span class="veyq-form-copy">{{ t('moderation.deferral.reasonHint') }}</span>
         </template>
 
