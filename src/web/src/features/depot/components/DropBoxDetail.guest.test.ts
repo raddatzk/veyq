@@ -140,7 +140,7 @@ describe("a drop box inside a folder share is the member's detail, read-only (in
     it(`${role}: the drop box's header offers Download; a real click opens core's download of THIS drop box`, async () => {
       const w = await mountBody(role)
       await click(tile(w, 'Postfach')!.element)
-      const action = w.findComponent(DropBoxDetail).find('.veyq-node-header-actions button[data-action="download"]')
+      const action = w.find('.veyq-node-page .veyq-node-header-actions button[data-action="download"]')
       expect(action.attributes('aria-label')).toBe(t('export.action'))
       await click(action.element)
       const dialog = w.findComponent(ExportSubtreeDialog)
@@ -169,7 +169,7 @@ describe("a drop box inside a folder share is the member's detail, read-only (in
       const view = w.findComponent(DropBoxDetail)
       expect(view.exists()).toBe(true)
       expect(view.props('access').mode).toBe('guest')
-      expect(view.text()).toContain('Postfach')
+      expect(w.get('.veyq-node-page .veyq-node-header-title').text(), 'core\'s header above the drop box').toBe('Postfach')
       expect(view.text()).toContain(t('depot.dropBox.sharedHint'))
       expect(view.find('.veyq-row-title').text()).toBe('Anna')
       expect(view.find('.veyq-row-subtitle').text()).toBe('1 file')

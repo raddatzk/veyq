@@ -70,6 +70,9 @@ export function registerDepot(registry: Registry): void {
     // node's key (ADR 0109).
     rekeyContent: nothingOfItsOwnToRekey,
     icon: 'file',
+    // The header's priority (ADR 0110): favorite, the download (what a file is for), sharing, replacing the content, then
+    // editing and moving it; delete and report are always the ⋯ menu's last entries.
+    header: { order: ['favorite', 'download', 'share', 'replace', 'rename', 'move', 'copy'] },
     detail: FileDetail,
     shareDialog: FileShareDialog,
     // Core's delete dialog (the detail's delete) names the file, not "item".
@@ -110,6 +113,8 @@ export function registerDepot(registry: Registry): void {
     // node's key (ADR 0109).
     rekeyContent: nothingOfItsOwnToRekey,
     icon: 'inbox',
+    // The header's priority (ADR 0110): favorite, sharing (what a drop box is for), its content, its look, then moving it.
+    header: { order: ['favorite', 'share', 'download', 'cover', 'move', 'copy'] },
     // A drop box carries a cover (inbox #411: core's action, picker, upload and display); a file does not.
     cover: {},
     detail: DropBoxDetail,

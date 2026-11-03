@@ -27,8 +27,9 @@
 // through the source's `chunks` (a member's scope READ gate, a guest's link), so a guest of either role sees the member's
 // viewer; nothing about it is a right of its own beyond the download it offers where the matrix grants one.
 //
-// **Who uploaded the current content** (ADR 0083 Decision 8, `../uploader.ts`): a member's page names them in the header's meta
-// line - a member by core's display rule with a link to the profile, one who left as a greyed "former member", a guest
+// **Who uploaded the current content** (ADR 0083 Decision 8, `../uploader.ts`): a member's page names them in core's header,
+// as a people fact this page contributes (core draws it, ADR 0110 decision 10) - a member by core's display rule with a link
+// to the profile (core links a member's page only), one who left as a greyed "former member", a guest
 // by the name it gave itself (inbox #431: its identity folder inside a drop box, else its sealed name opened under the
 // nearest key the tree holds) and marked as a guest's ("Ben (guest)", core's `guestDisplayName`, inbox #433), "a guest"
 // where that does not open. It comes from the member listing's `uploaderKey` and
@@ -38,14 +39,13 @@
 // Operator-blind as the section: every name, size and date is opened here under keys the tree holds.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { NodeDetailProps } from '../../../core/applications/registry'
 import { hostRights, injectNodeHost } from '../../../core/node/nodeHost'
 import type { TreeNode } from '../../../core/node/tree'
-import NodeHeader from '../../../core/node/components/NodeHeader.vue'
-import { standardNodeActions, type NodeHeaderAction } from '../../../core/node/nodeHeader'
+import { standardNodeActions, type NodeHeaderAction, type NodeHeaderPeopleFact } from '../../../core/node/nodeHeader'
+import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { enqueue, removeFile, useUploadQueue, APPLICATION_OFF, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
@@ -60,8 +60,6 @@ import { fileFacts } from '../download'
 import { extensionOf } from '../../../core/blob/sniff'
 import type { ViewerTarget } from '../useFileViewer'
 import FileViewer from './FileViewer.vue'
-import PersonAvatar from '../../../core/people/PersonAvatar.vue'
-import { personHash } from '../../../core/node/location'
 import { loadScopePeople, type Person } from '../../../core/people/directory'
 import { guestUploaderName, needsPeople, uploaderOf, type FileUploader } from '../uploader'
 import { guestDisplayName } from '../../../core/sharing/guestIdentity'
@@ -70,8 +68,7 @@ const props = defineProps<NodeDetailProps>()
 // The page's doors (`core/node/nodeHost.ts`): the rename and move through core's dialogs, the share, the delete question.
 const host = injectNodeHost()
 const { t, locale } = useI18n()
-// Core's own actions (the heart, "Copy to…", Report) come with core's header for this node (`NodeHeader`'s `node`); a file
-// downloads as itself (the header's own download below), so core offers no ZIP download for it (ADR 0082 decision 4).
+// Core's own actions (the heart, "Copy to…", Report) come with core's header for this node; a file downloads as itself (the header's own download below), so core offers no ZIP download for it (ADR 0082 decision 4).
 const { ask } = useConfirm()
 const toast = useToast()
 const { batches } = useUploadQueue()
@@ -165,9 +162,20 @@ const facts = computed(() => {
 })
 const empty = computed(() => blob.value === null)
 
-/** The file header's priority (ADR 0110): favorite, the download (what a file is for), sharing, replacing the content,
- *  then editing and moving it; delete and report are always the ⋯ menu's last entries. */
-const FILE_HEADER_ORDER = ['favorite', 'download', 'share', 'replace', 'rename', 'move', 'copy'] as const
+/** The uploader as a people fact of core's header: a member by name (core links them on a member's page), one who left as a
+ *  former member, a guest by the name it gave itself marked as a guest's, else "a guest". */
+const uploaderFact = computed<NodeHeaderPeopleFact | null>(() => {
+  const u = uploader.value
+  if (!u) return null
+  const person =
+    u.kind === 'member'
+      ? { userId: u.userId, name: u.name }
+      : u.kind === 'former'
+        ? { userId: null, name: t('people.formerMember'), former: true }
+        : { userId: null, name: u.name ? guestDisplayName(u.name) : t('depot.detail.aGuest') }
+  return { kind: 'people', label: t('depot.detail.uploadedBy'), caption: t('depot.detail.uploadedBy'), people: [person] }
+})
+
 /** The header's actions (owner decision 2026-10-14): the download, the replace of the content (an upload into a file that
  *  holds none), then share, rename, move, delete — each only where the rights matrix grants it. The download is the
  *  page's call to action; it runs inside the click (the save picker needs its activation). */
@@ -298,30 +306,14 @@ async function replaceAnyway(n: Notice) {
   await loadBlob()
   await startReplace(file, true)
 }
+
+// The header is core's (its order is the kind's `header.order`): the file adds its actions and who uploaded it.
+contributeNodeHeader(() => ({ actions: headerActions.value, facts: uploaderFact.value ? [uploaderFact.value] : [] }))
 </script>
 
 <template>
-  <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the file's own actions, then what it holds. -->
+  <!-- Opens like a folder (inbox #385 (b)): under core's header (the file's own actions), what it holds. -->
   <div class="veyq-level-view">
-    <NodeHeader :node="node" icon="file" :title="node.name" :actions="headerActions" :order="FILE_HEADER_ORDER">
-      <template v-if="uploader" #meta>
-        <p class="file-detail-uploader" data-testid="file-uploader">
-          <!-- The space is real text, so the line reads "Uploaded by Anna" to assistive technology too; the avatar is decorative. -->
-          <span class="file-detail-uploader-label">{{ t('depot.detail.uploadedBy') }}</span>{{ ' ' }}
-          <RouterLink v-if="uploader.kind === 'member'" :to="{ hash: personHash(uploader.userId) }" class="file-detail-uploader-person">
-            <PersonAvatar :name="uploader.name" :user-id="uploader.userId" />
-            <span class="file-detail-uploader-name">{{ uploader.name }}</span>
-          </RouterLink>
-          <span v-else-if="uploader.kind === 'former'" class="file-detail-uploader-person is-former" :title="t('people.formerMemberHint')">
-            <PersonAvatar :name="t('people.formerMember')" />
-            <span class="file-detail-uploader-name">{{ t('people.formerMember') }}</span>
-          </span>
-          <!-- A guest by the name it gave itself, marked as a guest's (inbox #433: a guest may pick a member's name; no link: a
-               guest has no profile), else "a guest". -->
-          <span v-else class="file-detail-uploader-person file-detail-uploader-name">{{ uploader.name ? guestDisplayName(uploader.name) : t('depot.detail.aGuest') }}</span>
-        </p>
-      </template>
-    </NodeHeader>
     <section class="veyq-section file-detail">
       <VeyqMessage v-for="n in notices" :key="n.key" tone="error" class="files-notice">
         <span class="file-detail-notice">
@@ -373,39 +365,6 @@ async function replaceAnyway(n: Notice) {
 .file-detail-facts dd {
   margin: 0;
   overflow-wrap: anywhere;
-}
-.file-detail-uploader {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0.25rem 0 0;
-  color: var(--app-muted);
-  font-size: 0.92rem;
-}
-.file-detail-uploader-person {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--app-text);
-  font-weight: 600;
-  text-decoration: none;
-}
-a.file-detail-uploader-person:hover {
-  text-decoration: underline;
-}
-a.file-detail-uploader-person:focus-visible {
-  outline: 2px solid var(--app-focus);
-  outline-offset: 2px;
-  border-radius: var(--app-radius-sm);
-}
-.file-detail-uploader-person.is-former {
-  color: var(--app-muted);
-  font-weight: 500;
-  font-style: italic;
-}
-.file-detail-uploader-person.is-former :deep(.veyq-avatar) {
-  opacity: 0.6;
 }
 .file-detail-notice {
   display: flex;

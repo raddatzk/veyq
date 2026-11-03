@@ -158,10 +158,15 @@ describe('DropBoxDetail', () => {
     expect(w.calls.share).toEqual([[BOX, { contribute: false }]]) // a drop box's dialog has no role to offer
     expect(w.calls.delete).toEqual([[BOX]])
 
-    // control: no share offered where the host says the kind cannot be shared
-    expect(mountDetail(false).find('button[aria-label="Share link"]').exists()).toBe(false)
+    // control: no share offered where the host says the kind cannot be shared (the header shows what the page contributed
+    // once it has rendered: a tick after the mount)
+    const unshareable = mountDetail(false)
+    await flushPromises()
+    expect(unshareable.find('button[aria-label="Share link"]').exists()).toBe(false)
     // …and the READ leaf is not the drop box's: public shares off alone keeps the WRITE_ONLY links manageable
-    expect(mountDetail(true, false).find('button[aria-label="Share link"]').exists()).toBe(true)
+    const readOff = mountDetail(true, false)
+    await flushPromises()
+    expect(readOff.find('button[aria-label="Share link"]').exists()).toBe(true)
   })
 
   it('deletes a guest’s folder after a confirm, and nothing without one', async () => {
@@ -185,7 +190,7 @@ describe('DropBoxDetail', () => {
   })
 })
 
-// A drop box carries a cover (inbox #411): core's action in its header, the image in the header's leading slot.
+// A drop box carries a cover (inbox #411): core's action in its header, the image its leading visual.
 describe('DropBoxDetail - its cover', () => {
   const KEY = v1.randomBytes(32)
   const withCover = (): TreeNode => node(BOX.id, DROPBOX_KIND, 'Einsendungen', null, {
@@ -207,19 +212,33 @@ describe('DropBoxDetail - its cover', () => {
     Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:box-cover'), revokeObjectURL: vi.fn() })
   })
 
-  it('a writer with the keys has Set cover in the header; with a cover, Change (and no separate Remove); the folder icon without one', async () => {
+  it('a writer with the keys has Set cover in the header; with a cover, Change (and no separate Remove); the inbox icon without one', async () => {
     const plain = mountWith(BOX)
     await flushPromises()
     expect(plain.find('.veyq-node-header-actions button[data-action="cover"]').attributes('aria-label')).toBe(t('node.cover.set'))
     expect(plain.find('.veyq-node-header-actions button[data-action="cover-remove"]').exists()).toBe(false)
-    expect(plain.findComponent(VeyqIcon).classes()).toContain('veyq-node-header-icon')
-    expect(plain.findComponent(VeyqIcon).props('name')).toBe('inbox')
+    // The leading visual is core's (the kind's `cover`): the icon tile, a button that sets the cover where the writer may.
+    const tile = plain.get('.veyq-node-header-leading button.veyq-node-header-icon')
+    expect(tile.attributes('aria-label')).toBe(t('node.cover.set'))
+    expect(tile.findComponent(VeyqIcon).props('name')).toBe('inbox')
 
     const covered = mountWith(withCover())
     await flushPromises()
     await vi.waitFor(() => expect(covered.find('.veyq-node-header-cover img').attributes('src')).toBe('blob:box-cover'))
+    expect(covered.get('.veyq-node-header-leading button.veyq-node-header-cover').attributes('aria-label')).toBe(t('node.cover.change'))
     expect(covered.find('button[data-action="cover"]').attributes('aria-label')).toBe(t('node.cover.change'))
     expect(covered.find('button[data-action="cover-remove"]').exists(), 'removal lives in the dialog').toBe(false)
+  })
+
+  it('the cover itself, clicked, opens the same dialog as the header action', async () => {
+    const covered = mountWith(withCover())
+    await flushPromises()
+    await vi.waitFor(() => expect(covered.find('.veyq-node-header-cover img').exists()).toBe(true))
+    await covered.get('.veyq-node-header-leading button.veyq-node-header-cover').trigger('click')
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
+    expect([...document.body.querySelectorAll('[role="dialog"] button')].map((b) => b.textContent?.trim())).toContain(t('node.cover.remove'))
+    covered.unmount()
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).toBeNull())
   })
 
   it('the header action, clicked, opens core\'s cover dialog - Remove inside it only where the box has a cover', async () => {
@@ -247,6 +266,7 @@ describe('DropBoxDetail - its cover', () => {
       await flushPromises()
       expect(w.find('button[data-action="cover"]').exists()).toBe(false)
       await vi.waitFor(() => expect(w.find('.veyq-node-header-cover img').exists()).toBe(true))
+      expect(w.find('.veyq-node-header-leading button').exists(), 'the cover is no button there').toBe(false)
     }
   })
 })

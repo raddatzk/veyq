@@ -3,7 +3,8 @@
 // identity, each named by its guest (its entry opened through the drop box's drop key, core's tree) — with how many
 // files each holds. A folder opens to core's level view, read-only there (a member places nothing in a guest's identity
 // folder) but for a delete per file (inbox #391); a member deletes a folder here, or the drop box, and shares it
-// (`DropBoxShareDialog`) from core's header card, the one a folder opens with (`NodeHeader`, inbox #385 (b), #406) — each
+// (`DropBoxShareDialog`) from core's header, the one a folder opens with (core's page draws it, inbox #385 (b), #406, ADR
+// 0110 decision 10; this contributes the drop box's actions) — each
 // where Depot's rights matrix says so (`../rights.ts`, inbox #401: the share with
 // the instance's public links, the deletes not during a pending deletion). Two guests of one name are told apart at
 // display time, never stored ("Anna", "Anna (2)",
@@ -37,11 +38,8 @@ import { compareByCreation, displayNamesOf } from '../../../core/node/location'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
-import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
-import { useNodeCover } from '../../../core/node/cover/useNodeCover'
-import { injectCoreNodeActions } from '../../../core/node/coreNodeActions'
-import NodeCoverImage from '../../../core/node/cover/components/NodeCoverImage.vue'
+import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { useTrashUndo } from '../../../core/node/trashUndo'
 import { depotRights } from '../rights'
 import { targetOf, type GuestAccess } from '../../../core/access'
@@ -52,11 +50,8 @@ const props = defineProps<NodeDetailProps>()
 const host = injectNodeHost()
 const { t } = useI18n()
 // Core's own actions (the heart, the cover, "Copy to…", the download as a ZIP of its guests' folders, Report) come with core's
-// header for this node (`NodeHeader`'s `node`). A drop box's cover is its own image (core's dialog, opened by core's cover
-// action), shown in the header's leading slot - the page's one cover (core's frame), its own only when mounted bare; the
-// inbox icon is the default.
-const cover = injectCoreNodeActions()?.cover ?? useNodeCover(() => props.access, () => props.tree, () => [props.node])
-const nodeCover = computed(() => cover.covers.value.get(props.node.id) ?? null)
+// header for this node. A drop box's cover is its own image, core's entirely (the kind's `cover`): the header shows it, the
+// inbox icon without one.
 const { ask } = useConfirm()
 const toast = useToast()
 const offerUndo = useTrashUndo()
@@ -76,9 +71,6 @@ const source: DepotSource = guest
       ...(host.move ? { move: (node: TreeNode) => host.move!(node) } : {}),
     })
 const rights = computed(() => hostRights(sourceRights(depotRights(props.access, targetOf(props.tree, props.node)), source), host))
-/** The drop box header's priority (ADR 0110): favorite, sharing (what a drop box is for), its content, its look, then
- *  moving it; delete and report are always the ⋯ menu's last entries. */
-const DROP_BOX_HEADER_ORDER = ['favorite', 'share', 'download', 'cover', 'move', 'copy'] as const
 /** The header's actions: share, move, delete — each only where the rights matrix grants it (a drop box is never renamed here). */
 const headerActions = computed(() =>
   standardNodeActions(
@@ -91,6 +83,7 @@ const headerActions = computed(() =>
     },
   ),
 )
+contributeNodeHeader(() => ({ actions: headerActions.value }))
 
 /** The guests' folders, each with its display name (a repeated name numbered) and its file count. */
 const folders = computed(() => {
@@ -128,13 +121,8 @@ async function removeFolder(folder: TreeNode, label: string) {
 </script>
 
 <template>
-  <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the drop box's share and delete, then its folders. -->
+  <!-- Opens like a folder (inbox #385 (b)): under core's header (its share and delete), its folders. -->
   <div class="veyq-level-view">
-    <NodeHeader :node="node" icon="inbox" :title="node.name" :actions="headerActions" :order="DROP_BOX_HEADER_ORDER">
-      <template v-if="nodeCover" #leading>
-        <span class="veyq-node-header-cover"><NodeCoverImage :src="nodeCover.url" :crop="nodeCover.crop" /></span>
-      </template>
-    </NodeHeader>
     <section class="veyq-section dropbox-detail">
       <div class="veyq-section-header">
         <h2>{{ t('node.folders') }}</h2>

@@ -204,7 +204,7 @@ describe.each([ShareRole.Read, ShareRole.ReadWrite])('a %s guest of a single-fil
     const w = await mountPage(role)
     expect(w.find('.veyq-node-header h1').text()).toBe('Report.pdf') // control: the header is drawn
     expect(w.find('.file-detail-facts').exists()).toBe(true)
-    expect(w.find('[data-testid="file-uploader"]').exists()).toBe(false)
+    expect(w.find('.veyq-node-header [data-fact="people"]').exists(), 'no people in core\'s header').toBe(false)
     expect(w.text()).not.toContain(t('depot.detail.uploadedBy'))
     expectNoMemberWorld()
   })
@@ -221,7 +221,7 @@ describe.each([ShareRole.Read, ShareRole.ReadWrite])('a %s guest of a single-fil
     }).listShareFiles
     const w = await mountPage(role)
     expect(w.find('.file-detail-facts').exists()).toBe(true) // control: the listing was read and the page drawn
-    expect(w.find('[data-testid="file-uploader"]').exists()).toBe(false)
+    expect(w.find('.veyq-node-header [data-fact="people"]').exists(), 'no people in core\'s header').toBe(false)
     expect(w.text()).not.toContain('Ben Gast')
     expectNoMemberWorld()
   })

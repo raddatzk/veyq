@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 // Who uploaded an opened file's current content, as a MEMBER sees it (ADR 0083 Decision 8, uc.depot.view-file step 0):
-// `FileDetail` mounted as the host does, with the real catalog and a real router (the name is a real link, clicked).
+// `FileDetail` mounted as the host does - under core's page, whose header draws the uploader it contributes - with the real catalog and a real router (the name is a real link, clicked).
 // Stubbed by path: Depot's client (`listFiles`, typed by the contract - it carries the `uploaderKey`), core's people
 // directory (`loadScopePeople`: the scope's CURRENT members), the download's chunk reader and core's tree store. A guest
 // session's page is `FileDetail.guest.test.ts`'s (its source has no uploader door, so it names nobody).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
+import { mountNodePage } from '../../../test/nodePage'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
@@ -69,7 +70,7 @@ async function mountDetail(
   const nodes = o.world?.nodes ?? [DOCS, REPORT]
   const tree = memberTreeOf(() => nodes, { scopeId: SCOPE, epochs })
   await router.push('/')
-  const w = mount(FileDetail, {
+  const w = mountNodePage(FileDetail, {
     props: {
       node, scopeId: SCOPE, epochs, contentKey: v1.randomBytes(32), children: { folders: [], byKind: new Map() },
       access: memberAccessOf({ scopeId: SCOPE, epochs }), tree,
@@ -80,7 +81,7 @@ async function mountDetail(
   return w
 }
 type Wrapper = Awaited<ReturnType<typeof mountDetail>>
-const uploaderLine = (w: Wrapper) => w.find('.veyq-node-header [data-testid="file-uploader"]')
+const uploaderLine = (w: Wrapper) => w.find('.veyq-node-header [data-fact="people"]')
 /** The line as assistive technology reads it: its text without the decorative (`aria-hidden`) avatar, spaces collapsed. */
 const spoken = (w: Wrapper) => {
   const copy = uploaderLine(w).element.cloneNode(true) as HTMLElement
