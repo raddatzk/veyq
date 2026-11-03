@@ -161,40 +161,45 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
 
-      # One install for the whole workspace (`npm ci` from the root links `@veyq/crypto` into src/web/), then each
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
+      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
+      # switches itself to the pinned version.
+      - name: Install pnpm
+        if: runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.16.1
+
+      # One install for the whole workspace (a root `pnpm install` links `@veyq/crypto` into src/web/), then each
       # package proves ITSELF. The shared crypto package is checked first and separately on purpose: it is the
       # one place a defect would be a defect in BOTH surfaces, so its own suite failing must not read as a
       # web failure.
       - name: Install dependencies
-        # The ONE gated install that asks the registry about the locked packages this platform skipped (the arm64
-        # image's bindings among them); every other gated install of this lockfile passes --skip-registry-check
+        # The ONE gated install that asks the registry whether a locked package was deprecated since the lock was
+        # written (the arm64 image's bindings among them); every other gated install of this lockfile passes --skip-registry-check
         # (inbox #312). The images install the same lockfile, and `publish` needs this job, so nothing built from a
-        # lockfile this did not pass is published. validate_npm_installs_gated.py holds both.
-        run: python3 scripts/npm_ci_no_deprecated.py
+        # lockfile this did not pass is published. validate_pnpm_installs_gated.py holds both.
+        run: python3 scripts/pnpm_install_no_deprecated.py
 
       - name: Run shared crypto checks
         working-directory: src/packages/crypto
-        run: npm run check
+        run: pnpm run check
 
       - name: Run frontend checks
         working-directory: src/web
-        run: npm run check
+        run: pnpm run check
 
       # Gated for the same reason the app is: the image build compiles but runs no tests, so without this a broken
       # admin surface could still be published beside a green app image (ADR 0065 — one release, its images).
       - name: Run admin surface checks
         working-directory: src/admin-web
-        run: npm run check
+        run: pnpm run check
 
       # Lane L1's browser suite runs only in `stack`, so its lint, its types, its spec list, its specs' out-of-tree
       # fixture paths (`new URL('../../../../../…', import.meta.url)`) and its split into legs (`shards.test.mjs`) are
       # checked here, on every commit.
       - name: Run browser suite checks
         working-directory: tests/e2e
-        run: npm run check
+        run: pnpm run check
 
   chart:
     name: Chart checks
@@ -285,8 +290,13 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
+
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
+      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
+      # switches itself to the pinned version.
+      - name: Install pnpm
+        if: runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.16.1
 
       # Build the runnable fast-jar ONCE; the orchestrator boots it again per e2e file, because every suite
       # cold-births its own Server Owner and asserts setupRequired===true, and an instance has one.
@@ -301,8 +311,8 @@ jobs:
         run: ./gradlew --no-daemon quarkusBuild
 
       - name: Install frontend dependencies
-        # The registry half (other platforms' bindings) is asked once per commit, by `frontend`.
-        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+        # The registry half is asked once per commit, by `frontend`.
+        run: python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
 
       # Docker-free: who owns the config-secret key a restore places, and that an unplaceable one is refused
       # before the first write. Beside the rehearsal below, which drives the same tool as one user end to end.
@@ -368,8 +378,13 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
+
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
+      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
+      # switches itself to the pinned version.
+      - name: Install pnpm
+        if: runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.16.1
 
       - name: Build backend fast-jar
         working-directory: src/backend
@@ -377,7 +392,7 @@ jobs:
 
       - name: Install frontend dependencies
         # The seeder (src/web/scripts/fuzz-seed.mts) runs on web's generated client; the registry half is `frontend`'s.
-        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+        run: python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
 
       - name: Fuzz the API against a live backend
         run: python3 scripts/run_api_fuzz.py
@@ -694,9 +709,9 @@ jobs:
     name: Stack lane L1 (${{ matrix.arch }}, ${{ matrix.domain }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
-    # `frontend` too: it is the one install of the lockfile that asks the registry about the packages this platform
-    # skipped (inbox #312), and the images this lane builds or pulls install that lockfile — so nothing is booted here
-    # from a lockfile that check has not passed (validate_npm_installs_gated.py). It runs beside `build`, so the
+    # `frontend` too: it is the one install of the lockfile that asks the registry about its locked packages
+    # (inbox #312), and the images this lane builds or pulls install that lockfile — so nothing is booted here
+    # from a lockfile that check has not passed (validate_pnpm_installs_gated.py). It runs beside `build`, so the
     # wait costs only what it takes longer.
     needs:
       - version
@@ -729,14 +744,19 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
+
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
+      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
+      # switches itself to the pinned version.
+      - name: Install pnpm
+        if: runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.16.1
 
       # The browser container installs nothing: it mounts this root install read-only, with `@playwright/test` pinned
       # to the image's version (the orchestrator refuses a mismatch). The registry half is asked once per commit, by
       # `frontend`.
       - name: Install dependencies
-        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+        run: python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
 
       # The orchestrator, the release producer and `veyqctl` run on the job's Python; PyYAML is the one dependency.
       - name: Set up the orchestrator's Python
@@ -919,8 +939,13 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: package-lock.json
+
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
+      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
+      # switches itself to the pinned version.
+      - name: Install pnpm
+        if: steps.predecessor.outputs.ref != '' && runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.16.1
       - name: Build the candidate's fast-jar
         if: steps.predecessor.outputs.ref != ''
         working-directory: src/backend
@@ -928,7 +953,7 @@ jobs:
       - name: Install the candidate's dependencies
         if: steps.predecessor.outputs.ref != ''
         # The registry half is asked once per commit, by this workflow's `frontend`.
-        run: python3 scripts/npm_ci_no_deprecated.py --skip-registry-check
+        run: python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
       # The orchestrator builds the predecessor itself, in a worktree of its ref inside the run directory, and removes
       # it afterwards; its summary ends with the proof's own lines (predecessor, both highest migrations, the outcome).
       # The major-entry leg proves from the release the tools image bakes and its gate admits alone (ADR 0098 decision

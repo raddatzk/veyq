@@ -17,8 +17,10 @@ multi-ecosystem-groups:
       interval: "weekly"
 
 updates:
-  # The npm workspace's one lockfile is at the root (src/web/, src/admin-web/, src/packages/crypto/ and tests/e2e/ are its
-  # members), so this is the directory that reaches all four. It bumps the openapi-generator-cli WRAPPER only: the generator
+  # The pnpm workspace's one lockfile is at the root (src/web/, src/admin-web/, src/packages/crypto/ and tests/e2e/ are its
+  # members, listed in pnpm-workspace.yaml), so this is the directory that reaches all four. Dependabot's "npm" ecosystem
+  # is also its pnpm one (remembered, NOT read from dependabot-core: it reads pnpm-lock.yaml; whether it reads pnpm 12's
+  # lockfile, which carries pnpm's own pin as a first YAML document, is unproven like the rest of this file). It bumps the openapi-generator-cli WRAPPER only: the generator
   # JAR it runs is chosen by `generator-cli.version` in src/web/ and src/admin-web/openapitools.json and pinned in
   # scripts/openapi_generator_jar.sha256, which no ecosystem here reads — that bump is by hand, at a release.
   - package-ecosystem: "npm"
@@ -28,9 +30,9 @@ updates:
     multi-ecosystem-group: "app-runtime"
     open-pull-requests-limit: 1
 
-  # The docs site is its own npm package with its own lockfile, deliberately outside the root workspace (site/package.json
-  # says why), so the entry above never reads it (remembered, NOT read from dependabot-core: npm's file fetcher follows
-  # the root's `workspaces`, and site/ is none of them). Without this entry its tree aged unseen — undici sat at an advisory version until an ORT run found it
+  # The docs site is its own package with its own lockfile, deliberately outside the root workspace (site/package.json
+  # says why), so the entry above never reads it (remembered, NOT read from dependabot-core: the file fetcher follows
+  # the root's pnpm-workspace.yaml `packages`, and site/ is none of them). Without this entry its tree aged unseen — undici sat at an advisory version until an ORT run found it
   # (2026-10-30). Its own group and a weekly schedule rather than app-runtime's daily one: the site ships nothing in an
   # image, only the GitHub Pages build.
   - package-ecosystem: "npm"

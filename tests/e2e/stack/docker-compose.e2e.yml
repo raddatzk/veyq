@@ -173,8 +173,9 @@ services:
       # A CI runner's `CI=true` (empty elsewhere): playwright.config.ts keeps a trace only for a failed test then.
       CI: ${CI:-}
     volumes:
-      # The checkout read-only: tests/e2e/, src/packages/crypto/ and the root node_modules the host installed through
-      # scripts/npm_ci_no_deprecated.py — nothing is installed in here. Pure-JS packages only on this path
+      # The checkout read-only: tests/e2e/, src/packages/crypto/ and the node_modules the host installed through
+      # scripts/pnpm_install_no_deprecated.py (each member's links resolve into the root's node_modules/.pnpm, all
+      # inside this mount) — nothing is installed in here. Pure-JS packages only on this path
       # (@playwright/test, @veyq/crypto, @noble/*), so a macOS install runs in this Linux image unchanged.
       - ${VEYQ_E2E_REPO:?set by scripts/run_stack_e2e.py}:/repo:ro
       # The run directory: Pebble's root in, the report, traces, junit.xml and instance.json out.
@@ -183,7 +184,7 @@ services:
     entrypoint:
       - /bin/sh
       - -c
-      - python3 /repo/tests/e2e/stack/nss_trust_root.py /out/pebble-root.pem "$$HOME/.pki/nssdb" && exec node /repo/node_modules/@playwright/test/cli.js test "$$@"
+      - python3 /repo/tests/e2e/stack/nss_trust_root.py /out/pebble-root.pem "$$HOME/.pki/nssdb" && exec node /repo/tests/e2e/node_modules/@playwright/test/cli.js test "$$@"
       - browser
 
   # The release mirror an operator may point the release check at (ADR 0097 decision 1, uc.admin.learn-of-new-releases)

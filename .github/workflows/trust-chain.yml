@@ -3,7 +3,7 @@ name: Trust chain
 # The product guards run unfiltered: on every push and every PR, docs included.
 #
 # They used to be a job in ci.yml, which ignores `docs/**` and `**/*.md` so a doc change does not pay for
-# `./gradlew check` + `npm ci`. That filter is right for those jobs and was wrong for this one: the guards whose
+# `./gradlew check` + `pnpm install`. That filter is right for those jobs and was wrong for this one: the guards whose
 # whole purpose is validating `docs/` only fired when *code* changed. Two of the three commits that found this
 # were doc-only, and would have skipped their own validation. ci.yml's `guards` job runs the same glob again, so
 # the pipeline's publish can wait on it (ADR 0091 decision 2); a docs-only commit is validated here and nowhere else.
