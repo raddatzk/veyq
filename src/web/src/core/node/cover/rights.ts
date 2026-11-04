@@ -1,5 +1,5 @@
 // What a viewer may do about a node's cover (inbox #411): ONE fail-closed rights function for EVERY kind that opts in
-// (`KindDescriptor.cover`: a folder, a drop box, a Memory), because setting a cover is core's action, not an application's.
+// (`KindDescriptor.cover`: a folder, a drop box, a Memory, a Pot), because setting a cover is core's action, not an application's.
 //
 // - **Writers only.** A cover is a write to the node (a blob in its `COVER` slot and its sealed meta), so it needs what a
 //   rename needs: a MEMBER of the scope who may write it. A share guest sets none - not in this step, for no guest role: the

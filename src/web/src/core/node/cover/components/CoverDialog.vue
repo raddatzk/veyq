@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The cover dialog every node that takes a cover shares (inbox #411, follow-up 2026-10-12): a folder, a drop box, a Memory.
+// The cover dialog every node that takes a cover shares (inbox #411, follow-up 2026-10-12): a folder, a drop box, a Memory, a Pot.
 // It crops ONE source with the shared 16:9 `ImageCropper` and emits a `CoverSaveIntent` - the view seals it. Sources: a NEW
 // image the member picks here (`upload`) and the CURRENT cover re-cropped (`keep`, only the crop moves) - a cover is set only by
 // an upload here, never from elsewhere, so no member overwrites another's choice in passing. Remove drops the cover.

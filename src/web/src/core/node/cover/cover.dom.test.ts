@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // A node's cover in a level, by real clicks and a real DOM (inbox #411): core's real `LevelView` with the real registry as
-// `main.ts` fills it (Memories' and Depot's real row factories), a folder, a Memory, a file and a drop box in one level.
+// `main.ts` fills it (Memories', Depot's and Expenses' real row factories), a folder, a Memory, a file and a drop box in one level
+// (and a Pot in a level of its own).
 //
 // Pinned here: the ONE action - `Set cover` / `Change cover`, core's, in the row's menu, and in the header the leading visual
 // itself (no header action, ADR 0110 decision 11); removal lives in the dialog it opens - is offered exactly where the rights function says (a writer, on the kinds that opted in; never a file,
@@ -43,6 +44,7 @@ import { resetCovers } from './coverStore'
 import { filesApi } from '../../../features/depot/api'
 import { MEMORY_KIND } from '../../../features/memories/kinds'
 import { FILE_KIND, DROPBOX_KIND } from '../../../features/depot/kinds'
+import { POT_KIND } from '../../../features/expenses/kinds'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { FileListPage } from '../../../api/generated/depot'
 import type { ScopeKey } from '../../../features/spaces/epochs'
@@ -386,6 +388,28 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
     await vi.waitFor(() => expect(visual(w, 'Sub').find('img').exists()).toBe(false))
     expect(iconIn(visual(w, 'Sub'))).toBe('folder')
     expect(URL.revokeObjectURL).toHaveBeenCalledWith(shown)
+  })
+})
+
+// A Pot takes a cover (owner 2026-11-04): Expenses only opts in (`cover: {}`), core's row action, dialog and visual serve it.
+describe('a Pot takes a cover as a folder does', () => {
+  const visual = (w: VueWrapper, title: string) => rowOf(w, title).find('.veyq-level-item-visual')
+
+  it('a writer gets the cover action on a Pot\'s row - the file beside it none - and a Pot with a cover shows its image', async () => {
+    TREE = [TRIPS, PLAN, node(6, POT_KIND, 'Trip', TRIPS.id)]
+    const plain = mountLevel(TRIPS)
+    await flushPromises()
+    expect(await actionIdsOf(plain, 'Trip')).toContain('cover')
+    expect(await actionLabel(plain, 'Trip', 'cover')).toBe(t('node.cover.set'))
+    expect(await actionIdsOf(plain, 'Plan.pdf'), 'control: a file takes none').not.toContain('cover')
+    expect(visual(plain, 'Trip').find('img').exists()).toBe(false)
+    expect(iconIn(visual(plain, 'Trip'))).toBe('wallet')
+
+    TREE = [TRIPS, PLAN, node(6, POT_KIND, 'Trip', TRIPS.id, sealCover(id(6), 'b-6'))]
+    const covered = mountLevel(TRIPS)
+    await flushPromises()
+    await vi.waitFor(() => expect(visual(covered, 'Trip').find('img').attributes('src')).toMatch(/^blob:cover-/))
+    expect(await actionLabel(covered, 'Trip', 'cover')).toBe(t('node.cover.change'))
   })
 })
 

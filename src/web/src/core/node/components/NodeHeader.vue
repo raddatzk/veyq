@@ -14,9 +14,9 @@
 // **The leading visual is core's** (inbox #411) and **as tall as the rows beside it** (owner 2026-11-04): core knows which rows
 // it draws - the title row, the subtitle, each row of chips, of people, of text (`headerRowCounts`) - and each kind of row has
 // a fixed block size (`styles/ui.css`, `--veyq-node-header-row-*`); the header hands the counts to that sum as custom
-// properties, so the visual's height is computed from the data, never measured. A kind that takes a cover shows the node's
-// cover, 16:9 at that height - or, without one, the empty 16:9 frame with the kind's icon in its middle; a kind without a
-// cover its icon tile, a square of that height. Compact, the fixed small sizes (a 64 px cover, a 42 px tile). Where whoever
+// properties, so the visual's height is computed from the data, never measured. **It is always 16:9** (owner 2026-11-04): a
+// kind that takes a cover shows the node's cover at that height - or, without one, the empty 16:9 frame with the kind's icon
+// in its middle; a kind without a cover (a file) that same frame, never a button. Compact, the one small size (64 × 36 px). Where whoever
 // looks may set the cover (`coverRights`, through the view's cover, `../coreNodeActions.ts`) the cover or the empty frame is
 // the button that opens core's cover dialog, with its hint - always on an empty wide frame, else on hover and keyboard
 // focus; otherwise a plain frame. The header offers no cover action besides it.
@@ -94,7 +94,7 @@ const props = withDefaults(
     /** The node this header heads, whose core actions it shows - required, so a page says which (null only for the
      *  space's top level, which is no node and has none). */
     node: TreeNode | null
-    /** The kind's icon (`KindDescriptor.icon`): the leading visual without a cover. */
+    /** The kind's icon (`KindDescriptor.icon`): in the middle of the 16:9 frame wherever no cover is shown. */
     icon?: VeyqIconName
     /** The kind takes a cover (`KindDescriptor.cover`): the node's cover is the leading visual where it has one. */
     cover?: boolean
@@ -116,9 +116,9 @@ const view = injectCoreNodeActions()
 const coreActions = useCoreHeaderActions(() => props.node)
 const parts = computed(() => partitionHeaderActions(orderHeaderActions(mergeHeaderActions(coreActions.value, props.actions).filter((a) => a.shown), props.order)))
 
-// The leading visual: the node's cover where the kind takes one and the view resolved it, the empty frame where it takes one
-// and has none, else the icon tile - the cover or the frame a button that opens core's cover dialog where whoever looks may
-// set the cover (the dialog's own right).
+// The leading visual, always 16:9: the node's cover where the kind takes one and the view resolved it, else the empty frame
+// with the kind's icon (a kind without a cover too) - the cover or the frame a button that opens core's cover dialog where
+// the kind takes one and whoever looks may set it (the dialog's own right).
 const takesCover = computed(() => props.cover && !!props.node)
 const coverOf = computed(() => (takesCover.value && props.node ? (view?.cover.covers.value.get(props.node.id) ?? null) : null))
 const coverEditable = computed(() => !!(takesCover.value && props.node && view?.cover.canSet(props.node)))
@@ -357,11 +357,17 @@ onBeforeUnmount(() => {
           <span class="veyq-node-header-cover-hint-label">{{ coverLabel }}</span>
         </span>
       </button>
-      <span v-else-if="takesCover" class="veyq-node-header-cover" :class="{ 'is-empty': !coverOf }" data-testid="node-header-cover-frame">
+      <!-- A plain frame: the cover or the empty frame where it may not be set, and a kind without a cover's icon in the same
+           16:9 frame (never a button: it takes none). -->
+      <span
+        v-else
+        class="veyq-node-header-cover"
+        :class="{ 'is-empty': !coverOf }"
+        :data-testid="takesCover ? 'node-header-cover-frame' : 'node-header-icon-frame'"
+      >
         <NodeCoverImage v-if="coverOf" :src="coverOf.url" :crop="coverOf.crop" :alt="title" />
         <VeyqIcon v-else-if="icon" :name="icon" class="veyq-node-header-cover-icon" />
       </span>
-      <VeyqIcon v-else-if="icon" :name="icon" class="veyq-node-header-icon" />
     </div>
     <div class="veyq-node-header-body">
       <div ref="titleRow" class="veyq-node-header-titlerow">
