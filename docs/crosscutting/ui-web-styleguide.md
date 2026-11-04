@@ -141,8 +141,8 @@ or a one-off `1rem` label sitting in them.
 - **Node cards (core):** `.veyq-card-grid` is the one track rule for a grid of node cards; the folder level view
   (`core/node/LevelView.vue`) adds `.veyq-level-grid` (list variant, narrow column), `.veyq-folder-card`,
   `.veyq-create-card` (Memories' chapter card wears it too) and `.veyq-danger-action` (`styles/ui.css`, end of sheet; dark
-  twins in `dark.css`); `.memory-card-grid` is Memories' twin of the grid (in Memories' own `memories.css`). Creation lives in the level toolbar's "New" menu
-  (`.veyq-new-menu-button`), not in tiles. **Node header:** every node page and level opens with `.veyq-node-header`
+  twins in `dark.css`); `.memory-card-grid` is Memories' twin of the grid (in Memories' own `memories.css`). Creation lives in the level head's "New" menu
+  (`.veyq-new-menu-button`, at the end of the header's row), not in tiles. **Node header:** every node page and level opens with `.veyq-node-header`
   (core's `NodeHeader`, [ADR 0110](../decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md), drawn
   by core for every kind — an application contributes data, never markup: the
   leading visual beside the name, then subtitle and facts, in one of two layouts the header picks by its own width — wide: the
@@ -192,8 +192,23 @@ or a one-off `1rem` label sitting in them.
   the cover is the leading visual, people with an editor are their fact (a pencil beside them, an empty chip while nobody
   is listed), a banner its own frame. A header's move and copy are ⋯ entries, like report and delete. A level's rows keep
   their entries: a row click opens the node.
-- **On a folder level the header's action buttons and the toolbar's controls are one height**
-  (`--veyq-level-control-height`), so in the head's one row they line up.
+- **On a folder level the header's action buttons, "New" and the tools row's controls are one height**
+  (`--veyq-level-control-height`), so they line up.
+- **A level's head and tools row** (owner 2026-11-04, `core/node/LevelView.vue`): the head's row holds the header and
+  "New" alone; right under it, with no rule or gap between, ONE tools row (`.veyq-level-tools`): the application tabs on
+  the left, then at its right end (`.veyq-level-toolbar`) Select and the trash as icon-only buttons — their words the
+  `aria-label` and the tooltip, never visible text — and the view switch. One hairline under the row where it has tabs;
+  without tabs the tools alone, right-aligned; nothing to offer, no row.
+- **A level's rows and tiles** (owner 2026-11-04, `core/node/components/LevelRowItem.vue`, `styles/ui.css`): the list is one
+  surface in one frame, its rows parted by hairlines, each led by the compact header's 16:9 thumbnail (4 × 2.25 rem: the
+  cover, or the kind's icon in a quiet frame); no row card, no shadow. In the grid the folders (first, `levelList.ts`) are
+  compact tiles (`.is-compact`: the row's layout in a frame) and form one group — the first other tile starts a new grid
+  row; every other node is a flat tile, the 16:9 cover on top and the name and meta line under it. Heart and ⋯ are quiet
+  icon buttons (`text` appearance, the layer's icon-button size): at the end of a row; over a flat tile's cover at its
+  top-right corner, and over a compact tile's row end where a pointer hovers (in its row where none does, so a narrow
+  column leaves the name its width) — a tile's shown on hover and `:focus-within` by **opacity alone** (never `display: none` or
+  `visibility`, which would take them out of the Tab order), always under `@media (hover: none)`, and a pressed heart
+  always. The Select checkbox sits over a tile's top-left corner, over a row's thumbnail.
 - **Empty/loading:** `.veyq-empty`, `.veyq-loading` — concise and action-oriented, not marketing copy.
 - **The UI layer** ([ADR 0107](../decisions/0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md)):
   a button, field, dialog, menu, select, tabs, toast, tooltip, date field or icon is a `Veyq*` component of

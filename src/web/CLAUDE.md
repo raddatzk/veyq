@@ -401,10 +401,11 @@ here; the server is blind.
   for the level's life; an entry whose handler is not `enabled` is disabled, and a DROP reaches `drop` (files) or
   `dropDirectory` (a directory that is no download) only while the entry is `allowed` AND its handler `enabled` (a drop is
   never more than the menu entry). There is no import entry: core recognises a download in what an upload picks or drops
-  (`host.screenUpload`, `host.screenDirectory`) and offers the member its import. The level's toolbar is core's: the "New" menu
+  (`host.screenUpload`, `host.screenDirectory`) and offers the member its import. The level's tools are core's: the "New" menu at the end of the header's row
   (`registry.levelMenu()` plus core's own folder entry, one `VeyqButton` + popup `VeyqMenu`, each entry only where its own
   rights function says yes, so a READ guest has none; a create entry asks the page's `createChild(kind, folder)` door and
-  the page mounts the `createDialog`), the space's trash, and the view switch over the union of the presentations on screen - core's grid and
+  the page mounts the `createDialog`), and in ONE tools row right under the head, the tabs on its left (owner 2026-11-04):
+  Select and the space's trash as icon buttons (their words the `aria-label` and the tooltip) and the view switch over the union of the presentations on screen - core's grid and
   list for every row, plus the shown kinds' `views` (`core/node/levelViews.ts`, inbox #370); the level shows the stored mode
   only where that union offers it, else the grid, without rewriting the stored preference, and hands that mode to every
   factory as `LevelRowsContext.viewMode` - a factory never reads `useViewMode` (inbox #404), `useViewMode` is keyed like the

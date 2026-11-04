@@ -257,7 +257,7 @@ leading visual (large on a tile; core resolves the cover, `host.covers`, inbox #
 default rename, move and delete in the row's menu (`standard`, `core/node/standardRowActions.ts`: Memories builds none of
 the three; the favorite heart on the row is core's own action, the same for every kind, inbox #409, and so is the ONE "Cover" action - "Set cover" / "Change cover" - that opens core's cover dialog, where the image is chosen, cropped and removed, inbox #411) —
 and the map as its own presentation; core draws the list, orders it (folders first, then everything by name, mixed with
-files and drop boxes) and offers the presentations grid, list and map in the level's toolbar, inbox #370; one list of
+files and drop boxes) and offers the presentations grid, list and map in the level's tools row, inbox #370; one list of
 the three, `memoryViews.ts`), and its create and share dialogs ride on its kinds
 (a rename is core's, as a folder's create is); Memories adds nothing to the shell (the sidebar's Favorites section is core's,
 and so is the upload status in the top bar, which lists Memories' batches with every other application's). How core and an application meet, on both sides, is
