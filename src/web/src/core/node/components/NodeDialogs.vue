@@ -175,6 +175,7 @@ async function guestCreate(name: string) {
     :tree="tree"
     :mover="dialogs.mover"
     :root-label="env.rootLabel?.()"
+    :summary="s.movingMany.value.summary"
     :after-undo="dialogs.afterUndo(s.movingMany.value.shown)"
     @moved="dialogs.stayOn(s.movingMany.value?.shown ?? null)"
     @close="s.movingMany.value = null"

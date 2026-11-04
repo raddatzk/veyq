@@ -1,7 +1,7 @@
 // A stand-in for a host page's doors (`core/node/nodeHost.ts`): every door records its calls, so a test of a view that asks
 // the page for something (core's `LevelView`, a kind's `detail`) mounts it as a host page would and reads what it asked.
 // `MEMBER_DOORS` and `GUEST_DOORS` are the sets the two real hosts hand on (`views/SpaceView.vue`: every one;
-// `core/sharing/ShareTreePage.vue`: open, the download, the create and - for a link that moves anything - the move).
+// `core/sharing/ShareTreePage.vue`: open, the download, the create and - for a link that moves anything - the moves).
 import type { NodeHost } from '../core/node/nodeHost'
 import { nodeHostProvide } from '../core/node/nodeHost'
 import type { Access } from '../core/access'
@@ -10,9 +10,9 @@ import { ShareRole } from '../api/generated/sharing'
 export type DoorName = keyof NodeHost
 
 export const MEMBER_DOORS: readonly DoorName[] = [
-  'open', 'rename', 'renameTo', 'move', 'moveMany', 'delete', 'deleteMany', 'share', 'createChild', 'download', 'copy', 'importArchive', 'openTrash',
+  'open', 'rename', 'renameTo', 'move', 'moveMany', 'moveTo', 'delete', 'deleteMany', 'share', 'createChild', 'download', 'copy', 'importArchive', 'openTrash',
 ]
-export const GUEST_DOORS: readonly DoorName[] = ['open', 'move', 'moveMany', 'download', 'createChild']
+export const GUEST_DOORS: readonly DoorName[] = ['open', 'move', 'moveMany', 'moveTo', 'download', 'createChild']
 
 export interface RecordingHost {
   host: NodeHost
@@ -26,7 +26,7 @@ export interface RecordingHost {
  *  that moves anything, `READ_WRITE`). */
 export function hostFor(access: Access): RecordingHost {
   if (access.mode === 'member') return recordingHost(MEMBER_DOORS)
-  return recordingHost(access.role === ShareRole.ReadWrite ? GUEST_DOORS : GUEST_DOORS.filter((d) => d !== 'move' && d !== 'moveMany'))
+  return recordingHost(access.role === ShareRole.ReadWrite ? GUEST_DOORS : GUEST_DOORS.filter((d) => d !== 'move' && d !== 'moveMany' && d !== 'moveTo'))
 }
 
 /** A host with the doors `doors` (default: a member's), each recording its calls. */

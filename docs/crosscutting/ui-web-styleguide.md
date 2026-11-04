@@ -215,6 +215,13 @@ or a one-off `1rem` label sitting in them.
   column leaves the name its width) — a tile's shown on hover and `:focus-within` by **opacity alone** (never `display: none` or
   `visibility`, which would take them out of the Tab order), always under `@media (hover: none)`, and a pressed heart
   always. The Select checkbox sits over a tile's top-left corner, over a row's thumbnail.
+- **A level's drag and drop** (owner 2026-11-04, `core/node/nodeDrag.ts`, uc.memory.move-node § By drag and drop): a
+  pointer's shortcut to the move, never the only way — the keyboard and touch path is the move dialog, and nothing drags
+  on touch. A row or tile carries `draggable="true"` only where the viewer may move it (no attribute otherwise), dims to
+  `0.45` opacity while dragged, and a sub-folder or a breadcrumb crumb that takes the drag shows the accent tint and a 2 px
+  accent outline (`.is-drop-target`) while under the pointer — a place that would refuse shows nothing and the cursor says
+  no. Several dragged show one accent pill with the count beside the pointer. The fade runs only under
+  `prefers-reduced-motion: no-preference`; tokens only, so no dark twin.
 - **Empty/loading:** `.veyq-empty`, `.veyq-loading` — concise and action-oriented, not marketing copy.
 - **The UI layer** ([ADR 0107](../decisions/0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md)):
   a button, field, dialog, menu, select, tabs, toast, tooltip, date field or icon is a `Veyq*` component of

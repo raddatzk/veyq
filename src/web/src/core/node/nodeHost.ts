@@ -1,6 +1,6 @@
 // Core's ONE host contract (owner 2026-11-01): the doors through which whatever draws a node - a kind's `detail`, a row
 // factory, core's level view, core's node page - asks the page around it to open a node or one of core's dialogs (the name
-// dialog, the move dialog, the delete question with its Undo, the share dialog, a kind's create dialog, the ZIP download,
+// dialog, the move dialogs and a drop's move, the delete question with its Undo, the share dialog, a kind's create dialog, the ZIP download,
 // the copy, the import, the space's trash). Two hosts build one: the member's space page (`views/SpaceView.vue`) and a share
 // guest's page (`core/sharing/ShareTreePage.vue`); the dialogs the doors open are core's ONE `components/NodeDialogs.vue`
 // (`nodeDialogs.ts`), which both mount, so each dialog exists once. The two hosts differ only in which doors they hand on.
@@ -61,6 +61,10 @@ export interface NodeHost {
   move?(node: TreeNode): void
   /** Move a level's selection: core's `MoveNodesDialog` (inbox #421). */
   moveMany?(nodes: readonly TreeNode[]): void
+  /** Move `nodes` under `to` (null: the scope root) with no browser - a drop on the level or on a crumb of its breadcrumb
+   *  (`nodeDrag.ts`): the move dialogs' own run (`moveRun.ts`), its refusal said in a toast, a selection's summary in
+   *  `MoveNodesDialog`. A host hands it on together with `move` and `moveMany`, never alone. */
+  moveTo?(nodes: readonly TreeNode[], to: string | null): void
   /** Delete one node after one question, with its Undo (core's `DeleteNodesDialog`); `remove` is the kind's own delete
    *  write where it has one (`LevelRowSelection.remove`). The node a page is about is left for its parent once it went. */
   delete?(node: TreeNode, remove?: (nodeId: string) => Promise<void>): void

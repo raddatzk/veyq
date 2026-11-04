@@ -216,6 +216,55 @@ describe('a READ_WRITE guest moves a selection of its level', () => {
   })
 })
 
+// inbox #421: drag and drop is the member's on a guest's level too - the same door, the same run as the dialog.
+describe('a READ_WRITE guest drags and drops', () => {
+  const transfer = () => ({ types: [] as string[], dropEffect: 'unset', effectAllowed: 'unset', setData(type: string) { this.types.push(type) }, setDragImage() {} })
+  function fire(el: Element, type: string, data: object): boolean {
+    const e = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperty(e, 'dataTransfer', { value: data })
+    el.dispatchEvent(e)
+    return e.defaultPrevented
+  }
+  const itemOf = (name: string) =>
+    [...document.body.querySelectorAll('li.veyq-level-item')].find((li) => li.querySelector('.veyq-level-item-title')?.textContent === name)!
+  const crumbOf = (name: string) =>
+    [...document.body.querySelectorAll('li.veyq-breadcrumb__item')].find((li) => li.textContent?.trim() === name)!
+
+  it('a note onto a folder of the level, and a folder onto the link\'s root in the breadcrumb: each placed through its link', async () => {
+    const updateShareNode = stubApi(publicSharesApi, { updateShareNode: undefined }).updateShareNode
+    const reload = vi.fn(async () => {})
+    let w = await mountAt(ShareRole.ReadWrite, undefined, { requestGuest: async () => guest, reload })
+    let data = transfer()
+    fire(itemOf('Notizen'), 'dragstart', data)
+    expect(fire(itemOf('Briefe'), 'dragover', data)).toBe(true)
+    fire(itemOf('Briefe'), 'drop', data)
+    await flushPromises()
+    expect(updateShareNode).toHaveBeenCalledTimes(1)
+    expect(updateShareNode.mock.calls[0][0]).toMatchObject({ nodeId: NOTE, xContributorToken: 'contributor-token' })
+    expect(updateShareNode.mock.calls[0][0].updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementRevision: 0 })
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.moved', { name: 'Notizen', to: 'Briefe' }) }))
+    w.unmount()
+
+    w = await mountAt(ShareRole.ReadWrite, LETTERS, { requestGuest: async () => guest, reload })
+    data = transfer()
+    fire(itemOf('Feldpost'), 'dragstart', data)
+    expect(fire(crumbOf('Briefe'), 'dragover', data), 'the place on screen').toBe(false)
+    expect(fire(crumbOf('Familie'), 'dragover', data)).toBe(true)
+    fire(crumbOf('Familie'), 'drop', data)
+    await flushPromises()
+    expect(updateShareNode.mock.calls[1][0]).toMatchObject({ nodeId: NESTED })
+    expect(updateShareNode.mock.calls[1][0].updateShareNodeRequest).toMatchObject({ parentId: ROOT, placementRevision: 2 })
+    expect(authenticatedCalls).toEqual([])
+    w.unmount()
+  })
+
+  it('READ: nothing on its level is draggable', async () => {
+    const w = await mountAt(ShareRole.Read)
+    expect(document.body.querySelectorAll('[draggable="true"]')).toHaveLength(0)
+    w.unmount()
+  })
+})
+
 describe('a guest without the right moves nothing', () => {
   it('READ: no move on a folder\'s header, none on a row, no dialog', async () => {
     const w = await mountAt(ShareRole.Read, NESTED)

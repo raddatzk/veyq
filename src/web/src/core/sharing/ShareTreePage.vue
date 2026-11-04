@@ -66,6 +66,7 @@ import { useLevelLive } from '../node/useLevelLive'
 import { sameKeyOr } from '../node/tree'
 import StatementNotice from '../../features/moderation/statement/StatementNotice.vue'
 import OrderNotice from './OrderNotice.vue'
+import { crumbDropTarget } from '../node/nodeDrag'
 
 // The props are the shell's, the registry's `ShareBodyProps` (core/applications/registry.ts), spelled out because the
 // SFC compiler reads them statically.
@@ -128,12 +129,16 @@ const trail = computed<string[]>(() => {
 function go(id: string) {
   if (tree.value) void router.push(tree.value.linkTo(id))
 }
+/** Each crumb's node: an ancestor takes nodes dragged from the level where the move dialog would (inbox #421,
+ *  `../node/nodeDrag.ts`) - for a `READ_WRITE` guest, whose level alone has anything to drag. */
+const places = new WeakMap<VeyqMenuItem, string>()
+const crumbTarget = crumbDropTarget((item) => places.get(item))
 /** A crumb is a real link to its node (a modified click opens it elsewhere, key included) whose plain click the router
  *  handles. `VeyqBreadcrumb` renders every crumb as an `<a>` and only CALLS `command`, so the anchor's default action still
  *  runs unless prevented: without a `url` that is `href="#"`, which — measured in the browser, 2026-10-07 — cleared the
  *  `#k=` fragment AND cancelled the push (`?node=` stayed), leaving a reload keyless and every guest write refused. */
 function crumb(tr: GuestTreeSource, id: string): VeyqMenuItem {
-  return {
+  const item: VeyqMenuItem = {
     label: tr.nameOf(id),
     url: router.resolve(tr.linkTo(id)).href,
     command: (e) => {
@@ -142,6 +147,8 @@ function crumb(tr: GuestTreeSource, id: string): VeyqMenuItem {
       go(id)
     },
   }
+  places.set(item, id)
+  return item
 }
 const home = computed<VeyqMenuItem>(() => (tree.value ? crumb(tree.value, tree.value.rootId) : { label: props.head.name }))
 const crumbs = computed<VeyqMenuItem[]>(() => {
@@ -194,7 +201,7 @@ const host: NodeHost = {
   download: doors.download,
   // Named (now or before) first: then name the new node.
   createChild: (kind, parent) => void props.access.requestGuest().then((named) => named && doors.createChild(kind, parent)),
-  ...(dialogs.mover ? { move: doors.move, moveMany: doors.moveMany } : {}),
+  ...(dialogs.mover ? { move: doors.move, moveMany: doors.moveMany, moveTo: doors.moveTo } : {}),
 }
 provideNodeHost(host)
 
@@ -222,7 +229,7 @@ function createError(e: unknown): string {
   </p>
   <section v-else class="veyq-section">
     <div class="share-folder-bar">
-      <VeyqBreadcrumb :home="home" :items="crumbs" class="app-breadcrumb" :aria-label="t('share.folder.breadcrumbRoot')" />
+      <VeyqBreadcrumb :home="home" :items="crumbs" :drop-target="crumbTarget" class="app-breadcrumb" :aria-label="t('share.folder.breadcrumbRoot')" />
       <span class="share-folder-badge">{{ badge }}</span>
     </div>
     <!-- The share's note (the curator's), once for the whole page. Safe markdown (escape-first), so v-html is safe. -->

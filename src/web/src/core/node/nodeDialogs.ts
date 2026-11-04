@@ -1,6 +1,7 @@
 // Core's dialogs behind the host doors (`nodeHost.ts`), ONE set for both host pages (owner 2026-11-01): the member's space
 // page and a share guest's page each call `useNodeDialogs` once and mount `components/NodeDialogs.vue` with its answer, so
-// the name dialog (and the rename in place it shares its write with), the create dialogs, the move dialogs, the delete question, the share dialogs, the download, the copy,
+// the name dialog (and the rename in place it shares its write with), the create dialogs, the move dialogs (and a drop's move,
+// which runs theirs), the delete question, the share dialogs, the download, the copy,
 // the import and the space's trash each exist once. The host hands on the `doors` its session has (a guest's: the move -
 // where its link moves anything -, the download and the create) and adds its own navigation (`open`).
 //
@@ -23,6 +24,7 @@ import { FOLDER_KIND, type NodeKind } from './kind'
 import type { SelectedForDelete } from './selection'
 import type { ImportOffer } from '../export/importSource'
 import { nodeMover, type NodeMover } from './move'
+import { useMoveRun } from './moveRun'
 import type { NodeHost, NodeShareOffer } from './nodeHost'
 import { renameMemberNode } from './nodeName'
 import { useToast } from '../../shared/state/useToast'
@@ -59,7 +61,8 @@ export interface NodeDialogState {
   create: ShallowRef<{ kind: NodeKind; parent: TreeNode | null } | null>
   guestCreate: ShallowRef<{ kind: NodeKind; parentId: string } | null>
   moving: ShallowRef<{ node: TreeNode; shown: string | null } | null>
-  movingMany: ShallowRef<{ nodes: TreeNode[]; shown: string | null } | null>
+  /** A selection being moved: the browser, or - after a drop that left some of them where they were - its `summary`. */
+  movingMany: ShallowRef<{ nodes: TreeNode[]; shown: string | null; summary?: { moved: string; lines: string[] } } | null>
   /** What is deleted after one question: one node or a selection - and, `leaving`, the node a page is about. */
   deleting: ShallowRef<{ items: SelectedForDelete[]; shown: string | null; leaving?: TreeNode } | null>
   /** The node being shared, `node` null for the space's top level (its upload-only link alone). */
@@ -76,7 +79,7 @@ export interface NodeDialogs {
   state: NodeDialogState
   /** The session's move door (`nodeMover`): none for a link that moves nothing. */
   mover: NodeMover | null
-  /** Whether any dialog is open (the page's live refresh pauses meanwhile). */
+  /** Whether any dialog is open, or a drop's move runs (the page's live refresh pauses meanwhile). */
   open: ComputedRef<boolean>
   /** The content key of the node a create lands under, and of the node being shared (the same object while the same key). */
   createParentKey: ComputedRef<Uint8Array | null>
@@ -109,6 +112,12 @@ export function useNodeDialogs(env: NodeDialogsEnv): NodeDialogs {
   }
   const shown = () => env.onScreen()
   const stayOn = (s: string | null) => env.stayOn?.(s)
+  const afterUndo = (s: string | null) => (env.stayOn ? () => stayOn(s) : undefined)
+  const mover = nodeMover(env.access)
+  const run = useMoveRun()
+  // A drop's move is running: a second drop meanwhile would be planned on the tree before the first's re-read, and the live
+  // refresh pauses as it does while the dialog writes.
+  const dropping = ref(false)
   const keyOf = (id: string | null | undefined) => (id ? (env.tree()?.keyOf(id) ?? null) : null)
 
   const doors: NodeDialogDoors = {
@@ -141,6 +150,34 @@ export function useNodeDialogs(env: NodeDialogsEnv): NodeDialogs {
     moveMany(nodes) {
       state.movingMany.value = { nodes: [...nodes], shown: shown() }
     },
+    // A drop (drag and drop on the level, `nodeDrag.ts`): the dialogs' own run with the place already chosen - one node as
+    // `MoveNodeDialog` moves it, several as `MoveNodesDialog` does. No dialog is open, so a refusal is said in an error toast
+    // in the dialog's words; where a selection's move left some of them out or had them refused, its dialog opens on the
+    // summary it would have shown. The page follows what was on screen, as after the dialog.
+    moveTo(nodes, to) {
+      const tree = env.tree()
+      if (!mover || !tree || nodes.length === 0 || dropping.value) return
+      const onScreen = shown()
+      const target = { tree, mover, rootLabel: env.rootLabel?.() }
+      const nameOf = (n: TreeNode) => tree.nameOf(n.id) || n.name
+      const opts = { afterUndo: afterUndo(onScreen) }
+      dropping.value = true
+      const done = (): void => void (dropping.value = false)
+      if (nodes.length === 1) {
+        void run.moveOne(target, nodes[0], nameOf(nodes[0]), to, opts).then((result) => {
+          if (result.status === 'refused') toast.error(result.text)
+          if (result.status === 'moved') stayOn(onScreen)
+        }).finally(done)
+        return
+      }
+      const names = new Map(nodes.map((n) => [n.id, nameOf(n)]))
+      void run.moveMany(target, nodes, (n) => names.get(n.id) ?? n.name, to, opts).then((result) => {
+        if (result.status === 'refused') toast.error(result.text)
+        if (result.status !== 'done') return
+        if (result.moved.length > 0) stayOn(onScreen)
+        if (result.lines.length > 0) state.movingMany.value = { nodes: [...nodes], shown: onScreen, summary: { moved: result.movedText, lines: result.lines } }
+      }).finally(done)
+    },
     delete(node, remove) {
       const item: SelectedForDelete = { node, ...(remove ? { remove } : {}) }
       // The node a page is about (the folder on screen, an opened node): its Undo keeps the parent - where the member
@@ -171,7 +208,7 @@ export function useNodeDialogs(env: NodeDialogsEnv): NodeDialogs {
     () =>
       !!state.name.value || !!state.create.value || !!state.guestCreate.value || !!state.moving.value || !!state.movingMany.value ||
       !!state.deleting.value || !!state.share.value || !!state.exporting.value || !!state.copying.value || !!state.importing.value ||
-      state.trash.value,
+      state.trash.value || dropping.value,
   )
   const createParentKey = computed<Uint8Array | null>((previous) => {
     const parent = state.name.value?.mode === 'create' ? state.name.value.parent : (state.create.value?.parent ?? null)
@@ -189,7 +226,7 @@ export function useNodeDialogs(env: NodeDialogsEnv): NodeDialogs {
     env,
     doors,
     state,
-    mover: nodeMover(env.access),
+    mover,
     open,
     createParentKey,
     shareKey,
@@ -202,6 +239,6 @@ export function useNodeDialogs(env: NodeDialogsEnv): NodeDialogs {
       else if (env.tree()?.node(d.leaving.id)) stayOn(d.leaving.id)
       else env.leave?.(d.leaving)
     },
-    afterUndo: (s) => (env.stayOn ? () => stayOn(s) : undefined),
+    afterUndo,
   }
 }

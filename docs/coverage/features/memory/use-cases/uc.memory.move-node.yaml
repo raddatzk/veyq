@@ -77,12 +77,20 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/core/node/move.test.ts, src/core/node/move.wire.test.ts, src/core/node/MoveNodesDialog.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/SpaceView.move.test.ts]
+
+  - id: drag-and-drop-moves-as-the-dialog-does
+    text: "On a folder level a row or tile is draggable only where the viewer may move that node and the page has its move door (a READ guest drags nothing); in Select mode a selected node drags the selection's movable part, an unselected one itself. A sub-folder of the level or an ancestor in the page's breadcrumb takes the drag exactly where the move dialog would enable Move here there - never the place the nodes are in, themselves, anything inside them or a guest's identity folder - and only a place that takes it is lit; a drag of files from the operating system lights none and stays the level's upload. The drop runs the move dialogs' own run: the same name check before sending, writes, refusal words (in an error toast), toast with Undo, and for a selection the dialog's summary of what did not move."
+    coverage:
+      web:
+        unit: [src/core/node/nodeDrag.test.ts, src/core/node/LevelView.drag.test.ts, src/core/node/nodeDialogs.moveTo.test.ts, src/components/app/AppTopbar.test.ts, src/core/sharing/ShareTreePage.move.test.ts]
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/account/field-seal.spec.ts`) drives `a-move-keeps-the-subtree-readable` in
     Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with
     its criterion. A folder moved through core's move dialog shows under its destination, by its name, after a reload
-    and on a second device. Not covered there: a moved subtree's children. Green only in local runs of
+    and on a second device; `tests/e2e/tests/features/depot/depot-drag-move.spec.ts` drives
+    `drag-and-drop-moves-as-the-dialog-does` with Chromium's own drag (a file onto a sub-folder, then onto the parent's
+    crumb), written 2026-11-04 and not yet run. Not covered there: a moved subtree's children. Green only in local runs of
     `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040
     admits `stack` refs only once a run's log shows the suite executed. On that run each file becomes a ref on the
     criteria its tests are tagged with, and this gap goes.

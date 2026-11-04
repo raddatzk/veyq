@@ -1404,6 +1404,42 @@ div.veyq-level-item-main,
   opacity: 1;
 }
 
+/* Drag and drop on the level (inbox #421, `core/node/nodeDrag.ts`): what is dragged dims; a sub-folder or a crumb that takes
+   the drag shows the accent frame and tint while it is under the pointer - and nothing that would refuse it does. Tokens
+   only, so no dark twin; the fade only where motion is welcome. */
+.veyq-level-item.is-dragging {
+  opacity: 0.45;
+}
+.veyq-level-item.is-drop-target {
+  background: var(--app-accent-soft);
+  outline: 2px solid var(--app-accent);
+  outline-offset: -2px;
+}
+.veyq-breadcrumb__item.is-drop-target .veyq-breadcrumb__link {
+  background: var(--app-accent-soft);
+  color: var(--app-control-text);
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .veyq-level-item {
+    transition: opacity 0.15s ease;
+  }
+}
+/* The picture under the pointer when several are dragged: drawn off screen for the browser to copy, then removed. */
+.veyq-node-drag-image {
+  position: fixed;
+  top: -100px;
+  left: -100px;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  background: var(--app-accent);
+  color: var(--app-on-fill);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* The selection's bar (inbox #421): All, None, the count, and the actions; one wrapping row under the toolbar. */
 .veyq-level-selection-bar {
   display: flex;

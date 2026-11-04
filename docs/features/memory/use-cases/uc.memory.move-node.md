@@ -26,7 +26,7 @@
    actions. Opening a place moves into it. **"Move here"** applies to the place on screen and is disabled with the
    reason where the node cannot go: where it is now, the node itself or anything inside it (which it does not open), a
    guest's folder. Every place and the breadcrumb are real buttons, so the browser is as reachable by keyboard and
-   screen reader as the list was. Drag and drop comes later, as a second way (inbox #421).
+   screen reader as the list was. Drag and drop is a second way on the level ([§ By drag and drop](#by-drag-and-drop)), never the only one.
 3. The user moves into the destination and chooses **Move here**, or **Cancel**. Before anything is sent, a node at the destination whose name folds to the
    same slug **in the same route group** (ADR 0080 decision 16: a Memory never meets a Pot or a folder) is named ("There is already a file named … there").
 4. Moving a drop-box guest's folder out asks first: it becomes an ordinary folder, its guest can add nothing more, and
@@ -60,6 +60,24 @@ out, the other two moved, and the summary stayed until closed; the toast's Undo 
 a `READ_WRITE` guest of a folder link moved a folder, a file and a Memory into a folder of its subtree - three
 `updateShareNode` writes, one re-resolve of the link.
 
+### By drag and drop (owner 2026-11-04, inbox #421)
+
+A shortcut beside the dialog for a pointer, never a replacement: the keyboard and touch path stays **Move to…** (a row's
+menu, the Select bar), and there is no touch or long-press drag. On a folder level (the list or the grid; never an
+application's own presentation such as the map), a row or tile is draggable only where the viewer may move that node -
+the same rights the menu's **Move to…** has, so a `READ` guest drags nothing and a `READ_WRITE` guest what its dialog
+moves. In Select mode a selected node drags the selection's movable part, an unselected one itself. It drops on a
+**sub-folder of the same level** or on an **ancestor in the page's breadcrumb** (the space root included, where the session
+reads it; a guest's trail ends at its link's root). No reordering: the level is sorted by name.
+
+A place takes the drag exactly where the dialog would enable **Move here** there - never the place the nodes are in, never
+into themselves or below themselves, not a guest's folder, not a place whose kind cannot hold them; a place that would
+refuse is not lit and does not take the drop. The drop runs the dialog's own steps 3 to 7 (or § Several at once) with the
+place already chosen: the name check before sending, the drop-box question, the same writes, the same refusals in the same
+words (as an error toast, since no dialog is open) and the same toast with **Undo**; where a selection's move left some
+nodes out or had them refused, the selection's dialog opens on the summary it would have shown. A drag of files from the
+operating system is not a move: it never lights a folder and stays the level's upload.
+
 ## Alternate / exception flows
 
 - **A1 — the name is taken there** (`409 slug_taken`): a sibling the client could not see (another member's race, one a
@@ -90,6 +108,8 @@ a `READ_WRITE` guest of a folder link moved a folder, a file and a Memory into a
   own, offered only for a node a folder of the subtree holds; and a folder is shared through core's own share dialog,
   never an application's ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   decision 6).
+- **Drag and drop has no rule of its own.** A drop target is a place the move browser would enable "Move here" at, and the
+  drop runs the dialog's run with that place: two ways to choose a place, one move.
 - **The picker is a hint, the server the authority.** The client mirrors `NodeKindRules` and the guest rules so it
   offers only what would be taken; a disagreement surfaces as the server's refusal, explained by its code — never a
   silently different result.
