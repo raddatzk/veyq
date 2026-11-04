@@ -41,6 +41,18 @@ export async function headerAction(page: Page, label: string, options: { timeout
   await page.getByRole('menuitem', { name: label, exact: true }).click(options)
 }
 
+/** Rename the node on screen in place (ADR 0110 decision 11): what is edited at its place has no header action - the name
+ *  is a button named "Rename “<name>”" in the page's heading; a click makes it a field, Enter writes. Resolves once the
+ *  write went through and the field closed. */
+export async function renameInHeader(page: Page, from: string, to: string): Promise<void> {
+  const header = nodeHeader(page)
+  await header.getByRole('button', { name: `Rename “${from}”`, exact: true }).click()
+  const field = header.getByRole('textbox', { name: 'Name', exact: true })
+  await field.fill(to)
+  await field.press('Enter')
+  await expect(field).toBeHidden({ timeout: 60_000 })
+}
+
 /** The header offers action `label` (a button, or an entry of its ⋯ menu, which is closed again after the look). */
 export async function expectHeaderAction(page: Page, label: string): Promise<void> {
   const { button, more } = await settle(page, label)
