@@ -155,13 +155,25 @@ async function advertised(page: Page): Promise<string[]> {
   })
 }
 
+/** A drop box is the upload-only link of a folder or of the space's top level (owner 2026-11-04): the top level's header
+ *  offers its Share for that link alone, so the Share is there exactly where drop boxes are, and its form offers "Add files
+ *  only". The "New" menu never offers a drop box. */
 async function expectDropBoxOffered(page: Page, offered: boolean): Promise<void> {
   await page.getByRole('button', { name: 'New', exact: true }).click()
   // The menu's other entry is the control that the menu opened at all.
   await expect(page.getByRole('menuitem', { name: 'New Memory' })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: 'New drop box' })).toHaveCount(offered ? 1 : 0)
+  await expect(page.getByRole('menuitem', { name: 'New drop box' })).toHaveCount(0)
   await page.keyboard.press('Escape')
-  await expect(page.getByRole('tab', { name: 'Drop boxes' })).toHaveCount(offered ? 1 : 0)
+  const header = page.locator('.veyq-node-header')
+  await expect(header.getByRole('heading', { level: 1 }), 'control: the top level\'s header').toBeVisible()
+  await expect(header.getByRole('button', { name: 'Share', exact: true })).toHaveCount(offered ? 1 : 0)
+  if (!offered) return
+  await header.getByRole('button', { name: 'Share', exact: true }).click()
+  const create = page.getByRole('dialog', { name: 'New share' })
+  await expect(create.getByRole('button', { name: 'Add files only' })).toBeVisible()
+  await expect(create.getByRole('button', { name: 'View only' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(create).toBeHidden()
 }
 
 async function expectAddADevice(page: Page, offered: boolean): Promise<void> {
@@ -248,7 +260,7 @@ test(
 )
 
 test(
-  'drop boxes switched off: no "New drop box" and no drop-box tab, until switched back on',
+  'drop boxes switched off: no Share at the top level for a drop box\'s link, until switched back on',
   { tag: ['@uc.admin.switch-capabilities:off-state-in-a-browser', '@uc.admin.switch-capabilities:switch-without-restart'] },
   async () => {
     const { page } = trusted

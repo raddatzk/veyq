@@ -28,9 +28,10 @@ function ctx(access: Access, over: { identity?: boolean; epochs?: boolean } = {}
 const shown = (c: LevelActionContext) => registry.levelMenu().filter((e) => e.allowed(c)).map((e) => e.id)
 
 describe('the applications\' "New" menu entries', () => {
-  it('are ordered Memory, drop box, upload, upload folder (core adds the folder before them; no import entry)', () => {
-    expect(registry.levelMenu().map((e) => e.id)).toEqual(['create:MEMORY', 'create:DEPOT_DROPBOX', 'depot.upload', 'depot.uploadFolder'])
-    expect(registry.levelMenu().map((e) => e.label)).toEqual(['memory.create', 'depot.dropBox.create', 'depot.upload', 'depot.uploadFolder'])
+  // Owner 2026-11-04: no drop box here - it is a folder's upload-only link, made in the folder's share dialog.
+  it('are ordered Memory, upload, upload folder (core adds the folder before them; no import entry, no drop box)', () => {
+    expect(registry.levelMenu().map((e) => e.id)).toEqual(['create:MEMORY', 'depot.upload', 'depot.uploadFolder'])
+    expect(registry.levelMenu().map((e) => e.label)).toEqual(['memory.create', 'depot.upload', 'depot.uploadFolder'])
   })
 
   it('a chapter is not created from a level: no entry for it', () => {
@@ -38,11 +39,11 @@ describe('the applications\' "New" menu entries', () => {
   })
 
   it('a member at a folder sees all of them', () => {
-    expect(shown(ctx(memberAccessOf()))).toEqual(['create:MEMORY', 'create:DEPOT_DROPBOX', 'depot.upload', 'depot.uploadFolder'])
+    expect(shown(ctx(memberAccessOf()))).toEqual(['create:MEMORY', 'depot.upload', 'depot.uploadFolder'])
   })
 
   it('an application switched off offers none of its entries; the other application\'s stay (uc.platform.switch-application-off)', () => {
-    expect(shown(ctx(memberAccessOf({ applicationsOff: new Set(['memories']) })))).toEqual(['create:DEPOT_DROPBOX', 'depot.upload', 'depot.uploadFolder'])
+    expect(shown(ctx(memberAccessOf({ applicationsOff: new Set(['memories']) })))).toEqual(['depot.upload', 'depot.uploadFolder'])
     expect(shown(ctx(memberAccessOf({ applicationsOff: new Set(['depot']) })))).toEqual(['create:MEMORY'])
   })
 
@@ -74,7 +75,6 @@ describe('the applications\' "New" menu entries', () => {
     const locked = ctx(memberAccessOf(), { epochs: false })
     const byId = Object.fromEntries(registry.levelMenu().map((e) => [e.id, e]))
     expect(byId['create:MEMORY'].enabled!(locked)).toBe(false)
-    expect(byId['create:DEPOT_DROPBOX'].enabled!(locked)).toBe(false)
     expect(byId['create:MEMORY'].enabled!(ctx(memberAccessOf()))).toBe(true)
     expect(byId['depot.upload'].enabled).toBeUndefined()
   })

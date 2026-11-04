@@ -14,9 +14,10 @@ import Screenshot from '../../../components/Screenshot.astro';
 1. Open the folder, file or Memory and choose **Share** at the top of its page.
 2. Choose **New share**.
 3. Give the link a **Name** if you like; only you see it.
-4. Under **What can people do?**, choose **View only**, or **View + contribute** (on a Memory: **View + add photos**). On a
-   Memory there is also **Add photos only**, for an [upload link](/veyq/sharing/request-uploads/). You see only the
-   choices your server allows.
+4. Under **What can people do?**, choose **View only**, or the choice that also lets people add: **View + add files** on
+   a folder, **View + contribute** on a file, **View + add photos** on a Memory. On a Memory there is also **Add photos
+   only**, for an [upload link](/veyq/sharing/request-uploads/), and on a folder **Add files only**, which creates a
+   [drop box](/veyq/depot/drop-boxes/). You see only the choices your server allows.
 5. If you like, add any of these:
    - **Note**: a message shown to whoever opens the link. Write it per language with **Edit**. Tick **Must be accepted
      before opening** if people should read and accept it first.
@@ -32,13 +33,13 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 <Screenshot id="sharing-create-link" shows="The New share form with the role choice, the Note, Password protection and Expiry date sections and the Create link button" />
 
-## What "View + contribute" allows
+## What a link to view and add allows
 
-- **On a folder:** guests can add folders and upload files, put a newer version over a file (veyq warns them that there
+- **On a folder** (**View + add files**): guests can add folders and upload files, put a newer version over a file (veyq warns them that there
   is no version history), and move things around inside the shared folder. They cannot delete or rename anything, and
   cannot create a Memory or a drop box.
-- **On a Memory:** guests can add photos and videos, and delete their own again.
-- **On a single file:** guests can see and download it, and put a newer version in its place. veyq warns them first
+- **On a Memory** (**View + add photos**): guests can add photos and videos, and delete their own again.
+- **On a single file** (**View + contribute**): guests can see and download it, and put a newer version in its place. veyq warns them first
   that the file changes for everyone who has the link, you included, and that the old content cannot be brought back.
 
 Guests who add something give their name once, so you can see who added what. Other guests never see it. What guests

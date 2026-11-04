@@ -38,7 +38,7 @@ export interface KindTab extends LevelTab {
 }
 
 /** The tabs this level offers: one whose kinds have a node here, or whose application the viewer may add to (a kind with an
- *  allowed "New" entry) - so a reader is not shown an empty "Drop boxes" tab, a writer is shown every place to start. */
+ *  allowed "New" entry) - so a reader is not shown an empty "Expenses" tab, a writer is shown every place to start. */
 export function offeredTabs<T extends KindTab>(specs: readonly T[], present: ReadonlySet<string>, creatable: ReadonlySet<string>): T[] {
   return specs.filter((t) => t.kinds.some((k) => present.has(k) || creatable.has(k)))
 }

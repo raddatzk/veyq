@@ -15,6 +15,7 @@ const emit = defineEmits<{ close: [] }>()
 const words: ShareDialogCopy = {
   title: 'depot.share.title',
   intro: 'depot.share.intro',
+  roleContributor: 'depot.share.roleContributor',
   roleViewerHint: 'depot.share.roleViewerHint',
   roleContributorHint: 'depot.share.roleContributorHint',
   deleteConfirm: 'depot.share.deleteConfirm',

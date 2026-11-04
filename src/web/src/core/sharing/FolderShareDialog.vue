@@ -2,8 +2,19 @@
 // The platform's share dialog for a FOLDER (uc.sharing.share-public-viewer:folder-share-root, ADR 0080 decisions 6 and
 // 12): a member lists the folder's links, makes a new one (READ or READ_WRITE), copies, switches off, re-activates,
 // renews and deletes them. Core owns FOLDER, so this is core's own dialog, built only on `./manageShares.ts` and
-// `./shareLink.ts` — never on the Memories application's share dialogs, whose uploader (WRITE_ONLY) role has no
-// meaning here: the backend refuses a WRITE_ONLY link on a folder (`illegal_scope`), so no such option is offered.
+// `./shareLink.ts` — never on the Memories application's share dialogs. The backend refuses a WRITE_ONLY link on a folder
+// (`illegal_scope`), so the folder's own links are READ and READ_WRITE only.
+//
+// **"Add files only"** (owner 2026-11-04): the third role, in the Memory dialog's order - view only, view + add, add only.
+// It is no link of the folder: it names a NEW node under it that the link roots at (ADR 0080 decision 11) - an
+// application's, which fills the seam `app.folderUploadShare` (Depot: a drop box named by the link, and that link as its
+// first). Offered where the host's offer says `upload` (`./folderUploadShare.ts`: a member who may create that node here)
+// and the application registered it; core names no kind and says the role's hint in the application's words. Its form
+// takes a name - required, it names the node its guests see -, a password and an end, no note; the name is checked
+// against the folder's children before anything is sent, the server's `slug_taken` stays the race backstop. Once it ran
+// (`done`), the host re-reads the tree, so the new node is a row behind the dialog; its links are its own dialog's, so
+// this list never shows them. Mounted with no node (`nodeId` absent) it is the space's TOP LEVEL's dialog: a scope root is
+// no link's root, so it lists nothing and offers this role alone.
 //
 // What a READ_WRITE link lets a guest do below a folder is the role matrix (docs/apps/memories.md): add folders, move
 // and rename between them (core), and contribute photos to any Memory or chapter below (Memories) — never upload into
@@ -56,8 +67,13 @@ import { buildShareLink, recoverShareLink } from './shareLink'
 import { lastExpiryDay, linkRules } from './linkRules'
 import { decodeHttpError } from '../../shared/httpError'
 import { ShareRole } from '../../api/generated/sharing'
-import type { NodeShareDialogProps } from '../applications/registry'
+import { registry, type NodeShareDialogProps } from '../applications/registry'
 import type { ShareDialogCopy } from './shareDialogCopy'
+import { FOLDER_KIND } from '../node/kind'
+import type { NodeParent } from '../node/tree'
+import { treeStore } from '../node/treeStore'
+import { collidingSibling, nameTakenMessage } from '../node/siblingCollision'
+import { httpStatus, HttpStatus } from '../../shared/httpError'
 
 /** A password-protected link needs at least this many characters (the Memory dialog's convention, cr-0118). */
 const MIN_PW = 10
@@ -65,12 +81,19 @@ const MIN_PW = 10
 // FOLDER's pre-registered `shareDialog` (cr-files-application P4c), so it takes the platform's share-dialog props: the
 // folder's scope (every link's recovery copy of `K_share` is bound to it, ADR 0072), the folder's own content key as
 // the key chain opens it (`nodeKey`, ADR 0080 decision 1 — what a link wraps; key material) and its name (`nodeName`,
-// re-sealed under `K_share` so a guest sees it without the scope key). `nodeKind` is always FOLDER here; `upload` is
-// never set for a folder (no WRITE_ONLY link on a folder) and would be ignored, and `view` is the door's own answer (it
-// opens on the READ right). `contribute` (the rights function's `shareContribute`, handed on by the host) lets the form
-// offer READ_WRITE for a new link.
-const props = defineProps<NodeShareDialogProps & { words?: ShareDialogCopy }>()
-const emit = defineEmits<{ close: [] }>()
+// re-sealed under `K_share` so a guest sees it without the scope key). `nodeKind` is FOLDER here (or Depot's FILE, through
+// `FileShareDialog`). The host's offer decides the roles of a new link, each absent not offered: `view` READ, `contribute`
+// READ_WRITE, `upload` "Add files only" - the last only for a folder (and the top level) whose scope epoch the host handed
+// (`nodeScopeEpoch`: the new node's create states it). The node's fields are absent only for the top level (above).
+type NodeFields = 'nodeId' | 'nodeKey' | 'nodeEpoch' | 'nodeName' | 'nodeKind'
+const props = defineProps<
+  Omit<NodeShareDialogProps, NodeFields> & Partial<Pick<NodeShareDialogProps, NodeFields>> & { words?: ShareDialogCopy }
+>()
+const emit = defineEmits<{ close: []; done: [] }>()
+/** The space's top level: no node, no links of its own, only the upload-only link (above). Fixed for the dialog's life. */
+const atRoot = props.nodeId === undefined
+/** The folder's key and epoch as a link wraps them (absent only at the top level, which mints no link of its own). */
+const root = () => ({ key: props.nodeKey!, epoch: props.nodeEpoch! })
 /** The i18n key of a sentence that says what the node is: the folder's own (`share.folder.*`) unless the wrapping dialog
  *  of another kind hands its own (`words`, Depot's single-file link). */
 const copyKey = (name: keyof ShareDialogCopy) => props.words?.[name] ?? `share.folder.${name}`
@@ -98,7 +121,7 @@ const sections = computed(() => [
 ])
 
 // The recovery copy is bound to (scope, node, share): this dialog's folder, never the row's own claim (ADR 0072).
-const addressOf = (s: ManagedShare) => ({ scopeId: props.scopeId, nodeId: props.nodeId, shareId: s.shareId })
+const addressOf = (s: ManagedShare) => ({ scopeId: props.scopeId, nodeId: props.nodeId!, shareId: s.shareId })
 
 const decoded = computed(() => {
   const m = new Map<string, { name: string; hasNote: boolean; link: string | null }>()
@@ -113,7 +136,7 @@ const decoded = computed(() => {
 })
 
 function roleLabel(r: ShareRole): string {
-  return r === ShareRole.ReadWrite ? t('share.folder.roleContributor') : t('share.roleViewer')
+  return r === ShareRole.ReadWrite ? t(copyKey('roleContributor')) : t('share.roleViewer')
 }
 const titleFor = (s: ManagedShare) => decoded.value.get(s.shareId)?.name || roleLabel(s.role)
 // A pending deletion (`readonly`, the host's): the server refuses every change below but switching a link off, so only
@@ -124,14 +147,16 @@ const changes = computed(() => !props.readonly)
 const canReissue = (s: ManagedShare) => changes.value && (s.mine || !s.enabled)
 
 async function loadShares() {
+  if (atRoot) return
   loadError.value = false
   try {
-    shares.value = await listSharesFor(props.nodeId)
+    shares.value = await listSharesFor(props.nodeId!)
   } catch {
     loadError.value = true
   }
 }
-onMounted(loadShares)
+// The top level has no links to list: it opens on the form.
+onMounted(() => (atRoot ? openCreate() : loadShares()))
 
 async function copy(text: string, id: string) {
   try {
@@ -172,7 +197,7 @@ async function onReactivate(s: ManagedShare) {
   let renew = false
   await rowAction(s, async () => {
     try {
-      await reactivateShare(s, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName)
+      await reactivateShare(s, root(), props.epochs, props.nodeName!)
     } catch (e) {
       // A departed member may hold the link (ADR 0075): only a renew brings it back, so offer that instead.
       if (!(await isReissueRequired(e))) throw e
@@ -211,7 +236,7 @@ async function onReissue(s: ManagedShare) {
   actionError.value = false
   alreadyReplaced.value = false
   try {
-    const minted = await remintShare({ ...s, ...addressOf(s) }, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName)
+    const minted = await remintShare({ ...s, ...addressOf(s) }, root(), props.epochs, props.nodeName!)
     link.value = buildShareLink(minted.shareId, minted.kShare)
     view.value = 'link'
   } catch (e) {
@@ -276,20 +301,41 @@ const link = ref('')
 /** The copied-state id of the freshly-minted link (a share id is 43 base64url characters, so it never collides). */
 const NEW_LINK = 'new'
 
-// READ and READ_WRITE only: a WRITE_ONLY link on a folder is refused by the backend. READ_WRITE only where the host
-// handed `contribute` (the rights function's `shareContribute`, `core.public-shares.contribute`) — or on the edit of a
-// link that already is one, so an existing contributor link keeps its role on screen instead of showing no selection.
-// While the switch is off such a link serves no guest (ADR 0088 decision 5), but the member still edits it or narrows it to
-// READ; the server refuses only a change INTO it.
-const roleOptions = computed(() => [
-  { label: t('share.roleViewer'), value: ShareRole.Read },
-  ...(props.contribute || (view.value === 'edit' && editing.value?.role === ShareRole.ReadWrite)
-    ? [{ label: t('share.folder.roleContributor'), value: ShareRole.ReadWrite }]
-    : []),
-])
+// The roles of a new link, each where the host's offer grants it, in the Memory dialog's order: READ (`view`), READ_WRITE
+// (`contribute`, `core.public-shares.contribute`) - or, on the edit, the role the link already is, so an existing link keeps
+// its role on screen instead of showing no selection (while a switch is off such a link serves no guest, ADR 0088 decision 5,
+// but the member still edits it or narrows it; the server refuses only a change INTO it) - and "Add files only" on a create
+// (`upload` and the application's registration; never at a node that is no folder). The top level offers that one alone.
+const uploadShare = registry.folderUploadShare()
+/** Where the upload-only link's node lands: the folder (its key and both epochs), null at the top level; undefined where it
+ *  is not offered. */
+const uploadParent = computed<NodeParent | undefined>(() => {
+  if (atRoot) return null
+  if (props.nodeKind !== FOLDER_KIND || !props.nodeId || !props.nodeKey || props.nodeEpoch == null || props.nodeScopeEpoch == null) return undefined
+  return { id: props.nodeId, key: props.nodeKey, epoch: props.nodeEpoch, scopeEpoch: props.nodeScopeEpoch }
+})
+const uploadOffered = computed(() => !!props.upload && !!uploadShare && !props.readonly && uploadParent.value !== undefined)
+const roleOptions = computed(() => {
+  const edits = (r: ShareRole) => view.value === 'edit' && editing.value?.role === r
+  return [
+    ...(!atRoot && (props.view || edits(ShareRole.Read)) ? [{ label: t('share.roleViewer'), value: ShareRole.Read }] : []),
+    ...(!atRoot && (props.contribute || edits(ShareRole.ReadWrite))
+      ? [{ label: t(copyKey('roleContributor')), value: ShareRole.ReadWrite }]
+      : []),
+    ...(view.value === 'create' && uploadOffered.value ? [{ label: t('share.folder.roleUploader'), value: ShareRole.WriteOnly }] : []),
+  ]
+})
+/** The upload-only link is chosen: the form names the node it creates, and carries no note. */
+const uploading = computed(() => role.value === ShareRole.WriteOnly)
 const roleHint = computed(() =>
-  role.value === ShareRole.ReadWrite ? t(copyKey('roleContributorHint')) : t(copyKey('roleViewerHint')),
+  uploading.value && uploadShare
+    ? t(uploadShare.hint)
+    : role.value === ShareRole.ReadWrite ? t(copyKey('roleContributorHint')) : t(copyKey('roleViewerHint')),
 )
+/** A create mints only a role the offer grants: with none, the submit stays off. */
+const roleRefused = computed(() => view.value === 'create' && !roleOptions.value.some((o) => o.value === role.value))
+/** The upload-only link's name names its node: required. */
+const nameMissing = computed(() => uploading.value && name.value.trim().length === 0)
 const passwordTooShort = computed(() => passwordEnabled.value && password.value.trim().length < MIN_PW)
 
 // --- the edit (inbox #364): the create form, pre-filled from the link and saved in place ------------------------
@@ -340,7 +386,7 @@ const { run: runSave, pending: saving } = useAsyncAction(
     await updateShare(
       addressOf(s), props.epochs, s, effectiveNote(), name.value,
       expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null, role.value, passwordChange,
-      { root: { key: props.nodeKey, epoch: props.nodeEpoch }, rootName: props.nodeName },
+      { root: root(), rootName: props.nodeName! },
     )
     editing.value = null
     view.value = 'list'
@@ -372,8 +418,10 @@ async function reissueFromEdit() {
 
 function openCreate() {
   editing.value = null
+  view.value = 'create'
   name.value = ''
-  role.value = ShareRole.Read
+  // the first role offered (`roleOptions` reads the create view): READ where it is, the upload-only link alone at the top level
+  role.value = roleOptions.value[0]?.value ?? ShareRole.Read
   noteEnabled.value = false
   note.value = {}
   noteMustAccept.value = false
@@ -382,8 +430,8 @@ function openCreate() {
   expiryEnabled.value = false
   expiresAt.value = null
   createError.value = false
+  nameTaken.value = null
   applyLinkRules()
-  view.value = 'create'
 }
 
 /** End of the picked local day — the link works THROUGH that day. */
@@ -396,7 +444,7 @@ function endOfDay(d: Date): Date {
 const { run: runCreate, pending: minting } = useAsyncAction(
   async () => {
     const minted = await mintShare(
-      props.scopeId, props.nodeId, { key: props.nodeKey, epoch: props.nodeEpoch }, props.epochs, props.nodeName, role.value,
+      props.scopeId, props.nodeId!, root(), props.epochs, props.nodeName!, role.value,
       expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null,
       effectiveNote(), name.value, passwordEnabled.value ? password.value : '',
     )
@@ -412,17 +460,62 @@ const { run: runCreate, pending: minting } = useAsyncAction(
   },
 )
 
+// "Add files only": the application births the node named by the link under the folder and mints its first link (the
+// registration's `create`). A name a child of the folder already folds to is refused before anything is sent.
+/** Why the upload-only link's name was refused: a sibling it collides with, or the server's `slug_taken`. */
+const nameTaken = ref<string | null>(null)
+const { run: runUpload, pending: uploadMinting } = useAsyncAction(
+  async () => {
+    const share = uploadShare!
+    const parent = uploadParent.value!
+    const label = name.value.trim()
+    const sibling = collidingSibling(treeStore.nodes, parent?.id ?? null, share.kind, label)
+    if (sibling) {
+      nameTaken.value = nameTakenMessage(t, sibling)
+      return
+    }
+    try {
+      const minted = await share.create({
+        scopeId: props.scopeId, epochs: props.epochs, parent, name: label, password: passwordEnabled.value ? password.value : '',
+        expiresAt: expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null,
+      })
+      link.value = buildShareLink(minted.shareId, minted.kShare)
+      view.value = 'link'
+    } finally {
+      // The host re-reads the tree: the new node is a row now - also after a failed mint, which leaves it without a link.
+      emit('done')
+    }
+  },
+  {
+    onError: async (e) => {
+      if (httpStatus(e) === HttpStatus.conflict) {
+        nameTaken.value = t('node.slugTaken')
+        return
+      }
+      await noteRequirementRefusal(e)
+      createError.value = true
+    },
+  },
+)
+
 async function onCreate() {
-  if (passwordTooShort.value || expiryMissing.value) return
+  if (passwordTooShort.value || expiryMissing.value || roleRefused.value || nameMissing.value) return
   createError.value = false
   requirementRefused.value = false
-  await runCreate()
+  nameTaken.value = null
+  await (uploading.value ? runUpload() : runCreate())
+}
+/** Back from the form, or done with a fresh link: the list - or, at the top level, which has none, the dialog closes. */
+function back() {
+  if (atRoot) emit('close')
+  else view.value = 'list'
 }
 /** A create or an edit is in flight: the form and the dialog's close wait for it. */
-const creating = computed(() => minting.value || saving.value)
+const creating = computed(() => minting.value || saving.value || uploadMinting.value)
 
+// The top level's dialog is one new link throughout: it shares no folder, so it never says so.
 const header = computed(() =>
-  view.value === 'create' ? t('share.createNew') : view.value === 'edit' ? t('share.editTitle') : t(copyKey('title')),
+  view.value === 'create' || atRoot ? t('share.createNew') : view.value === 'edit' ? t('share.editTitle') : t(copyKey('title')),
 )
 function onDialogVisible(visible: boolean) {
   if (!visible && !creating.value) emit('close')
@@ -458,7 +551,7 @@ function onDialogVisible(visible: boolean) {
       </div>
       <div class="veyq-dialog-action-row">
         <div class="veyq-action-group">
-          <VeyqButton :label="t('common.done')" icon="check" @click="view = 'list'" />
+          <VeyqButton :label="t('common.done')" icon="check" @click="back" />
         </div>
       </div>
     </div>
@@ -467,7 +560,14 @@ function onDialogVisible(visible: boolean) {
     <div v-else-if="view === 'create' || view === 'edit'" class="veyq-form">
       <div class="veyq-form-field">
         <label for="folder-share-name">{{ t('share.name') }}</label>
-        <VeyqInput id="folder-share-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="creating" />
+        <VeyqInput
+          id="folder-share-name"
+          v-model="name"
+          :placeholder="uploading ? t('share.folder.uploadNamePlaceholder') : t('share.nameOptional')"
+          :required="uploading"
+          :disabled="creating"
+        />
+        <p v-if="nameTaken" class="veyq-form-error folder-share-name-taken">{{ nameTaken }}</p>
       </div>
 
       <div class="veyq-form-field">
@@ -493,7 +593,8 @@ function onDialogVisible(visible: boolean) {
         </template>
       </div>
 
-      <div class="veyq-form-field">
+      <!-- An upload-only link carries no note (its node's application mints it without one). -->
+      <div v-if="!uploading" class="veyq-form-field">
         <div class="folder-share-toggle">
           <span>
             <strong>{{ t('share.noteSection') }}</strong>
@@ -576,7 +677,7 @@ function onDialogVisible(visible: boolean) {
           variant="secondary"
           appearance="outlined"
           :disabled="creating"
-          @click="view = 'list'"
+          @click="back"
         />
         <VeyqButton
           v-if="view === 'edit'"
@@ -593,7 +694,7 @@ function onDialogVisible(visible: boolean) {
           :label="creating ? t('share.creating') : t('share.create')"
           icon="link"
           :loading="creating"
-          :disabled="creating || passwordTooShort || expiryMissing"
+          :disabled="creating || passwordTooShort || expiryMissing || roleRefused || nameMissing"
           @click="onCreate"
         />
       </div>

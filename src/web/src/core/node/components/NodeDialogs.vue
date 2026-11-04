@@ -19,6 +19,7 @@ import ExportSubtreeDialog from '../../export/ExportSubtreeDialog.vue'
 import ImportSubtreeDialog from '../../export/ImportSubtreeDialog.vue'
 import CopyNodesDialog from '../../export/CopyNodesDialog.vue'
 import ShareNameDialog from '../../sharing/ShareNameDialog.vue'
+import FolderShareDialog from '../../sharing/FolderShareDialog.vue'
 
 const props = defineProps<{ dialogs: NodeDialogs }>()
 const { t } = useI18n()
@@ -45,16 +46,18 @@ const createParent = computed(() => (s.name.value?.mode === 'create' ? s.name.va
 /** The share dialog of the node being shared: its kind's (`KindDescriptor.shareDialog`, its whole answer; FOLDER's is
  *  core's own, pre-registered). A share wraps the node's own key, never K_SC (ADR 0080 decisions 1 and 12). */
 const shareDialog = computed(() => {
-  const sh = s.share.value
-  if (!sh) return null
-  const info = registry.kind(sh.node.kind)
+  const node = s.share.value?.node
+  if (!node) return null
+  const info = registry.kind(node.kind)
   return info.supported ? (info.shareDialog ?? null) : null
 })
 /** The node being shared as the tree reads it now (its name and epoch), the one the door was handed while it is gone. */
 const shared = computed(() => {
-  const sh = s.share.value
-  return sh ? (tree.value?.node(sh.node.id) ?? sh.node) : null
+  const node = s.share.value?.node
+  return node ? (tree.value?.node(node.id) ?? node) : null
 })
+/** The space's top level is being shared: core's folder dialog with no node, its upload-only link alone (`NodeHost.share`). */
+const sharingTop = computed(() => !!s.share.value && s.share.value.node === null)
 /** The roles a new link may take, as the door's offer says (each false unless granted); the dialog decides none. */
 const shareOffer = computed(() => {
   const o = s.share.value?.offer
@@ -192,10 +195,22 @@ async function guestCreate(name: string) {
     :node-id="shared.id"
     :node-key="dialogs.shareKey.value"
     :node-epoch="shared.epoch"
+    :node-scope-epoch="shared.scopeEpoch"
     :epochs="member.epochs"
     :node-name="shared.name"
     :node-kind="shared.kind"
     :readonly="member.readonly"
+    @done="reload"
+    @close="s.share.value = null"
+  />
+  <!-- The top level: no node and no list; never a READ or READ_WRITE link (a scope root is no link's root). -->
+  <FolderShareDialog
+    v-if="sharingTop && member"
+    :upload="shareOffer.upload"
+    :scope-id="member.scopeId"
+    :epochs="member.epochs"
+    :readonly="member.readonly"
+    @done="reload"
     @close="s.share.value = null"
   />
 </template>

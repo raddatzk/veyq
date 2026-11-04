@@ -8,7 +8,8 @@
 // Both directions: every kind of the contract is registered with its facts, and every registered kind is in a file.
 // Asked per kind: its application, its placement over the root and every kind of the contract (and one no file names),
 // its cover, its share roles (the share dialog and the drop page in the registry, and the rights function's offers for a
-// member with every leaf on), what its creation needs (the level's "New" entry with that leaf off), and what a link's
+// member with every leaf on), what its creation needs (the level's "New" entry - or its upload-only link, which births a
+// Depot drop box, owner 2026-11-04 - with that leaf off), and what a link's
 // guest may do around it (a `READ_WRITE` guest's create in a folder, the move core lets out of a container). What a
 // `WRITE_ONLY` guest creates is the backend's alone: the web's one place for it is the application's own drop page.
 import { describe, it, expect } from 'vitest'
@@ -22,6 +23,7 @@ import { depotRights } from './features/depot/rights'
 import { expensesRights } from './features/expenses/rights'
 import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from './features/platform/capabilities'
 import { guestAccessOf, memberAccessOf } from './test/models'
+import { folderUploadShareAt } from './core/sharing/folderUploadShare'
 
 interface KindFacts {
   placement: { root: boolean; parents: string[] }
@@ -70,11 +72,12 @@ function treeOfOneFolder(rootId: string | null): { tree: TreeSource; folder: Sou
 }
 
 /** Whether `access` is offered a create of `kind` at the folder of `tree`: core's folder create for FOLDER, else any entry of the
- *  level's "New" menu a kind of the application declared for it (its create entry, or an action such as Depot's uploads). */
+ *  level's "New" menu a kind of the application declared for it (its create entry, or an action such as Depot's uploads), or
+ *  the level's upload-only link where it creates that kind (`app.folderUploadShare`: Depot's drop box). */
 function createOffered(kind: string, access: Access, tree: TreeSource, folder: SourceNode): boolean {
   if (kind === FOLDER_KIND) return folderRights(access, targetOf(tree, folder)).createFolder
   const ctx: LevelActionContext = { access, tree, folder: folder as LevelActionContext['folder'], epochs: null }
-  return registry.levelMenu().some((e) => e.kind === kind && e.allowed(ctx))
+  return registry.levelMenu().some((e) => e.kind === kind && e.allowed(ctx)) || folderUploadShareAt(ctx)?.kind === kind
 }
 
 describe('the kinds contract and the web agree', () => {
@@ -109,7 +112,7 @@ describe('the kinds contract and the web agree', () => {
 
   it.each(kinds)('creating a $kind needs what its file says', (k) => {
     const { tree, folder } = treeOfOneFolder(null)
-    const viaLevel = k.kind === FOLDER_KIND || registry.levelMenu().some((e) => e.kind === k.kind)
+    const viaLevel = k.kind === FOLDER_KIND || registry.levelMenu().some((e) => e.kind === k.kind) || registry.folderUploadShare()?.kind === k.kind
     if (!viaLevel) {
       // Created through no level entry (a chapter, inside its Memory): the web has no generic door to hold a need to.
       expect(k.createNeeds, `${k.kind} is created at no level, so its file can state no need the web checks`).toBeNull()

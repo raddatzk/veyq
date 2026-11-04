@@ -6,6 +6,15 @@ div.veyq-node-host
           div.veyq-node-header-titlerow
             h1.veyq-node-header-title [aria-label="Personal"]
               "Personal"
+            div.veyq-node-header-actions
+              button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-share-2.veyq-icon__svg
+                    circle
+                    circle
+                    circle
+                    line
+                    line
       div.veyq-level-toolbar
         button.veyq-button.veyq-button--filled.veyq-button--primary.veyq-button--small.veyq-new-menu-button
           span.veyq-button__icon.veyq-icon
@@ -60,8 +69,6 @@ div.veyq-node-host
             "Memories"
           button.veyq-tab [role="tab"]
             "Depot"
-          button.veyq-tab [role="tab"]
-            "Drop boxes"
           button.veyq-tab [role="tab"]
             "Expenses"
     ul.veyq-level-list

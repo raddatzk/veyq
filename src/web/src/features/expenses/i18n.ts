@@ -255,6 +255,8 @@ const en = {
     share: {
       title: 'Share this Pot',
       intro: 'Create a link anyone can open in a browser — no account, no install. It shows only this Pot, and you can switch it off anytime.',
+      // A Pot's READ_WRITE role keeps its own word: a folder's ('View + add files') would be wrong for a Pot.
+      roleContributor: 'View + contribute',
       roleViewerHint: 'Anyone with the link sees the entries, balances and overview, read-only.',
       roleContributorHint: 'Anyone with the link can also add, change and delete entries, and add and rename people.',
       deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. Entries guests wrote stay in the Pot.',
@@ -512,6 +514,7 @@ const de: typeof en = {
       title: 'Diese Kasse teilen',
       intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese Kasse, und du kannst ihn jederzeit abschalten.',
       roleViewerHint: 'Wer den Link hat, sieht die Einträge, Salden und den Überblick — schreibgeschützt.',
+      roleContributor: 'Ansehen + mitwirken',
       roleContributorHint: 'Wer den Link hat, kann außerdem Einträge hinzufügen, ändern und löschen sowie Personen hinzufügen und umbenennen.',
       deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Einträge, die Gäste geschrieben haben, bleiben in der Kasse.',
       reissueWarning: 'Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.',

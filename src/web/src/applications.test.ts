@@ -71,13 +71,17 @@ describe('composition root', () => {
     ])
   })
 
-  it('gives the level view its tabs: Memories, Depot, Drop boxes, Expenses - the filter of the one list', () => {
+  it('gives the level view its tabs: Memories, Depot (files and drop boxes), Expenses - the filter of the one list', () => {
     expect(registry.tabs().map((t) => ({ id: t.id, label: t.label, kinds: t.kinds }))).toEqual([
       { id: MEMORY_KIND, label: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] },
-      { id: FILE_KIND, label: 'depot.title', kinds: [FILE_KIND] },
-      { id: DROPBOX_KIND, label: 'depot.dropBox.section', kinds: [DROPBOX_KIND] },
+      { id: FILE_KIND, label: 'depot.title', kinds: [FILE_KIND, DROPBOX_KIND] },
       { id: POT_KIND, label: 'expenses.title', kinds: [POT_KIND] },
     ])
+  })
+
+  it('lets Depot alone fill the folder\'s upload-only link, with its drop box (owner 2026-11-04)', () => {
+    expect(registry.folderUploadShare()?.kind).toBe(DROPBOX_KIND)
+    expect(registry.applicationOf(registry.folderUploadShare()!.kind)).toBe('depot')
   })
 
   it('lets Depot\'s uploads take what is dropped (files, a directory), and nothing else', () => {

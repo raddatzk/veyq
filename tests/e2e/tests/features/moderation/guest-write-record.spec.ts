@@ -86,7 +86,7 @@ test(
     await share.getByRole('button', { name: 'New share' }).click()
     const createShare = page.getByRole('dialog', { name: 'New share' })
     await createShare.getByLabel('Name').fill(recordTyped(shareLabel))
-    await createShare.getByRole('button', { name: 'View + contribute' }).click()
+    await createShare.getByRole('button', { name: 'View + add files' }).click()
     await createShare.getByRole('button', { name: 'Create link' }).click()
     const linkView = page.getByRole('dialog', { name: 'Share this folder' })
     shareLink = await linkView.getByRole('textbox', { name: 'Public link' }).inputValue()

@@ -48,7 +48,7 @@ const stubs = {
 }
 const mountDialog = (extra: { contribute?: boolean } = { contribute: true }) =>
   mount(FileShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: FILE_ID, nodeKey: FILE_KEY, epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Report.pdf', nodeKind: FILE_KIND, ...extra },
+    props: { scopeId: SCOPE_ID, nodeId: FILE_ID, nodeKey: FILE_KEY, epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Report.pdf', nodeKind: FILE_KIND, view: true, ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 const byText = (w: ReturnType<typeof mountDialog>, text: string) => w.findAll('button').find((b) => b.text() === text)!
@@ -128,7 +128,7 @@ describe('FileShareDialog', () => {
   it('every sentence it adds says nothing of folders or Memories, in both languages', () => {
     for (const locale of ['en', 'de'] as const) {
       const share = (i18n.global.getLocaleMessage(locale) as { depot: { share: Record<string, string> } }).depot.share
-      expect(Object.keys(share).sort()).toEqual(['deleteConfirm', 'intro', 'reissueWarning', 'roleContributorHint', 'roleViewerHint', 'title'])
+      expect(Object.keys(share).sort()).toEqual(['deleteConfirm', 'intro', 'reissueWarning', 'roleContributor', 'roleContributorHint', 'roleViewerHint', 'title'])
       for (const [key, text] of Object.entries(share)) expect(text, `${locale} ${key}`).not.toMatch(/folder|ordner|memor|erinnerung|photo|foto/i)
       expect(share.roleContributorHint, locale).toMatch(locale === 'en' ? /version history/ : /Versionsverlauf/)
     }

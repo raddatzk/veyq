@@ -101,6 +101,8 @@ const en = {
       title: 'Share this file',
       intro: 'Create a link anyone can open in a browser — no account, no install. It shows only this one file, and you can switch it off anytime.',
       roleViewerHint: 'Anyone with the link can see this file and download it, read-only.',
+      // A file's READ_WRITE role keeps its own word: a folder's ("View + add files") would be wrong for one file.
+      roleContributor: 'View + contribute',
       roleContributorHint: 'Anyone with the link can see and download this file and replace its content — the old content cannot be restored: there is no version history.',
       deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. Content guests replaced stays in this file.',
       reissueWarning: 'This makes a new link and deletes the old one. Hand out the new link.',
@@ -130,20 +132,17 @@ const en = {
       // A contributor's replace on an opened file (FileDetail, inbox #383): what it does, said before it happens.
       replaceFileConfirm: 'Replace the content of “{name}” with “{file}”? It changes for everyone who has this link, the owner too. The old content cannot be restored: there is no version history.',
     },
-    // The drop box (cr-files-application F3): a member's section, detail, create and share dialogs; a guest's page.
+    // The drop box (cr-files-application F3): a member's rows, detail and share dialog, the folder's upload-only link that
+    // creates one (owner 2026-11-04); a guest's page.
     dropBox: {
       // What a copy of a drop box does not carry (core's copy dialog lists it, `copyLosses`).
       copyLoss: 'A drop box becomes an ordinary folder, its people’s folders ordinary folders: no links, nobody can drop files into it, no cover.',
-      section: 'Drop boxes',
       // A drop box's row meta line: "Drop box · 3 people" (the guests who have a folder in it).
       kind: 'Drop box',
       people: 'Nobody yet | 1 person | {count} people',
-      create: 'New drop box',
-      createTitle: 'New drop box',
       aDropBox: 'a drop box',
-      createHint: 'A drop box collects files from people without an account. Share a link: everyone who uses it gets a folder of their own here, and nobody sees what others sent.',
-      sectionEmpty: 'No drop boxes yet. Choose New to create one — a drop box collects files from people without an account.',
-      createFailed: 'The drop box could not be created. Please try again.',
+      // The role hint of "Add files only" in core's folder share dialog (`app.folderUploadShare`): what creating the link does.
+      uploadShareHint: 'Creates a drop box with this name here. Anyone with the link can send you files: each person gets a folder of their own, and nobody sees the drop box or what others sent. You manage its links on the drop box.',
       open: 'Open {name}',
       empty: 'Nobody has dropped anything yet. Share a link to collect files.',
       guestFiles: 'No files | {count} file | {count} files',
@@ -278,6 +277,7 @@ const de: typeof en = {
       title: 'Diese Datei teilen',
       intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese eine Datei, und du kannst ihn jederzeit abschalten.',
       roleViewerHint: 'Wer den Link hat, kann diese Datei ansehen und herunterladen — schreibgeschützt.',
+      roleContributor: 'Ansehen + mitwirken',
       roleContributorHint: 'Wer den Link hat, kann diese Datei ansehen, herunterladen und ihren Inhalt ersetzen — der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
       deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Inhalt, den Gäste ersetzt haben, bleibt in dieser Datei.',
       reissueWarning: 'Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.',
@@ -303,15 +303,10 @@ const de: typeof en = {
     },
     dropBox: {
       copyLoss: 'Ein Briefkasten wird ein gewöhnlicher Ordner, die Ordner der Personen darin gewöhnliche Ordner: keine Links, niemand kann mehr einwerfen, kein Titelbild.',
-      section: 'Briefkästen',
       kind: 'Briefkasten',
       people: 'Noch niemand | 1 Person | {count} Personen',
-      create: 'Neuer Briefkasten',
-      createTitle: 'Neuer Briefkasten',
       aDropBox: 'einen Briefkasten',
-      createHint: 'Ein Briefkasten sammelt Dateien von Personen ohne Konto. Teile einen Link: Wer ihn nutzt, bekommt hier einen eigenen Ordner, und niemand sieht, was andere eingeworfen haben.',
-      sectionEmpty: 'Noch keine Briefkästen. Mit „Neu“ legst du einen an — ein Briefkasten sammelt Dateien von Personen ohne Konto.',
-      createFailed: 'Der Briefkasten konnte nicht angelegt werden. Bitte versuche es erneut.',
+      uploadShareHint: 'Legt hier einen Briefkasten mit diesem Namen an. Wer den Link hat, kann dir Dateien schicken: Jede Person bekommt einen eigenen Ordner, und niemand sieht den Briefkasten oder was andere geschickt haben. Seine Links verwaltest du am Briefkasten.',
       open: '{name} öffnen',
       empty: 'Noch hat niemand etwas eingeworfen. Teile einen Link, um Dateien einzusammeln.',
       guestFiles: 'Keine Dateien | {count} Datei | {count} Dateien',

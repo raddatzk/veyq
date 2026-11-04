@@ -260,7 +260,9 @@ here; the server is blind.
   ONE set of doors, `NodeHost`: `open`, `rename` (the name dialog, a row's), `renameTo` (the header's rename in place, the same
   write), `move`, `moveMany`, `delete` (one node, with the kind's own write where it
   has one), `deleteMany`, `share(node, offer)` (`NodeShareOffer`: the roles a new link may take - `view`, `contribute`, `upload` - from the rights
-  answer through `shareOfferOf`; rights, never a variant: Memories' one dialog lists every role's links and offers exactly these), `createChild(kind,
+  answer through `shareOfferOf`; rights, never a variant: Memories' one dialog lists every role's links and offers exactly these;
+  `node` null is the space's top level, which is no link's root: core's `FolderShareDialog` with no node and no list, offering
+  only the offer's `upload` - the level's upload-only link, `app.folderUploadShare` below), `createChild(kind,
   parent)`, `download`, `copy`, `importArchive`, `openTrash`. **Every door may be absent, and absence is the answer** - the
   action is not offered (fail closed), whatever a rights function says: a view narrows its rights by the doors (`hostRights`)
   and binds its standard actions through them (`hostHandlers`); core's row defaults and core's own actions take the same
@@ -419,7 +421,9 @@ here; the server is blind.
   unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's
   header (core's `NodeHeader`, which every node page opens with too - see above). Its `createDialog` - props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the page when the "New" menu or a detail asks its `createChild` door for that KIND; and its
-  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, view?, contribute?, upload?, readonly?}` (`view`/`contribute`/`upload`: offer READ/READ_WRITE/WRITE_ONLY for a new link — the rights function's `share`/`shareContribute`/`shareUpload`, carried by the `share` door's `NodeShareOffer`, never read by the dialog, each absent not offered; `readonly`: the scope is pending deletion, set by the host for every kind - the dialog lists and copies the links and offers revoking the caller's own live one, and mints and changes nothing else, as the server refuses every share write in the grace window but a revoke, uc.spaces.scope-access A1); a
+  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, nodeEpoch, nodeScopeEpoch?, epochs, nodeName, nodeKind, view?, contribute?, upload?, readonly?}`
+  (`nodeScopeEpoch`: what a create under the node states - the folder dialog's upload-only link; it emits `done` once it
+  created a node, and the host re-reads the tree) (`view`/`contribute`/`upload`: offer READ/READ_WRITE/WRITE_ONLY for a new link — the rights function's `share`/`shareContribute`/`shareUpload`, carried by the `share` door's `NodeShareOffer`, never read by the dialog, each absent not offered; `readonly`: the scope is pending deletion, set by the host for every kind - the dialog lists and copies the links and offers revoking the caller's own live one, and mints and changes nothing else, as the server refuses every share write in the grace window but a revoke, uc.spaces.scope-access A1); a
   kind without one offers no share. There is no guest-only list or detail: core's page of a `READ`/`READ_WRITE` public
   share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node -
   the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
@@ -446,7 +450,18 @@ here; the server is blind.
   a `WRITE_ONLY` link rooted at that kind (`PublicShare.rootKind`, a kind of the application's own - another's throws; the
   shell reads it with `registry.shareBodyFor`) — the one page with no member equivalent, its guest
   holding no key: Memories' photo drop (`MemoryShareBody`), Depot's drop box (`DropBoxShareBody`); `FOLDER` is claimed by
-  nobody and refused. Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any
+  nobody and refused; `app.folderUploadShare(kind, { allowed(ctx), hint, create(input) })` - ONCE across the registry, a kind
+  of the application's own whose `shareBody` it claimed first (else it throws) - the level's upload-only link (owner
+  2026-11-04): no `WRITE_ONLY` link roots at a folder, so core's `FolderShareDialog` offers "Add files only" after "View only"
+  and "View + add files" (the Memory dialog's order; a file's and a Pot's dialog keep their own `roleContributor` word
+  through `ShareDialogCopy`), and the space's top level offers it alone through a Share in its header (`LevelView`,
+  `share(null, …)`); choosing it hands `create` the member's scope, the level (a `NodeParent`, null at the root) and the
+  link's required name, password and end, and the application births its node there and mints that node's first
+  `WRITE_ONLY` link (Depot: `createDropBoxWithLink`, a drop box). Who is offered it is `core/sharing/folderUploadShare.ts`:
+  fail closed - a member, a folder or the root, not an identity folder, the kind's application switched on, its
+  `placement` there, and the application's `allowed` (Depot: `depotRights(...).createDropBox`); `hint` is the role's
+  sentence in the application's words, the dialog checks the name against the level's children and never lists the new
+  node's links (its own dialog does). There is no "New" entry for such a kind; Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any
   guest a write; `app.personSection(component)` and `app.itemReview(component)` (above, and the moderator's review of an
   application's reported record);
   `app.lifecycle(hooks)` once

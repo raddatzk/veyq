@@ -104,7 +104,8 @@ acceptanceCriteria:
           with code" entry and the drop-box id absent, and a remembered device asking for the password and the
           Secret Key. A real browser ran it once by hand on 2026-10-15 (inbox #447): a fresh instance switched off
           one entry at a time through admin-web's Server → Capabilities, each confirmation showing the entry's
-          served `whenOff` word for word; the web client then offered no "New drop box" and no drop-box tab, no
+          served `whenOff` word for word; the web client then offered no "New drop box" and no drop-box tab (since owner
+          decision 2026-11-04 a drop box is a folder's upload-only link: no top-level Share and no "Add files only"), no
           "Sign in with a QR code" and no "Add a device" (its address led back to Settings), and no "Stay signed
           in"; a trusted and a remembered device each asked for the password and the Secret Key with the
           `unlock.deviceHeldBack` hint once the email was entered (before that, the first-sign-in hint: the lookup
@@ -128,7 +129,8 @@ gaps:
     `switch-without-restart` and `device-switch-acts-at-once` in Chromium against the release candidate's two images,
     installed through `veyqctl` (ADR 0090): the Server Owner switches drop boxes, adding a device from another one,
     unlocking without a password and remembered devices off one at a time in admin-web's Server → Capabilities, each
-    confirmation showing the served `whenOff`; the web client then offers no "New drop box" and no drop-box tab, no
+    confirmation showing the served `whenOff`; the web client then offers no Share at the space's top level and no
+    "Add files only" for a drop box (owner decision 2026-11-04: a drop box is a folder's upload-only link), no
     "Sign in with a QR code", no "Add a device" (its address leads back to Settings) and no "Stay signed in"; a
     trusted and a remembered device ask for the password and the Secret Key with the held-back hint, the email filled
     in, and unlock with them, sending no POST or DELETE to `/api/account/wraps` while the switch is off; the child is
