@@ -127,11 +127,15 @@ describe('LevelView: Select', () => {
     expect(checked(w)).toEqual([])
   })
 
-  it('All selects every row on screen, None takes them away', async () => {
+  it('All selects every row on screen - in both groups, the folders and the contents -, None takes them away', async () => {
     const w = mountLevel()
     await startSelecting(w)
     await w.find('.veyq-select-all').trigger('click')
     expect(checked(w)).toEqual(['Sub', 'a1', 'a2', 'b-del', 'b1'])
+    // the selection is the level's, not one group's: each group's own list has its rows checked
+    const groups = w.findAll('section.veyq-level-group')
+    expect(groups).toHaveLength(2)
+    expect(groups.map((g) => g.findAll('input[type="checkbox"]').filter((c) => (c.element as HTMLInputElement).checked).length)).toEqual([1, 4])
     expect(count(w)).toBe(t('node.select.count', { count: 5 }))
     await w.find('.veyq-select-none').trigger('click')
     expect(checked(w)).toEqual([])

@@ -175,13 +175,15 @@ beforeEach(async () => {
 })
 
 describe("ShareTreePage browses a shared folder with core's level view", () => {
-  it("shows the folder's name, the note once and ONE list of its sub-folders and every kind's nodes, opened through the chain", async () => {
+  it("shows the folder's name, the note once and its sub-folders and every kind's nodes in two headed groups, opened through the chain", async () => {
     const w = await mountBody(head())
     expect(w.emitted('unavailable')).toBeUndefined()
     expect(heading(w)).toBe('Familie')
     expect(w.findAll('.markdown-body')).toHaveLength(1)
     expect(w.find('.markdown-body').text()).toContain('Folder note')
-    expect(w.findAll('ul.veyq-level-list'), 'one list for everything').toHaveLength(1)
+    // the folders, then the contents: two groups, each its own list under its heading - the member's level, unchanged
+    expect(w.findAll('section.veyq-level-group h2').map((h) => h.text())).toEqual([t('node.groupFolders'), t('node.groupContents')])
+    expect(w.findAll('ul.veyq-level-list')).toHaveLength(2)
     expect(folderCards(w)).toEqual(['Briefe'])
     // Unified list (inbox #407): folders first, then every other node MIXED BY NAME (not grouped by kind as the sections
     // were) - the unregistered kind's explicit unsupported row ("Ausgaben") sorts among the kinds' nodes.

@@ -61,6 +61,18 @@ describe('LevelRowItem', () => {
     expect(mountItem(row(), 'grid').classes()).not.toContain('is-compact')
   })
 
+  it('every other tile is a card: its open button holds the cover first, then the name and meta inside; checkbox and actions sit over it', () => {
+    const w = mountItem(row({ actions: [act('heart', { first: true })] }), 'grid', { selected: false })
+    expect(w.classes()).toEqual(expect.arrayContaining(['is-grid']))
+    expect([...w.get('.veyq-level-item-main').element.children].map((el) => el.className.split(' ')[0])).toEqual([
+      'veyq-level-item-visual', 'veyq-level-item-text',
+    ])
+    // the checkbox and the actions are the card's own children beside its open button (laid over the cover by the sheet)
+    expect([...w.element.children].map((el) => el.className.split(' ')[0])).toEqual([
+      'veyq-level-item-check', 'veyq-level-item-main', 'veyq-level-item-actions',
+    ])
+  })
+
   it('in both layouts the heart and "more" are quiet icon buttons (no frame), each named - in the tile beside its cover', () => {
     for (const mode of ['list', 'grid'] as const) {
       const w = mountItem(row({ actions: [act('heart', { first: true, pressed: true }), act('rename')] }), mode)

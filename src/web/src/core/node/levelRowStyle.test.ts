@@ -1,6 +1,7 @@
 // The look of the level list's items is CSS, which a unit test cannot render - so what the owner's design rests on (2026-11-04:
-// the list one surface of rows led by the compact header's 16:9 thumbnail; the grid's folders a compact group above flat
-// tiles whose quiet actions sit over the cover's corner, shown on hover and focus, always without hover) and the phone-width
+// two groups, the folders and the contents, each list one surface of rows led by the compact header's 16:9 thumbnail; in the
+// grid the folders compact tiles, every other node a card with its cover flush at the top and quiet actions over the cover's
+// corner, shown on hover and focus, always without hover; the groups' quiet headings) and the phone-width
 // reasoning are pinned at the source: sizes in rem (they follow the reader's font size), tokens for every colour, the
 // narrow-width fallbacks. A real browser pass is still the proof of the look; this stops the numbers drifting back unseen.
 import { describe, it, expect } from 'vitest'
@@ -56,15 +57,38 @@ describe('level item styles', () => {
     expect(rule('.veyq-level-item.is-list + .veyq-level-item.is-list')).toMatch(/border-top:\s*1px solid var\(--app-line\)/)
   })
 
-  it('a tile is flat with a 16:9 cover, the tiles narrower than before (210 px, was 280-340 px)', () => {
+  it('a tile has a 16:9 cover, the tiles narrower than before (210 px, was 280-340 px), no shadow', () => {
     expect(rule('.veyq-level-item.is-grid .veyq-level-item-visual')).toMatch(/aspect-ratio:\s*16 \/ 9/)
     expect(rule('.veyq-level-list')).toMatch(/repeat\(auto-fill, minmax\(min\(100%, 210px\), 1fr\)\)/)
     expect(css).not.toMatch(/\.veyq-level-item\.is-grid[^{]*\{[^}]*box-shadow/)
   })
 
-  it('the grid\'s folders are one group: the first other tile starts a new row', () => {
-    expect(rule('.veyq-level-item.is-compact + .veyq-level-item:not(.is-compact)')).toMatch(/grid-column-start:\s*1/)
+  it('every tile but a folder\'s is a card with the list\'s surface, frame and radius: the cover flush at its top, the text inside', () => {
+    const card = rule('.veyq-level-item.is-grid:not(.is-compact)')
+    const list = rule('.veyq-level-list.is-list')
+    for (const prop of ['border', 'border-radius', 'background']) {
+      const of = (decl: string) => new RegExp(`(?:^|[\\s;])${prop}:\\s*([^;]+);`).exec(decl)?.[1]
+      expect(of(card), `the card's ${prop} is the list's`).toBe(of(list))
+      expect(of(card), prop).toBeDefined()
+    }
+    // the cover: no frame of its own, its top corners the card's (one pixel inside its border), its bottom square
+    const cover = rule('.veyq-level-item.is-grid:not(.is-compact) .veyq-level-item-visual')
+    expect(cover).toMatch(/border:\s*0/)
+    expect(cover).toMatch(/border-radius:\s*calc\(var\(--app-radius\) - 1px\) calc\(var\(--app-radius\) - 1px\) 0 0/)
+    // the name and meta line inside the card: padded on both sides and below, nothing above (the cover is the top)
+    expect(rule('.veyq-level-item.is-grid .veyq-level-item-text')).toMatch(/padding:\s*0 0\.75rem 0\.75rem/)
+    // selected, a tile - compact or card - takes the accent frame
+    expect(rule('.veyq-level-item.is-grid.is-selected')).toMatch(/border-color:\s*var\(--app-accent\)/)
+  })
+
+  it('the groups: each its own list (no trick placing the first content tile), a small gap between, a quiet heading', () => {
+    expect(css).not.toMatch(/grid-column-start/)
     expect(rule('.veyq-level-item.is-compact')).toMatch(/border:\s*1px solid var\(--app-line\)/)
+    expect(rem(rule('.veyq-level-groups'), 'gap')).toBeLessThanOrEqual(1.5)
+    const heading = rule('.veyq-level-group-heading')
+    expect(heading).toMatch(/color:\s*var\(--app-muted\)/)
+    expect(rem(heading, 'font-size')).toBeLessThan(1)
+    expect(heading).toMatch(/margin:\s*0/)
   })
 
   it('a tile\'s actions sit over the cover\'s top-right corner, shown on hover and focus by opacity alone, always without hover', () => {
@@ -101,7 +125,10 @@ describe('level item styles', () => {
   })
 
   it('draws colours from tokens only (the dark theme needs no rule of its own)', () => {
-    for (const sel of ['.veyq-level-item', '.veyq-level-item-visual', '.veyq-level-item-meta', '.veyq-level-list.is-list', '.veyq-level-item.is-compact']) {
+    for (const sel of [
+      '.veyq-level-item', '.veyq-level-item-visual', '.veyq-level-item-meta', '.veyq-level-list.is-list', '.veyq-level-item.is-compact',
+      '.veyq-level-item.is-grid:not(.is-compact)', '.veyq-level-group-heading',
+    ]) {
       expect(rule(sel), sel).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/)
     }
   })

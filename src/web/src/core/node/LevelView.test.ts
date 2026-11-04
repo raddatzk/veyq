@@ -33,6 +33,8 @@ import { FOLDER_KIND, type NodeKind } from './kind'
 import type { TreeNode } from './tree'
 import { setViewMode, useViewMode } from '../../shared/state/useViewMode'
 import { GRID_VIEW, LIST_VIEW } from './levelViews'
+import { ALL_TAB } from './levelTabs'
+import { setLevelTab } from '../../shared/state/useLevelTab'
 import { realI18n, t } from '../../test/i18n'
 import { chooseNew, hasNewMenu, isDisabled, newMenuLabels, openNewMenu } from '../../test/newMenu'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
@@ -101,7 +103,7 @@ function blockOf(el: Element): string | null {
     if (el.classList.contains('veyq-level-head')) return el.querySelector(':scope > .veyq-node-header') ? 'overview' : null
     if (el.classList.contains('veyq-level-tools')) return null
     if (el.classList.contains('veyq-empty')) return `empty:${el.textContent?.trim()}`
-    if (el.classList.contains('veyq-level-list')) return 'list'
+    if (el.classList.contains('veyq-level-groups')) return 'list'
     if (el.classList.contains('stub-presentation')) return `presentation:${el.getAttribute('data-name')}`
     if (el.classList.contains('veyq-node-header')) return 'overview'
     return `?${el.className}`
@@ -123,8 +125,21 @@ function twoKinds() {
   return { a, b }
 }
 
-describe('LevelView: the one list', () => {
-  it('lists the folders first, then every other node MIXED BY NAME - not grouped by kind, no section headers', () => {
+/** The level's groups as a reader meets them: each group's heading (null: none) - read through the `aria-labelledby` that
+ *  names its section, so a heading that names nothing does not count - and the titles in its own list. */
+function groupsOf(w: Level): { heading: string | null; titles: string[] }[] {
+  return w.findAll('.veyq-level-groups > .veyq-level-group').map((g) => {
+    const by = g.attributes('aria-labelledby')
+    const heading = by ? w.find(`[id="${by}"]`) : null
+    return {
+      heading: heading?.exists() && heading.element.tagName === 'H2' ? heading.text() : null,
+      titles: g.findAll(':scope > ul.veyq-level-list .veyq-level-item-title').map((x) => x.text()),
+    }
+  })
+}
+
+describe('LevelView: the folders, then the contents', () => {
+  it('lists the folders first, then every other node MIXED BY NAME - not grouped by kind', () => {
     twoKinds()
     const tree = [
       TRIPS, node('Zed', FOLDER_KIND, 'Trips'), node('Alpha', FOLDER_KIND, 'Trips'),
@@ -133,10 +148,64 @@ describe('LevelView: the one list', () => {
     const w = mountLevel(tree, { folder: TRIPS })
     // the folders by name, then a, b, c, d of two applications interleaved (case ignored); the tree's order decides nothing
     expect(titlesOf(w)).toEqual(['Alpha', 'Zed', 'alpha', 'Bravo', 'Charlie', 'delta'])
-    expect(w.findAll('ul.veyq-level-list')).toHaveLength(1)
-    expect(w.findAll('h1, h2, h3, h4, h5, h6'), 'no section headings: the folder header\'s own title is the only one').toHaveLength(1)
     expect(w.findAll('li.veyq-level-item').map((li) => li.attributes('data-kind'))).toEqual([FOLDER_KIND, FOLDER_KIND, 'BETA', 'ALPHA', 'BETA', 'ALPHA'])
     expect(blocks(w)).toEqual(['overview', 'list'])
+  })
+
+  for (const mode of ['grid', 'list'] as const) {
+    it(`${mode}: with folders AND contents, two groups, each a section named by its h2 and its own list`, () => {
+      twoKinds()
+      setViewMode(mode)
+      const tree = [TRIPS, node('Rome', FOLDER_KIND, 'Trips'), node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips')]
+      const w = mountLevel(tree, { folder: TRIPS })
+      expect(groupsOf(w)).toEqual([
+        { heading: t('node.groupFolders'), titles: ['Rome'] },
+        { heading: t('node.groupContents'), titles: ['a1', 'b1'] },
+      ])
+      expect(w.findAll('section.veyq-level-group')).toHaveLength(2)
+      expect(w.findAll('ul.veyq-level-list')).toHaveLength(2)
+      // each group's list has the mode's look (in the list view each its own surface)
+      expect(w.findAll('ul.veyq-level-list').map((ul) => ul.classes().includes('is-list'))).toEqual([mode === 'list', mode === 'list'])
+      // the outline: the folder's name the one h1, the two groups h2 under it, nothing deeper
+      expect(w.findAll('h1, h2, h3, h4, h5, h6').map((h) => `${h.element.tagName}:${h.text()}`)).toEqual([
+        'H1:Trips', `H2:${t('node.groupFolders')}`, `H2:${t('node.groupContents')}`,
+      ])
+      // the two ids differ, and Tab reaches the folders before the contents (DOM order)
+      const ids = w.findAll('h2').map((h) => h.attributes('id'))
+      expect(new Set(ids).size).toBe(2)
+      expect(w.findAll('button.veyq-level-item-main').map((b) => b.attributes('aria-label'))).toEqual(['Rome', 'open a1', 'open b1'])
+    })
+  }
+
+  it('one group alone - only contents, only folders, or a tab that shows no contents - is one list with no heading', async () => {
+    twoKinds()
+    const contentsOnly = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips')], { folder: TRIPS })
+    expect(groupsOf(contentsOnly)).toEqual([{ heading: null, titles: ['a1', 'b1'] }])
+    const foldersOnly = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips'), node('Oslo', FOLDER_KIND, 'Trips')], { folder: TRIPS })
+    expect(groupsOf(foldersOnly)).toEqual([{ heading: null, titles: ['Oslo', 'Rome'] }])
+    for (const w of [contentsOnly, foldersOnly]) {
+      expect(w.findAll('ul.veyq-level-list')).toHaveLength(1)
+      expect(w.find('section').exists(), 'no section without a heading').toBe(false)
+      expect(w.find('[aria-labelledby]').exists()).toBe(false)
+      expect(w.findAll('h1, h2, h3, h4, h5, h6').map((h) => h.element.tagName), "the folder header's own title is the only heading").toEqual(['H1'])
+    }
+  })
+
+  it('both groups decide on what the shown tab holds: a tab with no contents is the folders alone, unheaded', async () => {
+    holder.reg = createRegistry()
+    const Dialog = { name: 'D', render: () => null }
+    const allow = () => true
+    testKind(reg(), { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: 'memory.memories' } })
+    testKind(reg(), { rekeyContent: nothingOfItsOwnToRekey,
+      kind: 'BETA', icon: 'file', createDialog: Dialog, createEntry: { label: 'node.anItem', icon: 'file', order: 20, allowed: allow },
+      list: { rows: stubRows('b').factory, tabLabel: 'depot.title' },
+    })
+    const w = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips'), node('a1', 'ALPHA', 'Trips')], { folder: TRIPS })
+    expect(groupsOf(w).map((g) => g.heading)).toEqual([t('node.groupFolders'), t('node.groupContents')])
+    const tab = w.findAll('[role="tab"]').find((b) => b.text() === t('depot.title'))!
+    await tab.trigger('mousedown')
+    expect(groupsOf(w)).toEqual([{ heading: null, titles: ['Rome'] }])
+    setLevelTab(ALL_TAB) // the stored tab outlives the test
   })
 
   it('a folder\'s page has exactly one h1, the folder\'s name, for a member and a guest alike', () => {

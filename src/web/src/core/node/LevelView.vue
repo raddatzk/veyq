@@ -6,11 +6,13 @@
 // "New" menu, which wraps below the name where both do not fit -; then ONE TOOLS ROW right under it (owner 2026-11-04): the
 // application TABS on the left, on the right Select and the space's node trash (which holds every application's nodes) as icon
 // buttons - their words the accessible name and the tooltip - and the view-mode switch; without a tab bar the tools alone,
-// right-aligned, and nothing of either, no row. Then the applications' NOTICES, and then ONE LIST - or one set of tiles - of
-// everything at this level: the folders, the Memories, the files, the drop boxes, every kind, with no section headers. In
-// the list the rows are one surface parted by hairlines, each led by a 16:9 thumbnail (the compact header's 4 x 2.25 rem); in
-// the grid the folders are compact tiles (thumbnail, name, actions) whose group ends where the flat 16:9 tiles of every other
-// node begin, a tile's heart and "more" over its cover's corner (`LevelRowItem`, `styles/ui.css`).
+// right-aligned, and nothing of either, no row. Then the applications' NOTICES, and then everything at this level - the
+// folders, the Memories, the files, the drop boxes, every kind - in TWO GROUPS (owner 2026-11-04): the folders, then the
+// contents, each its own `<ul>`. Where both have something under the shown tab, each is a `<section>` named by its quiet `h2`
+// ("Folders", "Contents"); one group alone is one list with no heading. In the list each group is one surface of rows parted by
+// hairlines, each led by a 16:9 thumbnail (the compact header's 4 x 2.25 rem); in the grid the folders are compact tiles
+// (thumbnail, name, actions) and every other node a card - the 16:9 cover flush at its top, the name and meta line inside, its
+// heart and "more" over the cover's corner (`LevelRowItem`, `styles/ui.css`).
 //
 // **Core draws every row; an application only supplies row data.** For each node of its kinds a kind's `list.rows` factory
 // (`registry.lists()`, `levelRow.ts`) answers a `LevelRow` - icon or cover, title, meta line, primary click, actions - and
@@ -83,7 +85,7 @@
 // presentation (Memories' map has no rows). The level writes nothing itself: it hands the movable part to the host
 // (`moveMany`, core's move dialog), the copyable part (`copy`, core's copy dialog) and the deletable part
 // (`deleteMany`, core's delete question).
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqMenu from '../../shared/ui/VeyqMenu.vue'
@@ -208,7 +210,7 @@ const folderRename = computed(() => standardNodeRename(hostRights(rights.value, 
 // The space's node trash, where the rights grant it and the page has the door.
 const trashOffered = computed(() => rights.value.nodeTrash && !!host.openTrash)
 
-// --- what is here, and the tabs: a pure filter over the one list ------------------------------------------------------------
+// --- what is here, and the tabs: a pure filter over the level ---------------------------------------------------------------
 // Read once per mount, like the host's slots: the registry is filled before the first route resolves and never changes.
 const lists = registry.lists()
 const registryTabs = registry.tabs()
@@ -311,7 +313,7 @@ function withStandard(node: TreeNode, row: LevelRow): LevelRow {
   return { ...row, actions: withStandardRowActions(row.actions, standardRowActions(t, node, row, host)) }
 }
 
-// --- the one list ------------------------------------------------------------------------------------------------------
+// --- the list: the folders, then the contents ----------------------------------------------------------------------------
 // The sub-folders' labels: a repeated name numbered, in creation order - the rule the URL segments follow too.
 const folderLabels = computed(() => displayNamesOf(listedLevel.value.folders, (n) => n.name, compareByCreation))
 
@@ -328,6 +330,19 @@ const items = computed<Item[]>(() => {
   const ordered = orderLevel(showFolders.value ? listedLevel.value.folders : [], visibleNodes.value, locale.value)
   return ordered.map((node): Item => withCover(rawItem(node)))
 })
+// The list's two groups (owner 2026-11-04): the folders, then everything else. Only where both have something under the shown
+// tab does each get its heading (`h2`: the page's `h1` is the header's name) and its `<section>` named by it; one group alone
+// has nothing to be told apart from, so it is one list with no heading.
+interface Group { id: 'folders' | 'contents'; heading: string; items: Item[] }
+const groups = computed<Group[]>(() =>
+  [
+    { id: 'folders' as const, heading: 'node.groupFolders', items: items.value.filter((i) => i.folder) },
+    { id: 'contents' as const, heading: 'node.groupContents', items: items.value.filter((i) => !i.folder) },
+  ].filter((g) => g.items.length > 0),
+)
+const headed = computed(() => groups.value.length > 1)
+const groupIds = useId()
+const headingId = (group: Group['id']): string => `veyq-level-group-${group}-${groupIds}`
 function rawItem(node: TreeNode): Item {
   return node.blockedByOperator ? blockedItem(node, unblockedItem(node)) : unblockedItem(node)
 }
@@ -716,20 +731,34 @@ async function onDrop(e: DragEvent): Promise<void> {
       <p v-if="cannotDeleteText" id="veyq-select-cannot-delete" class="veyq-level-selection-hint">{{ cannotDeleteText }}</p>
     </div>
 
-    <ul v-if="!presentations.length && items.length" class="veyq-level-list" :class="{ 'is-list': mode === 'list' }">
-      <LevelRowItem
-        v-for="item in items"
-        :key="item.key"
-        :row="item.row"
-        :mode="itemMode"
-        :kind="item.kind"
-        :folder="item.folder"
-        :unsupported="item.unsupported"
-        :core-actions="coreRowActions(item)"
-        :selected="selecting ? selection.has(item.key) : undefined"
-        @toggle-select="selection.toggle(item.key)"
-      />
-    </ul>
+    <!-- The folders, then everything else: two groups, each its own list (in the list view its own surface), headed and a
+         `<section>` named by its heading only where both are there. Tab reaches the folders first. -->
+    <div v-if="!presentations.length && items.length" class="veyq-level-groups">
+      <component
+        :is="headed ? 'section' : 'div'"
+        v-for="group in groups"
+        :key="group.id"
+        class="veyq-level-group"
+        :class="`is-${group.id}`"
+        :aria-labelledby="headed ? headingId(group.id) : undefined"
+      >
+        <h2 v-if="headed" :id="headingId(group.id)" class="veyq-level-group-heading">{{ t(group.heading) }}</h2>
+        <ul class="veyq-level-list" :class="{ 'is-list': mode === 'list' }">
+          <LevelRowItem
+            v-for="item in group.items"
+            :key="item.key"
+            :row="item.row"
+            :mode="itemMode"
+            :kind="item.kind"
+            :folder="item.folder"
+            :unsupported="item.unsupported"
+            :core-actions="coreRowActions(item)"
+            :selected="selecting ? selection.has(item.key) : undefined"
+            @toggle-select="selection.toggle(item.key)"
+          />
+        </ul>
+      </component>
+    </div>
     <!-- The one cover dialog (inbox #411): opened by the cover action of a row or of the folder's header. -->
     <CoverEditor :cover="cover" />
   </div>

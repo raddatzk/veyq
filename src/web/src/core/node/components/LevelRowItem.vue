@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// ONE item of the unified level list (inbox #407), drawn by core for every kind - a folder, a Memory, a file, a drop box,
+// ONE item of the level list (inbox #407), drawn by core for every kind - a folder, a Memory, a file, a drop box,
 // a kind this client cannot show - as a ROW (list mode) or a TILE (grid mode) from the same `LevelRow`
 // (`../levelRow.ts`): a leading visual (the kind's icon, or the application's cover component), the name, one meta line,
 // a primary click and the actions. The application supplies the data and its rights answers; core owns the look, the
@@ -12,12 +12,13 @@
 //
 // The visual is hidden from assistive technology: an item is named by its title (the primary button's `aria-label`).
 //
-// The look (owner 2026-11-04, `styles/ui.css`): a ROW is a line of the list's one surface - a 16:9 thumbnail (the compact
+// The look (owner 2026-11-04, `styles/ui.css`): a ROW is a line of its group's one surface - a 16:9 thumbnail (the compact
 // header's 4 x 2.25 rem), the name and meta line, the actions at its end. A folder's TILE is compact (`is-compact`): the row's
-// layout in a quiet frame, so the level's folders form a short group above the other tiles. Every other TILE is flat: the
-// 16:9 cover, the name and meta line under it, and the actions over the cover's top-right corner (a compact tile's over its
-// row's end where a pointer hovers) - a tile's shown on hover and while focus is inside (opacity only, so they stay in the
-// Tab order), always where nothing hovers. The actions are quiet icon buttons (no frame) at the layer's icon-button size.
+// layout in a quiet frame, so the level's folders form a short group of their own (`LevelView` lists them apart). Every other
+// TILE is a card - the list's surface, frame and radius: the 16:9 cover flush at its top, the name and meta line inside under
+// it, and the actions over the cover's top-right corner (a compact tile's over its row's end where a pointer hovers) - a
+// tile's shown on hover and while focus is inside (opacity only, so they stay in the Tab order), always where nothing hovers.
+// The actions are quiet icon buttons (no frame) at the layer's icon-button size.
 //
 // In the level's Select mode (inbox #421) the item carries a real `<input type="checkbox">` named by the node's title, drawn
 // over the visual's corner as a media tile's (`selected` is then a boolean; omitted: no checkbox; on a tile the cover's
@@ -61,7 +62,7 @@ const split = computed(() => splitRowActions(mergeRowActions(props.coreActions, 
 const menu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([split.value.menu, split.value.menuOnly], 'veyq-row'))
 const hasMenu = computed(() => split.value.menu.length + split.value.menuOnly.length > 0)
-// A folder's tile is compact: the level's folders come first (`levelList.ts`), so they read as one short group above the tiles.
+// A folder's tile is compact: the level lists its folders as a group of their own (`LevelView`), short above the cards.
 const compact = computed(() => props.mode === 'grid' && props.folder)
 const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.severity === 'danger' ? 'danger' : a.severity === 'primary' ? 'primary' : 'secondary')
 </script>

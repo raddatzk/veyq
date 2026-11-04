@@ -1061,11 +1061,11 @@
 @media (max-width: 520px) {
 }
 
-/* The unified level list (core/node/LevelView.vue + core/node/components/LevelRowItem.vue, inbox #407; tidied 2026-11-04):
-   ONE list of folders, Memories, files and drop boxes, drawn by core from the applications' row data. `is-list` items are
-   rows of one surface, `is-grid` items tiles - a folder's compact (`is-compact`, the row's layout in a quiet frame), every
-   other flat (the cover, the name and meta under it, the actions over the cover's corner). Tokens only, so the dark theme
-   needs no rule of its own.
+/* The level list (core/node/LevelView.vue + core/node/components/LevelRowItem.vue, inbox #407; tidied 2026-11-04): folders,
+   Memories, files and drop boxes, drawn by core from the applications' row data, in two groups (the folders, then the
+   contents). `is-list` items are rows of one surface, `is-grid` items tiles - a folder's compact (`is-compact`, the row's
+   layout in a quiet frame), every other a card (the cover flush at its top, the name and meta inside, the actions over the
+   cover's corner). Tokens only, so the dark theme needs no rule of its own.
    The icon glyph is styled through TWO classes (`.veyq-level-item-visual > .veyq-level-item-icon`): the layer's own `.veyq-icon`
    rule (display and font-size, `layer.css`) loads after this sheet and wins a single-class tie, and a glyph that kept its
    `.veyq-icon` size sat off-centre in its tile (seen in a real browser, 2026-10-12, on the node header's icon tile). */
@@ -1081,10 +1081,25 @@
   list-style: none;
 }
 
-/* The folders come first (`levelList.ts`); in the grid their compact tiles are ONE group above the other tiles: the first
-   other tile starts a new grid row (auto-placement moves it below the last folder, whatever column that one took). */
-.veyq-level-item.is-compact + .veyq-level-item:not(.is-compact) {
-  grid-column-start: 1;
+/* The level's two groups (owner 2026-11-04): the folders, then the contents, each its own list - in the list view each its own
+   surface - a small gap between them. Where both are there each opens with a quiet heading: the sidebar's section label
+   (`.sidebar-section-label`, layout.css) - small, bold, uppercase, in the secondary text colour. */
+.veyq-level-groups {
+  display: grid;
+  min-width: 0;
+  gap: 1.25rem;
+}
+.veyq-level-group {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+}
+.veyq-level-group-heading {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 /* The list: one surface in one frame, its rows parted by hairlines. */
@@ -1193,25 +1208,42 @@ div.veyq-level-item-main,
   gap: 0.1rem;
 }
 
-/* A tile (every node but a folder): flat - the 16:9 cover across the tile's width, then the name and the meta line. */
+/* A tile (every node but a folder): a CARD (owner 2026-11-04: a name under a flat cover looked lost) - the list's surface,
+   frame and radius, so the grid and the list match, and no shadow, as the list has none. The 16:9 cover runs flush across
+   its top (its top corners the card's), the name and the meta line inside under it. */
+.veyq-level-item.is-grid:not(.is-compact) {
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+}
+
 .veyq-level-item.is-grid .veyq-level-item-main {
   grid-template-rows: auto minmax(0, 1fr);
   align-content: start;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .veyq-level-item.is-grid .veyq-level-item-visual {
   width: 100%;
   height: auto;
   aspect-ratio: 16 / 9;
-  border-radius: var(--app-radius-sm);
+}
+
+.veyq-level-item.is-grid:not(.is-compact) .veyq-level-item-visual {
+  border: 0;
+  border-radius: calc(var(--app-radius) - 1px) calc(var(--app-radius) - 1px) 0 0;
 }
 
 .veyq-level-item.is-grid .veyq-level-item-text {
-  padding: 0 0.15rem;
+  padding: 0 0.75rem 0.75rem;
 }
 
-/* A tile's actions - a flat tile's over the cover's top-right corner, a folder's compact tile's over the end of its row
+/* The card's open button fills it, so its focus ring follows the card's corners. */
+.veyq-level-item.is-grid:not(.is-compact) .veyq-level-item-main:focus-visible {
+  border-radius: var(--app-radius);
+}
+
+/* A tile's actions - a card's over the cover's top-right corner, a folder's compact tile's over the end of its row
    where a pointer hovers (in its row where none does) - on a veil of the surface so they read on any picture: shown on
    hover and while focus is inside - by opacity alone, so they stay in the Tab order -, always where nothing hovers (a touch
    screen), and a pressed toggle (the heart of a favourite) always, since it says something about the node. A compact tile
@@ -1304,14 +1336,14 @@ div.veyq-level-item-main,
   background: var(--app-hover);
 }
 
-/* A folder's compact tile: a quiet frame, no shadow. */
+/* A folder's compact tile: a quiet frame, no shadow. It and a card take an accent-tinted frame on hover and focus. */
 .veyq-level-item.is-compact {
   border: 1px solid var(--app-line);
   border-radius: var(--app-radius-sm);
   background: var(--app-surface);
 }
-.veyq-level-item.is-compact:hover,
-.veyq-level-item.is-compact:focus-within {
+.veyq-level-item.is-grid:hover,
+.veyq-level-item.is-grid:focus-within {
   border-color: color-mix(in srgb, var(--app-accent) 28%, var(--app-line));
 }
 
@@ -1321,17 +1353,13 @@ div.veyq-level-item-main,
 
 /* The level's Select mode (inbox #421): a real checkbox over the visual's corner, the media tile's round check
    (`.media-tile-check`) in core's own class - a tile's top-left (opposite its actions), a row's and a compact tile's over its
-   thumbnail; a selected row takes the accent tint, a compact tile the accent frame, a tile an accent ring round its cover.
-   Tokens only, so no dark twin. */
+   thumbnail; a selected row takes the accent tint, a tile - a compact one or a card - the accent frame. Tokens only, so no
+   dark twin. */
 .veyq-level-item.is-list.is-selected {
   background: var(--app-accent-soft);
 }
-.veyq-level-item.is-compact.is-selected {
+.veyq-level-item.is-grid.is-selected {
   border-color: var(--app-accent);
-}
-.veyq-level-item.is-grid:not(.is-compact).is-selected .veyq-level-item-visual {
-  outline: 2px solid var(--app-accent);
-  outline-offset: 2px;
 }
 .veyq-level-item-check {
   position: absolute;

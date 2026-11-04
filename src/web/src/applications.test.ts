@@ -60,7 +60,7 @@ describe('composition root', () => {
     expect(registry.shareBodyFor(CHAPTER_KIND)).toBe(registry.shareBodyFor(MEMORY_KIND))
   })
 
-  // The level view is core's (P4b) and draws ONE list (inbox #407): Memories' row factory serves both its kinds, Depot's serves
+  // The level view is core's (P4b) and draws every row itself (inbox #407): Memories' row factory serves both its kinds, Depot's serves
   // FILE and the drop box; each kind has its tab, in registration order (Memories first).
   it('gives the level view three row sources: Memories\' for MEMORY and CHAPTER, Depot\'s for FILE and the drop box, Expenses\' for the Pot', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
@@ -71,7 +71,7 @@ describe('composition root', () => {
     ])
   })
 
-  it('gives the level view its tabs: Memories, Depot (files and drop boxes), Expenses - the filter of the one list', () => {
+  it('gives the level view its tabs: Memories, Depot (files and drop boxes), Expenses - a filter over the level', () => {
     expect(registry.tabs().map((t) => ({ id: t.id, label: t.label, kinds: t.kinds }))).toEqual([
       { id: MEMORY_KIND, label: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { id: FILE_KIND, label: 'depot.title', kinds: [FILE_KIND, DROPBOX_KIND] },
