@@ -42,7 +42,7 @@ import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { NodeDetailProps } from '../../../core/applications/registry'
-import { hostRights, injectNodeHost } from '../../../core/node/nodeHost'
+import { hostRights, injectNodeHost, shareOfferOf } from '../../../core/node/nodeHost'
 import type { TreeNode } from '../../../core/node/tree'
 import { standardNodeActions, standardNodeRename, type NodeHeaderAction, type NodeHeaderPeopleFact } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
@@ -195,7 +195,7 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
     t,
     rights.value,
     {
-      share: () => host.share?.(props.node, { contribute: rights.value.shareContribute }),
+      share: () => host.share?.(props.node, shareOfferOf(rights.value)),
       move: () => source.move?.(props.node),
       remove: () => host.delete?.(props.node),
     },

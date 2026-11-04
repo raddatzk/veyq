@@ -158,7 +158,8 @@ describe('DropBoxDetail', () => {
     await card.find('button[aria-label="Share link"]').trigger('click')
     expect(card.find('button[aria-label="Delete drop box"]').exists(), 'delete is never a button (ADR 0110)').toBe(false)
     expect((await chooseHeaderEntry(w, 'delete')).textContent?.trim()).toBe('Delete drop box')
-    expect(w.calls.share).toEqual([[BOX, { contribute: false }]]) // a drop box's dialog has no role to offer
+    // the offer is the rights answer's: the upload role alone (a drop box's dialog mints that one role anyway)
+    expect(w.calls.share).toEqual([[BOX, { view: false, contribute: false, upload: true }]])
     expect(w.calls.delete).toEqual([[BOX]])
 
     // control: no share offered where the host says the kind cannot be shared (the header shows what the page contributed

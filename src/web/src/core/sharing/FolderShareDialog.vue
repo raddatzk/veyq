@@ -2,7 +2,7 @@
 // The platform's share dialog for a FOLDER (uc.sharing.share-public-viewer:folder-share-root, ADR 0080 decisions 6 and
 // 12): a member lists the folder's links, makes a new one (READ or READ_WRITE), copies, switches off, re-activates,
 // renews and deletes them. Core owns FOLDER, so this is core's own dialog, built only on `./manageShares.ts` and
-// `./shareLink.ts` — never on the Memories application's share dialogs, whose uploader (WRITE_ONLY) variant has no
+// `./shareLink.ts` — never on the Memories application's share dialogs, whose uploader (WRITE_ONLY) role has no
 // meaning here: the backend refuses a WRITE_ONLY link on a folder (`illegal_scope`), so no such option is offered.
 //
 // What a READ_WRITE link lets a guest do below a folder is the role matrix (docs/apps/memories.md): add folders, move
@@ -65,9 +65,10 @@ const MIN_PW = 10
 // FOLDER's pre-registered `shareDialog` (cr-files-application P4c), so it takes the platform's share-dialog props: the
 // folder's scope (every link's recovery copy of `K_share` is bound to it, ADR 0072), the folder's own content key as
 // the key chain opens it (`nodeKey`, ADR 0080 decision 1 — what a link wraps; key material) and its name (`nodeName`,
-// re-sealed under `K_share` so a guest sees it without the scope key). `nodeKind` is always FOLDER here; `uploader` is
-// never set for a folder (no WRITE_ONLY link on a folder) and would be ignored. `contribute` (the rights function's
-// `shareContribute`, handed on by the host) lets the form offer READ_WRITE for a new link.
+// re-sealed under `K_share` so a guest sees it without the scope key). `nodeKind` is always FOLDER here; `upload` is
+// never set for a folder (no WRITE_ONLY link on a folder) and would be ignored, and `view` is the door's own answer (it
+// opens on the READ right). `contribute` (the rights function's `shareContribute`, handed on by the host) lets the form
+// offer READ_WRITE for a new link.
 const props = defineProps<NodeShareDialogProps & { words?: ShareDialogCopy }>()
 const emit = defineEmits<{ close: [] }>()
 /** The i18n key of a sentence that says what the node is: the folder's own (`share.folder.*`) unless the wrapping dialog

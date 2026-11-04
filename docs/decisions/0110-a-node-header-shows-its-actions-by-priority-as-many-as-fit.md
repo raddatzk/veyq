@@ -53,10 +53,11 @@ big cover are date, place and participants*; *and on a desktop the title and the
    end.** The fit is measured from the row's width and measured again when that width changes (decision 8 picks the
    layout, this decision fills its row).
 5. **The priority is the order of the node kind's list**, which the page that draws the header supplies, core's actions
-   (favorite, copy, download, report) included by their ids. A Memory's order is the owner's: favorite, upload, share,
-   upload request, download, banner, move, copy. A folder's, a file's, a drop box's and a Pot's follow the same reading —
-   favorite first, then what the kind is for, then sharing, then moving and copying it; each kind's list is the order its
-   descriptor's `header.order` names. What is edited at its place has no entry (decision 11).
+   (favorite, copy, download, report) included by their ids. A Memory's order is the owner's: favorite, upload, share
+   (one action for every link role since 2026-11-04, the upload request folded into it), download, banner, move, copy. A
+   folder's, a file's, a drop box's and a Pot's follow the same reading — favorite first, then what the kind is for, then
+   sharing, then moving and copying it; each kind's list is the order its descriptor's `header.order` names. What is
+   edited at its place has no entry (decision 11).
 6. **Delete and report are never buttons.** They are always the last entries of the menu, behind a separator, delete
    last: a button that moves with the width is too easy to hit by mistake, and both open a consequential dialog. **Move and
    copy are menu entries too** (owner 2026-11-04), in that last group before report.

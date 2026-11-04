@@ -37,7 +37,7 @@ import VeyqTabPanels from '../../../shared/ui/VeyqTabPanels.vue'
 import VeyqTabPanel from '../../../shared/ui/VeyqTabPanel.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import type { TreeNode } from '../../../core/node/tree'
-import type { NodeShareOffer } from '../../../core/node/nodeHost'
+import { shareOfferOf, sharesAny, type NodeShareOffer } from '../../../core/node/nodeHost'
 import { hasDerivatives, mediaTypeOf, isVideoMediaType, type MediaItem } from '../media'
 import { openedBlobMeta } from '../openedListing'
 import { useMemoryDate } from '../useMemoryDate'
@@ -104,7 +104,6 @@ const emit = defineEmits<{
   openChapter: [node: TreeNode]
   createChapter: []
   share: [offer: NodeShareOffer]
-  shareUpload: []
   metaUpdated: [NodeMetaUpdate]
   /** The lightbox's "Report": the host opens core's report dialog for this medium. */
   reportMedium: [item: MediaItem]
@@ -177,12 +176,11 @@ provideMemoryView({ source: props.source, rights: can })
 const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null)
 
 /** The header's actions (core's header; their priority is the kind's `header.order`): each is shown only where `can` grants
- *  it; a share guest gets the same list with fewer entries. The uploader (drop-box) link is its own action with its own
- *  dialog (no role switcher). */
+ *  it; a share guest gets the same list with fewer entries. One share action opens the one dialog of every link role, shown
+ *  where any role may be minted (`sharesAny`); the offer says which (`shareOfferOf`). */
 const headerActions = computed<NodeHeaderAction[]>(() => [
   { id: 'upload', label: t('media.upload'), icon: 'cloud-upload', severity: 'primary', shown: can.value.upload, disabled: !props.memoryKey, onClick: () => triggerUpload() },
-  { id: 'share', label: t('share.share'), icon: 'share-alt', shown: can.value.share, disabled: !props.memoryKey, onClick: () => emit('share', { contribute: can.value.shareContribute }) },
-  { id: 'shareUpload', label: t('share.uploadRequest'), icon: 'user-plus', shown: can.value.shareUpload, disabled: !props.memoryKey, onClick: () => emit('shareUpload') },
+  { id: 'share', label: t('share.share'), icon: 'share-alt', shown: sharesAny(can.value), disabled: !props.memoryKey, onClick: () => emit('share', shareOfferOf(can.value)) },
   // The banner above the Memory (uc.memory.banner): who may choose the cover may set it (`setBanner`, a member's only). A drawn
   // banner opens its own dialog (`MemoryBanner`'s edit), so the menu offers it only while none is drawn: none set yet, or
   // one whose picture does not open (it draws nothing, E5 - the dialog still changes or removes it).

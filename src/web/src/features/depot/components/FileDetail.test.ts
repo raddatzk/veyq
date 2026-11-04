@@ -248,7 +248,7 @@ describe('an opened file: its page for a member', () => {
     await flushPromises()
     await w.find(`.veyq-node-header-actions button[aria-label="${t('share.share')}"]`).trigger('click')
     await chooseHeaderEntry(w, 'delete')
-    expect(w.calls.share).toEqual([[REPORT, { contribute: true }]])
+    expect(w.calls.share).toEqual([[REPORT, { view: true, contribute: true, upload: false }]])
     expect(w.calls.delete).toEqual([[REPORT]])
     const move = await chooseHeaderEntry(w, 'move')
     expect(move.querySelector('.veyq-menu__item-label')?.textContent?.trim()).toBe(t('node.move.action'))

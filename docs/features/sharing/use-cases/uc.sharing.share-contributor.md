@@ -108,8 +108,8 @@ sequenceDiagram
   **READ_WRITE** (or back) from the share-management dialog — the **same link keeps working**, no new `K_share`,
   no re-wrap. `role` is plaintext authorization the server enforces per request, so the new grant bites on the next
   resolve/upload (a promote enables contributions at once; a demote 403s new uploads at once, already-contributed
-  photos stay). Restricted to **READ ↔ READ_WRITE** — a **WRITE_ONLY** drop-box is its own separate action and its
-  write-only promise is never flipped in place (a `422 invalid_role_change` rejects setting WRITE_ONLY or editing a
+  photos stay). Restricted to **READ ↔ READ_WRITE** — a **WRITE_ONLY** drop-box is a role of its own, chosen only when the link is
+  made, and its write-only promise is never flipped in place (a `422 invalid_role_change` rejects setting WRITE_ONLY or editing a
   WRITE_ONLY share's role). A promote while `core.public-shares.contribute` is switched off on the instance is a
   `422 capability_disabled`, as creating a READ_WRITE link is (ADR 0088). Owner-gated via `updateShare` ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 - **A4 — someone else uses the same device ("Not you?", inbox #401 S2):** once named, the page says whose session

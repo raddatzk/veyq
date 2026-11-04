@@ -110,7 +110,7 @@ acceptanceCriteria:
         e2e: [src/features/memories/folderShare.e2e.test.ts]
   - id: chapter-share-root
     text: >-
-      A member shares a chapter through the same dialogs as a Memory, worded for a chapter. The chapter link's guest
+      A member shares a chapter through the same dialog as a Memory, worded for a chapter. The chapter link's guest
       opens the chapter's own key, its title (as the share's sealedName), the chapters below it and their media, and
       nothing of the Memory above or of a sibling chapter; the resolve serves no node above the root.
     coverage:

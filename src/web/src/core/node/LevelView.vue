@@ -96,7 +96,7 @@ import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './l
 import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
 import { useSelection } from './selection'
 import { standardRowActions, withStandardRowActions } from './standardRowActions'
-import { hostHandlers, hostRights, injectNodeHost } from './nodeHost'
+import { hostHandlers, hostRights, injectNodeHost, shareOfferOf } from './nodeHost'
 import { provideCoreNodeActions, useCoreNodeActions } from './coreNodeActions'
 import NodeCoverImage from './cover/components/NodeCoverImage.vue'
 import CoverEditor from './cover/components/CoverEditor.vue'
@@ -178,7 +178,7 @@ const menuItems = computed<VeyqMenuItem[]>(() =>
 const newMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 // The folder header's actions and its name's rename in place (ADR 0110 decision 11): the rights answers for the folder on
 // screen, narrowed to the page's doors.
-const folderHandlers = () => hostHandlers(host, () => props.folder!, () => ({ contribute: rights.value.shareContribute }))
+const folderHandlers = () => hostHandlers(host, () => props.folder!, () => shareOfferOf(rights.value))
 const folderActions = computed(() => standardNodeActions(t, hostRights(rights.value, host), folderHandlers()))
 const folderRename = computed(() => standardNodeRename(hostRights(rights.value, host), folderHandlers()))
 // The space's node trash, where the rights grant it and the page has the door.

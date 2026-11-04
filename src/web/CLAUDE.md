@@ -259,7 +259,8 @@ here; the server is blind.
   **One host contract (owner 2026-11-01, `core/node/nodeHost.ts`).** Whatever draws a node asks the page around it through
   ONE set of doors, `NodeHost`: `open`, `rename` (the name dialog, a row's), `renameTo` (the header's rename in place, the same
   write), `move`, `moveMany`, `delete` (one node, with the kind's own write where it
-  has one), `deleteMany`, `share(node, offer)` (`NodeShareOffer`: `contribute`, or the `uploader` variant), `createChild(kind,
+  has one), `deleteMany`, `share(node, offer)` (`NodeShareOffer`: the roles a new link may take - `view`, `contribute`, `upload` - from the rights
+  answer through `shareOfferOf`; rights, never a variant: Memories' one dialog lists every role's links and offers exactly these), `createChild(kind,
   parent)`, `download`, `copy`, `importArchive`, `openTrash`. **Every door may be absent, and absence is the answer** - the
   action is not offered (fail closed), whatever a rights function says: a view narrows its rights by the doors (`hostRights`)
   and binds its standard actions through them (`hostHandlers`); core's row defaults and core's own actions take the same
@@ -418,7 +419,7 @@ here; the server is blind.
   unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's
   header (core's `NodeHeader`, which every node page opens with too - see above). Its `createDialog` - props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the page when the "New" menu or a detail asks its `createChild` door for that KIND; and its
-  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?, contribute?, readonly?}` (`contribute`: offer READ_WRITE for a new link — the rights function's `shareContribute`, carried by the `share` door's `NodeShareOffer`, never read by the dialog; `readonly`: the scope is pending deletion, set by the host for every kind - the dialog lists and copies the links and offers revoking the caller's own live one, and mints and changes nothing else, as the server refuses every share write in the grace window but a revoke, uc.spaces.scope-access A1); a
+  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, view?, contribute?, upload?, readonly?}` (`view`/`contribute`/`upload`: offer READ/READ_WRITE/WRITE_ONLY for a new link — the rights function's `share`/`shareContribute`/`shareUpload`, carried by the `share` door's `NodeShareOffer`, never read by the dialog, each absent not offered; `readonly`: the scope is pending deletion, set by the host for every kind - the dialog lists and copies the links and offers revoking the caller's own live one, and mints and changes nothing else, as the server refuses every share write in the grace window but a revoke, uc.spaces.scope-access A1); a
   kind without one offers no share. There is no guest-only list or detail: core's page of a `READ`/`READ_WRITE` public
   share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node -
   the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are

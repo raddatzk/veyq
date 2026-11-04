@@ -22,7 +22,9 @@ The record, the drop key path and the lifecycle are [en.sharing.public-link](../
 
 ## Main flow
 
-1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Uploader** role. The client
+1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Uploader** role ("Add photos
+   only"; the one share dialog of every link role lists the node's uploader links beside its others and offers this
+   role where `core.public-shares.drop-box` is on, owner 2026-11-04). The client
    mints `K_share`, re-seals the name, and seals the Memory's **drop public key** under `K_share` — **no wrap of
    `K_node`** ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). The Memory's first WRITE_ONLY
    share mints the drop keypair and brings its private half sealed under `K_node`, which the server sets on the

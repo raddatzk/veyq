@@ -23,14 +23,28 @@ import type { NodeRights } from '../access'
 import type { StandardActionHandlers } from './nodeHeader'
 import type { ImportOffer } from '../export/importSource'
 
-/** What a `share` door hands the dialog it mounts: the share rights beyond "may share at all" that the application's rights
- *  function answered for the node (`contribute`: offer the READ_WRITE role for a new link, `core.public-shares.contribute`),
- *  or `uploader`: the dialog's uploader (`WRITE_ONLY`) variant, which offers no role. The host passes them on as
- *  `NodeShareDialogProps`, so a dialog never reads a capability itself (src/web/CLAUDE.md: never a `hasCapability` read
- *  inline). */
+/** What a `share` door hands the dialog it mounts: which roles a NEW link may take, as the application's rights function
+ *  answered them for the node - `view` (`READ`, the `share` right, `core.public-shares`), `contribute` (`READ_WRITE`,
+ *  `shareContribute`, `core.public-shares.contribute`) and `upload` (`WRITE_ONLY`, `shareUpload`,
+ *  `core.public-shares.drop-box`). Rights, never a variant: the dialog lists every link of the node and offers exactly the
+ *  roles set here (fail closed - each one false unless granted), a dialog whose roles the door already decides ignores
+ *  them. The host passes them on as `NodeShareDialogProps`, so a dialog never reads a capability itself (src/web/CLAUDE.md:
+ *  never a `hasCapability` read inline). Build it with {@link shareOfferOf}. */
 export interface NodeShareOffer {
+  view: boolean
   contribute: boolean
-  uploader?: boolean
+  upload: boolean
+}
+
+/** The share door's offer from a rights answer: each role exactly where its right holds (an absent right grants none). */
+export function shareOfferOf(rights: Partial<Pick<NodeRights, 'share' | 'shareContribute' | 'shareUpload'>>): NodeShareOffer {
+  return { view: !!rights.share, contribute: !!rights.shareContribute, upload: !!rights.shareUpload }
+}
+
+/** Whether a rights answer lets the viewer share the node in any way - a link of any role: what shows a share action
+ *  that opens the one dialog of every role ({@link shareOfferOf}). */
+export function sharesAny(rights: Partial<Pick<NodeRights, 'share' | 'shareContribute' | 'shareUpload'>>): boolean {
+  return !!rights.share || !!rights.shareContribute || !!rights.shareUpload
 }
 
 /** The page's doors (see the header). Every one may be absent: then the action it would open is not offered. */

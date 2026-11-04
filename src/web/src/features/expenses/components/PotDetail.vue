@@ -17,7 +17,7 @@ import VeyqTab from '../../../shared/ui/VeyqTab.vue'
 import VeyqTabPanels from '../../../shared/ui/VeyqTabPanels.vue'
 import VeyqTabPanel from '../../../shared/ui/VeyqTabPanel.vue'
 import type { NodeDetailProps } from '../../../core/applications/registry'
-import { hostHandlers, hostRights, injectNodeHost } from '../../../core/node/nodeHost'
+import { hostHandlers, hostRights, injectNodeHost, shareOfferOf } from '../../../core/node/nodeHost'
 import { standardNodeActions, standardNodeRename } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { canReport, nodeTarget } from '../../../core/report/reportActions'
@@ -69,7 +69,7 @@ onMounted(() => {
 // Core's own actions of the Pot (the heart, "Copy to…", the download, Report) come with core's header for this node; this
 // page offers Report for an entry and a receipt on its own, by the same rule.
 const reportOn = useReportOffered()
-const handlers = hostHandlers(host, () => props.node, () => ({ contribute: rights.value.shareContribute }))
+const handlers = hostHandlers(host, () => props.node, () => shareOfferOf(rights.value))
 const headerActions = computed(() => standardNodeActions(t, { ...hostRights(rights.value, host), deleteLabel: t('expenses.delete') }, handlers))
 // The Pot's name, renamed in place in the header where core's rename right and the page's door allow it.
 const headerRename = computed(() => standardNodeRename(hostRights(rights.value, host), handlers))

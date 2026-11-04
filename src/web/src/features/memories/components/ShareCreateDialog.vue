@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// The share create/edit dialog (cr-0116), opened from the list-only ShareDialog. Shared by BOTH share flows via the
-// `uploader` flag so they stay identical by construction: the normal flow shows a READ/READ_WRITE role switcher;
-// the uploader (drop-box) flow fixes the role to WRITE_ONLY and hides the switcher — that is the ONLY difference.
+// The share create/edit dialog (cr-0116), opened from the list-only ShareDialog - the one dialog of every link role
+// (owner 2026-11-04). CREATE offers the roles the host's offer grants - view (READ), view and contribute (READ_WRITE),
+// upload only (WRITE_ONLY, the drop) - each only where its right is set (fail closed); it decides no right itself.
 // CREATE collects an optional name + per-locale note, mints the share and shows the copyable link. EDIT (editShare
 // set): pre-fills name + note (decrypted via the K_SC-recoverable K_share) and saves them in place with `updateShare` —
 // the link stays valid. Operator-blind: name + note sealed under K_share; the fresh K_share rides only the returned
-// link. (The uploader-links right is gated on the memory ACTION that opens the uploader dialog, not here.)
+// link.
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -46,13 +46,17 @@ const props = defineProps<{
   /** When set, the dialog RE-ISSUES this share (ADR 0075): the create form pre-filled from it, role fixed, and on
    *  submit a new link replaces it — the old one is switched off in the same request. */
   reissueFrom?: ManagedShare | null
-  /** The uploader (drop-box) variant: role fixed to WRITE_ONLY, no switcher. Identical otherwise. */
-  uploader?: boolean
   /** The shared node is a chapter: the hints say "chapter", not "Memory" (inbox #363; the parent decides by `nodeKind`). */
   chapter?: boolean
+  /** Offer the READ (view) role for a new link: the rights function's `share` (`core.public-shares`), handed down by the
+   *  host, never read here. Absent: not offered (fail closed). */
+  view?: boolean
   /** Offer the READ_WRITE (contribute) role: the rights function's `shareContribute` (`core.public-shares.contribute`),
-   *  handed down by the host, never read here. Absent: viewer only (fail closed). */
+   *  handed down by the host, never read here. Absent: not offered (fail closed). */
   contribute?: boolean
+  /** Offer the WRITE_ONLY (upload only) role for a new link: the rights function's `shareUpload`
+   *  (`core.public-shares.drop-box`), handed down by the host, never read here. Absent: not offered (fail closed). */
+  upload?: boolean
 }>()
 // `reissue`: the edit asks its parent to renew this share instead (#303) — the renew is the parent's own dialog.
 const emit = defineEmits<{ close: []; saved: []; reissue: [share: ManagedShare] }>()
@@ -62,19 +66,21 @@ const isEdit = computed(() => !!props.editShare)
 const isReissue = computed(() => !isEdit.value && !!props.reissueFrom)
 // A share's recovery copy is bound to (scope, Memory, share) (ADR 0072): this dialog's scope + Memory, never the row's.
 const addressOf = (s: ManagedShare) => ({ scopeId: props.scopeId, nodeId: props.nodeId, shareId: s.shareId })
-// The role switcher shows in the normal flow on BOTH create and edit (cr-0119: an existing READ/READ_WRITE share
-// can be re-graded in place); the uploader variant never shows it (its role is fixed, its promise not flippable).
-// A re-issue keeps the old share's role (the server takes it from the old row), so it shows no switcher either.
-const showRoleSwitcher = computed(() => !props.uploader && !isReissue.value)
+// The role switcher shows on create and on the edit of a READ/READ_WRITE link (cr-0119: re-graded in place). An upload
+// (WRITE_ONLY) link's role is fixed - its promise not flippable, the server refuses a change of or into it - and a re-issue
+// keeps the old share's role (the server takes it from the old row), so neither shows one; nor does a form with no role
+// to offer (its submit stays off, `roleRefused`).
+const editsUploadLink = computed(() => isEdit.value && props.editShare?.role === ShareRole.WriteOnly)
+const showRoleSwitcher = computed(() => !isReissue.value && !editsUploadLink.value && roleOptions.value.length > 0)
 const headerLabel = computed(() =>
   isEdit.value
     ? t('share.editTitle')
     : isReissue.value
       ? t('share.reissueTitle')
-      : props.uploader ? t('share.uploaderCreate') : t('share.createNew'),
+      : t('share.createNew'),
 )
 const name = ref('')
-const role = ref<ShareRole>(props.uploader ? ShareRole.WriteOnly : ShareRole.Read)
+const role = ref<ShareRole>(ShareRole.Read)
 const note = ref<LocaleMap>({})
 /** The note's acceptance switch, sealed inside the note (uc.sharing.share-note); off by default. */
 const noteMustAccept = ref(false)
@@ -145,20 +151,29 @@ onMounted(() => {
   }
 })
 
-// The normal flow's switcher offers READ + READ_WRITE only — the uploader is its own action/dialog (no switcher). READ_WRITE
-// only where `contribute` is on — or on the edit of a link that already is one, so an existing contributor link keeps its
-// role on screen instead of showing no selection. While the switch is off such a link serves no guest (ADR 0088 decision
-// 5), but the member still edits its note and name or narrows it to READ; the server refuses only a change INTO it.
-const roleOptions = computed(() => [
-  { label: t('share.roleViewer'), value: ShareRole.Read },
-  ...(props.contribute || props.editShare?.role === ShareRole.ReadWrite
-    ? [{ label: t('share.roleContributor'), value: ShareRole.ReadWrite }]
-    : []),
-])
+// The roles a NEW link may take: each exactly where the host's offer sets it (fail closed), in the order view, view and
+// contribute, upload only. An edit re-grades a READ/READ_WRITE link between those two alone (never into WRITE_ONLY, which
+// the server refuses), each where offered - or where the link already is it, so an existing link keeps its role on screen
+// instead of showing no selection. While a switch is off such a link serves no guest (ADR 0088 decision 5), but the member
+// still edits its note and name or narrows it; the server refuses only a change INTO a role switched off.
+const roleOptions = computed(() => {
+  const is = (r: ShareRole) => isEdit.value && props.editShare?.role === r
+  return [
+    ...(props.view || is(ShareRole.Read) ? [{ label: t('share.roleViewer'), value: ShareRole.Read }] : []),
+    ...(props.contribute || is(ShareRole.ReadWrite) ? [{ label: t('share.roleContributor'), value: ShareRole.ReadWrite }] : []),
+    ...(props.upload && !isEdit.value ? [{ label: t('share.roleUploader'), value: ShareRole.WriteOnly }] : []),
+  ]
+})
+// A new link starts at the first role offered; an edit or a re-issue takes its share's (`onMounted`).
+if (roleOptions.value.length) role.value = roleOptions.value[0].value
+// A create mints only a role the offer grants: with none (or one gone), the submit stays off.
+const roleRefused = computed(() => !isEdit.value && !isReissue.value && !roleOptions.value.some((o) => o.value === role.value))
 const roleHint = computed(() =>
   role.value === ShareRole.ReadWrite
     ? t('share.roleContributorHint')
-    : props.chapter ? t('share.chapterRoleViewerHint') : t('share.roleViewerHint'),
+    : role.value === ShareRole.WriteOnly
+      ? props.chapter ? t('share.chapterRoleUploaderHint') : t('share.roleUploaderHint')
+      : props.chapter ? t('share.chapterRoleViewerHint') : t('share.roleViewerHint'),
 )
 // #303 (ADR 0076 point 5): a link minted before the write verifier refuses every new guest as a READ_WRITE, and an
 // edit never adds a verifier (point 2) — only a renew stores one. So such a link, graded READ_WRITE, warns and offers
@@ -185,11 +200,11 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
         : password.value === currentPassword.value
           ? undefined
           : ({ set: password.value } as const)
-      // cr-0119: a normal-flow edit may re-grade the role (READ ↔ READ_WRITE); the uploader variant never sends one.
+      // cr-0119: an edit may re-grade a READ/READ_WRITE link between the two; an upload link's edit never sends a role.
       // An end date moved past a passed one reopens the link (ADR 0114 decision 7): the Memory's key and name go with it.
       await updateShare(
         addressOf(props.editShare), props.epochs, props.editShare,
-        effectiveNote, name.value, expiry, props.uploader ? undefined : role.value, passwordChange,
+        effectiveNote, name.value, expiry, editsUploadLink.value ? undefined : role.value, passwordChange,
         { root: { key: props.memoryKey, epoch: props.memoryEpoch }, rootName: props.memoryName },
       )
       emit('saved')
@@ -223,7 +238,7 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
 
 async function onSubmit() {
   // Both guarded (the button is also disabled): never mint an under-length password, never retry a lost renew.
-  if (passwordTooShort.value || alreadyReplaced.value || expiryMissing.value) return
+  if (passwordTooShort.value || alreadyReplaced.value || expiryMissing.value || roleRefused.value) return
   error.value = false
   requirementRefused.value = false
   await runSubmit()
@@ -288,8 +303,8 @@ function endOfDay(d: Date): Date {
         <VeyqInput id="share-create-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="busy" />
       </div>
 
-      <!-- Normal flow: pick READ/READ_WRITE on create AND edit (cr-0119, re-grade in place). Uploader flow: no
-           switcher — just a short description of what a drop-box link does. -->
+      <!-- The role: every role offered on create, READ/READ_WRITE on the edit of such a link (cr-0119, re-grade in place);
+           none on an upload link's edit or a re-issue (its role is fixed). -->
       <div v-if="showRoleSwitcher" class="share-field">
         <label>{{ t('share.roleLabel') }}</label>
         <VeyqToggleGroup v-model="role" :options="roleOptions" :disabled="busy" class="share-role-switcher" />
@@ -307,7 +322,6 @@ function endOfDay(d: Date): Date {
           />
         </div>
       </div>
-      <p v-else-if="uploader && !isEdit && !isReissue" class="share-hint share-uploader-desc">{{ chapter ? t('share.chapterRoleUploaderHint') : t('share.roleUploaderHint') }}</p>
       <p v-if="isReissue" class="share-hint share-reissue-warning">{{ t('share.reissueWarning') }}</p>
 
       <!-- The optional note, grouped in a card behind a toggle (like the password). On → the per-locale editor. -->
@@ -397,7 +411,7 @@ function endOfDay(d: Date): Date {
             : (isEdit ? t('share.noteSave') : isReissue ? t('share.reissueSubmit') : t('share.create'))"
           :icon="isEdit ? 'check' : isReissue ? 'replay' : 'link'"
           :loading="busy"
-          :disabled="busy || passwordTooShort || alreadyReplaced || expiryMissing"
+          :disabled="busy || passwordTooShort || alreadyReplaced || expiryMissing || roleRefused"
           @click="onSubmit"
         />
       </div>
@@ -420,8 +434,7 @@ function endOfDay(d: Date): Date {
   color: var(--app-muted);
   font-size: 0.82rem;
 }
-/* The uploader-flow description stands in for the (absent) role switcher, so it carries the field's spacing. */
-.share-uploader-desc,
+/* The re-issue warning stands where the (absent) role switcher would, so it carries the field's spacing. */
 .share-reissue-warning {
   margin-bottom: 1.1rem;
 }
@@ -471,13 +484,18 @@ function endOfDay(d: Date): Date {
   flex: 1 1 auto;
   min-width: 0;
 }
-/* The role switcher spans the full dialog width, its options splitting it evenly. */
+/* The role switcher spans the full dialog width, its options splitting it evenly; a label that wraps (three roles on a
+   phone) stays centred in its option. */
 .share-role-switcher {
   display: flex;
   width: 100%;
 }
 .share-role-switcher :deep(.veyq-toggle-group__item) {
   flex: 1 1 0;
+}
+.share-role-switcher :deep(.veyq-toggle-group__content) {
+  text-align: center;
+  line-height: 1.25;
 }
 .share-error {
   margin: 0 0 0.5rem;

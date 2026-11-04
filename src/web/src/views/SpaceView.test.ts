@@ -60,7 +60,7 @@ vi.mock('../features/memories/components/MemoryDetail.vue', async () => {
     default: defineComponent({
       name: 'MemoryDetailStub',
       props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'rights', 'renameTo'],
-      emits: ['toggleFavorite', 'delete', 'openChapter', 'createChapter', 'share', 'shareUpload', 'metaUpdated'],
+      emits: ['toggleFavorite', 'delete', 'openChapter', 'createChapter', 'share', 'metaUpdated'],
       setup: (p) => () => h('div', {
         class: 'detail-stub', 'data-shareable': String(p.rights.share), 'data-share-upload': String(p.rights.shareUpload),
         'data-upload': String(p.rights.upload), 'data-key': String(p.memoryKey?.[0]),
@@ -91,9 +91,9 @@ vi.mock('../features/memories/components/ShareDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
-      props: { nodeId: String, uploader: Boolean, contribute: Boolean, nodeName: String, nodeKey: Uint8Array, nodeKind: String },
+      props: { nodeId: String, view: Boolean, contribute: Boolean, upload: Boolean, nodeName: String, nodeKey: Uint8Array, nodeKind: String },
       setup: (p) => () => h('div', { class: 'share-stub', 'data-name': p.nodeName, 'data-key': String(p.nodeKey?.[0]), 'data-kind': p.nodeKind, 'data-contribute': String(p.contribute) },
-        `${p.nodeId}|${p.uploader ? 'uploader' : 'viewer'}`),
+        `${p.nodeId}|${[p.view && 'view', p.contribute && 'contribute', p.upload && 'upload'].filter(Boolean).join('+') || 'none'}`),
     }),
   }
 })
@@ -308,31 +308,33 @@ describe('SpaceView over the real registry', () => {
     expect(w.find('ul.veyq-level-list').exists(), 'the detail replaces the level').toBe(false)
   })
 
-  // A chapter is a share root of its own (ADR 0080 Decision 13): the same detail offers the share affordances, and both
-  // dialogs open for the chapter itself — its id, its own K_node (the key chain's, not the Memory's) and its name as the
+  // A chapter is a share root of its own (ADR 0080 Decision 13): the same detail offers the share affordance, and its one
+  // dialog opens for the chapter itself — its id, its own K_node (the key chain's, not the Memory's) and its name as the
   // tree opened it, which the dialog re-seals under K_share.
-  it('opens a chapter to the same detail, shareable, and shares the chapter itself (both dialogs)', async () => {
+  it('opens a chapter to the same detail, shareable, and shares the chapter itself (whatever the offer)', async () => {
     const w = await mountAt('#~me/trips/memories/italy/day1')
     expect(w.find('.detail-stub').text()).toBe('Day1|')
     expect(w.find('.detail-stub').attributes('data-shareable')).toBe('true')
 
     const detail = w.findComponent({ name: 'MemoryDetailStub' })
-    // One share dialog at a time: the viewer one, then the uploader variant of the same dialog.
+    // One share dialog at a time: opened with every role, then with the upload role alone.
     const shared: { text: string; name?: string; key?: string; kind?: string; contribute?: string }[] = []
-    for (const ask of [() => detail.vm.$emit('share', { contribute: true }), () => detail.vm.$emit('shareUpload')]) {
+    for (const ask of [
+      () => detail.vm.$emit('share', { view: true, contribute: true, upload: true }),
+      () => detail.vm.$emit('share', { view: false, contribute: false, upload: true }),
+    ]) {
       ask()
       await flushPromises()
       const dialog = w.findAll('.share-stub')
       expect(dialog).toHaveLength(1)
       shared.push({ text: dialog[0].text(), name: dialog[0].attributes('data-name'), key: dialog[0].attributes('data-key'), kind: dialog[0].attributes('data-kind'), contribute: dialog[0].attributes('data-contribute') })
     }
-    expect(shared.map((s) => s.text)).toEqual(['day1|viewer', 'day1|uploader'])
+    expect(shared.map((s) => s.text)).toEqual(['day1|view+contribute+upload', 'day1|upload'])
     expect(shared.map((s) => s.name)).toEqual(['Day1', 'Day1'])
     expect(shared.map((s) => s.key), "the chapter's own key, not its Memory's (9)").toEqual(['7', '7'])
     // the node's kind travels with it, so the application's dialog can say "chapter"
     expect(shared.map((s) => s.kind)).toEqual(['CHAPTER', 'CHAPTER'])
-    // the offer the detail's rights function made reaches the dialog as a prop (the host never reads it again); the uploader
-    // variant offers no role
+    // the offer the detail's rights function made reaches the dialog as props, role by role (the host never reads it again)
     expect(shared.map((s) => s.contribute)).toEqual(['true', 'false'])
   })
 
@@ -342,7 +344,7 @@ describe('SpaceView over the real registry', () => {
     expect(w.find('.detail-stub').attributes('data-shareable')).toBe('false')
   })
 
-  it("wires the detail to the kind's dialogs: the rename in place (core's write), create-chapter, share, uploader share, delete", async () => {
+  it("wires the detail to the kind's dialogs: the rename in place (core's write), create-chapter, share, delete", async () => {
     const w = await mountAt('#~me/trips/memories/italy')
     const detail = w.findComponent({ name: 'MemoryDetailStub' })
 
@@ -357,14 +359,14 @@ describe('SpaceView over the real registry', () => {
     expect(w.find('.create-stub').attributes('data-key')).toBe('9')
     expect(w.find('.name-stub').exists()).toBe(false)
 
-    detail.vm.$emit('share', { contribute: false })
+    detail.vm.$emit('share', { view: true, contribute: false, upload: false })
     await flushPromises()
-    expect(w.findAll('.share-stub').map((s) => s.text())).toEqual(['italy|viewer'])
+    expect(w.findAll('.share-stub').map((s) => s.text())).toEqual(['italy|view'])
     // control: an offer without contribute reaches the dialog as false (fail closed)
     expect(w.find('.share-stub').attributes('data-contribute')).toBe('false')
-    detail.vm.$emit('shareUpload')
+    detail.vm.$emit('share', { view: false, contribute: false, upload: true })
     await flushPromises()
-    expect(w.findAll('.share-stub').map((s) => s.text()), 'the uploader variant takes its place').toEqual(['italy|uploader'])
+    expect(w.findAll('.share-stub').map((s) => s.text()), 'a second share opens the one dialog afresh, with its own offer').toEqual(['italy|upload'])
 
     detail.vm.$emit('delete')
     await flushPromises()

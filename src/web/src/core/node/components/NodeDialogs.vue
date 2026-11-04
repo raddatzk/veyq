@@ -50,13 +50,16 @@ const shareDialog = computed(() => {
   const info = registry.kind(sh.node.kind)
   return info.supported ? (info.shareDialog ?? null) : null
 })
-/** The dialog's variant: the uploader one (no role switcher, uploader shares only), else the role offer. */
 /** The node being shared as the tree reads it now (its name and epoch), the one the door was handed while it is gone. */
 const shared = computed(() => {
   const sh = s.share.value
   return sh ? (tree.value?.node(sh.node.id) ?? sh.node) : null
 })
-const shareVariant = computed(() => (s.share.value?.offer.uploader ? { uploader: true } : { contribute: s.share.value?.offer.contribute ?? false }))
+/** The roles a new link may take, as the door's offer says (each false unless granted); the dialog decides none. */
+const shareOffer = computed(() => {
+  const o = s.share.value?.offer
+  return { view: !!o?.view, contribute: !!o?.contribute, upload: !!o?.upload }
+})
 
 function nameDone() {
   const n = s.name.value
@@ -184,7 +187,7 @@ async function guestCreate(name: string) {
   <component
     :is="shareDialog"
     v-if="shareDialog && shared && dialogs.shareKey.value && member"
-    v-bind="shareVariant"
+    v-bind="shareOffer"
     :scope-id="member.scopeId"
     :node-id="shared.id"
     :node-key="dialogs.shareKey.value"

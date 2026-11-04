@@ -888,10 +888,11 @@ describe('MemoryDetail (a place on a server without a map, #458)', () => {
   })
 })
 
-// ADR 0080 Decision 13: a chapter is a share root of its own, so its detail — the same `MemoryDetail` — offers both
-// share actions where its rights say so (the instance's public and uploader links, `../rights.ts`), and
-// offers none where they do not: the button follows `rights`, never the node's kind.
-describe('share actions on a chapter', () => {
+// ADR 0080 Decision 13: a chapter is a share root of its own, so its detail — the same `MemoryDetail` — offers the share
+// action where its rights say so (the instance's public, contributor and uploader links, `../rights.ts`), and offers none
+// where they do not: the button follows `rights`, never the node's kind. Owner 2026-11-04: ONE share action for every link
+// role, shown where any role may be minted, its offer naming which (`shareOfferOf`).
+describe('the share action on a chapter', () => {
   const chapter: TreeNode = treeNode({
     id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==',
     wrappedMeta: null, metaRevision: 0, placementRevision: 0,
@@ -902,24 +903,29 @@ describe('share actions on a chapter', () => {
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
   })
+  const shareButtons = (w: ReturnType<typeof mountDetail>) => w.findAll('.veyq-node-header-actions button[data-action^="share"]')
 
-  it('shows the share and the uploader-link buttons on a shareable chapter and emits each', async () => {
-    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, rights: memberMemoryRights({}, CHAPTER_KIND) })
+  it.each([
+    ['every share right', {}, { view: true, contribute: true, upload: true }],
+    ['the upload right alone', { share: false, shareContribute: false }, { view: false, contribute: false, upload: true }],
+    ['the view right alone', { shareContribute: false, shareUpload: false }, { view: true, contribute: false, upload: false }],
+    ['the contribute right alone', { share: false, shareUpload: false }, { view: false, contribute: true, upload: false }],
+  ])('one share action with %s, emitting the offer of exactly those roles', async (_, narrowed, offer) => {
+    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, rights: { ...memberMemoryRights({}, CHAPTER_KIND), ...narrowed } })
     await flushPromises()
-    const share = wrapper.find(`button[aria-label="${t('share.share')}"]`)
-    const upload = wrapper.find(`button[aria-label="${t('share.uploadRequest')}"]`)
-    expect(share.exists()).toBe(true)
-    expect(upload.exists()).toBe(true)
-    await share.trigger('click')
-    await upload.trigger('click')
-    expect(wrapper.emitted('share')).toHaveLength(1)
-    expect(wrapper.emitted('shareUpload')).toHaveLength(1)
+    const buttons = shareButtons(wrapper)
+    expect(buttons.map((b) => b.attributes('data-action')), 'one share action, no second link action').toEqual(['share'])
+    expect(buttons[0].attributes('aria-label')).toBe(t('share.share'))
+    await buttons[0].trigger('click')
+    expect(wrapper.emitted('share')).toEqual([[offer]])
   })
 
-  it('shows neither when the instance offers no public links (live control above)', async () => {
-    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, rights: memberMemoryRights({ publicShares: false, publicSharesDropBox: false }, CHAPTER_KIND) })
+  it('shows none when no role may be minted (live control above)', async () => {
+    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, rights: memberMemoryRights({ publicShares: false, publicSharesContribute: false, publicSharesDropBox: false }, CHAPTER_KIND) })
     await flushPromises()
     expect(wrapper.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
-    expect(wrapper.find(`button[aria-label="${t('share.uploadRequest')}"]`).exists()).toBe(false)
+    expect(shareButtons(wrapper)).toHaveLength(0)
+    // control: the header is drawn - its upload is there (its rename is the name itself, ADR 0110 decision 11)
+    expect(wrapper.find('.veyq-node-header-actions button[data-action="upload"]').exists()).toBe(true)
   })
 })

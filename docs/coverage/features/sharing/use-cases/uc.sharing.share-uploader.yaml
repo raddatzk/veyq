@@ -20,7 +20,12 @@ acceptanceCriteria:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.theKeysAShareCarriesFollowItsRole, ShareUploaderSliceTest.theDropKeyIsSetOnceOnTheMemory]
       web:
-        unit: [src/features/memories/share.test.ts]
+        unit: [src/features/memories/share.test.ts, src/features/memories/components/ShareCreateDialog.test.ts]
+  - id: one-share-action-for-every-role
+    text: A Memory or a chapter has ONE share action and ONE dialog for every link role (owner 2026-11-04) - the upload request is no action of its own. The action shows where any role may be minted (core's share, shareContribute or shareUpload right), and a share guest never gets it. The dialog lists every link of the node, each with its role (viewer, contributor, uploader), and keeps every row's copy, note, switch-off, renew and delete; its create form offers view, view and contribute, and upload only, each exactly where its right holds (core.public-shares, .contribute, .drop-box, handed in by the host as the share door's offer - the dialog reads no capability), and mints nothing when none does. An edit re-grades a READ/READ_WRITE link between those two and never into WRITE_ONLY; an upload link's edit shows no role choice and sends no role.
+    coverage:
+      web:
+        unit: [src/features/memories/components/ShareDialog.test.ts, src/features/memories/components/ShareCreateDialog.test.ts, src/features/memories/components/MemoryDetail.test.ts, src/features/memories/components/MemoryDetail.rights.test.ts, src/core/node/nodeHost.test.ts, src/views/SpaceView.test.ts]
   - id: naming-proves-the-link-key
     text: An uploader naming themself proves they hold the link's key, as a contributor does (ADR 0076) — the WRITE_ONLY share carries writeVerifier like every role, and createShareIdentity without the K_share-derived X-Share-Write, or with another link's, is the non-enumerable 404 with no identity written; the whole link names the uploader, who then uploads.
     coverage:

@@ -84,7 +84,7 @@ async function mountDetail(
 }
 
 // What is edited at its place has no entry (ADR 0110 decision 11): the name, the cover, the participants (their fact).
-const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'memory.banner.add', 'node.move.action', 'node.delete'] as const
+const HEADER = ['media.upload', 'share.share', 'memory.banner.add', 'node.move.action', 'node.delete'] as const
 const EDITED_IN_PLACE = ['node.rename', 'node.cover.set', 'node.cover.change', 'memory.participants.title', 'memory.participants.edit'] as const
 /** The header's actions among {@link HEADER}, a button or a ⋯ menu entry (delete is always the latter, ADR 0110). */
 const header = async (w: Awaited<ReturnType<typeof mountDetail>>) => {
@@ -101,7 +101,7 @@ describe('MemoryDetail follows rights', () => {
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, {
       coreActions: [core('favorite', { placement: 'before' }), core('copy', { placement: { after: 'move' }, menuOnly: true }), core('download'), core('report', { menuOnly: true })],
     })
-    expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'shareUpload', 'download'])
+    expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'download'])
     // The banner only while none is drawn, the move and copy: ⋯ entries, before report and delete.
     expect(await headerMenuIds(w)).toEqual(['banner', 'move', 'copy', 'report', 'delete'])
   })
@@ -258,7 +258,7 @@ describe('MemoryDetail follows rights', () => {
 
   it('a pending deletion: share stays, every write goes', async () => {
     const w = await mountDetail(memberMemoryRights({ readonly: true }))
-    expect(await header(w)).toEqual(['share.share', 'share.uploadRequest'])
+    expect(await header(w)).toEqual(['share.share'])
     expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(true)
     await w.findAll('[role="tab"]')[1].trigger('mousedown')
     await flushPromises()
