@@ -95,7 +95,7 @@ function expectNoMemberControl(w: Page) {
   // the folder's one header action for a guest is its download (ADR 0082 decision 5)
   expect(w.findAll('.veyq-node-header-actions button').map((b) => b.attributes('aria-label')), 'share, rename, delete of the folder').toEqual([t('export.action')])
   for (const label of [
-    t('node.favorite'), t('node.unfavorite'), t('media.marks.mark'), t('share.share'), t('share.uploadRequest'), t('node.rename'),
+    t('node.favorite'), t('node.unfavorite'), t('media.marks.mark'), t('share.share'), t('node.rename'),
     t('node.delete'), t('node.trash.open'), t('node.cover.set'), t('node.cover.change'), t('memory.createChapterTitle'),
   ]) {
     expect(w.find(`[aria-label="${label}"]`).exists(), label).toBe(false)

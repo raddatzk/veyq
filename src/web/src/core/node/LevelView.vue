@@ -96,7 +96,7 @@ import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './l
 import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
 import { useSelection } from './selection'
 import { standardRowActions, withStandardRowActions } from './standardRowActions'
-import { hostHandlers, hostRights, injectNodeHost } from './nodeHost'
+import { hostHandlers, hostRights, injectNodeHost, shareOfferOf } from './nodeHost'
 import { provideCoreNodeActions, useCoreNodeActions } from './coreNodeActions'
 import NodeCoverImage from './cover/components/NodeCoverImage.vue'
 import CoverEditor from './cover/components/CoverEditor.vue'
@@ -182,7 +182,7 @@ const folderActions = computed(() =>
   standardNodeActions(
     t,
     hostRights(rights.value, host),
-    hostHandlers(host, () => props.folder!, () => ({ contribute: rights.value.shareContribute })),
+    hostHandlers(host, () => props.folder!, () => shareOfferOf(rights.value)),
   ),
 )
 // The space's node trash, where the rights grant it and the page has the door.

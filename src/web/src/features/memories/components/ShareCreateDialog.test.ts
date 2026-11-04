@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-// The share CREATE/EDIT dialog is shared by both flows via the `uploader` flag. The NORMAL flow shows a
-// READ/READ_WRITE role switcher (never the uploader — that is its own action/dialog); the WRITE_ONLY flow hides
-// the switcher entirely (role fixed to WRITE_ONLY). cr-share-link-expiry-ui/-edit adds an optional expiry on both
+// The share CREATE/EDIT dialog of every link role (owner 2026-11-04: one share action, one dialog). A new link offers
+// exactly the roles the host's offer grants - view (READ), view and contribute (READ_WRITE), upload only (WRITE_ONLY) -
+// and mints no other; an edit re-grades a READ/READ_WRITE link between those two and leaves an upload link's role alone.
+// cr-share-link-expiry-ui/-edit adds an optional expiry on both
 // create and edit: the picked day is sent at its END (works through that day), and on edit it is a FULL REPLACE
 // (pre-filled from the current share, always re-sent — an edit that drops it clears it).
 import { describe, it, expect, vi } from 'vitest'
@@ -62,7 +63,7 @@ const EPOCHS = { epoch: 0, key: new Uint8Array(32) }
 
 function mountDialog(props: Record<string, unknown>) {
   return mount(ShareCreateDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryEpoch: 0, epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...props },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryEpoch: 0, epochs: EPOCHS, memoryName: 'Rom', view: true, contribute: true, ...props },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -74,15 +75,57 @@ const editShareWith = (over: Record<string, unknown>) => ({
 })
 
 describe('ShareCreateDialog (cr-0116)', () => {
-  it('normal flow: the switcher offers view-only + view+add, never the uploader', () => {
-    const w = mountDialog({})
-    expect(w.find('.select-button').exists()).toBe(true)
-    expect(w.text()).toContain(t('share.roleViewer'))
-    expect(w.text()).toContain(t('share.roleContributor'))
-    expect(w.text()).not.toContain(t('share.roleUploader'))
+  /** The role options the switcher shows, in order. */
+  const options = (w: ReturnType<typeof mountDialog>) => w.findAll('.select-button .opt').map((o) => o.text())
+  const submit = (w: ReturnType<typeof mountDialog>) => w.findAll('button').find((b) => b.text() === t('share.create'))!
+
+  it.each([
+    [{ view: true, contribute: true, upload: true }, ['share.roleViewer', 'share.roleContributor', 'share.roleUploader']],
+    [{ view: true, contribute: false, upload: false }, ['share.roleViewer']],
+    [{ view: false, contribute: true, upload: false }, ['share.roleContributor']],
+    [{ view: false, contribute: false, upload: true }, ['share.roleUploader']],
+    [{ view: true, contribute: false, upload: true }, ['share.roleViewer', 'share.roleUploader']],
+  ])('a new link offers each role exactly where the offer grants it (%o)', (offer, roles) => {
+    expect(options(mountDialog(offer))).toEqual(roles.map((r) => t(r)))
   })
 
-  it('normal flow without contribute (core.public-shares.contribute off): view only; an edit of a READ_WRITE link keeps its role on offer', () => {
+  it('a new link mints the role picked, the upload role included', async () => {
+    createShare.mockClear()
+    const w = mountDialog({ view: true, contribute: true, upload: true })
+    expect(createShare).not.toHaveBeenCalled()
+    await w.findAll('.select-button .opt').find((o) => o.text() === t('share.roleUploader'))!.trigger('click')
+    expect(w.text(), 'the hint says what the link does').toContain(t('share.roleUploaderHint'))
+    await submit(w).trigger('click')
+    await flushPromises()
+    expect(createShare).toHaveBeenCalledTimes(1)
+    expect(createShare.mock.calls[0][5]).toBe(ShareRole.WriteOnly)
+  })
+
+  it('starts at the first role offered: an offer of the upload role alone mints an upload link', async () => {
+    createShare.mockClear()
+    const w = mountDialog({ view: false, contribute: false, upload: true })
+    await submit(w).trigger('click')
+    await flushPromises()
+    expect(createShare.mock.calls[0][5]).toBe(ShareRole.WriteOnly)
+  })
+
+  it('with no role offered nothing is minted (fail closed)', async () => {
+    createShare.mockClear()
+    const none = mountDialog({ view: false, contribute: false, upload: false })
+    expect(options(none)).toEqual([])
+    expect(submit(none).attributes('disabled'), 'the submit stays off').toBeDefined()
+    // past the disabled button too: the submit itself refuses (VTU reaches a script-setup function through `vm`)
+    await (none.vm as unknown as { onSubmit(): Promise<void> }).onSubmit()
+    await flushPromises()
+    expect(createShare).not.toHaveBeenCalled()
+    // control: one role offered mints it
+    await submit(mountDialog({ view: true, contribute: false, upload: false })).trigger('click')
+    await flushPromises()
+    expect(createShare).toHaveBeenCalledTimes(1)
+    expect(createShare.mock.calls[0][5]).toBe(ShareRole.Read)
+  })
+
+  it('without contribute (core.public-shares.contribute off): no contributor role; an edit of a READ_WRITE link keeps its role on offer', () => {
     const create = mountDialog({ contribute: false })
     expect(create.text()).toContain(t('share.roleViewer'))
     expect(create.text()).not.toContain(t('share.roleContributor'))
@@ -93,14 +136,32 @@ describe('ShareCreateDialog (cr-0116)', () => {
     expect(mountDialog({ contribute: false, editShare: editShareWith({}) }).text()).not.toContain(t('share.roleContributor'))
   })
 
-  it('uploader flow: no role switcher at all (role fixed to WRITE_ONLY)', () => {
-    const w = mountDialog({ uploader: true })
+  it('an edit never re-grades into the upload role, whatever the offer (the server refuses a change into WRITE_ONLY)', () => {
+    const w = mountDialog({ view: true, contribute: true, upload: true, editShare: editShareWith({}) })
+    expect(options(w)).toEqual([t('share.roleViewer'), t('share.roleContributor')])
+  })
+
+  it("an upload link's edit shows no role switcher and sends no role (its role is fixed)", async () => {
+    updateShare.mockClear()
+    const w = mountDialog({ view: true, contribute: true, upload: true, editShare: editShareWith({ role: ShareRole.WriteOnly }) })
+    await flushPromises()
     expect(w.find('.select-button').exists()).toBe(false)
+    await w.findAll('button').find((b) => b.text() === t('share.noteSave'))!.trigger('click')
+    await flushPromises()
+    expect(updateShare).toHaveBeenCalledTimes(1)
+    expect(updateShare.mock.calls[0][6]).toBeUndefined()
+    // control: a READ link's edit sends its role
+    updateShare.mockClear()
+    const read = mountDialog({ editShare: editShareWith({}) })
+    await flushPromises()
+    await read.findAll('button').find((b) => b.text() === t('share.noteSave'))!.trigger('click')
+    await flushPromises()
+    expect(updateShare.mock.calls[0][6]).toBe(ShareRole.Read)
   })
 
   // inbox #363: on a chapter the hints that name the node say "chapter" (the parent passes `chapter` by `nodeKind`).
   it.each([
-    [{ uploader: true }, 'share.chapterRoleUploaderHint', 'share.roleUploaderHint'],
+    [{ view: false, contribute: false, upload: true }, 'share.chapterRoleUploaderHint', 'share.roleUploaderHint'],
     [{}, 'share.chapterRoleViewerHint', 'share.roleViewerHint'],
   ])('a chapter link (%o) is described as a chapter', (flow, chapterKey, memoryKey) => {
     const onChapter = mountDialog({ ...flow, chapter: true })
@@ -251,7 +312,7 @@ describe("ShareCreateDialog — the note's acceptance switch", () => {
   // Core's real acceptance field (its checkbox is the layer's, installed for every test), beside the stubs above.
   const mountWithField = (props: Record<string, unknown>) =>
     mount(ShareCreateDialog, {
-      props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryEpoch: 0, epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...props },
+      props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryEpoch: 0, epochs: EPOCHS, memoryName: 'Rom', view: true, contribute: true, ...props },
       global: { plugins: [realI18n()], stubs },
     })
   const mustAccept = (w: ReturnType<typeof mountWithField>) => w.find('#share-note-must-accept')
@@ -332,7 +393,7 @@ describe('ShareCreateDialog — a stopped link gets its password on the same lin
       // The edit handed over as the other mounts here hand it (a row built by `editShareWith`, not a whole ManagedShare).
       const edit: Record<string, unknown> = { editShare: editShareWith({ shareId: 's-stopped', guestStops: [{ reason: 'linkPassword' }] }) }
       const w = mount(ShareCreateDialog, {
-        props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryEpoch: 0, epochs: EPOCHS, memoryName: 'Rom', contribute: true, ...edit },
+        props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryEpoch: 0, epochs: EPOCHS, memoryName: 'Rom', view: true, contribute: true, ...edit },
         global: { plugins: [realI18n()], stubs: typing },
       })
       await flushPromises()

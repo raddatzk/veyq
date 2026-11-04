@@ -31,7 +31,7 @@ import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import type { NodeDetailProps } from '../../../core/applications/registry'
-import { hostRights, injectNodeHost } from '../../../core/node/nodeHost'
+import { hostRights, injectNodeHost, shareOfferOf } from '../../../core/node/nodeHost'
 import type { TreeNode } from '../../../core/node/tree'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { compareByCreation, displayNamesOf } from '../../../core/node/location'
@@ -77,7 +77,7 @@ const headerActions = computed(() =>
     t,
     { share: rights.value.shareUpload, move: rights.value.move, delete: rights.value.delete, shareLabel: t('depot.dropBox.share'), deleteLabel: t('depot.dropBox.delete') },
     {
-      share: () => host.share?.(props.node, { contribute: rights.value.shareContribute }),
+      share: () => host.share?.(props.node, shareOfferOf(rights.value)),
       move: () => source.move?.(props.node),
       remove: () => host.delete?.(props.node),
     },

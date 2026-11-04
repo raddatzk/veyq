@@ -335,7 +335,7 @@ describe('the spaces of the last rotation, as the server reads them (decision 8)
 
 describe('the links to renew (decision 13)', () => {
   const ShareDialogStub = defineComponent({
-    props: ['scopeId', 'nodeId', 'nodeKey', 'nodeEpoch', 'epochs', 'nodeName', 'nodeKind', 'uploader', 'contribute'],
+    props: ['scopeId', 'nodeId', 'nodeKey', 'nodeEpoch', 'epochs', 'nodeName', 'nodeKind', 'view', 'contribute', 'upload'],
     emits: ['close'],
     setup: (props, { emit }) => () => h('div', { class: 'share-dialog-stub', 'data-node': props.nodeId, onClick: () => emit('close') }),
   })
@@ -390,7 +390,7 @@ describe('the links to renew (decision 13)', () => {
     const dialog = w.findComponent(ShareDialogStub)
     expect(dialog.exists()).toBe(true)
     expect(kindOf).toHaveBeenCalledWith('FOLDER')
-    expect(dialog.props()).toMatchObject({ scopeId: 's-here', nodeId: 'node-flagged', nodeName: 'Reisen', nodeKind: 'FOLDER', uploader: false, contribute: false })
+    expect(dialog.props()).toMatchObject({ scopeId: 's-here', nodeId: 'node-flagged', nodeName: 'Reisen', nodeKind: 'FOLDER', view: true, contribute: false, upload: false })
     await dialog.trigger('click') // the dialog's close
     await flushPromises()
     expect(w.findComponent(ShareDialogStub).exists()).toBe(false)

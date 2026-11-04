@@ -55,18 +55,21 @@ const stubs = {
   ShareCreateDialog: true,
 }
 
-const mountList = (extra: { readonly?: boolean; uploader?: boolean } = {}) =>
+/** The host's offer with every role granted - a test narrows it to what it is about. */
+const EVERY_ROLE = { view: true, contribute: true, upload: true }
+
+const mountList = (extra: { readonly?: boolean; view?: boolean; contribute?: boolean; upload?: boolean } = EVERY_ROLE) =>
   mount(ShareDialog, {
     props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), nodeEpoch: 0, epochs: EPOCHS, nodeName: 'Rom', nodeKind: 'MEMORY', ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 
 // uc.sharing.share-public-viewer:chapter-share-root: a chapter is a share root of its own, so the dialog on one says
-// "chapter", not "Memory"; the uploader variant keeps its own copy.
+// "chapter", not "Memory" - in its own copy and in the create form's hints (inbox #363).
 describe('ShareDialog — the wording follows the shared node\'s kind', () => {
-  const mountKind = (nodeKind: string, uploader = false) =>
+  const mountKind = (nodeKind: string) =>
     mount(ShareDialog, {
-      props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), nodeEpoch: 0, epochs: EPOCHS, nodeName: 'Tag 2', nodeKind, uploader },
+      props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), nodeEpoch: 0, epochs: EPOCHS, nodeName: 'Tag 2', nodeKind, ...EVERY_ROLE },
       global: { plugins: [realI18n()], stubs },
     })
 
@@ -89,26 +92,13 @@ describe('ShareDialog — the wording follows the shared node\'s kind', () => {
     expect(w.html()).not.toContain(t('share.chapterTitle'))
   })
 
-  // inbox #363: the uploader variant's copy names the node too — "chapter" on a chapter, by the same `nodeKind`.
-  it('the uploader variant on a chapter says "chapter" in its copy and hands the create form the chapter wording', async () => {
+  // inbox #363: the create form's hints name the node too — "chapter" on a chapter, by the same `nodeKind`.
+  it.each([['CHAPTER', true], ['MEMORY', false]])('a new link on a %s hands the create form chapter = %s', async (kind, chapter) => {
     listSharesFor.mockResolvedValue([])
-    const w = mountKind('CHAPTER', true)
+    const w = mountKind(kind)
     await flushPromises()
-    expect(w.text()).toContain(t('share.chapterUploaderDialogCopy'))
-    expect(w.text()).not.toContain(t('share.uploaderDialogCopy'))
-    expect(w.html(), 'the uploader title names no node').not.toContain(t('share.chapterTitle'))
-    await w.findAll('button').find((b) => b.text() === t('share.uploaderCreate'))!.trigger('click')
-    expect(w.findComponent({ name: 'ShareCreateDialog' }).props('chapter')).toBe(true)
-  })
-
-  it('control: the uploader variant on a Memory keeps the Memory copy', async () => {
-    listSharesFor.mockResolvedValue([])
-    const w = mountKind('MEMORY', true)
-    await flushPromises()
-    expect(w.text()).toContain(t('share.uploaderDialogCopy'))
-    expect(w.text()).not.toContain(t('share.chapterUploaderDialogCopy'))
-    await w.findAll('button').find((b) => b.text() === t('share.uploaderCreate'))!.trigger('click')
-    expect(w.findComponent({ name: 'ShareCreateDialog' }).props('chapter')).toBe(false)
+    await w.findAll('button').find((b) => b.text() === t('share.createNew'))!.trigger('click')
+    expect(w.findComponent({ name: 'ShareCreateDialog' }).props('chapter')).toBe(chapter)
   })
 
   it("a chapter's link delete says the guests' photos stay in the chapter", async () => {
@@ -120,6 +110,60 @@ describe('ShareDialog — the wording follows the shared node\'s kind', () => {
     const asked = confirmRequest.value?.message
     settleConfirm(false) // before asserting, so a red here leaves no confirm pending for the next test
     expect(asked).toBe(t('share.chapterDeleteConfirm'))
+  })
+})
+
+// Owner 2026-11-04: ONE share action and ONE dialog for every link role. The dialog lists every link of the node, each
+// with its role, and its "New" offers exactly the roles the host's offer grants - it decides none itself.
+describe('ShareDialog — one dialog for every link role', () => {
+  const ROLES = [ShareRole.Read, ShareRole.ReadWrite, ShareRole.WriteOnly]
+  const listEveryRole = () =>
+    listSharesFor.mockResolvedValue([
+      share({ shareId: 'r', role: ShareRole.Read }),
+      share({ shareId: 'rw', role: ShareRole.ReadWrite }),
+      share({ shareId: 'wo', role: ShareRole.WriteOnly }),
+    ])
+
+  it.each([
+    ['every role offered', EVERY_ROLE],
+    ['the upload role alone', { view: false, contribute: false, upload: true }],
+    ['the view role alone', { view: true, contribute: false, upload: false }],
+  ])('lists the links of every role, each saying its role, whatever the offer (%s)', async (_, offer) => {
+    listEveryRole()
+    const w = mountList(offer)
+    await flushPromises()
+    expect(w.findAll('.share-list-item')).toHaveLength(3)
+    expect(w.findAll('.share-list-role').map((r) => r.text())).toEqual([t('share.roleViewer'), t('share.roleContributor'), t('share.roleUploader')])
+    // every row keeps its copy, whatever its role
+    expect(w.findAll(`button[aria-label="${t('share.copy')}"]`)).toHaveLength(ROLES.length)
+  })
+
+  it.each([
+    [{ view: true, contribute: true, upload: true }],
+    [{ view: true, contribute: false, upload: false }],
+    [{ view: false, contribute: true, upload: false }],
+    [{ view: false, contribute: false, upload: true }],
+    [{ view: true, contribute: false, upload: true }],
+  ])('hands the create form exactly the offer it was given (%o)', async (offer) => {
+    listSharesFor.mockResolvedValue([])
+    const w = mountList(offer)
+    await flushPromises()
+    await w.find('.share-new-button').trigger('click')
+    const create = w.findComponent({ name: 'ShareCreateDialog' })
+    expect(create.exists()).toBe(true)
+    expect({ view: create.props('view'), contribute: create.props('contribute'), upload: create.props('upload') }).toEqual(offer)
+  })
+
+  it('offers no new link where no role is granted; the links stay listed and copyable', async () => {
+    listEveryRole()
+    const none = mountList({ view: false, contribute: false, upload: false })
+    await flushPromises()
+    expect(none.findAll('.share-list-item'), 'the list is there').toHaveLength(3)
+    expect(none.find('.share-new-button').exists(), 'no role, no new link').toBe(false)
+    // control: one role granted is enough for the button
+    const one = mountList({ view: false, contribute: false, upload: true })
+    await flushPromises()
+    expect(one.find('.share-new-button').exists()).toBe(true)
   })
 })
 
@@ -239,17 +283,16 @@ describe('ShareDialog — renew vs re-activate (ADR 0075, W1)', () => {
 describe('ShareDialog — a pending deletion (`readonly`)', () => {
   const CHANGES = ['share.edit', 'share.reissue', 'share.reactivate', 'share.revoke', 'share.delete']
   it('lists the links, revokes the own live one and changes nothing else; control: the same list otherwise offers them', async () => {
-    for (const uploader of [false, true]) {
-      const role = uploader ? ShareRole.WriteOnly : ShareRole.Read // the uploader variant lists only uploader links
+    for (const role of [ShareRole.Read, ShareRole.WriteOnly]) {
       listSharesFor.mockResolvedValue([share({ shareId: 'live', role }), share({ shareId: 'off', enabled: false, role })])
-      const w = mountList({ readonly: true, uploader })
+      const w = mountList({ readonly: true, ...EVERY_ROLE })
       await flushPromises()
       await openOff(w)
       expect(w.findAll('.share-list-item')).toHaveLength(2)
       expect(w.find('.share-new-button').exists(), 'no new link').toBe(false)
       expect(w.text()).toContain(t('share.pendingDeletion'))
       for (const label of CHANGES.filter((l) => l !== 'share.revoke')) expect(button(w, t(label)).exists(), label).toBe(false)
-      expect(w.findAll(`button[aria-label="${t('share.revoke')}"]`), `the one live link of mine (uploader: ${uploader})`).toHaveLength(1)
+      expect(w.findAll(`button[aria-label="${t('share.revoke')}"]`), `the one live link of mine (${role})`).toHaveLength(1)
       vi.mocked(shareModule.revokeShare).mockClear()
       await button(w, t('share.revoke')).trigger('click')
       await flushPromises()

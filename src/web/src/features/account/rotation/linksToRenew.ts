@@ -59,8 +59,10 @@ export type RenewDialog = { component: Component; props: NodeShareDialogProps; r
  * Open the share dialog of `link`'s node from the account's settings: the space is opened by id, its tree read, and the
  * node's key resolved through the content-key chain — what the node's own page does before it mounts the same dialog.
  * Null when the space or the node does not open here, or its kind brings no share dialog. `release` zeroes the keys the
- * dialog was handed; the caller calls it when the dialog closes. `contribute` stays off (fail closed): a renew keeps
- * the link's role, and only a NEW link's role choice reads it.
+ * dialog was handed; the caller calls it when the dialog closes. A new link made here takes the flagged link's kind - an
+ * upload link for a WRITE_ONLY one (`upload`, which a drop box's renew is: it offers no re-issue), a viewer link otherwise
+ * (`view`) -, and `contribute` stays off (fail closed): a renew keeps the link's role, and only a NEW link's role
+ * choice reads the offer.
  */
 export async function openRenewDialog(link: LinkToRenew): Promise<RenewDialog | null> {
   if (!link.here) return null
@@ -90,8 +92,9 @@ export async function openRenewDialog(link: LinkToRenew): Promise<RenewDialog | 
         epochs: opened.epochs,
         nodeName: node.name,
         nodeKind: node.kind,
-        uploader: link.upload,
+        view: !link.upload,
         contribute: false,
+        upload: link.upload,
       },
       release: () => {
         nodeKey.fill(0)

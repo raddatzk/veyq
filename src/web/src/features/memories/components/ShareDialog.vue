@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // The curator's share MANAGEMENT dialog (cr-0116, redesigned toward the legacy shape): a **list-only** view of a
 // Memory's or a chapter's share links (a folder's are core's `FolderShareDialog`) + a "New" button that opens the
-// separate create dialog. Shared by BOTH share flows via the `uploader` flag so they stay identical by construction:
-// the NORMAL variant lists READ/READ_WRITE shares and creates them with a role switcher; the WRITE_ONLY (drop-box) variant lists uploader shares and creates them with no
-// switcher (a separate memory action, rights-gated at that action). Each row shows the share's private name (or
+// separate create dialog. ONE dialog for every link role (owner 2026-11-04): it lists every link of the node - viewer,
+// contributor and uploader (WRITE_ONLY, the drop) alike, each with its role - and the create form offers exactly the roles
+// the host's offer grants (`view`, `contribute`, `upload`; none decided here). Each row shows the share's private name (or
 // the role), badges (note present / disabled / by another member), and per-row actions: **copy link** (copy-only —
 // reconstructed via the member-recoverable K_share), edit name+note, switch off / re-activate, and **renew** (re-issue,
 // ADR 0075): a new link with a fresh key, the old one deleted. A share whose link a departed member may hold is marked
@@ -40,8 +40,8 @@ import { CHAPTER_KIND } from '../kinds'
 // Memories' `shareDialog` for MEMORY and CHAPTER (cr-files-application P4c), so it takes the platform's share-dialog
 // props: the scope (every share's recovery copy of `K_share` is bound to it, ADR 0072, and opens under `K_SC` at its
 // epoch), the node and its `K_node` (`nodeKey`), its name, its kind (a chapter link says "chapter", not "Memory") and
-// `uploader` — the drop-box variant: list only uploader shares, create with no role switcher. Identical otherwise.
-// `contribute` (the rights function's answer, handed on by the host) lets the create form offer READ_WRITE.
+// `view`, `contribute`, `upload` — the rights function's answers, handed on by the host — are the roles the create form
+// offers for a new link: READ, READ_WRITE, WRITE_ONLY, each only where set (fail closed). With none, no "New" button.
 const props = defineProps<NodeShareDialogProps>()
 const emit = defineEmits<{ close: [] }>()
 
@@ -64,26 +64,14 @@ const editShare = ref<ManagedShare | null>(null)
 // The share being re-issued (ADR 0075) — the create dialog pre-filled from it.
 const reissueFrom = ref<ManagedShare | null>(null)
 
-// The two flows differ only in which shares they list + their labels — the uploader variant filters to WRITE_ONLY, the
-// normal variant to everything else. Guaranteed identical look because it is the SAME component.
-const visibleShares = computed(() =>
-  shares.value.filter((s) => (props.uploader ? s.role === ShareRole.WriteOnly : s.role !== ShareRole.WriteOnly)),
-)
-// Live links first; switched-off ones in a folded section of their own.
+// Live links first; switched-off ones in a folded section of their own. Every role's links, each row saying its role.
 const sections = computed(() => [
-  { key: 'on', foldable: false, shares: visibleShares.value.filter((s) => s.enabled) },
-  { key: 'off', foldable: true, shares: visibleShares.value.filter((s) => !s.enabled) },
+  { key: 'on', foldable: false, shares: shares.value.filter((s) => s.enabled) },
+  { key: 'off', foldable: true, shares: shares.value.filter((s) => !s.enabled) },
 ])
 const isChapter = computed(() => props.nodeKind === CHAPTER_KIND)
-const headerTitle = computed(() => (props.uploader ? t('share.uploaderTitle') : isChapter.value ? t('share.chapterTitle') : t('share.title')))
-// The uploader variant names the node too (inbox #363): its title "Request upload" names none, its copy does.
-const introText = computed(() =>
-  props.uploader
-    ? isChapter.value ? t('share.chapterUploaderDialogCopy') : t('share.uploaderDialogCopy')
-    : isChapter.value ? t('share.chapterIntro') : t('share.intro'),
-)
-const createLabel = computed(() => (props.uploader ? t('share.uploaderCreate') : t('share.createNew')))
-const emptyLabel = computed(() => (props.uploader ? t('share.uploaderNone') : t('share.none')))
+const headerTitle = computed(() => (isChapter.value ? t('share.chapterTitle') : t('share.title')))
+const introText = computed(() => (isChapter.value ? t('share.chapterIntro') : t('share.intro')))
 
 function roleLabel(r: ShareRole | string): string {
   if (r === ShareRole.WriteOnly) return t('share.roleUploader')
@@ -149,6 +137,8 @@ function openReissue(share: ManagedShare) {
 const changes = computed(() => !props.readonly)
 // Renew: the owner's own share, enabled or not; anyone's share once it is off (the new one is then theirs).
 const canReissue = (share: ManagedShare) => changes.value && (share.mine || !share.enabled)
+// A new link: some role the offer grants, outside a pending deletion.
+const canCreate = computed(() => changes.value && (props.view || props.contribute || props.upload))
 // Edit: the caller's own link, whose recovery copy re-opens `K_share`.
 const canEdit = (share: ManagedShare) => changes.value && share.mine && !!share.sealedShareKey
 async function onSaved() {
@@ -233,12 +223,12 @@ function fmtDate(d: Date): string {
   <VeyqDialog :visible="true" :header="headerTitle" class="share-dialog" @update:visible="emit('close')">
     <div class="share-manage-head">
       <p class="share-intro">{{ introText }}</p>
-      <VeyqButton v-if="changes" class="share-new-button" :label="createLabel" icon="plus" @click="openCreate" />
+      <VeyqButton v-if="canCreate" class="share-new-button" :label="t('share.createNew')" icon="plus" @click="openCreate" />
     </div>
     <p v-if="!changes" class="share-intro share-pending">{{ t('share.pendingDeletion') }}</p>
 
     <p v-if="loadError" class="share-error">{{ t('share.loadFailed') }}</p>
-    <p v-else-if="!visibleShares.length" class="share-empty">{{ emptyLabel }}</p>
+    <p v-else-if="!shares.length" class="share-empty">{{ t('share.none') }}</p>
 
     <ul v-else class="share-list">
       <template v-for="section in sections" :key="section.key">
@@ -361,8 +351,9 @@ function fmtDate(d: Date): string {
       :memory-name="nodeName"
       :edit-share="editShare"
       :reissue-from="reissueFrom"
-      :uploader="uploader"
+      :view="view"
       :contribute="contribute"
+      :upload="upload"
       :chapter="isChapter"
       @saved="onSaved"
       @close="onDialogClose"
