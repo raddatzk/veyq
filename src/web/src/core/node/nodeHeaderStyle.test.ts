@@ -147,10 +147,13 @@ describe('node header styles', () => {
     expect(rule('.veyq-node-header.is-compact .veyq-node-header-cover-hint-label,\n.veyq-node-header-visual-button:not(.is-roomy) .veyq-node-header-cover-hint-label', css)).toMatch(/display:\s*none/)
   })
 
-  it('on a folder level the header\'s action buttons and the toolbar\'s controls are one height', () => {
-    expect(rule('.veyq-level-head', css)).toMatch(/--veyq-level-control-height:\s*2\.25rem/)
+  it('on a folder level the header\'s action buttons, "New" and the tools row\'s controls are one height', () => {
+    expect(rule('.veyq-level-head,\n.veyq-level-tools', css)).toMatch(/--veyq-level-control-height:\s*2\.25rem/)
     expect(rule('.veyq-level-head .veyq-node-header-actions .veyq-button', css)).toMatch(/height:\s*var\(--veyq-level-control-height\)/)
-    expect(rule('.veyq-level-toolbar > .veyq-button', css)).toMatch(/height:\s*var\(--veyq-level-control-height\)/)
+    expect(rule('.veyq-level-new > .veyq-button', css)).toMatch(/height:\s*var\(--veyq-level-control-height\)/)
+    // the tools' icon buttons are squares of that height
+    const tool = rule('.veyq-level-toolbar > .veyq-button', css)
+    for (const prop of ['width', 'min-width', 'height']) expect(tool, prop).toMatch(new RegExp(`(^|[\\s;])${prop}:\\s*var\\(--veyq-level-control-height\\)`))
     const toggle = readFileSync(new URL('./ViewModeToggle.vue', import.meta.url), 'utf8')
     expect(toggle).toMatch(/height:\s*var\(--veyq-level-control-height, auto\)/)
   })

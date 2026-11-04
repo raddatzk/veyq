@@ -113,7 +113,17 @@ big cover are date, place and participants*; *and on a desktop the title and the
   gets a visual as tall as the name, and every kind that takes a cover shows the empty frame without one - the look
   Memories drew before decision 10, generalised. What a detail contributes reaches the header one render after the detail
   mounts (the same frame in a browser; a unit test waits a tick).
-- On a folder level the header's action buttons and the toolbar's controls share one height, so in one row they line up.
+- On a folder level the header's action buttons, "New" and the tools row's controls share one height, so they line up.
+  The head's row holds the header and "New" alone (owner 2026-11-04); the measured fit above is unchanged by it. Right
+  under it ONE tools row holds the application tabs on the left and, on the right, Select and the space's trash as icon
+  buttons (their words the accessible name and the tooltip) and the view switch; without tabs the tools alone, with
+  nothing of either no row.
+- The level rows keep their split (two `first` buttons, the rest one ⋯ menu) and draw it quietly (owner 2026-11-04):
+  heart and ⋯ are icon buttons without a frame at the layer's icon-button size. A row is a line of the list's one
+  surface, led by the compact header's 16:9 thumbnail (4 × 2.25 rem); in the grid a folder is a compact tile (the row's
+  layout in a frame) and the folders form one group above the flat tiles of every other node, whose actions sit over the
+  cover's top-right corner (a compact tile's over its row's end where a pointer hovers) - shown on hover and on focus within by opacity alone, so they stay in the Tab order, and always
+  where nothing hovers.
 - **Rejected — the application declaring its visual's row count:** core already knows which rows it draws; a declared
   number drifts from what is drawn.
 - **Rejected — measuring the body's height for the visual:** the layout answer reads the visual's wide width, and a

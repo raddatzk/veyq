@@ -182,14 +182,16 @@ const describeFocus = (page: Page, n: number) =>
     if (!el || el === document.body || !el.closest('.veyq-level-view')) return null
     el.setAttribute('data-e2e-stop', String(n))
     const zone = el.closest('.veyq-level-toolbar')
-      ? 'toolbar'
+      ? 'tools'
       : el.closest('.veyq-node-header')
         ? 'header'
-        : el.closest('.veyq-level-tabs')
-          ? 'tabs'
-          : el.closest('.veyq-level-item')
-            ? 'list'
-            : 'other'
+        : el.closest('.veyq-level-new')
+          ? 'new'
+          : el.closest('.veyq-level-tabs')
+            ? 'tabs'
+            : el.closest('.veyq-level-item')
+              ? 'list'
+              : 'other'
     const item = el.closest('.veyq-level-item')
     return {
       zone,
@@ -491,10 +493,10 @@ test(
       await expect(unsupported.locator('.veyq-level-item-meta')).toHaveText(`${LATER_KIND} · This client cannot open this kind of item.`)
       await expect(unsupported.getByRole('button')).toHaveCount(0)
       await expect(page.getByRole('button', { name: laterFolder, exact: true })).toHaveCount(0)
-      // Its look: dimmed, the row's own frame kept (`ui.css` `.veyq-level-item.is-unsupported`).
-      expect(await styleOf(unsupported, ['opacity', 'background-color'])).toEqual({
-        opacity: '0.85',
-        'background-color': await probe(page, 'background-color: var(--app-surface)', 'background-color'),
+      // Its look: dimmed (`ui.css` `.veyq-level-item.is-unsupported`), a flat tile like every other, its visual the quiet frame.
+      expect(await styleOf(unsupported, ['opacity', 'background-color'])).toEqual({ opacity: '0.85', 'background-color': 'rgba(0, 0, 0, 0)' })
+      expect(await styleOf(unsupported.locator('.veyq-level-item-visual'), ['background-color'])).toEqual({
+        'background-color': await probe(page, 'background-color: var(--app-surface-muted)', 'background-color'),
       })
     } finally {
       await page.evaluate((flag) => sessionStorage.removeItem(flag), LATER_FLAG)
@@ -508,7 +510,7 @@ test(
 // --- 2. focus, keyboard and tab order --------------------------------------------------------------------------------
 
 test(
-  "Tab walks the level's header, toolbar, tabs and rows in order, Shift+Tab walks back, and the keys work each part",
+  "Tab walks the level's header, New, tabs, tools and rows in order, Shift+Tab walks back, and the keys work each part",
   { tag: ['@uc.memory.browse:application-tabs', '@uc.memory.browse:view-modes'] },
   async () => {
     const { page } = member
@@ -518,15 +520,18 @@ test(
     await page.locator('.veyq-level-head .veyq-node-header button').first().focus()
     const stops = await tabStops(page)
 
-    // Every stop belongs to a part of the level, and the parts come in the component's order.
-    const rank: Record<string, number> = { header: 0, toolbar: 1, tabs: 2, list: 3 }
-    expect(stops.filter((s) => !(s.zone in rank)), 'no stop outside the four parts').toEqual([])
+    // Every stop belongs to a part of the level, and the parts come in the component's order: the head's row (the header,
+    // then "New"), then the tools row (the tabs on its left, the tools on its right), then the rows (owner 2026-11-04).
+    const rank: Record<string, number> = { header: 0, new: 1, tabs: 2, tools: 3, list: 4 }
+    expect(stops.filter((s) => !(s.zone in rank)), 'no stop outside the five parts').toEqual([])
     const ranks = stops.map((s) => rank[s.zone])
-    expect(ranks, 'header, then toolbar, then tabs, then rows').toEqual([...ranks].sort((a, b) => a - b))
+    expect(ranks, 'header, then New, then tabs, then tools, then rows').toEqual([...ranks].sort((a, b) => a - b))
 
-    const toolbar = stops.filter((s) => s.zone === 'toolbar').map((s) => s.label)
-    expect(toolbar.slice(0, 3)).toEqual(['New', 'Trash', 'Select'])
-    expect(toolbar).toEqual(expect.arrayContaining(['Grid view', 'List view']))
+    expect(stops.filter((s) => s.zone === 'new').map((s) => s.label)).toEqual(['New'])
+    // Select and the trash are icon buttons: their words are their accessible names.
+    const tools = stops.filter((s) => s.zone === 'tools').map((s) => s.label)
+    expect(tools.slice(0, 2)).toEqual(['Select', 'Trash'])
+    expect(tools).toEqual(expect.arrayContaining(['Grid view', 'List view']))
     expect(stops.filter((s) => s.zone === 'header').length, 'the folder header has its actions').toBeGreaterThan(0)
     // The tab bar is ONE stop: the selected tab (the arrow keys move inside it).
     expect(stops.filter((s) => s.zone === 'tabs').map(({ label, role, selected }) => ({ label, role, selected }))).toEqual([
@@ -548,12 +553,16 @@ test(
     expect(rows.indexOf(blockingFolder), 'a folder comes before the files').toBeLessThan(rows.indexOf(trayFiles[0].name))
     expect(rows.indexOf(blockingFolder)).toBeGreaterThanOrEqual(0)
 
-    // Shift+Tab walks back one stop: out of the first row into the tab bar, out of the tab bar into the toolbar.
+    // Shift+Tab walks back one stop: out of the first row into the tools, out of the first tool into the tab bar, out of the
+    // tab bar onto "New".
     const firstTab = stops.findIndex((s) => s.zone === 'tabs')
+    const firstTool = stops.findIndex((s) => s.zone === 'tools')
     const firstRow = listStops[0].i
-    expect(await shiftTabFrom(page, firstRow)).toBe(firstTab)
+    expect(await shiftTabFrom(page, firstRow)).toBe(firstRow - 1)
+    expect(stops[firstRow - 1].zone).toBe('tools')
+    expect(await shiftTabFrom(page, firstTool)).toBe(firstTab)
     expect(await shiftTabFrom(page, firstTab)).toBe(firstTab - 1)
-    expect(stops[firstTab - 1].zone).toBe('toolbar')
+    expect(stops[firstTab - 1].zone).toBe('new')
 
     // The arrow keys move between the tabs, and a focused tab is the shown one; back to All.
     await page.locator(`[data-e2e-stop="${firstTab}"]`).focus()
@@ -641,24 +650,30 @@ test(
       expect(await styleOf(page.locator('.veyq-level-list'), ['display', 'list-style-type', 'padding-left', 'margin-top'])).toEqual({
         display: 'grid', 'list-style-type': 'none', 'padding-left': '0px', 'margin-top': '0px',
       })
-      // The toolbar: one right-aligned row.
+      // The tools: one right-aligned group at the end of the tools row, which carries the one hairline under the tabs.
       expect(await styleOf(page.locator('.veyq-level-toolbar'), ['display', 'justify-content'])).toEqual({
         display: 'flex', 'justify-content': 'flex-end',
       })
-
-      // A file's tile: the item's surface, corner and shadow; its visual the accent tile; its title and meta line.
-      const file = fileItem(page, trayFiles[0].name)
-      const fileStyle = await styleOf(file, ['background-color', 'color', 'border-top-left-radius', 'box-shadow'])
-      expect(fileStyle).toEqual({
-        ...(await tokens({ 'background-color': 'background-color: var(--app-surface)', color: 'color: var(--app-text)' })),
-        'border-top-left-radius': '12px',
-        'box-shadow': await probe(page, 'box-shadow: var(--app-shadow-card)', 'box-shadow'),
+      expect(await styleOf(page.locator('.veyq-level-tools'), ['display', 'border-bottom-style'])).toEqual({
+        display: 'flex', 'border-bottom-style': 'solid',
       })
-      surfaces.push(fileStyle['background-color'])
-      expect(await styleOf(file.locator('.veyq-level-item-visual'), ['background-color', 'color', 'aspect-ratio'])).toEqual({
-        ...(await tokens({ 'background-color': 'background-color: var(--app-accent-soft)', color: 'color: var(--app-accent)' })),
+
+      // A file's tile: flat (no surface, frame or shadow of its own); its visual the quiet 16:9 frame; its title and meta line;
+      // its actions over the cover's top-right corner (owner 2026-11-04).
+      const file = fileItem(page, trayFiles[0].name)
+      expect(await styleOf(file, ['background-color', 'color', 'box-shadow', 'border-top-style'])).toEqual({
+        'background-color': 'rgba(0, 0, 0, 0)',
+        color: await probe(page, 'color: var(--app-text)', 'color'),
+        'box-shadow': 'none',
+        'border-top-style': 'none',
+      })
+      expect(await styleOf(file.locator('.veyq-level-item-actions'), ['position'])).toEqual({ position: 'absolute' })
+      const fileVisual = await styleOf(file.locator('.veyq-level-item-visual'), ['background-color', 'color', 'aspect-ratio'])
+      expect(fileVisual).toEqual({
+        ...(await tokens({ 'background-color': 'background-color: var(--app-surface-muted)', color: 'color: var(--app-accent)' })),
         'aspect-ratio': '16 / 9',
       })
+      surfaces.push(fileVisual['background-color'])
       expect(await styleOf(file.locator('.veyq-level-item-title'), ['font-weight', 'color', 'white-space'])).toEqual({
         'font-weight': '700', color: await probe(page, 'color: var(--app-text)', 'color'), 'white-space': 'nowrap',
       })
@@ -666,12 +681,16 @@ test(
         await tokens({ color: 'color: var(--app-muted)', 'font-size': 'font-size: 0.85rem' }),
       )
 
-      // A folder's tile: the info tile instead of the accent one.
+      // A folder's tile: compact - the quiet frame, the 4 x 2.25 rem thumbnail on the info tint (its actions over its row's
+      // end on hover).
       const folderItem = page.locator('li.veyq-level-item.is-folder').filter({
         has: page.getByRole('button', { name: blockingFolder, exact: true }),
       })
-      expect(await styleOf(folderItem.locator('.veyq-level-item-visual'), ['background-color', 'color'])).toEqual(
-        await tokens({ 'background-color': 'background-color: var(--app-info-soft)', color: 'color: var(--app-info-text)' }),
+      await expect(folderItem).toHaveClass(/\bis-compact\b/)
+      expect(await styleOf(folderItem.locator('.veyq-level-item-visual'), ['background-color', 'color', 'width', 'height'])).toEqual(
+        await tokens({
+          'background-color': 'background-color: var(--app-info-soft)', color: 'color: var(--app-info-text)', width: 'width: 4rem', height: 'height: 2.25rem',
+        }),
       )
 
       // The folder header's empty cover frame (a folder takes a cover; its dark twin in `dark.css` says the same tokens): 16:9,
@@ -685,17 +704,21 @@ test(
       expect(Number.parseFloat(box.width), 'its width').toBeCloseTo(compact ? 64 : (42 * 16) / 9, 1)
       expect(Number.parseFloat(box.height), 'its height').toBeCloseTo(compact ? 36 : 42, 1)
 
-      // The list mode: one column, the visual a 6.5 × 4 rem tile at this width; then back to the grid.
+      // The list mode: one surface in one frame, the visual the compact header's 4 × 2.25 rem thumbnail; then back to the grid.
       const toolbar = page.locator('.veyq-level-toolbar')
       await toolbar.getByRole('button', { name: 'List view', exact: true }).click()
       await expect(page.locator('.veyq-level-list')).toHaveClass(/\bis-list\b/)
+      expect(await styleOf(page.locator('.veyq-level-list'), ['background-color', 'border-top-style'])).toEqual({
+        ...(await tokens({ 'background-color': 'background-color: var(--app-surface)' })),
+        'border-top-style': 'solid',
+      })
       expect(await styleOf(file.locator('.veyq-level-item-visual'), ['width', 'height'])).toEqual(
-        await tokens({ width: 'width: 6.5rem', height: 'height: 4rem' }),
+        await tokens({ width: 'width: 4rem', height: 'height: 2.25rem' }),
       )
       await toolbar.getByRole('button', { name: 'Grid view', exact: true }).click()
       await expect(page.locator('.veyq-level-list')).not.toHaveClass(/\bis-list\b/)
     }
-    expect(surfaces[1], 'the dark theme gives the item another surface').not.toBe(surfaces[0])
+    expect(surfaces[1], 'the dark theme gives the item\'s frame another surface').not.toBe(surfaces[0])
     await page.emulateMedia({ colorScheme: 'light' })
   },
 )

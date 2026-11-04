@@ -35,6 +35,7 @@ div.veyq-node-host
                     path
                     path
                     path
+    div.veyq-level-tools
       div.veyq-level-toolbar
         div.view-mode-toggle [role="group"] [aria-label="View"]
           button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
@@ -57,7 +58,7 @@ div.veyq-node-host
                 path
                 path
     ul.veyq-level-list
-      li.is-folder.is-grid.veyq-level-item
+      li.is-compact.is-folder.is-grid.veyq-level-item
         button.veyq-level-item-main [aria-label="Rome"]
           span.veyq-level-item-visual
             span.veyq-icon.veyq-level-item-icon
@@ -69,11 +70,11 @@ div.veyq-node-host
             small.veyq-level-item-meta
               "Folder"
         span.veyq-level-item-actions
-          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
             span.veyq-button__icon.veyq-icon
               svg.lucide.lucide-heart.veyq-icon__svg
                 path
-          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Rome”"]
+          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Rome”"]
             span.veyq-button__icon.veyq-icon
               svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
                 circle
@@ -101,11 +102,11 @@ div.veyq-node-host
               span.veyq-level-item-detail
                 "p-1"
         span.veyq-level-item-actions
-          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
             span.veyq-button__icon.veyq-icon
               svg.lucide.lucide-heart.veyq-icon__svg
                 path
-          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Italy”"]
+          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Italy”"]
             span.veyq-button__icon.veyq-icon
               svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
                 circle

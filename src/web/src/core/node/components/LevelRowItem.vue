@@ -12,9 +12,16 @@
 //
 // The visual is hidden from assistive technology: an item is named by its title (the primary button's `aria-label`).
 //
+// The look (owner 2026-11-04, `styles/ui.css`): a ROW is a line of the list's one surface - a 16:9 thumbnail (the compact
+// header's 4 x 2.25 rem), the name and meta line, the actions at its end. A folder's TILE is compact (`is-compact`): the row's
+// layout in a quiet frame, so the level's folders form a short group above the other tiles. Every other TILE is flat: the
+// 16:9 cover, the name and meta line under it, and the actions over the cover's top-right corner (a compact tile's over its
+// row's end where a pointer hovers) - a tile's shown on hover and while focus is inside (opacity only, so they stay in the
+// Tab order), always where nothing hovers. The actions are quiet icon buttons (no frame) at the layer's icon-button size.
+//
 // In the level's Select mode (inbox #421) the item carries a real `<input type="checkbox">` named by the node's title, drawn
-// over the visual's corner as a media tile's (`selected` is then a boolean; omitted: no checkbox). The primary click still
-// opens the node: selecting is the checkbox's alone.
+// over the visual's corner as a media tile's (`selected` is then a boolean; omitted: no checkbox; on a tile the cover's
+// top-left corner, opposite the actions). The primary click still opens the node: selecting is the checkbox's alone.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -34,7 +41,7 @@ const props = withDefaults(
     kind?: string
     /** Core's actions next to the application's (see the header). */
     coreActions?: readonly CoreRowAction[]
-    /** A folder's tint. */
+    /** A folder: its tint, and in the grid the compact tile. */
     folder?: boolean
     /** A kind this client cannot show: not clickable, says so. */
     unsupported?: boolean
@@ -54,13 +61,15 @@ const split = computed(() => splitRowActions(mergeRowActions(props.coreActions, 
 const menu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([split.value.menu, split.value.menuOnly], 'veyq-row'))
 const hasMenu = computed(() => split.value.menu.length + split.value.menuOnly.length > 0)
+// A folder's tile is compact: the level's folders come first (`levelList.ts`), so they read as one short group above the tiles.
+const compact = computed(() => props.mode === 'grid' && props.folder)
 const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.severity === 'danger' ? 'danger' : a.severity === 'primary' ? 'primary' : 'secondary')
 </script>
 
 <template>
   <li
     class="veyq-level-item"
-    :class="[`is-${mode}`, { 'has-cover': !!row.leading, 'is-folder': folder, 'is-unsupported': unsupported, 'is-selected': selected === true }]"
+    :class="[`is-${mode}`, { 'is-compact': compact, 'has-cover': !!row.leading, 'is-folder': folder, 'is-unsupported': unsupported, 'is-selected': selected === true }]"
     :data-kind="kind"
   >
     <label v-if="selected !== undefined" class="veyq-level-item-check" :class="{ 'is-on': selected }">
@@ -106,7 +115,7 @@ const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.
           :aria-label="a.label"
           :aria-pressed="a.pressed === undefined ? undefined : a.pressed"
           :variant="variantOf(a)"
-          appearance="outlined"
+          appearance="text"
           size="small"
           :loading="a.loading"
           :disabled="a.disabled"
@@ -121,7 +130,7 @@ const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.
             :aria-label="t('node.rowMore', { name: row.title })"
             aria-haspopup="menu"
             variant="secondary"
-            appearance="outlined"
+            appearance="text"
             size="small"
             @click="menu?.toggle($event)"
           />

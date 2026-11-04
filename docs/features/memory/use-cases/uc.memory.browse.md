@@ -25,20 +25,20 @@
    the tree from the opaque rows (`id`, `parentId`, `kind`).
 3. The **shell** renders: a sidebar (the personal space + profile menu), a **breadcrumb** built
    **client-side** from the local tree (the blind server cannot compute it), and a content area showing the
-   **current level**. A toolbar **display toggle** picks how that level is shown — **grid** (cards, the
+   **current level**. A **display toggle** at the right end of the level's tools row picks how that level is shown — **grid** (cards, the
    default), **list** (a compact list), or **map** ("Karte": the level's located Memories/Chapters plotted as
    pins, [uc.memory.place](uc.memory.place.md)) — one **app-wide, persisted** preference. In grid/list the
    child **folders** and **Memories** render with a *create* card each; in map the subtree's located nodes
    render as clickable pins (folders are navigated from grid/list). Where the level shows two or more
-   application sections (Memories, Depot, drop boxes), a **tab bar** `All | Memories | Depot | …` sits under the
-   folder's card ([Application tabs](#application-tabs-a-facet-of-browsing)).
+   application sections (Memories, Depot, drop boxes), a **tab bar** `All | Memories | Depot | …` sits on the left of
+   that tools row, right under the folder's header ([Application tabs](#application-tabs-a-facet-of-browsing)).
 4. **Navigate:** clicking a folder drills into it (new level + breadcrumb); clicking a Memory opens it (its
    detail view, [uc.memory.gallery](uc.memory.gallery.md)). The breadcrumb walks back up the local tree.
 5. **Organize:** *create folder* / *create Memory* seal the name (under a field key derived from the parent's key) + blinded slug (under the parent's key) (`K_SC` at
    the scope root, the folder's key inside one) and POST only ciphertext (every node, a folder too, births its random
    key wrapped under the same parent key — ADR 0080); *rename* re-seals the name + recomputes the slug under it; *delete* takes the node and its whole subtree into the space's recoverable trash
    ([uc.memory.delete-node](uc.memory.delete-node.md)). All via [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md).
-6. **Select** (owner decisions 2026-10-14, inbox #421): **Select** in the level's toolbar, beside "New" and the trash,
+6. **Select** (owner decisions 2026-10-14, inbox #421): **Select** in the level's tools row, an icon button beside the trash,
    turns on a selection mode: each row gets a labelled checkbox (a row's own click still opens it), the bar offers
    **All** / **None**, a count (announced to a screen reader) and the actions **Move to…** and **Delete**, and leaving
    the mode or the level clears it. The selection belongs to the level, not to a tab: switching tabs keeps it, "All"
@@ -116,7 +116,7 @@
   whose link was revoked, expired or deleted meets the same non-enumerable `404` as ever and the page shows its
   unavailable state. A Memory's own gallery has its own poll ([uc.memory.live-updates](uc.memory.live-updates.md)).
 - **Display modes are a facet of browsing.** How the current level is shown — **grid / list / map** — is one
-  persisted toggle per user of the browser (`useViewMode`, keyed like the tab: per account, one for the share guest; core's `ViewModeToggle` in the level view's toolbar, the map offered
+  persisted toggle per user of the browser (`useViewMode`, keyed like the tab: per account, one for the share guest; core's `ViewModeToggle` in the level view's tools row, the map offered
   because Memories' section names it among its `views` — inbox #370), not a separate goal: grid/list shipped with
   cr-0063, the map view with cr-0071. The **map** stays operator-blind — it plots each node's sealed
   `location` unsealed on device from what `listNodes` already returns, behind the personal tiles opt-in (ADR
