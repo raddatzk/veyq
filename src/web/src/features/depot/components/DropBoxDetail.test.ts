@@ -126,11 +126,11 @@ describe('DropBoxDetail', () => {
   it('hands the move of a guest\'s folder out, and of the drop box, to the host', async () => {
     const w = mountDetail()
     await w.find(`button[aria-label="${t('depot.dropBox.moveFolder', { name: 'Anna (2)' })}"]`).trigger('click')
-    await w.find(`.veyq-node-header button[aria-label="${t('node.move.action')}"]`).trigger('click')
+    await chooseHeaderEntry(w, 'move')
     expect(w.calls.move).toEqual([[ANNA_2], [BOX]])
   })
 
-  it('a drop box\'s header in its priority (ADR 0110): favorite, share, download, cover, move, copy; delete in the ⋯', async () => {
+  it('a drop box\'s header in its priority (ADR 0110): favorite, share, download; move, copy, delete in the ⋯ - no rename, no cover entry', async () => {
     const epochs = epochsOf(new Uint8Array(32).fill(4))
     const w = mountNodePage(DropBoxDetail, {
       props: {
@@ -140,8 +140,11 @@ describe('DropBoxDetail', () => {
       global: { plugins: [realI18n()] },
     })
     await flushPromises()
-    expect(headerButtonIds(w)).toEqual(['favorite', 'share', 'download', 'cover', 'move', 'copy'])
-    expect(await headerMenuIds(w)).toEqual(['delete'])
+    expect(headerButtonIds(w)).toEqual(['favorite', 'share', 'download'])
+    expect(await headerMenuIds(w)).toEqual(['move', 'copy', 'delete'])
+    // A drop box is never renamed here: its name is plain text.
+    expect(w.find('h1.veyq-node-header-title').text()).toBe(BOX.name)
+    expect(w.find('button[data-testid="node-header-rename"]').exists()).toBe(false)
   })
 
   it('opens a folder, and hands share and delete of the drop box to the host', async () => {
@@ -213,25 +216,23 @@ describe('DropBoxDetail - its cover', () => {
     Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:box-cover'), revokeObjectURL: vi.fn() })
   })
 
-  it('a writer with the keys has Set cover in the header; with a cover, Change (and no separate Remove); the inbox icon without one', async () => {
+  it('a writer with the keys sets the cover from the header\'s visual: the empty frame with the inbox icon says Set, a cover Change; no action', async () => {
     const plain = mountWith(BOX)
     await flushPromises()
-    expect(plain.find('.veyq-node-header-actions button[data-action="cover"]').attributes('aria-label')).toBe(t('node.cover.set'))
-    expect(plain.find('.veyq-node-header-actions button[data-action="cover-remove"]').exists()).toBe(false)
-    // The leading visual is core's (the kind's `cover`): the icon tile, a button that sets the cover where the writer may.
-    const tile = plain.get('.veyq-node-header-leading button.veyq-node-header-icon')
-    expect(tile.attributes('aria-label')).toBe(t('node.cover.set'))
-    expect(tile.findComponent(VeyqIcon).props('name')).toBe('inbox')
+    expect(plain.find('.veyq-node-header-actions [data-action^="cover"]').exists()).toBe(false)
+    // The leading visual is core's (the kind's `cover`): the empty frame, a button that sets the cover where the writer may.
+    const frame = plain.get('.veyq-node-header-leading button.veyq-node-header-cover.is-empty')
+    expect(frame.attributes('aria-label')).toBe(t('node.cover.set'))
+    expect(frame.findComponent(VeyqIcon).props('name')).toBe('inbox')
 
     const covered = mountWith(withCover())
     await flushPromises()
     await vi.waitFor(() => expect(covered.find('.veyq-node-header-cover img').attributes('src')).toBe('blob:box-cover'))
     expect(covered.get('.veyq-node-header-leading button.veyq-node-header-cover').attributes('aria-label')).toBe(t('node.cover.change'))
-    expect(covered.find('button[data-action="cover"]').attributes('aria-label')).toBe(t('node.cover.change'))
-    expect(covered.find('button[data-action="cover-remove"]').exists(), 'removal lives in the dialog').toBe(false)
+    expect(covered.find('[data-action^="cover"]').exists(), 'no header action: the visual is the way in, removal in its dialog').toBe(false)
   })
 
-  it('the cover itself, clicked, opens the same dialog as the header action', async () => {
+  it('the cover itself, clicked, opens core\'s cover dialog', async () => {
     const covered = mountWith(withCover())
     await flushPromises()
     await vi.waitFor(() => expect(covered.find('.veyq-node-header-cover img').exists()).toBe(true))
@@ -242,10 +243,10 @@ describe('DropBoxDetail - its cover', () => {
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).toBeNull())
   })
 
-  it('the header action, clicked, opens core\'s cover dialog - Remove inside it only where the box has a cover', async () => {
+  it('the header\'s visual, clicked, opens core\'s cover dialog - Remove inside it only where the box has a cover', async () => {
     const plain = mountWith(BOX)
     await flushPromises()
-    await plain.find('.veyq-node-header-actions button[data-action="cover"]').trigger('click')
+    await plain.get('.veyq-node-header-leading button[data-testid="node-header-cover"]').trigger('click')
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
     const buttons = () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].map((b) => b.textContent?.trim())
     expect(buttons()).toContain(t('node.cover.choose'))
@@ -255,7 +256,7 @@ describe('DropBoxDetail - its cover', () => {
 
     const covered = mountWith(withCover())
     await flushPromises()
-    await covered.find('.veyq-node-header-actions button[data-action="cover"]').trigger('click')
+    await covered.get('.veyq-node-header-leading button[data-testid="node-header-cover"]').trigger('click')
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
     expect(buttons()).toContain(t('node.cover.remove'))
     expect(document.body.querySelector('[role="dialog"]')!.textContent, 'no application hint on a drop box').not.toContain('gallery')

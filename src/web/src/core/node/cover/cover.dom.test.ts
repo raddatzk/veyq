@@ -2,8 +2,8 @@
 // A node's cover in a level, by real clicks and a real DOM (inbox #411): core's real `LevelView` with the real registry as
 // `main.ts` fills it (Memories' and Depot's real row factories), a folder, a Memory, a file and a drop box in one level.
 //
-// Pinned here: the ONE action - `Set cover` / `Change cover`, core's, in the row's menu and in the header; removal lives in the
-// dialog it opens - is offered exactly where the rights function says (a writer, on the kinds that opted in; never a file,
+// Pinned here: the ONE action - `Set cover` / `Change cover`, core's, in the row's menu, and in the header the leading visual
+// itself (no header action, ADR 0110 decision 11); removal lives in the dialog it opens - is offered exactly where the rights function says (a writer, on the kinds that opted in; never a file,
 // never a guest, never a pending deletion, never while the keys are locked), and a click opens core's dialog, whose Save runs
 // core's flow (the derive and upload, ONE write with the meta, the crop it was framed with); the cover is the leading visual
 // of the row, the tile and the header, the kind's icon the fallback when it is missing or fails to open; and a share guest sees
@@ -29,7 +29,6 @@ vi.mock('./coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCove
 vi.mock('../../../features/memories/storedMatch', async (orig) => ({ ...(await orig<object>()), findStoredCover: vi.fn() }))
 
 import LevelView from '../LevelView.vue'
-import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { childrenOf } from '../browse'
 import { FOLDER_KIND } from '../kind'
@@ -81,6 +80,8 @@ function mountLevel(folder: TreeNode | null, o: { access?: ReturnType<typeof mem
   })
 }
 const headerAction = (w: VueWrapper, action: string) => w.find(`.veyq-node-header-actions [data-action="${action}"]`)
+/** The header's way to the cover: its leading visual, a button where the cover may be set. */
+const headerCover = (w: VueWrapper) => w.find('.veyq-node-header-leading button[data-testid="node-header-cover"]')
 /** The icon name a `VeyqIcon` inside `el` draws (null: none). */
 const iconIn = (el: ReturnType<VueWrapper['find']>) => {
   const icon = el.findComponent(VeyqIcon)
@@ -141,10 +142,12 @@ describe('who is offered the cover action, and on which kinds (rights matrix, fa
     for (const title of ['Sub', 'Rome', 'Inbox']) expect(await actionIdsOf(w, title), title).toContain('cover')
     expect(await actionIdsOf(w, 'Plan.pdf')).not.toContain('cover')
     expect(await actionLabel(w, 'Sub', 'cover')).toBe(t('node.cover.set'))
-    expect(headerAction(w, 'cover').attributes('aria-label')).toBe(t('node.cover.set')) // the folder on screen: in its header too
+    // The folder on screen: its header's leading visual is the way in, no action of its own.
+    expect(headerCover(w).attributes('aria-label')).toBe(t('node.cover.set'))
+    expect(headerAction(w, 'cover').exists()).toBe(false)
   })
 
-  it('it is ONE entry: the row menu and the header carry a single cover action each, and no separate Remove', async () => {
+  it('it is ONE entry: the row menu carries a single cover action, the header none (its visual), and no separate Remove', async () => {
     TREE = [TRIPS, ROME, PLAN, BOX, node(5, FOLDER_KIND, 'Sub', TRIPS.id, sealCover(id(5), 'b-5'))]
     const w = mountLevel(node(1, FOLDER_KIND, 'Trips', null, sealCover(id(1), 'b-1')))
     await flushPromises()
@@ -152,15 +155,17 @@ describe('who is offered the cover action, and on which kinds (rights matrix, fa
       const ids = (await actionIdsOf(w, title)).filter((a) => a.startsWith('cover'))
       expect(ids, title).toEqual(['cover'])
     }
-    expect(w.findAll('.veyq-node-header-actions [data-action^="cover"]').map((b) => b.attributes('data-action'))).toEqual(['cover'])
+    expect(headerCover(w).attributes('aria-label'), 'control: the header offers the cover').toBe(t('node.cover.change'))
+    expect(w.findAll('.veyq-node-header-actions [data-action^="cover"]')).toHaveLength(0)
     expect(w.find('[data-action="cover-remove"]').exists()).toBe(false)
   })
 
-  it('the action and the icon are one image icon, not two look-alikes', async () => {
+  it('the header\'s cover hint is the image icon over the empty frame, which shows the kind\'s own icon', async () => {
     const w = mountLevel(TRIPS)
     await flushPromises()
-    const action = headerAction(w, 'cover')
-    expect(w.findAllComponents(VeyqButton).find((b) => b.element === action.element)!.props('icon')).toBe('image')
+    const cover = headerCover(w)
+    expect(iconIn(cover.find('.veyq-node-header-cover-hint'))).toBe('image')
+    expect(cover.findAllComponents(VeyqIcon).map((i: { props: (key: 'name') => unknown }) => i.props('name'))).toEqual(['folder', 'image'])
   })
 
   it('a node that has a cover says Change; one without says Set', async () => {
@@ -178,6 +183,8 @@ describe('who is offered the cover action, and on which kinds (rights matrix, fa
     const w = mountLevel(TRIPS, { access: memberAccessOf({ scopeId: SCOPE, epochs: EPOCHS, ...over }) })
     await flushPromises()
     for (const title of ['Sub', 'Rome', 'Inbox']) expect(await actionIdsOf(w, title), title).not.toContain('cover')
+    expect(w.find('.veyq-node-header-leading [data-testid="node-header-cover-frame"]').exists(), 'control: the plain frame').toBe(true)
+    expect(headerCover(w).exists()).toBe(false)
     expect(headerAction(w, 'cover').exists()).toBe(false)
   })
 
@@ -190,6 +197,7 @@ describe('who is offered the cover action, and on which kinds (rights matrix, fa
       expect(ids.filter((a) => a.startsWith('cover')), title).toEqual([])
     }
     expect(headerAction(w, 'cover').exists()).toBe(false)
+    expect(headerCover(w).exists()).toBe(false)
     expect(w.find('[data-action^="cover"]').exists()).toBe(false)
     expect(dialog(), 'no dialog for a guest').toBeNull()
     expect(authenticatedCalls).toEqual([])
@@ -227,7 +235,7 @@ describe('the cover dialog, by a real click: choose, crop, Save - the derive and
   it('the folder on screen sets its cover from its header', async () => {
     const w = mountLevel(TRIPS)
     await flushPromises()
-    await setCoverVia(() => headerAction(w, 'cover').trigger('click'))
+    await setCoverVia(() => headerCover(w).trigger('click'))
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
     expect(vi.mocked(writeNodeCover).mock.calls[0][0]).toMatchObject({ nodeId: TRIPS.id })
   })
@@ -350,7 +358,7 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
     expect(iconIn(visual(w, 'Inbox'))).toBe('inbox')
   })
 
-  it('the folder on screen shows its cover in the header, the folder icon without one', async () => {
+  it('the folder on screen shows its cover in the header; without one the empty frame with the folder icon', async () => {
     const withCover = node(1, FOLDER_KIND, 'Trips', null, sealCover(id(1), 'b-1'))
     TREE = [withCover, ROME, PLAN, BOX, SUB]
     const w = mountLevel(withCover)
@@ -358,7 +366,8 @@ describe('the cover is the leading visual; the icon is the fallback', () => {
     await vi.waitFor(() => expect(w.find('.veyq-node-header-cover img').exists()).toBe(true))
     const plain = mountLevel(TRIPS)
     await flushPromises()
-    expect(plain.find('.veyq-node-header-cover').exists()).toBe(false)
+    expect(plain.find('.veyq-node-header-cover img').exists()).toBe(false)
+    expect(plain.find('.veyq-node-header-cover').classes()).toContain('is-empty')
     expect(iconIn(plain.find('.veyq-node-header-leading'))).toBe('folder')
   })
 

@@ -25,8 +25,7 @@ import { fakeApi, stubApi } from '../../../test/apiMock'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode, memberMemoryRights, guestAccessOf } from '../../../test/models'
-import VeyqButton from '../../../shared/ui/VeyqButton.vue'
-import { headerActionLabels, headerButtonIds, headerMenuIds, mountWithHeader } from '../../../test/nodeHeader'
+import { chooseHeaderEntry, headerActionLabels, headerButtonIds, headerMenuIds, mountWithHeader } from '../../../test/nodeHeader'
 import type { CoreHeaderAction } from '../../../core/node/nodeHeader'
 import { coreActionsStandIn, coverStandIn } from '../../../test/nodePage'
 
@@ -65,9 +64,16 @@ async function seedDated(memoryKey: Uint8Array) {
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, deriver)
 }
 
-async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { personalScope?: boolean; attach?: boolean; coreActions?: CoreHeaderAction[]; canSetCover?: boolean } = {}) {
+async function mountDetail(
+  rights: MemoryRights,
+  kind = MEMORY_KIND,
+  o: { personalScope?: boolean; attach?: boolean; coreActions?: CoreHeaderAction[]; canSetCover?: boolean; renameTo?: (name: string) => Promise<void> } = {},
+) {
   const w = mountWithHeader(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: { epoch: 0, key: v1.randomBytes(32) }, personalScope: o.personalScope ?? false, chapters: [chapter], rights },
+    props: {
+      source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: { epoch: 0, key: v1.randomBytes(32) },
+      personalScope: o.personalScope ?? false, chapters: [chapter], rights, renameTo: o.renameTo ?? null,
+    },
     // Core's page draws the header; core's actions and its cover come from the view around it, a stand-in here.
     global: { plugins: [realI18n()], provide: coreActionsStandIn(o.coreActions ?? [], coverStandIn({ canSet: o.canSetCover ?? false })) },
     ...(o.attach ? { attachTo: document.body } : {}),
@@ -77,7 +83,9 @@ async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { person
   return w
 }
 
-const HEADER = ['media.upload', 'share.share', 'memory.participants.title', 'memory.banner.add', 'node.rename', 'node.move.action', 'node.delete'] as const
+// What is edited at its place has no entry (ADR 0110 decision 11): the name, the cover, the participants (their fact).
+const HEADER = ['media.upload', 'share.share', 'memory.banner.add', 'node.move.action', 'node.delete'] as const
+const EDITED_IN_PLACE = ['node.rename', 'node.cover.set', 'node.cover.change', 'memory.participants.title', 'memory.participants.edit'] as const
 /** The header's actions among {@link HEADER}, a button or a ⋯ menu entry (delete is always the latter, ADR 0110). */
 const header = async (w: Awaited<ReturnType<typeof mountDetail>>) => {
   const offered = await headerActionLabels(w)
@@ -91,15 +99,18 @@ describe('MemoryDetail follows rights', () => {
   it('a Memory\'s header in the owner\'s priority (ADR 0110), core\'s actions by their ids; report and delete in the ⋯', async () => {
     const core = (id: string, over: Partial<CoreHeaderAction> = {}): CoreHeaderAction => ({ id, label: id, icon: 'heart', shown: true, onClick: () => {}, ...over })
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, {
-      coreActions: [core('favorite', { placement: 'before' }), core('cover'), core('copy', { placement: { after: 'move' } }), core('download'), core('report', { menuOnly: true })],
+      coreActions: [core('favorite', { placement: 'before' }), core('copy', { placement: { after: 'move' }, menuOnly: true }), core('download'), core('report', { menuOnly: true })],
     })
-    expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'participants', 'download', 'cover', 'banner', 'rename', 'move', 'copy'])
-    expect(await headerMenuIds(w)).toEqual(['report', 'delete'])
+    expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'download'])
+    // The banner only while none is drawn, the move and copy: ⋯ entries, before report and delete.
+    expect(await headerMenuIds(w)).toEqual(['banner', 'move', 'copy', 'report', 'delete'])
   })
 
   it("a member's rights: every header action, all four tabs, the chapter card, the editable cover/date/place, the marks", async () => {
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, { canSetCover: true })
     expect(await header(w)).toEqual([...HEADER])
+    const offered = await headerActionLabels(w)
+    for (const key of EDITED_IN_PLACE) expect(offered, key).not.toContain(t(key))
     expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.buckets.title'), t('memory.trash.title')])
     expect(w.find('input[type="file"]').exists()).toBe(true)
     expect(w.find('[data-testid="node-header-cover"]').exists(), 'core\'s cover button, where its right says so').toBe(true)
@@ -179,10 +190,11 @@ describe('MemoryDetail follows rights', () => {
         attachTo: document.body,
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
-      const action = w.find(`.veyq-node-header-actions button[aria-label="${t('memory.banner.add')}"]`)
-      expect(action.exists(), `the header's action, setBanner ${setBanner}`).toBe(setBanner)
+      // No banner yet: the ⋯ menu's entry (never a button), the way in while none is drawn.
+      expect(w.find(`.veyq-node-header-actions button[aria-label="${t('memory.banner.add')}"]`).exists()).toBe(false)
+      expect((await headerMenuIds(w)).includes('banner'), `the header's entry, setBanner ${setBanner}`).toBe(setBanner)
       if (setBanner) {
-        await action.trigger('click')
+        await chooseHeaderEntry(w, 'banner')
         await vi.waitFor(() => expect(!!dialog(), 'the dialog').toBe(true))
       }
       w.unmount()
@@ -190,17 +202,17 @@ describe('MemoryDetail follows rights', () => {
     }
   })
 
-  // uc.memory.participants (owner decision 2026-10-14): "Participants" is a header action, a member's alone, and the way into
-  // the picker; the line under the title has no link of its own.
-  it('the "Participants" action is shown for a member on a Memory and opens the picker', async () => {
+  // uc.memory.participants (owner 2026-11-04, ADR 0110 decision 11): the people fact is the way into the picker, a member's
+  // alone - with nobody listed, the empty chip "Add participants"; the header has no "Participants" action.
+  it('the participants\' fact opens the picker for a member on a Memory: the empty chip while nobody is listed', async () => {
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, { attach: true })
-    const action = w.find('.veyq-node-header-actions button[data-action="participants"]')
-    expect(action.attributes('aria-label')).toBe(t('memory.participants.title'))
-    // its own icon: two actions of one bar never share one (inbox #425)
-    expect(w.findAllComponents(VeyqButton).find((b) => b.element === action.element)?.props('icon')).toBe('users')
+    expect(w.find('[data-action="participants"]').exists(), 'no header action').toBe(false)
+    const chip = w.get('.veyq-node-header-facts.is-people button[data-fact="people-edit"]')
+    expect(chip.text()).toBe(t('memory.participants.add'))
+    expect(chip.attributes('aria-label')).toBe(t('memory.participants.edit'))
     const picker = () => document.body.querySelector('.memory-participants-dialog')
     expect(picker(), 'no picker before the click').toBeNull()
-    await action.trigger('click')
+    await chip.trigger('click')
     await flushPromises()
     expect(picker(), 'the picker').not.toBeNull()
     expect(document.body.textContent).toContain(t('memory.participants.dialogTitle'))
@@ -208,20 +220,40 @@ describe('MemoryDetail follows rights', () => {
     document.body.innerHTML = ''
   })
 
-  it('the "Participants" action is absent for every share role, in a personal scope and on a chapter', async () => {
+  it('no way to the picker for any share role, in a personal scope or on a chapter - and no action in its place', async () => {
+    const edit = (w: Awaited<ReturnType<typeof mountDetail>>) => w.find('[data-fact="people-edit"]').exists()
     for (const role of Object.values(ShareRole)) {
       const w = await mountDetail(memoryRights(guestAccessOf(role), { kind: MEMORY_KIND, inIdentityFolder: false, shareable: true }))
+      expect(w.find('h1').text(), `control: ${role}'s header`).toBe('Rom 2026')
+      expect(edit(w), role).toBe(false)
       expect(w.find('[data-action="participants"]').exists(), role).toBe(false)
       w.unmount()
     }
-    // the `participants` gate on its own, with the meta writable: a role that may write the meta still gets no action
+    // the `participants` gate on its own, with the meta writable: a role that may write the meta still gets no way in
     const writerWithout = await mountDetail({ ...memberMemoryRights(), participants: false })
-    expect(await header(writerWithout), 'participants off, editMeta on').not.toContain('memory.participants.title')
+    expect(edit(writerWithout), 'participants off, editMeta on').toBe(false)
     const personal = await mountDetail(memberMemoryRights(), MEMORY_KIND, { personalScope: true })
-    expect(await header(personal), 'personal scope').not.toContain('memory.participants.title')
-    expect(await header(personal), 'control: the rest of the header is there').toContain('node.rename')
+    expect(edit(personal), 'personal scope').toBe(false)
+    expect(await header(personal), 'control: the rest of the header is there').toContain('node.move.action')
     const onChapter = await mountDetail(memberMemoryRights({}, CHAPTER_KIND), CHAPTER_KIND)
-    expect(await header(onChapter), 'chapter').not.toContain('memory.participants.title')
+    expect(edit(onChapter), 'chapter').toBe(false)
+    const member = await mountDetail(memberMemoryRights())
+    expect(edit(member), 'control: a member on a Memory has it').toBe(true)
+  })
+
+  it('the name is renamed in place through the page\'s door, only with the rename right and the door', async () => {
+    const renameTo = vi.fn(async () => {})
+    const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, { renameTo })
+    await w.get('h1 button[data-testid="node-header-rename"]').trigger('click')
+    const field = w.get<HTMLInputElement>('input[data-testid="node-header-name-input"]')
+    await field.setValue('Roma')
+    await field.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(renameTo).toHaveBeenCalledExactlyOnceWith('Roma')
+    const without = await mountDetail({ ...memberMemoryRights(), rename: false }, MEMORY_KIND, { renameTo })
+    expect(without.find('h1').text(), 'control: the name').toBe('Rom 2026')
+    expect(without.find('h1 button').exists()).toBe(false)
+    expect((await mountDetail(memberMemoryRights())).find('h1 button').exists(), 'no door: plain text').toBe(false)
   })
 
   it('a pending deletion: share stays, every write goes', async () => {
@@ -237,7 +269,8 @@ describe('MemoryDetail follows rights', () => {
   // inbox #358: the move is the host's (core's move dialog), asked for through `move`; offered only with rights.move.
   it('Move to… asks the host for core\'s move dialog, and only with move', async () => {
     const w = await mountDetail(memberMemoryRights())
-    await w.find(`.veyq-node-header-actions button[aria-label="${t('node.move.action')}"]`).trigger('click')
+    expect(w.find(`.veyq-node-header-actions button[aria-label="${t('node.move.action')}"]`).exists(), 'a ⋯ entry, never a button').toBe(false)
+    await chooseHeaderEntry(w, 'move')
     expect(w.emitted('move')).toHaveLength(1)
     const only = await mountDetail({ ...NO_MEMORY_RIGHTS, move: true })
     expect(await header(only)).toEqual(['node.move.action'])

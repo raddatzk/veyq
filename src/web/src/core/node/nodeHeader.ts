@@ -62,6 +62,14 @@ export interface NodeHeaderPeopleFact {
   caption?: string
   /** A muted line beside them (loading the names, a read that failed). */
   status?: string
+  /** What edits the people (the application's picker): a button beside them, or - with nobody yet - the empty chip that
+   *  is the way in (`emptyLabel`). Omitted: the people are only shown, and with nobody there is no fact. This is the one way
+   *  to the editor: a header offers no action of its own for what it shows editable in place (ADR 0110 decision 11). */
+  onEdit?: () => void
+  /** The edit button's accessible name and tooltip ("Edit participants"); default `label`. */
+  editLabel?: string
+  /** The chip's words while nobody is listed ("Add participants"); default `editLabel`. */
+  emptyLabel?: string
 }
 
 /** A plain line of text under the name. */
@@ -81,6 +89,15 @@ export interface NodeHeaderBanner {
   props?: Record<string, unknown>
 }
 
+/** The node's name as the header's title edits it in place (ADR 0110 decision 11): a click on the name makes it a field,
+ *  Enter writes, Esc cancels. Given only where whoever looks may rename the node - the rights answer AND the page's door,
+ *  as {@link standardNodeRename} builds it; absent, the name is plain text (a guest, a reader). */
+export interface NodeHeaderRename {
+  /** Write `name` (trimmed, changed, not empty) as the node's new name: the kind's own rename write through the page's door
+   *  (`NodeHost.renameTo`). Rejects with the write's error, which core words under the field (`nodeNameErrorText`). */
+  save: (name: string) => Promise<void>
+}
+
 /** The facts as the header lays them out: consecutive chips share one row, every other fact has a row of its own. */
 export function factRows(facts: readonly NodeHeaderFact[]): NodeHeaderFact[][] {
   const rows: NodeHeaderFact[][] = []
@@ -90,6 +107,29 @@ export function factRows(facts: readonly NodeHeaderFact[]): NodeHeaderFact[][] {
     else rows.push([f])
   }
   return rows
+}
+
+/** How many rows of each kind the header's body draws beside the leading visual, the title row aside (always one): the
+ *  subtitle, the rows of chips, of people and of text ({@link factRows}). The leading visual is exactly as tall as these
+ *  rows and the gaps between them - each kind of row has a fixed block size in `styles/ui.css` (`--veyq-node-header-row-*`),
+ *  and the header hands these counts to that sum as custom properties - so its size is computed from the data, never
+ *  measured, and the layout answer that reads its wide width cannot flip (ADR 0110 decisions 1 and 8). */
+export interface HeaderRowCounts {
+  subtitle: number
+  chips: number
+  people: number
+  text: number
+}
+
+export function headerRowCounts(subtitle: boolean, facts: readonly NodeHeaderFact[]): HeaderRowCounts {
+  const counts: HeaderRowCounts = { subtitle: subtitle ? 1 : 0, chips: 0, people: 0, text: 0 }
+  for (const row of factRows(facts)) {
+    const kind = row[0]!.kind
+    if (kind === 'people') counts.people++
+    else if (kind === 'text') counts.text++
+    else counts.chips++
+  }
+  return counts
 }
 
 /** One button of the header's action row. */
@@ -247,14 +287,18 @@ export interface StandardActionFlags extends Partial<Pick<NodeRights, 'share' | 
 }
 export interface StandardActionHandlers {
   share?: () => void
+  /** Open core's name dialog (a level row's rename). */
   rename?: () => void
+  /** Write a new name in place (the header's name, {@link standardNodeRename}). */
+  renameTo?: (name: string) => Promise<void>
   move?: () => void
   remove?: () => void
 }
 
-/** The share / rename / move / delete actions of a node header from the caller's rights answers: only the granted
- *  ones, in that order. `t` is the caller's translate function (core's neutral words for the labels). */
-export function standardNodeActions(
+/** The share / rename / move / delete actions of a node from the caller's rights answers: only the granted ones, in that
+ *  order. `t` is the caller's translate function (core's neutral words for the labels). A level row offers all four
+ *  (`standardRowActions.ts`); a header {@link standardNodeActions}. */
+export function standardActionList(
   t: (key: string) => string,
   flags: StandardActionFlags,
   on: StandardActionHandlers,
@@ -267,4 +311,22 @@ export function standardNodeActions(
     { id: 'delete', label: flags.deleteLabel ?? t('node.delete'), icon: 'trash', onClick: on.remove ?? noop, severity: 'danger', shown: !!flags.delete },
   ]
   return all.filter((a) => a.shown)
+}
+
+/** A node HEADER's standard actions (ADR 0110 decision 11): share, then move and delete in the ⋯ menu - the move is
+ *  menu-only there, as core's copy beside it. The rename is no action of a header: the name itself is edited in place
+ *  ({@link standardNodeRename}), so a header offers no entry for it, whatever `flags.rename` says. */
+export function standardNodeActions(
+  t: (key: string) => string,
+  flags: StandardActionFlags,
+  on: StandardActionHandlers,
+): NodeHeaderAction[] {
+  return standardActionList(t, { ...flags, rename: false }, on).map((a) => (a.id === 'move' ? { ...a, menuOnly: true } : a))
+}
+
+/** The header's rename in place (ADR 0110 decision 11): where the rights answer grants the rename AND the page has the write
+ *  (`on.renameTo`, from its `renameTo` door), else null - the name is plain text. */
+export function standardNodeRename(flags: Pick<StandardActionFlags, 'rename'>, on: Pick<StandardActionHandlers, 'renameTo'>): NodeHeaderRename | null {
+  const write = on.renameTo
+  return flags.rename && write ? { save: (name) => write(name) } : null
 }

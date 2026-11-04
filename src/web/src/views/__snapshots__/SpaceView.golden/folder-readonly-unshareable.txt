@@ -8,12 +8,13 @@ div.veyq-node-host
     div.has-header.veyq-level-head
       header.has-leading.veyq-node-header
         div.veyq-node-header-leading
-          span.veyq-icon.veyq-node-header-icon
-            svg.lucide.lucide-folder.veyq-icon__svg
-              path
+          span.is-empty.veyq-node-header-cover
+            span.veyq-icon.veyq-node-header-cover-icon
+              svg.lucide.lucide-folder.veyq-icon__svg
+                path
         div.veyq-node-header-body
           div.veyq-node-header-titlerow
-            h1.veyq-node-header-title
+            h1.veyq-node-header-title [aria-label="Trips"]
               "Trips"
             div.veyq-node-header-actions
               button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]

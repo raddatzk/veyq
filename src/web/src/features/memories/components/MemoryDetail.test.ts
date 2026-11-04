@@ -925,7 +925,7 @@ describe('the share action on a chapter', () => {
     await flushPromises()
     expect(wrapper.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
     expect(shareButtons(wrapper)).toHaveLength(0)
-    // control: the header is drawn - its rename is there
-    expect(wrapper.find(`.veyq-node-header-actions button[aria-label="${t('node.rename')}"]`).exists()).toBe(true)
+    // control: the header is drawn - its upload is there (its rename is the name itself, ADR 0110 decision 11)
+    expect(wrapper.find('.veyq-node-header-actions button[data-action="upload"]').exists()).toBe(true)
   })
 })

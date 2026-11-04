@@ -70,7 +70,7 @@ const rows = () => [...document.body.querySelectorAll<HTMLElement>('.memory-part
 /** The layer's checkboxes (ADR 0107): Reka `role="checkbox"` buttons, ticked when `aria-checked` is "true". */
 const boxes = () => [...document.body.querySelectorAll<HTMLButtonElement>('.memory-participants-option button[role="checkbox"].veyq-checkbox')]
 const ticked = (b: Element) => b.getAttribute('aria-checked') === 'true'
-/** What the header's "Participants" action does (`MemoryDetail`): the row's exposed `openPicker`. */
+/** The row's exposed `openPicker` (what the fact's `onEdit` calls). */
 const openPicker = async (w: VueWrapper) => {
   await (w.vm as unknown as { openPicker: () => Promise<void> }).openPicker()
   await flushPromises()
@@ -91,6 +91,10 @@ describe('MemoryParticipants: the people fact core\'s header draws', () => {
         { userId: GONE, name: 'Former member', former: true },
         { userId: B, name: 'Ben', former: false },
       ],
+      // The fact is the way to the picker (ADR 0110 decision 11): no header action of its own.
+      onEdit: expect.any(Function),
+      editLabel: 'Edit participants',
+      emptyLabel: 'Add participants',
     })
     // The row itself draws nothing: no avatars, no names - core's header does.
     expect(w.text()).toBe('')
@@ -110,17 +114,20 @@ describe('MemoryParticipants: the people fact core\'s header draws', () => {
     expect(fact(failed)).toMatchObject({ people: [], status: 'Could not load the members. Please try again.' })
   })
 
-  // Owner decision 2026-10-14: the way in is the header's action, so an empty list offers NO fact - no "nobody yet" text, no
-  // add link - while the picker stays reachable through the action.
-  it('with no participant there is no fact at all, and the picker still opens', async () => {
+  // Owner 2026-11-04 (ADR 0110 decision 11): the fact is the way in, so with nobody listed it is the empty fact core draws as
+  // the chip "Add participants" - and only where the list may be written; its `onEdit` opens the picker.
+  it('with no participant the fact is the empty way in - only where the list may be written - and it opens the picker', async () => {
     const empty = await mountRow()
-    expect(fact(empty)).toBeNull()
-    expect(empty.find('button').exists(), 'a control').toBe(false)
+    expect(fact(empty)).toMatchObject({ kind: 'people', people: [], emptyLabel: 'Add participants', editLabel: 'Edit participants' })
+    expect(fact(empty)?.status, 'no "loading" for nobody').toBeUndefined()
+    expect(empty.find('button').exists(), 'the row draws no control itself').toBe(false)
     expect(people).not.toHaveBeenCalled() // nobody to name, nothing to look up until the picker opens
     expect(canEdit(empty)).toBe(true)
-    await openPicker(empty)
+    fact(empty)!.onEdit!()
+    await flushPromises()
     expect(document.body.querySelector('[data-testid="participants-search"]'), 'the picker').not.toBeNull()
-    expect(fact(await mountRow({ ids: [A] }))).not.toBeNull()
+    // Nobody listed and no right to write: no fact at all.
+    expect(fact(await mountRow({ write: null }))).toBeNull()
   })
 
   it('without the right to write the meta (pending deletion) the people stay and the picker is not offered', async () => {

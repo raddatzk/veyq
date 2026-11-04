@@ -7,24 +7,23 @@
 // (`KindDescriptor.createDialog`). Moved from Memories' former `NodeMutationDialog.vue` with the same markup, labels,
 // validation and error mapping; it reads core's `node.*` keys (and `common.save`) since P4d, values unchanged.
 // Inline slug_taken (409) / illegal_structure (422) errors. Before sending, a name that collides with a sibling in the
-// loaded tree is refused naming that sibling (`siblingCollision.ts`, inbox #389); the 409 stays the race backstop.
+// loaded tree is refused naming that sibling (`siblingCollision.ts`, inbox #389); the 409 stays the race backstop. The
+// check, the rename write and the wording of a refusal are `nodeName.ts`'s, which the header's rename in place shares
+// (ADR 0110 decision 11): one rule for both ways in.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
-import { createFolder, renameNode, type NodeParent, type TreeNode } from './tree'
+import { createFolder, type NodeParent, type TreeNode } from './tree'
 import { treeStore, loadTree } from './treeStore'
 import { memberCreateOptions } from './rereadNode'
 import { FOLDER_KIND } from './kind'
-import { collidingSibling, nameTakenMessage } from './siblingCollision'
-import { registry } from '../applications/registry'
-import { resealShareNames } from '../sharing/manageShares'
+import { nodeNameErrorText, refuseTakenName, renameMemberNode, renameSelectionEnd } from './nodeName'
 import { useToast } from '../../shared/state/useToast'
 import type { ScopeKey } from '../../features/spaces/epochs'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
-import { httpStatus, HttpStatus } from '../../shared/httpError'
 
 // Mounted via v-if while open; closing = the parent unmounting it on `close` (robust — no two-way `visible`).
 const props = defineProps<{
@@ -62,38 +61,22 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
     if (props.mode === 'create') {
       const parent = createParent()
       await createFolder(props.scopeId, props.epochs, trimmed, parent, memberCreateOptions(props.scopeId, parent))
+      await loadTree()
     } else if (props.node) {
-      // A rename is a placement to the same parent (ADR 0080 Decision 3): the key re-wraps and the name re-seals under
-      // the parent's key, resolved from the loaded tree, at the next placement revision.
-      await renameNode(props.scopeId, props.epochs, treeStore.nodes, props.node.id, trimmed)
-      await resealAfterRename(props.node.id, trimmed)
+      // A rename (`renameMemberNode`): the placement write, every share rooted at the node re-sealed with the new name (one it
+      // cannot re-seal keeps showing the old name to its guests: said in a toast, never as a failed rename), the tree re-read.
+      const { resealed } = await renameMemberNode(props.scopeId, props.epochs, props.node, trimmed)
+      if (!resealed) toast.error(t('share.nameResealFailed'))
     }
     // The tree is re-read BEFORE the dialog closes, as the move's is (`move.ts` `memberMover`): `done` means the write
     // stands AND the loaded tree carries it, so the host follows the node on screen to its new path in the same step
     // (`SpaceView` `stayOn`). Closed first, the dialog was gone for one tree read while the URL still held the old
     // path — a reload in that window resolved nothing and stood on the scope root (inbox #475). `loadTree` never throws.
-    await loadTree()
     emit('done')
     emit('close')
   },
-  {
-    onError: (e) => {
-      const status = httpStatus(e)
-      error.value = status === HttpStatus.conflict ? t('node.slugTaken') : status === HttpStatus.unprocessable ? t('node.illegalStructure') : t('node.saveFailed')
-    },
-  },
+  { onError: (e) => void (error.value = nodeNameErrorText(t, e)) },
 )
-/** The rename stands; now every share rooted at the node — any member's, any kind — gets the new name re-sealed under
- *  its own `K_share` (ADR 0080 decision 14, core's `resealShareNames`). A share it cannot re-seal keeps showing the old
- *  name to its guests: that is said in a toast, never as a failed rename (the dialog closes either way). */
-async function resealAfterRename(nodeId: string, newName: string): Promise<void> {
-  try {
-    const report = await resealShareNames(nodeId, newName, props.epochs)
-    if (report.failed.length + report.skipped.length > 0) toast.error(t('share.nameResealFailed'))
-  } catch {
-    toast.error(t('share.nameResealFailed'))
-  }
-}
 const canSubmit = computed(() => name.value.trim().length > 0 && !loading.value)
 
 /** A rename selects what its kind says a rename usually changes (`KindDescriptor.renameSelectionEnd`: a file's name
@@ -103,28 +86,26 @@ const canSubmit = computed(() => name.value.trim().length > 0 && !loading.value)
 const nameInput = ref<{ $el: HTMLElement } | null>(null)
 function selectForRename() {
   if (props.mode !== 'rename' || !props.node) return
-  const info = registry.kind(props.node.kind)
-  const end = info.supported ? info.renameSelectionEnd?.(name.value) : undefined
+  const end = renameSelectionEnd(props.node, name.value)
   const el = nameInput.value?.$el
   const input = el instanceof HTMLInputElement ? el : el?.querySelector('input')
   if (end !== undefined && input) input.setSelectionRange(0, end)
 }
 
-/** The loaded sibling the name collides with, folded by each node's own kind: a create is a FOLDER under the parent, a
- *  rename is the node's own kind under its own parent, never colliding with itself. */
-function takenBy(): TreeNode | null {
-  const trimmed = name.value.trim()
-  if (props.mode === 'create') return collidingSibling(treeStore.nodes, props.parentId ?? null, FOLDER_KIND, trimmed)
-  if (props.node) return collidingSibling(treeStore.nodes, props.node.parentId, props.node.kind, trimmed, props.node.id)
-  return null
+/** Refuse a name a loaded sibling has, folded by each node's own kind: a create is a FOLDER under the parent, a rename is
+ *  the node's own kind under its own parent, never colliding with itself (the rename write checks it again). */
+function refuseTaken(): void {
+  if (props.mode === 'create') refuseTakenName(treeStore.nodes, props.parentId ?? null, FOLDER_KIND, name.value)
+  else if (props.node) refuseTakenName(treeStore.nodes, props.node.parentId, props.node.kind, name.value, props.node.id)
 }
 
 async function submit() {
   if (!canSubmit.value) return
   error.value = ''
-  const sibling = takenBy()
-  if (sibling) {
-    error.value = nameTakenMessage(t, sibling)
+  try {
+    refuseTaken()
+  } catch (e) {
+    error.value = nodeNameErrorText(t, e)
     return
   }
   await runSubmit()

@@ -3,10 +3,11 @@
 // `views/SpaceView.vue` and a guest's `core/sharing/ShareTreePage.vue` - mount a kind's registered `detail` through it, never
 // bare. **It draws the page's header, the same row for every application:** core's `NodeHeader` from the kind's descriptor
 // (`registry.kind(node.kind)`: its icon, whether it takes a cover, its priority `header.order`) and from what the detail
-// below contributes as data (`../nodeHeaderContribution.ts`: a subtitle, the application's actions, its facts - a date, a
-// place, people, a line of text - and a banner drawn above the header). Then the detail, the application's own body.
+// below contributes as data (`../nodeHeaderContribution.ts`: a subtitle, the application's actions, the rename in place, its
+// facts - a date, a place, people, a line of text - and a banner drawn above the header). Then the detail, the application's
+// own body.
 //
-// It supplies core's actions of the node (`../coreNodeActions.ts`: the heart, the cover, "Copy to…", the ZIP download and
+// It supplies core's actions of the node (`../coreNodeActions.ts`: the heart, the cover dialog, "Copy to…", the ZIP download and
 // Report) to the header, so every kind's header carries them - Report above all, a legal duty - without the application
 // building or forwarding one, and it mounts the cover dialog that the cover action and the header's cover open. People in the
 // header link to a profile and show a member's picture on a member's page only (`linkPeople`): a share page never does. The
@@ -51,6 +52,7 @@ const banner = computed(() => header.value.banner ?? null)
       :order="kind?.header?.order"
       :subtitle="header.subtitle"
       :actions="header.actions"
+      :rename="header.rename ?? null"
       :facts="header.facts"
       :link-people="access.mode === 'member'"
     />

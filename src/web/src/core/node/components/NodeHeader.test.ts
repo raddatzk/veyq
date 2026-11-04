@@ -10,7 +10,17 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import NodeHeader from './NodeHeader.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
-import { mergeHeaderActions, standardNodeActions, type CoreHeaderAction, type NodeHeaderAction } from '../nodeHeader'
+import {
+  mergeHeaderActions,
+  standardActionList,
+  standardNodeActions,
+  standardNodeRename,
+  type CoreHeaderAction,
+  type NodeHeaderAction,
+  type NodeHeaderFact,
+} from '../nodeHeader'
+import { NodeNameTaken } from '../nodeName'
+import { registry } from '../../applications/registry'
 import { coreNodeActionsKey, type CoreNodeActions } from '../coreNodeActions'
 import type { UseNodeCover } from '../cover/useNodeCover'
 import type { TreeNode } from '../tree'
@@ -69,16 +79,24 @@ describe('NodeHeader', () => {
       return w
     }
 
-    it('a kind that takes a cover shows the node\'s cover, its name at the cover\'s size; without one, its icon tile', () => {
+    it('a kind that takes a cover shows the node\'s cover; without one, the empty 16:9 frame with the kind\'s icon in it', () => {
       const w = withCover({ covers: new Map([[NODE.id, COVER]]) })
       expect(w.find('.veyq-node-header-leading .veyq-node-header-cover img').attributes('src')).toBe('blob:cover')
+      expect(w.find('.veyq-node-header-cover').classes()).not.toContain('is-empty')
       expect(w.find('.veyq-node-header-icon').exists()).toBe(false)
-      expect(w.find('.veyq-node-header').classes()).toContain('has-visual')
-      // A view with nothing resolved for the node: the kind's icon, no cover's size.
+      // A view with nothing resolved for the node: the empty frame - the cover's box, the kind's icon in its middle - and,
+      // without the right to set one, a plain frame: no button, no hint.
       const bare = withCover({})
-      expect(bare.find('.veyq-node-header-cover').exists()).toBe(false)
-      expect(bare.findComponent(VeyqIcon).classes()).toContain('veyq-node-header-icon')
-      expect(bare.find('.veyq-node-header').classes()).not.toContain('has-visual')
+      const frame = bare.find('.veyq-node-header-leading > .veyq-node-header-cover')
+      expect(frame.classes()).toContain('is-empty')
+      expect(frame.element.tagName).toBe('SPAN')
+      expect(frame.attributes('data-testid')).toBe('node-header-cover-frame')
+      expect(frame.findComponent(VeyqIcon).props('name')).toBe('images')
+      expect(frame.find('.veyq-node-header-cover-hint').exists()).toBe(false)
+      expect(bare.find('button').exists()).toBe(false)
+      expect(bare.find('.veyq-node-header-icon').exists(), 'no icon tile for a kind that takes a cover').toBe(false)
+      // The name is one size, cover or not: no class switches it.
+      expect(w.find('.veyq-node-header').classes()).toEqual(bare.find('.veyq-node-header').classes())
     })
 
     it('a kind without a cover never shows one, whatever the view resolved', () => {
@@ -96,8 +114,10 @@ describe('NodeHeader', () => {
       const open = vi.fn()
       const empty = withCover({ canSet: true, open })
       const button = empty.find('button[data-testid="node-header-cover"]')
-      // Without a cover the button IS the icon tile, named "Set cover".
-      expect(button.classes()).toContain('veyq-node-header-icon')
+      // Without a cover the button IS the empty frame, the kind's icon in it, named "Set cover".
+      expect(button.classes()).toEqual(expect.arrayContaining(['veyq-node-header-cover', 'is-empty']))
+      expect(button.findComponent(VeyqIcon).props('name')).toBe('images')
+      expect(empty.find('.veyq-node-header-icon').exists()).toBe(false)
       expect(button.attributes('aria-label')).toBe(t('node.cover.set'))
       expect(button.find('.veyq-node-header-cover-hint').exists()).toBe(true)
       await button.trigger('click')
@@ -105,6 +125,7 @@ describe('NodeHeader', () => {
       // With one, it is the cover, named "Change cover".
       const set = withCover({ canSet: true, covers: new Map([[NODE.id, COVER]]) })
       expect(set.find('button[data-testid="node-header-cover"]').classes()).toContain('veyq-node-header-cover')
+      expect(set.find('button[data-testid="node-header-cover"]').classes()).not.toContain('is-empty')
       expect(set.find('button[data-testid="node-header-cover"]').attributes('aria-label')).toBe(t('node.cover.change'))
     })
 
@@ -406,21 +427,207 @@ describe('NodeHeader', () => {
   })
 })
 
+describe('NodeHeader: what is editable at its place has no action (ADR 0110 decision 11)', () => {
+  const input = (w: VueWrapper) => w.find<HTMLInputElement>('input[data-testid="node-header-name-input"]')
+  const mountRenamable = (save: (name: string) => Promise<void>, node: TreeNode = NODE, title = 'Trips') =>
+    mountHeader({ title, node, rename: { save } })
+  async function startEditing(w: VueWrapper) {
+    await w.find('button[data-testid="node-header-rename"]').trigger('click')
+    await flushPromises()
+    return input(w)
+  }
+
+  it('without a rename the name is plain text in the page\'s one h1 - no button, no field', () => {
+    const w = mountHeader({ title: 'Trips', node: NODE })
+    const h1 = w.find('h1.veyq-node-header-title')
+    expect(h1.text()).toBe('Trips')
+    expect(h1.attributes('title')).toBe('Trips')
+    expect(h1.find('button').exists()).toBe(false)
+    expect(w.find('input').exists()).toBe(false)
+  })
+
+  it('with one, the h1 holds a real button named "Rename “…”" - still the page\'s one heading', () => {
+    const w = mountRenamable(vi.fn())
+    expect(w.findAll('h1')).toHaveLength(1)
+    const button = w.find('h1.veyq-node-header-title > button.veyq-node-header-rename')
+    expect(button.attributes('type')).toBe('button')
+    expect(button.attributes('aria-label')).toBe(t('node.renameNamed', { name: 'Trips' }))
+    expect(button.text()).toBe('Trips')
+    // The heading itself is named by the name, never by its button's "Rename …" (a reader's heading list, a spec's locator).
+    expect(w.find('h1').attributes('aria-label')).toBe('Trips')
+  })
+
+  it('a click makes it a field holding the name, pre-selected whole; Enter saves the trimmed name through the page\'s write', async () => {
+    let done!: () => void
+    const save = vi.fn((_name: string) => new Promise<void>((r) => (done = r)))
+    const w = mountRenamable(save)
+    const field = await startEditing(w)
+    expect(field.element.value).toBe('Trips')
+    expect(document.activeElement).toBe(field.element)
+    expect([field.element.selectionStart, field.element.selectionEnd]).toEqual([0, 5])
+    await field.setValue('  Reisen  ')
+    await field.trigger('keydown', { key: 'Enter' })
+    expect(save).toHaveBeenCalledExactlyOnceWith('Reisen')
+    // Open while the write runs; a second Enter sends nothing more.
+    await field.trigger('keydown', { key: 'Enter' })
+    expect(save).toHaveBeenCalledOnce()
+    done()
+    await flushPromises()
+    expect(input(w).exists()).toBe(false)
+    expect(w.find('button[data-testid="node-header-rename"]').exists()).toBe(true)
+  })
+
+  it('pre-selects what the kind says a rename changes, as core\'s name dialog does (a file\'s name before its extension)', async () => {
+    const real = registry.kind.bind(registry)
+    vi.spyOn(registry, 'kind').mockImplementation(((kind: string) =>
+      kind === 'FILE' ? { ...real('FOLDER'), supported: true, renameSelectionEnd: (n: string) => n.lastIndexOf('.') } : real(kind)) as typeof registry.kind)
+    const file = treeNode({ id: 'f0000000-0000-4000-8000-000000000001', kind: 'FILE', name: 'notes.txt' })
+    const field = await startEditing(mountRenamable(vi.fn(), file, 'notes.txt'))
+    expect([field.element.selectionStart, field.element.selectionEnd]).toEqual([0, 5])
+  })
+
+  it('Esc cancels: nothing is written and the name is back', async () => {
+    const save = vi.fn(async () => {})
+    const w = mountRenamable(save)
+    const field = await startEditing(w)
+    await field.setValue('Reisen')
+    await field.trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    expect(save).not.toHaveBeenCalled()
+    expect(input(w).exists()).toBe(false)
+    expect(w.find('h1').text()).toBe('Trips')
+  })
+
+  it('an unchanged or empty name writes nothing: Enter on the same name closes, an empty one keeps the field', async () => {
+    const save = vi.fn(async () => {})
+    const w = mountRenamable(save)
+    let field = await startEditing(w)
+    await field.setValue('   ')
+    await field.trigger('keydown', { key: 'Enter' })
+    expect(input(w).exists()).toBe(true)
+    await field.setValue(' Trips ')
+    await field.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(input(w).exists()).toBe(false)
+    field = await startEditing(w)
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('a refused name stays in the field with the dialog\'s words under it - a collision names the sibling by its kind', async () => {
+    const sibling = treeNode({ id: 'b0000000-0000-4000-8000-000000000002', kind: 'FOLDER', name: 'Reisen' })
+    const save = vi.fn(async () => {
+      throw new NodeNameTaken(sibling)
+    })
+    const w = mountRenamable(save)
+    const field = await startEditing(w)
+    await field.setValue('Reisen')
+    await field.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(input(w).exists()).toBe(true)
+    const error = w.find('.veyq-node-header-rename-error')
+    expect(error.text()).toBe(t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Reisen' }))
+    expect(error.attributes('role')).toBe('alert')
+    expect(input(w).attributes('aria-describedby')).toBe(error.attributes('id'))
+    // Esc still leaves, the error with it.
+    await input(w).trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    expect(w.find('.veyq-node-header-rename-error').exists()).toBe(false)
+  })
+
+  it('blur keeps what was typed: a changed name is written; the window losing focus leaves the field open', async () => {
+    const save = vi.fn(async () => {})
+    const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    const w = mountRenamable(save)
+    const field = await startEditing(w)
+    await field.setValue('Reisen')
+    await field.trigger('blur')
+    expect(save).not.toHaveBeenCalled()
+    expect(input(w).exists()).toBe(true)
+    focus.mockReturnValue(true)
+    await field.trigger('blur')
+    await flushPromises()
+    expect(save).toHaveBeenCalledExactlyOnceWith('Reisen')
+    expect(input(w).exists()).toBe(false)
+  })
+
+  it('the rows beside the visual are handed to the sheet as counts: the visual\'s height is computed, never measured', () => {
+    const facts: NodeHeaderFact[] = [
+      { kind: 'date', label: '2026' },
+      { kind: 'place', label: 'Rome' },
+      { kind: 'people', label: 'Participants', people: [{ userId: null, name: 'Anna' }] },
+    ]
+    const style = mountHeader({ title: 'Rome', subtitle: '3 items', facts }).find('.veyq-node-header').attributes('style')
+    expect(style).toContain('--veyq-node-header-subtitle-rows: 1')
+    expect(style).toContain('--veyq-node-header-chip-rows: 1')
+    expect(style).toContain('--veyq-node-header-people-rows: 1')
+    expect(style).toContain('--veyq-node-header-text-rows: 0')
+    const folder = mountHeader({ title: 'Trips' }).find('.veyq-node-header').attributes('style')
+    expect(folder).toContain('--veyq-node-header-subtitle-rows: 0')
+    expect(folder).toContain('--veyq-node-header-chip-rows: 0')
+    expect(folder).toContain('--veyq-node-header-people-rows: 0')
+  })
+
+  it('a people fact with an editor opens it from the fact: a button beside the people, the empty chip with nobody yet', async () => {
+    const edit = vi.fn()
+    const people = { kind: 'people' as const, label: 'Participants', editLabel: 'Edit participants', emptyLabel: 'Add participants', onEdit: edit }
+    const empty = mountHeader({ title: 'Rome', facts: [{ ...people, people: [] }] })
+    const chip = empty.find('button[data-fact="people-edit"]')
+    expect(chip.text()).toBe('Add participants')
+    expect(chip.attributes('aria-label')).toBe('Edit participants')
+    expect(empty.find('[data-fact="people"]').exists(), 'nobody to show').toBe(false)
+    await chip.trigger('click')
+    const some = mountHeader({ title: 'Rome', facts: [{ ...people, people: [{ userId: null, name: 'Anna' }] }] })
+    expect(some.find('[data-fact="people"]').text()).toContain('Anna')
+    const button = some.find('button[data-fact="people-edit"]')
+    expect(button.attributes('aria-label')).toBe('Edit participants')
+    await button.trigger('click')
+    expect(edit).toHaveBeenCalledTimes(2)
+    // Without an editor: the people alone.
+    expect(mountHeader({ title: 'Rome', facts: [{ kind: 'people', label: 'P', people: [{ userId: null, name: 'Anna' }] }] }).find('[data-fact="people-edit"]').exists()).toBe(false)
+  })
+
+  it('a header\'s move and copy are menu entries, never buttons; share stays a button', async () => {
+    const w = mountHeader(
+      { title: 'Trips', actions: standardNodeActions(t, { share: true, move: true, delete: true }, {}), order: ['share', 'move', 'copy'] },
+      {},
+      [{ ...act('copy'), menuOnly: true, placement: { after: 'move' } }],
+    )
+    expect(headerButtonIds(w)).toEqual(['share'])
+    expect(await headerMenuIds(w)).toEqual(['move', 'copy', 'delete'])
+  })
+})
+
 describe('nodeHeader helpers', () => {
   it('mergeHeaderActions puts core before / after the application list', () => {
     const ids = mergeHeaderActions([{ ...act('x'), placement: 'before' }, act('y')], [act('a')]).map((a) => a.id)
     expect(ids).toEqual(['x', 'a', 'y'])
   })
 
-  it('standardNodeActions: only the granted ones, share, rename, move, delete; the kind may relabel', () => {
+  it('standardActionList (a row\'s): only the granted ones, share, rename, move, delete; the kind may relabel', () => {
     const on = { share: vi.fn(), rename: vi.fn(), move: vi.fn(), remove: vi.fn() }
-    const all = standardNodeActions(t, { share: true, rename: true, move: true, delete: true, deleteLabel: 'Drop it' }, on)
+    const all = standardActionList(t, { share: true, rename: true, move: true, delete: true, deleteLabel: 'Drop it' }, on)
     expect(all.map((a) => a.id)).toEqual(['share', 'rename', 'move', 'delete'])
     expect(all[3].label).toBe('Drop it')
     expect(all[3].severity).toBe('danger')
     all.forEach((a) => a.onClick())
     expect(Object.values(on).every((f) => f.mock.calls.length === 1)).toBe(true)
-    expect(standardNodeActions(t, { rename: true }, on).map((a) => a.id)).toEqual(['rename'])
-    expect(standardNodeActions(t, {}, on)).toEqual([])
+    expect(standardActionList(t, { rename: true }, on).map((a) => a.id)).toEqual(['rename'])
+    expect(standardActionList(t, {}, on)).toEqual([])
+  })
+
+  it('standardNodeActions (a header\'s): no rename entry whatever the right says, the move menu-only (ADR 0110 decision 11)', () => {
+    const on = { share: vi.fn(), rename: vi.fn(), move: vi.fn(), remove: vi.fn() }
+    const all = standardNodeActions(t, { share: true, rename: true, move: true, delete: true }, on)
+    expect(all.map((a) => a.id)).toEqual(['share', 'move', 'delete'])
+    expect(all.find((a) => a.id === 'move')?.menuOnly).toBe(true)
+    expect(all.find((a) => a.id === 'share')?.menuOnly).toBeUndefined()
+  })
+
+  it('standardNodeRename: only with the right AND the page\'s write; it saves through that write', async () => {
+    const renameTo = vi.fn(async () => {})
+    expect(standardNodeRename({ rename: false }, { renameTo })).toBeNull()
+    expect(standardNodeRename({ rename: true }, {})).toBeNull()
+    await standardNodeRename({ rename: true }, { renameTo })!.save('Roma')
+    expect(renameTo).toHaveBeenCalledWith('Roma')
   })
 })

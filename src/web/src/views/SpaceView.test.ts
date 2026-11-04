@@ -59,8 +59,8 @@ vi.mock('../features/memories/components/MemoryDetail.vue', async () => {
   return {
     default: defineComponent({
       name: 'MemoryDetailStub',
-      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'rights'],
-      emits: ['toggleFavorite', 'rename', 'delete', 'openChapter', 'createChapter', 'share', 'metaUpdated'],
+      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'rights', 'renameTo'],
+      emits: ['toggleFavorite', 'delete', 'openChapter', 'createChapter', 'share', 'metaUpdated'],
       setup: (p) => () => h('div', {
         class: 'detail-stub', 'data-shareable': String(p.rights.share), 'data-share-upload': String(p.rights.shareUpload),
         'data-upload': String(p.rights.upload), 'data-key': String(p.memoryKey?.[0]),
@@ -344,17 +344,17 @@ describe('SpaceView over the real registry', () => {
     expect(w.find('.detail-stub').attributes('data-shareable')).toBe('false')
   })
 
-  it("wires the detail events to the kind's dialogs: rename (core's), create-chapter, share, delete", async () => {
+  it("wires the detail to the kind's dialogs: the rename in place (core's write), create-chapter, share, delete", async () => {
     const w = await mountAt('#~me/trips/memories/italy')
     const detail = w.findComponent({ name: 'MemoryDetailStub' })
 
-    detail.vm.$emit('rename')
-    await flushPromises()
-    expect(w.find('.name-stub').text(), "a Memory's rename is core's name dialog").toBe('rename|-|Italy')
+    // A Memory's rename is its header's name, edited in place through the page's `renameTo` door (ADR 0110 decision 11) -
+    // no name dialog (`SpaceView.rename.test.ts` writes through it).
+    expect(typeof detail.props('renameTo'), "the page's rename in place").toBe('function')
 
     detail.vm.$emit('createChapter')
     await flushPromises()
-    // CHAPTER's createDialog (Memories'), under the open Memory and its key; the rename dialog gives way (one at a time)
+    // CHAPTER's createDialog (Memories'), under the open Memory and its key
     expect(w.find('.create-stub').text()).toBe('CHAPTER|italy')
     expect(w.find('.create-stub').attributes('data-key')).toBe('9')
     expect(w.find('.name-stub').exists()).toBe(false)
@@ -409,11 +409,12 @@ describe('SpaceView over the real registry', () => {
     expect(w.find('.create-stub').text()).toBe('MEMORY|trips')
   })
 
-  it('wires the folder header (rename, delete for the folder) and a folder row navigates', async () => {
+  it('wires the folder header (rename in place, delete for the folder) and a folder row navigates', async () => {
     const w = await mountAt('#~me/trips')
-    await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
+    await w.find('.veyq-node-header button[data-testid="node-header-rename"]').trigger('click')
     await flushPromises()
-    expect(w.find('.name-stub').text()).toBe('rename|-|Trips')
+    expect(w.find('.veyq-node-header input[data-testid="node-header-name-input"]').exists(), 'the name, editable in place').toBe(true)
+    expect(w.find('.name-stub').exists(), 'no name dialog').toBe(false)
 
     // The header's delete is the row's (inbox #385 (c)): core's one question with its Undo, `DeleteNodesDialog`, for the one
     // folder - the kind's own question and the Undo are that dialog's (`DeleteNodesDialog.test.ts`).
@@ -476,7 +477,7 @@ describe('SpaceView sharing a folder', () => {
     capabilityState.ids = [MEMORIES, DEPOT]
     const w = await mountAt('#~me/trips')
     expect(shareButton(w).exists()).toBe(false)
-    expect(w.find(`.veyq-node-header button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card renders').toBe(true)
+    expect(w.find('.veyq-node-header button[data-testid="node-header-rename"]').exists(), 'control: the card renders').toBe(true)
   })
 })
 

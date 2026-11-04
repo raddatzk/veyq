@@ -13,7 +13,9 @@
 // and blurs; paused, it holds the last frame, and under `prefers-reduced-motion` it stays the poster. A video shows its poster and a play button and NOTHING plays before the click (no `<video>` exists until
 // then); the click registers the `BANNER` blob with the media service worker (ADR 0047) and plays it with its controls -
 // or, without a service worker, decrypts it whole first, as the lightbox's fallback does. The same component for a member
-// and a guest: it offers no action of its own.
+// and a guest; where the banner may be changed (`edit`, a member's `setBanner`) a click on it opens its dialog (owner
+// 2026-11-04, ADR 0110 decision 11: what is edited at its place has no header action) - the frame itself while nothing plays,
+// a button in its corner while a video plays (its controls take the clicks then). A guest's banner offers nothing.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { handleFromUrl, registerPlayback, revokePlayback } from '../../../sw/register'
@@ -33,6 +35,8 @@ const props = defineProps<{
   videoChunks: () => ChunkProvider | null
   /** A video decrypted whole (the playback without a service worker). */
   videoBytes: () => Promise<Uint8Array | null>
+  /** Open the banner's dialog (change or remove it); null or absent: the banner offers nothing (a guest, a reader). */
+  edit?: (() => void) | null
 }>()
 
 const { t } = useI18n()
@@ -195,6 +199,23 @@ onBeforeUnmount(stop)
         <VeyqIcon :name="loading ? 'spinner' : 'play'" :spin="loading" />
       </button>
     </template>
+    <!-- Its way to its dialog: the whole frame while nothing plays (beneath the play button), a corner button while a video
+         plays. -->
+    <button
+      v-if="edit"
+      type="button"
+      class="memory-banner-edit"
+      :class="{ 'is-corner': !!videoSrc }"
+      :aria-label="t('memory.banner.change')"
+      :title="t('memory.banner.change')"
+      data-testid="memory-banner-edit"
+      @click="edit()"
+    >
+      <span class="memory-banner-edit-hint">
+        <VeyqIcon name="objects-column" />
+        <span class="memory-banner-edit-label">{{ t('memory.banner.change') }}</span>
+      </span>
+    </button>
     <p v-if="failed" class="memory-banner-error" role="status">{{ t('memory.banner.playFailed') }}</p>
   </section>
 </template>
@@ -234,7 +255,58 @@ onBeforeUnmount(stop)
   filter: blur(28px) saturate(1.1);
   opacity: 0.85;
 }
+/* The way to the banner's dialog: a transparent button over the whole frame, its hint at the foot on hover and keyboard focus
+   (the cover's look); while a video plays, a small round button in the frame's corner instead, always shown. */
+.memory-banner-edit {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+.memory-banner-edit:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: -2px;
+}
+.memory-banner-edit-hint {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  background: color-mix(in srgb, var(--app-backdrop-strong) 62%, transparent);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.memory-banner-edit:hover .memory-banner-edit-hint,
+.memory-banner-edit:focus-visible .memory-banner-edit-hint {
+  opacity: 1;
+}
+.memory-banner-edit.is-corner {
+  inset: 0.6rem 0.6rem auto auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  overflow: hidden;
+  border-radius: 999px;
+}
+.memory-banner-edit.is-corner .memory-banner-edit-hint {
+  height: 100%;
+  padding: 0;
+  opacity: 1;
+}
+.memory-banner-edit.is-corner .memory-banner-edit-label {
+  display: none;
+}
 .memory-banner-play {
+  z-index: 1;
   position: absolute;
   top: 50%;
   left: 50%;

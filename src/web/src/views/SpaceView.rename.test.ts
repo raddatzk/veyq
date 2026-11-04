@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 // A member's rename through the personal-space host, over the REAL registry (Memories and Depot, as `main.ts` fills it),
-// the real router, the UI layer, core's real level view, overview card and name dialog — every step a DOM click. The position
+// the real router, the UI layer, core's real level view, its header's name edited in place (ADR 0110 decision 11) and a row's
+// name dialog — every step a DOM event. The position
 // lives in the #fragment as a slug path derived from the names (ADR 0015), so a rename of the node on screen changes its
 // own path — and a restore of an older sibling of one plain segment renumbers it: the URL must follow it, or the old path
 // resolves to nothing and the view collapses to the scope root (found by the read-only assessment of inbox #328). The
 // writes are recorders (`renameNode`, `restoreNode`; their wire is `core/node/tree.wire.test.ts`'s) and the re-read is
-// `loadTree`'s stub. Only the heavy Memories detail is a stub exposing the events the host listens to; the level's rows
+// `loadTree`'s stub. Only the heavy Memories detail is a stub exposing what the host hands it (its rename in place); the level's rows
 // (inbox #407: one list, the applications' real row factories) are real, Depot's blob listing is an empty stub.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -49,10 +50,10 @@ vi.mock('../features/memories/components/MemoryDetail.vue', async () => {
   return {
     default: defineComponent({
       name: 'MemoryDetailStub',
-      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'rights', 'source'],
-      emits: ['rename'],
-      setup: (p, { emit }) => () =>
-        h('div', { class: 'detail-stub' }, [h('h1', p.node.name), h('button', { class: 'detail-rename', onClick: () => emit('rename') }, 'rename')]),
+      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'rights', 'source', 'renameTo'],
+      // The real detail hands `renameTo` to core's header as its rename in place; the stub calls it with the name typed.
+      setup: (p) => () =>
+        h('div', { class: 'detail-stub' }, [h('h1', p.node.name), h('button', { class: 'detail-rename', onClick: () => void p.renameTo?.('Italia') }, 'rename')]),
     }),
   }
 })
@@ -71,6 +72,7 @@ import { isFavorite } from '../core/favorites/favoritesStore'
 import { stubApi } from '../test/apiMock'
 import { filesApi } from '../features/depot/api'
 import { clickAction, titlesOf } from '../test/levelRows'
+import { renameInHeader } from '../test/nodeHeader'
 
 const node = (id: string, kind: string, parentId: string | null, name: string, createdAt: number): TreeNode =>
   treeNode({ id, kind, name, parentId, createdAt })
@@ -102,9 +104,10 @@ async function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
   await flushPromises()
 }
-const byLabel = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.getAttribute('aria-label') === label)
 const heading = () => document.body.querySelector('.veyq-node-header-title')?.textContent ?? null
-/** Type the new name into core's open name dialog and press its Save. */
+/** The header's name field, while it is open. */
+const nameField = () => document.body.querySelector<HTMLInputElement>('.veyq-node-header input[data-testid="node-header-name-input"]')
+/** Type the new name into core's open name dialog (a row's rename) and press its Save. */
 async function renameTo(name: string) {
   const input = document.body.querySelector<HTMLInputElement>('.veyq-form input')!
   input.value = name
@@ -129,9 +132,8 @@ describe('a member renames the node on screen', () => {
     await mountAt('#~me/trips/rome/')
     expect(heading()).toBe('Rome')
     const push = vi.spyOn(router, 'push')
-    await click(byLabel(t('node.rename'))!)
     serverRenames({ rome: 'Roma Antica' })
-    await renameTo('Roma Antica')
+    await renameInHeader('Roma Antica')
     expect(renameNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'rome', 'Roma Antica')
     expect(loadTree).toHaveBeenCalled()
     expect(router.currentRoute.value.hash, 'the folder on screen is followed to its new path').toBe('#~me/trips/roma-antica/')
@@ -139,12 +141,11 @@ describe('a member renames the node on screen', () => {
     expect(push, 'the same logical position: replaced, not pushed').not.toHaveBeenCalled()
   })
 
-  it('the dialog closes only once the fragment follows — a reload the moment it is gone opens the renamed folder (inbox #475)', async () => {
-    // The move's dialog re-reads the tree before it closes (`move.ts` `memberMover`); the rename's closed first and the
-    // host re-read after, so for one tree read the dialog was gone and the URL still the OLD path — a reload in that
-    // window (lane L1's, under load) resolved nothing and stood on the scope root.
+  it('the field closes only once the fragment follows — a reload the moment it is gone opens the renamed folder (inbox #475)', async () => {
+    // The move's dialog re-reads the tree before it closes (`move.ts` `memberMover`); the rename's dialog once closed first
+    // and the host re-read after, so for one tree read the dialog was gone and the URL still the OLD path — a reload in that
+    // window (lane L1's, under load) resolved nothing and stood on the scope root. The rename in place shares the write.
     await mountAt('#~me/trips/rome/')
-    await click(byLabel(t('node.rename'))!)
     let release!: () => void
     vi.mocked(loadTree).mockImplementationOnce(
       () =>
@@ -155,21 +156,21 @@ describe('a member renames the node on screen', () => {
           }
         }),
     )
-    await renameTo('Roma Antica')
+    await renameInHeader('Roma Antica')
     expect(renameNode).toHaveBeenCalled()
-    expect(document.body.querySelector('.veyq-form'), 'open while the tree is re-read').not.toBeNull()
+    expect(nameField(), 'open while the tree is re-read').not.toBeNull()
     expect(router.currentRoute.value.hash).toBe('#~me/trips/rome/')
     release()
     await flushPromises()
-    expect(document.body.querySelector('.veyq-form'), 'closed once the re-read is in').toBeNull()
-    expect(router.currentRoute.value.hash, 'the URL followed before the dialog went').toBe('#~me/trips/roma-antica/')
+    expect(nameField(), 'closed once the re-read is in').toBeNull()
+    expect(router.currentRoute.value.hash, 'the URL followed before the field went').toBe('#~me/trips/roma-antica/')
   })
 
   it('an opened Memory from its detail: the detail stays open under the new path', async () => {
     await mountAt('#~me/trips/memories/italy')
-    await click(document.body.querySelector('.detail-rename')!)
     serverRenames({ italy: 'Italia' })
-    await renameTo('Italia')
+    await click(document.body.querySelector('.detail-rename')!)
+    expect(renameNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'italy', 'Italia')
     expect(router.currentRoute.value.hash).toBe('#~me/trips/memories/italia')
     expect(document.body.querySelector('.detail-stub h1')?.textContent).toBe('Italia')
   })
@@ -177,11 +178,26 @@ describe('a member renames the node on screen', () => {
   it('a folder renamed to a file\'s name keeps the plain segment — the trailing slash tells them apart', async () => {
     // the file `x.y` and the folder `X.Y` share the URL segment `x-y` but are separate numbering spaces (ADR 0015)
     await mountAt('#~me/trips/rome/')
-    await click(byLabel(t('node.rename'))!)
     serverRenames({ rome: 'X.Y' })
-    await renameTo('X.Y')
+    await renameInHeader('X.Y')
     expect(router.currentRoute.value.hash).toBe('#~me/trips/x-y/')
     expect(heading(), 'the folder, not the file of the same segment').toBe('X.Y')
+  })
+})
+
+describe('a refused rename in place', () => {
+  it('a sibling of that name: nothing is written, the name dialog\'s words stay under the field, Esc gives the name back', async () => {
+    treeStore.nodes = [...TREE(), node('paris', FOLDER_KIND, 'trips', 'Paris', 7)]
+    await mountAt('#~me/trips/rome/')
+    await renameInHeader('Paris')
+    expect(renameNode).not.toHaveBeenCalled()
+    expect(nameField(), 'the field stays open').not.toBeNull()
+    expect(document.body.querySelector('.veyq-node-header-rename-error')?.textContent).toBe(t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Paris' }))
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/rome/')
+    nameField()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    await flushPromises()
+    expect(nameField()).toBeNull()
+    expect(heading()).toBe('Rome')
   })
 })
 
@@ -191,9 +207,8 @@ describe('a rename that changes an ancestor of the open node', () => {
   // of the member, another member). The URL is rebuilt from the whole re-read path, not patched at the renamed segment.
   it('the re-read tree also brings an ancestor\'s new name: the fragment is the open node\'s whole new path', async () => {
     await mountAt('#~me/trips/rome/forum/')
-    await click(byLabel(t('node.rename'))!)
     serverRenames({ forum: 'Foro', trips: 'Travel' })
-    await renameTo('Foro')
+    await renameInHeader('Foro')
     expect(router.currentRoute.value.hash).toBe('#~me/travel/rome/foro/')
     expect(heading()).toBe('Foro')
   })

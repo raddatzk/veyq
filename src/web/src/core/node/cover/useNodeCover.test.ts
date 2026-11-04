@@ -131,7 +131,6 @@ describe('what the dialog opens with', () => {
     const api = harness([node], access)
     api.open(node)
     expect(api.editor.value).toBeNull()
-    expect(api.headerActions(node)).toEqual([])
     expect(api.rowActions(node)).toEqual([])
   })
 })
@@ -139,17 +138,17 @@ describe('what the dialog opens with', () => {
 describe('the action', () => {
   it('is ONE action, id cover, the image icon, "Set cover" without a cover and "Change cover" with one', () => {
     const api = harness([FOLDER])
-    const [set, ...rest] = api.headerActions(FOLDER)
+    const [set, ...rest] = api.rowActions(FOLDER)
     expect(rest, 'no separate remove').toEqual([])
     expect([set.id, set.icon, set.label]).toEqual(['cover', 'image', t('node.cover.set')])
     declaredIds.add(FOLDER.id)
-    expect(api.headerActions(FOLDER)[0].label).toBe(t('node.cover.change'))
+    expect(api.rowActions(FOLDER)[0].label).toBe(t('node.cover.change'))
     expect(api.rowActions(FOLDER).map((a) => a.id)).toEqual(['cover'])
   })
 
   it('opens the dialog', () => {
     const api = harness([FOLDER])
-    api.headerActions(FOLDER)[0].onClick()
+    api.rowActions(FOLDER)[0].onClick()
     expect(api.editor.value?.node.id).toBe(FOLDER.id)
   })
 })

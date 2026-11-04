@@ -112,8 +112,10 @@ export interface DepotSource {
   /** Bring back a node this session just deleted (the undo after a delete, inbox #385 (c)): core's trash restore, then
    *  re-read the tree. Absent: no undo (a guest deletes nothing). */
   readonly restore?: (node: TreeNode) => Promise<void>
-  /** Rename a file (the host's name dialog). Absent: this session renames nothing. */
+  /** Rename a file (the host's name dialog: a row's rename). Absent: this session renames nothing. */
   readonly rename?: (node: TreeNode) => void
+  /** Rename a file to `name` in place (its page's header, the host's `renameTo` door); present only beside `rename`. */
+  readonly renameTo?: (node: TreeNode, name: string) => Promise<void>
   /** Move a file, a drop box or a guest's folder out of one (the host's `MoveNodeDialog`, inbox #358). Absent: this
    *  session moves nothing. */
   readonly move?: (node: TreeNode) => void
@@ -134,12 +136,14 @@ export function sourceRights(rights: DepotRights, source: DepotSource): DepotRig
 }
 
 /** A member's source over the unlocked scope: `scopeId` the scope the view addresses, `epochs` its keys (null while
- *  locked), `keyOf` the tree's content keys, `rename` the host's name dialog, `move` the host's move dialog. */
+ *  locked), `keyOf` the tree's content keys, `rename` the host's name dialog and `renameTo` its rename in place, `move` the
+ *  host's move dialog. */
 export function memberDepotSource(from: {
   scopeId: () => string | null
   epochs: () => ScopeKey | null
   keyOf: (id: string) => Uint8Array | null
   rename?: (node: TreeNode) => void
+  renameTo?: (node: TreeNode, name: string) => Promise<void>
   move?: (node: TreeNode) => void
 }): DepotSource {
   async function listWithUploaders(folderId: string | null): Promise<Map<string, ListedFile>> {
@@ -211,6 +215,7 @@ export function memberDepotSource(from: {
       await loadTree()
     },
     rename: from.rename,
+    ...(from.rename && from.renameTo ? { renameTo: from.renameTo } : {}),
     move: from.move,
   }
 }

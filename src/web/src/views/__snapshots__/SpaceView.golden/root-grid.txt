@@ -4,7 +4,7 @@ div.veyq-node-host
       header.veyq-node-header
         div.veyq-node-header-body
           div.veyq-node-header-titlerow
-            h1.veyq-node-header-title
+            h1.veyq-node-header-title [aria-label="Personal"]
               "Personal"
       div.veyq-level-toolbar
         button.veyq-button.veyq-button--filled.veyq-button--primary.veyq-button--small.veyq-new-menu-button

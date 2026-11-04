@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // An opened file (inbox #378): the page of ONE file — core's header with the file's actions (download, replace of its
-// content, share, rename, move, delete, each where Depot's matrix says so; owner decision 2026-10-14: the download and the
+// content, share, move, delete, each where Depot's matrix says so, and its name renamed in place; owner decision 2026-10-14: the download and the
 // replace are header actions, no longer buttons below it), then the file itself and its size, type and modified time
 // opened from the blob's own sealed meta. It is FILE's `detail` in the registry, so the host mounts it for a member who
 // opens a file from the folder's list, and core's page of a public link (`ShareTreePage`) mounts the very same component
@@ -44,7 +44,7 @@ import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import type { NodeDetailProps } from '../../../core/applications/registry'
 import { hostRights, injectNodeHost, shareOfferOf } from '../../../core/node/nodeHost'
 import type { TreeNode } from '../../../core/node/tree'
-import { standardNodeActions, type NodeHeaderAction, type NodeHeaderPeopleFact } from '../../../core/node/nodeHeader'
+import { standardNodeActions, standardNodeRename, type NodeHeaderAction, type NodeHeaderPeopleFact } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { enqueue, removeFile, useUploadQueue, APPLICATION_OFF, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { useConfirm } from '../../../shared/state/useConfirm'
@@ -89,6 +89,7 @@ const source: DepotSource = guest
       epochs: () => props.epochs,
       keyOf: (id) => props.tree.keyOf(id),
       ...(host.rename ? { rename: (node: TreeNode) => host.rename!(node) } : {}),
+      ...(host.renameTo ? { renameTo: (node: TreeNode, name: string) => host.renameTo!(node, name) } : {}),
       ...(host.move ? { move: (node: TreeNode) => host.move!(node) } : {}),
     })
 const rights = computed(() => hostRights(sourceRights(depotRights(props.access, targetOf(props.tree, props.node)), source), host))
@@ -177,7 +178,7 @@ const uploaderFact = computed<NodeHeaderPeopleFact | null>(() => {
 })
 
 /** The header's actions (owner decision 2026-10-14): the download, the replace of the content (an upload into a file that
- *  holds none), then share, rename, move, delete — each only where the rights matrix grants it. The download is the
+ *  holds none), then share, move, delete — each only where the rights matrix grants it (the name is renamed in place). The download is the
  *  page's call to action; it runs inside the click (the save picker needs its activation). */
 const headerActions = computed<NodeHeaderAction[]>(() => [
   {
@@ -195,13 +196,16 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
     rights.value,
     {
       share: () => host.share?.(props.node, shareOfferOf(rights.value)),
-      rename: () => source.rename?.(props.node),
       move: () => source.move?.(props.node),
       remove: () => host.delete?.(props.node),
     },
-
   ),
 ])
+/** The file's name, renamed in place in the header through the session's own rename write (the source's `renameTo`), where
+ *  the rights matrix grants the rename (a guest's source has none). */
+const headerRename = computed(() =>
+  standardNodeRename(rights.value, source.renameTo ? { renameTo: (name: string) => source.renameTo!(props.node, name) } : {}),
+)
 
 /** What the viewer opens: this blob, read through the session's own door. The claims (sealed type; the node's name, else the
  *  uploaded one when the node's has no extension) only narrow what the decrypted bytes already allow (`view.ts`). Null until
@@ -308,7 +312,7 @@ async function replaceAnyway(n: Notice) {
 }
 
 // The header is core's (its order is the kind's `header.order`): the file adds its actions and who uploaded it.
-contributeNodeHeader(() => ({ actions: headerActions.value, facts: uploaderFact.value ? [uploaderFact.value] : [] }))
+contributeNodeHeader(() => ({ actions: headerActions.value, rename: headerRename.value, facts: uploaderFact.value ? [uploaderFact.value] : [] }))
 </script>
 
 <template>

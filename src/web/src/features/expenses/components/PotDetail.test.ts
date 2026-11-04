@@ -53,7 +53,7 @@ import { EXPENSES } from '../../platform/capabilities'
 import { realI18n, t } from '../../../test/i18n'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { memberAccessOf, memberTreeOf } from '../../../test/models'
-import { headerButtonIds } from '../../../test/nodeHeader'
+import { headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
 import { ANNA, BEN, CLEO, PotServer, POT_ID, SCOPE, expense, person, potNode } from '../potTestUtil'
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
 import { setAccountUserId } from '../../../app/account'
@@ -125,7 +125,11 @@ describe('PotDetail for a member', () => {
     await flushPromises()
     expect(w.find('h1').text()).toBe('Trip')
     expect(tabLabels(w)).toEqual([t('expenses.tabs.entries'), t('expenses.tabs.overview'), t('expenses.tabs.settings')])
-    expect(headerButtonIds(w)).toEqual(expect.arrayContaining(['share', 'rename', 'move']))
+    expect(headerButtonIds(w)).toEqual(expect.arrayContaining(['share']))
+    expect(await headerMenuIds(w)).toEqual(expect.arrayContaining(['move', 'delete']))
+    // The Pot's name is renamed in place, no entry of its own (ADR 0110 decision 11).
+    expect([...headerButtonIds(w), ...(await headerMenuIds(w))]).not.toContain('rename')
+    expect(w.find('h1 button[data-testid="node-header-rename"]').attributes('aria-label')).toBe(t('node.renameNamed', { name: 'Trip' }))
     expect(w.text()).toContain('Dinner')
     expect(w.text()).not.toContain(t('expenses.ledger.missing'))
   })

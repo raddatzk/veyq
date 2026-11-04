@@ -19,7 +19,7 @@ import { recordTyped } from '../../../src/canaries'
 import { addLanguage } from '../../../src/localeEditor'
 import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../../src/devices'
 import { toast } from '../../../src/toast'
-import { headerAction } from '../../../src/header'
+import { headerAction, renameInHeader } from '../../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -113,11 +113,8 @@ test(
     }
 
     await page.getByRole('button', { name: folderBefore, exact: true }).click()
-    await headerAction(page, 'Rename')
-    const rename = page.getByRole('dialog', { name: 'Rename' })
-    await rename.getByLabel('Name').fill(recordTyped(folderAfter))
-    await rename.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect(rename).toBeHidden()
+    // The folder's name is renamed in place in its header (ADR 0110 decision 11): no dialog.
+    await renameInHeader(page, folderBefore, recordTyped(folderAfter))
     // The reload re-opens what the URL names: the folder's NEW slug path (ADR 0015, a folder with its trailing slash).
     // Reloaded on the old one, the path resolves to nothing and the page stands on the space root (inbox #475).
     await expect(page).toHaveURL(new RegExp(`#${folderAfterPath}$`))

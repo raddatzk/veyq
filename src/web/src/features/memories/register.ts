@@ -5,7 +5,8 @@
 // Memories' rows of the folder level (`memoryRows`, inbox #407) ride on its two kinds' descriptors: core's level view calls
 // the row factory once and draws every Memory as a row or a tile of the one list (cr-files-application P4b). So do its dialogs
 // (P4c): `MemoryNodeDialog` creates a Memory or a chapter (the kind picks which), `ShareDialog` manages a Memory's or a
-// chapter's links (its uploader variant included); a rename of either is core's `FolderNameDialog`. The same detail
+// chapter's links (every role's, one dialog); a rename of either is core's - its header's name edited in place, a row's
+// `FolderNameDialog`, one write (`core/node/nodeName.ts`). The same detail
 // serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. Memories adds nothing to the shell: the sidebar's
 // Favorites section is core's (`core/favorites/PinnedNodes.vue`, inbox #409), and so is the top bar's upload status
 // (`core/blob/UploadStatusMenu.vue`, cr-files-application B3), which lists Memories' batches with every other application's.
@@ -57,7 +58,7 @@ export function registerMemories(registry: Registry): void {
     detail: MemoryDetailHost, icon: 'images' as const, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
     // The header's priority (owner, 2026-10-23, ADR 0110): what is first a button. Delete and report are always the ⋯ menu's
     // last entries. Core draws the header; `MemoryDetail` contributes its actions, facts and banner.
-    header: { order: ['favorite', 'upload', 'share', 'participants', 'download', 'cover', 'banner', 'rename', 'move', 'copy'] },
+    header: { order: ['favorite', 'upload', 'share', 'download', 'banner', 'move', 'copy'] },
     // Both carry a cover (inbox #411: core's action, dialog, upload and display), set only by an upload in core's dialog. A
     // picked image equal to a gallery medium's original shares that medium's PREVIEW instead of being stored again.
     cover: { findStored: findStoredCover },

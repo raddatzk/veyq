@@ -674,12 +674,16 @@ test(
         await tokens({ 'background-color': 'background-color: var(--app-info-soft)', color: 'color: var(--app-info-text)' }),
       )
 
-      // The folder header's icon tile (its dark twin in `dark.css` says the same tokens).
-      expect(await styleOf(page.locator('.veyq-node-header .veyq-node-header-icon'), ['width', 'height', 'background-color', 'color'])).toEqual({
-        width: '42px',
-        height: '42px',
-        ...(await tokens({ 'background-color': 'background-color: var(--app-info-soft)', color: 'color: var(--app-info-text)' })),
-      })
+      // The folder header's empty cover frame (a folder takes a cover; its dark twin in `dark.css` says the same tokens): 16:9,
+      // 64 px wide on a compact header, else as tall as the folder's one name row (ADR 0110 decision 11).
+      const frame = page.locator('.veyq-level-head .veyq-node-header .veyq-node-header-cover.is-empty')
+      expect(await styleOf(frame, ['background-color', 'color'])).toEqual(
+        await tokens({ 'background-color': 'background-color: var(--app-info-soft)', color: 'color: var(--app-info-text)' }),
+      )
+      const compact = await page.locator('.veyq-level-head .veyq-node-header').evaluate((h) => h.classList.contains('is-compact'))
+      const box = await styleOf(frame, ['width', 'height'])
+      expect(Number.parseFloat(box.width), 'its width').toBeCloseTo(compact ? 64 : (42 * 16) / 9, 1)
+      expect(Number.parseFloat(box.height), 'its height').toBeCloseTo(compact ? 36 : 42, 1)
 
       // The list mode: one column, the visual a 6.5 × 4 rem tile at this width; then back to the grid.
       const toolbar = page.locator('.veyq-level-toolbar')

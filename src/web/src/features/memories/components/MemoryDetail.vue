@@ -11,8 +11,10 @@
 //
 // **The header is core's** (owner 2026-11-03, ADR 0110 decision 10): core's page draws it above this body, the cover
 // included, and this view contributes data to it (`contributeNodeHeader`): the item count as the subtitle, its actions
-// (upload, the share actions, participants, the banner, rename, move, delete), its facts - the date and the place, whose
-// chips open this view's editors, and the participants (`MemoryParticipants`' fact) - and the banner core draws above the row.
+// (upload, the share actions, the banner while none is shown, move, delete), the rename of its name in place, its facts -
+// the date and the place, whose chips open this view's editors, and the participants (`MemoryParticipants`' fact, which opens
+// their picker) - and the banner core draws above the row, which opens its own dialog where it may be changed. What is
+// edited at its place has no action of its own (ADR 0110 decision 11).
 //
 // **One view for a member and a share guest** (inbox #401). It reads and writes only through `source` — Memories' data
 // source (`../source.ts`), the member's or the guest's, fixed by the host at mount — and offers what `rights` grants
@@ -55,7 +57,7 @@ import MemoryLocationEditor from './MemoryLocationEditor.vue'
 import MemoryParticipants from './MemoryParticipants.vue'
 import { useUploaderNames } from '../useUploaderNames'
 import MemoryCard from './MemoryCard.vue'
-import { standardNodeActions, type NodeHeaderAction, type NodeHeaderFact } from '../../../core/node/nodeHeader'
+import { standardNodeActions, standardNodeRename, type NodeHeaderAction, type NodeHeaderFact } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
@@ -93,9 +95,10 @@ const props = defineProps<{
   coverEditing?: boolean
   /** The lightbox offers "Report" (uc.moderation.report): the host's answer, core's rule (`canReport`). */
   canReport?: boolean
+  /** The page's rename in place of this node (its `renameTo` door); null where the page has none. */
+  renameTo?: ((name: string) => Promise<void>) | null
 }>()
 const emit = defineEmits<{
-  rename: []
   move: []
   delete: []
   openChapter: [node: TreeNode]
@@ -123,6 +126,8 @@ const memoryBanner = useMemoryBanner({
   memoryKey: () => props.memoryKey,
   loaders: props.source.loaders,
 })
+/** The banner is on screen: set, and its picture opens (`MemoryBanner` draws nothing for one that does not). */
+const bannerDrawn = computed(() => !!memoryBanner.banner.value && memoryBanner.status.value !== 'failed' && memoryBanner.status.value !== 'none')
 /** Whether the banner dialog is open - the banner's only way in (a file picked there). */
 const bannerDialog = ref(false)
 function openBannerDialog() {
@@ -167,7 +172,7 @@ onBeforeUnmount(() => {
   stickyObserver?.disconnect()
 })
 provideMemoryView({ source: props.source, rights: can })
-/** Who was there: the participants' model and picker, whose fact the header shows and whose picker the header's action opens. */
+/** Who was there: the participants' model and picker, whose fact the header shows and opens the picker from. */
 const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null)
 
 /** The header's actions (core's header; their priority is the kind's `header.order`): each is shown only where `can` grants
@@ -176,20 +181,20 @@ const participantsRow = ref<InstanceType<typeof MemoryParticipants> | null>(null
 const headerActions = computed<NodeHeaderAction[]>(() => [
   { id: 'upload', label: t('media.upload'), icon: 'cloud-upload', severity: 'primary', shown: can.value.upload, disabled: !props.memoryKey, onClick: () => triggerUpload() },
   { id: 'share', label: t('share.share'), icon: 'share-alt', shown: sharesAny(can.value), disabled: !props.memoryKey, onClick: () => emit('share', shareOfferOf(can.value)) },
-  // Who was there (ADR 0083, owner decision 2026-10-14): the picker opens from here, not from the row under the title. Shown by
-  // `participants` (a member's alone, fail-closed) where the list may be written - never in a personal scope, never during a
-  // pending deletion (E2) - which is the row's own `canEdit`.
-  { id: 'participants', label: t('memory.participants.title'), icon: 'users', shown: participantsRow.value?.canEdit === true, onClick: () => void participantsRow.value?.openPicker() },
-  // The banner above the Memory (uc.memory.banner): who may choose the cover may set it (`setBanner`, a member's only).
-  { id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'objects-column', shown: can.value.setBanner, disabled: !props.memoryKey, onClick: () => openBannerDialog() },
-  // Rename, move and delete are core's standard three (`standardNodeActions`), granted by `can`; the move is core's dialog
-  // (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
-  ...standardNodeActions(
-    t,
-    { rename: can.value.rename, move: can.value.move, delete: can.value.delete },
-    { rename: () => emit('rename'), move: () => emit('move'), remove: () => emit('delete') },
-  ),
+  // The banner above the Memory (uc.memory.banner): who may choose the cover may set it (`setBanner`, a member's only). A drawn
+  // banner opens its own dialog (`MemoryBanner`'s edit), so the menu offers it only while none is drawn: none set yet, or
+  // one whose picture does not open (it draws nothing, E5 - the dialog still changes or removes it).
+  {
+    id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'objects-column', menuOnly: true,
+    shown: can.value.setBanner && !bannerDrawn.value, disabled: !props.memoryKey, onClick: () => openBannerDialog(),
+  },
+  // Move and delete are core's standard actions (`standardNodeActions`, both in the ⋯ menu), granted by `can`; the move is
+  // core's dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory. The rename is the name's own,
+  // in place (`headerRename`).
+  ...standardNodeActions(t, { move: can.value.move, delete: can.value.delete }, { move: () => emit('move'), remove: () => emit('delete') }),
 ])
+/** The Memory's name, renamed in place in the header (the page's door), where `can` grants the rename. */
+const headerRename = computed(() => standardNodeRename({ rename: can.value.rename }, props.renameTo ? { renameTo: props.renameTo } : {}))
 
 // --- item favorites (ADR 0068) ---
 // The marks inside this Memory, shared with the scope. The filter is declared BEFORE the gallery core because
@@ -403,6 +408,7 @@ const bannerEditor = useBannerEditor({
 contributeNodeHeader(() => ({
   subtitle: t('media.itemCount', { count: items.value.length }, items.value.length),
   actions: headerActions.value,
+  rename: headerRename.value,
   facts: headerFacts.value,
   banner: {
     component: MemoryBanner,
@@ -412,6 +418,8 @@ contributeNodeHeader(() => ({
       status: memoryBanner.status.value,
       videoChunks: memoryBanner.videoChunks,
       videoBytes: memoryBanner.videoBytes,
+      // The banner opens its own dialog where it may be changed (a member's `setBanner`); a guest's offers nothing.
+      edit: can.value.setBanner && props.memoryKey ? openBannerDialog : null,
     },
   },
 }))
@@ -623,7 +631,7 @@ watch(
     />
     <!-- Who was there (ADR 0083): a member's alone - `can.participants` is false for every share role, so a guest's view
          mounts the component with `show` false and it offers no fact. A personal scope has nobody to name. It draws only its
-         picker, which opens from the header's "Participants" action; core's header draws the people (its `fact`). -->
+         picker, which opens from its fact in core's header (the people's edit button, or the empty chip). -->
     <MemoryParticipants
       ref="participantsRow"
       :scope-id="scopeId"

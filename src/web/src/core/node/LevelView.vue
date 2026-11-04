@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // The folder level view (cr-files-application P4b, ADR 0079; the UNIFIED LIST since inbox #407): what a member sees at the
 // scope root or inside a folder. Core's, and it names no application. In this order it renders its HEAD - one row of the
-// folder's HEADER (core's `NodeHeader`: name, share, rename, move, delete - a folder is core's kind; the move is core's
-// `MoveNodeDialog`, behind the page's `move` door, inbox #358), or the space's name at the top level, and then its
+// folder's HEADER (core's `NodeHeader`: the name, renamed in place, then share, move and delete - a folder is core's kind; the
+// move is core's `MoveNodeDialog`, behind the page's `move` door, inbox #358), or the space's name at the top level, and then its
 // TOOLBAR (the "New" menu, the space's node trash, which holds every application's nodes, Select and the view-mode switch),
 // which wraps below the name where both do not fit -, the application TABS, the applications' NOTICES, and then ONE LIST - or one set of
 // tiles - of everything at this level: the folders, the Memories, the files, the drop boxes, every kind, with no section
@@ -104,7 +104,7 @@ import ViewModeToggle from './ViewModeToggle.vue'
 import NodeHeader from './components/NodeHeader.vue'
 import LevelRowItem from './components/LevelRowItem.vue'
 import LevelNotices from './components/LevelNotices.vue'
-import { standardNodeActions } from './nodeHeader'
+import { standardNodeActions, standardNodeRename } from './nodeHeader'
 import { canCopy } from '../export/copyActions'
 import { canReport, reportNodes } from '../report/reportActions'
 import { useReportOffered } from '../report/report'
@@ -176,15 +176,11 @@ const menuItems = computed<VeyqMenuItem[]>(() =>
   }),
 )
 const newMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
-// The folder header's actions: the rights answers for the folder on screen, narrowed to the page's doors, in the header's
-// fixed order.
-const folderActions = computed(() =>
-  standardNodeActions(
-    t,
-    hostRights(rights.value, host),
-    hostHandlers(host, () => props.folder!, () => shareOfferOf(rights.value)),
-  ),
-)
+// The folder header's actions and its name's rename in place (ADR 0110 decision 11): the rights answers for the folder on
+// screen, narrowed to the page's doors.
+const folderHandlers = () => hostHandlers(host, () => props.folder!, () => shareOfferOf(rights.value))
+const folderActions = computed(() => standardNodeActions(t, hostRights(rights.value, host), folderHandlers()))
+const folderRename = computed(() => standardNodeRename(hostRights(rights.value, host), folderHandlers()))
 // The space's node trash, where the rights grant it and the page has the door.
 const trashOffered = computed(() => rights.value.nodeTrash && !!host.openTrash)
 
@@ -570,6 +566,7 @@ async function onDrop(e: DragEvent): Promise<void> {
         :cover="folderHeader?.cover"
         :title="folderName ?? folder.name"
         :actions="folderActions"
+        :rename="folderRename"
         :order="folderHeader?.order"
       />
       <!-- The space's top level: core's header with the space's name and nothing to act on (the space is no node). -->

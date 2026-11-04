@@ -3,8 +3,8 @@ div.veyq-node-host
     div.has-header.veyq-level-head
       header.has-leading.veyq-node-header
         div.veyq-node-header-leading
-          button.veyq-node-header-icon.veyq-node-header-visual-button [aria-label="Set cover"]
-            span.veyq-icon
+          button.is-empty.veyq-node-header-cover.veyq-node-header-visual-button [aria-label="Set cover"]
+            span.veyq-icon.veyq-node-header-cover-icon
               svg.lucide.lucide-folder.veyq-icon__svg
                 path
             span.veyq-node-header-cover-hint
@@ -17,8 +17,9 @@ div.veyq-node-host
                 "Set cover"
         div.veyq-node-header-body
           div.veyq-node-header-titlerow
-            h1.veyq-node-header-title
-              "Empty"
+            h1.veyq-node-header-title [aria-label="Empty"]
+              button.veyq-node-header-rename [aria-label="Rename “Empty”"]
+                "Empty"
             div.veyq-node-header-actions
               button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
                 span.veyq-button__icon.veyq-icon
@@ -37,29 +38,6 @@ div.veyq-node-host
                   svg.lucide.lucide-download.veyq-icon__svg
                     path
                     path
-                    path
-              button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Set cover"]
-                span.veyq-button__icon.veyq-icon
-                  svg.lucide.lucide-image.veyq-icon__svg
-                    rect
-                    circle
-                    path
-              button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Rename"]
-                span.veyq-button__icon.veyq-icon
-                  svg.lucide.lucide-pencil.veyq-icon__svg
-                    path
-                    path
-              button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Move to…"]
-                span.veyq-button__icon.veyq-icon
-                  svg.lucide.lucide-file-output.veyq-icon__svg
-                    path
-                    path
-                    path
-                    path
-              button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Copy to…"]
-                span.veyq-button__icon.veyq-icon
-                  svg.lucide.lucide-copy.veyq-icon__svg
-                    rect
                     path
               button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-node-header-more.veyq-prime-icon-button [aria-label="More actions for “Empty”"]
                 span.veyq-button__icon.veyq-icon

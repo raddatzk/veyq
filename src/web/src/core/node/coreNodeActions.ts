@@ -1,5 +1,5 @@
 // Core's own actions of a node, built in ONE place for every place a node shows its actions (owner 2026-11-01, ADR 0110):
-// the favorite heart (inbox #409), the cover (inbox #411), "Copy to…" (uc.platform.copy-node), the ZIP download (ADR 0082)
+// the favorite heart (inbox #409), the cover (inbox #411; a row's entry - a header's leading visual is its way in), "Copy to…" (uc.platform.copy-node), the ZIP download (ADR 0082)
 // and Report (uc.moderation.report, ADR 0093 § 1 - a legal duty, DSA Art. 16: whoever sees a node can report it). Each is
 // gated by its own core rights function (`favoriteRights`, `coverRights`, `canCopy`, `canDownload`, `canReport`) and fails
 // closed; no application builds, lists or forgets one.
@@ -49,8 +49,9 @@ export const coreNodeActionsKey: InjectionKey<CoreNodeActions> = Symbol('veyq.co
 /**
  * Core's actions for the nodes a view draws, for whoever looks. Called in a view's setup (it uses the i18n, toast and
  * cover contexts). `nodes` are those whose covers the view resolves (the folder on screen and its children, or the one
- * node of a page). In merge order the actions are: the heart (before the application's), the cover, the copy beside
- * the move, the download, and Report (menu-only, the menu's last group before delete).
+ * node of a page). In merge order a header's are: the heart (before the application's), the copy beside the move (a menu
+ * entry, as the move), the download, and Report (menu-only, the menu's last group before delete); a row's add the cover
+ * after the heart.
  */
 export function useCoreNodeActions(
   access: () => Access,
@@ -71,10 +72,11 @@ export function useCoreNodeActions(
     header(node) {
       if (!node) return []
       const a = access()
+      // No cover action in a header: its leading visual IS the cover's way in (ADR 0110 decision 11), and the copy is a
+      // menu entry, as the move beside it.
       return [
         ...favoriteHeaderActions(t, toast.error, a, node),
-        ...cover.headerActions(node),
-        ...(doors.copy ? copyHeaderActions(t, a, node, copy(node)) : []),
+        ...(doors.copy ? copyHeaderActions(t, a, node, copy(node)).map((c) => ({ ...c, menuOnly: true })) : []),
         ...(doors.download ? downloadHeaderActions(t, a, node, download(node)) : []),
         ...reportHeaderActions(t, reportOn.value, a, node, report(node)),
       ]

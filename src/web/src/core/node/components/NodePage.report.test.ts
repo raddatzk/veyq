@@ -44,7 +44,7 @@ import { fakeApi, stubApi } from '../../../test/apiMock'
 import { galleryFakeStore } from '../../../features/memories/components/galleryFakeStore'
 import { realI18n } from '../../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
-import { chooseHeaderEntry, headerMenuIds } from '../../../test/nodeHeader'
+import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
 import { mountNodePage } from '../../../test/nodePage'
 import { hostFor } from '../../../test/nodeHost'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
@@ -147,6 +147,22 @@ describe('Report on every node\'s page (a legal duty, DSA Art. 16)', () => {
       expect(bare.find('.veyq-node-header').exists(), `${kind} mounted bare draws no header`).toBe(false)
       expect(bare.text().length, `${kind}: control, the bare detail rendered its body`).toBeGreaterThan(0)
       bare.unmount()
+    }
+  })
+
+  // ADR 0110 decision 11 (owner 2026-11-04): what is edited at its place - the name, the cover, a Memory's participants - has no
+  // header entry on any kind's page, and the move and the copy are ⋯ entries, never buttons.
+  it('no kind\'s header offers an entry for what is edited in place; its move and copy are ⋯ entries only', async () => {
+    const IN_PLACE = ['rename', 'cover', 'participants']
+    for (const kind of pageKinds()) {
+      const w = await mountPage(kind)
+      const buttons = headerButtonIds(w)
+      const menu = await headerMenuIds(w)
+      expect(menu, `${kind}: control, its ⋯ is read`).toContain('report')
+      for (const id of IN_PLACE) expect([...buttons, ...menu], `${kind}: ${id}`).not.toContain(id)
+      for (const id of ['move', 'copy']) expect(buttons, `${kind}: ${id} is no button`).not.toContain(id)
+      expect(menu, `${kind}: the member moves it from the ⋯`).toContain('move')
+      w.unmount()
     }
   })
 

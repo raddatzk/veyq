@@ -109,7 +109,13 @@ async function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
   await flushPromises()
 }
-const moveCardButton = () => document.body.querySelector(`.veyq-node-header-actions button[aria-label="${t('node.move.action')}"]`)
+/** The header's "Move to…": an entry of its ⋯ menu (ADR 0110 decision 11), opened with a real click; null where it has none. */
+async function moveCardEntry(): Promise<HTMLElement | null> {
+  const more = document.body.querySelector<HTMLElement>('.veyq-node-header .veyq-node-header-more')
+  if (!more) return null
+  await click(more)
+  return document.body.querySelector<HTMLElement>('.veyq-node-header-action-move .veyq-menu__item-content')
+}
 const guest: GuestIdentity = { identityId: 'g-1', contributorToken: 'contributor-token' } as GuestIdentity
 
 beforeEach(async () => {
@@ -129,7 +135,7 @@ describe('a READ_WRITE guest moves inside its share', () => {
     const requestGuest = vi.fn(async () => guest)
     const reload = vi.fn(async () => {})
     await mountAt(ShareRole.ReadWrite, NESTED, { requestGuest, reload })
-    await click(moveCardButton()!)
+    await click((await moveCardEntry())!)
     // it opens where the folder is; the trail runs up to the share root, never the scope root; itself is not to be opened
     expect(crumbs()).toEqual(['Familie', 'Briefe'])
     expect(places()).toEqual([['Feldpost', false, t('node.move.blocked.self')]])
@@ -168,7 +174,7 @@ describe('a READ_WRITE guest moves inside its share', () => {
     const updateShareNode = stubApi(publicSharesApi, { updateShareNode: undefined }).updateShareNode
     updateShareNode.mockRejectedValueOnce({ response: new Response(body, { status: 422, headers: { 'content-type': 'application/json' } }) })
     await mountAt(ShareRole.ReadWrite, NESTED, { requestGuest: async () => guest })
-    await click(moveCardButton()!)
+    await click((await moveCardEntry())!)
     await moveHere('Familie')
     expect(document.body.querySelector('.veyq-message--error')!.textContent!.trim()).toBe(t('node.move.refused.illegal_scope'))
   })
@@ -178,7 +184,8 @@ describe('a READ_WRITE guest moves inside its share', () => {
   it('the link\'s root offers no move: its parent lies above the link', async () => {
     await mountAt(ShareRole.ReadWrite)
     expect(document.body.querySelector('.veyq-node-header-title')!.textContent).toBe('Familie')
-    expect(moveCardButton()).toBeNull()
+    expect(await moveCardEntry()).toBeNull()
+    expect(document.body.querySelector(`.veyq-node-header button[aria-label="${t('node.move.action')}"]`)).toBeNull()
   })
 })
 
@@ -212,7 +219,8 @@ describe('a READ_WRITE guest moves a selection of its level', () => {
 describe('a guest without the right moves nothing', () => {
   it('READ: no move on a folder\'s header, none on a row, no dialog', async () => {
     const w = await mountAt(ShareRole.Read, NESTED)
-    expect(moveCardButton()).toBeNull()
+    expect(await moveCardEntry()).toBeNull()
+    expect(document.body.querySelector(`.veyq-node-header button[aria-label="${t('node.move.action')}"]`)).toBeNull()
     expect(authenticatedCalls).toEqual([])
     w.unmount()
     // (the folder level above holds no note: the root does)
@@ -224,6 +232,7 @@ describe('a guest without the right moves nothing', () => {
 
   it('WRITE_ONLY (never this page\'s, by the shell): still no move anywhere', async () => {
     await mountAt(ShareRole.WriteOnly, NESTED)
-    expect(moveCardButton()).toBeNull()
+    expect(await moveCardEntry()).toBeNull()
+    expect(document.body.querySelector(`.veyq-node-header button[aria-label="${t('node.move.action')}"]`)).toBeNull()
   })
 })

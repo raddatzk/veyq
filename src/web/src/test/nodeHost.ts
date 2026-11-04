@@ -10,7 +10,7 @@ import { ShareRole } from '../api/generated/sharing'
 export type DoorName = keyof NodeHost
 
 export const MEMBER_DOORS: readonly DoorName[] = [
-  'open', 'rename', 'move', 'moveMany', 'delete', 'deleteMany', 'share', 'createChild', 'download', 'copy', 'importArchive', 'openTrash',
+  'open', 'rename', 'renameTo', 'move', 'moveMany', 'delete', 'deleteMany', 'share', 'createChild', 'download', 'copy', 'importArchive', 'openTrash',
 ]
 export const GUEST_DOORS: readonly DoorName[] = ['open', 'move', 'moveMany', 'download', 'createChild']
 

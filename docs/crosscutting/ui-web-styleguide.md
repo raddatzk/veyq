@@ -176,10 +176,22 @@ or a one-off `1rem` label sitting in them.
   keeps its own width.
 - **A row that leads with a picture or icon** (a person's avatar) is `.veyq-list-row.has-leading`: the visual, the name
   beside it, then the actions. Never the visual in the row's wide first column — that pushed the name to the far end.
-- **Every cover in a node header is 244 px wide, 16:9; the icon tile a 4rem square** — one size for every kind, as tall
-  as a Memory's four rows beside it (64 px and 42 px compact). Where the cover may be set it is the button that opens
-  core's cover dialog, its hint (`.veyq-node-header-cover-hint`) shown on hover and focus. **A fact under the name** is
-  core's look too: a date or place a borderless chip (`.veyq-node-header-chip`), people core's `PersonGroup`.
+- **A node header's leading visual is as tall as the rows beside it** — each row kind (the name, the subtitle, a row of
+  chips, of people, of text) has one block-size token (`--veyq-node-header-row-*`, `styles/ui.css`), and the visual's
+  height is their computed sum, never a measured one; a cover is 16:9 at that height, the icon tile a square of it (64 px
+  and 42 px compact). A kind that takes a cover and has none shows the empty 16:9 frame with its icon
+  (`.veyq-node-header-cover.is-empty`, dark twin in `dark.css`). Where the cover may be set the cover or the frame is the
+  button that opens core's cover dialog, its hint (`.veyq-node-header-cover-hint`) shown on hover and focus and always on
+  an empty wide frame. The content is centred against the visual. **The name is one size, cover or not:** 2rem wide,
+  1.5rem compact. **A fact under the name** is core's look too: a date or place a borderless chip
+  (`.veyq-node-header-chip`), people core's `PersonGroup`.
+- **What is edited at its place has no header entry** — neither a button nor in the ⋯ menu: the name is a button in the
+  page's `h1` that turns into a field (Enter writes, Esc cancels, the error under it; the heading stays named by the name),
+  the cover is the leading visual, people with an editor are their fact (a pencil beside them, an empty chip while nobody
+  is listed), a banner its own frame. A header's move and copy are ⋯ entries, like report and delete. A level's rows keep
+  their entries: a row click opens the node.
+- **On a folder level the header's action buttons and the toolbar's controls are one height**
+  (`--veyq-level-control-height`), so in the head's one row they line up.
 - **Empty/loading:** `.veyq-empty`, `.veyq-loading` — concise and action-oriented, not marketing copy.
 - **The UI layer** ([ADR 0107](../decisions/0107-the-clients-own-their-ui-components-reka-ui-underneath-primevue-out.md)):
   a button, field, dialog, menu, select, tabs, toast, tooltip, date field or icon is a `Veyq*` component of

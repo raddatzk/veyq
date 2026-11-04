@@ -1,7 +1,8 @@
 // A node's cover as a CORE feature for a view (inbox #411): the resolved covers of the nodes it draws (every kind that
 // opts in; a share guest's through the link's own reads) AND the core action that sets, changes and removes one, plugged
-// into the two places a node shows its actions - a node's header and its row, through `core/node/coreNodeActions.ts` - the
-// way the favorite heart is (`core/favorites/favoriteActions.ts`), with no change to any application.
+// into a node's row through `core/node/coreNodeActions.ts` - the way the favorite heart is (`core/favorites/favoriteActions.ts`),
+// with no change to any application. A node's header has no cover action: its leading visual is the way in (`canSet`, `open`;
+// ADR 0110 decision 11).
 //
 // Called in a view's SETUP (it uses the i18n, toast and watch contexts) with the view's access, tree source and the nodes it
 // draws. ONE action, `cover`, labelled `Set cover` / `Change cover` by whether the node has one, gated by `coverRights`
@@ -20,7 +21,6 @@ import { targetOf, type Access, type TreeSource } from '../../access'
 import { registry } from '../../applications/registry'
 import { enqueue, QUOTA_EXCEEDED } from '../../blob/queue'
 import { shareBlob, type SharedBlob } from '../../blob/sharedBlob'
-import type { CoreHeaderAction } from '../nodeHeader'
 import type { CoreRowAction } from '../levelRow'
 import { nodeMetaState, unsealNodeMeta } from '../nodeMeta'
 import { writeUnderMemberNode } from '../rereadNode'
@@ -52,9 +52,7 @@ export interface UseNodeCover {
   has(nodeId: string): boolean
   /** Resolve the covers of further nodes this view draws that `nodes` does not list. */
   ensure(nodes: readonly TreeNode[]): void
-  /** The header's core action for `node`. */
-  headerActions(node: TreeNode | null): CoreHeaderAction[]
-  /** A row's core action for `node`. */
+  /** A row's core action for `node` (a header has none: its leading visual opens the dialog, ADR 0110 decision 11). */
   rowActions(node: TreeNode | null): CoreRowAction[]
   /** Whether whoever looks may set `node`'s cover (`coverRights`): what a kind's own cover control reads (Memories' cover
    *  tile), so it offers exactly what core's action does. */
@@ -254,7 +252,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
     void writeSealed(node, key, scopeId, kept, true)
   }
 
-  function build(node: TreeNode | null): (CoreHeaderAction & CoreRowAction)[] {
+  function build(node: TreeNode | null): CoreRowAction[] {
     const shown = !!node && canSet(node)
     if (!shown) return []
     return [
@@ -273,7 +271,6 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
     covers: store.covers,
     has: (id) => store.declared.has(id),
     ensure: (extra) => store.ensure(extra, (id) => tree().keyOf(id)),
-    headerActions: (node) => build(node),
     rowActions: (node) => build(node),
     canSet,
     editor,

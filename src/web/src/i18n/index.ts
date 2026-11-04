@@ -1638,6 +1638,8 @@ const en = {
     },
     createFolderTitle: 'Create a folder',
     renameTitle: 'Rename',
+    // The header's name where it may be renamed in place (`NodeHeader`): the button's accessible name and tooltip.
+    renameNamed: 'Rename “{name}”',
     nameLabel: 'Name',
     favorite: 'Favorite',
     unfavorite: 'Remove favorite',
@@ -3634,6 +3636,7 @@ const de: typeof en = {
     },
     createFolderTitle: 'Ordner anlegen',
     renameTitle: 'Umbenennen',
+    renameNamed: '„{name}“ umbenennen',
     nameLabel: 'Name',
     favorite: 'Favorit',
     unfavorite: 'Favorit entfernen',

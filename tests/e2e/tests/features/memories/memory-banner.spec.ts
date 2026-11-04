@@ -63,6 +63,9 @@ async function drawnImage(page: Page, w: number, h: number): Promise<Buffer> {
 const banner = (page: Page) => page.getByTestId('memory-banner')
 const tabRow = (page: Page) => page.locator('.memory-tabs .veyq-tabs__bar')
 const bannerDialog = (page: Page) => page.getByRole('dialog', { name: /banner/i })
+/** A drawn banner opens its own dialog (ADR 0110 decision 11): the header's menu offers "Add banner" only while none is drawn. */
+const changeBanner = (page: Page, options: { timeout?: number } = {}) =>
+  banner(page).getByRole('button', { name: 'Change banner', exact: true }).click(options)
 
 /**
  * The frame's height as the product's rules make it (`MemoryBanner.vue`): `aspect-ratio` over the column's width - 16:9
@@ -278,7 +281,7 @@ function watchSave(page: Page) {
 test('the gallery\'s portrait photo, uploaded again, shares its preview and shows whole with blurred sides; nothing to re-frame', { tag: ['@uc.memory.banner:frame-and-focal-point', '@uc.memory.banner:upload-shares-an-equal-gallery-file'] }, async () => {
   const { page } = member
   await expect(page.getByRole('button', { name: 'Use as banner' }), 'the gallery offers no way in').toHaveCount(0)
-  await headerAction(page, 'Change banner')
+  await changeBanner(page)
   const dialog = bannerDialog(page)
   const chooser = page.waitForEvent('filechooser')
   await dialog.getByRole('button', { name: 'Choose an image or a video' }).click()
@@ -295,7 +298,7 @@ test('the gallery\'s portrait photo, uploaded again, shares its preview and show
   expectFrame((await banner(page).boundingBox())!, 16 / 9, 900, 'the frame is the screen\'s, not the portrait\'s')
 
   // a stored banner is never re-framed: the dialog shows it, and Save waits for a new file
-  await headerAction(page, 'Change banner')
+  await changeBanner(page)
   await expect(bannerDialog(page).getByTestId('banner-preview-wide').locator('img.banner-frame-media')).toBeVisible({ timeout: 60_000 })
   await expect(bannerDialog(page).getByRole('button', { name: 'Save banner' }), 'nothing to save without a new file').toBeDisabled()
   await bannerDialog(page).getByRole('button', { name: 'Cancel', exact: true }).click()
@@ -315,7 +318,7 @@ test(
     const media = ((await (await listing).json()) as { media: { blobId: string; derivatives: unknown[] }[] }).media
     const originals = new Set(media.map((m) => m.blobId))
 
-    await headerAction(page, 'Change banner', { timeout: 60_000 })
+    await changeBanner(page, { timeout: 60_000 })
     const chooser = page.waitForEvent('filechooser')
     await bannerDialog(page).getByRole('button', { name: 'Choose an image or a video' }).click()
     await (await chooser).setFiles({ name: `Wellen ${stamp}.webm`, mimeType: 'video/webm', buffer: VIDEO })
@@ -386,7 +389,7 @@ test(
 
 test('the banner is removed', { tag: ['@uc.memory.banner:one-write-for-slots-and-meta'] }, async () => {
   const { page } = member
-  await headerAction(page, 'Change banner')
+  await changeBanner(page)
   await bannerDialog(page).getByRole('button', { name: 'Remove banner' }).click()
   await expect(bannerDialog(page)).toBeHidden({ timeout: 60_000 })
   await expect(banner(page)).toHaveCount(0)
