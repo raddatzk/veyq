@@ -2,13 +2,14 @@
 
 - **ID:** uc.platform.node-cover
 - **Primary actor:** A member who may write the space (a member with write access on the scope, keys unlocked).
-- **Goal:** Give a **folder**, a **drop box** or a **Memory** a **cover** — an image the member uploads directly — shown as the
+- **Goal:** Give a **folder**, a **drop box**, a **Memory** or a **Pot** a **cover** — an image the member uploads directly — shown as the
   node's leading visual in the level list and tiles, in the node's header and in the sidebar's Favorites, with the kind's icon as
   the default. Core's feature (inbox #411): the action, **the dialog (choose, crop, remove)**, the derive, the upload, the write and
   the display belong to the platform; a kind only **opts in** (`NodeKindRules.takesCover` on the server, `cover` on the web descriptor).
 - **Preconditions:** The scope is unlocked (the scope key is loaded), not pending deletion, the member may write it, and the
-  node's kind opted in (FOLDER — core's own, `DEPOT_DROPBOX`, `MEMORY`, `CHAPTER`; **not** `FILE`: a file's own thumbnail is a
-  different idea, it needs the client to understand many formats). The node is not a guest's identity folder.
+  node's kind opted in (FOLDER — core's own, `DEPOT_DROPBOX`, `MEMORY`, `CHAPTER`, `EXPENSES_POT` (owner 2026-11-04); **not**
+  `FILE`: its one blob is its content, and a file's own thumbnail is a different idea, it needs the client to understand many
+  formats). The node is not a guest's identity folder.
 - **Postconditions (success):** The image is the node's own blob in core's `COVER` attachment slot — not a child, not a file in
   the folder — and the node's sealed `wrappedMeta` names it; both landed in ONE write. The node goes to the trash with its
   cover, counts against the quota like any attachment and is freed with the node's purge.
@@ -19,8 +20,8 @@
    **Change cover** where it has one. It is **ONE action** (one id `cover`, the image icon, in the header and in the row menu
    beside the favorite heart) gated by `coverRights` (fail closed); there is **no separate Remove entry** — removal lives
    in the dialog.
-2. Core's **cover dialog** (`core/node/cover/components/CoverDialog.vue`) opens — the same one for a folder, a drop box and a
-   Memory. It offers **Choose an image** (a hidden `image/*` input: an image, not empty, up to **40 MB**, otherwise a clear
+2. Core's **cover dialog** (`core/node/cover/components/CoverDialog.vue`) opens — the same one for a folder, a drop box, a
+   Memory and a Pot. It offers **Choose an image** (a hidden `image/*` input: an image, not empty, up to **40 MB**, otherwise a clear
    message inside the dialog and nothing is read), the shared **16:9 crop** (drag to pan, zoom 1–3×), **Remove cover** (only where
    the node has one — a cover that could not be opened can still be removed), **Cancel** and **Save cover**. Opened on a node
    that has a cover, it shows that image with its **stored crop restored**, so the member can re-frame it without uploading
@@ -50,8 +51,8 @@
   and a SHA-256 sealed in the medium's `blob-meta`); the upload then becomes a **second blob row on that stored object** - the
   stored blob's `K_blob` wrapped again bound to the node and `COVER`, sent as `setNodeCover`'s `shared` in place of an upload
   id, nothing uploaded ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) § 5). A failure to look
-  is no match. A folder and a drop box have no such seam: a Depot file is an original and a cover a derived JPEG, never the same
-  object. The server refuses a source the node does not hold, a blocked one or a taken id (`shared_source_invalid`), and the
+  is no match. A folder, a drop box and a Pot have no such seam: a Depot file or a receipt is an original and a cover a derived JPEG,
+  never the same object. The server refuses a source the node does not hold, a blocked one or a taken id (`shared_source_invalid`), and the
   operator learns which blob the cover shares (accepted, inbox #505).
 - **E1 — a peer changed the cover meanwhile:** `409 cover_stale` — nothing was attached, the old cover is intact, the upload was
   spent and freed; the member is told and may try again. A meta that moved is `409 stale_revision`: nothing written, the upload
@@ -87,7 +88,7 @@
 
 ## User impact
 
-You can give a folder, a drop box or a Memory a picture of your own so you recognise it at a glance in lists, on its
+You can give a folder, a drop box, a Memory or a Pot a picture of your own so you recognise it at a glance in lists, on its
 page and in your favorites.
 
 ## Related
@@ -95,8 +96,10 @@ page and in your favorites.
 - Feature: [Platform](../_index.md)
 - End-user view (docs site): [Choose a cover](../../../../site/src/content/docs/memories/set-a-cover.mdx)
 - End-user view (docs site): [Give a folder a cover](../../../../site/src/content/docs/spaces/give-a-folder-a-cover.mdx)
+- End-user view (docs site): [Expenses](../../../../site/src/content/docs/expenses/index.mdx) (a Pot's cover)
 - Use-cases: [uc.memory.cover](../../memory/use-cases/uc.memory.cover.md) (a Memory's own second source and its gallery flow),
-  [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) (a drop box carries one),
+  [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) (a drop box carries one), a Pot carries one
+  ([docs/apps/expenses.md](../../../apps/expenses.md)),
   [uc.memory.delete-node](../../memory/use-cases/uc.memory.delete-node.md) (the trash keeps a cover for a restore, the purge frees it)
 - Enabler: [en.memory.node-meta](../../memory/enablers/en.memory.node-meta.md) (the sealed `wrappedMeta` envelope the cover field lives in)
 - Sibling: [uc.memory.banner](../../memory/use-cases/uc.memory.banner.md) — Memories' own attachment pair beside the cover,

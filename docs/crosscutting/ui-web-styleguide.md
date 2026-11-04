@@ -149,8 +149,8 @@ or a one-off `1rem` label sitting in them.
   full leading visual, the name in one line and the actions in its row, the name first down to the kind's first two actions,
   then shortened with an ellipsis; compact (`.is-compact`): a small leading visual, the name in two lines at most, the actions
   in a row of their own; as many actions as fit are buttons in the kind's priority and the rest one ⋯ menu, delete and report
-  always in it — no action is hidden by a width rule, and no viewport query places the header; tokens only, the icon tile has
-  its dark twin).
+  always in it — no action is hidden by a width rule, and no viewport query places the header; tokens only, the empty frame
+  has its dark twin).
 - **Badges:** `.veyq-badge.success|.warning|.muted` for status; no one-off pills.
 - **Forms:** `.veyq-form`, `.veyq-form-grid`, `.veyq-form-copy`; full-width inputs; concise labels;
   muted helper text that explains *consequences*, not the label.
@@ -178,9 +178,10 @@ or a one-off `1rem` label sitting in them.
   beside it, then the actions. Never the visual in the row's wide first column — that pushed the name to the far end.
 - **A node header's leading visual is as tall as the rows beside it** — each row kind (the name, the subtitle, a row of
   chips, of people, of text) has one block-size token (`--veyq-node-header-row-*`, `styles/ui.css`), and the visual's
-  height is their computed sum, never a measured one; a cover is 16:9 at that height, the icon tile a square of it (64 px
-  and 42 px compact). A kind that takes a cover and has none shows the empty 16:9 frame with its icon
-  (`.veyq-node-header-cover.is-empty`, dark twin in `dark.css`). Where the cover may be set the cover or the frame is the
+  height is their computed sum, never a measured one; the visual is **always 16:9** at that height (64 × 36 px compact,
+  owner 2026-11-04): a cover, or, without one, the empty 16:9 frame with the kind's icon — a kind that takes a cover and has
+  none, and a kind without a cover (a file) alike, never a square tile (`.veyq-node-header-cover.is-empty`, dark twin in
+  `dark.css`). Where the cover may be set the cover or the frame is the
   button that opens core's cover dialog, its hint (`.veyq-node-header-cover-hint`) shown on hover and focus and always on
   an empty wide frame three rows tall or more (`.is-roomy`: a Memory's, a chapter's); its words only there — a lower
   frame (a folder's name alone) and a compact header show the image glyph alone over the frame, the words its tooltip. The content is centred against the visual. **The name is one size, cover or not:** 2rem wide,

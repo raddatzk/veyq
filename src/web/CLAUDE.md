@@ -213,8 +213,8 @@ here; the server is blind.
   counts as custom properties (`headerRowCounts`) and the sheet sums them - computed, never measured (a Memory's four rows: 137.2 px, its
   cover ~244 px wide; a folder's name alone: 42 px). A kind with a `cover` shows the node's cover 16:9 at that height (`NodeCoverImage`, the
   view's resolved covers) or, without one, the empty 16:9 frame with the kind's icon, and where `cover.canSet(node)` it is the button that opens
-  core's cover dialog (hint on hover and focus, always on an empty wide frame of three rows or more — its words only there, a lower frame shows the glyph), else a plain frame; a kind without one, the icon tile, a square of
-  that height. **What is edited at its place has no header entry** (ADR 0110 decision 11): no rename, cover or participants action - the name is
+  core's cover dialog (hint on hover and focus, always on an empty wide frame of three rows or more — its words only there, a lower frame shows the glyph), else a plain frame; a kind without one (a file), its
+  icon in that same empty 16:9 frame, never a button - **the leading visual is always 16:9** (owner 2026-11-04). **What is edited at its place has no header entry** (ADR 0110 decision 11): no rename, cover or participants action - the name is
   renamed in place (the contribution's `rename`, `standardNodeRename`: the rename right AND the page's `renameTo` door; the `h1` - named by the
   name, `aria-label` - holds a button "Rename “…”", Enter writes through the kind's own write, Esc cancels, blur writes a changed name; check,
   write and refusal words are `core/node/nodeName.ts`'s, shared with `FolderNameDialog`), the cover is the visual, the participants their fact.
@@ -223,7 +223,7 @@ here; the server is blind.
   picked by the header's own width** (`headerLayout`, `core/node/nodeHeader.ts`; no viewport query): **wide** while the leading visual's wide width,
   the name's minimum (12rem), the floor's two buttons and the ⋯ fit in one row — the name ONE line at its natural width, the actions at the right end
   of its row, yielding to the ⋯ down to the kind's first two shown actions (`headerFloor`), only then the name shortened with "…" — else **compact**
-  (`.is-compact`): a 64 px cover (or a 42 px icon tile) beside a name of two lines at most, the actions in a row of their own. The answer
+  (`.is-compact`): the 16:9 visual at 64 × 36 px beside a name of two lines at most, the actions in a row of their own. The answer
   reads sizes no layout changes — the leading visual's registered `--veyq-node-header-leading-wide` (computed from the row counts,
   `styles/ui.css`), `--veyq-node-header-name-min`, the column gaps — never the name or the layout in force,
   so it cannot flip. The application only feeds data: its action list
@@ -322,7 +322,7 @@ here; the server is blind.
   (`useMediaGalleryLive`, bound to the loop by `mediaRevisionPolling.ts`) is the first user. Core imports no application.
 
   **Covers are core's (inbox #411, `core/node/cover/`).** Any node whose kind carries a `cover` descriptor (`KindDescriptor.cover`: FOLDER
-  pre-registered by core, Depot's drop box, Memories' MEMORY and CHAPTER - the server's `NodeKindRules.takesCover` is the authority and must
+  pre-registered by core, Depot's drop box, Memories' MEMORY and CHAPTER, Expenses' Pot - the server's `NodeKindRules.takesCover` is the authority and must
   agree; a file takes none) has one image its owner uploads as the node's own `COVER` blob. `coverModel.ts` is the pure model (the
   `cover` field of the sealed `wrappedMeta` - `core/node/nodeMeta.ts`, moved from Memories - in the shape every Memory cover already
   had: crop, display formula, ref, `uploadedCover`), `coverWrite.ts` the I/O (`uploadCoverImage`: the existing derive pipeline, ONE JPEG at
