@@ -199,12 +199,18 @@ or a one-off `1rem` label sitting in them.
   the left, then at its right end (`.veyq-level-toolbar`) Select and the trash as icon-only buttons — their words the
   `aria-label` and the tooltip, never visible text — and the view switch. One hairline under the row where it has tabs;
   without tabs the tools alone, right-aligned; nothing to offer, no row.
-- **A level's rows and tiles** (owner 2026-11-04, `core/node/components/LevelRowItem.vue`, `styles/ui.css`): the list is one
-  surface in one frame, its rows parted by hairlines, each led by the compact header's 16:9 thumbnail (4 × 2.25 rem: the
-  cover, or the kind's icon in a quiet frame); no row card, no shadow. In the grid the folders (first, `levelList.ts`) are
-  compact tiles (`.is-compact`: the row's layout in a frame) and form one group — the first other tile starts a new grid
-  row; every other node is a flat tile, the 16:9 cover on top and the name and meta line under it. Heart and ⋯ are quiet
-  icon buttons (`text` appearance, the layer's icon-button size): at the end of a row; over a flat tile's cover at its
+- **A level's two groups** (owner 2026-11-04, `core/node/LevelView.vue`): the folders, then the contents (every other
+  node), each its own `<ul>`, in the list view and the grid alike. Where both have something under the shown tab, each is
+  a `<section>` named by its `h2` (`aria-labelledby`; the page's `h1` is the header's name) — "Folders" / "Contents",
+  "Ordner" / "Inhalte" — in the sidebar's section-label look (`.veyq-level-group-heading`: small, bold, uppercase,
+  `--app-muted`); one group alone is one list with no heading. Select's All / None and count act on the level, not on a group.
+- **A level's rows and tiles** (owner 2026-11-04, `core/node/components/LevelRowItem.vue`, `styles/ui.css`): in the list each
+  group is one surface in one frame, a small gap between the two, its rows parted by hairlines, each led by the compact
+  header's 16:9 thumbnail (4 × 2.25 rem: the cover, or the kind's icon in a quiet frame); no row card, no shadow. In the grid
+  the folders are compact tiles (`.is-compact`: the row's layout in a frame); every other node is a card — the list's
+  surface, frame and radius, no shadow —, the 16:9 cover flush at its top (its top corners the card's) and the name and
+  meta line inside under it. Heart and ⋯ are quiet
+  icon buttons (`text` appearance, the layer's icon-button size): at the end of a row; over a card's cover at its
   top-right corner, and over a compact tile's row end where a pointer hovers (in its row where none does, so a narrow
   column leaves the name its width) — a tile's shown on hover and `:focus-within` by **opacity alone** (never `display: none` or
   `visibility`, which would take them out of the Tab order), always under `@media (hover: none)`, and a pressed heart

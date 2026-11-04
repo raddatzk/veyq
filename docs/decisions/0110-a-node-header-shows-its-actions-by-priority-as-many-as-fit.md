@@ -119,11 +119,13 @@ big cover are date, place and participants*; *and on a desktop the title and the
   buttons (their words the accessible name and the tooltip) and the view switch; without tabs the tools alone, with
   nothing of either no row.
 - The level rows keep their split (two `first` buttons, the rest one ⋯ menu) and draw it quietly (owner 2026-11-04):
-  heart and ⋯ are icon buttons without a frame at the layer's icon-button size. A row is a line of the list's one
-  surface, led by the compact header's 16:9 thumbnail (4 × 2.25 rem); in the grid a folder is a compact tile (the row's
-  layout in a frame) and the folders form one group above the flat tiles of every other node, whose actions sit over the
-  cover's top-right corner (a compact tile's over its row's end where a pointer hovers) - shown on hover and on focus within by opacity alone, so they stay in the Tab order, and always
-  where nothing hovers.
+  heart and ⋯ are icon buttons without a frame at the layer's icon-button size. The level lists the folders and the
+  contents as two groups, each its own list, headed ("Folders", "Contents" in quiet `h2`s) only where both are there. A
+  row is a line of its group's one surface, led by the compact header's 16:9 thumbnail (4 × 2.25 rem); in the grid a folder
+  is a compact tile (the row's layout in a frame) and every other node a card with the list's surface, frame and radius -
+  its cover flush at the top, the name and meta line inside - whose actions sit over the cover's top-right corner (a
+  compact tile's over its row's end where a pointer hovers) - shown on hover and on focus within by opacity alone, so they
+  stay in the Tab order, and always where nothing hovers.
 - **Rejected — the application declaring its visual's row count:** core already knows which rows it draws; a declared
   number drifts from what is drawn.
 - **Rejected — measuring the body's height for the visual:** the layout answer reads the visual's wide width, and a

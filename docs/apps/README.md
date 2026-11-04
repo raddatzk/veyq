@@ -281,8 +281,8 @@ point 8).
   door may be absent, and an absent door is an action not offered, whatever a rights function says. The dialogs behind
   them are core's one set (`core/node/components/NodeDialogs.vue`), mounted by both pages: the member's space page
   hands on every door, a share guest's page `open`, the download, the create and - a `READ_WRITE` link - the move.
-- **Core draws the level.** The folder level view is core's (`core/node/LevelView.vue`): one list of the folders and
-  every kind's rows, each from its application's row factory (below), and the presentations it switches between (core's
+- **Core draws the level.** The folder level view is core's (`core/node/LevelView.vue`): the folders, then every kind's
+  rows mixed in one group of contents, each row from its application's row factory (below), and the presentations it switches between (core's
   grid and list, an application's own such as Memories' map) in core's toolbar. A folder's create, every node's rename,
   move (`core/node/MoveNodeDialog.vue`, mirroring the server's `NodeKindRules` through each kind's `placement`) and a
   `FOLDER`'s share dialog are core's; an application's create and share dialogs ride on its kinds. The top-bar upload

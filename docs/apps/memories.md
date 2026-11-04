@@ -202,7 +202,7 @@ guest moves a Memory, never a chapter); the cover is core's action with core's r
 | item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
 | share (one action and one dialog for every link role: it lists them all and offers each role a new link may take where its leaf is on, owner 2026-11-04) | the instance's `core.public-shares` for the viewer role, `.contribute` for the READ_WRITE role, `.drop-box` for the uploader link - one leaf each; the action shows where any is on | the same: the dialog lists and copies the links and revokes ✓ the caller's own live one, mints and changes nothing else (the server refuses every other share write then) | ✗ | ✗ | ✗ |
 
-At a folder level (Memories' rows in core's one list): a member creates a Memory (not during a pending deletion, never in a guest's
+At a folder level (Memories' rows among core's contents, after the folders): a member creates a Memory (not during a pending deletion, never in a guest's
 identity folder); a share guest creates none — the "New" menu offers a guest no Memory (ADR 0080 decision 6); every role that reads opens
 one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's), and a guest's move
 the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unknown at the link's root). A level's selection
