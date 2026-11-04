@@ -106,6 +106,9 @@ describe('node header styles', () => {
     expect(rule('.veyq-node-header-facts.is-people', css)).toMatch(/min-block-size:\s*var\(--veyq-node-header-row-people\)/)
     expect(rule('.veyq-node-header-facts.is-text', css)).toMatch(/min-block-size:\s*var\(--veyq-node-header-row-text\)/)
     expect(rule('.veyq-node-header-body', css)).toMatch(/gap:\s*var\(--veyq-node-header-row-gap\)/)
+    // A chip's line box is set, not the font's `normal` (which drew a 27 px row over its 26 px token in a real browser).
+    expect(rule('.veyq-node-header-chip', css)).toMatch(/line-height:\s*1\.25/)
+    expect(rule('.veyq-node-header-subtitle', css)).toMatch(/line-height:\s*var\(--veyq-node-header-row-subtitle\)/)
     // The content is centred against the visual (a folder's one-line name in the middle of its tile).
     expect(rule('.veyq-node-header', css)).toMatch(/align-items:\s*center/)
   })

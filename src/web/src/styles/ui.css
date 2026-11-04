@@ -883,6 +883,7 @@
   font-family: inherit;
   font-size: 0.9rem;
   font-weight: 600;
+  line-height: 1.25; /* a set line box (with the padding 26 px), so the chips' row keeps its token whatever the font's metrics */
   white-space: nowrap; /* the label (e.g. "Kein Ort erkannt") stays on one line, never breaks mid-phrase */
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
