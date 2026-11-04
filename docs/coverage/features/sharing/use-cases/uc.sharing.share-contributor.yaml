@@ -184,8 +184,8 @@ acceptanceCriteria:
       - surface: web
         reason: >-
           The guest page offers "New folder" and "Upload files" in the level toolbar's "New" menu (each entry only where
-          its rights function grants it, inbox #401 S2, #406; no "New Memory" or "New drop box" for any guest,
-          LevelNewMenu.entries.test.ts), and core's move dialog (inbox #358, uc.memory.move-node, ShareTreePage.move.test.ts); no rename
+          its rights function grants it, inbox #401 S2, #406; no "New Memory" for any guest, LevelNewMenu.entries.test.ts,
+          and no drop box - a member's folder share makes one, never a guest's page, uploadShare.test.ts), and core's move dialog (inbox #358, uc.memory.move-node, ShareTreePage.move.test.ts); no rename
           control exists, so a guest's rename is proven through placeShareNodeAsGuest by the wire test and the e2e, not
           through a screen.
   - id: guest-tree-refusals
@@ -197,7 +197,7 @@ acceptanceCriteria:
       Depot's FILE) and nothing else - a Memory, a chapter, a drop box or an unknown kind is 422 illegal_scope, before
       the placement rule (owner decision 2026-10-14); a declared kind NodeKindRules does not place there is still
       422 illegal_structure; a kind two applications declare is created by nobody and fails startup. The web offers
-      no guest a "New Memory" or "New drop box" entry (hidden, not greyed). A READ or WRITE_ONLY link does none
+      no guest a "New Memory" entry nor a drop box's upload-only link (hidden, not greyed). A READ or WRITE_ONLY link does none
       (403 share_not_contributable). Every guest tree operation stays inside the link's subtree: its root is never
       moved, renamed or deleted, nothing is placed or created outside it, and a member's move out of the subtree
       meanwhile refuses the guest's write (ADR 0080 decisions 6, 9 and 10).

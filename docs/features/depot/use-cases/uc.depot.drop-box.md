@@ -7,7 +7,7 @@
 - **Goal:** Collect files from people outside the space — each sender sees only what it sent, the members see
   everything, nobody approves anything.
 - **Preconditions:** A member created a drop box (a `DEPOT_DROPBOX` node at the scope root or in a folder) and minted
-  a `WRITE_ONLY` link on it.
+  a `WRITE_ONLY` link on it — both in one flow (step 0).
 - **Postconditions (success):** every guest identity that sent something has exactly one identity folder in the
   drop box, holding its files; the members open it; revoking the link keeps all of it. The keys and the server's part
   are [docs/apps/depot.md](../../../apps/depot.md) § The drop box and
@@ -15,6 +15,15 @@
 
 ## Main flow
 
+0. A member makes the drop box with its first link in ONE flow, from a sharing dialog (owner decision 2026-11-04; there is
+   no "New drop box" in the level's "New" menu): a folder's share dialog offers, after "View only" and "View + add
+   files", the role **"Add files only"**; the space's top level - no link's root - offers that role alone through a Share
+   in its header. Choosing it asks a name (required: it names the drop box its guests see), a password and an end, no
+   note; the drop box is created under the folder (the scope root) with that name and gets its first `WRITE_ONLY` link,
+   which the dialog shows to copy. It is offered exactly where a member may create a drop box there - a writer, not in
+   a guest's identity folder, no pending deletion, Depot switched on for the tenant, the instance's
+   `core.public-shares.drop-box` - and never to a share guest. The new drop box is a row of the level (the "Depot" tab
+   holds files and drop boxes); its further links are its own share dialog's, never the folder's list.
 1. The guest opens the link and names itself once; its device keeps the identity, its token, its identity key and the
    name, and the page says whose session it is ("Sending as …").
 2. With the first file, the client asks for the guest's folder (`ensureShareDropFolder`) — a guest that names itself

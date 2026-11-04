@@ -107,7 +107,8 @@ reads).
   owner decision 2026-10-14: both used to be buttons below the header), with no standing sentence about what a replace
   does: the replace asks when it happens. Files, Memories and
   drop boxes are listed together, folders first and then everything by name (core's order); the tab "Depot" filters the
-  list to FILE nodes, the folders stay. **Upload** is a level action (`depot.upload`, the "New" menu's "Upload files"),
+  list to its files AND drop boxes (owner decision 2026-11-04: one tab - both kinds name the label `depot.title`, and kinds
+  sharing a label share a tab, its empty text the files'), the folders stay. **Upload** is a level action (`depot.upload`, the "New" menu's "Upload files"),
   registered with the level by the factory for the level's whole life — so it is available under every tab — and core
   hands it the files dropped onto the level, only while the action is allowed and enabled. Hidden in map mode like every
   row (the map is Memories' presentation, drawn where a shown tab offers it; a guest's identity folder without Memories
@@ -348,7 +349,7 @@ never renamed, a contributor moves no drop box); a file's row asks about its fil
 | copy a file, a drop box, a guest's folder elsewhere in the space (core's "Copy to…", `canCopy`, [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md); a drop box's copy is a plain folder) | ✓ | ✗ | ✓ out of it | ✗ | ✗ | ✗ |
 | the **opened file** (`FileDetail`): replace, a header action | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder) | ✗ |
 | the opened file: rename, share, delete, move | all ✓ (share with the instance's `core.public-shares`, its READ_WRITE role with `.contribute`; not in an identity folder) | share only (links are a read: the dialog lists and copies them and revokes ✓ the caller's own live one, mints and changes nothing else) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
-| create a drop box (needs the instance's `core.public-shares.drop-box`) | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| create a drop box - a folder's or the top level's "Add files only" link (needs the instance's `core.public-shares.drop-box`) | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | a drop box's links, delete it | links with the instance's `core.public-shares.drop-box` (not the READ leaf); delete ✓ | links only (listed and copied, the caller's own live one switched off ✓, none minted or otherwise changed) | — | ✗ | ✗ | ✗ |
 
 These are the matrix half; a right shows only where the session's data source also implements it
@@ -498,8 +499,19 @@ leading visual (ADR 0110 decision 10), the row/tile and the sidebar's Favorites 
   `404`, or `share_not_contributable`/`share_password_incorrect` at any door — turns the page into "this link no longer
   takes files from you" without a picker, and `dropGuestJob` stops the rest of the batch without a request; a store's own
   refusal (`chunk_put_failed:403`) is a failed file, not a gone link.
-- **The member** (a drop box's row in the level list — icon, name, "Drop box · N people", open on a click, move and delete in its menu —, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
-  `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off (after a question; only the
+- **The member** (a drop box's row in the level list — icon, name, "Drop box · N people", open on a click, move and delete in its menu —, `DropBoxDetail.vue`,
+  `DropBoxShareDialog.vue`): creates a drop box **with its first link in one flow from a sharing dialog** (owner decision
+  2026-11-04; no "New drop box" in the level's "New" menu, no create dialog of its own): core's folder share dialog offers
+  the role "Add files only" after "View only" and "View + add files", and the space's top level - no link's root - offers
+  that role alone through a Share in its header. Depot fills the seam core asks (`app.folderUploadShare(DROPBOX_KIND,
+  { allowed, hint, create })`, `src/web/CLAUDE.md`): `allowed` is `depotRights(...).createDropBox` (below), core ANDs a
+  member, the folder or root level, no identity folder, Depot switched on and the kind's placement
+  (`core/sharing/folderUploadShare.ts`); `create` is `createDropBoxWithLink` (`dropBox.ts`): the drop box named by the
+  link's required name under the level - a member's create, re-read and pulled forward on an epoch refusal - and its
+  first `WRITE_ONLY` link (`mintDropBoxLink`, the drop key set with it) on the key the drop box was just born with,
+  no label and no note; a failed mint leaves the drop box without a link, its own dialog makes one. The folder dialog
+  checks the name against the level's children first and lists only the folder's own links; the drop box's are its
+  own dialog's. Then on the drop box the member mints further links, copies, switches off (after a question; only the
   caller's own link, the served `mine`) and on again (core's `reactivateShare`; a link a departed member may hold says
   to make a new one) and deletes its links (where the served `deletable` says so),
   opens it to its guests' folders — under core's header (`NodeHeader`, the one a folder opens with: the

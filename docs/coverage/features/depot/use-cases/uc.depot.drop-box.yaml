@@ -5,6 +5,26 @@ title: Drop box — guests send files, each into a folder of its own
 # Depot); web: the guest's wire recorded at fetch with real crypto, the member's tree opening identity folders, the drop
 # box's detail and the read-only level; depotDropBox.e2e.test.ts runs in the web-e2e job.
 acceptanceCriteria:
+  - id: a-drop-box-is-born-from-a-share-dialog
+    text: >-
+      A member creates a drop box with its first WRITE_ONLY link in one flow (step 0, owner decision 2026-11-04) - a
+      folder's share dialog offers "Add files only" after "View only" and "View + add files", the space's top level offers
+      it alone through a Share in its header - named by the link's required name, under that folder or at the scope
+      root, the link minted on the new drop box's own key; offered exactly where a member may create a drop box there
+      (not to a share guest, not with the instance's drop-box leaf off, not with Depot switched off, not during a pending
+      deletion, not in a guest's identity folder); no "New drop box" menu entry; the drop boxes are listed in the "Depot"
+      tab with the files.
+    coverage:
+      web:
+        unit:
+          - src/core/sharing/FolderShareDialog.upload.test.ts
+          - src/core/sharing/folderUploadShare.test.ts
+          - src/features/depot/uploadShare.test.ts
+          - src/features/depot/dropBoxWithLink.test.ts
+          - src/core/node/LevelView.test.ts
+          - src/views/SpaceView.test.ts
+          - src/views/LevelNewMenu.entries.test.ts
+          - src/features/depot/register.test.ts
   - id: one-folder-per-guest-identity
     text: A drop-box guest's first call creates its identity folder from its own ciphertext; every later call of that identity, concurrent first calls included, answers the same folder and its stored wrap; two guests get two folders, and two uploads of one identity land in the same one.
     coverage:
