@@ -11,6 +11,7 @@ import { setBreadcrumb } from '../../app/breadcrumb'
 import { realI18n } from '../../test/i18n'
 import { addMedia } from '../../features/memories/media'
 import { enqueueUploads, clearUploads } from '../../features/memories/uploadQueue'
+import { NODE_DRAG_TYPE, endNodeDrag, startNodeDrag } from '../../core/node/nodeDrag'
 
 const mountTopbar = () => mount(AppTopbar, { global: { plugins: [realI18n()] } })
 
@@ -43,5 +44,59 @@ describe('AppTopbar upload status (core\'s menu)', () => {
     await flushPromises()
     expect(w.find('.uploads-trigger').exists()).toBe(true)
     clearUploads()
+  })
+})
+
+// Drag and drop (inbox #421): the space's breadcrumb is a drop target for nodes dragged from the level - each crumb stands
+// for its place (the scope root's for `null`), and which of them take the drag is the drag's own answer (`nodeDrag.ts`,
+// the move dialog's rule; `LevelView.drag.test.ts` drives that). A drag of files lights none.
+describe('AppTopbar breadcrumb as drop targets', () => {
+  const transfer = (types: string[]) => ({ types: [...types], dropEffect: 'unset', effectAllowed: 'unset', setData() {}, setDragImage() {} })
+  const crumbs = (w: ReturnType<typeof mountTopbar>) => w.findAll('li.veyq-breadcrumb__item')
+  async function dragOver(li: ReturnType<typeof crumbs>[number], data: object): Promise<boolean> {
+    const e = new Event('dragover', { bubbles: true, cancelable: true })
+    Object.defineProperty(e, 'dataTransfer', { value: data })
+    li.element.dispatchEvent(e)
+    await flushPromises()
+    return e.defaultPrevented
+  }
+
+  it('an ancestor the drag may go to is lit and takes the drop; the place on screen and a drag of files never', async () => {
+    setBreadcrumb([
+      { id: null, name: 'Personal', hash: '#~me' },
+      { id: 'f1', name: 'Reisen 2026', hash: '#~me/reisen-2026' },
+      { id: 'm1', name: 'Rom', hash: '#~me/reisen-2026/rom' },
+    ])
+    const w = mountTopbar()
+    const dropped: (string | null)[] = []
+    // the drag's answer: everything but the place its nodes are in (as `dropTakes` answers for nodes of Rom)
+    startNodeDrag({ dataTransfer: transfer([]) } as unknown as DragEvent, { ids: new Set(['x']), accepts: (to) => to !== 'm1', drop: (to) => dropped.push(to) })
+    try {
+      const files = transfer(['Files'])
+      expect(await dragOver(crumbs(w)[1], files), 'a drag of files').toBe(false)
+      expect(crumbs(w)[1].classes()).not.toContain('is-drop-target')
+      const data = transfer([NODE_DRAG_TYPE])
+      expect(await dragOver(crumbs(w)[2], data), 'the place on screen').toBe(false)
+      expect(crumbs(w)[2].classes()).not.toContain('is-drop-target')
+      expect(await dragOver(crumbs(w)[1], data)).toBe(true)
+      expect(crumbs(w)[1].classes()).toContain('is-drop-target')
+      // given up over it (Escape): the drag's end, wherever it fires, leaves nothing lit
+      document.dispatchEvent(new Event('dragend'))
+      await flushPromises()
+      expect(crumbs(w)[1].classes()).not.toContain('is-drop-target')
+      expect(await dragOver(crumbs(w)[0], data), 'the scope root').toBe(true)
+      await crumbs(w)[0].trigger('drop', { dataTransfer: data })
+      expect(dropped).toEqual([null])
+      expect(crumbs(w)[0].classes()).not.toContain('is-drop-target')
+    } finally {
+      endNodeDrag()
+    }
+  })
+
+  it('with no drag of nodes under way, no crumb takes one', async () => {
+    setBreadcrumb([{ id: null, name: 'Personal', hash: '#~me' }, { id: 'f1', name: 'Reisen 2026', hash: '#~me/reisen-2026' }])
+    const w = mountTopbar()
+    expect(await dragOver(crumbs(w)[0], transfer([NODE_DRAG_TYPE]))).toBe(false)
+    expect(crumbs(w)[0].classes()).not.toContain('is-drop-target')
   })
 })

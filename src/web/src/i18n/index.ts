@@ -1702,6 +1702,10 @@ const en = {
       cannotCopy: '{n} of {m} cannot be copied.',
       cannotDelete: '{n} of {m} cannot be deleted.',
     },
+    // Drag and drop on the level (`core/node/nodeDrag.ts`, inbox #421): the picture under the pointer when several are dragged.
+    drag: {
+      count: '{count} item | {count} items',
+    },
     // Core's move dialog (`core/node/MoveNodeDialog.vue`, inbox #358): pick a destination, then the placement write.
     // Each refusal the server answers is explained by its code (`refused.<code>`, `core/node/move.ts` `moveRefusalOf`).
     // "Copy to…" (uc.platform.copy-node, `core/export/CopyNodesDialog.vue`): the move's browser with "Copy here", then what the
@@ -3693,6 +3697,9 @@ const de: typeof en = {
       cannotMove: '{n} von {m} kann nicht verschoben werden. | {n} von {m} können nicht verschoben werden.',
       cannotCopy: '{n} von {m} kann nicht kopiert werden. | {n} von {m} können nicht kopiert werden.',
       cannotDelete: '{n} von {m} kann nicht gelöscht werden. | {n} von {m} können nicht gelöscht werden.',
+    },
+    drag: {
+      count: '{count} Eintrag | {count} Einträge',
     },
     copy: {
       action: 'Kopieren nach …',

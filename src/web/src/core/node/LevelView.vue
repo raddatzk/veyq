@@ -85,6 +85,14 @@
 // presentation (Memories' map has no rows). The level writes nothing itself: it hands the movable part to the host
 // (`moveMany`, core's move dialog), the copyable part (`copy`, core's copy dialog) and the deletable part
 // (`deleteMany`, core's delete question).
+//
+// **Drag and drop** (inbox #421, owner 2026-11-04; `nodeDrag.ts`, uc.memory.move-node § By drag and drop): a second way to
+// MOVE, for a pointer only - the keyboard and touch path stays the move dialog. A row or tile is `draggable` where its node
+// may be moved (its part in a selection, `LevelRow.selection.move`) and the page has the `moveTo` door; in Select mode a
+// selected node drags the selection's movable part. A sub-folder of this level, and an ancestor in the page's breadcrumb
+// (the host's, `crumbDropTarget`), takes it exactly where the move dialog would enable "Move here" (`dropTakes`), lit only
+// then; the drop is the page's `moveTo` - the dialogs' own run (`moveRun.ts`). A drag of nodes carries its own type and is
+// never an upload: the level takes only a drag from the operating system anywhere on it, and no folder lights for one.
 import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
@@ -108,6 +116,7 @@ import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './levelTabs'
 import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
 import { useSelection } from './selection'
+import { activeNodeDrag, dropOnNodeTarget, dropTakes, endNodeDrag, isNodeDrag, leftTarget, overNodeTarget, startNodeDrag } from './nodeDrag'
 import { standardRowActions, withStandardRowActions } from './standardRowActions'
 import { hostHandlers, hostRights, injectNodeHost, shareOfferOf, type NodeShareOffer } from './nodeHost'
 import { folderUploadShareAt } from '../sharing/folderUploadShare'
@@ -487,6 +496,57 @@ watch(canSelect, (can) => {
 })
 watch(levelItems, (now) => selection.retain(now.keys()))
 
+// --- drag and drop (inbox #421, owner 2026-11-04; `nodeDrag.ts`) ----------------------------------------------------------
+// A second way to move, beside the dialog, through the page's `moveTo` door (the dialogs' own run). A row or tile drags only
+// where its node may be moved - its part in a selection (`LevelRow.selection.move`; a folder's is core's `folderRights`) and
+// the door, so a guest drags exactly what its move dialog would move. Only core's rows drag: an application's own presentation
+// (Memories' map) replaces them and has none. In Select mode a selected node drags the selection's movable part, an unselected
+// one itself. A sub-folder of this level takes the drag where the dialog would move it there (`dropTakes`); the breadcrumb's
+// ancestors are the page's (`crumbDropTarget`).
+const canDrag = (item: Item): boolean => !!host.moveTo && !item.unsupported && item.row.selection?.move === true
+/** The id of the folder whose row a drag it takes is over. */
+const dropOver = ref<string | null>(null)
+const dragged = computed(() => activeNodeDrag()?.ids ?? null)
+let ownDrag = false
+function draggedNodes(item: Item): TreeNode[] {
+  if (selecting.value && selection.has(item.key)) return movable.value.map((id) => levelItems.value.get(id)!.node)
+  return [item.node]
+}
+function onDragStart(e: DragEvent, item: Item): void {
+  if (!canDrag(item)) return // not a drag of nodes (a text selection's, say): left to the browser
+  const nodes = draggedNodes(item)
+  const move = host.moveTo
+  ownDrag = true
+  startNodeDrag(
+    e,
+    {
+      ids: new Set(nodes.map((n) => n.id)),
+      accepts: (to) => dropTakes(props.tree, nodes, props.access.mode, to),
+      drop: (to) => move?.(nodes, to),
+    },
+    nodes.length > 1 ? t('node.drag.count', { count: nodes.length }, nodes.length) : undefined,
+  )
+}
+function onDragEnd(): void {
+  if (ownDrag) endNodeDrag()
+  ownDrag = false
+  dropOver.value = null
+}
+onBeforeUnmount(onDragEnd)
+// A sub-folder's row as a target; a drag from the operating system (files) never lights one.
+function onTargetOver(e: DragEvent, item: Item): void {
+  if (!item.folder || item.unsupported) return
+  if (overNodeTarget(e, item.node.id)) dropOver.value = item.key
+  else if (dropOver.value === item.key) dropOver.value = null
+}
+function onTargetLeave(e: DragEvent, item: Item): void {
+  if (dropOver.value === item.key && leftTarget(e)) dropOver.value = null
+}
+function onTargetDrop(e: DragEvent, item: Item): void {
+  dropOver.value = null
+  if (item.folder && !item.unsupported) dropOnNodeTarget(e, item.node.id)
+}
+
 // Core's own row actions (`coreNodeActions.ts`), merged around the application's for EVERY kind and the folders, with no
 // change to any application: the heart (inbox #409), the cover (inbox #411), "Copy to…" beside the move, the download and
 // Report. An unsupported row (a kind nobody draws) gets none, and so does a node a moderator blocked: its placeholder keeps
@@ -562,7 +622,13 @@ function dropHandlers() {
   })
 }
 
+/** The level takes a drop from the operating system anywhere on it; a drag of nodes only where a target took it. */
+function onLevelDragOver(e: DragEvent): void {
+  if (!isNodeDrag(e)) e.preventDefault()
+}
+
 async function onDrop(e: DragEvent): Promise<void> {
+  if (isNodeDrag(e)) return // a drag of nodes is a move, never an upload
   // The entries are read NOW: a drop's items are gone once the handler awaits anything.
   const entries = [...(e.dataTransfer?.items ?? [])].map((item) => (item.kind === 'file' ? (item.webkitGetAsEntry?.() as DroppedEntry | null) : null))
   const all = [...(e.dataTransfer?.files ?? [])]
@@ -592,7 +658,7 @@ async function onDrop(e: DragEvent): Promise<void> {
 </script>
 
 <template>
-  <div class="veyq-level-view" @dragover.prevent @drop.prevent="onDrop">
+  <div class="veyq-level-view" @dragover="onLevelDragOver" @drop.prevent="onDrop">
     <!-- The level's head (owner 2026-11-01, tidied 2026-11-04): the header and "New" in ONE row, the name first; where both
          do not fit, "New" wraps below the name, which it never shortens. Name first in the DOM too, so the Tab order is the
          reading order. -->
@@ -754,7 +820,16 @@ async function onDrop(e: DragEvent): Promise<void> {
             :unsupported="item.unsupported"
             :core-actions="coreRowActions(item)"
             :selected="selecting ? selection.has(item.key) : undefined"
+            :can-drag="canDrag(item)"
+            :dragging="!!dragged?.has(item.key)"
+            :drop-target="dropOver === item.key"
             @toggle-select="selection.toggle(item.key)"
+            @dragstart="onDragStart($event, item)"
+            @dragend="onDragEnd"
+            @dragenter="onTargetOver($event, item)"
+            @dragover="onTargetOver($event, item)"
+            @dragleave="onTargetLeave($event, item)"
+            @drop="onTargetDrop($event, item)"
           />
         </ul>
       </component>

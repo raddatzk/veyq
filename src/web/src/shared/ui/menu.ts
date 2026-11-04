@@ -20,6 +20,13 @@ export interface VeyqMenuItem {
   badge?: string
 }
 
+/** A `VeyqBreadcrumb`'s entries as drop targets (its `drop-target`): `over` answers a `dragenter`/`dragover` on an entry - true
+ *  where it takes this drag (and it has told the event so), and the entry is drawn lit -, `drop` a drop on it. */
+export interface VeyqDropTarget {
+  over(item: VeyqMenuItem, event: DragEvent): boolean
+  drop(item: VeyqMenuItem, event: DragEvent): void
+}
+
 /** How an entry of a `VeyqMenu` (or of its submenus) runs its pick: the menu closes and gives focus back to its opener
  *  first, then `run` runs (`VeyqMenu.vue`). */
 export const MENU_PICK: InjectionKey<(run: () => void) => void> = Symbol('veyq-menu-pick')

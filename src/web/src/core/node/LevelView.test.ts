@@ -85,7 +85,7 @@ function mountLevel(
 type Level = ReturnType<typeof mountLevel>
 /** The level as a share guest sees it: the guest page's doors (the move only where the link moves anything). */
 const mountGuest = (role: ShareRole, tree: TreeNode[] = [TRIPS], folder: TreeNode | null = TRIPS) => {
-  const rec = recordingHost(role === ShareRole.ReadWrite ? GUEST_DOORS : GUEST_DOORS.filter((d) => d !== 'move' && d !== 'moveMany'))
+  const rec = recordingHost(role === ShareRole.ReadWrite ? GUEST_DOORS : GUEST_DOORS.filter((d) => d !== 'move' && d !== 'moveMany' && d !== 'moveTo'))
   const w = mount(LevelView, {
     props: { folder, level: childrenOf(tree, folder?.id ?? null), access: guestAccessOf(role), tree: memberTreeOf(() => tree) },
     global: { plugins: [realI18n()], provide: rec.provide },

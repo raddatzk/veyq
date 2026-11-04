@@ -289,7 +289,7 @@ describe("ShareTreePage renders a node's detail for the guest", () => {
   // copy, import or trash, whatever a rights function says (an absent door is an action not offered).
   for (const [role, doors] of [
     [ShareRole.Read, ['createChild', 'download', 'open']],
-    [ShareRole.ReadWrite, ['createChild', 'download', 'move', 'moveMany', 'open']],
+    [ShareRole.ReadWrite, ['createChild', 'download', 'move', 'moveMany', 'moveTo', 'open']],
   ] as const) {
     it(`${role}: the guest page's doors are its own - never a rename, delete, share, copy, import or trash`, async () => {
       seen.host = null

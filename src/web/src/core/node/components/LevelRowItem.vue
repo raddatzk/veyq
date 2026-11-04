@@ -23,6 +23,10 @@
 // In the level's Select mode (inbox #421) the item carries a real `<input type="checkbox">` named by the node's title, drawn
 // over the visual's corner as a media tile's (`selected` is then a boolean; omitted: no checkbox; on a tile the cover's
 // top-left corner, opposite the actions). The primary click still opens the node: selecting is the checkbox's alone.
+//
+// Drag and drop (inbox #421, `../nodeDrag.ts`): the item is `draggable` only where the level says the viewer may move it
+// (`canDrag`), drawn dimmed while dragged and lit while a drag it takes is over it; the level listens to the drag events on
+// the item (they fall through to the `<li>`). A click without movement is never a drag, so the primary click is unchanged.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -48,8 +52,14 @@ const props = withDefaults(
     unsupported?: boolean
     /** The level's Select mode is on and this item is (true) or is not (false) selected; omitted: no checkbox. */
     selected?: boolean
+    /** The viewer may move this node, so it may be dragged (`draggable="true"`); otherwise no attribute at all. */
+    canDrag?: boolean
+    /** It is being dragged (dimmed). */
+    dragging?: boolean
+    /** A drag is over it that it takes (lit). */
+    dropTarget?: boolean
   }>(),
-  { kind: undefined, coreActions: () => [], folder: false, unsupported: false, selected: undefined },
+  { kind: undefined, coreActions: () => [], folder: false, unsupported: false, selected: undefined, canDrag: false, dragging: false, dropTarget: false },
 )
 const emit = defineEmits<{ toggleSelect: [] }>()
 const { t } = useI18n()
@@ -70,8 +80,15 @@ const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.
 <template>
   <li
     class="veyq-level-item"
-    :class="[`is-${mode}`, { 'is-compact': compact, 'has-cover': !!row.leading, 'is-folder': folder, 'is-unsupported': unsupported, 'is-selected': selected === true }]"
+    :class="[
+      `is-${mode}`,
+      {
+        'is-compact': compact, 'has-cover': !!row.leading, 'is-folder': folder, 'is-unsupported': unsupported, 'is-selected': selected === true,
+        'is-dragging': dragging, 'is-drop-target': dropTarget,
+      },
+    ]"
     :data-kind="kind"
+    :draggable="canDrag ? 'true' : undefined"
   >
     <label v-if="selected !== undefined" class="veyq-level-item-check" :class="{ 'is-on': selected }">
       <input type="checkbox" :checked="selected" :aria-label="row.title" @change="emit('toggleSelect')" />

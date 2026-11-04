@@ -16,6 +16,7 @@ import { useRouter } from 'vue-router'
 import VeyqBreadcrumb from '../../shared/ui/VeyqBreadcrumb.vue'
 import type { VeyqMenuItem } from '../../shared/ui/menu'
 import { breadcrumb } from '../../app/breadcrumb'
+import { crumbDropTarget } from '../../core/node/nodeDrag'
 import InvitationsBadge from '../../features/spaces/InvitationsBadge.vue'
 import UploadStatusMenu from '../../core/blob/UploadStatusMenu.vue'
 
@@ -24,17 +25,22 @@ const router = useRouter()
 // bar mounts the menu itself. No application adds anything to the bar (ADR 0079: the shell names no application).
 
 // Every crumb is a real link to its place (`VeyqBreadcrumb` runs the push on a plain click and lets a modified one
-// open the link elsewhere).
-function crumb(label: string | undefined, hash: string): VeyqMenuItem {
-  return { label, url: router.resolve({ hash }).href, command: () => void router.push({ hash }) }
+// open the link elsewhere). A crumb of the space's tree is also a drop target for nodes dragged from the level (inbox #421,
+// `core/node/nodeDrag.ts`): an ancestor takes them where the move dialog would; the drag decides, so nothing lights without one.
+const places = new WeakMap<VeyqMenuItem, string | null>()
+function crumb(label: string | undefined, hash: string, place?: string | null): VeyqMenuItem {
+  const item: VeyqMenuItem = { label, url: router.resolve({ hash }).href, command: () => void router.push({ hash }) }
+  if (place !== undefined) places.set(item, place)
+  return item
 }
-const home = computed<VeyqMenuItem>(() => crumb(breadcrumb.trail[0]?.name, breadcrumb.trail[0]?.hash ?? '#~me'))
-const items = computed<VeyqMenuItem[]>(() => breadcrumb.trail.slice(1).map((c) => crumb(c.name, c.hash)))
+const home = computed<VeyqMenuItem>(() => crumb(breadcrumb.trail[0]?.name, breadcrumb.trail[0]?.hash ?? '#~me', breadcrumb.trail[0]?.id))
+const items = computed<VeyqMenuItem[]>(() => breadcrumb.trail.slice(1).map((c) => crumb(c.name, c.hash, c.id)))
+const dropTarget = crumbDropTarget((item) => places.get(item))
 </script>
 
 <template>
   <header class="workspace-topbar">
-    <VeyqBreadcrumb :items="items" :home="home" class="app-breadcrumb" />
+    <VeyqBreadcrumb :items="items" :home="home" :drop-target="dropTarget" class="app-breadcrumb" />
     <div class="workspace-topbar-actions">
       <InvitationsBadge />
       <UploadStatusMenu />
