@@ -117,6 +117,18 @@ describe('level item styles', () => {
     expect(media('(hover: none)')).not.toMatch(/position:\s*absolute/)
   })
 
+  it('a folder\'s compact tile at rest keeps its pressed heart off the name: the other buttons fold away, the name leaves room', () => {
+    const hover = media('(hover: hover)')
+    const folded = rule('.veyq-level-item.is-compact:not(:hover):not(:focus-within) .veyq-level-item-actions > .veyq-button:not(.is-pressed)', hover)
+    expect(folded).toMatch(/width:\s*0/)
+    expect(folded).toMatch(/min-width:\s*0/)
+    // folded, never taken out of the Tab order
+    expect(folded).not.toMatch(/display:\s*none|visibility:\s*hidden/)
+    // the room the heart takes (an icon button, 2.55rem, plus its inset) is kept free of the name
+    expect(rule('.veyq-level-item.is-compact:has(.veyq-level-item-actions > .veyq-button.is-pressed) .veyq-level-item-main', hover))
+      .toMatch(/padding-inline-end:\s*2\.9rem/)
+  })
+
   it('the meta line wraps to two lines instead of one clipped line (details are real text, long ones must not overflow)', () => {
     const meta = rule('.veyq-level-item-meta')
     expect(meta).toMatch(/-webkit-line-clamp:\s*2/)

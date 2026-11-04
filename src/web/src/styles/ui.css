@@ -1263,6 +1263,21 @@ div.veyq-level-item-main,
     right: 0.35rem;
     transform: translateY(-50%);
   }
+  /* At rest a compact tile shows only a pressed heart, and it must not sit on the name: the other buttons fold to no width
+     (still in the Tab order - focus inside unfolds them), so the heart sits at the row's end, and the name keeps clear of it. */
+  .veyq-level-item.is-compact:not(:hover):not(:focus-within) .veyq-level-item-actions {
+    gap: 0;
+  }
+  .veyq-level-item.is-compact:not(:hover):not(:focus-within) .veyq-level-item-actions > .veyq-button:not(.is-pressed) {
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    border-width: 0;
+    overflow: hidden;
+  }
+  .veyq-level-item.is-compact:has(.veyq-level-item-actions > .veyq-button.is-pressed) .veyq-level-item-main {
+    padding-inline-end: 2.9rem;
+  }
 }
 .veyq-level-item.is-grid .veyq-level-item-actions > .veyq-button {
   background: color-mix(in srgb, var(--app-surface) 88%, transparent);
