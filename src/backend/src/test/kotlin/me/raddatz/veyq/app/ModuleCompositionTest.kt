@@ -225,15 +225,15 @@ class ModuleCompositionTest {
 
     /**
      * Which kinds take a cover (inbox #411), across core and every application: each kind's own rule opts it in -
-     * core's `FOLDER`, Memories' two, Depot's drop box - and a file does not (its one blob is its content). A kind no
+     * core's `FOLDER`, Memories' two, Depot's drop box, Expenses' Pot - and a file does not (its one blob is its content). A kind no
      * rule claims takes none, so core never needs to name an application kind.
      */
     @Test
     fun everyKindThatTakesACoverIsOptedInByItsOwnRule() {
-        for (kind in listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", "DEPOT_DROPBOX")) {
+        for (kind in listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", "DEPOT_DROPBOX", "EXPENSES_POT")) {
             assertTrue(NodeKindRules.takesCover(kindRules, kind), "$kind takes a cover")
         }
-        for (kind in listOf("FILE", "EXPENSES_POT", "NOT_A_KIND")) {
+        for (kind in listOf("FILE", "NOT_A_KIND")) {
             assertFalse(NodeKindRules.takesCover(kindRules, kind), "$kind takes none")
         }
     }

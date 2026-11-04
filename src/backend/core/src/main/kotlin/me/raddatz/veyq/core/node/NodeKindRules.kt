@@ -35,7 +35,7 @@ interface NodeKindRules {
     /**
      * Whether a node of [kind] — one this implementation [handles] — may carry a **cover**: an image attached to the
      * node itself, in its `COVER` slot ([me.raddatz.veyq.core.content.NodeCover], inbox #411). The kind's own answer,
-     * so core names no application kind: `FOLDER` here, a drop box, a Memory and a Chapter in their applications.
+     * so core names no application kind: `FOLDER` here, a drop box, a Memory, a Chapter and a Pot in their applications.
      * Default no — a kind opts in. Asked from the one rule that handles the kind, so a kind no rule claims takes none.
      */
     fun takesCover(kind: String): Boolean = false
