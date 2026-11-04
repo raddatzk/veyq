@@ -1617,7 +1617,7 @@ const en = {
     rowMore: 'More actions for “{name}”',
     kindFolder: 'Folder',
     blockedByOperator: 'Blocked by the operator',
-    // A node's cover (inbox #411): core's action on every kind that carries one (a folder, a drop box, a Memory).
+    // A node's cover (inbox #411): core's action on every kind that carries one (a folder, a drop box, a Memory, a Pot).
     cover: {
       set: 'Set cover',
       change: 'Change cover',

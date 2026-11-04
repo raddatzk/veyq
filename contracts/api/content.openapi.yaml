@@ -330,8 +330,8 @@ paths:
         A cover is an image attached to the node itself, in its `COVER` slot (core's one-blob-per-slot node
         attachment, ADR 0079): not a child, not a file in a folder. It goes to the trash with the node, counts against
         the quota like any attachment, and is freed with the node's purge. Which kinds take one is each kind's
-        application's answer (`NodeKindRules.takesCover`): `FOLDER` (core's own), a drop box, a Memory and a Chapter;
-        any other kind is `422 illegal_target`.
+        application's answer (`NodeKindRules.takesCover`): `FOLDER` (core's own), a drop box, a Memory, a Chapter
+        and a Pot; any other kind (a file: its one blob is its content) is `422 illegal_target`.
 
         **One request, two writes, one transaction.** The client sealed the blob (`startBlobUploads` with `role:
         COVER` and `ownerId` = this node; its `K_blob` wrap is sealed under the node's content key, bound to blob,

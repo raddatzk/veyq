@@ -14,10 +14,10 @@ acceptanceCriteria:
       backend:
         integration: [NodeCoverCoreSliceTest.setThenReplaceThenRemoveLeavesNoRowNoBlobNoSessionAndTheQuotaWhereItStarted]
   - id: kinds-opt-in-core-names-none
-    text: Which kinds take a cover is each kind's own rule (FOLDER core's, a drop box Depot's, a Memory and a Chapter Memories'; a file and an unknown kind take none), asked of the one rule that handles the kind; core names no application kind.
+    text: Which kinds take a cover is each kind's own rule (FOLDER core's, a drop box Depot's, a Memory and a Chapter Memories', a Pot Expenses'; a file and an unknown kind take none), asked of the one rule that handles the kind; core names no application kind. A Pot's cover is the Pot's own blob in core's slot - no receipt, no revision of its ledger - and a switched-off Expenses takes none.
     coverage:
       backend:
-        integration: [CoreAloneSliceTest.onlyAFolderTakesACoverWithCoreAlone, ModuleCompositionTest.everyKindThatTakesACoverIsOptedInByItsOwnRule, NodeCoverCoreSliceTest.aKindNoRuleOptedInTakesNoCover, NodeCoverDepotSliceTest.aFileTakesNoCoverAndAnUploadThatDoesNotFitTheDeclarationIsRefused]
+        integration: [CoreAloneSliceTest.onlyAFolderTakesACoverWithCoreAlone, ModuleCompositionTest.everyKindThatTakesACoverIsOptedInByItsOwnRule, NodeCoverCoreSliceTest.aKindNoRuleOptedInTakesNoCover, NodeCoverDepotSliceTest.aFileTakesNoCoverAndAnUploadThatDoesNotFitTheDeclarationIsRefused, NodeCoverExpensesSliceTest.aPotTakesACoverThatIsNoReceiptAndNoRevision, NodeCoverExpensesSliceTest.aKindNoRuleOptsInTakesNoCover, NodeCoverExpensesSliceTest.aPotGetsNoCoverWhileExpensesIsOff]
       web:
         unit: [src/core/node/cover/rights.test.ts]
   - id: writers-only-fail-closed
@@ -50,10 +50,10 @@ acceptanceCriteria:
       web:
         unit: [src/core/node/cover/coverModel.test.ts]
   - id: one-dialog-one-action
-    text: A node that takes a cover has ONE cover action (`Set cover` without one, `Change cover` with one, the image icon) in its header and ONE matching entry in its row menu, and no separate Remove; it opens core's dialog, which offers choosing an image, re-cropping the current cover, Remove (only where a cover exists) and Save/Cancel, and is the same dialog for a folder, a drop box and a Memory. Where the rights function says no (a file, a guest, a pending deletion, locked keys) there is no action and the dialog does not open.
+    text: A node that takes a cover has ONE cover action (`Set cover` without one, `Change cover` with one, the image icon) in its header and ONE matching entry in its row menu, and no separate Remove; it opens core's dialog, which offers choosing an image, re-cropping the current cover, Remove (only where a cover exists) and Save/Cancel, and is the same dialog for a folder, a drop box, a Memory and a Pot. Where the rights function says no (a file, a guest, a pending deletion, locked keys, a switched-off application) there is no action and the dialog does not open.
     coverage:
       web:
-        unit: [src/core/node/cover/components/CoverDialog.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/cover.dom.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memories/components/MemoryDetailHost.cover.test.ts]
+        unit: [src/core/node/cover/components/CoverDialog.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/cover.dom.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memories/components/MemoryDetailHost.cover.test.ts, src/features/expenses/components/PotDetail.test.ts]
   - id: dialog-crops-and-saves-one-write
     text: The dialog frames the image in the shared 16:9 cropper and Save stores that crop in the cover meta in its existing format - a new image as one upload job + one setNodeCover write, a re-crop as a plain meta write that keeps the stored image, a removal as one write with no cover; a cover reopened restores its crop; a non-image, an empty file or one over 40 MB is refused inside the dialog before anything is read; a conflict or a stale slot re-opens the dialog on the current cover and says so.
     coverage:

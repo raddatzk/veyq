@@ -610,8 +610,8 @@
    shortened with an ellipsis. COMPACT (`.is-compact`): a small leading visual, the name in two lines at most, the actions
    in a row of their own the header wide. As many actions as fit are buttons and the rest sit in one ⋯ menu — the component
    measures it, so no action is lost at any width and none is hidden here. The leading visual is as tall as the rows beside
-   it, the content centred against it. Tokens only, so the dark theme needs no rule of its own beyond the icon tile's and the
-   empty cover frame's (dark.css). */
+   it and always 16:9, the content centred against it. Tokens only, so the dark theme needs no rule of its own beyond the
+   empty frame's (dark.css). */
 
 /* The two sizes the layout answer reads, registered as lengths so the computed style answers in px whatever unit a sheet
    uses. A leading visual sets its WIDE width here and sizes itself from it, so the answer never reads the compact size. */
@@ -662,8 +662,9 @@
   align-items: center;
 }
 
-/* A cover is 16:9 at the rows' height (a Memory's four rows: 244 px wide). Without one, a kind that takes a cover shows the
-   empty frame (`.is-empty`): the kind's icon in its middle on the soft info tile, a line around it. */
+/* The leading visual is always 16:9 at the rows' height (a Memory's four rows: 244 px wide; owner 2026-11-04). Without a
+   cover - none set, or a kind that takes none (a file) - it is the empty frame (`.is-empty`): the kind's icon in its middle
+   on the soft info tile, a line around it. */
 .veyq-node-header-cover {
   --veyq-node-header-leading-wide: calc(var(--veyq-node-header-visual-height) * 16 / 9);
   display: block;
@@ -740,21 +741,6 @@
 .veyq-node-header.is-compact .veyq-node-header-cover-hint-label,
 .veyq-node-header-visual-button:not(.is-roomy) .veyq-node-header-cover-hint-label {
   display: none;
-}
-
-/* Two classes on purpose: the layer's own `.veyq-icon` (display, font-size) is loaded after this sheet and would otherwise win,
-   leaving a 16 px glyph in the corner of a tile that is meant to centre a larger one (seen in a real browser). A kind
-   without a cover: a square as tall as the rows, its glyph half of it; compact, 42 px beside the name's two lines. */
-.veyq-node-header .veyq-node-header-icon {
-  --veyq-node-header-leading-wide: var(--veyq-node-header-visual-height);
-  display: grid;
-  place-items: center;
-  width: var(--veyq-node-header-leading-wide);
-  height: var(--veyq-node-header-leading-wide);
-  border-radius: 12px;
-  background: var(--app-info-soft);
-  color: var(--app-info-text);
-  font-size: calc(var(--veyq-node-header-visual-height) / 2);
 }
 
 .veyq-node-header-body {
@@ -992,21 +978,14 @@
   justify-content: flex-start;
 }
 
-/* A cover (or its empty frame) is a 64 × 36 px tile beside the name (ADR 0110 decision 1); its wide width stays what the
-   answer reads. */
+/* The visual - a cover, its empty frame, a kind without a cover's icon - is a 64 × 36 px tile beside the name (ADR 0110
+   decision 1); its wide width stays what the answer reads. */
 .veyq-node-header.is-compact .veyq-node-header-cover {
   width: 64px;
 }
 
 .veyq-node-header.is-compact .veyq-node-header-cover-icon {
   font-size: 1rem;
-}
-
-.veyq-node-header.is-compact .veyq-node-header-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  font-size: 1.25rem;
 }
 
 .veyq-danger-action.veyq-button,

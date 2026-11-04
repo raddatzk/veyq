@@ -63,8 +63,12 @@ describe('NodeHeader', () => {
     // The name shows two lines at most (`ui.css`); the whole name stays in the DOM and is the title's tooltip.
     expect(w.find('h1.veyq-node-header-title').attributes('title')).toBe('Trips')
     expect(w.find('.veyq-node-header-subtitle').text()).toBe('3 items')
-    expect(w.findComponent(VeyqIcon).classes()).toContain('veyq-node-header-icon')
-    expect(w.findComponent(VeyqIcon).props('name')).toBe('folder')
+    // A kind without a cover: its icon in the 16:9 frame (owner 2026-11-04), never a button.
+    const frame = w.get('.veyq-node-header-leading > [data-testid="node-header-icon-frame"]')
+    expect(frame.element.tagName).toBe('SPAN')
+    expect(frame.classes()).toEqual(expect.arrayContaining(['veyq-node-header-cover', 'is-empty']))
+    expect(frame.findComponent(VeyqIcon).classes()).toContain('veyq-node-header-cover-icon')
+    expect(frame.findComponent(VeyqIcon).props('name')).toBe('folder')
   })
 
   describe('the cover is core\'s (inbox #411, owner 2026-11-03)', () => {
@@ -83,7 +87,7 @@ describe('NodeHeader', () => {
       const w = withCover({ covers: new Map([[NODE.id, COVER]]) })
       expect(w.find('.veyq-node-header-leading .veyq-node-header-cover img').attributes('src')).toBe('blob:cover')
       expect(w.find('.veyq-node-header-cover').classes()).not.toContain('is-empty')
-      expect(w.find('.veyq-node-header-icon').exists()).toBe(false)
+      expect(w.find('[data-testid="node-header-icon-frame"]').exists()).toBe(false)
       // A view with nothing resolved for the node: the empty frame - the cover's box, the kind's icon in its middle - and,
       // without the right to set one, a plain frame: no button, no hint.
       const bare = withCover({})
@@ -94,7 +98,7 @@ describe('NodeHeader', () => {
       expect(frame.findComponent(VeyqIcon).props('name')).toBe('images')
       expect(frame.find('.veyq-node-header-cover-hint').exists()).toBe(false)
       expect(bare.find('button').exists()).toBe(false)
-      expect(bare.find('.veyq-node-header-icon').exists(), 'no icon tile for a kind that takes a cover').toBe(false)
+      expect(bare.find('[data-testid="node-header-icon-frame"]').exists(), 'the cover frame, not the frame of a kind without one').toBe(false)
       // The name is one size, cover or not: no class switches it.
       expect(w.find('.veyq-node-header').classes()).toEqual(bare.find('.veyq-node-header').classes())
     })
@@ -114,15 +118,19 @@ describe('NodeHeader', () => {
       expect(header({ subtitle: '3 items', facts: [{ kind: 'date', label: 'Spring', empty: true }] })).toContain('is-roomy')
     })
 
-    it('a kind without a cover never shows one, whatever the view resolved', () => {
+    it('a kind without a cover never shows one, whatever the view resolved: its icon in the same 16:9 frame, never a button', () => {
       const w = mount(NodeHeader, {
         props: { node: NODE, title: 'Rome', icon: 'file' },
         global: { plugins: [realI18n()], provide: coreActionsStandIn([], coverStandIn({ covers: new Map([[NODE.id, COVER]]), canSet: true })) },
       })
       mounted.push(w)
-      expect(w.find('.veyq-node-header-cover').exists()).toBe(false)
+      expect(w.find('.veyq-node-header-cover img').exists()).toBe(false)
       expect(w.find('[data-testid="node-header-cover"]').exists()).toBe(false)
-      expect(w.find('.veyq-node-header-icon').exists()).toBe(true)
+      expect(w.find('button.veyq-node-header-cover').exists()).toBe(false)
+      const frame = w.get('.veyq-node-header-leading > .veyq-node-header-cover')
+      expect(frame.attributes('data-testid')).toBe('node-header-icon-frame')
+      expect(frame.classes()).toContain('is-empty')
+      expect(frame.findComponent(VeyqIcon).props('name')).toBe('file')
     })
 
     it('where the cover may be set, the visual is a labelled button that opens core\'s dialog for THIS node', async () => {
@@ -132,7 +140,7 @@ describe('NodeHeader', () => {
       // Without a cover the button IS the empty frame, the kind's icon in it, named "Set cover".
       expect(button.classes()).toEqual(expect.arrayContaining(['veyq-node-header-cover', 'is-empty']))
       expect(button.findComponent(VeyqIcon).props('name')).toBe('images')
-      expect(empty.find('.veyq-node-header-icon').exists()).toBe(false)
+      expect(empty.find('[data-testid="node-header-icon-frame"]').exists()).toBe(false)
       expect(button.attributes('aria-label')).toBe(t('node.cover.set'))
       expect(button.find('.veyq-node-header-cover-hint').exists()).toBe(true)
       await button.trigger('click')
@@ -290,7 +298,7 @@ describe('NodeHeader', () => {
         .veyq-node-header { --veyq-node-header-name-min: 192px; column-gap: 16px }
         .veyq-node-header-titlerow { column-gap: 16px }
         .veyq-node-header-actions { column-gap: 7px }
-        .veyq-node-header-icon { --veyq-node-header-leading-wide: 180px }`
+        .veyq-node-header-cover { --veyq-node-header-leading-wide: 180px }`
       document.head.appendChild(sheet)
     })
     afterEach(() => sheet.remove())
@@ -306,7 +314,7 @@ describe('NodeHeader', () => {
         return 0
       })
       vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
-        if (this.classList.contains('veyq-node-header-icon')) return compactNow(this) ? 64 : 180
+        if (this.classList.contains('veyq-node-header-cover')) return compactNow(this) ? 64 : 180
         return this.matches('.veyq-node-header-action, .veyq-node-header-more') ? 41 : 0
       })
       vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
@@ -314,7 +322,7 @@ describe('NodeHeader', () => {
       })
     }
     const memoryActions = () => ['favorite', 'upload', 'share', 'request', 'people', 'download', 'cover', 'banner', 'rename', 'move', 'copy'].map((id) => act(id))
-    // The leading visual is the icon tile here, given the 180 px wide width above (a cover's is 244 px in the sheet).
+    // The leading visual is the icon's 16:9 frame here, given the 180 px wide width above (a Memory's is 244 px in the sheet).
     const mountMemory = (title: string) => mountHeader({ title, icon: 'images', actions: [...memoryActions(), act('delete', { severity: 'danger' })] })
 
     it('compact below the switch, wide at it: the header\'s class follows the answer', async () => {

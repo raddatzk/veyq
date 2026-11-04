@@ -43,8 +43,8 @@ function evaluate(expr: string, vars: Record<string, string>): number {
   return Function(`return (${e})`)() as number
 }
 
-/** The leading visual of a header that draws `subtitle` and `facts`: its height, a cover's wide width and the icon tile's, from
- *  the sheet's own rules and the counts the component sets (`headerRowCounts`). */
+/** The leading visual of a header that draws `subtitle` and `facts`: its height and its wide width (16:9, a cover's or a kind
+ *  without one's icon frame alike), from the sheet's own rules and the counts the component sets (`headerRowCounts`). */
 function visualOf(subtitle: boolean, facts: readonly NodeHeaderFact[]) {
   const c = headerRowCounts(subtitle, facts)
   const vars: Record<string, string> = {
@@ -56,8 +56,7 @@ function visualOf(subtitle: boolean, facts: readonly NodeHeaderFact[]) {
   }
   const height = evaluate('var(--veyq-node-header-visual-height)', vars)
   const cover = evaluate(customProperties(rule('.veyq-node-header-cover', css))['--veyq-node-header-leading-wide'], vars)
-  const tile = evaluate(customProperties(rule('.veyq-node-header .veyq-node-header-icon', css))['--veyq-node-header-leading-wide'], vars)
-  return { height: Math.round(height * 10) / 10, cover: Math.round(cover * 10) / 10, tile: Math.round(tile * 10) / 10 }
+  return { height: Math.round(height * 10) / 10, cover: Math.round(cover * 10) / 10 }
 }
 const DATE: NodeHeaderFact = { kind: 'date', label: '2026' }
 const PLACE: NodeHeaderFact = { kind: 'place', label: 'Rome' }
@@ -87,9 +86,9 @@ describe('node header styles', () => {
 
   it('the leading visual is as tall as the rows core draws beside it: computed per row set, never measured (owner 2026-11-04)', () => {
     // A Memory's four rows (the name, the count, date and place, the people): a cover near the former fixed 244 px.
-    expect(visualOf(true, [DATE, PLACE, PEOPLE])).toEqual({ height: 137.2, cover: 243.9, tile: 137.2 })
-    // A folder's name alone: a tile as tall as the name row (and a cover frame 16:9 at that height).
-    expect(visualOf(false, [])).toEqual({ height: 42, cover: 74.7, tile: 42 })
+    expect(visualOf(true, [DATE, PLACE, PEOPLE])).toEqual({ height: 137.2, cover: 243.9 })
+    // A folder's name alone: a frame as tall as the name row, 16:9 at that height.
+    expect(visualOf(false, [])).toEqual({ height: 42, cover: 74.7 })
     // A Pot (the name, its currency) and a file (the name, who uploaded it): each row its own size.
     expect(visualOf(true, []).height).toBe(64.4)
     expect(visualOf(false, [PEOPLE]).height).toBe(86.4)
@@ -113,15 +112,15 @@ describe('node header styles', () => {
     expect(rule('.veyq-node-header', css)).toMatch(/align-items:\s*center/)
   })
 
-  it('a cover is 16:9 and the icon tile a square, each sized from the wide width core reads', () => {
+  it('the leading visual is always 16:9, sized from the wide width core reads - a kind without a cover has no square tile', () => {
     // Without the property the layout answer would read 0 and put the cover beside a name squeezed below its minimum.
     const cover = rule('.veyq-node-header-cover', css)
     expect(cover).toMatch(/--veyq-node-header-leading-wide:\s*calc\(var\(--veyq-node-header-visual-height\) \* 16 \/ 9\);[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
     expect(cover).toMatch(/aspect-ratio:\s*16 \/ 9/)
-    const icon = rule('.veyq-node-header .veyq-node-header-icon', css)
-    expect(icon).toMatch(/--veyq-node-header-leading-wide:\s*var\(--veyq-node-header-visual-height\);[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
-    expect(icon).toMatch(/height:\s*var\(--veyq-node-header-leading-wide\)/)
-    // The empty frame of a kind that takes a cover: the kind's icon in its middle, a line around it.
+    // No other leading visual: the square icon tile of a kind without a cover is gone (owner 2026-11-04) - that kind's icon
+    // sits in the empty frame below, so no rule may size a visual to anything but 16:9.
+    expect(css).not.toMatch(/veyq-node-header-icon(?![-\w])/)
+    // The empty frame - none set, or a kind that takes none: the kind's icon in its middle, a line around it.
     const empty = rule('.veyq-node-header-cover.is-empty', css)
     expect(empty).toMatch(/place-items:\s*center/)
     expect(empty).toMatch(/border:\s*1px solid var\(--app-line\)/)
@@ -160,11 +159,12 @@ describe('node header styles', () => {
     expect(rule('.veyq-node-page', css)).toMatch(/container:\s*veyq-node-page \/ inline-size/)
   })
 
-  it('compact, the cover is 64 px wide and the icon tile 42 px', () => {
-    expect(rule('.veyq-node-header.is-compact .veyq-node-header-cover', css)).toMatch(/width:\s*64px/)
-    const icon = rule('.veyq-node-header.is-compact .veyq-node-header-icon', css)
-    expect(icon).toMatch(/width:\s*42px/)
-    expect(icon).toMatch(/height:\s*42px/)
+  it('compact, the visual is 64 px wide and still 16:9 (64 × 36 px): one size for every kind', () => {
+    const compact = rule('.veyq-node-header.is-compact .veyq-node-header-cover', css)
+    expect(compact).toMatch(/width:\s*64px/)
+    // Its height is the aspect ratio's, never one of its own (a square would be back).
+    expect(compact).not.toMatch(/(^|[\s;])height:/)
+    expect(rule('.veyq-node-header-cover', css)).toMatch(/aspect-ratio:\s*16 \/ 9/)
   })
 
   it('wide, the name is one line with an ellipsis at its natural width; the title row does not wrap', () => {

@@ -54,6 +54,12 @@ and anyone in the Pot sees at any time who owes whom.
   [`contracts/expenses/pot-meta.v1.schema.json`](../../contracts/expenses/pot-meta.v1.schema.json), written by a member
   whole with the revision it read. A Pot whose meta carries no readable `pot` shows no balance and takes no money entry
   until a member sets a base currency: a client never guesses a currency.
+- **A cover** (owner 2026-11-04): a Pot takes one as a folder, a drop box and a Memory do — core's feature
+  ([uc.platform.node-cover](../features/platform/use-cases/uc.platform.node-cover.md)): one image in core's `COVER` slot of
+  the Pot's node and the `cover` field of its sealed meta, beside the `pot` object, which a settings write keeps as it is
+  handed (`writeNodeMeta`). It is no receipt and no revision of the ledger. Expenses only opts in
+  (`ExpensesNodeKindRules.takesCover`, the descriptor's `cover`); a member who may write the Pot sets it, a link guest
+  sees it and sets none. A download and a copy leave it out, as a folder's (the copy dialog says so).
 - **No one is addressed** (owner 2026-11-04): the Pot shows who owes whom and marks no row as the viewer's — no "who am
   I" choice, nothing kept on the device. The "Who am I" of inbox #541 was built and removed again. A later reminder of
   what one owes is a member's alone and finds them by their member participant (the user id it holds, decision 2),

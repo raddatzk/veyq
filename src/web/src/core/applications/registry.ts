@@ -174,7 +174,7 @@ export interface KindDescriptor {
    *  folders and a Memory's new chapters arrive as rows, and a key re-derived from a re-read tree is the same object, so
    *  nothing keyed on it reloads. What lives beside the tree (a Memory's gallery, ADR 0033) the page polls itself. */
   detail?: Component
-  /** The icon core draws next to a node of this kind (e.g. the trash list), and its header's icon tile (without a cover). */
+  /** The icon core draws next to a node of this kind (e.g. the trash list), and its header's 16:9 frame wherever no cover is shown. */
   icon: VeyqIconName
   /** What core's header of a node of this kind needs that never changes per node (owner 2026-11-03, ADR 0110 decision 10):
    *  core draws every node page's header (`core/node/components/NodePage.vue`, the folder level for FOLDER), from this,

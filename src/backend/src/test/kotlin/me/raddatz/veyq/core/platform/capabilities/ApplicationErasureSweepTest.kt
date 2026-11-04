@@ -208,6 +208,8 @@ class ApplicationErasureSweepTest {
         val guestFolder = seedNode(personal, NodeEntity.FOLDER, parentId = dropBox, wrappedContentKey = CONTENT_KEY)
         val pot = seedNode(personal, ExpensesNodeKinds.POT, wrappedContentKey = CONTENT_KEY)
         appendRevision(owner, personal, pot)
+        // A Pot's cover is core's attachment on it: it goes with the Pot, and `residue` finds a row left behind.
+        CoverKit.set(owner, personal, pot, CoverKit.start(owner, personal, pot).uploadId, expectedBlobId = null).statusCode(204)
         val memory = seedNode(personal, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val erased = listOf(file, dropBox, guestFolder, pot)
         madeBeforeTheSwitchOff(personal)

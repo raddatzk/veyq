@@ -29,15 +29,16 @@ big cover are date, place and participants*; *and on a desktop the title and the
 ## Decision
 
 1. **Two layouts, and the leading visual stays beside the name in both; the header never stacks.**
-   - **Compact** (a phone): a small leading visual — a Memory's or a folder's cover a 16:9 tile of 64 × 36 px, the icon
-     tile its 42 px —, the name beside it in **at most two lines**, the actions in a row of their own, the header's full
+   - **Compact** (a phone): a small leading visual — a 16:9 tile of 64 × 36 px for every kind, a cover, its empty frame
+     or the icon of a kind without one —, the name beside it in **at most two lines**, the actions in a row of their own, the header's full
      width, below them; then subtitle and meta.
    - **Wide** (a desktop): the full sizes - **the leading visual as tall as the rows core draws beside it** (owner
      2026-11-04): each kind of row - the name's, the subtitle, a row of date and place chips, a row of people, a line of
      text - has one fixed block size, and the visual's height is their sum and the gaps between them, computed from the
-     data the header draws, never measured. A cover is 16:9 at that height (a Memory's four rows - the name, the count,
-     date and place, the people - make it about 244 px wide), the icon tile a square of it (a folder's name alone: a tile
-     as tall as the name). Wrapped chips on a narrow window may make the text taller than the visual; that is accepted.
+     data the header draws, never measured. **The leading visual is always 16:9 at that height** (owner 2026-11-04): a
+     cover (a Memory's four rows - the name, the count, date and place, the people - make it about 244 px wide), the empty
+     frame of a kind that takes one, and a kind without a cover (a file) its icon in that same frame - no square tile (a
+     folder's name alone: a frame as tall as the name, about 75 px wide). Wrapped chips on a narrow window may make the text taller than the visual; that is accepted.
      The name and the actions are **always one row** — the name **one line**, because the lines beside a big cover belong
      to the subtitle and the meta (a Memory's date, place and participants). The actions never get a row of their own
      here. The content is centred against the visual.
@@ -88,7 +89,7 @@ big cover are date, place and participants*; *and on a desktop the title and the
     sizes) - without one the empty 16:9 frame with the kind's icon in its middle (owner 2026-11-04) - and it is the
     button that opens core's cover dialog, its hint "Set cover" on the empty frame (in words where the frame is three rows tall or more, else the image glyph on
     hover and focus, the words its tooltip), where whoever looks may set it; else
-    a plain frame. A kind without a cover shows its icon tile. People link
+    a plain frame. A kind without a cover shows its icon in the same 16:9 frame, never a button. People link
     to a profile and show a member's picture on a member's page only - the header's default is a share page's, so no
     application can link a person for a guest. The body below the header is the application's own, to present itself.
     No application imports the header component (a guard), so none can draw a header of its own beside core's.
@@ -141,7 +142,7 @@ big cover are date, place and participants*; *and on a desktop the title and the
 - **Rejected — the cover above the name on a phone** (the former stacking): it pushes the content a screen down and is
   what the owner asked to change.
 - **Rejected — a viewport breakpoint for the layout** (the first build, 540 px): it ignores what the header holds — a
-  Memory's cover and an icon tile switch at the same width — and it jumped from 9 buttons to 1 one pixel past the
+  Memory's cover and a file's icon switch at the same width — and it jumped from 9 buttons to 1 one pixel past the
   breakpoint. The header's own width, read against what it must fit, decides instead.
 - **Rejected — the actions first on a wide header, the name at a fixed minimum** (the first build): a long name squeezed
   to 12rem in two lines beside the buttons; the owner put the name first.

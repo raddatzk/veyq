@@ -190,7 +190,7 @@ kind `FOLDER` only.
   core stores and compares it and names none of an application's. `validate_blob_reference_arity` pins the `veyq_blob`
   arms.
 - **A cover is a node feature, core's.** Any node whose kind opts in (`NodeKindRules.takesCover`: core's `FOLDER`,
-  Depot's drop box, Memories' two kinds) carries one uploaded image in its own `COVER` slot, written by core's
+  Depot's drop box, Memories' two kinds, Expenses' Pot; never a file) carries one uploaded image in its own `COVER` slot, written by core's
   `setNodeCover` / `removeNodeCover` together with the re-sealed `wrappedMeta` that names it, in one transaction. The web
   half (`core/node/cover/`) serves every kind; a cover is set only by an upload in core's dialog, and an application adds
   only what is its own (Memories' `cover.findStored`: an upload equal to a gallery photo shares that medium's stored
@@ -290,7 +290,7 @@ point 8).
 - **Core draws every node page's header** ([ADR 0110](../decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md)
   decision 10). Core's node page (`core/node/components/NodePage.vue`, which both hosts mount around a kind's `detail`)
   draws it from the kind's descriptor - its `icon`, its `cover` (the cover where the node has one, else the empty frame
-  with the kind's icon; a kind without a cover its icon tile) and its priority `header.order` - and the level draws a
+  with the kind's icon; a kind without a cover its icon in the same 16:9 frame) and its priority `header.order` - and the level draws a
   folder's the same way. A kind's page is the body below and adds to the header only data, through
   `contributeNodeHeader` (`core/node/nodeHeaderContribution.ts`): a subtitle, its own actions, the rename of its name in
   place (its rights answer and its rename write), its facts (a date, a place, people, a line of text - Memories' date,

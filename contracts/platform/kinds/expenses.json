@@ -1,11 +1,11 @@
 {
   "$schema": "./kinds.schema.json",
   "owner": "expenses",
-  "description": "Expenses' kind (ADR 0108 decision 2): an EXPENSES_POT at the root or in a folder, taking no child (its entries are records, decision 3), no cover, and a READ or READ_WRITE link. Only a member creates one.",
+  "description": "Expenses' kind (ADR 0108 decision 2): an EXPENSES_POT at the root or in a folder, taking no child (its entries are records, decision 3), carrying a cover (owner 2026-11-04), and a READ or READ_WRITE link. Only a member creates one.",
   "kinds": {
     "EXPENSES_POT": {
       "placement": { "root": true, "parents": ["FOLDER"] },
-      "cover": false,
+      "cover": true,
       "createNeeds": null,
       "shareRoles": ["READ", "READ_WRITE"],
       "guest": { "creatableInFolder": false, "container": false, "writeOnlyCreates": [] }

@@ -56,6 +56,7 @@ import { memberAccessOf, memberTreeOf } from '../../../test/models'
 import { headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
 import { ANNA, BEN, CLEO, PotServer, POT_ID, SCOPE, expense, person, potNode } from '../potTestUtil'
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { setAccountUserId } from '../../../app/account'
 import { loadScopePeople, type Person } from '../../../core/people/directory'
 import { hostFor } from '../../../test/nodeHost'
@@ -499,6 +500,22 @@ describe('PotDetail for a member', () => {
     await w.find(`[data-entry="${DINNER}"]`).trigger('click')
     await flushPromises()
     expect(buttonIn(dialog()!, t('common.save'))).toBeUndefined()
+  })
+
+  // A Pot carries a cover (owner 2026-11-04): core's header draws and offers it from the kind's `cover`, no Expenses code.
+  it('the header\'s visual is the Pot\'s cover: the empty 16:9 frame with the wallet sets it for a writer, no action', async () => {
+    const w = mountPot()
+    await flushPromises()
+    const frame = w.get('.veyq-node-header-leading button[data-testid="node-header-cover"]')
+    expect(frame.classes()).toEqual(expect.arrayContaining(['veyq-node-header-cover', 'is-empty']))
+    expect(frame.attributes('aria-label')).toBe(t('node.cover.set'))
+    expect(frame.findComponent(VeyqIcon).props('name')).toBe('wallet')
+    expect(w.find('.veyq-node-header-actions [data-action^="cover"]').exists(), 'the visual is the way in').toBe(false)
+    // control: Expenses switched off, the same frame is plain - a Pot then takes no cover write
+    const off = mountPot(memberAccessOf({ scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), applicationsOff: new Set([EXPENSES]) }))
+    await flushPromises()
+    expect(off.find('[data-testid="node-header-cover"]').exists()).toBe(false)
+    expect(off.find('.veyq-node-header-leading [data-testid="node-header-cover-frame"]').exists()).toBe(true)
   })
 
   it('a Pot with no base currency says so and shows no entry', async () => {

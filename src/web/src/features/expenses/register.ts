@@ -7,7 +7,8 @@
 // removed, for a `READ` or `READ_WRITE` guest: core's page of a link mounts it, inbox #401), its `shareDialog` (`READ` and
 // `READ_WRITE` links only), its download, import and copy (`exportImport.ts`), its re-key (`rekey.ts`: every revision's
 // `K_rev` and every receipt's `K_blob` re-wrapped, no body touched) and the moderator's review of a reported entry or receipt
-// (`PotEntryReview`). No share body: a Pot is never a `WRITE_ONLY` root, so every guest gets core's page.
+// (`PotEntryReview`). No share body: a Pot is never a `WRITE_ONLY` root, so every guest gets core's page. A Pot carries a
+// cover (owner 2026-11-04): core's action, dialog, upload, header and row display - Expenses only opts in.
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, Registry } from '../../core/applications/registry'
 import { targetOf } from '../../core/access'
@@ -45,6 +46,9 @@ export function registerExpenses(registry: Registry): void {
     icon: 'wallet',
     // The header's priority (ADR 0110): favorite, sharing (a Pot is kept together), its download, then rename, move, copy.
     header: { order: ['favorite', 'share', 'download', 'move', 'copy'] },
+    // A Pot carries a cover (owner 2026-11-04: core's action, dialog, upload and display, as a folder's and a drop box's);
+    // a copy or a download does not carry it (`copyLosses`), as a folder's does not.
+    cover: {},
     detail: PotDetail,
     shareDialog: PotShareDialog,
     deleteTitle: 'expenses.delete',
@@ -66,7 +70,7 @@ export function registerExpenses(registry: Registry): void {
     // The import reads a receipt's payload only through the upload pump's frame-sized slices (the CSV is for a spreadsheet
     // only, never read), so a copy hands it the original read by frame and nothing is buffered whole.
     importStreams: true,
-    copyLosses: ['expenses.copyLoss'],
+    copyLosses: ['expenses.copyLoss', 'expenses.copyLossCover'],
   })
   app.route('expenses')
   app.itemReview(PotEntryReview)

@@ -20,7 +20,7 @@ object ExpensesNodeKinds {
 }
 
 /**
- * Where a Pot lives in core's tree (ADR 0108 decision 2): at the root or under a `FOLDER`, as a Depot file — never under
+ * Where a Pot lives in core's tree (ADR 0108 decision 2), and that it carries a cover: at the root or under a `FOLDER`, as a Depot file — never under
  * another kind, and nothing under it (no rule admits a Pot as a parent). Only a member creates one: Expenses declares no
  * `GuestCreatableKinds`, so a folder link's guest creates none (owner 2026-10-14), and no `GuestNodeRules`, so a link
  * rooted on a Pot has no tree rights inside it (the container default, `illegal_scope`). `ModuleCompositionTest` pins
@@ -32,6 +32,12 @@ class ExpensesNodeKindRules : NodeKindRules {
 
     override fun parentAllows(kind: String, parent: ParentSlot): Boolean =
         handles(kind) && (parent is ParentSlot.Root || (parent is ParentSlot.Node && parent.kind == NodeEntity.FOLDER))
+
+    /**
+     * A Pot takes a cover (owner 2026-11-04), as a folder, a drop box and a Memory do: one image in core's `COVER` slot of
+     * the Pot's node - never a receipt, which is an entry's blob of Expenses' own role.
+     */
+    override fun takesCover(kind: String): Boolean = handles(kind)
 
     /** A Pot is Expenses': switched off, no Pot is created, renamed, moved or linked (uc.platform.switch-application-off). */
     override fun applicationOf(kind: String): String? = if (handles(kind)) CapabilityIds.EXPENSES else null

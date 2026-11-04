@@ -51,7 +51,7 @@
 
 What an import does not carry: shares, members, favourites, the trash, server-observed times; participants and a
 medium's original contributor stay names only (a medium's capture-time correction, coordinates and place name DO come
-along: a copy carries the sealed facts and the derived tiers, ADR 0082 decision 11); a folder's or a drop box's cover; a drop box becomes a plain folder with
+along: a copy carries the sealed facts and the derived tiers, ADR 0082 decision 11); a folder's, a drop box's or a Pot's cover; a drop box becomes a plain folder with
 plain folders inside (no drop key, no links, no guest identities).
 
 ## Quality notes
