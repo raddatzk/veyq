@@ -58,7 +58,6 @@ import { ANNA, BEN, CLEO, PotServer, POT_ID, SCOPE, expense, person, potNode } f
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
 import { setAccountUserId } from '../../../app/account'
 import { loadScopePeople, type Person } from '../../../core/people/directory'
-import { whoAmIBase } from '../whoAmI'
 import { hostFor } from '../../../test/nodeHost'
 import { mountNodePage } from '../../../test/nodePage'
 
@@ -173,46 +172,26 @@ describe('PotDetail for a member', () => {
     expect(w.find(`.expenses-balances [data-person="${BEN}"]`).text()).toContain(t('expenses.balances.sent', { amount: '€30.00' }))
   })
 
-  // uc.expenses.balances step 2 (inbox #541): the viewer picks who they are once; their row is marked in the balances and
-  // the overview; the choice stays in this browser under this account and this Pot, and nothing is sent.
-  it('who am I: the chosen person\'s row is marked you in both tabs, kept on the device, and never sent', async () => {
-    setAccountUserId('u-anna')
+  // The overview shows who owes whom and addresses no one (owner 2026-11-04): no "who am I" choice, no row marked as the
+  // viewer's — also not a signed-in member's own member participant — and nothing stored on the device.
+  it('the overview marks no row as the viewer\'s, though the signed-in member is a participant of the Pot', async () => {
+    const self = '0d000000-0000-4000-8000-0000000000f1'
+    setAccountUserId(self)
     localStorage.clear()
+    const ME = '0e000000-0000-4000-8000-0000000000e1'
+    server.current.append([{ entryId: ME, content: { kind: 'participant', name: 'Me Sealed', active: true, joined: 4, member: { userId: self } } }])
     const w = mountPot()
     await flushPromises()
     await openTab(w, t('expenses.tabs.overview'))
-    expect(w.findAll('.expenses-you'), 'nobody is marked before a choice').toHaveLength(0)
-    const reads = vi.mocked(readMemberPot).mock.calls.length
-    w.findComponent(VeyqSelect).vm.$emit('update:modelValue', BEN)
-    await flushPromises()
-    expect(w.find(`.expenses-balances [data-person="${BEN}"] .expenses-you`).text()).toBe(t('expenses.whoAmI.you'))
-    expect(w.findAll('.expenses-balances .expenses-you')).toHaveLength(1)
-    expect(localStorage.getItem(`${whoAmIBase(POT_ID)}:u:u-anna`)).toBe(BEN)
-    expect(server.appends, 'no write carries it').toEqual([])
-    expect(vi.mocked(appendPotWrites)).not.toHaveBeenCalled()
-    expect(vi.mocked(writeNodeMeta)).not.toHaveBeenCalled()
-    expect(vi.mocked(readMemberPot).mock.calls.length, 'nor any read').toBe(reads)
-    await openTab(w, t('expenses.tabs.overview'))
-    expect(w.find(`.expenses-overview [data-person="${BEN}"] .expenses-you`).exists()).toBe(true)
-    w.unmount()
-
-    // another visit on this device remembers it; another account on it does not share it
-    const again = mountPot()
-    await flushPromises()
-    await openTab(again, t('expenses.tabs.overview'))
-    expect(again.find(`[data-person="${BEN}"] .expenses-you`).exists()).toBe(true)
-    again.unmount()
-    setAccountUserId('u-other')
-    const other = mountPot()
-    await flushPromises()
-    await openTab(other, t('expenses.tabs.overview'))
-    expect(other.findAll('.expenses-you'), 'another account on this browser chose nothing').toHaveLength(0)
-    // and "not chosen" clears it
-    other.findComponent(VeyqSelect).vm.$emit('update:modelValue', ANNA)
-    await flushPromises()
-    other.findComponent(VeyqSelect).vm.$emit('update:modelValue', 'nobody')
-    await flushPromises()
-    expect(other.findAll('.expenses-you')).toHaveLength(0)
+    // control: the member's own row is there, with its figures
+    expect(w.find(`.expenses-balances [data-person="${ME}"]`).exists()).toBe(true)
+    expect(w.findComponent(VeyqSelect).exists(), 'no "who am I" choice').toBe(false)
+    // every row's subtitle is its figures alone, opening with what the person paid — nothing addressed to the viewer
+    const paid = t('expenses.balances.paid', { amount: '' }).trim()
+    const subtitles = w.findAll('.expenses-balances .veyq-row-subtitle').map((x) => x.text())
+    expect(subtitles).toHaveLength(4)
+    for (const line of subtitles) expect(line.startsWith(paid), line).toBe(true)
+    expect(Object.keys(localStorage).filter((k) => k.startsWith('veyq.expenses.'))).toEqual([])
     setAccountUserId('')
   })
 
@@ -332,67 +311,6 @@ describe('PotDetail for a member', () => {
     await flushPromises()
     expect(eraseParticipant).toHaveBeenCalledWith(expect.objectContaining({ kind: 'member' }), expect.anything(), expect.anything(), CLEO, expect.anything())
     expect(w.text()).toContain(t('expenses.people.deletedSummary', { n: 1 }, 1))
-  })
-
-  // "Who am I" defaults to the viewer's own member participant (ADR 0108 decision 2): a read, never written, until they
-  // choose. Each case is its own account, so its stored choice is read fresh (a setting caches per storage key).
-  describe('who am I for a member participant', () => {
-    const own = (userId: string, joined: number) => ({ kind: 'participant' as const, name: 'Me Sealed', active: true, joined, member: { userId } })
-    const ME = '0e000000-0000-4000-8000-0000000000e1'
-    const marked = (w: VueWrapper, panel: string) => w.findAll(`${panel} .expenses-you`).map((x) => x.element.closest('[data-person]')?.getAttribute('data-person'))
-
-    it('preselects the signed-in member\'s own participant while none is stored, in both tabs, storing nothing', async () => {
-      const self = '0d000000-0000-4000-8000-0000000000f1'
-      setAccountUserId(self)
-      server.current.append([{ entryId: ME, content: own(self, 4) }])
-      server.current.append([{ entryId: '0e000000-0000-4000-9000-0000000000e3', content: expense('Boat', 2000, ME, [ME, ANNA]) }])
-      const w = mountPot()
-      await flushPromises()
-      await openTab(w, t('expenses.tabs.overview'))
-      expect(marked(w, '.expenses-balances')).toEqual([ME])
-      expect((w.findComponent(VeyqSelect).props() as unknown as { modelValue?: string }).modelValue).toBe(ME)
-      await openTab(w, t('expenses.tabs.overview'))
-      expect(marked(w, '.expenses-overview')).toEqual([ME])
-      expect(localStorage.getItem(`${whoAmIBase(POT_ID)}:u:${self}`), 'a default, never written').toBeNull()
-      expect(server.appends).toEqual([])
-    })
-
-    it('a choice the member made stays theirs — another participant, or nobody — over their own participant', async () => {
-      const chose = '0d000000-0000-4000-8000-0000000000f2'
-      setAccountUserId(chose)
-      localStorage.setItem(`${whoAmIBase(POT_ID)}:u:${chose}`, BEN)
-      server.current.append([{ entryId: ME, content: own(chose, 4) }])
-      let w = mountPot()
-      await flushPromises()
-      await openTab(w, t('expenses.tabs.overview'))
-      expect(marked(w, '.expenses-balances')).toEqual([BEN])
-      // choosing nobody is a choice too: stored, and the default does not come back
-      w.findComponent(VeyqSelect).vm.$emit('update:modelValue', 'nobody')
-      await flushPromises()
-      expect(marked(w, '.expenses-balances')).toEqual([])
-      expect(localStorage.getItem(`${whoAmIBase(POT_ID)}:u:${chose}`)).toBe('nobody')
-      w.unmount()
-      // and read back from storage by a fresh setting (another account's key, stored "nobody" before its first read)
-      const later = '0d000000-0000-4000-8000-0000000000f3'
-      setAccountUserId(later)
-      localStorage.setItem(`${whoAmIBase(POT_ID)}:u:${later}`, 'nobody')
-      server.current.append([{ entryId: '0e000000-0000-4000-8000-0000000000e2', content: own(later, 5) }])
-      w = mountPot()
-      await flushPromises()
-      await openTab(w, t('expenses.tabs.overview'))
-      expect(marked(w, '.expenses-balances')).toEqual([])
-    })
-
-    it('a member who is no participant of the Pot is nobody until they choose (control: the first case is preselected)', async () => {
-      const outsider = '0d000000-0000-4000-8000-0000000000f4'
-      setAccountUserId(outsider)
-      server.current.append([{ entryId: ME, content: own('0d000000-0000-4000-8000-0000000000f5', 4) }])
-      const w = mountPot()
-      await flushPromises()
-      await openTab(w, t('expenses.tabs.overview'))
-      expect(marked(w, '.expenses-balances')).toEqual([])
-      expect((w.findComponent(VeyqSelect).props() as unknown as { modelValue?: string }).modelValue).toBe('nobody')
-    })
   })
 
   // A participant that is a member of the space (ADR 0108 decision 2, inbox #783).

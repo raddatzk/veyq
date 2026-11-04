@@ -837,51 +837,6 @@ test.describe('in English', () => {
   )
 
   test(
-    'step 4d: who am I — a member and a guest each mark their own row, kept on the device over a reload, nothing sent',
-    { tag: '@uc.expenses.balances:who-am-i-stays-on-the-device' },
-    async () => {
-      test.setTimeout(180_000)
-      const marked = (page: Page) => page.locator('.expenses-balances li').filter({ has: page.locator('.expenses-you') })
-      /** Choose [name] in the Overview: no request but reads while choosing, and the row is marked. */
-      async function choose(page: Page, name: string): Promise<void> {
-        await openTab(page, L.pot.tabs.overview)
-        await expect(marked(page)).toHaveCount(0)
-        const sent: string[] = []
-        const watch = (r: { method(): string; url(): string }) => {
-          if (r.method() !== 'GET') sent.push(`${r.method()} ${new URL(r.url()).pathname}`)
-        }
-        page.on('request', watch)
-        await pick(page, page.getByRole('combobox', { name: L.pot.whoAmI }), name)
-        await expect(marked(page).locator('.veyq-row-title')).toHaveText([name])
-        await expect(marked(page).locator('.expenses-you')).toHaveText([L.pot.you])
-        page.off('request', watch)
-        expect(sent, 'choosing who one is sends nothing').toEqual([])
-      }
-      await choose(a.page, PEOPLE[0]!)
-      const g = guest.page
-      await choose(g, PEOPLE[1]!)
-      // Each device keeps its own choice: a reload, the member's and the guest's.
-      await a.page.reload()
-      await expect(a.page.getByRole('heading', { level: 1, name: pot })).toBeVisible({ timeout: 60_000 })
-      await expect(a.page.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
-      await openTab(a.page, L.pot.tabs.overview)
-      await expect(marked(a.page).locator('.veyq-row-title')).toHaveText([PEOPLE[0]!])
-      await openLink(g, shareLink)
-      await expect(g.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
-      await openTab(g, L.pot.tabs.overview)
-      await expect(marked(g).locator('.veyq-row-title')).toHaveText([PEOPLE[1]!])
-      // Back to "not chosen", so the later steps read the rows as they were.
-      for (const page of [a.page, g]) {
-        await openTab(page, L.pot.tabs.overview)
-        await pick(page, page.getByRole('combobox', { name: L.pot.whoAmI }), L.pot.nobody)
-        await expect(marked(page)).toHaveCount(0)
-      }
-      await openTab(a.page, L.pot.tabs.entries)
-      await openTab(g, L.pot.tabs.entries)
-    },
-  )
-
-  test(
     'step 5: a deleted entry leaves the balances and its restore brings them back, with no ledger notice',
     {
       tag: [

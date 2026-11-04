@@ -4,7 +4,6 @@ title: See who owes whom, settle up, and see where the money went
 # Built by cr-expenses-ledger (inbox #325, ADR 0108): :apps:expenses on the backend (PotRevisionStore's append,
 # erasure and reads, the guest gate and record, the erasers, the re-key participant, the ITEM report), features/expenses on
 # the web (the domain under domain/, run through contracts/expenses/v1-vectors.json and the real crypto; the Pot page).
-# `who-am-i-stays-on-the-device` by inbox #541 (features/expenses/whoAmI.ts); `who-am-i-defaults-to-the-own-member` by #783's follow-up.
 acceptanceCriteria:
   - id: balances-from-the-live-entries
     text: "Each participant's balance is what they paid and received against their share of every expense and refund, transfers included, computed in the client from the live entries."
@@ -20,32 +19,25 @@ acceptanceCriteria:
     text: "The overview shows the cost per category, and per person what they paid and consumed side by side with the net of their transfers, in the row of their balance, the three adding up to it; refunds count against their category, transfers are not costs."
     coverage:
       web:
-        unit: [src/features/expenses/domain/ledger.test.ts]
-  - id: who-am-i-stays-on-the-device
-    text: "The viewer's choice of who they are marks their row you in the balances and the overview, for a member and a guest alike, is kept in this browser per Pot and per account (or per guest), and never leaves the device: no request carries it."
+        unit: [src/features/expenses/domain/ledger.test.ts, src/features/expenses/people.test.ts, src/features/expenses/components/PotDetail.test.ts]
+  - id: the-overview-addresses-no-one
+    text: "No row is marked as the viewer's — not even a signed-in member's own member participant — there is no choice of who one is, and nothing about it is kept on the device."
     coverage:
       web:
-        unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/components/PotDetail.guest.test.ts]
+        unit: [src/features/expenses/components/PotDetail.test.ts]
   - id: a-settled-person-with-costs-keeps-a-row
     text: "A deactivated or deleted participant keeps a row in the balances (by name, or in the one deleted-people row) while their balance is open or they paid or consumed anything, so the rows' paid and consumed add up to the cost per category; one settled with neither is left out."
     coverage:
       web:
         unit: [src/features/expenses/people.test.ts]
-  - id: who-am-i-defaults-to-the-own-member
-    text: "Until the viewer has chosen on this device, a signed-in member who is a member participant of the Pot is that participant, in the balances and the overview, without anything stored; a choice made — another participant or nobody — is kept over it; a link guest and a member who is no participant start with nobody."
-    coverage:
-      web:
-        unit: [src/features/expenses/components/PotDetail.test.ts, src/features/expenses/components/PotDetail.guest.test.ts]
 gaps:
   backend: "No part here: every figure is computed in the client from the opened revisions (ADR 0108 decision 9); the server stores and serves them, covered under uc.expenses.record-entries."
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `balances-from-the-live-
-    entries`, `settle-up-is-greedy-and-deterministic`, `overviews-by-category-and-person` and
-    `who-am-i-stays-on-the-device` in Chromium, in
+    entries`, `settle-up-is-greedy-and-deterministic` and `overviews-by-category-and-person` in Chromium, in
     English, with the first two again in the German pass (ADR 0090 decision 9), against the release candidate's two images installed through `veyqctl` (ADR 0090),
     each test tagged with its criterion: the vectors' "trip" Pot typed in shows the vector's balances and settle-up
-    (each amount formatted for the language), the overview's paid and share columns each sum to the costs, the
-    settle-up recorded in one batch settles everyone, a member and a guest each marked as who they chose (kept over a
-    reload, no request carrying it), and the Pot at 375 px scrolls only down. Green only in local
+    (each amount formatted for the language), each balance row's paid and consumed sum to the costs, the
+    settle-up recorded in one batch settles everyone, and the Pot at 375 px scrolls only down. Green only in local
     runs of the lane (the V1 heavy stage), and ADR 0040 admits `stack` refs only once a CI run's log shows the suite
     executed.

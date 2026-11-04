@@ -2,8 +2,8 @@
 // A Pot under its own link is the member's page with functions removed (inbox #401, ADR 0108 decision 6): core's real
 // `ShareTreePage` mounts the Pot's `detail` at the link's root through the app's real registry, the guest's tree opens the
 // Pot's key from the link's `K_share`, and every authenticated client throws (`test/guestMode.ts`). A `READ_WRITE` guest
-// adds an entry and a person through the share path — naming itself first — and sees no Settings, no deactivate or delete
-// of a person and no writer's name; a `READ` guest writes nothing. Its receipts (uc.expenses.attach-receipts E4): a `READ`
+// adds an entry and a person through the share path — naming itself first — and sees Settings with the people alone, no
+// deactivate or delete of a person and no writer's name; a `READ` guest writes nothing. Its receipts (uc.expenses.attach-receipts E4): a `READ`
 // guest opens and downloads them and adds and removes none, a `READ_WRITE` guest adds one through the link's own upload.
 // The Pot's revisions are written by the real write path (`potTestUtil.ts`); only the share path's wire is replaced.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -30,10 +30,6 @@ import { appendPotWrites, readGuestPot, sealPotWrites } from '../domain/potApi'
 import { readGuestReceipts, uploadReceipt } from '../receipts'
 import { POT_KIND } from '../kinds'
 import { ANNA, BEN, POT_ID, PotServer, SCOPE, expense, person, potNode } from '../potTestUtil'
-import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
-import { setPreferenceAudience } from '../../../shared/state/scopedPreference'
-import { whoAmIBase } from '../whoAmI'
-import { setAccountUserId } from '../../../app/account'
 import { httpError } from '../../../test/httpError'
 
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_8'
@@ -194,46 +190,6 @@ describe('a Pot under its own link', () => {
     await flushPromises()
     expect(dialog()!.textContent).toContain(t('expenses.entry.saveFailed'))
     expect(dialog()!.textContent).not.toContain(t('expenses.entry.blocked'))
-  })
-
-  // A link guest has no member identity: "Who am I" picks nothing for it, even where an account signed in on this browser
-  // is a member participant of the Pot (control: PotDetail.test.ts preselects it for that member). Before the case below,
-  // which stores the guest's choice: a setting caches per storage key, so this one reads the guest's key fresh.
-  it('READ: who am I preselects nobody for a guest, though the browser\'s account is a member participant', async () => {
-    const self = '0d000000-0000-4000-8000-0000000000f9'
-    setAccountUserId(self)
-    server.current.append([{ entryId: '0e000000-0000-4000-8000-0000000000e9', content: { kind: 'participant', name: 'Me Sealed', active: true, joined: 3, member: { userId: self } } }])
-    setPreferenceAudience('guest')
-    localStorage.clear()
-    try {
-      const page = await mountShare(ShareRole.Read)
-      await openTab(page, t('expenses.tabs.overview'))
-      expect(page.find('[data-person="0e000000-0000-4000-8000-0000000000e9"]').text()).toContain('Me Sealed')
-      expect(page.findAll('.expenses-you')).toHaveLength(0)
-      expect((page.findComponent(VeyqSelect).props() as unknown as { modelValue?: string }).modelValue).toBe('nobody')
-    } finally {
-      setPreferenceAudience('account')
-      setAccountUserId('')
-    }
-  })
-
-  it('READ: who am I is a guest\'s too — its row marked, kept under the guest\'s own key on this device, nothing sent', async () => {
-    setPreferenceAudience('guest') // as the share page declares it (views/ShareView.vue)
-    localStorage.clear()
-    try {
-      const page = await mountShare(ShareRole.Read)
-      await openTab(page, t('expenses.tabs.overview'))
-      const reads = vi.mocked(readGuestPot).mock.calls.length
-      page.findComponent(VeyqSelect).vm.$emit('update:modelValue', ANNA)
-      await flushPromises()
-      expect(page.find(`[data-person="${ANNA}"] .expenses-you`).exists()).toBe(true)
-      expect(localStorage.getItem(`${whoAmIBase(POT_ID)}:guest`)).toBe(ANNA)
-      expect(vi.mocked(appendPotWrites)).not.toHaveBeenCalled()
-      expect(vi.mocked(readGuestPot).mock.calls.length).toBe(reads)
-      expect(authenticatedCalls).toEqual([])
-    } finally {
-      setPreferenceAudience('account')
-    }
   })
 
   it('READ: reads everything, writes nothing (control: READ_WRITE above adds)', async () => {

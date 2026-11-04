@@ -23,7 +23,6 @@ import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { canReport, nodeTarget } from '../../../core/report/reportActions'
 import { useReportOffered } from '../../../core/report/report'
 import { loadScopePeople, loadTenantPeople, type Person } from '../../../core/people/directory'
-import { account } from '../../../app/account'
 import { targetOf } from '../../../core/access'
 import { expensesRights } from '../rights'
 import { usePotSession } from '../potSession'
@@ -59,9 +58,6 @@ const people = shallowRef<ReadonlyMap<string, Person> | null>(null)
 // page reads no member list, so it is handed none and shows each participant by the name sealed at adding.
 const members = shallowRef<Person[] | null>(null)
 const directory = computed<MemberDirectory>(() => (members.value ? new Map(members.value.map((m) => [m.userId, m] as const)) : null))
-/** Who looks, as a member of the space: "Who am I" defaults to their own member participant. A link guest has no member
- *  identity (even where an account is signed in on the same browser), so none. */
-const selfId = computed(() => (props.access.mode === 'member' && account.userId ? account.userId : null))
 onMounted(() => {
   void session.refresh().catch(() => {})
   if (props.access.mode === 'member') {
@@ -141,7 +137,7 @@ function receiptSource(receipt: HeldReceipt) {
               <EntriesPanel :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :directory="directory" @open="(entryId) => (editing = { entryId })" />
             </VeyqTabPanel>
             <VeyqTabPanel value="overview">
-              <OverviewPanel :session="session" :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :pot-id="node.id" :directory="directory" :self-id="selfId" />
+              <OverviewPanel :session="session" :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :directory="directory" />
             </VeyqTabPanel>
           </template>
           <VeyqTabPanel v-if="settingsTab" value="settings">

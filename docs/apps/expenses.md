@@ -3,7 +3,7 @@
 > **Built, on the V1 line** (its browser pass lane L1's `tests/e2e/tests/features/expenses/expenses-pot.spec.ts`,
 > EN and DE). Shared expense tracking in the shape of Splid, as the third application on the platform: Pots, their
 > people, entries with their history and receipts, the day's exchange rate, the ledger check, balances, settle-up,
-> overviews, "Who am I" and the link are built. Backend `:apps:expenses`
+> overviews and the link are built. Backend `:apps:expenses`
 > (`me.raddatz.veyq.expenses`), contract `contracts/api/expenses/`, the entry format `contracts/expenses/`, web
 > `src/web/src/features/expenses`. What it asks of the platform — storage, seals, guests, receipts, exchange rates, what
 > the operator sees — is [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md); this
@@ -54,11 +54,10 @@ and anyone in the Pot sees at any time who owes whom.
   [`contracts/expenses/pot-meta.v1.schema.json`](../../contracts/expenses/pot-meta.v1.schema.json), written by a member
   whole with the revision it read. A Pot whose meta carries no readable `pot` shows no balance and takes no money entry
   until a member sets a base currency: a client never guesses a currency.
-- **Who am I** is each viewer's own choice, kept on the device (per Pot, per account or guest); it marks "you" in the
-  balances and the overview and never leaves the client. Until a signed-in member has chosen on this device, their own
-  member participant is who they are (`whoAmI.ts`' `ownParticipant`): a default that is read, never written, so a
-  choice they make — "nobody" included, stored as a choice of its own — stays theirs. A link guest has no member
-  identity and gets no default, nor does a member who is no participant of the Pot.
+- **No one is addressed** (owner 2026-11-04): the Pot shows who owes whom and marks no row as the viewer's — no "who am
+  I" choice, nothing kept on the device. The "Who am I" of inbox #541 was built and removed again. A later reminder of
+  what one owes is a member's alone and finds them by their member participant (the user id it holds, decision 2),
+  never by a choice on the device; a link guest gets none (#782, #550).
 
 ## Entries
 

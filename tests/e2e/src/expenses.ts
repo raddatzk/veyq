@@ -65,7 +65,6 @@ export const LABELS = {
       deletedPeople: 'deleted people', oneDeleted: 'One deleted person.', expenseBy: (n: string) => `expense by ${n}`,
       copyLoss: 'The history of each entry and the deleted entries: a copy starts every entry at its current version.',
       reviewTitle: 'The reported entry, every version',
-      whoAmI: 'You are', nobody: 'Not chosen', you: 'you',
       receipts: {
         title: 'Receipts', add: 'Add receipt', open: (n: string) => `Open ${n}`, close: (n: string) => `Close ${n}`,
         download: (n: string) => `Download ${n}`, remove: (n: string) => `Remove ${n}`, downloadOnly: 'Download',
@@ -126,7 +125,6 @@ export const LABELS = {
       deletedPeople: 'gelöschte Personen', oneDeleted: 'Eine gelöschte Person.', expenseBy: (n: string) => `Ausgabe von ${n}`,
       copyLoss: 'Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.',
       reviewTitle: 'Der gemeldete Eintrag, jede Fassung',
-      whoAmI: 'Du bist', nobody: 'Nicht gewählt', you: 'du',
       receipts: {
         title: 'Belege', add: 'Beleg hinzufügen', open: (n: string) => `${n} öffnen`, close: (n: string) => `${n} schließen`,
         download: (n: string) => `${n} herunterladen`, remove: (n: string) => `${n} entfernen`, downloadOnly: 'Herunterladen',
@@ -261,8 +259,8 @@ export async function readOverview(page: Page, L: Labels): Promise<Overview> {
   return {
     categories: read.categories,
     people: read.people.map(({ name, subtitle }) => {
-      // "you · paid €10.00 · consumed €5.00 · transferred €3.00": the viewer's mark (device-local, so not a figure) left out
-      const parts = subtitle.split(' · ').filter((p) => p !== L.pot.you)
+      // "paid €10.00 · consumed €5.00 · transferred €3.00"
+      const parts = subtitle.split(' · ')
       return { name, paid: partOf(parts, L.pot.explain.paid, name), consumed: partOf(parts, L.pot.explain.consumed, name) }
     }),
   }

@@ -213,12 +213,6 @@ const en = {
       recordAll: 'Record all',
       allSettled: 'Everyone is settled.',
     },
-    whoAmI: {
-      label: 'You are',
-      nobody: 'Not chosen',
-      hint: 'Marks your row. Kept on this device only.',
-      you: 'you',
-    },
     overview: {
       empty: 'No costs yet.',
       byCategory: 'By category',
@@ -474,12 +468,6 @@ const de: typeof en = {
       record: 'Eintragen',
       recordAll: 'Alle eintragen',
       allSettled: 'Alle sind ausgeglichen.',
-    },
-    whoAmI: {
-      label: 'Du bist',
-      nobody: 'Nicht gewählt',
-      hint: 'Markiert deine Zeile. Nur auf diesem Gerät gespeichert.',
-      you: 'du',
     },
     overview: {
       empty: 'Noch keine Kosten.',

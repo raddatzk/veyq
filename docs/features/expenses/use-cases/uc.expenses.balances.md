@@ -14,15 +14,13 @@
 1. **Balances** (the Pot's **Overview** tab): per participant, what they paid and received against their share of every
    expense and refund, transfers included ([docs/apps/expenses.md](../../../apps/expenses.md) § What the client
    computes); each row explains its balance by what the person paid, what they consumed and the net of their transfers
-   (sent or received), which add up to it. The viewer's own row is marked *you* when they chose who they are (step 2).
-2. **Who am I:** the viewer picks their participant once, above the balances; the choice stays on the device — per Pot,
-   and per account or per guest on that browser — and is never sent. Until a signed-in member has chosen, their own
-   member participant is preselected; it is not stored, so their choice — "nobody" too — is never overwritten.
-3. **Settle up:** the suggested transfers that bring every balance to zero, computed greedily as the domain says — at
+   (sent or received), which add up to it. No row is marked as the viewer's: the tab shows who owes whom and addresses
+   no one (owner 2026-11-04).
+2. **Settle up:** the suggested transfers that bring every balance to zero, computed greedily as the domain says — at
    most one fewer than there are people, the same on every device.
-4. **Record** (a writer): one suggested transfer, or all of them, is saved as transfer entries
+3. **Record** (a writer): one suggested transfer, or all of them, is saved as transfer entries
    ([uc.expenses.record-entries](uc.expenses.record-entries.md)); the balances follow.
-5. **Overviews**, on the same tab below the settle-up: the total cost per category; per person, paid and consumed side
+4. **Overviews**, on the same tab below the settle-up: the total cost per category; per person, paid and consumed side
    by side, are the balance rows of step 1. Refunds count against their category; transfers are not costs.
 
 ## Alternate / exception flows
