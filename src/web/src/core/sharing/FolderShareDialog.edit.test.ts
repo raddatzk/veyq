@@ -51,7 +51,7 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
 function mountDialog(extra: { contribute?: boolean } = { contribute: true }) {
   return mount(FolderShareDialog, {
     attachTo: document.body,
-    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
+    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeEpoch: 0, nodeName: 'Trips', nodeKind: 'FOLDER', view: true, ...extra },
     global: {
       plugins: [realI18n()],
       stubs: {

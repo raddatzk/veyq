@@ -22,6 +22,12 @@
 // page's doors (`nodeHost.ts`, injected: `rename`, `move`, and `delete` - core's delete question with its Undo); a guest's
 // page hands on the move door alone. An application's own action of the same id replaces the default (Depot's file).
 //
+// **Sharing the level** (owner 2026-11-04): the folder header's share opens core's folder dialog with the folder's READ and
+// READ_WRITE roles as its rights grant them, plus "Add files only" - the upload-only link that births an application's node
+// here (`app.folderUploadShare`, `../sharing/folderUploadShare.ts`: Depot's drop box) - and is shown where any of READ or
+// that link is offered. The space's top level is no link's root: its header's share offers that link alone, and only
+// where it is offered (`share(null, …)`); nothing else is shared there.
+//
 // **The page's doors** (`nodeHost.ts`): everything the level asks of the page around it - open a node, create one, the name,
 // move, delete, share, copy, download, import and trash dialogs - goes through the one host the page provides, the very
 // object a `detail` injects; an absent door is an action the level does not offer (fail closed).
@@ -96,7 +102,8 @@ import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './l
 import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
 import { useSelection } from './selection'
 import { standardRowActions, withStandardRowActions } from './standardRowActions'
-import { hostHandlers, hostRights, injectNodeHost, shareOfferOf } from './nodeHost'
+import { hostHandlers, hostRights, injectNodeHost, shareOfferOf, type NodeShareOffer } from './nodeHost'
+import { folderUploadShareAt } from '../sharing/folderUploadShare'
 import { provideCoreNodeActions, useCoreNodeActions } from './coreNodeActions'
 import NodeCoverImage from './cover/components/NodeCoverImage.vue'
 import CoverEditor from './cover/components/CoverEditor.vue'
@@ -176,10 +183,22 @@ const menuItems = computed<VeyqMenuItem[]>(() =>
   }),
 )
 const newMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
+// The upload-only link of this level (above): offered where the page has the share door and core's answer says so.
+const uploadShare = computed(() => !!host.share && folderUploadShareAt(menuCtx.value) !== null)
 // The folder header's actions and its name's rename in place (ADR 0110 decision 11): the rights answers for the folder on
-// screen, narrowed to the page's doors.
-const folderHandlers = () => hostHandlers(host, () => props.folder!, () => shareOfferOf(rights.value))
-const folderActions = computed(() => standardNodeActions(t, hostRights(rights.value, host), folderHandlers()))
+// screen, narrowed to the page's doors; its share also where only the upload-only link is offered.
+const folderOffer = (): NodeShareOffer => ({ ...shareOfferOf(rights.value), upload: uploadShare.value })
+const folderHandlers = () => hostHandlers(host, () => props.folder!, folderOffer)
+const folderFlags = computed(() => {
+  const r = hostRights(rights.value, host)
+  return { ...r, share: r.share || uploadShare.value }
+})
+const folderActions = computed(() => standardNodeActions(t, folderFlags.value, folderHandlers()))
+// The space's top level: its header's share offers the upload-only link alone - never READ or READ_WRITE.
+const TOP_LEVEL_OFFER: NodeShareOffer = Object.freeze({ view: false, contribute: false, upload: true })
+const topLevelActions = computed(() =>
+  standardNodeActions(t, { share: uploadShare.value }, { share: () => host.share?.(null, TOP_LEVEL_OFFER) }),
+)
 const folderRename = computed(() => standardNodeRename(hostRights(rights.value, host), folderHandlers()))
 // The space's node trash, where the rights grant it and the page has the door.
 const trashOffered = computed(() => rights.value.nodeTrash && !!host.openTrash)
@@ -569,8 +588,9 @@ async function onDrop(e: DragEvent): Promise<void> {
         :rename="folderRename"
         :order="folderHeader?.order"
       />
-      <!-- The space's top level: core's header with the space's name and nothing to act on (the space is no node). -->
-      <NodeHeader v-else-if="spaceName" :node="null" :title="spaceName" />
+      <!-- The space's top level: core's header with the space's name (the space is no node); its one action is the share of
+           the upload-only link, where it is offered. -->
+      <NodeHeader v-else-if="spaceName" :node="null" :title="spaceName" :actions="topLevelActions" />
       <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own. Hidden
            where nothing is written (a pending deletion: a restore is a write; a guest's folder). The view switch governs the
            whole list, so it is the level's too - a guest's as well. -->

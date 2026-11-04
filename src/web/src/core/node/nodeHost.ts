@@ -66,8 +66,10 @@ export interface NodeHost {
   delete?(node: TreeNode, remove?: (nodeId: string) => Promise<void>): void
   /** Delete a level's selection after one question, each node with its kind's own write where it has one. */
   deleteMany?(items: readonly SelectedForDelete[]): void
-  /** Manage a node's links: its kind's `shareDialog` with this offer. */
-  share?(node: TreeNode, offer: NodeShareOffer): void
+  /** Manage a node's links: its kind's `shareDialog` with this offer. `null` is the space's top level, which is no link's
+   *  root: core's folder dialog with no list, offering only the offer's `upload` - the upload-only link that births an
+   *  application's node there (`app.folderUploadShare`); its `view` and `contribute` are never offered at the top level. */
+  share?(node: TreeNode | null, offer: NodeShareOffer): void
   /** Create a node of `kind` under `parent` (null: the scope root): core's `FolderNameDialog` for a FOLDER, the kind's
    *  `createDialog` otherwise (a guest's: core's naming of the new node). */
   createChild?(kind: NodeKind, parent: TreeNode | null): void

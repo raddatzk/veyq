@@ -43,7 +43,7 @@ import { actionIdsOf, clickAction, rowOf, titlesOf } from '../../test/levelRows'
 import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../test/nodeHeader'
 import { nothingOfItsOwnToRekey } from './rekey/hooks'
 import { GUEST_DOORS, recordingHost } from '../../test/nodeHost'
-import { testKind } from '../../test/testApplication'
+import { testApp, testKind } from '../../test/testApplication'
 
 function node(id: string, kind: NodeKind, parentId: string | null = null, over: Partial<TreeNode> = {}): TreeNode {
   return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, ...over })
@@ -54,7 +54,10 @@ const TRIPS = node('Trips', FOLDER_KIND)
  *  is a guest's identity folder (what the member's tree answers); `publicShares`: the instance offers public links. */
 function mountLevel(
   tree: TreeNode[],
-  over: { folder?: TreeNode | null; pending?: boolean; identityFolder?: boolean; publicShares?: boolean; folderName?: string; spaceName?: string; liveTick?: number; unlocked?: boolean } = {},
+  over: {
+    folder?: TreeNode | null; pending?: boolean; identityFolder?: boolean; publicShares?: boolean; folderName?: string; spaceName?: string; liveTick?: number;
+    unlocked?: boolean; applicationsOff?: Set<string>
+  } = {},
 ) {
   const folder = over.folder ?? null
   const source = memberTreeOf(() => tree)
@@ -63,7 +66,10 @@ function mountLevel(
   const w = mount(LevelView, {
     props: {
       folder, level: childrenOf(tree, folder?.id ?? null),
-      access: memberAccessOf({ readonly: over.pending ?? false, publicShares: over.publicShares ?? false, epochs: over.unlocked ? epochsOf(new Uint8Array(32)) : null }),
+      access: memberAccessOf({
+        readonly: over.pending ?? false, publicShares: over.publicShares ?? false, epochs: over.unlocked ? epochsOf(new Uint8Array(32)) : null,
+        ...(over.applicationsOff ? { applicationsOff: over.applicationsOff } : {}),
+      }),
       tree: { ...source, inIdentityFolder: () => over.identityFolder ?? false },
       folderName: over.folderName,
       spaceName: over.spaceName,
@@ -499,6 +505,67 @@ describe('LevelView: the folder header', () => {
     expect(headerButtonIds(w), 'control: the header has its buttons').toContain('share')
     expect(await headerMenuIds(w)).not.toContain('move')
     expect(w.find(`button[aria-label="${t('node.move.action')}"]`).exists()).toBe(false)
+  })
+})
+
+// Owner 2026-11-04: a level's upload-only link - an application's node born under it with its WRITE_ONLY link
+// (`app.folderUploadShare`, Depot's drop box) - is offered through the share door: beside the folder's own roles in its
+// header's share, and alone in the space's top level's header, which shares nothing else (a scope root is no link's root).
+describe('LevelView: the upload-only link', () => {
+  const SHARE = '.veyq-node-header-action[data-action="share"]'
+  /** An application filling the seam: kind BOX at the root and in a folder, its drop page claimed, `allowed` as given. */
+  function uploadApp(allowed: () => boolean = () => true, placement = { root: true, parents: [FOLDER_KIND] as NodeKind[] }) {
+    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey, kind: 'BOX', icon: 'inbox', placement })
+    testApp(holder.reg!).shareBody('BOX', defineComponent({ render: () => null }))
+    testApp(holder.reg!).folderUploadShare('BOX', { allowed, hint: 'test.hint', create: vi.fn() })
+  }
+
+  it('the top level offers a share for it alone: the door is asked with no node, upload and nothing else', async () => {
+    uploadApp()
+    const w = mountLevel([TRIPS], { spaceName: 'Familie Raddatz' })
+    expect(headerButtonIds(w)).toEqual(['share'])
+    await w.get(SHARE).trigger('click')
+    expect(w.calls.share).toEqual([[null, { view: false, contribute: false, upload: true }]])
+  })
+
+  it.each<[string, () => void, Parameters<typeof mountLevel>[1]]>([
+    ['nobody registered it', () => {}, {}],
+    ['the application says no', () => uploadApp(() => false), {}],
+    ['the application is switched off', () => uploadApp(), { applicationsOff: new Set(['test']) }],
+    ['its kind does not live at the root', () => uploadApp(() => true, { root: false, parents: [FOLDER_KIND] }), {}],
+  ])('the top level offers no share where %s', (_, register, over) => {
+    register()
+    const w = mountLevel([TRIPS], { spaceName: 'Familie Raddatz', ...over })
+    expect(w.get('h1').text(), 'control: the top level\'s header renders').toBe('Familie Raddatz')
+    expect(w.find(SHARE).exists()).toBe(false)
+  })
+
+  it('a folder\'s share offers it beside the folder\'s own roles, and is shown for it alone where public links are off', async () => {
+    uploadApp()
+    const on = mountLevel([TRIPS], { folder: TRIPS, publicShares: true })
+    await on.get(SHARE).trigger('click')
+    expect(on.calls.share).toEqual([[TRIPS, { view: true, contribute: true, upload: true }]])
+    const off = mountLevel([TRIPS], { folder: TRIPS, publicShares: false })
+    await off.get(SHARE).trigger('click')
+    expect(off.calls.share).toEqual([[TRIPS, { view: false, contribute: true, upload: true }]])
+  })
+
+  it.each<[string, () => void, Parameters<typeof mountLevel>[1]]>([
+    ['the application says no', () => uploadApp(() => false), {}],
+    ['its kind does not live in a folder', () => uploadApp(() => true, { root: true, parents: [] }), {}],
+    ['the folder is a guest\'s identity folder', () => uploadApp(), { identityFolder: true }],
+  ])('a folder offers no upload-only link where %s', (_, register, over) => {
+    register()
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: false, ...over })
+    expect(w.find('.veyq-node-header-title').text(), 'control: the folder\'s header renders').toBe('Trips')
+    expect(w.find(SHARE).exists()).toBe(false)
+  })
+
+  it('a share guest is never offered it: its page has no share door', () => {
+    uploadApp()
+    const w = mountGuest('READ_WRITE' as ShareRole)
+    expect(w.find('.veyq-node-header-title').text(), 'control: the folder\'s header renders').toBe('Trips')
+    expect(w.find(SHARE).exists()).toBe(false)
   })
 })
 

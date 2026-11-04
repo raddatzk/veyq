@@ -260,6 +260,49 @@ describe('registry: drop pages (share bodies)', () => {
   })
 })
 
+// Owner 2026-11-04: a folder's upload-only link names a new node of ONE application's kind - one registration across the
+// registry, of a kind of its own whose drop page it claimed (a link nobody serves is refused).
+describe('registry: the folder upload-only link', () => {
+  const share = { allowed: () => true, hint: 'test.hint', create: vi.fn() }
+  const owning = (...kinds: string[]) => {
+    const r = createRegistry()
+    for (const kind of kinds) testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind, icon: 'file' })
+    return r
+  }
+
+  it('is none until registered, then the registering application\'s kind with its answer', () => {
+    const r = owning('BOX')
+    expect(r.folderUploadShare()).toBeNull()
+    testApp(r).shareBody('BOX', Stub)
+    testApp(r).folderUploadShare('BOX', share)
+    expect(r.folderUploadShare()).toEqual({ kind: 'BOX', allowed: share.allowed, hint: 'test.hint', create: share.create })
+    expect(Object.isFrozen(r.folderUploadShare())).toBe(true)
+  })
+
+  it('is write-once across the registry: a second registration throws, by another application too', () => {
+    const r = owning('BOX')
+    testApp(r).shareBody('BOX', Stub)
+    testApp(r).folderUploadShare('BOX', share)
+    expect(() => testApp(r).folderUploadShare('BOX', { ...share, hint: 'other' })).toThrow(/already registered/)
+    testKind(r, { rekeyContent: nothingOfItsOwnToRekey, kind: 'CRATE', icon: 'file' }, 'other')
+    testApp(r, 'other').shareBody('CRATE', Stub)
+    expect(() => testApp(r, 'other').folderUploadShare('CRATE', share)).toThrow(/already registered/)
+    expect(r.folderUploadShare()?.hint).toBe('test.hint')
+  })
+
+  it('refuses another application\'s kind, FOLDER, and a kind with no drop page; keeps nothing of them', () => {
+    const r = owning('BOX')
+    const other = r.registerApplication({ id: 'other', name: 'o' })
+    expect(() => other.folderUploadShare('BOX', share)).toThrow(/not a kind of other/)
+    expect(() => testApp(r).folderUploadShare(FOLDER_KIND, share)).toThrow(/not a kind of test/)
+    expect(() => testApp(r).folderUploadShare('BOX', share)).toThrow(/no drop page/)
+    expect(r.folderUploadShare()).toBeNull()
+    testApp(r).shareBody('BOX', Stub)
+    testApp(r).folderUploadShare('BOX', share) // control: its owner may, once the page is claimed
+    expect(r.folderUploadShare()?.kind).toBe('BOX')
+  })
+})
+
 describe('registry: lifecycle hooks', () => {
   const hooks = (over: Partial<LifecycleHooks> = {}): LifecycleHooks => ({ onMasterKeyRotated: async () => {}, ...over })
   /** A registry that named the applications `ids`, as a composition root does; the registrars by id. */

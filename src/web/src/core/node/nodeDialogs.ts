@@ -62,7 +62,8 @@ export interface NodeDialogState {
   movingMany: ShallowRef<{ nodes: TreeNode[]; shown: string | null } | null>
   /** What is deleted after one question: one node or a selection - and, `leaving`, the node a page is about. */
   deleting: ShallowRef<{ items: SelectedForDelete[]; shown: string | null; leaving?: TreeNode } | null>
-  share: ShallowRef<{ node: TreeNode; offer: NodeShareOffer } | null>
+  /** The node being shared, `node` null for the space's top level (its upload-only link alone). */
+  share: ShallowRef<{ node: TreeNode | null; offer: NodeShareOffer } | null>
   exporting: ShallowRef<TreeNode | null>
   copying: ShallowRef<{ nodes: TreeNode[]; shown: string | null } | null>
   importing: ShallowRef<ImportOffer | null>
@@ -176,7 +177,7 @@ export function useNodeDialogs(env: NodeDialogsEnv): NodeDialogs {
     const parent = state.name.value?.mode === 'create' ? state.name.value.parent : (state.create.value?.parent ?? null)
     return sameKeyOr(previous, keyOf(parent?.id))
   })
-  const shareKey = computed<Uint8Array | null>((previous) => sameKeyOr(previous, keyOf(state.share.value?.node.id)))
+  const shareKey = computed<Uint8Array | null>((previous) => sameKeyOr(previous, keyOf(state.share.value?.node?.id)))
   const importParent = computed(() => {
     const id = shown()
     const node = id ? (env.tree()?.node(id) ?? null) : null

@@ -121,14 +121,14 @@ describe('LevelView application tabs', () => {
     setLevelTab('BETA')
     // an identity folder offers no tab for a kind with nothing in it: here BETA has no node, so the bar has ALPHA and GAMMA only
     const c = stubRows('c')
-    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey, kind: 'GAMMA', icon: 'inbox', list: { rows: c.factory, tabLabel: 'depot.dropBox.section' } })
+    testKind(holder.reg!, { rekeyContent: nothingOfItsOwnToRekey, kind: 'GAMMA', icon: 'inbox', list: { rows: c.factory, tabLabel: 'expenses.title' } })
     const level = childrenOf([TRIPS, node('a1', 'ALPHA', 'Trips'), node('g1', 'GAMMA', 'Trips')], TRIPS.id)
     const tree = memberTreeOf(() => [TRIPS])
     const w = mount(LevelView, {
       props: { folder: TRIPS, level, access: memberAccessOf({}), tree: { ...tree, inIdentityFolder: () => true } },
       global: PLUGINS,
     })
-    expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t('depot.dropBox.section')])
+    expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t('expenses.title')])
     expect(selected(w)).toEqual([t('node.tabAll')])
     expect(titlesOf(w)).toEqual(['a1', 'g1'])
     expect(useLevelTab().levelTab.value).toBe('BETA')

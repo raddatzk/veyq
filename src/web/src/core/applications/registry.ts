@@ -10,7 +10,7 @@
 // **One door per application: its registrar (owner 2026-11-01).** `registerApplication({ id, name })` names the
 // application and answers its SCOPED registrar (`ApplicationRegistrar`), through which it registers everything else:
 // `app.kind(kind, descriptor)` per node kind, `app.route(slug | null)` once, `app.lifecycle(hooks)`, `app.shareBody(rootKind,
-// body)`, `app.personSection(component)`, `app.itemReview(component)`. Ownership comes from the call: a kind belongs to the
+// body)`, `app.folderUploadShare(kind, share)`, `app.personSection(component)`, `app.itemReview(component)`. Ownership comes from the call: a kind belongs to the
 // application whose registrar registered it, so no list of its kinds exists beside the registrations, and `app.id` is the
 // one place an application's id lives on the web side (its kinds' `contentSchema.application` is read from it). There are
 // no free register functions.
@@ -63,6 +63,18 @@
 // once (a second claim throws), only by the application that registered it (another's kind throws), FOLDER by nobody (no
 // `WRITE_ONLY` link roots at a folder, ADR 0080 decision 11). A `WRITE_ONLY` root kind nobody claimed, or none at all,
 // renders the shell's explicit unavailable state.
+//
+// **The folder's upload-only link (`app.folderUploadShare`, owner 2026-11-04).** No `WRITE_ONLY` link roots at a folder (ADR
+// 0080 decision 11): an upload-only link names a NEW node of an application's kind under the folder - Depot's drop box - which
+// the link then roots at. Core's folder share dialog (`core/sharing/FolderShareDialog.vue`) offers that role, "Add files
+// only", beside READ and READ_WRITE, and the space's top level offers it alone (a scope root is no link's root); one
+// application fills it, ONCE across the registry (a second registration throws), with a kind of its own whose drop page it
+// already claimed (`app.shareBody`, else it throws: a link nobody serves). It hands `allowed` - its fail-closed rights
+// answer for the level, as a "New" entry's -, `hint` - the i18n key of its own sentence for what the link does - and
+// `create`, which births the node named by the link's name under the folder (null: the scope root) and mints its first
+// `WRITE_ONLY` link with the application's own key handling. Core decides who is offered it
+// (`core/sharing/folderUploadShare.ts`: a member, the kind's application switched on, the kind placeable there, and
+// `allowed`), never names the kind, and the node it created is a row of the level like any other, its links its own dialog's.
 //
 // **Lifecycle hooks (`app.lifecycle`).** What runs when a scope is entered or reset and when the master key
 // rotates. Registered through the application's registrar - so a hook set cannot exist for an application this build does
@@ -118,13 +130,14 @@
 import { nothingOfItsOwnToRekey, type RekeyContentHook, type ScopeRekeyParticipant } from '../node/rekey/hooks'
 import { defineAsyncComponent, type Component } from 'vue'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
-import type { TreeNode } from '../node/tree'
+import type { NodeParent, TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { LevelViewOption } from '../node/levelViews'
 import type { LevelRowsFactory } from '../node/levelRow'
 import type { StoredBlob } from '../blob/sharedBlob'
 import type { ScopeKey } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
+import type { MintedShare } from '../sharing/manageShares'
 import type { Access, GuestAccess, TreeSource } from '../access'
 import { slugify } from '../../shared/naming'
 import type { VeyqIconName } from '../../shared/ui/icons'
@@ -441,6 +454,9 @@ export interface NodeShareDialogProps {
   /** The node's epoch as read (`TreeNode.epoch`): the epoch `nodeKey` was minted at, which a mint or re-issue states as
    *  `nodeEpoch` (ADR 0109 point 6). */
   nodeEpoch: number
+  /** The scope epoch the node's key was minted under (`TreeNode.scopeEpoch`): what a create under the node states - the
+   *  folder dialog's upload-only link births its node there (`app.folderUploadShare`). Absent: no such create is offered. */
+  nodeScopeEpoch?: number
   epochs: ScopeKey
   nodeName: string
   nodeKind: NodeKind
@@ -453,6 +469,35 @@ export interface NodeShareDialogProps {
    *  `Deleting`) but a revoke, which only closes exposure and stays if the deletion is stopped (uc.spaces.scope-access
    *  A1); it serves no guest then, so a link left on is dormant until a restore. */
   readonly?: boolean
+}
+
+/** What core's folder share dialog hands an application's {@link FolderUploadShare.create}: the member's scope and epoch keys,
+ *  the folder the new node lands under (`null`: the scope root) and the link's settings - its name, which names the node,
+ *  its password (empty: none) and its end. */
+export interface FolderUploadShareInput {
+  scopeId: string
+  epochs: ScopeKey
+  parent: NodeParent
+  name: string
+  password: string
+  expiresAt: Date | null
+}
+
+/** What an application registers with `app.folderUploadShare` (see the header): the upload-only link of a folder level. */
+export interface FolderUploadShare {
+  /** The application's fail-closed rights answer for the level on screen (`ctx.folder`, null: the scope root): whether the
+   *  viewer may create the node and its link there. */
+  allowed(ctx: LevelActionContext): boolean
+  /** The i18n key, of the application's own namespace, of the sentence the dialog says for the role: what the link does. */
+  hint: string
+  /** Birth the node named `input.name` under `input.parent` and mint its first `WRITE_ONLY` link; resolves with the link's
+   *  id and key (the dialog builds the address). Rejects with the write's error; a node born before a failed mint stays. */
+  create(input: FolderUploadShareInput): Promise<MintedShare>
+}
+
+/** A registered {@link FolderUploadShare} as core reads it: with the kind it creates. */
+export interface FolderUploadShareRegistration extends FolderUploadShare {
+  kind: NodeKind
 }
 
 /** What the shell hands a `WRITE_ONLY` link's drop page, the one share body (event: `unavailable` — the page found the
@@ -533,6 +578,10 @@ export interface ApplicationRegistrar {
   /** Claim the drop page of a `WRITE_ONLY` link rooted at `rootKind` (see the header). Throws if that kind is already
    *  claimed, if it is not a kind this application registered, and for FOLDER. */
   shareBody(rootKind: NodeKind, body: Component): void
+  /** Offer the folder share dialog's upload-only link (see the header): `share.create` births a node of `kind` and mints its
+   *  `WRITE_ONLY` link. Throws on a second registration (by any application), for a kind that is not this application's,
+   *  and for a kind whose drop page this application has not claimed (`shareBody` first). */
+  folderUploadShare(kind: NodeKind, share: FolderUploadShare): void
   /** Add a section to a person's profile page (`#people/<userId>`, ADR 0083): what an application knows of the person -
    *  Memories' "Memories with this person". The component takes the props `PersonSectionProps` and draws its own loading,
    *  empty and error states. Sections show in registration order; the same component twice throws. */
@@ -553,6 +602,9 @@ export interface Registry {
   /** The drop page claimed for a `WRITE_ONLY` link's root kind, or null when nobody claimed it (the shell renders its
    *  unavailable state — never an empty page). */
   shareBodyFor(kind: NodeKind): Component | null
+  /** The folder's upload-only link an application registered, or null: none offered (core's
+   *  `core/sharing/folderUploadShare.ts` decides who is offered it). */
+  folderUploadShare(): FolderUploadShareRegistration | null
   /** The sections claimed for a person's profile page, in registration order. */
   personSections(): readonly Component[]
   /** The item reviews claimed, in registration order — each draws only the items that are its application's. */
@@ -645,6 +697,7 @@ export function createRegistry(): Registry {
   const listEntries: { rows: LevelRowsFactory; views: readonly LevelViewOption[]; kinds: NodeKind[] }[] = []
   const tabEntries: LevelTabSpec[] = []
   const shareBodies = new Map<NodeKind, Component>()
+  let uploadShare: FolderUploadShareRegistration | null = null
   const personSections: Component[] = []
   const itemReviews: Component[] = []
   // application id → its route slug, or null for the application with no segment.
@@ -723,6 +776,12 @@ export function createRegistry(): Registry {
         if (applicationOfKind.get(rootKind) !== id) throw new Error(`node kind ${rootKind} is not a kind of ${id}: its share body is refused`)
         shareBodies.set(rootKind, body)
       },
+      folderUploadShare(kind: NodeKind, share: FolderUploadShare) {
+        if (uploadShare) throw new Error('the folder upload-only link is already registered')
+        if (applicationOfKind.get(kind) !== id) throw new Error(`node kind ${kind} is not a kind of ${id}: its upload-only link is refused`)
+        if (!shareBodies.has(kind)) throw new Error(`node kind ${kind} has no drop page: claim it (shareBody) before its upload-only link`)
+        uploadShare = Object.freeze({ kind, allowed: share.allowed, hint: share.hint, create: share.create })
+      },
       personSection(component: Component) {
         if (personSections.includes(component)) throw new Error('this person-profile section is already claimed')
         personSections.push(component)
@@ -742,6 +801,7 @@ export function createRegistry(): Registry {
     applications: () => applications.map((a) => ({ ...a })),
     applicationOf: (kind) => applicationOfKind.get(kind) ?? null,
     shareBodyFor: (kind) => shareBodies.get(kind) ?? null,
+    folderUploadShare: () => uploadShare,
     personSections: () => [...personSections],
     itemReviews: () => [...itemReviews],
     scopeReset() {

@@ -5,7 +5,8 @@
 // guest job a folder contributor runs (`shareUpload.ts`), its folder being the only key of its context. A member opens
 // every folder through the drop box's key (core's tree, `childEntryKey`).
 //
-//   member: createDropBox → mintDropBoxLink (the drop key is set on the node with the first link)
+//   member: createDropBox → mintDropBoxLink (the drop key is set on the node with the first link); both in one flow from
+//           a folder's share dialog, "Add files only" (createDropBoxWithLink, the `app.folderUploadShare` Depot registers)
 //   guest:  nameDropGuest (K_up) → [first file] ensureDropFolder (its folder, K_F under K_up) → dropGuestContext →
 //           guestFileUploadJob
 import * as v1 from '@veyq/crypto/v1'
@@ -15,6 +16,7 @@ import { withRefresh } from '../../app/sessionRefresh'
 import type { ScopeKey } from '../spaces/epochs'
 import { createContentNode, openContentKey, sealName, slugTokenFor, wrapContentKey, type CreateNodeOptions, type NodeParent } from '../../core/node/tree'
 import { FOLDER_KIND } from '../../core/node/kind'
+import { heldScopeEpochs, memberCreateOptions } from '../../core/node/rereadNode'
 import { mintShare, NO_NOTE, type MintedShare, type ShareRootKey } from '../../core/sharing/manageShares'
 import { dropKeysForShare, mintIdentityKey, openDropPublicKey } from '../../core/sharing/dropKey'
 import { forgetGuestSession, identityNameContext, loadGuestSession, saveGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
@@ -33,7 +35,27 @@ import { DROPBOX_KIND } from './kinds'
 export async function createDropBox(
   scopeId: string, epochs: ScopeKey, parent: NodeParent, name: string, opts: CreateNodeOptions = {},
 ): Promise<string> {
-  return (await createContentNode(scopeId, epochs, parent, DROPBOX_KIND, name, undefined, opts)).nodeId
+  return (await birthDropBox(scopeId, epochs, parent, name, opts)).nodeId
+}
+
+/** The drop box's create as the node write answers it: its id, its fresh key and the epochs it was minted at. */
+function birthDropBox(scopeId: string, epochs: ScopeKey, parent: NodeParent, name: string, opts: CreateNodeOptions) {
+  return createContentNode(scopeId, epochs, parent, DROPBOX_KIND, name, undefined, opts)
+}
+
+/**
+ * A folder's "Add files only" (owner 2026-11-04, `app.folderUploadShare`): a drop box named `name` under `parent` (a
+ * folder, or the scope root) — a member's create, pulled forward and re-read on an epoch refusal like any
+ * (`memberCreateOptions`) — and its first WRITE_ONLY link ({@link mintDropBoxLink}) on the key it was just born with, at the
+ * epochs this device holds once the create went through. The link carries no label: the drop box's name is what its guest
+ * sees. A failed mint leaves the drop box in place, without a link; its own share dialog makes one.
+ */
+export async function createDropBoxWithLink(
+  scopeId: string, epochs: ScopeKey, parent: NodeParent, name: string, password = '', expiresAt: Date | null = null,
+): Promise<MintedShare> {
+  const box = await birthDropBox(scopeId, epochs, parent, name, memberCreateOptions(scopeId, parent))
+  const held = heldScopeEpochs(scopeId) ?? epochs
+  return mintDropBoxLink(scopeId, box.nodeId, { key: box.contentKey, epoch: box.epoch }, held, name, '', password, expiresAt)
 }
 
 /** The drop box's sealed drop private key as the server holds it now — null until its first link. */

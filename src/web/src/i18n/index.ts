@@ -2043,7 +2043,12 @@ const en = {
     folder: {
       title: 'Share this folder',
       intro: 'Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.',
-      roleContributor: 'View + contribute',
+      // The three roles in the Memory dialog's words and order (owner 2026-11-04): view only, view + add, add only. "Add files
+      // only" is the upload-only link an application offers through `app.folderUploadShare` (its hint is that application's).
+      roleContributor: 'View + add files',
+      roleUploader: 'Add files only',
+      // The name of an upload-only link names the node it creates, which its guests see: required, never "only you see it".
+      uploadNamePlaceholder: 'Name — guests with the link see it',
       roleViewerHint: 'Anyone with the link can look at this folder and everything in it, read-only.',
       roleContributorHint: 'Anyone with the link can look, add folders and content, move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history.',
       deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.',
@@ -3982,7 +3987,9 @@ const de: typeof en = {
     folder: {
       title: 'Diesen Ordner teilen',
       intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten.',
-      roleContributor: 'Ansehen + mitwirken',
+      roleContributor: 'Ansehen + Dateien hinzufügen',
+      roleUploader: 'Nur Dateien hinzufügen',
+      uploadNamePlaceholder: 'Name — Gäste mit dem Link sehen ihn',
       roleViewerHint: 'Wer den Link hat, kann diesen Ordner mit allem darin ansehen — schreibgeschützt.',
       roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner und Inhalte hinzufügen, darin verschieben und Dateien hochladen — auch über jede Datei, die schon darin liegt, deine eingeschlossen. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
       deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Was Gäste angelegt haben, bleibt in diesem Ordner.',

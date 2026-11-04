@@ -13,18 +13,20 @@
 // `ShareTreePage` mounts the kind's detail at the link's root), and a file opened inside a folder link. No share body —
 // a file is never a `WRITE_ONLY` root, and every other role gets core's page.
 //
-// The `DEPOT_DROPBOX` kind (F3, ADR 0080 decision 11): its rows in the same list (the drop boxes of a folder, a "New drop box"
-// entry in the level's menu), its `createDialog` (a name), its `detail` (its guests' folders — for a member, and read-only for a READ or
-// READ_WRITE guest of a folder link above it, inbox #380 and #401 S3), its `shareDialog` (WRITE_ONLY links only) and the
-// share BODY: on its own WRITE_ONLY link the guest's drop page (name yourself, pick files, upload into your own folder),
-// the one page core renders by claim (every other guest page is the member's views, inbox #401).
+// The `DEPOT_DROPBOX` kind (F3, ADR 0080 decision 11): its rows in the same list and the same "Depot" tab as the files (the drop
+// boxes of a folder), its `detail` (its guests' folders — for a member, and read-only for a READ or READ_WRITE guest of a folder
+// link above it, inbox #380 and #401 S3), its `shareDialog` (WRITE_ONLY links only) and the share BODY: on its own WRITE_ONLY
+// link the guest's drop page (name yourself, pick files, upload into your own folder), the one page core renders by claim
+// (every other guest page is the member's views, inbox #401). A drop box is not created from the "New" menu (owner
+// 2026-11-04): it is the folder's upload-only link - core's folder share dialog offers "Add files only" beside its READ and
+// READ_WRITE links, the space's top level that alone, and Depot fills that seam (`app.folderUploadShare`) with the drop box
+// named by the link and its first link, in one flow. No `createDialog` either.
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { DEPOT } from '../platform/capabilities'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'
-import DropBoxCreateDialog from './components/DropBoxCreateDialog.vue'
 import DropBoxDetail from './components/DropBoxDetail.vue'
 import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
@@ -33,6 +35,7 @@ import FileShareDialog from './components/FileShareDialog.vue'
 import { canUploadFolder, depotRights } from './rights'
 import { depotRows, UPLOAD_ACTION, UPLOAD_FOLDER_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
+import { createDropBoxWithLink } from './dropBox'
 import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent, DEPOT_CONTENT_VERSION } from './exportImport'
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
@@ -43,7 +46,6 @@ export function fileNameStemEnd(name: string): number {
 }
 
 /** Where Depot's entries sit in the level's "New" menu: after core's folder (0) and Memories' Memory (10). */
-const NEW_DROPBOX_ORDER = 20
 const NEW_UPLOAD_ORDER = 30
 const NEW_UPLOAD_FOLDER_ORDER = 31
 
@@ -123,13 +125,9 @@ export function registerDepot(registry: Registry): void {
     // …and its sentence names what goes with it: the guests' folders, and the links that stop taking files (#395).
     deleteCopy: 'depot.dropBox.deleteConfirm',
     nounWithArticle: 'depot.dropBox.aDropBox',
-    list: { rows: depotRows, tabLabel: 'depot.dropBox.section', emptyText: () => 'depot.dropBox.sectionEmpty' },
-    createDialog: DropBoxCreateDialog,
-    createEntry: {
-      label: 'depot.dropBox.create', icon: 'inbox', order: NEW_DROPBOX_ORDER,
-      allowed: (ctx: LevelActionContext) => depotRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createDropBox,
-      enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
-    },
+    // One "Depot" tab with the files (owner 2026-11-04): kinds sharing a label share a tab, whose empty text is the first
+    // kind's (the files', `depotEmptyText`).
+    list: { rows: depotRows, tabLabel: 'depot.title' },
     shareDialog: DropBoxShareDialog,
     placement: DEPOT_PLACEMENT,
     // Downloaded as a directory of its guests' folders; imported as a plain folder (ADR 0082 decision 4).
@@ -140,6 +138,15 @@ export function registerDepot(registry: Registry): void {
     copyLosses: ['depot.dropBox.copyLoss'],
   })
   app.shareBody(DROPBOX_KIND, DropBoxShareBody)
+  // A folder's - and the space's top level's - upload-only link ("Add files only" in core's folder share dialog): a drop box
+  // named by the link under the level, with that link as its first. Offered where a drop box may be created there
+  // (`depotRights(...).createDropBox`: a writer, no guest's identity folder, the instance's drop-box leaf) - core adds the
+  // rest of the fail-closed answer (`core/sharing/folderUploadShare.ts`).
+  app.folderUploadShare(DROPBOX_KIND, {
+    allowed: (ctx: LevelActionContext) => depotRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createDropBox,
+    hint: 'depot.dropBox.uploadShareHint',
+    create: ({ scopeId, epochs, parent, name, password, expiresAt }) => createDropBoxWithLink(scopeId, epochs, parent, name, password, expiresAt),
+  })
   // Depot is the one application with NO route segment (inbox #328, ADR 0015, the grammar of a node's path): a file or
   // a drop box is its plain name in the path (`#reisen/report`), a folder of the same name needs the trailing slash
   // (`#reisen/report/`). Declared, not defaulted, so the registry knows it was chosen — and no second application can

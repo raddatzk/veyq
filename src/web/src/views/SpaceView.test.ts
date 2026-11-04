@@ -102,9 +102,14 @@ vi.mock('../core/sharing/FolderShareDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
-      props: { scopeId: String, nodeId: String, nodeName: String, nodeKey: Uint8Array, nodeKind: String, epochs: Object },
-      setup: (p) => () => h('div', { class: 'folder-share-stub', 'data-name': p.nodeName, 'data-key': String(p.nodeKey?.[0]), 'data-kind': p.nodeKind },
-        `${p.scopeId}|${p.nodeId}`),
+      props: {
+        scopeId: String, nodeId: String, nodeName: String, nodeKey: Uint8Array, nodeKind: String, epochs: Object, nodeScopeEpoch: Number,
+        view: Boolean, contribute: Boolean, upload: Boolean,
+      },
+      setup: (p) => () => h('div', {
+        class: 'folder-share-stub', 'data-name': p.nodeName, 'data-key': String(p.nodeKey?.[0]), 'data-kind': p.nodeKind,
+        'data-offer': `${p.view}|${p.contribute}|${p.upload}`, 'data-scope-epoch': String(p.nodeScopeEpoch),
+      }, `${p.scopeId}|${p.nodeId}`),
     }),
   }
 })
@@ -462,15 +467,43 @@ describe('SpaceView sharing a folder', () => {
     expect(dialog.attributes('data-name')).toBe('Trips')
     expect(dialog.attributes('data-key'), "the folder's own key from the chain").toBe('9')
     expect(dialog.attributes('data-kind')).toBe(FOLDER_KIND)
+    // owner 2026-11-04: READ, READ_WRITE and the upload-only link (Depot's drop box), with the folder's scope epoch its create states
+    expect(dialog.attributes('data-offer')).toBe('true|true|true')
+    expect(dialog.attributes('data-scope-epoch')).toBe(String(treeStore.nodes.find((n) => n.id === 'trips')!.scopeEpoch))
     expect(w.find('.share-stub').exists(), "never the application's Memory dialog").toBe(false)
   })
 
-  it('offers no share at the scope root (no node to share, no overview card)', async () => {
+  it('offers the folder share for the upload-only link alone where public links are off but drop boxes on', async () => {
+    capabilityState.ids = [MEMORIES, DEPOT, CORE_PUBLIC_SHARES_DROP_BOX]
+    const w = await mountAt('#~me/trips')
+    await shareButton(w).trigger('click')
+    await flushPromises()
+    expect(w.get('.folder-share-stub').attributes('data-offer')).toBe('false|false|true')
+  })
+
+  // Owner 2026-11-04: the space's top level is no link's root, but a drop box may be born there with its link - its header's
+  // share offers that upload-only link alone (core's folder dialog with no node), never READ or READ_WRITE.
+  it('offers the top level a share that opens core\'s dialog with no node, for the upload-only link alone', async () => {
     const w = await mountAt('#~me')
-    // The header names the space (its top level's h1) and acts on nothing: the space is no node.
+    expect(w.get('.veyq-node-header-title').text()).toBe(t('shell.personal'))
+    expect(shareButton(w).exists()).toBe(true)
+    await shareButton(w).trigger('click')
+    await flushPromises()
+    const dialog = w.get('.folder-share-stub')
+    expect(dialog.text()).toBe('scope-1|undefined')
+    expect(dialog.attributes('data-offer')).toBe('false|false|true')
+  })
+
+  it.each([
+    ['the instance\'s drop-box leaf is off', [MEMORIES, DEPOT, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE]],
+    ['Depot is switched off', [MEMORIES, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]],
+  ])('offers no share at the top level where %s (the space is no node: nothing else is shared there)', async (_, ids) => {
+    capabilityState.ids = ids
+    const w = await mountAt('#~me')
+    // The header names the space (its top level's h1), the control that it rendered.
     expect(w.get('.veyq-node-header-title').text()).toBe(t('shell.personal'))
     expect(w.find('.veyq-node-header-actions').exists()).toBe(false)
-    expect(w.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
+    expect(shareButton(w).exists()).toBe(false)
   })
 
   it('hides the folder share when the instance turns public links off', async () => {

@@ -9,6 +9,8 @@ export interface ShareDialogCopy {
   title?: string
   /** The paragraph above the links. */
   intro?: string
+  /** The `READ_WRITE` role's name ("View + add files" for a folder). */
+  roleContributor?: string
   /** What a `READ` link lets its guest do. */
   roleViewerHint?: string
   /** What a `READ_WRITE` link lets its guest do. */

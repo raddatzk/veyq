@@ -5,7 +5,6 @@ import { fileNameSlug, slugify } from '../../shared/naming'
 import { fileNameStemEnd, registerDepot } from './register'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { depotRows } from './levelRows'
-import DropBoxCreateDialog from './components/DropBoxCreateDialog.vue'
 import DropBoxDetail from './components/DropBoxDetail.vue'
 import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
@@ -78,7 +77,7 @@ describe('registerDepot', () => {
     expect(registry.tokenInputFor(FOLDER_KIND, 'Foto.JPG')).not.toBe(fileNameSlug('Foto.JPG'))
   })
 
-  it('registers the DEPOT_DROPBOX kind: shareable, its rows beside the files\', its dialogs, detail and share body (F3)', () => {
+  it('registers the DEPOT_DROPBOX kind: shareable, its rows in the files\' tab, its share dialog, detail and share body - no create dialog (F3)', () => {
     const registry = createRegistry()
     registerDepot(registry)
     expect(registry.kind(DROPBOX_KIND)).toEqual({
@@ -91,9 +90,9 @@ describe('registerDepot', () => {
       deleteTitle: 'depot.dropBox.delete',
       deleteCopy: 'depot.dropBox.deleteConfirm',
       nounWithArticle: 'depot.dropBox.aDropBox',
-      list: { rows: depotRows, tabLabel: 'depot.dropBox.section', emptyText: expect.any(Function) },
-      createDialog: DropBoxCreateDialog,
-      createEntry: { label: 'depot.dropBox.create', icon: 'inbox', order: 20, allowed: expect.any(Function), enabled: expect.any(Function) },
+      // one "Depot" tab with the files (owner 2026-11-04); no "New" entry and no create dialog: a drop box is a folder's
+      // upload-only link (below)
+      list: { rows: depotRows, tabLabel: 'depot.title' },
       shareDialog: DropBoxShareDialog,
       placement: { root: true, parents: [FOLDER_KIND] },
       // downloaded as a directory of its guests' folders, imported as a plain folder (ADR 0082 decision 4)
@@ -109,17 +108,17 @@ describe('registerDepot', () => {
     expect(registry.tokenInputFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
   })
 
-  it('brings its own rows and tabs (files, then drop boxes), and no FILE create dialog, list item, drop page or lifecycle', () => {
+  it('brings its own rows and ONE tab for files and drop boxes, and no FILE create dialog, list item, drop page or lifecycle', () => {
     const registry = createRegistry()
     registerDepot(registry)
     const file = registry.kind(FILE_KIND)
     expect(file.supported && file.createDialog).toBeUndefined() // a file is created by uploading it, never by a name dialog
-    // inbox #407: both kinds name ONE row factory (one source per level, called once) and one tab each
+    // inbox #407: both kinds name ONE row factory (one source per level, called once); owner 2026-11-04: and ONE tab, the
+    // files' empty text its own
     expect(registry.lists()).toEqual([{ rows: depotRows, kinds: [FILE_KIND, DROPBOX_KIND], views: [] }])
-    expect(registry.tabs().map((t) => [t.id, t.label, t.kinds])).toEqual([
-      [FILE_KIND, 'depot.title', [FILE_KIND]],
-      [DROPBOX_KIND, 'depot.dropBox.section', [DROPBOX_KIND]],
-    ])
+    expect(registry.tabs().map((t) => [t.id, t.label, t.kinds])).toEqual([[FILE_KIND, 'depot.title', [FILE_KIND, DROPBOX_KIND]]])
+    const fileKind = registry.kind(FILE_KIND)
+    expect(registry.tabs()[0].emptyText).toBe(fileKind.supported ? fileKind.list?.emptyText : 'unsupported')
     expect(registry.shareBodyFor(FILE_KIND)).toBeNull() // no WRITE_ONLY link on a file: core's page serves every file link
   })
 

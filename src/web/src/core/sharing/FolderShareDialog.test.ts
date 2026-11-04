@@ -69,7 +69,7 @@ const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
 
 function mountDialog(extra: { contribute?: boolean; readonly?: boolean } = { contribute: true }) {
   return mount(FolderShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeEpoch: FOLDER_EPOCH, nodeName: 'Trips', nodeKind: 'FOLDER', ...extra },
+    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: FOLDER_KEY, epochs: EPOCHS, nodeEpoch: FOLDER_EPOCH, nodeName: 'Trips', nodeKind: 'FOLDER', view: true, ...extra },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -88,7 +88,7 @@ beforeEach(() => {
 })
 
 describe('FolderShareDialog — a new link', () => {
-  it('offers READ and READ_WRITE only — no WRITE_ONLY (uploader) option on a folder', async () => {
+  it('offers READ and READ_WRITE only — no WRITE_ONLY (uploader) option without the host\'s upload offer', async () => {
     const w = mountDialog()
     await flushPromises()
     await byText(w, t('share.createNew')).trigger('click')
