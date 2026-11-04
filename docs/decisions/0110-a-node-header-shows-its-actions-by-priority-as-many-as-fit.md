@@ -32,10 +32,16 @@ big cover are date, place and participants*; *and on a desktop the title and the
    - **Compact** (a phone): a small leading visual — a Memory's or a folder's cover a 16:9 tile of 64 × 36 px, the icon
      tile its 42 px —, the name beside it in **at most two lines**, the actions in a row of their own, the header's full
      width, below them; then subtitle and meta.
-   - **Wide** (a desktop): the full sizes - **every cover 244 px wide, 16:9** (as tall as a Memory's four rows beside it:
-     the name, the count, date and place, the people; owner 2026-11-03), the icon tile a 4rem square -, and
-     the name and the actions **always one row** — the name **one line**, because the lines beside a big cover belong to
-     the subtitle and the meta (a Memory's date, place and participants). The actions never get a row of their own here.
+   - **Wide** (a desktop): the full sizes - **the leading visual as tall as the rows core draws beside it** (owner
+     2026-11-04): each kind of row - the name's, the subtitle, a row of date and place chips, a row of people, a line of
+     text - has one fixed block size, and the visual's height is their sum and the gaps between them, computed from the
+     data the header draws, never measured. A cover is 16:9 at that height (a Memory's four rows - the name, the count,
+     date and place, the people - make it about 244 px wide), the icon tile a square of it (a folder's name alone: a tile
+     as tall as the name). Wrapped chips on a narrow window may make the text taller than the visual; that is accepted.
+     The name and the actions are **always one row** — the name **one line**, because the lines beside a big cover belong
+     to the subtitle and the meta (a Memory's date, place and participants). The actions never get a row of their own
+     here. The content is centred against the visual.
+   - **The name is one size, cover or not** (owner 2026-11-04): 2 rem wide, 1.5 rem compact.
 2. **The full name is the title's tooltip** in both layouts, and the DOM keeps all of it. A longer text belongs in a
    description under the name, not in the name.
 3. **On a wide header the name comes first.** It takes its natural width; the actions yield to the ⋯ menu from the back
@@ -47,23 +53,24 @@ big cover are date, place and participants*; *and on a desktop the title and the
    end.** The fit is measured from the row's width and measured again when that width changes (decision 8 picks the
    layout, this decision fills its row).
 5. **The priority is the order of the node kind's list**, which the page that draws the header supplies, core's actions
-   (favorite, cover, copy, download, report) included by their ids. A Memory's order is the owner's: favorite, upload,
-   share, upload request, participants, download, cover, banner, rename, move, copy. A folder's, a file's and a drop
-   box's follow the same reading — favorite first, then what the kind is for, then sharing, then editing the node itself,
-   then moving and copying it; each kind's list is the order its page passes.
+   (favorite, copy, download, report) included by their ids. A Memory's order is the owner's: favorite, upload, share,
+   upload request, download, banner, move, copy. A folder's, a file's, a drop box's and a Pot's follow the same reading —
+   favorite first, then what the kind is for, then sharing, then moving and copying it; each kind's list is the order its
+   descriptor's `header.order` names. What is edited at its place has no entry (decision 11).
 6. **Delete and report are never buttons.** They are always the last entries of the menu, behind a separator, delete
-   last: a button that moves with the width is too easy to hit by mistake, and both open a consequential dialog.
+   last: a button that moves with the width is too easy to hit by mistake, and both open a consequential dialog. **Move and
+   copy are menu entries too** (owner 2026-11-04), in that last group before report.
 7. **No action is lost.** An action that does not fit is an entry of the menu with its label and icon; a disabled
    action is a disabled entry. Every entry is reachable by keyboard (the layer's menu).
 8. **The header's own width picks the layout, by fit — no viewport query.** Wide applies while the wide leading visual,
-   the name's minimum (**12rem**, 192 px: about "Rom 2026" in a Memory's 2 rem name, about "Omas 80. Geburtstag" in the
-   1.15 rem name of the other kinds), the floor's two buttons and the ⋯, with their gaps, fit in one row; otherwise
+   the name's minimum (**12rem**, 192 px: about "Rom 2026" in the 2 rem name), the floor's two buttons and the ⋯, with
+   their gaps, fit in one row; otherwise
    compact. Cover size, name lines and where the actions sit all follow this one answer, so a big cover can no longer
-   sit beside a name in a narrow header. Its inputs are the header's width (which its layout does not change) and fixed
-   sizes — never the name's text or the layout in force — so it cannot flip back and forth, and a 375 px phone is
-   compact for every kind.
-9. **Core's actions come centrally, never from the page.** Favorite, cover, copy, download and report are core's for
-   every node, each gated by its own core rights function and failing closed. The page names the node its header heads;
+   sit beside a name in a narrow header. Its inputs are the header's width (which its layout does not change) and sizes
+   no layout changes — the visual's wide width is computed from the rows the header draws (decision 1), never from the
+   name's text or the layout in force — so it cannot flip back and forth, and a 375 px phone is compact for every kind.
+9. **Core's actions come centrally, never from the page.** Favorite, copy, download and report are core's for every
+   node (and the cover, whose way in a header is its visual, decision 11), each gated by its own core rights function and failing closed. The page names the node its header heads;
    the header takes core's actions for that node from the core view around it — core's node page, which both hosts
    mount around every kind's page, and the folder level — and merges them with the kind's own. No application builds,
    lists or forwards one, so none can leave one out: report — the notice mechanism the DSA asks of a host (Art. 16),
@@ -77,18 +84,39 @@ big cover are date, place and participants*; *and on a desktop the title and the
     own actions, its **facts** - a date, a place, people, a line of text, each a feature any application may use (Memories
     a date, a place and who was there, Depot who uploaded a file) - and a **banner** core draws above the row (Memories').
     Core draws the facts in one look. **The cover is core's for every kind that takes one:** core shows it (decision 1's
-    sizes), the icon tile without one, and opens core's cover dialog from it where whoever looks may set it. People link
+    sizes) - without one the empty 16:9 frame with the kind's icon in its middle (owner 2026-11-04) - and it is the
+    button that opens core's cover dialog, its hint "Set cover" on the empty frame, where whoever looks may set it; else
+    a plain frame. A kind without a cover shows its icon tile. People link
     to a profile and show a member's picture on a member's page only - the header's default is a share page's, so no
     application can link a person for a guest. The body below the header is the application's own, to present itself.
     No application imports the header component (a guard), so none can draw a header of its own beside core's.
+11. **What is editable at its place has no header entry** (owner 2026-11-04) - neither a button nor in the ⋯ menu. The
+    **name** is renamed in place: the page's one `h1` holds a real button (named "Rename “…”", the heading itself still
+    named by the name) where the viewer may rename - the rename right and the page's door, `renameTo` -, a click makes it
+    a field pre-selected as core's name dialog selects (a file's name before its extension), Enter writes through the
+    kind's own rename write, Esc cancels, and a blur writes a changed name as Enter does (not while the window lost focus,
+    not a name just refused); the check and the words of a refusal (the colliding sibling by its kind's noun) are the
+    name dialog's own code, shown under the field. A guest or a reader sees plain text. The **cover** is its visual
+    (decision 10); a Memory's **participants** are their people fact, which opens the picker (an edit button beside the
+    people, the chip "Add participants" while nobody is listed); a **date** and a **place** are their chips; a drawn
+    **banner** opens its own dialog, so the menu offers "Add banner" only while none is drawn. A level's rows are
+    unchanged: a row click opens the node, so its rename, cover and move stay entries of the row's menu.
 
 ## Consequences
 
 - The header and the level rows split their actions by two rules: the header by its measured width, a row by its fixed
   two `first` actions. They share the menu's entries (label, icon, disabled, danger) and nothing else.
-- Decision 10 makes the covers one size: a folder's and a drop box's cover grew from a 4rem-tall tile to the Memory's
-  244 px, and a Memory without a cover shows its icon tile, no longer an empty 244 px frame. What a detail contributes
-  reaches the header one render after the detail mounts (the same frame in a browser; a unit test waits a tick).
+- The leading visual follows the rows (decision 1): a Memory's cover stays near its former 244 px, a folder's name alone
+  gets a visual as tall as the name, and every kind that takes a cover shows the empty frame without one - the look
+  Memories drew before decision 10, generalised. What a detail contributes reaches the header one render after the detail
+  mounts (the same frame in a browser; a unit test waits a tick).
+- On a folder level the header's action buttons and the toolbar's controls share one height, so in one row they line up.
+- **Rejected — the application declaring its visual's row count:** core already knows which rows it draws; a declared
+  number drifts from what is drawn.
+- **Rejected — measuring the body's height for the visual:** the layout answer reads the visual's wide width, and a
+  measured one moves with fonts and wraps; computed from the data it cannot flip.
+- **Rejected — an action beside what is edited in place** (rename, cover, participants as header buttons): two ways to the
+  same edit, and the button row full of what the page already offers where the thing is.
 - **Rejected — slots in the header for an application's own visual and meta row** (the build before decision 10): each
   application drew what it liked there - Memories its own cover button, chips and avatar row, Depot its own uploader
   line - so the same fact looked different per application, and keeping a person unlinked on a share page was each

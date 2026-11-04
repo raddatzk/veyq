@@ -49,8 +49,9 @@ on a phone, the top of the page on a share).
 
 ## Main flow
 
-1. The member chooses **Add banner** (or **Change banner** where the Memory has one) among the header row's actions —
-   the only way in; the gallery offers none.
+1. The member chooses **Add banner** in the header's ⋯ menu while no banner is drawn, or clicks the drawn banner itself
+   (**Change banner**: the frame, or a corner button while its video plays; ADR 0110 decision 11) — the only ways in; the
+   gallery offers none.
 2. The **banner dialog** opens on the current banner's previews, or nothing yet:
    **Choose an image or a video** picks a file (`image/*`, `video/*`). An image above 40 MB (the cover's bound) or a file
    the browser cannot read is refused inside the dialog with a message, and nothing is read further. A video's first

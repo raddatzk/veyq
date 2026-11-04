@@ -289,20 +289,25 @@ point 8).
   status is core's and lists every application's uploads.
 - **Core draws every node page's header** ([ADR 0110](../decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md)
   decision 10). Core's node page (`core/node/components/NodePage.vue`, which both hosts mount around a kind's `detail`)
-  draws it from the kind's descriptor - its `icon`, its `cover` (the cover where the node has one, else the icon tile) and
-  its priority `header.order` - and the level draws a folder's the same way. A kind's page is the body below and adds to
-  the header only data, through `contributeNodeHeader` (`core/node/nodeHeaderContribution.ts`): a subtitle, its own
-  actions, its facts (a date, a place, people, a line of text - Memories' date, place and participants, Depot's uploader)
-  and a banner above the row (Memories'). Core draws the facts in one look and links a person on a member's page only. No
+  draws it from the kind's descriptor - its `icon`, its `cover` (the cover where the node has one, else the empty frame
+  with the kind's icon; a kind without a cover its icon tile) and its priority `header.order` - and the level draws a
+  folder's the same way. A kind's page is the body below and adds to the header only data, through
+  `contributeNodeHeader` (`core/node/nodeHeaderContribution.ts`): a subtitle, its own actions, the rename of its name in
+  place (its rights answer and its rename write), its facts (a date, a place, people, a line of text - Memories' date,
+  place and participants, Depot's uploader) and a banner above the row (Memories'). What is edited at its place has no
+  header entry (decision 11): the name, the cover (the visual), the participants (their fact opens the picker), a drawn
+  banner (it opens its own dialog). Core draws the facts in one look and links a person on a member's page only. No
   application imports `NodeHeader.vue` (`scripts/validate_web_core_imports_no_applications.py`, the `header` rule).
-- **Core's own actions come centrally.** The heart, the cover, "Copy to…", the ZIP download and Report are core's for
-  every node (`core/node/coreNodeActions.ts`), each gated by its core rights function: the level adds them to every row
-  and to the folder's header, and core's node page supplies them to the header of the node on screen. A kind's page
+- **Core's own actions come centrally.** The heart, the cover (a row's entry; a header's is its visual), "Copy to…", the
+  ZIP download and Report are core's for every node (`core/node/coreNodeActions.ts`), each gated by its core rights
+  function: the level adds them to every row and to the folder's header, and core's node page supplies them to the header of the node on screen. A kind's page
   builds and forwards none of them, so Report - a legal duty on everything a person sees - is on every page
   ([ADR 0110](../decisions/0110-a-node-header-shows-its-actions-by-priority-as-many-as-fit.md) decision 9).
 - **Rename, move and delete are core's default functions.** Every node gets them from core - on its row
-  (`core/node/standardRowActions.ts`) and in its header (`standardNodeActions`) - through core's dialogs (the name
-  dialog, the move dialog, the delete question with its Undo, the same for a row's node and a page's own). The application decides only WHETHER: its rights
+  (`core/node/standardRowActions.ts`) and in its header (`standardNodeActions`: move and delete in the ⋯ menu; the rename
+  is the name edited in place, `standardNodeRename`) - through core's dialogs and writes (the name dialog and the same
+  write in place, `core/node/nodeName.ts`, the move dialog, the delete question with its Undo, the same for a row's node
+  and a page's own). The application decides only WHETHER: its rights
   function answers each for the node (a row's `standard`, the header's flags), and no answer is no action. An
   application that needs its own implementation supplies an action of the same id, which replaces core's; none does
   today (Depot's file and drop box use core's three, with their kinds' own delete sentence). A share guest's

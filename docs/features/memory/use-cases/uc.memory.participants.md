@@ -19,18 +19,19 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 
 ## Main flow — name the participants
 
-1. With a Memory open, a member chooses **Participants**, an action of the header beside share, rename and move — a
-   button where the row has room, else an entry of its ⋯ menu (core's `NodeHeader`, a `NodeHeaderAction` with `users`;
-   owner decision 2026-10-14 — it used to be a link in the line under the title; ADR 0110). Its right is `memoryRights` `participants`, true for a
-   member only and fail-closed, so a guest gets the same header without it.
+1. With a Memory open, a member opens the picker from the participants' own line in the header: **Add participants**, a
+   muted chip while nobody is listed, else the pencil beside the people (**Edit participants**) — the people fact's
+   `onEdit` (core's `NodeHeader`; owner 2026-11-04, ADR 0110 decision 11: what is edited at its place has no header
+   action). Its right is `memoryRights` `participants`, true for a member only and fail-closed, so a guest gets the same
+   header without it - and, with nobody listed, without the line.
 2. The dialog lists the members of the Memory's scope — tenant members for a tenant Memory, group members for a group
    Memory — from `listScopeMembers`, each by display name (real name when it opens, else username).
 3. The member ticks and unticks; the client accepts only ids the directory returned (the server cannot check: the list
    is sealed).
 4. On save the client writes the `participants` sub-object (user ids only) into the Memory's `wrappedMeta` (under a field key derived from `K_node`)
    with the node-meta compare-and-set, stating the `metaRevision` it read.
-5. The line under the title shows the participants as overlapping avatars; **with no participant it shows nothing** —
-   no "nobody yet" text, the action button is the way in. The header re-renders with the participants - one as their avatar and name, a link to
+5. The line under the title shows the participants as overlapping avatars; **with no participant it shows only the way
+   in** — the "Add participants" chip, for whoever may edit, and nothing at all for anyone else. The header re-renders with the participants - one as their avatar and name, a link to
    their profile; several as overlapping avatars (the member's profile picture, else the letter): up to three, and past three the third slot is a "+N" (two avatars and "+2" for four people). Hovering the
    group, focusing it by keyboard or tapping it opens a popover with everyone — avatar and display name — and Escape
    closes it.
@@ -122,9 +123,8 @@ together with whom.
   `NodeMetaDoor.setParticipants` in `source.ts`.
 - At creation: "I was there" in Memories' create dialog `components/MemoryNodeDialog.vue`, sealed at birth by `createMemory`'s
   `participants` (`memoryNodes.ts`).
-- Header and picker: the `participants` action in `components/MemoryDetail.vue`'s header list, which opens the picker
-  `components/MemoryParticipants.vue` exposes beside the people fact it hands core's header (drawn by `core/people/PersonGroup.vue`,
-  ADR 0110 decision 10); `MemoryParticipantsDialog.vue`, `useMemoryParticipants.ts`; names
+- Header and picker: the people fact `components/MemoryParticipants.vue` hands core's header (drawn by `core/people/PersonGroup.vue`,
+  ADR 0110 decision 10), whose `onEdit` opens its picker (decision 11); `MemoryParticipantsDialog.vue`, `useMemoryParticipants.ts`; names
   from `core/people/directory.ts` (real name, else username; read from the tenant's member list).
 - Profile: `core/people/PersonProfile.vue` (core's frame, sections claimed through an application's registrar, `app.personSection`), Memories'
   section `components/PersonMemories.vue` over `participantIndex.ts` (its presentations `memoryViews.ts`, the level's list; its map

@@ -430,7 +430,7 @@ the member view with functions removed). Decided with it, small questions answer
   it served no guest anyway, and a restore is not a new share). A file trashed after its link exists serves nothing:
   not listed, its blob `404`, an upload refused.
 - **The page is the member's file view, `FileDetail`** (`components/FileDetail.vue`, FILE's registered `detail`): core's
-  header (name; download, replace, share, rename, move, delete — each a header action where the matrix says, owner
+  header (its name renamed in place; download, replace, share, move, delete — each a header action where the matrix says, owner
   decision 2026-10-14: the download and the replace used to be buttons below it), then the file and its size, type and
   date from its blob's sealed meta. The replace asks first (the node keeps its name; a compare-and-set on the blob it
   read, with "replace anyway" after a peer's replace; a file that holds no content offers an upload into it, which asks

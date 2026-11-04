@@ -5,7 +5,7 @@
 // The `FILE` kind with its ROWS in the unified level list (cr-files-application F1b, inbox #407): the files of a folder as
 // rows core draws - download first-class, replace, rename, move and delete in the row's menu - the upload (a level action that
 // also takes dropped files); its `detail` (inbox #378) is the page of one opened file (`FileDetail`: facts, download,
-// replace, and the header card's share, rename, move and delete) and its `shareDialog` the links of that one file
+// replace, and the header's share, move and delete, its name renamed in place) and its `shareDialog` the links of that one file
 // (`FileShareDialog`, READ and READ_WRITE — a single-file share; the backend's `DepotShareRoots`). No `createDialog` (a
 // file is created by uploading it, never by naming an empty one). The same rows are a shared folder's file list on the
 // public page (inbox #401 S3): core's folder page hands the row factory the guest's access and tree, the download for every
