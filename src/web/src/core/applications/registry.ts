@@ -30,8 +30,8 @@
 // `createDialog` opens nothing.
 //
 // **The unified level list (`KindDescriptor.list`, inbox #407).** The folder level view is core's (`core/node/LevelView.vue`):
-// the folder's header, the application tabs, then ONE list (or one set of tiles) of every node at the level - folders,
-// Memories, files, drop boxes - that CORE draws. An application no longer draws a section of its own: a kind brings, with its
+// the folder's header, the application tabs, then every node at the level - the folders, then the contents (Memories, files,
+// drop boxes, every kind mixed) - that CORE draws. An application no longer draws a section of its own: a kind brings, with its
 // descriptor, a `list` - `rows`, a factory (`core/node/levelRow.ts`) the level calls once per view with its reactive context and
 // a host, answering for each node of the kind a `LevelRow` (leading icon or cover, title, meta line, primary click, actions;
 // each action `shown` by the application's fail-closed rights function) plus the notices and presentation only the

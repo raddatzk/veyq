@@ -28,7 +28,9 @@
    **current level**. A **display toggle** at the right end of the level's tools row picks how that level is shown — **grid** (cards, the
    default), **list** (a compact list), or **map** ("Karte": the level's located Memories/Chapters plotted as
    pins, [uc.memory.place](uc.memory.place.md)) — one **app-wide, persisted** preference. In grid/list the
-   child **folders** and **Memories** render with a *create* card each; in map the subtree's located nodes
+   child **folders** come first as a group of their own, then the **contents** — Memories, files, drop boxes, mixed by
+   name — the two headed "Folders" / "Contents" where both are there (owner 2026-11-04); creating is the head's "New"
+   menu, never a card. In map the subtree's located nodes
    render as clickable pins (folders are navigated from grid/list). Where the level shows two or more
    application sections (Memories, Depot, drop boxes), a **tab bar** `All | Memories | Depot | …` sits on the left of
    that tools row, right under the folder's header ([Application tabs](#application-tabs-a-facet-of-browsing)).

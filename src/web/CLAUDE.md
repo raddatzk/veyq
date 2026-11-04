@@ -277,9 +277,11 @@ here; the server is blind.
   the move. A test mounts a view as a page would with `src/test/nodeHost.ts` (`recordingHost`, `hostFor(access)`; a
   detail through `mountNodePage`, which records the calls).
 
-  **One list for the level (inbox #407).** The folder level (`core/node/LevelView.vue`) is ONE list - or one set of tiles - of
-  everything at the level: the folders, the Memories, the files, the drop boxes, every kind, with no section headers. **Core
-  draws every row and tile** (`core/node/components/LevelRowItem.vue`); an application only supplies ROW DATA. **The order**
+  **One level, two groups (inbox #407; owner 2026-11-04).** The folder level (`core/node/LevelView.vue`) lists everything at
+  the level - the folders, the Memories, the files, the drop boxes, every kind - as two groups, the folders and then the
+  contents (every other kind MIXED, never a section per kind), each its own `<ul>`; only where both have something under the
+  shown tab is each a `<section>` named by its quiet `h2` ("Folders", "Contents": `node.groupFolders` / `node.groupContents`).
+  Select's All / None and count act on the level, not on a group. **Core draws every row and tile** (`core/node/components/LevelRowItem.vue`); an application only supplies ROW DATA. **The order**
   (`core/node/levelList.ts`, a pure function): folders first, then ALL other nodes mixed by name - natural (`Foto 2` before
   `Foto 10`), locale-aware and case-insensitive (`Intl.Collator`), equal names in `compareByCreation` order; the Memory's date
   no longer sorts. A row is `{ icon, leading?, title, meta, primary, actions }` (`LevelRow`, `core/node/levelRow.ts`): the

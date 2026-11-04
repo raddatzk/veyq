@@ -1661,6 +1661,9 @@ const en = {
     // The dismiss button of a notice an application shows above the level list (`LevelNotices.vue`).
     dismiss: 'Dismiss',
     tabAll: 'All',
+    // The level's two groups (`core/node/LevelView.vue`): their headings, shown only where both have something.
+    groupFolders: 'Folders',
+    groupContents: 'Contents',
     illegalStructure: 'That isn’t allowed here.',
     saveFailed: 'That didn’t work. Please try again.',
     // The delete question of one node (core's `DeleteNodesDialog`): a folder's own title and copy; any other node's title is its kind's
@@ -3658,6 +3661,8 @@ const de: typeof en = {
     tabs: 'Anwendungen',
     dismiss: 'Ausblenden',
     tabAll: 'Alle',
+    groupFolders: 'Ordner',
+    groupContents: 'Inhalte',
     illegalStructure: 'Das ist hier nicht erlaubt.',
     saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     deleteFolderTitle: 'Ordner löschen',

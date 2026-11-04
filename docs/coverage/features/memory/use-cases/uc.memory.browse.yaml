@@ -17,7 +17,7 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/core/node/browse.test.ts, src/core/node/location.test.ts] }
   - id: view-modes
-    text: The current level is shown via one app-wide, persisted display toggle — grid (cards, default) / list / map. Grid/list is the card-grid layout (cr-0063); map ("Karte", browse-only, cr-0071) plots the current folder's subtree of located Memories/Chapters as clickable pins from each node's sealed `location` (unsealed on device from listNodes, no locations API, behind the ADR 0018 tiles opt-in), a pin click opening that Memory. The preference persists across surfaces (localStorage), one per signed-in account and one for the share-guest pages, never one for the whole browser (inbox #408).
+    text: The current level is shown via one app-wide, persisted display toggle — grid (cards, default) / list / map. In grid and list the level's folders and its contents are two groups, each its own list, headed "Folders" / "Contents" (each an `h2` naming its section) only where both have something under the shown tab; map ("Karte", browse-only, cr-0071) plots the current folder's subtree of located Memories/Chapters as clickable pins from each node's sealed `location` (unsealed on device from listNodes, no locations API, behind the ADR 0018 tiles opt-in), a pin click opening that Memory. The preference persists across surfaces (localStorage), one per signed-in account and one for the share-guest pages, never one for the whole browser (inbox #408).
     coverage:
       web:
         unit:
@@ -27,7 +27,7 @@ acceptanceCriteria:
           - src/core/node/LevelView.test.ts
           - src/features/memories/components/SpaceMap.test.ts
   - id: row-details
-    text: A row or tile shows, under the name, the kind and the details its application supplies through the row (`LevelRow.details`) - a Memory's date and place from its unsealed node meta (locale-formatted, each left out when the Memory has none, never a placeholder), a file's size and modified time (human-readable units, EN and DE; the modified time left out when the blob carries none), a drop box's people count - the same for a share guest, as real text in reading order; a list row's visual is larger than before (4.5 x 3 rem, 6.5 x 4 rem from 521 px) and a tile is a 16:9 cover (columns 280 to 340 px), tokens only, no horizontal overflow at phone width.
+    text: A row or tile shows, under the name, the kind and the details its application supplies through the row (`LevelRow.details`) - a Memory's date and place from its unsealed node meta (locale-formatted, each left out when the Memory has none, never a placeholder), a file's size and modified time (human-readable units, EN and DE; the modified time left out when the blob carries none), a drop box's people count - the same for a share guest, as real text in reading order; a list row's visual is the compact header's 16:9 thumbnail (4 x 2.25 rem), a folder's grid tile is compact and every other grid tile a card with the list's surface, frame and radius, its 16:9 cover flush at the top (columns from 210 px), tokens only, no horizontal overflow at phone width.
     coverage:
       web:
         unit:
@@ -40,7 +40,7 @@ acceptanceCriteria:
           - src/features/depot/levelRows.test.ts
           - src/shared/formatBytes.test.ts
   - id: application-tabs
-    text: Where the level offers two or more application tabs, a tab bar `All | <one tab per application>` filters the ONE list of the current folder (folders first, then every node by name, whatever its kind) to one application's nodes (sub-folders stay in every tab, no subtree search; a tab is offered where its kinds have a node or the viewer may add one); the selection is a persisted setting per signed-in account (and one for the share-guest pages), shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
+    text: Where the level offers two or more application tabs, a tab bar `All | <one tab per application>` filters the current folder's level (its folders, then every other node by name, whatever its kind) to one application's nodes (sub-folders stay in every tab, no subtree search; a tab is offered where its kinds have a node or the viewer may add one); the selection is a persisted setting per signed-in account (and one for the share-guest pages), shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
     coverage:
       web:
         unit:

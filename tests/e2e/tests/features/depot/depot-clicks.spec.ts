@@ -189,9 +189,11 @@ const describeFocus = (page: Page, n: number) =>
           ? 'new'
           : el.closest('.veyq-level-tabs')
             ? 'tabs'
-            : el.closest('.veyq-level-item')
-              ? 'list'
-              : 'other'
+            : el.closest('.veyq-level-group.is-folders .veyq-level-item')
+              ? 'folders'
+              : el.closest('.veyq-level-group.is-contents .veyq-level-item')
+                ? 'contents'
+                : 'other'
     const item = el.closest('.veyq-level-item')
     return {
       zone,
@@ -493,8 +495,10 @@ test(
       await expect(unsupported.locator('.veyq-level-item-meta')).toHaveText(`${LATER_KIND} · This client cannot open this kind of item.`)
       await expect(unsupported.getByRole('button')).toHaveCount(0)
       await expect(page.getByRole('button', { name: laterFolder, exact: true })).toHaveCount(0)
-      // Its look: dimmed (`ui.css` `.veyq-level-item.is-unsupported`), a flat tile like every other, its visual the quiet frame.
-      expect(await styleOf(unsupported, ['opacity', 'background-color'])).toEqual({ opacity: '0.85', 'background-color': 'rgba(0, 0, 0, 0)' })
+      // Its look: dimmed (`ui.css` `.veyq-level-item.is-unsupported`), a card like every other, its visual the quiet frame.
+      expect(await styleOf(unsupported, ['opacity', 'background-color'])).toEqual({
+        opacity: '0.85', 'background-color': await probe(page, 'background-color: var(--app-surface)', 'background-color'),
+      })
       expect(await styleOf(unsupported.locator('.veyq-level-item-visual'), ['background-color'])).toEqual({
         'background-color': await probe(page, 'background-color: var(--app-surface-muted)', 'background-color'),
       })
@@ -521,11 +525,15 @@ test(
     const stops = await tabStops(page)
 
     // Every stop belongs to a part of the level, and the parts come in the component's order: the head's row (the header,
-    // then "New"), then the tools row (the tabs on its left, the tools on its right), then the rows (owner 2026-11-04).
-    const rank: Record<string, number> = { header: 0, new: 1, tabs: 2, tools: 3, list: 4 }
-    expect(stops.filter((s) => !(s.zone in rank)), 'no stop outside the five parts').toEqual([])
+    // then "New"), then the tools row (the tabs on its left, the tools on its right), then the folders' group and then the
+    // contents' group (owner 2026-11-04), each headed here, where the level has both.
+    const rank: Record<string, number> = { header: 0, new: 1, tabs: 2, tools: 3, folders: 4, contents: 5 }
+    expect(stops.filter((s) => !(s.zone in rank)), 'no stop outside the six parts').toEqual([])
     const ranks = stops.map((s) => rank[s.zone])
-    expect(ranks, 'header, then New, then tabs, then tools, then rows').toEqual([...ranks].sort((a, b) => a - b))
+    expect(ranks, 'header, then New, then tabs, then tools, then the folders, then the contents').toEqual([...ranks].sort((a, b) => a - b))
+    await expect(page.locator('section.veyq-level-group > h2')).toHaveText(['Folders', 'Contents'])
+    await expect(page.getByRole('region', { name: 'Folders', exact: true }).getByRole('button', { name: blockingFolder, exact: true })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Contents', exact: true }).getByRole('button', { name: `Open ${trayFiles[0].name}`, exact: true })).toBeVisible()
 
     expect(stops.filter((s) => s.zone === 'new').map((s) => s.label)).toEqual(['New'])
     // Select and the trash are icon buttons: their words are their accessible names.
@@ -539,7 +547,7 @@ test(
     ])
 
     // Each row is one run of stops: its primary button first, its "More actions" last; folders before files.
-    const listStops = stops.map((s, i) => ({ ...s, i })).filter((s) => s.zone === 'list')
+    const listStops = stops.map((s, i) => ({ ...s, i })).filter((s) => s.zone === 'folders' || s.zone === 'contents')
     const rows = [...new Set(listStops.map((s) => s.row))]
     for (const row of rows) {
       const own = listStops.filter((s) => s.row === row)
@@ -646,9 +654,17 @@ test(
       const tokens = async (pairs: Record<string, string>) =>
         Object.fromEntries(await Promise.all(Object.entries(pairs).map(async ([p, d]) => [p, await probe(page, d, p)] as const)))
 
-      // The list: a grid with no list indent (inbox #382 (c)).
-      expect(await styleOf(page.locator('.veyq-level-list'), ['display', 'list-style-type', 'padding-left', 'margin-top'])).toEqual({
-        display: 'grid', 'list-style-type': 'none', 'padding-left': '0px', 'margin-top': '0px',
+      // The two groups' lists: each a grid with no list indent (inbox #382 (c)), under its quiet heading (owner 2026-11-04).
+      const lists = page.locator('.veyq-level-groups > .veyq-level-group > .veyq-level-list')
+      await expect(lists).toHaveCount(2)
+      for (const list of [lists.nth(0), lists.nth(1)]) {
+        expect(await styleOf(list, ['display', 'list-style-type', 'padding-left', 'margin-top'])).toEqual({
+          display: 'grid', 'list-style-type': 'none', 'padding-left': '0px', 'margin-top': '0px',
+        })
+      }
+      expect(await styleOf(page.locator('.veyq-level-group-heading'), ['color', 'text-transform'])).toEqual({
+        ...(await tokens({ color: 'color: var(--app-muted)' })),
+        'text-transform': 'uppercase',
       })
       // The tools: one right-aligned group at the end of the tools row, which carries the one hairline under the tabs.
       expect(await styleOf(page.locator('.veyq-level-toolbar'), ['display', 'justify-content'])).toEqual({
@@ -658,14 +674,14 @@ test(
         display: 'flex', 'border-bottom-style': 'solid',
       })
 
-      // A file's tile: flat (no surface, frame or shadow of its own); its visual the quiet 16:9 frame; its title and meta line;
-      // its actions over the cover's top-right corner (owner 2026-11-04).
+      // A file's tile: a card with the list's surface, frame and radius, no shadow; its visual the quiet 16:9 frame flush at
+      // its top; its title and meta line; its actions over the cover's top-right corner (owner 2026-11-04).
       const file = fileItem(page, trayFiles[0].name)
-      expect(await styleOf(file, ['background-color', 'color', 'box-shadow', 'border-top-style'])).toEqual({
-        'background-color': 'rgba(0, 0, 0, 0)',
+      expect(await styleOf(file, ['background-color', 'color', 'box-shadow', 'border-top-style', 'border-top-left-radius'])).toEqual({
+        ...(await tokens({ 'background-color': 'background-color: var(--app-surface)', 'border-top-left-radius': 'border-top-left-radius: var(--app-radius)' })),
         color: await probe(page, 'color: var(--app-text)', 'color'),
         'box-shadow': 'none',
-        'border-top-style': 'none',
+        'border-top-style': 'solid',
       })
       expect(await styleOf(file.locator('.veyq-level-item-actions'), ['position'])).toEqual({ position: 'absolute' })
       const fileVisual = await styleOf(file.locator('.veyq-level-item-visual'), ['background-color', 'color', 'aspect-ratio'])
@@ -704,19 +720,22 @@ test(
       expect(Number.parseFloat(box.width), 'its width').toBeCloseTo(compact ? 64 : (42 * 16) / 9, 1)
       expect(Number.parseFloat(box.height), 'its height').toBeCloseTo(compact ? 36 : 42, 1)
 
-      // The list mode: one surface in one frame, the visual the compact header's 4 × 2.25 rem thumbnail; then back to the grid.
+      // The list mode: each group one surface in one frame, the visual the compact header's 4 × 2.25 rem thumbnail; then back
+      // to the grid.
       const toolbar = page.locator('.veyq-level-toolbar')
       await toolbar.getByRole('button', { name: 'List view', exact: true }).click()
-      await expect(page.locator('.veyq-level-list')).toHaveClass(/\bis-list\b/)
-      expect(await styleOf(page.locator('.veyq-level-list'), ['background-color', 'border-top-style'])).toEqual({
-        ...(await tokens({ 'background-color': 'background-color: var(--app-surface)' })),
-        'border-top-style': 'solid',
-      })
+      for (const list of [lists.nth(0), lists.nth(1)]) {
+        await expect(list).toHaveClass(/\bis-list\b/)
+        expect(await styleOf(list, ['background-color', 'border-top-style'])).toEqual({
+          ...(await tokens({ 'background-color': 'background-color: var(--app-surface)' })),
+          'border-top-style': 'solid',
+        })
+      }
       expect(await styleOf(file.locator('.veyq-level-item-visual'), ['width', 'height'])).toEqual(
         await tokens({ width: 'width: 4rem', height: 'height: 2.25rem' }),
       )
       await toolbar.getByRole('button', { name: 'Grid view', exact: true }).click()
-      await expect(page.locator('.veyq-level-list')).not.toHaveClass(/\bis-list\b/)
+      for (const list of [lists.nth(0), lists.nth(1)]) await expect(list).not.toHaveClass(/\bis-list\b/)
     }
     expect(surfaces[1], 'the dark theme gives the item\'s frame another surface').not.toBe(surfaces[0])
     await page.emulateMedia({ colorScheme: 'light' })

@@ -69,135 +69,143 @@ div.veyq-node-host
                 path
                 path
                 path
-    ul.is-list.veyq-level-list
-      li.is-folder.is-list.veyq-level-item
-        button.veyq-level-item-main [aria-label="Empty"]
-          span.veyq-level-item-visual
-            span.veyq-icon.veyq-level-item-icon
-              svg.lucide.lucide-folder.veyq-icon__svg
-                path
-          span.veyq-level-item-text
-            strong.veyq-level-item-title
-              "Empty"
-            small.veyq-level-item-meta
-              "Folder"
-        span.veyq-level-item-actions
-          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-heart.veyq-icon__svg
-                path
-          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Empty”"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
-                circle
-                circle
-                circle
-      li.is-folder.is-list.veyq-level-item
-        button.veyq-level-item-main [aria-label="Trips"]
-          span.veyq-level-item-visual
-            span.veyq-icon.veyq-level-item-icon
-              svg.lucide.lucide-folder.veyq-icon__svg
-                path
-          span.veyq-level-item-text
-            strong.veyq-level-item-title
-              "Trips"
-            small.veyq-level-item-meta
-              "Folder"
-        span.veyq-level-item-actions
-          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-heart.veyq-icon__svg
-                path
-          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Trips”"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
-                circle
-                circle
-                circle
-      li.has-cover.is-list.veyq-level-item
-        button.veyq-level-item-main [aria-label="Beach"]
-          span.veyq-level-item-visual
-            span.memory-cover-image
-              span.memory-cover-image-ph.veyq-icon
-                svg.lucide.lucide-images.veyq-icon__svg
-                  path
-                  path
-                  circle
-                  rect
-          span.veyq-level-item-text
-            strong.veyq-level-item-title
-              "Beach"
-            small.veyq-level-item-meta
-              "Memory"
-              "·"
-              span.veyq-level-item-detail
-                "p-2"
-        span.veyq-level-item-actions
-          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-heart.veyq-icon__svg
-                path
-          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Beach”"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
-                circle
-                circle
-                circle
-      li.has-cover.is-list.veyq-level-item
-        button.veyq-level-item-main [aria-label="Solo"]
-          span.veyq-level-item-visual
-            span.memory-cover-image
-              span.memory-cover-image-ph.veyq-icon
-                svg.lucide.lucide-images.veyq-icon__svg
-                  path
-                  path
-                  circle
-                  rect
-          span.veyq-level-item-text
-            strong.veyq-level-item-title
-              "Solo"
-            small.veyq-level-item-meta
-              "Memory"
-              "·"
-              span.veyq-level-item-detail
-                "03/04/2023"
-        span.veyq-level-item-actions
-          button.is-pressed.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Remove favorite"] [aria-pressed="true"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-heart.veyq-icon__svg
-                path
-          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Solo”"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
-                circle
-                circle
-                circle
-      li.has-cover.is-list.veyq-level-item
-        button.veyq-level-item-main [aria-label="Summer"]
-          span.veyq-level-item-visual
-            span.memory-cover-image
-              span.memory-cover-image-ph.veyq-icon
-                svg.lucide.lucide-images.veyq-icon__svg
-                  path
-                  path
-                  circle
-                  rect
-          span.veyq-level-item-text
-            strong.veyq-level-item-title
-              "Summer"
-            small.veyq-level-item-meta
-              "Memory"
-              "·"
-              span.veyq-level-item-detail
-                "06/01/2024 – 06/30/2024"
-        span.veyq-level-item-actions
-          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-heart.veyq-icon__svg
-                path
-          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Summer”"]
-            span.veyq-button__icon.veyq-icon
-              svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
-                circle
-                circle
-                circle
+    div.veyq-level-groups
+      section.is-folders.veyq-level-group
+        h2.veyq-level-group-heading
+          "Folders"
+        ul.is-list.veyq-level-list
+          li.is-folder.is-list.veyq-level-item
+            button.veyq-level-item-main [aria-label="Empty"]
+              span.veyq-level-item-visual
+                span.veyq-icon.veyq-level-item-icon
+                  svg.lucide.lucide-folder.veyq-icon__svg
+                    path
+              span.veyq-level-item-text
+                strong.veyq-level-item-title
+                  "Empty"
+                small.veyq-level-item-meta
+                  "Folder"
+            span.veyq-level-item-actions
+              button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-heart.veyq-icon__svg
+                    path
+              button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Empty”"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
+                    circle
+                    circle
+                    circle
+          li.is-folder.is-list.veyq-level-item
+            button.veyq-level-item-main [aria-label="Trips"]
+              span.veyq-level-item-visual
+                span.veyq-icon.veyq-level-item-icon
+                  svg.lucide.lucide-folder.veyq-icon__svg
+                    path
+              span.veyq-level-item-text
+                strong.veyq-level-item-title
+                  "Trips"
+                small.veyq-level-item-meta
+                  "Folder"
+            span.veyq-level-item-actions
+              button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-heart.veyq-icon__svg
+                    path
+              button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Trips”"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
+                    circle
+                    circle
+                    circle
+      section.is-contents.veyq-level-group
+        h2.veyq-level-group-heading
+          "Contents"
+        ul.is-list.veyq-level-list
+          li.has-cover.is-list.veyq-level-item
+            button.veyq-level-item-main [aria-label="Beach"]
+              span.veyq-level-item-visual
+                span.memory-cover-image
+                  span.memory-cover-image-ph.veyq-icon
+                    svg.lucide.lucide-images.veyq-icon__svg
+                      path
+                      path
+                      circle
+                      rect
+              span.veyq-level-item-text
+                strong.veyq-level-item-title
+                  "Beach"
+                small.veyq-level-item-meta
+                  "Memory"
+                  "·"
+                  span.veyq-level-item-detail
+                    "p-2"
+            span.veyq-level-item-actions
+              button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-heart.veyq-icon__svg
+                    path
+              button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Beach”"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
+                    circle
+                    circle
+                    circle
+          li.has-cover.is-list.veyq-level-item
+            button.veyq-level-item-main [aria-label="Solo"]
+              span.veyq-level-item-visual
+                span.memory-cover-image
+                  span.memory-cover-image-ph.veyq-icon
+                    svg.lucide.lucide-images.veyq-icon__svg
+                      path
+                      path
+                      circle
+                      rect
+              span.veyq-level-item-text
+                strong.veyq-level-item-title
+                  "Solo"
+                small.veyq-level-item-meta
+                  "Memory"
+                  "·"
+                  span.veyq-level-item-detail
+                    "03/04/2023"
+            span.veyq-level-item-actions
+              button.is-pressed.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Remove favorite"] [aria-pressed="true"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-heart.veyq-icon__svg
+                    path
+              button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Solo”"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
+                    circle
+                    circle
+                    circle
+          li.has-cover.is-list.veyq-level-item
+            button.veyq-level-item-main [aria-label="Summer"]
+              span.veyq-level-item-visual
+                span.memory-cover-image
+                  span.memory-cover-image-ph.veyq-icon
+                    svg.lucide.lucide-images.veyq-icon__svg
+                      path
+                      path
+                      circle
+                      rect
+              span.veyq-level-item-text
+                strong.veyq-level-item-title
+                  "Summer"
+                small.veyq-level-item-meta
+                  "Memory"
+                  "·"
+                  span.veyq-level-item-detail
+                    "06/01/2024 – 06/30/2024"
+            span.veyq-level-item-actions
+              button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-heart.veyq-icon__svg
+                    path
+              button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Summer”"]
+                span.veyq-button__icon.veyq-icon
+                  svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
+                    circle
+                    circle
+                    circle
