@@ -99,7 +99,6 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     @create-chapter="host.createChild?.(CHAPTER_KIND, node)"
     @open-chapter="host.open?.($event)"
     @share="host.share?.(node, $event)"
-    @share-upload="host.share?.(node, { contribute: false, uploader: true })"
     @meta-updated="onMetaUpdated"
     @report-medium="onReportMedium"
   />

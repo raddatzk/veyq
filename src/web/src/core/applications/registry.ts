@@ -430,11 +430,10 @@ export interface NodeCreateDialogEmits {
 
 /** What the host hands a kind's `shareDialog`: the node, its content key as the key chain opens it (what a link wraps;
  *  key material), the scope's epoch keys (each link's recovery copy opens under `K_SC`), the node's name as the tree
- *  opened it (re-sealed under `K_share`) and its kind. `uploader`: the uploader (WRITE_ONLY drop) variant, set only on
- *  a `share` door's `uploader` offer — a kind whose dialog has no such variant ignores it. `contribute`: offer the READ_WRITE
- *  role for a new link, from the `share` door's `NodeShareOffer` (`core/node/nodeHost.ts`); absent, it is not offered (fail closed) — a dialog
-
- *  with no role choice ignores it. Mounted while open; emits `close`. */
+ *  opened it (re-sealed under `K_share`) and its kind. `view`, `contribute`, `upload`: offer the `READ`, `READ_WRITE`,
+ *  `WRITE_ONLY` role for a NEW link, from the `share` door's `NodeShareOffer` (`core/node/nodeHost.ts`); each absent is
+ *  not offered (fail closed) - a dialog whose roles its kind or the door already decides ignores them. Mounted while
+ *  open; emits `close`. */
 export interface NodeShareDialogProps {
   scopeId: string
   nodeId: string
@@ -445,8 +444,9 @@ export interface NodeShareDialogProps {
   epochs: ScopeKey
   nodeName: string
   nodeKind: NodeKind
-  uploader?: boolean
+  view?: boolean
   contribute?: boolean
+  upload?: boolean
   /** The scope is pending deletion (`MemberAccess.readonly`, set by the host for every kind's dialog, core's rule): the
    *  dialog lists the node's links and copies them, and switches the caller's own live link off, but mints none and
    *  changes none else - the server refuses every share write during the grace window (`ScopeAccess`'s WRITE answer

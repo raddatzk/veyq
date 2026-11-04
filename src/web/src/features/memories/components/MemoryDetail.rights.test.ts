@@ -77,7 +77,7 @@ async function mountDetail(rights: MemoryRights, kind = MEMORY_KIND, o: { person
   return w
 }
 
-const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'memory.participants.title', 'memory.banner.add', 'node.rename', 'node.move.action', 'node.delete'] as const
+const HEADER = ['media.upload', 'share.share', 'memory.participants.title', 'memory.banner.add', 'node.rename', 'node.move.action', 'node.delete'] as const
 /** The header's actions among {@link HEADER}, a button or a ⋯ menu entry (delete is always the latter, ADR 0110). */
 const header = async (w: Awaited<ReturnType<typeof mountDetail>>) => {
   const offered = await headerActionLabels(w)
@@ -93,7 +93,7 @@ describe('MemoryDetail follows rights', () => {
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, {
       coreActions: [core('favorite', { placement: 'before' }), core('cover'), core('copy', { placement: { after: 'move' } }), core('download'), core('report', { menuOnly: true })],
     })
-    expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'shareUpload', 'participants', 'download', 'cover', 'banner', 'rename', 'move', 'copy'])
+    expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'participants', 'download', 'cover', 'banner', 'rename', 'move', 'copy'])
     expect(await headerMenuIds(w)).toEqual(['report', 'delete'])
   })
 
@@ -196,7 +196,7 @@ describe('MemoryDetail follows rights', () => {
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, { attach: true })
     const action = w.find('.veyq-node-header-actions button[data-action="participants"]')
     expect(action.attributes('aria-label')).toBe(t('memory.participants.title'))
-    // its own icon: "Request uploads" is `user-plus`, and two actions of one bar never share one (inbox #425)
+    // its own icon: two actions of one bar never share one (inbox #425)
     expect(w.findAllComponents(VeyqButton).find((b) => b.element === action.element)?.props('icon')).toBe('users')
     const picker = () => document.body.querySelector('.memory-participants-dialog')
     expect(picker(), 'no picker before the click').toBeNull()
@@ -226,7 +226,7 @@ describe('MemoryDetail follows rights', () => {
 
   it('a pending deletion: share stays, every write goes', async () => {
     const w = await mountDetail(memberMemoryRights({ readonly: true }))
-    expect(await header(w)).toEqual(['share.share', 'share.uploadRequest'])
+    expect(await header(w)).toEqual(['share.share'])
     expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(true)
     await w.findAll('[role="tab"]')[1].trigger('mousedown')
     await flushPromises()

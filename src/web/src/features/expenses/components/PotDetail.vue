@@ -17,7 +17,7 @@ import VeyqTab from '../../../shared/ui/VeyqTab.vue'
 import VeyqTabPanels from '../../../shared/ui/VeyqTabPanels.vue'
 import VeyqTabPanel from '../../../shared/ui/VeyqTabPanel.vue'
 import type { NodeDetailProps } from '../../../core/applications/registry'
-import { hostHandlers, hostRights, injectNodeHost } from '../../../core/node/nodeHost'
+import { hostHandlers, hostRights, injectNodeHost, shareOfferOf } from '../../../core/node/nodeHost'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { canReport, nodeTarget } from '../../../core/report/reportActions'
@@ -73,7 +73,7 @@ const headerActions = computed(() =>
   standardNodeActions(
     t,
     { ...hostRights(rights.value, host), deleteLabel: t('expenses.delete') },
-    hostHandlers(host, () => props.node, () => ({ contribute: rights.value.shareContribute })),
+    hostHandlers(host, () => props.node, () => shareOfferOf(rights.value)),
   ),
 )
 const subtitle = computed(() => (meta.value ? t('expenses.inCurrency', { currency: meta.value.base.currency }) : undefined))

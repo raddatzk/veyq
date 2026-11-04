@@ -85,7 +85,7 @@ const Detail = defineComponent({
   props: ['node', 'access', 'tree'],
   setup: (p, { expose }) => {
     const host = injectNodeHost()
-    expose({ share: () => host.share?.(p.node, { contribute: false }) })
+    expose({ share: () => host.share?.(p.node, { view: true, contribute: false, upload: false }) })
     return () => h('div', { class: 'detail' }, `${p.node.name}|${(p.access as Access).mode === 'member' && (p.access as Access & { mode: 'member' }).publicShares && targetOf(p.tree as TreeSource, p.node).shareable}`)
   },
 })

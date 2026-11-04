@@ -160,7 +160,7 @@ const byLabel = (w: Page, label: string) => w.find(`[aria-label="${label}"]`)
 /** Nothing a member alone may do is on the page, nothing reached the member's world or an authenticated client. */
 function expectGuestOnly(w: Page) {
   for (const label of [
-    t('share.share'), t('share.uploadRequest'), t('node.favorite'), t('node.unfavorite'), t('node.rename'), t('node.delete'),
+    t('share.share'), t('node.favorite'), t('node.unfavorite'), t('node.rename'), t('node.delete'),
     t('media.marks.mark'), t('media.marks.unmark'), t('memory.addChapter'), t('memory.banner.add'), t('memory.banner.change'),
   ]) {
     expect(byLabel(w, label).exists(), label).toBe(false)
