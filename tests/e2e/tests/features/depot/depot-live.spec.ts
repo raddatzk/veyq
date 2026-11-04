@@ -19,7 +19,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
-import { createFolder, downloadButton, pickFiles, shareOpenFolder } from '../../../src/depot'
+import { createDropBoxLink, createFolder, downloadButton, pickFiles, shareOpenFolder } from '../../../src/depot'
 import { newDevice, signInOwner, type Device } from '../../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
@@ -70,7 +70,7 @@ test(
   async () => {
     await signInOwner(member)
     await createFolder(member.page, folder)
-    shareLink = await shareOpenFolder(member.page, shareLabel, 'View + contribute')
+    shareLink = await shareOpenFolder(member.page, shareLabel, 'View + add files')
     await expect(member.page.getByText(/^Nothing here yet\./)).toBeVisible()
     await markDocument(member.page)
 
@@ -113,25 +113,10 @@ test(
   },
   async ({ browser }) => {
     const { page } = member
-    await page.getByRole('button', { name: 'New', exact: true }).click()
-    await page.getByRole('menuitem', { name: 'New drop box' }).click()
-    const create = page.getByRole('dialog', { name: 'New drop box' })
-    await create.getByLabel('Name').fill(recordTyped(dropBox))
-    await create.getByRole('button', { name: 'Create', exact: true }).click()
-    await expect(create).toBeHidden()
+    // The folder's share, "Add files only": the drop box and its first link in one flow (owner 2026-11-04).
+    dropLink = await createDropBoxLink(page, dropBox)
 
-    await page.getByRole('button', { name: `Open ${dropBox}`, exact: true }).click()
-    await expect(page.getByRole('heading', { name: dropBox })).toBeVisible()
-    await page.getByRole('button', { name: 'Share link', exact: true }).click()
-    const links = page.getByRole('dialog', { name: 'Drop box links' })
-    await links.getByRole('button', { name: 'Create link', exact: true }).click()
-    dropLink = await links.getByRole('textbox', { name: 'Copy link' }).inputValue()
-    expect(new URL(dropLink).hash, 'the link key travels in the fragment').toMatch(/^#k=/)
-    await links.getByRole('button', { name: 'Close', exact: true }).first().click()
-    await expect(links).toBeHidden()
-
-    // Back on the folder level that holds the drop box — the level that polls.
-    await page.goBack()
+    // On the folder level that holds the drop box — the level that polls.
     await expect(page.getByRole('heading', { name: folder })).toBeVisible()
     await expect(page.getByText('Nobody yet', { exact: true })).toBeVisible()
     await markDocument(page)

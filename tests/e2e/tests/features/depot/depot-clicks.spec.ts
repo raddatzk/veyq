@@ -42,7 +42,7 @@ import { test, expect, type Locator, type Page, type Request, type Route } from 
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { recordTyped } from '../../../src/canaries'
-import { createFolder, downloadButton, pickFiles, sha256 } from '../../../src/depot'
+import { createDropBoxLink, createFolder, downloadButton, pickFiles, sha256 } from '../../../src/depot'
 import { newDevice, signInOwner, tenantOrigin, type Device } from '../../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
@@ -708,21 +708,8 @@ test(
   async ({ browser }) => {
     const { page } = member
     await openFolder(page)
-    await page.getByRole('button', { name: 'New', exact: true }).click()
-    await page.getByRole('menuitem', { name: 'New drop box' }).click()
-    const create = page.getByRole('dialog', { name: 'New drop box' })
-    await create.getByLabel('Name').fill(recordTyped(dropBox))
-    await create.getByRole('button', { name: 'Create', exact: true }).click()
-    await expect(create).toBeHidden()
-    await page.getByRole('button', { name: `Open ${dropBox}`, exact: true }).click()
-    await expect(page.getByRole('heading', { name: dropBox })).toBeVisible()
-    await page.getByRole('button', { name: 'Share link', exact: true }).click()
-    const links = page.getByRole('dialog', { name: 'Drop box links' })
-    await links.getByRole('button', { name: 'Create link', exact: true }).click()
-    dropLink = await links.getByRole('textbox', { name: 'Copy link' }).inputValue()
-    expect(new URL(dropLink).hash, 'the link key travels in the fragment').toMatch(/^#k=/)
-    await links.getByRole('button', { name: 'Close', exact: true }).first().click()
-    await expect(links).toBeHidden()
+    // The folder's share, "Add files only": the drop box and its first link in one flow (owner 2026-11-04).
+    dropLink = await createDropBoxLink(page, dropBox)
 
     guest = await newDevice(browser)
     const tab = guest.page
@@ -771,8 +758,9 @@ test(
     await expect(page.getByRole('button', { name: `Open ${dropper}`, exact: true })).toBeVisible({ timeout: 60_000 })
     await expect(page.getByRole('button', { name: `Open ${dropper} (2)`, exact: true })).toHaveCount(0)
 
-    // The owner switches the link off: the guest's next file is refused with the page's own message.
+    // The owner switches the link off - on the drop box's own links: the guest's next file is refused with the page's own message.
     await page.getByRole('button', { name: 'Share link', exact: true }).click()
+    const links = page.getByRole('dialog', { name: 'Drop box links' })
     await links.getByRole('button', { name: 'Switch off', exact: true }).click()
     const off = question(page, 'Switch this link off?')
     await off.getByRole('button', { name: 'Switch off', exact: true }).click()
