@@ -34,6 +34,11 @@ acceptanceCriteria:
         integration: [PotSliceTest.aBatchOutsideItsContractIsRefusedWhole_andARecordBelongsToOnePot]
       web:
         unit: [src/features/expenses/entryForm.test.ts, src/features/expenses/components/EntryEditor.split.test.ts, src/features/expenses/domain/potApi.wire.test.ts, src/features/expenses/domain/ledger.test.ts, src/features/expenses/domain/codec.test.ts]
+  - id: the-list-in-the-order-recorded
+    text: "The live entries by date, newest first, and of one date the one recorded last on top by the server's time of its first revision (an edit does not move it); each row says its kind: an expense by its payers, a refund to its receivers, a transfer from one person to the other."
+    coverage:
+      web:
+        unit: [src/features/expenses/components/PotDetail.test.ts]
   - id: delete-is-a-tombstone-revision
     text: "A delete is a tombstone revision the server sees as such; the entry leaves the list and the balances and moves to the Pot's deleted entries."
     coverage:

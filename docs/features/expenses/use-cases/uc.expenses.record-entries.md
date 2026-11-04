@@ -28,11 +28,15 @@
 5. On save the client mints the entry's id (a new entry) and appends revision `n + 1` of the revision it read; the
    server takes it only where `n` is the latest, bumps the Pot's item revision, and every open view of the Pot learns
    of it on its next poll ([docs/apps/README.md](../../../apps/README.md) § How an application publishes a revisioned list).
-6. **Edit:** the same editor over the entry's current revision; the save is the next revision. The entry shows that it
+6. **The list:** the live entries by date, newest first; of one date, the one recorded last on top (the server's time
+   of the entry's first revision, so an edit does not move it). Each row says what it is: "expense by" its payers,
+   "refund to" its receivers (its amount shown negative), a transfer "from" one person "to" the other, untitled named
+   **Transfer**.
+7. **Edit:** the same editor over the entry's current revision; the save is the next revision. The entry shows that it
    was edited.
-7. **Delete:** a tombstone revision; the entry leaves the list and the balances and moves to the Pot's deleted entries
+8. **Delete:** a tombstone revision; the entry leaves the list and the balances and moves to the Pot's deleted entries
    ([uc.expenses.entry-history](uc.expenses.entry-history.md)).
-8. **Receipts** are attached in the same editor ([uc.expenses.attach-receipts](uc.expenses.attach-receipts.md)).
+9. **Receipts** are attached in the same editor ([uc.expenses.attach-receipts](uc.expenses.attach-receipts.md)).
 
 ## Alternate / exception flows
 

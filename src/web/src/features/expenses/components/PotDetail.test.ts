@@ -131,6 +131,26 @@ describe('PotDetail for a member', () => {
     expect(w.text()).not.toContain(t('expenses.ledger.missing'))
   })
 
+  it('lists the entries of one date in the order recorded, the last on top, and says what each kind is', async () => {
+    // Recorded after the dinner, all on its date, in an order their ids contradict: the id decides only a tie of the
+    // server's time, never the order the people entered them.
+    const LUNCH = '0e000000-0000-4000-9000-000000000009'
+    const REFUND = '0e000000-0000-4000-9000-000000000002'
+    const PAYBACK = '0e000000-0000-4000-9000-000000000005'
+    server.current.append([{ entryId: LUNCH, content: { ...expense('Lunch', 3000, BEN, [ANNA, BEN]) } }])
+    server.current.append([{ entryId: REFUND, content: { kind: 'refund', title: 'Deposit', date: '2026-07-01', category: 'food', currency: 'EUR', minorUnits: 2, rate: '1', amount: 1000, receipts: [], receivers: [{ participant: CLEO, amount: 1000 }], allocation: { items: [], rest: { mode: 'equal', participants: [ANNA, CLEO] } } } }])
+    server.current.append([{ entryId: PAYBACK, content: { kind: 'transfer', date: '2026-07-01', currency: 'EUR', minorUnits: 2, rate: '1', amount: 500, receipts: [], from: CLEO, to: ANNA } }])
+    const w = mountPot()
+    await flushPromises()
+    expect(w.findAll('.expenses-entries > .veyq-list [data-entry]').map((r) => r.attributes('data-entry'))).toEqual([PAYBACK, REFUND, LUNCH, DINNER])
+    const row = (id: string) => w.find(`[data-entry="${id}"]`).text()
+    expect(row(DINNER)).toContain(t('expenses.entries.expenseBy', { names: 'Anna' }))
+    expect(row(REFUND)).toContain(t('expenses.entries.refundTo', { names: 'Cleo' }))
+    // an untitled transfer is named by its kind, and its line says who paid whom
+    expect(row(PAYBACK)).toContain(t('expenses.kind.transfer'))
+    expect(row(PAYBACK)).toContain(t('expenses.entries.transferFromTo', { from: 'Cleo', to: 'Anna' }))
+  })
+
   it('shows the balances and the settle-up of the entries, and records one transfer of it', async () => {
     const w = mountPot()
     await flushPromises()

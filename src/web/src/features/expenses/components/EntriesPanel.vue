@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// A Pot's entries (uc.expenses.record-entries): the live ones newest first — an invalid one marked and counted nowhere
+// A Pot's entries (uc.expenses.record-entries): the live ones newest first — by date, then the one recorded last on top
+// (the server's time of its first revision; an edit does not move it) — an invalid one marked and counted nowhere
 // (owner 2026-10-24), one that did not open marked as such — and below them the Pot's own list of deleted entries, each
 // opened to read or restore (a deleted entry stays inside its Pot, ADR 0108 decision 6). A row opens the entry dialog.
 import { computed } from 'vue'
@@ -16,7 +17,8 @@ const props = defineProps<{ ledger: PotLedger; meta: PotMeta; canWrite: boolean;
 const emit = defineEmits<{ open: [entryId: string | null] }>()
 const { t, locale } = useI18n()
 
-const byDate = (a: LedgerEntry, b: LedgerEntry) => (b.content?.date ?? '').localeCompare(a.content?.date ?? '') || a.id.localeCompare(b.id)
+const byDate = (a: LedgerEntry, b: LedgerEntry) =>
+  (b.content?.date ?? '').localeCompare(a.content?.date ?? '') || b.recordedAt.getTime() - a.recordedAt.getTime() || a.id.localeCompare(b.id)
 const live = computed(() => props.ledger.entries.filter((e) => e.status !== 'deleted').sort(byDate))
 const deleted = computed(() => props.ledger.entries.filter((e) => e.status === 'deleted').sort(byDate))
 const own = computed(() => ownCategoryNames(props.meta))
@@ -25,18 +27,21 @@ const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value === 'de' 
 function title(e: LedgerEntry): string {
   const c = e.content
   if (!c) return t('expenses.entries.unreadable')
-  if (c.kind === 'transfer') return c.title || t('expenses.entries.transferTitle', { from: personLabel(props.ledger, c.from, t, props.directory ?? null), to: personLabel(props.ledger, c.to, t, props.directory ?? null) })
+  if (c.kind === 'transfer') return c.title || t('expenses.kind.transfer')
   return c.title
 }
 function subtitle(e: LedgerEntry): string {
   const c = e.content
   if (!c) return ''
+  const name = (id: string) => personLabel(props.ledger, id, t, props.directory ?? null)
   const parts = [dateFormat.value.format(new Date(`${c.date}T00:00:00Z`))]
-  if (c.kind !== 'transfer') {
+  if (c.kind === 'transfer') parts.push(t('expenses.entries.transferFromTo', { from: name(c.from), to: name(c.to) }))
+  else {
     const l = categoryLabel(c.category, own.value)
     parts.push('key' in l ? t(l.key) : 'name' in l ? l.name : t('expenses.unknownCategory'))
-    const who = (c.kind === 'expense' ? c.payers : c.receivers).map((p) => personLabel(props.ledger, p.participant, t, props.directory ?? null))
-    parts.push(t(c.kind === 'expense' ? 'expenses.entries.paidBy' : 'expenses.entries.receivedBy', { names: [...new Set(who)].join(', ') }))
+    // The kind in words: an expense by who paid, a refund to who received it (its amount is shown negative).
+    const who = [...new Set((c.kind === 'expense' ? c.payers : c.receivers).map((p) => name(p.participant)))].join(', ')
+    parts.push(t(c.kind === 'expense' ? 'expenses.entries.expenseBy' : 'expenses.entries.refundTo', { names: who }))
   }
   if (c.currency !== props.meta.base.currency) parts.push(formatMoney(BigInt(c.amount), c.currency, c.minorUnits, locale.value))
   return parts.join(' · ')

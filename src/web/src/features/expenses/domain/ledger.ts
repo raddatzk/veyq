@@ -65,6 +65,8 @@ export type LedgerEntry = {
   effect: EntryEffect | null
   /** It has more than one revision: the entry shows that it was edited. */
   edited: boolean
+  /** When the server stored its first revision held: the order of entries recorded on the same date. */
+  recordedAt: Date
 }
 
 export type Transfer = { from: string; to: string; amount: bigint }
@@ -321,7 +323,7 @@ export function buildLedger(held: readonly HeldRevision[], base: BaseCurrency): 
 
   const entries: LedgerEntry[] = money.map(({ id, revisions }) => {
     const last = revisions[revisions.length - 1]!
-    const common = { id, revision: last.revision, edited: last.revision > 1 }
+    const common = { id, revision: last.revision, edited: last.revision > 1, recordedAt: revisions[0]!.createdAt }
     const body: RevisionContent | null = last.body
     if (body === null) return { ...common, status: 'unreadable', content: null, problem: null, effect: null }
     if (body.kind === 'deleted') {
