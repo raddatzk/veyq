@@ -362,8 +362,9 @@ onBeforeUnmount(() => {
     <div class="veyq-node-header-body">
       <div ref="titleRow" class="veyq-node-header-titlerow">
         <!-- The page's one h1. Where the name may be renamed it holds a real button that turns it into a field (Enter
-             writes, Esc cancels); the full name is then in that button's tooltip, else the title's. -->
-        <h1 ref="titleEl" class="veyq-node-header-title" :class="{ 'is-editing': editing }" :title="rename ? undefined : title">
+             writes, Esc cancels); the full name is then in that button's tooltip, else the title's. The heading is named by
+             the name itself (`aria-label`), so the button's "Rename “…”" never becomes the page's heading. -->
+        <h1 ref="titleEl" class="veyq-node-header-title" :class="{ 'is-editing': editing }" :title="rename ? undefined : title" :aria-label="title">
           <VeyqInput
             v-if="editing"
             ref="nameInput"

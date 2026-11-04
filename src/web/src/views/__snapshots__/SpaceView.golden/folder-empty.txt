@@ -17,7 +17,7 @@ div.veyq-node-host
                 "Set cover"
         div.veyq-node-header-body
           div.veyq-node-header-titlerow
-            h1.veyq-node-header-title
+            h1.veyq-node-header-title [aria-label="Empty"]
               button.veyq-node-header-rename [aria-label="Rename “Empty”"]
                 "Empty"
             div.veyq-node-header-actions

@@ -453,6 +453,8 @@ describe('NodeHeader: what is editable at its place has no action (ADR 0110 deci
     expect(button.attributes('type')).toBe('button')
     expect(button.attributes('aria-label')).toBe(t('node.renameNamed', { name: 'Trips' }))
     expect(button.text()).toBe('Trips')
+    // The heading itself is named by the name, never by its button's "Rename …" (a reader's heading list, a spec's locator).
+    expect(w.find('h1').attributes('aria-label')).toBe('Trips')
   })
 
   it('a click makes it a field holding the name, pre-selected whole; Enter saves the trimmed name through the page\'s write', async () => {
