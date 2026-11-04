@@ -48,7 +48,7 @@ big cover are date, place and participants*; *and on a desktop the title and the
    layout, this decision fills its row).
 5. **The priority is the order of the node kind's list**, which the page that draws the header supplies, core's actions
    (favorite, cover, copy, download, report) included by their ids. A Memory's order is the owner's: favorite, upload,
-   share, upload request, participants, download, cover, banner, rename, move, copy. A folder's, a file's and a drop
+   share (one action for every link role since 2026-11-04, the upload request folded into it), participants, download, cover, banner, rename, move, copy. A folder's, a file's and a drop
    box's follow the same reading — favorite first, then what the kind is for, then sharing, then editing the node itself,
    then moving and copying it; each kind's list is the order its page passes.
 6. **Delete and report are never buttons.** They are always the last entries of the menu, behind a separator, delete
