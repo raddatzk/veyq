@@ -86,7 +86,8 @@ big cover are date, place and participants*; *and on a desktop the title and the
     a date, a place and who was there, Depot who uploaded a file) - and a **banner** core draws above the row (Memories').
     Core draws the facts in one look. **The cover is core's for every kind that takes one:** core shows it (decision 1's
     sizes) - without one the empty 16:9 frame with the kind's icon in its middle (owner 2026-11-04) - and it is the
-    button that opens core's cover dialog, its hint "Set cover" on the empty frame, where whoever looks may set it; else
+    button that opens core's cover dialog, its hint "Set cover" on the empty frame (in words where the frame is three rows tall or more, else the image glyph on
+    hover and focus, the words its tooltip), where whoever looks may set it; else
     a plain frame. A kind without a cover shows its icon tile. People link
     to a profile and show a member's picture on a member's page only - the header's default is a share page's, so no
     application can link a person for a guest. The body below the header is the application's own, to present itself.

@@ -687,9 +687,10 @@
 }
 
 /* The leading visual as the button that opens core's cover dialog (where whoever looks may set the cover): the cover or the
-   empty frame it is, with the hint over its foot - on hover and keyboard focus, and always on an empty wide frame (it says
-   what the frame is for); the words on a wide header, the icon alone on a compact one (the words stay its accessible name
-   and tooltip). */
+   empty frame it is, with the hint over its foot - on hover and keyboard focus, and always on an empty frame three rows tall
+   or more (`.is-roomy`, it says what the frame is for); the words only there and on a wide header. A lower frame (a folder's
+   name alone) and a compact header show the image glyph alone over the whole frame, on hover and focus (the words stay its
+   accessible name and tooltip) - the words would not fit (owner 2026-11-04). */
 .veyq-node-header-visual-button {
   position: relative;
   padding: 0;
@@ -725,17 +726,19 @@
 
 .veyq-node-header-visual-button:hover .veyq-node-header-cover-hint,
 .veyq-node-header-visual-button:focus-visible .veyq-node-header-cover-hint,
-.veyq-node-header:not(.is-compact) .veyq-node-header-visual-button.is-empty .veyq-node-header-cover-hint {
+.veyq-node-header:not(.is-compact) .veyq-node-header-visual-button.is-empty.is-roomy .veyq-node-header-cover-hint {
   opacity: 1;
 }
 
-.veyq-node-header.is-compact .veyq-node-header-cover-hint {
+.veyq-node-header.is-compact .veyq-node-header-cover-hint,
+.veyq-node-header-visual-button:not(.is-roomy) .veyq-node-header-cover-hint {
   inset-block-start: 0;
   padding: 0;
   font-size: 1rem;
 }
 
-.veyq-node-header.is-compact .veyq-node-header-cover-hint-label {
+.veyq-node-header.is-compact .veyq-node-header-cover-hint-label,
+.veyq-node-header-visual-button:not(.is-roomy) .veyq-node-header-cover-hint-label {
   display: none;
 }
 

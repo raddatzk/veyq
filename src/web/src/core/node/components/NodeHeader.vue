@@ -131,6 +131,10 @@ function editCover() {
 // The rows beside the visual, as counts the sheet sums to the visual's height (`styles/ui.css`): computed from the data the
 // header draws, never measured, so the wide width the layout answer reads does not move with a font or a resize.
 const rowCounts = computed(() => headerRowCounts(!!props.subtitle, props.facts))
+/** The cover button's words fit on a visual three rows tall or more (a Memory's, a chapter's): a lower one (a folder's name
+ *  alone) shows its kind's icon and, on hover and focus, the image glyph over the whole frame, the words its tooltip and
+ *  accessible name — as on a compact header (owner 2026-11-04). Read from the counts, never measured. */
+const roomyVisual = computed(() => 1 + Object.values(rowCounts.value).reduce((a, b) => a + b, 0) >= 3)
 const rowStyle = computed<CSSProperties>(() => ({
   '--veyq-node-header-subtitle-rows': String(rowCounts.value.subtitle),
   '--veyq-node-header-chip-rows': String(rowCounts.value.chips),
@@ -340,7 +344,7 @@ onBeforeUnmount(() => {
         v-if="coverEditable"
         type="button"
         class="veyq-node-header-visual-button veyq-node-header-cover"
-        :class="{ 'is-empty': !coverOf }"
+        :class="{ 'is-empty': !coverOf, 'is-roomy': roomyVisual }"
         :aria-label="coverLabel"
         :title="coverLabel"
         data-testid="node-header-cover"
@@ -362,8 +366,9 @@ onBeforeUnmount(() => {
     <div class="veyq-node-header-body">
       <div ref="titleRow" class="veyq-node-header-titlerow">
         <!-- The page's one h1. Where the name may be renamed it holds a real button that turns it into a field (Enter
-             writes, Esc cancels); the full name is then in that button's tooltip, else the title's. The heading is named by
-             the name itself (`aria-label`), so the button's "Rename “…”" never becomes the page's heading. -->
+             writes, Esc cancels) - with no tooltip (owner 2026-11-04): the field shows the whole name; a name that cannot be
+             renamed has it as the title's tooltip. The heading is named by the name itself (`aria-label`), so the button's
+             "Rename “…”" never becomes the page's heading. -->
         <h1 ref="titleEl" class="veyq-node-header-title" :class="{ 'is-editing': editing }" :title="rename ? undefined : title" :aria-label="title">
           <VeyqInput
             v-if="editing"
@@ -382,11 +387,9 @@ onBeforeUnmount(() => {
             @keydown.esc.prevent.stop="cancelRename"
             @blur="onRenameBlur"
           />
-          <VeyqTooltip v-else-if="rename" :text="renameLabel">
-            <button ref="nameButton" type="button" class="veyq-node-header-rename" :aria-label="renameLabel" data-testid="node-header-rename" @click="startRename">
-              {{ title }}
-            </button>
-          </VeyqTooltip>
+          <button v-else-if="rename" ref="nameButton" type="button" class="veyq-node-header-rename" :aria-label="renameLabel" data-testid="node-header-rename" @click="startRename">
+            {{ title }}
+          </button>
           <template v-else>{{ title }}</template>
         </h1>
         <div v-if="parts.buttons.length || parts.menuOnly.length" ref="actionsEl" class="veyq-node-header-actions">

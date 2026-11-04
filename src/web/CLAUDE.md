@@ -213,7 +213,7 @@ here; the server is blind.
   counts as custom properties (`headerRowCounts`) and the sheet sums them - computed, never measured (a Memory's four rows: 137.2 px, its
   cover ~244 px wide; a folder's name alone: 42 px). A kind with a `cover` shows the node's cover 16:9 at that height (`NodeCoverImage`, the
   view's resolved covers) or, without one, the empty 16:9 frame with the kind's icon, and where `cover.canSet(node)` it is the button that opens
-  core's cover dialog (hint on hover and focus, always on an empty wide frame), else a plain frame; a kind without one, the icon tile, a square of
+  core's cover dialog (hint on hover and focus, always on an empty wide frame of three rows or more — its words only there, a lower frame shows the glyph), else a plain frame; a kind without one, the icon tile, a square of
   that height. **What is edited at its place has no header entry** (ADR 0110 decision 11): no rename, cover or participants action - the name is
   renamed in place (the contribution's `rename`, `standardNodeRename`: the rename right AND the page's `renameTo` door; the `h1` - named by the
   name, `aria-label` - holds a button "Rename “…”", Enter writes through the kind's own write, Esc cancels, blur writes a changed name; check,

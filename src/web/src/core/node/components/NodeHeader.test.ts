@@ -99,6 +99,21 @@ describe('NodeHeader', () => {
       expect(w.find('.veyq-node-header').classes()).toEqual(bare.find('.veyq-node-header').classes())
     })
 
+    it('the cover button carries its words from three rows on; a lower frame (a folder\'s name alone) is the glyph alone', () => {
+      const header = (props: Record<string, unknown>) => {
+        const w = mount(NodeHeader, {
+          props: { node: NODE, title: 'Rome', icon: 'images', cover: true, ...props },
+          global: { plugins: [realI18n()], provide: coreActionsStandIn([], coverStandIn({ canSet: true })) },
+          attachTo: document.body,
+        })
+        mounted.push(w)
+        return w.find('button[data-testid="node-header-cover"]').classes()
+      }
+      expect(header({}), 'the name alone: one row').not.toContain('is-roomy')
+      expect(header({ subtitle: '3 items' }), 'two rows').not.toContain('is-roomy')
+      expect(header({ subtitle: '3 items', facts: [{ kind: 'date', label: 'Spring', empty: true }] })).toContain('is-roomy')
+    })
+
     it('a kind without a cover never shows one, whatever the view resolved', () => {
       const w = mount(NodeHeader, {
         props: { node: NODE, title: 'Rome', icon: 'file' },
@@ -455,6 +470,14 @@ describe('NodeHeader: what is editable at its place has no action (ADR 0110 deci
     expect(button.text()).toBe('Trips')
     // The heading itself is named by the name, never by its button's "Rename …" (a reader's heading list, a spec's locator).
     expect(w.find('h1').attributes('aria-label')).toBe('Trips')
+    // No tooltip on the name (owner 2026-11-04): no layer tooltip trigger (it marks its trigger with `data-state`, as every
+    // action button of this header has), no native title on the button or the heading.
+    const withAction = mountHeader({ title: 'Trips', node: NODE, rename: { save: vi.fn() }, actions: [{ id: 'x', label: 'X', icon: 'pencil', onClick: vi.fn(), shown: true }] })
+    expect(withAction.find('.veyq-node-header-actions button').attributes('data-state'), 'control: a tooltip trigger is marked').toBeDefined()
+    expect(withAction.find('button[data-testid="node-header-rename"]').attributes('data-state')).toBeUndefined()
+    expect(button.attributes('data-state')).toBeUndefined()
+    expect(button.attributes('title')).toBeUndefined()
+    expect(w.find('h1').attributes('title')).toBeUndefined()
   })
 
   it('a click makes it a field holding the name, pre-selected whole; Enter saves the trimmed name through the page\'s write', async () => {

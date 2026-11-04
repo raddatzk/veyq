@@ -182,7 +182,8 @@ or a one-off `1rem` label sitting in them.
   and 42 px compact). A kind that takes a cover and has none shows the empty 16:9 frame with its icon
   (`.veyq-node-header-cover.is-empty`, dark twin in `dark.css`). Where the cover may be set the cover or the frame is the
   button that opens core's cover dialog, its hint (`.veyq-node-header-cover-hint`) shown on hover and focus and always on
-  an empty wide frame. The content is centred against the visual. **The name is one size, cover or not:** 2rem wide,
+  an empty wide frame three rows tall or more (`.is-roomy`: a Memory's, a chapter's); its words only there — a lower
+  frame (a folder's name alone) and a compact header show the image glyph alone over the frame, the words its tooltip. The content is centred against the visual. **The name is one size, cover or not:** 2rem wide,
   1.5rem compact. **A fact under the name** is core's look too: a date or place a borderless chip
   (`.veyq-node-header-chip`), people core's `PersonGroup`.
 - **What is edited at its place has no header entry** — neither a button nor in the ⋯ menu: the name is a button in the

@@ -135,14 +135,17 @@ describe('node header styles', () => {
     expect(css).not.toMatch(/has-visual/)
   })
 
-  it('the cover button\'s hint shows on hover, on keyboard focus and on an empty wide frame; its words only on a wide header', () => {
+  it('the cover button\'s hint shows on hover, on keyboard focus and on an empty wide frame three rows tall; its words only there', () => {
     const shown = rule(
-      '.veyq-node-header-visual-button:hover .veyq-node-header-cover-hint,\n.veyq-node-header-visual-button:focus-visible .veyq-node-header-cover-hint,\n.veyq-node-header:not(.is-compact) .veyq-node-header-visual-button.is-empty .veyq-node-header-cover-hint',
+      '.veyq-node-header-visual-button:hover .veyq-node-header-cover-hint,\n.veyq-node-header-visual-button:focus-visible .veyq-node-header-cover-hint,\n.veyq-node-header:not(.is-compact) .veyq-node-header-visual-button.is-empty.is-roomy .veyq-node-header-cover-hint',
       css,
     )
     expect(shown).toMatch(/opacity:\s*1/)
     expect(rule('.veyq-node-header-cover-hint', css)).toMatch(/opacity:\s*0/)
-    expect(rule('.veyq-node-header.is-compact .veyq-node-header-cover-hint-label', css)).toMatch(/display:\s*none/)
+    // a compact header and a lower frame (a folder's name alone): the glyph over the whole frame, no words
+    const glyphOnly = '.veyq-node-header.is-compact .veyq-node-header-cover-hint,\n.veyq-node-header-visual-button:not(.is-roomy) .veyq-node-header-cover-hint'
+    expect(rule(glyphOnly, css)).toMatch(/inset-block-start:\s*0/)
+    expect(rule('.veyq-node-header.is-compact .veyq-node-header-cover-hint-label,\n.veyq-node-header-visual-button:not(.is-roomy) .veyq-node-header-cover-hint-label', css)).toMatch(/display:\s*none/)
   })
 
   it('on a folder level the header\'s action buttons and the toolbar\'s controls are one height', () => {
