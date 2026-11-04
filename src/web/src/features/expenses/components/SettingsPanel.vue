@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// A Pot's settings (ADR 0108 decision 2, a member's only — `../rights.ts`' `settings`): its base currency, fixed from its
+// A Pot's Settings tab: its people (the `people` slot, `PeoplePanel` — whoever may add or manage them) and, for a member who
+// may change the Pot's meta (ADR 0108 decision 2, `../rights.ts`' `settings`, [potSettings]), its base currency, fixed from its
 // first entry on because every entry carries its rate to it, and its own categories beside the default set, added and
 // renamed but never removed in the first cut (an entry names one by id). Written whole into the Pot's sealed meta with the
 // revision read (`PotSession.writeMeta`, ADR 0077): the change runs again on what the server holds after a conflict, so
@@ -15,7 +16,11 @@ import type { PotLedger } from '../domain/ledger'
 import type { PotSession } from '../potSession'
 import { knownCurrencies, minorUnitsOf } from '../amounts'
 
-const props = defineProps<{ session: PotSession; meta: PotMeta | null; ledger: PotLedger | null }>()
+const props = defineProps<{
+  session: PotSession; meta: PotMeta | null; ledger: PotLedger | null
+  /** The currency and the categories: who may change the Pot's meta (`settings`); a link guest gets the people alone. */
+  potSettings: boolean
+}>()
 const { t } = useI18n()
 
 /** The base currency is fixed once the Pot holds any money entry, live or deleted. */
@@ -71,7 +76,7 @@ async function renameCategory(id: string) {
 <template>
   <section class="expenses-settings">
     <h2>{{ t('expenses.tabs.settings') }}</h2>
-    <form class="veyq-form" @submit.prevent>
+    <form v-if="potSettings" class="veyq-form" @submit.prevent>
       <label>
         {{ t('expenses.baseCurrency') }}
         <VeyqSelect :model-value="currency" :options="currencyOptions" :disabled="fixed || busy" @update:model-value="setCurrency" />
@@ -79,7 +84,9 @@ async function renameCategory(id: string) {
       </label>
     </form>
 
-    <template v-if="meta">
+    <slot name="people" />
+
+    <template v-if="potSettings && meta">
       <h3 class="expenses-subhead">{{ t('expenses.settings.categories') }}</h3>
       <p class="veyq-form-copy">{{ t('expenses.settings.categoriesHint') }}</p>
       <ul v-if="meta.categories.length" class="veyq-list">
@@ -104,7 +111,7 @@ async function renameCategory(id: string) {
           </template>
         </li>
       </ul>
-      <form v-if="meta.categories.length < MAX_OWN_CATEGORIES" class="expenses-inline-form" @submit.prevent="addCategory">
+      <form v-if="meta.categories.length < MAX_OWN_CATEGORIES" class="expenses-inline-form expenses-add-category" @submit.prevent="addCategory">
         <VeyqInput v-model="newCategory" autocomplete="off" :aria-label="t('expenses.settings.categoryName')" :placeholder="t('expenses.settings.categoryName')" />
         <VeyqButton type="submit" :label="t('expenses.settings.addCategory')" icon="plus" size="small" :loading="busy" :disabled="!newCategory.trim()" />
       </form>

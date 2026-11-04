@@ -14,7 +14,7 @@ import Screenshot from '../../../components/Screenshot.astro';
 **Expenses** keeps **Pots** for shared costs: a trip, a shared flat, a club evening. Everyone puts in what they paid,
 and the Pot shows at any time who paid what and who owes whom.
 
-<Screenshot id="expenses-pot-entries" shows="An opened Pot on its Entries tab, with the tabs Entries, Balances, Overview, People and Settings, and a few entries, each with its title, date, amount and who paid" />
+<Screenshot id="expenses-pot-entries" shows="An opened Pot on its Entries tab, with the tabs Entries, Overview and Settings, and a few entries, each with its title, date, what it is and who paid, and its amount" />
 
 ## What you can do
 
@@ -31,20 +31,20 @@ and the Pot shows at any time who paid what and who owes whom.
 4. Create it. The Pot opens, with no entries yet.
 
 A person in a Pot is either a member of the space or just a name. A name is linked to no account, so you can add
-someone who does not use veyq. You can add more people of either kind on **People** later.
+someone who does not use veyq. You can add more people of either kind on **Settings** later.
 
 ## The Pot's page
 
 - **Entries**: everything that was paid, paid back or handed over. See [Record an expense](/veyq/expenses/record-an-expense/).
-- **Balances**: who is owed and who owes, and a suggestion how to settle up. See [Settle up](/veyq/expenses/settle-up/).
-- **Overview**: the totals per category, and per person what they paid beside what their share was.
-- **People**: the people in the Pot.
-- **Settings** (members of the space only): the base currency, which can be changed only while the Pot has no entry,
-  and the Pot's own categories beside the given ones. You can add and rename your own categories, not remove them.
+- **Overview**: who is owed and who owes, each person's row saying what they paid, what they consumed and what they
+  transferred; a suggestion how to settle up; and the totals per category. See [Settle up](/veyq/expenses/settle-up/).
+- **Settings**: the people in the Pot, each with their balance in short. For members of the space also the base
+  currency, which can be changed only while the Pot has no entry, and the Pot's own categories beside the given ones.
+  You can add and rename your own categories, not remove them.
 
 ## People
 
-On **People**, whoever may change entries can add a person by typing a name, and rename a name. A member of the
+On **Settings**, whoever may change entries can add a person by typing a name, and rename a name. A member of the
 space can also add another member of the space: the Pot then shows that person with their current name and profile
 picture, and as a **former member** once they have left the space or deleted their account; their entries stay. A
 person added as a name is never linked to an account later.

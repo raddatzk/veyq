@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// A Pot's people (uc.expenses.manage-participants, docs/apps/expenses.md § The Pot, ADR 0108 decision 6): whoever may
+// A Pot's people (uc.expenses.manage-participants, docs/apps/expenses.md § The Pot, ADR 0108 decision 6), a section of
+// the Settings tab (owner 2026-11-04), each person with their balance in short (the Overview explains it): whoever may
 // write adds and renames one; a member deactivates or activates one, and deletes a settled one (its name erased, entries
 // show "deleted people") — or removes one no revision names, which then appears nowhere. Every erased person is
 // summarised in one line. What is offered is `../rights.ts`' answer; the settled rule is the client's, asked again by the
@@ -128,7 +129,7 @@ async function erase(p: Participant) {
 
 <template>
   <section class="expenses-people">
-    <h2>{{ t('expenses.tabs.people') }}</h2>
+    <h3 class="expenses-subhead">{{ t('expenses.tabs.people') }}</h3>
     <ul class="veyq-list">
       <li v-for="p in shown" :key="p.id" class="veyq-list-row expenses-static-row" :class="{ 'has-leading': editing !== p.id }" :data-person="p.id">
         <span v-if="editing === p.id" class="expenses-inline-form">

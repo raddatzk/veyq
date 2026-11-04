@@ -41,7 +41,6 @@ const en = {
     },
     tabs: {
       entries: 'Entries',
-      balances: 'Balances',
       overview: 'Overview',
       people: 'People',
       settings: 'Settings',
@@ -200,6 +199,11 @@ const en = {
       unknownWriter: 'Someone',
     },
     balances: {
+      title: 'Balances',
+      paid: 'paid {amount}',
+      consumed: 'consumed {amount}',
+      sent: 'transferred {amount}',
+      received: 'received {amount}',
       owed: 'is owed {amount}',
       owes: 'owes {amount}',
       settled: 'settled',
@@ -218,10 +222,6 @@ const en = {
     overview: {
       empty: 'No costs yet.',
       byCategory: 'By category',
-      byPerson: 'By person',
-      person: 'Person',
-      paid: 'Paid',
-      share: 'Consumed',
       total: 'Total',
     },
     people: {
@@ -306,8 +306,7 @@ const de: typeof en = {
     },
     tabs: {
       entries: 'Einträge',
-      balances: 'Salden',
-      overview: 'Überblick',
+      overview: 'Übersicht',
       people: 'Personen',
       settings: 'Einstellungen',
     },
@@ -462,6 +461,11 @@ const de: typeof en = {
       unknownWriter: 'Jemand',
     },
     balances: {
+      title: 'Salden',
+      paid: 'bezahlt {amount}',
+      consumed: 'verbraucht {amount}',
+      sent: 'überwiesen {amount}',
+      received: 'erhalten {amount}',
       owed: 'bekommt {amount}',
       owes: 'schuldet {amount}',
       settled: 'ausgeglichen',
@@ -480,10 +484,6 @@ const de: typeof en = {
     overview: {
       empty: 'Noch keine Kosten.',
       byCategory: 'Nach Kategorie',
-      byPerson: 'Nach Person',
-      person: 'Person',
-      paid: 'Bezahlt',
-      share: 'Verbraucht',
       total: 'Summe',
     },
     people: {

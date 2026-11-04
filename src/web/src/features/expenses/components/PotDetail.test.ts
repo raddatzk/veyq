@@ -125,7 +125,7 @@ describe('PotDetail for a member', () => {
     const w = mountPot()
     await flushPromises()
     expect(w.find('h1').text()).toBe('Trip')
-    expect(tabLabels(w)).toEqual([t('expenses.tabs.entries'), t('expenses.tabs.balances'), t('expenses.tabs.overview'), t('expenses.tabs.people'), t('expenses.tabs.settings')])
+    expect(tabLabels(w)).toEqual([t('expenses.tabs.entries'), t('expenses.tabs.overview'), t('expenses.tabs.settings')])
     expect(headerButtonIds(w)).toEqual(expect.arrayContaining(['share', 'rename', 'move']))
     expect(w.text()).toContain('Dinner')
     expect(w.text()).not.toContain(t('expenses.ledger.missing'))
@@ -154,14 +154,23 @@ describe('PotDetail for a member', () => {
   it('shows the balances and the settle-up of the entries, and records one transfer of it', async () => {
     const w = mountPot()
     await flushPromises()
-    await openTab(w, t('expenses.tabs.balances'))
+    await openTab(w, t('expenses.tabs.overview'))
     expect(w.text()).toContain(t('expenses.balances.owed', { amount: '€60.00' }))
+    // each row says what makes its balance: Anna paid the dinner and consumed a third of it
+    expect(w.find(`.expenses-balances [data-person="${ANNA}"]`).text()).toContain(
+      [t('expenses.balances.paid', { amount: '€90.00' }), t('expenses.balances.consumed', { amount: '€30.00' })].join(' · '),
+    )
+    // the people's figures and the costs are this one tab: the category total beside the balances
+    expect(w.find('.expenses-categories').text()).toContain('€90.00')
     expect(w.text()).toContain(t('expenses.balances.pays', { from: 'Ben', to: 'Anna' }))
     await buttonIn(w.element, t('expenses.balances.recordAll'))!.click()
     await flushPromises()
     expect(server.appends).toHaveLength(1)
     expect((server.appends[0] as { content: { kind: string; amount: number } }[]).map((x) => [x.content.kind, x.content.amount])).toEqual([['transfer', 3000], ['transfer', 3000]])
     expect(w.text()).toContain(t('expenses.balances.allSettled'))
+    // the transfers now explain the balances: Anna received both, Ben sent his
+    expect(w.find(`.expenses-balances [data-person="${ANNA}"]`).text()).toContain(t('expenses.balances.received', { amount: '€60.00' }))
+    expect(w.find(`.expenses-balances [data-person="${BEN}"]`).text()).toContain(t('expenses.balances.sent', { amount: '€30.00' }))
   })
 
   // uc.expenses.balances step 2 (inbox #541): the viewer picks who they are once; their row is marked in the balances and
@@ -171,7 +180,7 @@ describe('PotDetail for a member', () => {
     localStorage.clear()
     const w = mountPot()
     await flushPromises()
-    await openTab(w, t('expenses.tabs.balances'))
+    await openTab(w, t('expenses.tabs.overview'))
     expect(w.findAll('.expenses-you'), 'nobody is marked before a choice').toHaveLength(0)
     const reads = vi.mocked(readMemberPot).mock.calls.length
     w.findComponent(VeyqSelect).vm.$emit('update:modelValue', BEN)
@@ -190,13 +199,13 @@ describe('PotDetail for a member', () => {
     // another visit on this device remembers it; another account on it does not share it
     const again = mountPot()
     await flushPromises()
-    await openTab(again, t('expenses.tabs.balances'))
+    await openTab(again, t('expenses.tabs.overview'))
     expect(again.find(`[data-person="${BEN}"] .expenses-you`).exists()).toBe(true)
     again.unmount()
     setAccountUserId('u-other')
     const other = mountPot()
     await flushPromises()
-    await openTab(other, t('expenses.tabs.balances'))
+    await openTab(other, t('expenses.tabs.overview'))
     expect(other.findAll('.expenses-you'), 'another account on this browser chose nothing').toHaveLength(0)
     // and "not chosen" clears it
     other.findComponent(VeyqSelect).vm.$emit('update:modelValue', ANNA)
@@ -312,7 +321,7 @@ describe('PotDetail for a member', () => {
     server.current.append([{ entryId: '0e000000-0000-4000-9000-000000000003', content: { kind: 'transfer', date: '2026-07-02', currency: 'EUR', minorUnits: 2, rate: '1', amount: 3000, receipts: [], from: CLEO, to: ANNA } }])
     const w = mountPot()
     await flushPromises()
-    await openTab(w, t('expenses.tabs.people'))
+    await openTab(w, t('expenses.tabs.settings'))
     const row = (id: string) => w.find(`[data-person="${id}"]`)
     expect(row(BEN).find('[data-action="delete"]').exists()).toBe(false)
     expect(row(CLEO).find('[data-action="delete"]').exists()).toBe(true)
@@ -339,7 +348,7 @@ describe('PotDetail for a member', () => {
       server.current.append([{ entryId: '0e000000-0000-4000-9000-0000000000e3', content: expense('Boat', 2000, ME, [ME, ANNA]) }])
       const w = mountPot()
       await flushPromises()
-      await openTab(w, t('expenses.tabs.balances'))
+      await openTab(w, t('expenses.tabs.overview'))
       expect(marked(w, '.expenses-balances')).toEqual([ME])
       expect((w.findComponent(VeyqSelect).props() as unknown as { modelValue?: string }).modelValue).toBe(ME)
       await openTab(w, t('expenses.tabs.overview'))
@@ -355,7 +364,7 @@ describe('PotDetail for a member', () => {
       server.current.append([{ entryId: ME, content: own(chose, 4) }])
       let w = mountPot()
       await flushPromises()
-      await openTab(w, t('expenses.tabs.balances'))
+      await openTab(w, t('expenses.tabs.overview'))
       expect(marked(w, '.expenses-balances')).toEqual([BEN])
       // choosing nobody is a choice too: stored, and the default does not come back
       w.findComponent(VeyqSelect).vm.$emit('update:modelValue', 'nobody')
@@ -370,7 +379,7 @@ describe('PotDetail for a member', () => {
       server.current.append([{ entryId: '0e000000-0000-4000-8000-0000000000e2', content: own(later, 5) }])
       w = mountPot()
       await flushPromises()
-      await openTab(w, t('expenses.tabs.balances'))
+      await openTab(w, t('expenses.tabs.overview'))
       expect(marked(w, '.expenses-balances')).toEqual([])
     })
 
@@ -380,7 +389,7 @@ describe('PotDetail for a member', () => {
       server.current.append([{ entryId: ME, content: own('0d000000-0000-4000-8000-0000000000f5', 4) }])
       const w = mountPot()
       await flushPromises()
-      await openTab(w, t('expenses.tabs.balances'))
+      await openTab(w, t('expenses.tabs.overview'))
       expect(marked(w, '.expenses-balances')).toEqual([])
       expect((w.findComponent(VeyqSelect).props() as unknown as { modelValue?: string }).modelValue).toBe('nobody')
     })
@@ -400,7 +409,7 @@ describe('PotDetail for a member', () => {
     const w = mountPot()
     await flushPromises()
     expect(loadScopePeople).toHaveBeenCalledWith(SCOPE)
-    await openTab(w, t('expenses.tabs.people'))
+    await openTab(w, t('expenses.tabs.settings'))
     const picker = () => w.find('form.expenses-add-member')
     type SelectProps = { placeholder?: string; options: { value: string }[] }
     const propsOf = (c: VueWrapper) => c.props() as unknown as SelectProps
@@ -431,7 +440,7 @@ describe('PotDetail for a member', () => {
     const w = mountPot()
     await flushPromises()
     expect(w.find('[data-entry="0e000000-0000-4000-9000-000000000007"]').text()).toContain('Gus Sealed')
-    await openTab(w, t('expenses.tabs.people'))
+    await openTab(w, t('expenses.tabs.settings'))
     const dana = w.find(`[data-person="${DANA}"]`)
     expect(dana.text()).toContain('Dana Now')
     expect(dana.text()).not.toContain('Dana Old')
@@ -445,7 +454,7 @@ describe('PotDetail for a member', () => {
     expect(buttonIn(dana.element, t('expenses.people.rename', { name: 'Dana Old' }))).toBeUndefined()
     expect(buttonIn(w.find(`[data-person="${ANNA}"]`).element, t('expenses.people.rename', { name: 'Anna' }))).toBeDefined()
     // the balances name them the same way
-    await openTab(w, t('expenses.tabs.balances'))
+    await openTab(w, t('expenses.tabs.overview'))
     expect(w.text()).toContain('Dana Now')
     expect(w.text()).not.toContain('Dana Old')
   })
@@ -455,7 +464,7 @@ describe('PotDetail for a member', () => {
     vi.mocked(loadScopePeople).mockResolvedValueOnce([who(U_DANA, 'Dana Now')])
     const w = mountPot()
     await flushPromises()
-    await openTab(w, t('expenses.tabs.people'))
+    await openTab(w, t('expenses.tabs.settings'))
     await buttonIn(w.find(`[data-person="${DANA}"]`).element, t('expenses.people.deactivate'))!.click()
     await flushPromises()
     const latest = server.current.held().filter((r) => r.entryId === DANA).at(-1)!
@@ -471,7 +480,7 @@ describe('PotDetail for a member', () => {
     await flushPromises()
     expect(server.appends.at(-1)).toEqual([{ entryId: DINNER, content: { kind: 'deleted' }, basedOn: 1 }])
     expect(w.text()).toContain(t('expenses.entries.deletedTitle'))
-    await openTab(w, t('expenses.tabs.balances'))
+    await openTab(w, t('expenses.tabs.overview'))
     expect(w.text()).toContain(t('expenses.balances.allSettled'))
     await openTab(w, t('expenses.tabs.entries'))
     await w.find(`[data-entry="${DINNER}"]`).trigger('click')
@@ -487,7 +496,7 @@ describe('PotDetail for a member', () => {
     // It names the heads its writer read — the tombstone it lifts — never those the deleted content once named.
     expect(heads.map((h) => `${h.entryId}:${h.revision}`)).toEqual([`${DINNER}:2`])
     expect(w.text()).not.toContain(t('expenses.entries.deletedTitle'))
-    await openTab(w, t('expenses.tabs.balances'))
+    await openTab(w, t('expenses.tabs.overview'))
     expect(w.text()).toContain(t('expenses.balances.owed', { amount: '€60.00' }))
   })
 
@@ -497,7 +506,7 @@ describe('PotDetail for a member', () => {
     server.current.append([{ entryId: '0e000000-0000-4000-9000-000000000003', content: { kind: 'transfer', date: '2026-07-02', currency: 'EUR', minorUnits: 2, rate: '1', amount: 3000, receipts: [], from: CLEO, to: ANNA } }])
     const w = mountPot()
     await flushPromises()
-    await openTab(w, t('expenses.tabs.people'))
+    await openTab(w, t('expenses.tabs.settings'))
     const row = (id: string) => w.find(`[data-person="${id}"]`)
     // Cleo is named by the dinner: delete, never remove; Dan by nothing: remove, never delete.
     expect([row(CLEO).find('[data-action="delete"]').exists(), row(CLEO).find('[data-action="remove"]').exists()]).toEqual([true, false])
@@ -525,7 +534,7 @@ describe('PotDetail for a member', () => {
     server.current.erase(CLEO)
     const w = mountPot()
     await flushPromises()
-    await openTab(w, t('expenses.tabs.people'))
+    await openTab(w, t('expenses.tabs.settings'))
     expect(w.text()).toContain(t('expenses.people.deletedSummary', { n: 1 }, 1))
     expect(w.text()).not.toContain(t('expenses.people.deletedSummary', { n: 2 }, 2))
   })
@@ -535,9 +544,9 @@ describe('PotDetail for a member', () => {
     await flushPromises()
     await openTab(w, t('expenses.tabs.settings'))
     expect(w.text()).toContain(t('expenses.settings.currencyFixed'))
-    const input = w.find('.expenses-settings form.expenses-inline-form input')
+    const input = w.find('.expenses-settings form.expenses-add-category input')
     await input.setValue('Ski pass')
-    await w.find('.expenses-settings form.expenses-inline-form').trigger('submit')
+    await w.find('.expenses-settings form.expenses-add-category').trigger('submit')
     await flushPromises()
     expect(writeNodeMeta).toHaveBeenCalledTimes(1)
     // The edit is applied to whatever meta the write reads (a peer's category written meanwhile included): it keeps

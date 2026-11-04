@@ -25,7 +25,7 @@ describe('people on screen', () => {
     expect(personLabel(ledger, ANNA, t)).toBe('Anna')
   })
 
-  it('erased people with an open balance are ONE line, their balances summed; settled ones are not shown', () => {
+  it('erased people with an open balance are ONE line, their balances summed; settled ones without costs are not shown', () => {
     const s = pot()
     s.erase(CLEO)
     s.erase(DAN)
@@ -37,6 +37,36 @@ describe('people on screen', () => {
     const settled = pot()
     settled.erase(DAN)
     expect(shownBalances(buildLedger(settled.held(), EUR)).map((r) => r.id)).toEqual([ANNA, BEN, CLEO])
+  })
+
+  it('a settled deactivated or deleted person with costs keeps a row, so the rows add up to the costs (control: without costs, none)', () => {
+    const s = pot()
+    s.append([{ entryId: '0e000000-0000-4000-9000-000000000001', content: expense('Dinner', 6000, ANNA, [ANNA, BEN, CLEO]) }])
+    // Ben and Cleo pay their part back; then Ben is deactivated and Cleo deleted, both settled.
+    for (const [i, from] of [[2, BEN], [3, CLEO]] as const) {
+      s.append([{ entryId: `0e000000-0000-4000-9000-00000000000${i}`, content: { kind: 'transfer', date: '2026-07-02', currency: 'EUR', minorUnits: 2, rate: '1', amount: 2000, receipts: [], from, to: ANNA } }])
+    }
+    s.append([{ entryId: BEN, content: person('Ben', 2, false) }])
+    s.erase(CLEO)
+    const ledger = buildLedger(s.held(), EUR)
+    const rows = shownBalances(ledger)
+    expect(rows.map((r) => [r.id, Number(r.balance), Number(r.consumed)])).toEqual([[ANNA, 0, 2000], [BEN, 0, 2000], [DAN, 0, 0], [null, 0, 2000]])
+    const total = [...ledger.overview.byCategory.values()].reduce((a, b) => a + b, 0n)
+    expect(rows.reduce((a, r) => a + r.consumed, 0n)).toBe(total)
+    expect(rows.reduce((a, r) => a + r.paid, 0n)).toBe(total)
+  })
+
+  it('a row explains its balance: paid less consumed plus the net of its transfers', () => {
+    const s = pot()
+    s.append([{ entryId: '0e000000-0000-4000-9000-000000000001', content: expense('Dinner', 9000, ANNA, [ANNA, BEN, CLEO]) }])
+    // Ben pays Anna back his part; Cleo does not.
+    s.append([{ entryId: '0e000000-0000-4000-9000-000000000002', content: { kind: 'transfer', date: '2026-07-02', currency: 'EUR', minorUnits: 2, rate: '1', amount: 3000, receipts: [], from: BEN, to: ANNA } }])
+    const rows = shownBalances(buildLedger(s.held(), EUR))
+    const of = (id: string) => rows.find((r) => r.id === id)!
+    expect([of(ANNA).paid, of(ANNA).consumed, of(ANNA).settled, of(ANNA).balance].map(Number)).toEqual([9000, 3000, -3000, 3000])
+    expect([of(BEN).paid, of(BEN).consumed, of(BEN).settled, of(BEN).balance].map(Number)).toEqual([0, 3000, 3000, 0])
+    expect([of(CLEO).paid, of(CLEO).consumed, of(CLEO).settled, of(CLEO).balance].map(Number)).toEqual([0, 3000, 0, -3000])
+    for (const r of rows) expect(r.paid - r.consumed + r.settled).toBe(r.balance)
   })
 
   it('a deactivated person is not offered for a new entry, only on the entry that already names them', () => {

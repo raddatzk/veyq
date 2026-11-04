@@ -79,23 +79,36 @@ export function offeredPeople(ledger: PotLedger, named: readonly string[] = []):
   return ledger.participants.filter((p) => (p.active && !p.erased) || keep.has(p.id))
 }
 
+/** One person's row of the balances: what they paid and consumed (`overview.byPerson`: expenses and refunds) and the
+ *  net of their transfers, `settled` — what they paid others (positive) or received (negative) — which together make the
+ *  balance: `balance = paid - consumed + settled`, so the three figures explain the one. */
+export type ShownBalance = { id: string | null; participant: Participant | null; balance: bigint; paid: bigint; consumed: bigint; settled: bigint }
+
 /** A balance per person as the screen shows it: each live or deactivated person by name, and every erased one summed
- *  into ONE line (`id: null`). Deactivated or erased people whose balance is settled are left out — they show again
- *  once an edit unsettles them, so the group sees what is open. */
-export function shownBalances(ledger: PotLedger): { id: string | null; participant: Participant | null; balance: bigint }[] {
-  const rows: { id: string | null; participant: Participant | null; balance: bigint }[] = []
-  let erased = 0n
-  let anyErasedOpen = false
+ *  into ONE line (`id: null`). A deactivated or erased person shows while their balance is open or they have costs in
+ *  the Pot (paid or consumed), so the rows always add up to the cost per category; only one who is settled and has
+ *  none is left out — and shows again once an edit gives them either. */
+export function shownBalances(ledger: PotLedger): ShownBalance[] {
+  const rows: ShownBalance[] = []
+  const erased: ShownBalance = { id: null, participant: null, balance: 0n, paid: 0n, consumed: 0n, settled: 0n }
+  let anyErasedShown = false
   for (const p of ledger.participants) {
     const balance = ledger.balances.get(p.id) ?? 0n
+    const costs = ledger.overview.byPerson.get(p.id)
+    const paid = costs?.paid ?? 0n
+    const consumed = costs?.share ?? 0n
+    const row: ShownBalance = { id: p.id, participant: p, balance, paid, consumed, settled: balance - paid + consumed }
     if (p.erased) {
-      erased += balance
-      if (balance !== 0n) anyErasedOpen = true
+      erased.balance += row.balance
+      erased.paid += row.paid
+      erased.consumed += row.consumed
+      erased.settled += row.settled
+      if (balance !== 0n || paid !== 0n || consumed !== 0n) anyErasedShown = true
       continue
     }
-    if (!p.active && balance === 0n) continue
-    rows.push({ id: p.id, participant: p, balance })
+    if (!p.active && balance === 0n && paid === 0n && consumed === 0n) continue
+    rows.push(row)
   }
-  if (anyErasedOpen) rows.push({ id: null, participant: null, balance: erased })
+  if (anyErasedShown) rows.push(erased)
   return rows
 }

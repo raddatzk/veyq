@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // An opened Pot (ADR 0108, docs/apps/expenses.md): the body under core's header (core's page draws it, ADR 0110 decision 10;
-// this contributes the Pot's share, rename, move and delete and its currency as the subtitle), the ledger notice when the check finds a revision missing, and the tabs Entries / Balances /
-// Overview / People — and Settings for whoever may change the Pot's meta. Every control is `../rights.ts`' answer for the
+// this contributes the Pot's share, rename, move and delete and its currency as the subtitle), the ledger notice when the check finds a revision missing, and the tabs Entries /
+// Overview (the balances, the settle-up and the costs) — and Settings (the people, the currency, the categories) for whoever
+// may add or manage people or change the Pot's meta (owner 2026-11-04). Every control is `../rights.ts`' answer for the
 // viewer: a member and a share guest of a `READ` or `READ_WRITE` link get this very page with functions removed (inbox
-// #401) — a guest sees no Settings, manages no people beyond adding and renaming, and reads no writer names (its read has
+// #401) — a guest changes no currency or category, manages no people beyond adding and renaming, and reads no writer names (its read has
 // none, decision 3). Core's page of a link mounts this `detail` at the link's root and below it.
 //
 // The Pot's revisions live beside the tree: `../potSession.ts` reads them, keeps them live and writes them.
@@ -31,7 +32,6 @@ import { reportEntry, reportReceipt } from '../report'
 import { potReceiptSource, type HeldReceipt } from '../receipts'
 import EntriesPanel from './EntriesPanel.vue'
 import EntryEditor from './EntryEditor.vue'
-import BalancesPanel from './BalancesPanel.vue'
 import OverviewPanel from './OverviewPanel.vue'
 import PeoplePanel from './PeoplePanel.vue'
 import SettingsPanel from './SettingsPanel.vue'
@@ -55,7 +55,7 @@ const { meta, ledger, check, loaded, failed } = session
 // A member's history names each writer; the people come from the tenant's directory (a guest's page reads none).
 const people = shallowRef<ReadonlyMap<string, Person> | null>(null)
 // The space's current members (ADR 0108 decision 2): a member participant reads by their current name and picture, one the
-// list no longer holds as a former member, and the People tab offers the others to add. A member's read only: a guest's
+// list no longer holds as a former member, and the Settings tab's people offer the others to add. A member's read only: a guest's
 // page reads no member list, so it is handed none and shows each participant by the name sealed at adding.
 const members = shallowRef<Person[] | null>(null)
 const directory = computed<MemberDirectory>(() => (members.value ? new Map(members.value.map((m) => [m.userId, m] as const)) : null))
@@ -85,6 +85,8 @@ const subtitle = computed(() => (meta.value ? t('expenses.inCurrency', { currenc
 contributeNodeHeader(() => ({ subtitle: subtitle.value, actions: headerActions.value }))
 
 const tab = ref('entries')
+/** The Settings tab: the people for whoever may add or manage them, the Pot's meta for whoever may change it. */
+const settingsTab = computed(() => rights.value.settings || rights.value.addPeople || rights.value.managePeople)
 const editing = ref<{ entryId: string | null } | null>(null)
 const reportsEntries = computed(() => reportOn.value && canReport(props.access) && !!props.contentKey)
 
@@ -130,37 +132,33 @@ function receiptSource(receipt: HeldReceipt) {
       <VeyqTabs v-model:value="tab">
         <VeyqTabList :aria-label="node.name">
           <VeyqTab value="entries">{{ t('expenses.tabs.entries') }}</VeyqTab>
-          <VeyqTab value="balances">{{ t('expenses.tabs.balances') }}</VeyqTab>
           <VeyqTab value="overview">{{ t('expenses.tabs.overview') }}</VeyqTab>
-          <VeyqTab value="people">{{ t('expenses.tabs.people') }}</VeyqTab>
-          <VeyqTab v-if="rights.settings" value="settings">{{ t('expenses.tabs.settings') }}</VeyqTab>
+          <VeyqTab v-if="settingsTab" value="settings">{{ t('expenses.tabs.settings') }}</VeyqTab>
         </VeyqTabList>
         <VeyqTabPanels>
           <template v-if="meta && ledger">
             <VeyqTabPanel value="entries">
               <EntriesPanel :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :directory="directory" @open="(entryId) => (editing = { entryId })" />
             </VeyqTabPanel>
-            <VeyqTabPanel value="balances">
-              <BalancesPanel :session="session" :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :pot-id="node.id" :directory="directory" :self-id="selfId" />
-            </VeyqTabPanel>
             <VeyqTabPanel value="overview">
-              <OverviewPanel :ledger="ledger" :meta="meta" :pot-id="node.id" :directory="directory" :self-id="selfId" />
-            </VeyqTabPanel>
-            <VeyqTabPanel value="people">
-              <PeoplePanel
-                :session="session"
-                :ledger="ledger"
-                :meta="meta"
-                :add-people="rights.addPeople"
-                :add-members="rights.addMembers"
-                :manage-people="rights.managePeople"
-                :members="rights.addMembers ? members : null"
-                :directory="directory"
-              />
+              <OverviewPanel :session="session" :ledger="ledger" :meta="meta" :can-write="rights.writeEntries" :pot-id="node.id" :directory="directory" :self-id="selfId" />
             </VeyqTabPanel>
           </template>
-          <VeyqTabPanel v-if="rights.settings" value="settings">
-            <SettingsPanel :session="session" :meta="meta" :ledger="ledger" />
+          <VeyqTabPanel v-if="settingsTab" value="settings">
+            <SettingsPanel :session="session" :meta="meta" :ledger="ledger" :pot-settings="rights.settings">
+              <template v-if="meta && ledger" #people>
+                <PeoplePanel
+                  :session="session"
+                  :ledger="ledger"
+                  :meta="meta"
+                  :add-people="rights.addPeople"
+                  :add-members="rights.addMembers"
+                  :manage-people="rights.managePeople"
+                  :members="rights.addMembers ? members : null"
+                  :directory="directory"
+                />
+              </template>
+            </SettingsPanel>
           </VeyqTabPanel>
         </VeyqTabPanels>
       </VeyqTabs>

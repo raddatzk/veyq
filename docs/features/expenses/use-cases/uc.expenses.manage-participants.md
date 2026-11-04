@@ -13,7 +13,8 @@
 
 ## Main flow
 
-1. The actor opens the Pot's **People**.
+1. The actor opens the Pot's **Settings**, whose people list shows each person with their balance in short (the
+   **Overview** explains it); a link guest who may add people sees this list alone there.
 2. **Add:** a name typed, or — a member's view — one of the space's current members not yet in the Pot; the client
    mints the record's id and appends its first revision, for a member with their user id and, sealed with it, their
    display name as it is now ([ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)

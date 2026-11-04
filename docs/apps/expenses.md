@@ -16,7 +16,7 @@ and anyone in the Pot sees at any time who owes whom.
 
 - **Participants** are a **member** of the space or a **name** (ADR 0108 decision 2). Whoever may write adds either:
   a name typed, or one of the space's current members not yet in the Pot, chosen from the member list a Memory's
-  participants come from (`core/people/directory.ts`) — on **People**, and already in the dialog that creates the Pot,
+  participants come from (`core/people/directory.ts`) — on **Settings**, the Pot's people, and already in the dialog that creates the Pot,
   through the same picker rules (`people.ts`' `addableMembers` and `participantRecord`). A member participant's record holds the member's user id and,
   sealed with it, their display name when they were added (`member` in [the entry format](../../contracts/expenses/entry.v1.schema.json), optional and additive under `v: 1`: a Pot written before it reads as names). A link guest adds
   names only — it cannot see the space's members — which is the member's view with one function fewer. A member is a
@@ -229,6 +229,12 @@ A receipt is an image or a PDF of at most 10 MiB kept with an entry, up to 100 p
   matter. Recording one is a transfer entry.
 - **Overviews**: total cost per category, per person (what they paid and what their share was, side by side — either
   alone misleads), and category by person. Refunds count against their category; transfers are not costs.
+- **On screen** (owner 2026-11-04): the Pot has three tabs. **Entries**; **Overview** — each person's balance, its row
+  explaining it by what they paid, what they consumed and the net of their transfers (`balance = paid − consumed +
+  transfers`, so the three figures add up to the one; `people.ts`' `shownBalances`), the settle-up below, then the cost
+  per category; and **Settings** for whoever may add or manage people or change the Pot's meta — the people, each with
+  their balance in short, and, for a member who may change the meta, the base currency and the own categories. Category
+  by person is computed (`overview.byCategoryAndPerson`) and shown nowhere yet.
 
 ## Rights
 

@@ -5,8 +5,8 @@
 //   1. A creates a Pot in a folder — base currency EUR, three people in order — and the folder's row names its currency;
 //   2. A types in the "trip" Pot of contracts/expenses/v1-vectors.json, its nine entries as the vector holds them (all
 //      rest, items with a rest by shares, foreign currencies at a typed rate, items by percent and by shares, two payers,
-//      exact amounts as one item each, a refund with two receivers and an item, a transfer): Balances, the settle-up and
-//      the Overview show what the vector computes;
+//      exact amounts as one item each, a refund with two receivers and an item, a transfer): the Overview's balances, its
+//      settle-up and its costs by category and by person show what the vector computes;
 //   2a. A's device fetched the day's ECB table once (answered by the lane's fixture, `src/egress.ts`), with the date and
 //      nothing else; a new entry in USD gets its rate filled from it, typeable, citing the ECB and the rows' date — no
 //      second request;
@@ -14,7 +14,8 @@
 //      changed (the one `409` the pass provokes), shows B's version, and saving again puts A's on top; the history names
 //      A, B, A;
 //   4. A shares the Pot READ_WRITE (viewing, or viewing and adding: no other role); the guest names itself, adds a person
-//      and an entry, sees no Settings, manages no people and reads no writer's name; A's history names the guest;
+//      and an entry, finds only the people in Settings, manages none of them and reads no writer's name; A's history
+//      names the guest;
 //   4c. A, the tenant owner, switches the exchange rates off (Settings → Capabilities): B's and the guest's devices, which
 //      hold no table yet, make no request and ask for the rate — the guest learns the switch from its Pot read, its
 //      client holding only the instance's manifest; switched on again, the guest's device fetches and fills (control);
@@ -28,7 +29,7 @@
 //      and reads the entry's three versions in plaintext, then dismisses it (the shared queue is left as found);
 //   9. A removes B from the group, which rotates the group's key and re-keys the Pot: no re-key left running, every
 //      figure unchanged, no ledger notice, and the Pot still opens for A and through the guest's link;
-//  10. the Pot at 375 px: Entries, Balances, the editor with items, People — no horizontal scroll, every action in reach.
+//  10. the Pot at 375 px: Entries, Overview, the editor with items, Settings — no horizontal scroll, every action in reach.
 //
 // Receipts (uc.expenses.attach-receipts), in the same pass:
 //   2b. A keeps a JPEG, a PDF and a text that claims to be a PDF with "Museum" (a `.txt` is refused at the picker): the
@@ -158,7 +159,7 @@ async function openPot(page: Page, L: Labels, pot: string): Promise<void> {
   await expect(page.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
 }
 
-/** What the Balances tab must show for [balances] (base minor units by participant id), sorted by name. */
+/** What the Overview's balances must show for [balances] (base minor units by participant id), sorted by name. */
 function balanceRows(L: Labels, lang: Lang, balances: Record<string, number>, settledToo: string[] = []): [string, string][] {
   const text = (b: number) =>
     b > 0 ? L.pot.owed(money(b, 'EUR', 2, lang)) : b < 0 ? L.pot.owes(money(-b, 'EUR', 2, lang)) : L.pot.settled
@@ -185,15 +186,18 @@ async function figures(page: Page, L: Labels) {
   return { rows: [...b.rows].sort((x, y) => x[0].localeCompare(y[0])), transfers: b.transfers, settled: b.settled, overview: await readOverview(page, L) }
 }
 
-/** The Overview's two tables add up: per person, the paid column and the share column each sum to the costs. */
+/**
+ * The Overview adds up: the categories sum to the total, and what each person paid and what each consumed (their balance
+ * row's subtitle) each sum to the costs — a deactivated or deleted person with costs keeps a row, settled or not.
+ */
 async function expectOverviewAddsUp(page: Page, L: Labels): Promise<number> {
-  const [byCategory, byPerson] = await readOverview(page, L)
-  expect(byCategory, 'the category table and its total').toBeDefined()
-  const total = minorOf(byCategory!.at(-1)![1]!)
-  const categories = byCategory!.slice(0, -1).reduce((s, r) => s + minorOf(r[1]!), 0)
-  expect(categories, 'the categories sum to the total').toBe(total)
-  expect(byPerson!.reduce((s, r) => s + minorOf(r[1]!), 0), 'what each person paid sums to the costs').toBe(total)
-  expect(byPerson!.reduce((s, r) => s + minorOf(r[2]!), 0), 'every share sums to the costs').toBe(total)
+  const { categories, people } = await readOverview(page, L)
+  expect(categories.length, 'the category table and its total').toBeGreaterThan(1)
+  const total = minorOf(categories.at(-1)![1]!)
+  const sum = categories.slice(0, -1).reduce((s, r) => s + minorOf(r[1]!), 0)
+  expect(sum, 'the categories sum to the total').toBe(total)
+  expect(people.reduce((s, p) => s + minorOf(p.paid), 0), 'what each person paid sums to the costs').toBe(total)
+  expect(people.reduce((s, p) => s + minorOf(p.consumed), 0), 'what each consumed sums to the costs').toBe(total)
   return total
 }
 
@@ -498,7 +502,7 @@ test.describe('in English', () => {
 
       await openPot(page, L, pot)
       await expect(potTab(page, L.pot.tabs.entries)).toHaveAttribute('aria-selected', 'true')
-      await openTab(page, L.pot.tabs.people)
+      await openTab(page, L.pot.tabs.settings)
       await expect(page.locator('.expenses-people li .veyq-row-title')).toHaveText(PEOPLE)
       await openTab(page, L.pot.tabs.entries)
     },
@@ -662,7 +666,7 @@ test.describe('in English', () => {
   )
 
   test(
-    'step 4: a READ_WRITE guest adds a person and an entry in the member\'s view, without Settings, people management or writer names',
+    'step 4: a READ_WRITE guest adds a person and an entry in the member\'s view, without the Pot\'s settings, people management or writer names',
     {
       tag: [
         '@uc.expenses.share-pot:read-and-read-write-never-write-only',
@@ -700,12 +704,14 @@ test.describe('in English', () => {
       if (await terms.isVisible()) await terms.click()
       await expect(heading).toBeVisible({ timeout: 60_000 })
       await expect(g.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
-      // The member's page with functions removed: no Settings tab.
+      // The member's page with functions removed: a Settings tab, for the people alone — no currency, no categories.
       await expect(g.getByRole('tablist', { name: pot }).getByRole('tab'))
-        .toHaveText([L.pot.tabs.entries, L.pot.tabs.balances, L.pot.tabs.overview, L.pot.tabs.people])
+        .toHaveText([L.pot.tabs.entries, L.pot.tabs.overview, L.pot.tabs.settings])
+      await openTab(g, L.pot.tabs.settings)
+      await expect(g.locator('.expenses-settings > form'), 'no currency form').toHaveCount(0)
+      await expect(g.locator('.expenses-settings .expenses-add-category'), 'no categories').toHaveCount(0)
 
       // People: add and rename, never deactivate or delete. The first write asks the guest's name.
-      await openTab(g, L.pot.tabs.people)
       const people = g.locator('.expenses-people')
       await expect(people.locator('li')).toHaveCount(3)
       await expect(people.getByRole('button', { name: L.pot.deactivate, exact: true })).toHaveCount(0)
@@ -836,9 +842,9 @@ test.describe('in English', () => {
     async () => {
       test.setTimeout(180_000)
       const marked = (page: Page) => page.locator('.expenses-balances li').filter({ has: page.locator('.expenses-you') })
-      /** Choose [name] in the Balances tab: no request but reads while choosing, and the row is marked. */
+      /** Choose [name] in the Overview: no request but reads while choosing, and the row is marked. */
       async function choose(page: Page, name: string): Promise<void> {
-        await openTab(page, L.pot.tabs.balances)
+        await openTab(page, L.pot.tabs.overview)
         await expect(marked(page)).toHaveCount(0)
         const sent: string[] = []
         const watch = (r: { method(): string; url(): string }) => {
@@ -858,18 +864,15 @@ test.describe('in English', () => {
       await a.page.reload()
       await expect(a.page.getByRole('heading', { level: 1, name: pot })).toBeVisible({ timeout: 60_000 })
       await expect(a.page.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
-      await openTab(a.page, L.pot.tabs.balances)
+      await openTab(a.page, L.pot.tabs.overview)
       await expect(marked(a.page).locator('.veyq-row-title')).toHaveText([PEOPLE[0]!])
       await openLink(g, shareLink)
       await expect(g.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
-      await openTab(g, L.pot.tabs.balances)
-      await expect(marked(g).locator('.veyq-row-title')).toHaveText([PEOPLE[1]!])
-      // The overview marks the same row.
       await openTab(g, L.pot.tabs.overview)
-      await expect(g.locator('.expenses-overview tr').filter({ has: g.locator('.expenses-you') }).locator('th')).toContainText([PEOPLE[1]!])
+      await expect(marked(g).locator('.veyq-row-title')).toHaveText([PEOPLE[1]!])
       // Back to "not chosen", so the later steps read the rows as they were.
       for (const page of [a.page, g]) {
-        await openTab(page, L.pot.tabs.balances)
+        await openTab(page, L.pot.tabs.overview)
         await pick(page, page.getByRole('combobox', { name: L.pot.whoAmI }), L.pot.nobody)
         await expect(marked(page)).toHaveCount(0)
       }
@@ -929,11 +932,11 @@ test.describe('in English', () => {
     },
     async () => {
       const { page } = a
-      await openTab(page, L.pot.tabs.balances)
-      await page.locator('.expenses-balances').getByRole('button', { name: L.pot.recordAll, exact: true }).click()
-      await expect(page.locator('.expenses-balances').getByText(L.pot.allSettled, { exact: true })).toBeVisible({ timeout: 30_000 })
+      await openTab(page, L.pot.tabs.overview)
+      await page.locator('.expenses-overview').getByRole('button', { name: L.pot.recordAll, exact: true }).click()
+      await expect(page.locator('.expenses-overview').getByText(L.pot.allSettled, { exact: true })).toBeVisible({ timeout: 30_000 })
 
-      await openTab(page, L.pot.tabs.people)
+      await openTab(page, L.pot.tabs.settings)
       const people = page.locator('.expenses-people')
       const row = (name: string) => people.locator('li').filter({ has: page.locator('.veyq-row-title').getByText(name, { exact: true }) })
       const cleo = nameOf(CLEO!)
@@ -957,8 +960,8 @@ test.describe('in English', () => {
 
       // Cleo's entries name "deleted people"; the removed person appears nowhere.
       await openTab(page, L.pot.tabs.entries)
-      await expect(entryRow(page, titleOf('Museum')).locator('.veyq-row-subtitle')).toContainText(L.pot.paidBy(L.pot.deletedPeople))
-      for (const tab of [L.pot.tabs.entries, L.pot.tabs.balances, L.pot.tabs.overview, L.pot.tabs.people]) {
+      await expect(entryRow(page, titleOf('Museum')).locator('.veyq-row-subtitle')).toContainText(L.pot.expenseBy(L.pot.deletedPeople))
+      for (const tab of [L.pot.tabs.entries, L.pot.tabs.overview, L.pot.tabs.settings]) {
         await openTab(page, tab)
         await expect(page.locator('.expenses-pot').getByText(dora), `${tab} names no removed person`).toHaveCount(0)
       }
@@ -994,6 +997,8 @@ test.describe('in English', () => {
       const { page } = a
       before = await figures(page, L)
       expect(before.settled, 'everyone is settled after step 6').toBe(true)
+      // Cleo, deleted settled in step 6, had costs: her figures stay on screen as the one "deleted people" row.
+      expect(before.rows, 'the deleted person with costs keeps a row, settled').toContainEqual([L.pot.deletedPeople, L.pot.settled])
       const total = await expectOverviewAddsUp(page, L)
       expect(total, 'the overview still counts the costs').toBeGreaterThan(0)
 
@@ -1066,7 +1071,7 @@ test.describe('in English', () => {
       await openLink(g, shareLink)
       await expect(g.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
       // The guest's page, read anew, names neither the deleted nor the removed person.
-      await openTab(g, L.pot.tabs.people)
+      await openTab(g, L.pot.tabs.settings)
       await expect(g.locator('.expenses-people li .veyq-row-title')).toHaveText(PEOPLE.slice(0, 2))
       await openTab(g, L.pot.tabs.entries)
       await entryRow(g, dinner).click()
@@ -1229,7 +1234,7 @@ test.describe('in English', () => {
   )
 
   test(
-    'step 10: the Pot at 375 px — Entries, Balances, the editor with items, People — scrolls only down',
+    'step 10: the Pot at 375 px — Entries, Overview, the editor with items, Settings — scrolls only down',
     {
       tag: [
         '@uc.expenses.balances:balances-from-the-live-entries',
@@ -1241,7 +1246,7 @@ test.describe('in English', () => {
       await page.setViewportSize({ width: 375, height: 812 })
       await page.reload()
       await expect(page.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
-      for (const tab of [L.pot.tabs.entries, L.pot.tabs.balances, L.pot.tabs.overview, L.pot.tabs.people]) {
+      for (const tab of [L.pot.tabs.entries, L.pot.tabs.overview, L.pot.tabs.settings]) {
         await inReach(potTab(page, tab), `the ${tab} tab`)
       }
 
@@ -1250,12 +1255,12 @@ test.describe('in English', () => {
       await inReach(page.locator('.expenses-entries').getByRole('button', { name: L.pot.addEntry, exact: true }), L.pot.addEntry)
 
       const read = await readBalances(page, L)
-      await noHorizontalScroll(page, L.pot.tabs.balances)
+      await noHorizontalScroll(page, L.pot.tabs.overview)
       expect(read.settled, 'the settled Pot reads as settled').toBe(true)
       expect(read.rows.map((r) => r[1]), 'every shown person settled').toEqual(read.rows.map(() => L.pot.settled))
 
-      await openTab(page, L.pot.tabs.people)
-      await noHorizontalScroll(page, L.pot.tabs.people)
+      await openTab(page, L.pot.tabs.settings)
+      await noHorizontalScroll(page, L.pot.tabs.settings)
       for (const name of PEOPLE.slice(0, 2)) {
         await inReach(page.locator('.expenses-people li').filter({ hasText: name }).getByRole('button', { name: L.pot.deactivate, exact: true }), `${L.pot.deactivate} ${name}`)
       }
@@ -1440,16 +1445,14 @@ test.describe('auf Deutsch', () => {
       await page.setViewportSize({ width: 375, height: 812 })
       await page.reload()
       await expect(page.locator('.expenses-entries')).toBeVisible({ timeout: 60_000 })
-      for (const tab of [L.pot.tabs.entries, L.pot.tabs.balances, L.pot.tabs.overview, L.pot.tabs.people]) {
+      for (const tab of [L.pot.tabs.entries, L.pot.tabs.overview, L.pot.tabs.settings]) {
         await inReach(potTab(page, tab), `the ${tab} tab`)
       }
       await openTab(page, L.pot.tabs.entries)
       await noHorizontalScroll(page, L.pot.tabs.entries)
       await expectBalances(page, L, balanceRows(L, lang, trip.expected.balances), transferRows(L, lang))
-      await noHorizontalScroll(page, L.pot.tabs.balances)
-      await inReach(page.locator('.expenses-balances').getByRole('button', { name: L.pot.recordAll, exact: true }), L.pot.recordAll)
-      await openTab(page, L.pot.tabs.overview)
       await noHorizontalScroll(page, L.pot.tabs.overview)
+      await inReach(page.locator('.expenses-overview').getByRole('button', { name: L.pot.recordAll, exact: true }), L.pot.recordAll)
       await openTab(page, L.pot.tabs.entries)
       await entryRow(page, titleOf('Trattoria')).click()
       const editor = entryDialog(page, L.pot.editEntry)

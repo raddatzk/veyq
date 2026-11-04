@@ -104,13 +104,17 @@ const dialog = () => document.body.querySelector('.expenses-entry-dialog') as HT
 const buttonIn = (root: ParentNode, label: string) => [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === label || b.getAttribute('aria-label') === label) as HTMLButtonElement | undefined
 
 describe('a Pot under its own link', () => {
-  it('READ_WRITE: the member\'s page without Settings, people managed only by adding and renaming, no writer\'s name', async () => {
+  it('READ_WRITE: the member\'s page, its Settings the people alone, managed only by adding and renaming, no writer\'s name', async () => {
     const w = mountShare(ShareRole.ReadWrite)
     const page = await w
     expect(page.find('h1').text()).toBe('Trip')
     expect(page.text()).toContain('Dinner for two')
-    expect(tabLabels(page)).toEqual([t('expenses.tabs.entries'), t('expenses.tabs.balances'), t('expenses.tabs.overview'), t('expenses.tabs.people')])
-    await openTab(page, t('expenses.tabs.people'))
+    expect(tabLabels(page)).toEqual([t('expenses.tabs.entries'), t('expenses.tabs.overview'), t('expenses.tabs.settings')])
+    await openTab(page, t('expenses.tabs.settings'))
+    // the people, without the Pot's currency or its categories (a member's who may change the meta)
+    expect(page.find('.expenses-people').exists()).toBe(true)
+    expect(page.text()).not.toContain(t('expenses.baseCurrency'))
+    expect(page.text()).not.toContain(t('expenses.settings.categories'))
     expect(page.find('[data-action="delete"]').exists()).toBe(false)
     expect(page.find('[data-action="remove"]').exists()).toBe(false)
     expect(buttonIn(page.element, t('expenses.people.deactivate'))).toBeUndefined()
@@ -142,7 +146,7 @@ describe('a Pot under its own link', () => {
     await flushPromises()
     expect(dialog()).toBeNull()
     expect(page.text()).toContain('Taxi')
-    await openTab(page, t('expenses.tabs.people'))
+    await openTab(page, t('expenses.tabs.settings'))
     const name = page.find('form.expenses-inline-form input')
     await name.setValue('Cleo')
     await page.find('form.expenses-inline-form').trigger('submit')
@@ -161,7 +165,7 @@ describe('a Pot under its own link', () => {
     const U_DANA = '0d000000-0000-4000-8000-000000000001'
     server.current.append([{ entryId: DANA, content: { kind: 'participant', name: 'Dana Sealed', active: true, joined: 3, member: { userId: U_DANA } } }])
     const page = await mountShare(ShareRole.ReadWrite)
-    await openTab(page, t('expenses.tabs.people'))
+    await openTab(page, t('expenses.tabs.settings'))
     const dana = page.find(`[data-person="${DANA}"]`)
     expect(dana.text()).toContain('Dana Sealed')
     expect(dana.find('.veyq-avatar').exists()).toBe(true)
@@ -203,7 +207,7 @@ describe('a Pot under its own link', () => {
     localStorage.clear()
     try {
       const page = await mountShare(ShareRole.Read)
-      await openTab(page, t('expenses.tabs.balances'))
+      await openTab(page, t('expenses.tabs.overview'))
       expect(page.find('[data-person="0e000000-0000-4000-8000-0000000000e9"]').text()).toContain('Me Sealed')
       expect(page.findAll('.expenses-you')).toHaveLength(0)
       expect((page.findComponent(VeyqSelect).props() as unknown as { modelValue?: string }).modelValue).toBe('nobody')
@@ -218,7 +222,7 @@ describe('a Pot under its own link', () => {
     localStorage.clear()
     try {
       const page = await mountShare(ShareRole.Read)
-      await openTab(page, t('expenses.tabs.balances'))
+      await openTab(page, t('expenses.tabs.overview'))
       const reads = vi.mocked(readGuestPot).mock.calls.length
       page.findComponent(VeyqSelect).vm.$emit('update:modelValue', ANNA)
       await flushPromises()
@@ -241,10 +245,10 @@ describe('a Pot under its own link', () => {
     expect(buttonIn(dialog()!, t('common.save'))).toBeUndefined()
     expect(buttonIn(dialog()!, t('expenses.entry.delete'))).toBeUndefined()
     expect([...dialog()!.querySelectorAll('input')].every((i) => i.disabled)).toBe(true)
-    await openTab(page, t('expenses.tabs.people'))
+    // no Settings tab at all: nothing in it is the guest's to change (control: READ_WRITE above has one, its people)
+    expect(tabLabels(page)).toEqual([t('expenses.tabs.entries'), t('expenses.tabs.overview')])
     expect(buttonIn(page.element, t('expenses.people.add'))).toBeUndefined()
-    expect(buttonIn(page.element, t('expenses.people.rename', { name: 'Ben' }))).toBeUndefined()
-    await openTab(page, t('expenses.tabs.balances'))
+    await openTab(page, t('expenses.tabs.overview'))
     expect(buttonIn(page.element, t('expenses.balances.record'))).toBeUndefined()
     expect(vi.mocked(appendPotWrites)).not.toHaveBeenCalled()
     expect(authenticatedCalls).toEqual([])

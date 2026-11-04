@@ -38,7 +38,8 @@ export const LABELS = {
     pot: {
       newPot: 'New Pot', baseCurrency: /^Base currency/, addPerson: 'Add person', open: (n: string) => `Open ${n}`, kindPot: 'Pot',
       addAsName: (n: string) => `Add “${n}” as a name`,
-      tabs: { entries: 'Entries', balances: 'Balances', overview: 'Overview', people: 'People', settings: 'Settings' },
+      // `people` names no tab any more: it is the Pot create dialog's people field (`expenses.tabs.people`).
+      tabs: { entries: 'Entries', overview: 'Overview', settings: 'Settings', people: 'People' },
       kind: { expense: 'Expense', refund: 'Refund', transfer: 'Transfer' },
       split: { shares: 'By shares', percent: 'By percent', amounts: 'By amount' },
       everyone: (n: number) => `All ${n} people, equally`, adjust: 'Adjust', splitPerson: 'Person in the split',
@@ -55,11 +56,13 @@ export const LABELS = {
       stale: 'Someone else changed this entry. Here is their version; save again to put yours on top.',
       ledgerMissing: 'Changes to these entries are missing, so the balances may be wrong:',
       owed: (a: string) => `is owed ${a}`, owes: (a: string) => `owes ${a}`, settled: 'settled',
+      // a balance row's subtitle, its parts joined by " · ": what makes the balance
+      explain: { paid: (a: string) => `paid ${a}`, consumed: (a: string) => `consumed ${a}`, sent: (a: string) => `transferred ${a}`, received: (a: string) => `received ${a}` },
       pays: (f: string, t: string) => `${f} pays ${t}`, recordAll: 'Record all', allSettled: 'Everyone is settled.',
       byAt: (n: string) => `${n}, `,
       deactivate: 'Deactivate', activate: 'Activate', inactive: 'deactivated',
       deletePerson: (n: string) => `Delete ${n}`, deleteAccept: 'Delete', removePerson: (n: string) => `Remove ${n}`, removeAccept: 'Remove',
-      deletedPeople: 'deleted people', oneDeleted: 'One deleted person.', paidBy: (n: string) => `paid by ${n}`,
+      deletedPeople: 'deleted people', oneDeleted: 'One deleted person.', expenseBy: (n: string) => `expense by ${n}`,
       copyLoss: 'The history of each entry and the deleted entries: a copy starts every entry at its current version.',
       reviewTitle: 'The reported entry, every version',
       whoAmI: 'You are', nobody: 'Not chosen', you: 'you',
@@ -98,7 +101,7 @@ export const LABELS = {
     pot: {
       newPot: 'Neue Kasse', baseCurrency: /^Basiswährung/, addPerson: 'Person hinzufügen', open: (n: string) => `${n} öffnen`, kindPot: 'Kasse',
       addAsName: (n: string) => `„${n}“ als Namen hinzufügen`,
-      tabs: { entries: 'Einträge', balances: 'Salden', overview: 'Überblick', people: 'Personen', settings: 'Einstellungen' },
+      tabs: { entries: 'Einträge', overview: 'Übersicht', settings: 'Einstellungen', people: 'Personen' },
       kind: { expense: 'Ausgabe', refund: 'Erstattung', transfer: 'Überweisung' },
       split: { shares: 'Nach Anteilen', percent: 'Nach Prozent', amounts: 'Nach Betrag' },
       everyone: (n: number) => `Alle ${n} Personen zu gleichen Teilen`, adjust: 'Anpassen', splitPerson: 'Person der Aufteilung',
@@ -115,11 +118,12 @@ export const LABELS = {
       stale: 'Jemand anderes hat diesen Eintrag geändert. Hier ist die neue Fassung; speichere erneut, um deine darüberzulegen.',
       ledgerMissing: 'Änderungen an diesen Einträgen fehlen, die Salden können also falsch sein:',
       owed: (a: string) => `bekommt ${a}`, owes: (a: string) => `schuldet ${a}`, settled: 'ausgeglichen',
+      explain: { paid: (a: string) => `bezahlt ${a}`, consumed: (a: string) => `verbraucht ${a}`, sent: (a: string) => `überwiesen ${a}`, received: (a: string) => `erhalten ${a}` },
       pays: (f: string, t: string) => `${f} zahlt an ${t}`, recordAll: 'Alle eintragen', allSettled: 'Alle sind ausgeglichen.',
       byAt: (n: string) => `${n}, `,
       deactivate: 'Deaktivieren', activate: 'Aktivieren', inactive: 'deaktiviert',
       deletePerson: (n: string) => `${n} löschen`, deleteAccept: 'Löschen', removePerson: (n: string) => `${n} entfernen`, removeAccept: 'Entfernen',
-      deletedPeople: 'gelöschte Personen', oneDeleted: 'Eine gelöschte Person.', paidBy: (n: string) => `bezahlt von ${n}`,
+      deletedPeople: 'gelöschte Personen', oneDeleted: 'Eine gelöschte Person.', expenseBy: (n: string) => `Ausgabe von ${n}`,
       copyLoss: 'Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.',
       reviewTitle: 'Der gemeldete Eintrag, jede Fassung',
       whoAmI: 'Du bist', nobody: 'Nicht gewählt', you: 'du',
@@ -216,30 +220,68 @@ export async function openTab(page: Page, name: string): Promise<void> {
   await expect(potTab(page, name)).toHaveAttribute('aria-selected', 'true')
 }
 
-/** The Balances tab as read: each shown person's row (name → text) and the settle-up's transfers in order. */
+/** The Overview tab's balances as read: each shown person's row (name → balance text) and the settle-up's transfers in
+ *  order; settled when the settle-up shows its empty note instead of a list. */
 export async function readBalances(page: Page, L: Labels): Promise<{ rows: [string, string][]; transfers: [string, string][]; settled: boolean }> {
-  await openTab(page, L.pot.tabs.balances)
-  const section = page.locator('.expenses-balances')
-  await expect(section).toBeVisible()
+  const section = await openOverview(page, L)
   return section.evaluate((el) => {
     const s = (x: Element | null | undefined) => (x?.textContent ?? '').replace(/\s+/g, ' ').trim()
-    const lists = el.querySelectorAll(':scope > ul.veyq-list')
-    const pairs = (ul: Element | undefined) =>
+    const pairs = (ul: Element | null) =>
       [...(ul?.querySelectorAll(':scope > li') ?? [])].map((li) => [s(li.querySelector('.veyq-row-title')), s(li.querySelector('.expenses-amount'))] as [string, string])
-    return { rows: pairs(lists[0]), transfers: pairs(lists[1]), settled: !!el.querySelector('.veyq-empty') }
+    const settleUp = el.querySelector(':scope > ul.expenses-settle-up')
+    return {
+      rows: pairs(el.querySelector(':scope > ul.expenses-balances')),
+      transfers: pairs(settleUp),
+      // the settle-up's own empty note: the categories' "No costs yet." is a `.veyq-empty` of the same section
+      settled: !settleUp && !!el.querySelector(':scope > .expenses-subhead-row + p.veyq-empty'),
+    }
   })
 }
 
-/** The Overview tab as read: each table's rows, cell texts in order (the category table's footer is its last row). */
-export async function readOverview(page: Page, L: Labels): Promise<string[][][]> {
+/** What the Overview shows: the category table's rows, cell texts in order (its footer, the total, last; none with no
+ *  costs), and per shown person — each balance row — what they paid and consumed, as the row's subtitle says it. */
+export interface Overview {
+  categories: string[][]
+  people: { name: string; paid: string; consumed: string }[]
+}
+
+export async function readOverview(page: Page, L: Labels): Promise<Overview> {
+  const section = await openOverview(page, L)
+  const read = await section.evaluate((el) => {
+    const s = (x: Element | null | undefined) => (x?.textContent ?? '').replace(/\s+/g, ' ').trim()
+    const table = el.querySelector('table.expenses-categories')
+    return {
+      categories: [...(table?.querySelectorAll('tbody tr, tfoot tr') ?? [])].map((tr) => [...tr.querySelectorAll('th, td')].map((c) => s(c))),
+      people: [...el.querySelectorAll(':scope > ul.expenses-balances > li')].map((li) => ({
+        name: s(li.querySelector('.veyq-row-title')),
+        subtitle: s(li.querySelector('.veyq-row-subtitle')),
+      })),
+    }
+  })
+  return {
+    categories: read.categories,
+    people: read.people.map(({ name, subtitle }) => {
+      // "you · paid €10.00 · consumed €5.00 · transferred €3.00": the viewer's mark (device-local, so not a figure) left out
+      const parts = subtitle.split(' · ').filter((p) => p !== L.pot.you)
+      return { name, paid: partOf(parts, L.pot.explain.paid, name), consumed: partOf(parts, L.pot.explain.consumed, name) }
+    }),
+  }
+}
+
+/** The Overview opened: its section. */
+async function openOverview(page: Page, L: Labels): Promise<Locator> {
   await openTab(page, L.pot.tabs.overview)
   const section = page.locator('.expenses-overview')
   await expect(section).toBeVisible()
-  return section.evaluate((el) =>
-    [...el.querySelectorAll('table')].map((table) =>
-      [...table.querySelectorAll('tbody tr, tfoot tr')].map((tr) =>
-        [...tr.querySelectorAll('th, td')].map((c) => (c.textContent ?? '').replace(/\s+/g, ' ').trim()))),
-  )
+  return section
+}
+
+/** The amount of the subtitle part [label] words ("paid {amount}"); red when the row has no such part. */
+function partOf(parts: string[], label: (amount: string) => string, who: string): string {
+  const [before, after] = label('\u0000').split('\u0000') as [string, string]
+  const part = parts.find((p) => p.startsWith(before) && p.endsWith(after) && p.length > before.length + after.length)
+  if (part === undefined) throw new Error(`${who}'s balance row says no "${label('…')}": ${parts.join(' · ')}`)
+  return part.slice(before.length, part.length - after.length)
 }
 
 /** Minor units from an amount the screen shows, in either language ("€1,234.50", "1.234,50 €", "-€3.00"). */
