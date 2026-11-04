@@ -105,11 +105,13 @@ function expectNoMemberControl(w: Page) {
 
 describe("a folder link's guest page is the member's level (inbox #401 S2)", () => {
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
-    it(`${role}: the Memory, the sub-folder and the file are items of ONE list - nothing of a member's`, async () => {
+    it(`${role}: the sub-folder, then the Memory and the file, in the member's two headed groups - nothing of a member's`, async () => {
       const w = await mountPage(role)
       expect(w.find('.veyq-node-header-title').text()).toBe('Familie')
-      expect(w.findAll('ul.veyq-level-list')).toHaveLength(1)
-      // Folders first, then the rest mixed by name (the Memory and the file no longer sit in their own sections).
+      // The folders, then the contents, each group its own list under its heading (share view = member view).
+      expect(w.findAll('section.veyq-level-group h2').map((h) => h.text())).toEqual([t('node.groupFolders'), t('node.groupContents')])
+      expect(w.findAll('ul.veyq-level-list')).toHaveLength(2)
+      // Folders first, then the rest mixed by name (the Memory and the file do not sit in sections of their own).
       expect(w.findAll('.veyq-level-item-title').map((c) => c.text())).toEqual(['Briefe', 'rezept.pdf', 'Rom 2026'])
       expect(w.findAll('li.veyq-level-item.is-folder .veyq-level-item-title').map((c) => c.text())).toEqual(['Briefe'])
       expect(w.find('li.veyq-level-item[data-kind="MEMORY"] .veyq-level-item-main').attributes('aria-label')).toBe('Rom 2026')
