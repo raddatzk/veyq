@@ -1,0 +1,5 @@
+{
+  "//": "Placed screenshots the capture does not take, each with the reason; their pages keep the placeholder (ADR 0087 §1). A placed id that is neither a scenario in site.shots.ts nor listed here fails the capture before it boots anything.",
+  "account-pairing-compare": "The number appears only after a second device has scanned the first one's QR code with a camera; nothing typed or pasted reaches that step, and faking a camera stream is not worth the flake for one picture.",
+  "memories-location-dialog": "The map's tiles come from OpenStreetMap, and the capture contacts no third party; a map with blank tiles would show the reader something the dialog never looks like."
+}
