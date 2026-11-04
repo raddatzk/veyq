@@ -36,8 +36,13 @@ copy (the drift the wiki's source guard was built after), and it lives only on G
      words, per language (German with *du*, as the UI), each closing with a short note on why it stays private
      that links the Security area. They describe only what is built, and name each application as the web client
      labels it ([ADR 0086](0086-one-word-per-meaning.md)). Where a picture helps, a page places a **screenshot
-     placeholder** that names what the shot must show; the owner supplies the images, one per language, and a
-     missing image renders as its placeholder, never as a broken build.
+     placeholder** that names what the shot must show; a missing image renders as its placeholder, never as a
+     broken build. The images, one per language, come from **the capture** (`scripts/site_capture.py`, amended
+     2026-11-04): it boots lane L1's throwaway instance, fills one space per language with made-up people and drawn
+     pictures, and photographs the web client in that language — every placed id is a scenario of
+     `tests/e2e/shots/site.shots.ts` or a reasoned entry of its `left-out.json`, and the capture is red before it boots
+     when one is neither. So the images are regenerated after a UI change rather than retaken by hand. The owner may
+     still replace an image by hand; one that must survive the next capture has its id moved to `left-out.json`.
    - **Run** (EN only) — for administrators; it holds the production runbook, and `infra/README.md` keeps the dev
      stack and cutting a release.
    - **Security** (EN only) — for researchers; a guided reading path that explains the model and links the

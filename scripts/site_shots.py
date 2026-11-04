@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The docs site's shot list: every `<Screenshot>` a Use page places, and which of its images exist.
 
-The owner supplies the screenshots (ADR 0087 §1), one per language, as `site/src/assets/screenshots/<id>.<en|de>.png`;
+The screenshots (ADR 0087 §1), one per language, are `site/src/assets/screenshots/<id>.<en|de>.png`, written by the
+capture (`scripts/site_capture.py`);
 until a file is there the page renders a placeholder that names the id and what the shot must show
 (`site/src/components/Screenshot.astro`). This prints that to-do list: per id the English page it sits on, what it
 must show, and which language files exist — then any image file no page places. It reads the `.mdx` sources, not a
@@ -14,6 +15,10 @@ language without a shot the other has.
 
     pnpm run shots            (in site/)
     python3 scripts/site_shots.py
+    python3 scripts/site_shots.py --ids     (only the placed ids, one per line: what the capture reads)
+
+The capture that takes the images is `scripts/site_capture.py`; the ids it leaves out, and why, are in
+`tests/e2e/shots/left-out.json`.
 """
 from __future__ import annotations
 
@@ -59,6 +64,12 @@ for page in sorted(PAGES.rglob("*.mdx")):
         entry["pages"].add(path)
         entry["shows"].setdefault(lang, attrs["shows"])
         placed.setdefault((lang, path), set()).add(attrs["id"])
+
+if "--ids" in sys.argv[1:]:
+    for e in errors:
+        print(e, file=sys.stderr)
+    print("\n".join(sorted(shots)))
+    sys.exit(1 if errors else 0)
 
 files = {p.name for p in SHOTS.glob("*.png")} if SHOTS.is_dir() else set()
 
