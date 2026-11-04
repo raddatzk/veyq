@@ -26,6 +26,7 @@ import { defineComponent, h } from 'vue'
 import LevelView from './LevelView.vue'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import VeyqTooltip from '../../shared/ui/VeyqTooltip.vue'
 import { createRegistry, type Registry } from '../applications/registry'
 import { childrenOf } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
@@ -90,14 +91,15 @@ const mountGuest = (role: ShareRole, tree: TreeNode[] = [TRIPS], folder: TreeNod
   return Object.assign(w, { calls: rec.calls })
 }
 
-/** The level's top-level blocks in DOM order - but the toolbar, which has its own tests. */
+/** The level's top-level blocks in DOM order - but "New" and the tools row, which have their own tests. */
 function blocks(w: Level): string[] {
   return [...w.element.children].flatMap((el): string[] => [blockOf(el)].filter((b): b is string => b !== null))
 }
 function blockOf(el: Element): string | null {
   {
-    // The head holds the header and the toolbar in one row; the toolbar has its own tests.
+    // The head holds the header and "New" in one row, the tools row the tabs and the tools; both have their own tests.
     if (el.classList.contains('veyq-level-head')) return el.querySelector(':scope > .veyq-node-header') ? 'overview' : null
+    if (el.classList.contains('veyq-level-tools')) return null
     if (el.classList.contains('veyq-empty')) return `empty:${el.textContent?.trim()}`
     if (el.classList.contains('veyq-level-list')) return 'list'
     if (el.classList.contains('stub-presentation')) return `presentation:${el.getAttribute('data-name')}`
@@ -570,27 +572,103 @@ describe('LevelView: the upload-only link', () => {
 })
 
 // inbox #370/#385 (f): the space's trash holds every application's nodes, so it is the level view's own button.
-describe('LevelView: the toolbar', () => {
-  const trash = (w: Level) => w.findAll('.veyq-level-toolbar button').find((b) => b.text() === t('node.trash.open'))
+// The head and the tools row (owner 2026-11-04): the header and "New" in ONE row; right under it ONE tools row - the tabs on the
+// left, then Select and the trash as icon buttons (their words the accessible name and the tooltip), then the view switch.
+describe('LevelView: the head and the tools row', () => {
+  const trash = (w: Level) => w.find(`.veyq-level-tools .veyq-level-toolbar button[aria-label="${t('node.trash.open')}"]`)
+  /** The tooltip that wraps a control (`VeyqTooltip` renders its one child itself, around nothing). */
+  const tooltipOf = (w: Level, el: Element) => w.findAllComponents(VeyqTooltip).find((c) => c.find('button').element === el)?.props('text')
+  function tabbedKinds() {
+    testKind(reg(), { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: 'node.kindFolder' } })
+    testKind(reg(), { rekeyContent: nothingOfItsOwnToRekey, kind: 'BETA', icon: 'file', list: { rows: stubRows('b').factory, tabLabel: 'node.folders' } })
+  }
+  const tabbedTree = [TRIPS, node('Sub', FOLDER_KIND, 'Trips'), node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips')]
 
-  it('offers the space\'s trash in the head, after the name, at the root and in a folder, and emits openTrash', async () => {
+  it('the head holds the header and "New" - nothing else -, at the root and in a folder', () => {
     twoKinds()
     for (const w of [mountLevel([]), mountLevel([TRIPS], { folder: TRIPS })]) {
       // In the head's one row, after the name: the reading order is the Tab order (owner 2026-11-01).
       const head = w.element.firstElementChild!
       expect(head.classList.contains('veyq-level-head')).toBe(true)
       const parts = [...head.children].map((el) => el.className.split(' ')[0])
-      expect(parts.at(-1)).toBe('veyq-level-toolbar')
-      expect(parts.slice(0, -1)).toEqual(w.find('.veyq-node-header').exists() ? ['veyq-node-header'] : [])
-      await trash(w)!.trigger('click')
+      expect(parts).toEqual([...(w.find('.veyq-node-header').exists() ? ['veyq-node-header'] : []), 'veyq-level-new'])
+      expect(head.querySelector('.veyq-level-new .veyq-new-menu-button')?.textContent?.trim()).toBe(t('node.new'))
+      expect(head.querySelector('.veyq-level-toolbar, .veyq-select-button, .veyq-trash-button, .view-mode-toggle'), 'no tool in the head').toBeNull()
+    }
+  })
+
+  it('one tools row right under the head: the tabs on the left, then Select, the trash and the view switch', () => {
+    tabbedKinds()
+    const w = mountLevel(tabbedTree, { folder: TRIPS })
+    const [head, tools] = [...w.element.children]
+    expect(head.classList.contains('veyq-level-head')).toBe(true)
+    expect(tools.classList.contains('veyq-level-tools'), 'the tools row follows the head at once').toBe(true)
+    expect(tools.classList.contains('has-tabs')).toBe(true)
+    expect([...tools.children].map((el) => el.classList.contains('veyq-level-tabs') ? 'tabs' : el.className.split(' ')[0])).toEqual(['tabs', 'veyq-level-toolbar'])
+    expect(tools.querySelectorAll('[role="tab"]').length, 'control: the tab bar is drawn').toBe(3)
+    const toolbar = tools.querySelector('.veyq-level-toolbar')!
+    expect([...toolbar.children].map((el) => el.className.split(' ')[0])).toEqual(['veyq-button', 'veyq-button', 'view-mode-toggle'])
+    expect([...toolbar.querySelectorAll(':scope > button')].map((b) => b.getAttribute('aria-label'))).toEqual([t('node.select.action'), t('node.trash.open')])
+  })
+
+  it('Select and the trash are icon buttons: no visible words, named by them, the same words their tooltip', () => {
+    tabbedKinds()
+    const w = mountLevel(tabbedTree, { folder: TRIPS })
+    for (const [selector, label] of [['.veyq-select-button', t('node.select.action')], ['.veyq-trash-button', t('node.trash.open')]] as const) {
+      const button = w.find(`.veyq-level-toolbar ${selector}`)
+      expect(button.exists(), label).toBe(true)
+      expect(button.text(), `${label}: no visible words`).toBe('')
+      expect(button.classes()).toContain('veyq-button--icon-only')
+      expect(button.attributes('aria-label')).toBe(label)
+      expect(tooltipOf(w, button.element), `${label}: its tooltip`).toBe(label)
+    }
+  })
+
+  it('offers the trash at the root and in a folder, and a click asks the page for it', async () => {
+    twoKinds()
+    for (const w of [mountLevel([]), mountLevel([TRIPS], { folder: TRIPS })]) {
+      await trash(w).trigger('click')
       expect(w.calls.openTrash).toHaveLength(1)
     }
   })
 
+  it('without a tab bar the row holds the tools alone; with nothing to offer, no row', () => {
+    twoKinds()
+    const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips')], { folder: TRIPS })
+    expect(w.find('[role="tablist"]').exists(), 'control: no tab bar here').toBe(false)
+    const tools = w.find('.veyq-level-tools')
+    expect(tools.classes()).not.toContain('has-tabs')
+    expect([...tools.element.children].map((el) => el.className.split(' ')[0])).toEqual(['veyq-level-toolbar'])
+    expect(trash(w).exists()).toBe(true)
+    // an empty identity folder: nothing to write, select or switch - no tools row at all, the header still there
+    const empty = mountLevel([TRIPS], { folder: TRIPS, identityFolder: true })
+    expect(empty.find('.veyq-node-header').exists(), 'control: the head renders').toBe(true)
+    expect(empty.find('.veyq-level-tools').exists()).toBe(false)
+  })
+
   it('has no trash where nothing is written (a pending deletion, a guest\'s folder)', () => {
-    expect(trash(mountLevel([], { pending: true }))).toBeUndefined()
-    // an empty identity folder lists nothing: nothing to switch either, so no toolbar at all
-    expect(mountLevel([TRIPS], { folder: TRIPS, identityFolder: true }).find('.veyq-level-toolbar').exists()).toBe(false)
+    twoKinds()
+    const pending = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips')], { folder: TRIPS, pending: true })
+    expect(pending.find('.veyq-level-toolbar .view-mode-toggle').exists(), 'control: the tools row is there').toBe(true)
+    expect(trash(pending).exists()).toBe(false)
+  })
+})
+
+// The level's items as the grid draws them (owner 2026-11-04): the folders a compact group (first, `levelList.ts`) above the
+// flat tiles of every other node; the list draws every item the same way.
+describe('LevelView: the grid\'s folder group', () => {
+  const kinds = (w: Level) => w.findAll('li.veyq-level-item').map((li) => (li.classes().includes('is-compact') ? 'compact' : 'flat'))
+  it('in the grid every folder is a compact tile and they all come before the tiles; in the list none is compact', () => {
+    twoKinds()
+    const tree = [TRIPS, node('b1', 'BETA', 'Trips'), node('Zed', FOLDER_KIND, 'Trips'), node('a1', 'ALPHA', 'Trips'), node('Alpha', FOLDER_KIND, 'Trips')]
+    const grid = mountLevel(tree, { folder: TRIPS })
+    expect(titlesOf(grid)).toEqual(['Alpha', 'Zed', 'a1', 'b1'])
+    expect(kinds(grid)).toEqual(['compact', 'compact', 'flat', 'flat'])
+    expect(grid.findAll('li.veyq-level-item.is-compact').every((li) => li.classes().includes('is-folder'))).toBe(true)
+    setViewMode('list')
+    const list = mountLevel(tree, { folder: TRIPS })
+    expect(kinds(list)).toEqual(['flat', 'flat', 'flat', 'flat'])
+    expect(list.findAll('li.veyq-level-item').every((li) => li.classes().includes('is-list'))).toBe(true)
   })
 })
 
@@ -598,7 +676,7 @@ describe('LevelView: the toolbar', () => {
 // on screen: core's grid and list for every row, and each shown kind's own `views` (the stand-in for Memories' map).
 describe('LevelView: the view switch', () => {
   const MAP = { mode: 'map', icon: 'map', label: 'node.folders' } as const // core's test names no application key
-  const trash = (w: Level) => w.findAll('.veyq-level-toolbar button').find((b) => b.text() === t('node.trash.open'))
+  const trash = (w: Level) => w.findAll('.veyq-level-toolbar button').find((b) => b.attributes('aria-label') === t('node.trash.open'))
   const switchLabels = (w: Level) => w.findAll('.veyq-level-toolbar .view-mode-button').map((b) => b.attributes('aria-label'))
 
   it('offers the grid and the list for the rows; a click switches every item to the list', async () => {

@@ -55,6 +55,31 @@ describe('LevelRowItem', () => {
     expect(mountItem(row(), 'grid').classes()).toContain('is-grid')
   })
 
+  it('a folder\'s tile is compact (the grid\'s folder group); a folder\'s row and every other tile are not', () => {
+    expect(mountItem(row(), 'grid', { folder: true }).classes()).toEqual(expect.arrayContaining(['is-grid', 'is-folder', 'is-compact']))
+    expect(mountItem(row(), 'list', { folder: true }).classes()).not.toContain('is-compact')
+    expect(mountItem(row(), 'grid').classes()).not.toContain('is-compact')
+  })
+
+  it('in both layouts the heart and "more" are quiet icon buttons (no frame), each named - in the tile beside its cover', () => {
+    for (const mode of ['list', 'grid'] as const) {
+      const w = mountItem(row({ actions: [act('heart', { first: true, pressed: true }), act('rename')] }), mode)
+      const buttons = w.findAll('.veyq-level-item-actions button')
+      expect(buttons.map((b) => b.attributes('aria-label')), mode).toEqual(['heart thing', t('node.rowMore', { name: 'report.pdf' })])
+      for (const b of buttons) {
+        expect(b.classes(), mode).toContain('veyq-button--text')
+        expect(b.classes(), mode).not.toContain('veyq-button--outlined')
+        expect(b.classes(), `${mode}: the layer's icon-button size`).toContain('veyq-icon-button')
+        expect(b.text(), mode).toBe('')
+      }
+      expect(buttons[0].attributes('aria-pressed')).toBe('true')
+      expect(buttons[0].classes()).toContain('is-pressed')
+      // the actions are the item's own, after its primary button: the Tab order is the name, then its actions
+      const kids = [...w.element.children].map((el) => el.className.split(' ')[0])
+      expect(kids.indexOf('veyq-level-item-main'), mode).toBeLessThan(kids.indexOf('veyq-level-item-actions'))
+    }
+  })
+
   it('draws the application\'s cover component instead of the icon, and marks the item as having one', () => {
     const Cover = defineComponent({ props: { src: String }, setup: (p) => () => h('img', { class: 'cover-probe', src: p.src }) })
     const w = mountItem(row({ leading: { component: Cover, props: { src: 'blob:x' } } }), 'grid')

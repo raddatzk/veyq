@@ -232,7 +232,7 @@ describe('a restore that renumbers an ancestor of the open node', () => {
     reReadBrings((nodes) => [...nodes, node('xyold', FOLDER_KIND, 'trips', 'x_y', 2)])
     await mountAt('#~me/trips/x-y/deep/')
     expect(heading()).toBe('Deep')
-    await click([...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('node.trash.open'))!)
+    await click(document.body.querySelector(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"]`)!)
     await click([...document.body.querySelectorAll('.trash-row button')].find((b) => b.textContent?.trim() === t('node.trash.restore'))!)
     expect(restoreNode).toHaveBeenCalled()
     expect(router.currentRoute.value.hash).toBe('#~me/trips/x-y-2/deep/')

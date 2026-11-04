@@ -50,7 +50,7 @@ div.veyq-node-host
                     circle
                     circle
                     circle
-      div.veyq-level-toolbar
+      div.veyq-level-new
         button.veyq-button.veyq-button--filled.veyq-button--primary.veyq-button--small.veyq-new-menu-button
           span.veyq-button__icon.veyq-icon
             svg.lucide.lucide-plus.veyq-icon__svg
@@ -58,7 +58,25 @@ div.veyq-node-host
               path
           span.veyq-button__label
             "New"
-        button.veyq-button.veyq-button--outlined.veyq-button--secondary.veyq-button--small
+    div.has-tabs.veyq-level-tools
+      div.veyq-level-tabs.veyq-tabs
+        div.veyq-tabs__bar
+          div.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
+            button.veyq-tab [role="tab"]
+              "All"
+            button.veyq-tab [role="tab"]
+              "Memories"
+            button.veyq-tab [role="tab"]
+              "Depot"
+            button.veyq-tab [role="tab"]
+              "Expenses"
+      div.veyq-level-toolbar
+        button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-select-button [aria-label="Select"] [aria-pressed="false"]
+          span.veyq-button__icon.veyq-icon
+            svg.lucide.lucide-check-square-2.lucide-square-check.veyq-icon__svg
+              rect
+              path
+        button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-trash-button [aria-label="Trash"]
           span.veyq-button__icon.veyq-icon
             svg.lucide.lucide-trash.lucide-trash-2.veyq-icon__svg
               path
@@ -66,15 +84,6 @@ div.veyq-node-host
               path
               path
               path
-          span.veyq-button__label
-            "Trash"
-        button.veyq-button.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-select-button [aria-pressed="false"]
-          span.veyq-button__icon.veyq-icon
-            svg.lucide.lucide-check-square-2.lucide-square-check.veyq-icon__svg
-              rect
-              path
-          span.veyq-button__label
-            "Select"
         div.view-mode-toggle [role="group"] [aria-label="View"]
           button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
             span.veyq-icon
@@ -95,19 +104,8 @@ div.veyq-node-host
                 path
                 path
                 path
-    div.veyq-level-tabs.veyq-tabs
-      div.veyq-tabs__bar
-        div.veyq-tabs__list [role="tablist"] [aria-label="Applications"]
-          button.veyq-tab [role="tab"]
-            "All"
-          button.veyq-tab [role="tab"]
-            "Memories"
-          button.veyq-tab [role="tab"]
-            "Depot"
-          button.veyq-tab [role="tab"]
-            "Expenses"
     ul.veyq-level-list
-      li.is-folder.is-grid.veyq-level-item
+      li.is-compact.is-folder.is-grid.veyq-level-item
         button.veyq-level-item-main [aria-label="Rome"]
           span.veyq-level-item-visual
             span.veyq-icon.veyq-level-item-icon
@@ -119,11 +117,11 @@ div.veyq-node-host
             small.veyq-level-item-meta
               "Folder"
         span.veyq-level-item-actions
-          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
             span.veyq-button__icon.veyq-icon
               svg.lucide.lucide-heart.veyq-icon__svg
                 path
-          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Rome”"]
+          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Rome”"]
             span.veyq-button__icon.veyq-icon
               svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
                 circle
@@ -151,11 +149,11 @@ div.veyq-node-host
               span.veyq-level-item-detail
                 "p-1"
         span.veyq-level-item-actions
-          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
             span.veyq-button__icon.veyq-icon
               svg.lucide.lucide-heart.veyq-icon__svg
                 path
-          button.veyq-button.veyq-button--icon-only.veyq-button--outlined.veyq-button--secondary.veyq-button--small.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Italy”"]
+          button.veyq-button.veyq-button--icon-only.veyq-button--secondary.veyq-button--small.veyq-button--text.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Italy”"]
             span.veyq-button__icon.veyq-icon
               svg.lucide.lucide-ellipsis.lucide-more-horizontal.veyq-icon__svg
                 circle

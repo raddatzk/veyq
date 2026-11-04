@@ -478,58 +478,87 @@
   gap: 1.45rem;
 }
 
-/* The level's head (owner 2026-11-01): the header and the toolbar in one row, the name at the start, the toolbar at the
-   end. The header's basis is its own content, so where the name and the toolbar do not both fit, the toolbar wraps onto a
-   row of its own below the name rather than shortening it; the header then measures its own wider box (`NodeHeader`). The
-   rule under the name is the head's, so it spans the toolbar too. Colours only from `--app-*` tokens, so no dark twin. */
-.veyq-level-head {
+/* The level's head and its tools row share ONE control height (owner 2026-11-04): the folder header's action buttons, "New",
+   the tools' icon buttons and the view switch (`ViewModeToggle`, which reads the same property) are one size, so in a row
+   they line up. */
+.veyq-level-head,
+.veyq-level-tools {
   --veyq-level-control-height: 2.25rem;
+}
+
+/* The level's head (owner 2026-11-01, tidied 2026-11-04): the header and "New" in one row, the name at the start, "New" at the
+   end. The header's basis is its own content, so where the name and "New" do not both fit, "New" wraps onto a row of its own
+   below the name rather than shortening it; the header then measures its own wider box (`NodeHeader`). No rule under it: the
+   tools row follows right below. Colours only from `--app-*` tokens, so no dark twin. */
+.veyq-level-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1.5rem;
   min-width: 0;
 }
-.veyq-level-head.has-header {
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--app-line);
-}
 .veyq-level-head > .veyq-node-header {
   flex: 1 1 auto;
   padding-bottom: 0;
   border-bottom: 0;
 }
+.veyq-level-new {
+  display: flex;
+  margin-inline-start: auto;
+}
 
-/* ONE control height in the level's head (owner 2026-11-04, `--veyq-level-control-height` above): the folder header's action
-   buttons, the toolbar's buttons and its view switch (`ViewModeToggle`, which reads the same property) are one size; the
-   header's content is centred against its visual and the head centres its items, so in one row they line up. */
+/* The header's content is centred against its visual and the head centres its items, so its buttons and "New" line up. */
 .veyq-level-head .veyq-node-header-actions .veyq-button {
   width: var(--veyq-level-control-height);
   min-width: var(--veyq-level-control-height);
   height: var(--veyq-level-control-height);
 }
 
-.veyq-level-toolbar > .veyq-button {
+.veyq-level-new > .veyq-button {
   height: var(--veyq-level-control-height);
 }
 
-/* The level view's own toolbar ("New", the space's trash, Select and the view switch, inbox #370/#385): one row at the
-   head's end. No colour of its own, so no dark twin. */
+/* The tools row (owner 2026-11-04), right under the head: the application tabs on the left (inbox #348), the level's tools on
+   the right - Select and the space's trash as icon buttons, then the view switch (inbox #370/#385/#421). One line: the tabs
+   scroll sideways where it is narrow, the tools keep their size. With tabs, ONE hairline under the whole row, on which the
+   picked tab's ink sits; without, the tools alone at the right end and no line. Tokens only, so no dark twin. */
+.veyq-level-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  margin-bottom: -0.5rem;
+}
+.veyq-level-head + .veyq-level-tools {
+  margin-top: -0.85rem;
+}
+.veyq-level-tools.has-tabs {
+  border-bottom: 1px solid var(--app-line);
+}
+
 .veyq-level-toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 0.35rem;
   margin-inline-start: auto;
 }
 
-/* The level view's application tabs (inbox #348): the Memory detail's tab look (`.memory-tabs`) in core's own classes,
-   colours only from `--app-*` tokens (they carry the dark theme), so no dark twin. The row scrolls sideways instead of
-   wrapping on a narrow screen. */
+.veyq-level-toolbar > .veyq-button {
+  width: var(--veyq-level-control-height);
+  min-width: var(--veyq-level-control-height);
+  height: var(--veyq-level-control-height);
+}
+
+/* The level view's application tabs (inbox #348): the Memory detail's tab look (`.memory-tabs`) in core's own classes, a
+   little lower to suit one tools row, their list's own line given to the row's (the -1px lays it over the row's hairline).
+   Colours only from `--app-*` tokens (they carry the dark theme), so no dark twin. */
 .veyq-level-tabs {
+  flex: 0 1 auto;
+  align-self: flex-end;
   min-width: 0;
-  margin-bottom: -0.5rem;
+  margin-bottom: -1px;
 }
 .veyq-level-tabs .veyq-tabs__list {
   overflow-x: auto;
@@ -542,6 +571,7 @@
   position: relative;
   flex: 0 0 auto;
   min-width: max-content;
+  padding: 0.6rem 0.9rem;
 }
 .veyq-level-tabs .veyq-tab:focus {
   outline: 0 !important;
@@ -1031,15 +1061,17 @@
 @media (max-width: 520px) {
 }
 
-/* The unified level list (core/node/LevelView.vue + core/node/components/LevelRowItem.vue, inbox #407): ONE list of
-   folders, Memories, files and drop boxes, drawn by core from the applications' row data. `is-grid` items are tiles
-   (visual on top, name, meta, actions), `is-list` items rows. Tokens only, so the dark theme needs no rule of its own.
+/* The unified level list (core/node/LevelView.vue + core/node/components/LevelRowItem.vue, inbox #407; tidied 2026-11-04):
+   ONE list of folders, Memories, files and drop boxes, drawn by core from the applications' row data. `is-list` items are
+   rows of one surface, `is-grid` items tiles - a folder's compact (`is-compact`, the row's layout in a quiet frame), every
+   other flat (the cover, the name and meta under it, the actions over the cover's corner). Tokens only, so the dark theme
+   needs no rule of its own.
    The icon glyph is styled through TWO classes (`.veyq-level-item-visual > .veyq-level-item-icon`): the layer's own `.veyq-icon`
    rule (display and font-size, `layer.css`) loads after this sheet and wins a single-class tie, and a glyph that kept its
    `.veyq-icon` size sat off-centre in its tile (seen in a real browser, 2026-10-12, on the node header's icon tile). */
 .veyq-level-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 340px));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
   align-items: stretch;
   min-width: 0;
   max-width: 100%;
@@ -1049,25 +1081,26 @@
   list-style: none;
 }
 
+/* The folders come first (`levelList.ts`); in the grid their compact tiles are ONE group above the other tiles: the first
+   other tile starts a new grid row (auto-placement moves it below the last folder, whatever column that one took). */
+.veyq-level-item.is-compact + .veyq-level-item:not(.is-compact) {
+  grid-column-start: 1;
+}
+
+/* The list: one surface in one frame, its rows parted by hairlines. */
 .veyq-level-list.is-list {
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.4rem;
+  gap: 0;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
 }
 
 .veyq-level-item {
   position: relative;
   display: grid;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--app-line) 78%, transparent);
-  border-radius: 12px;
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow-card);
   color: var(--app-text);
-}
-
-.veyq-level-item:hover,
-.veyq-level-item:focus-within {
-  border-color: color-mix(in srgb, var(--app-accent) 28%, var(--app-line));
 }
 
 .veyq-level-item-main {
@@ -1093,12 +1126,20 @@ div.veyq-level-item-main,
   border-radius: var(--app-radius-sm);
 }
 
+/* The leading visual: the node's cover, or the kind's icon in a quiet frame (a folder's on the soft info tint, as the node
+   header's empty frame). Always 16:9. */
 .veyq-level-item-visual {
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   overflow: hidden;
-  background: var(--app-accent-soft);
+  border: 1px solid var(--app-line);
+  background: var(--app-surface-muted);
   color: var(--app-accent);
+}
+
+.veyq-level-item.has-cover .veyq-level-item-visual {
+  border: 0;
 }
 
 .veyq-level-item-visual > .veyq-level-item-icon {
@@ -1145,73 +1186,133 @@ div.veyq-level-item-main,
   overflow-wrap: anywhere;
 }
 
+/* The actions: quiet icon buttons (the layer's `text` appearance, no frame) at the layer's icon-button size. */
 .veyq-level-item-actions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.1rem;
 }
 
-/* A row: visual left, text, the actions at the right edge. */
-.veyq-level-item.is-list {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
-}
-
-.veyq-level-item.is-list .veyq-level-item-main {
-  grid-template-columns: 4.5rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.75rem;
-}
-
-/* ONE visual size for every kind (an icon tile, a Memory's cover, later a folder's cover): the names of a mixed list
-   start on the same line, and a tile's top edge is the same height whatever it shows. 3:2 on a phone, a little wider
-   from 521 px up (the cover is one 2048 px JPEG, so a larger box only shows more of it). */
-.veyq-level-item.is-list .veyq-level-item-visual {
-  width: 4.5rem;
-  height: 3rem;
-  border-radius: 8px;
-}
-
-@media (min-width: 521px) {
-  .veyq-level-item.is-list .veyq-level-item-main {
-    grid-template-columns: 6.5rem minmax(0, 1fr);
-  }
-  .veyq-level-item.is-list .veyq-level-item-visual {
-    width: 6.5rem;
-    height: 4rem;
-    border-radius: 10px;
-  }
-}
-
-/* A tile: the visual across the whole width on top (a cover or an icon tile of the same size), then the text, then the actions. */
-.veyq-level-item.is-grid {
-  grid-template-rows: 1fr auto;
-  gap: 0.25rem;
-  padding: 0 0 0.5rem;
-}
-
+/* A tile (every node but a folder): flat - the 16:9 cover across the tile's width, then the name and the meta line. */
 .veyq-level-item.is-grid .veyq-level-item-main {
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.7rem;
+  align-content: start;
+  gap: 0.5rem;
 }
 
 .veyq-level-item.is-grid .veyq-level-item-visual {
   width: 100%;
   height: auto;
   aspect-ratio: 16 / 9;
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--app-radius-sm);
 }
 
-.veyq-level-item.is-grid .veyq-level-item-text,
-.veyq-level-item.is-grid .veyq-level-item-actions {
-  padding: 0 0.75rem;
+.veyq-level-item.is-grid .veyq-level-item-text {
+  padding: 0 0.15rem;
 }
 
-.veyq-level-item.is-grid .veyq-level-item-actions {
-  justify-content: flex-end;
+/* A tile's actions - a flat tile's over the cover's top-right corner, a folder's compact tile's over the end of its row
+   where a pointer hovers (in its row where none does) - on a veil of the surface so they read on any picture: shown on
+   hover and while focus is inside - by opacity alone, so they stay in the Tab order -, always where nothing hovers (a touch
+   screen), and a pressed toggle (the heart of a favourite) always, since it says something about the node. A compact tile
+   in a narrow grid column would otherwise leave its name a few letters beside the two buttons. */
+.veyq-level-item.is-grid:not(.is-compact) .veyq-level-item-actions {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+}
+@media (hover: hover) {
+  .veyq-level-item.is-grid.is-compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .veyq-level-item.is-compact .veyq-level-item-actions {
+    position: absolute;
+    top: 50%;
+    right: 0.35rem;
+    transform: translateY(-50%);
+  }
+}
+.veyq-level-item.is-grid .veyq-level-item-actions > .veyq-button {
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.veyq-level-item.is-grid .veyq-level-item-actions > .veyq-button:not(:disabled):hover {
+  background: var(--app-surface);
+}
+.veyq-level-item.is-grid:hover .veyq-level-item-actions > .veyq-button,
+.veyq-level-item.is-grid:focus-within .veyq-level-item-actions > .veyq-button,
+.veyq-level-item.is-grid .veyq-level-item-actions > .veyq-button.is-pressed {
+  opacity: 1;
+}
+@media (hover: none) {
+  .veyq-level-item.is-grid .veyq-level-item-actions > .veyq-button {
+    opacity: 1;
+  }
+}
+
+/* A row, and a folder's compact tile: the thumbnail, the text, the actions at the end. The thumbnail is the compact node
+   header's 16:9 visual, 4 x 2.25 rem (64 x 36 px at the default size), on every width, so every icon and cover of a mixed list
+   stays in one flush column. */
+.veyq-level-item.is-list,
+.veyq-level-item.is-compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.35rem 0.3rem 0.75rem;
+}
+
+.veyq-level-item.is-list .veyq-level-item-main,
+.veyq-level-item.is-compact .veyq-level-item-main {
+  grid-template-columns: 4rem minmax(0, 1fr);
+  grid-template-rows: none;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.veyq-level-item.is-list .veyq-level-item-visual,
+.veyq-level-item.is-compact .veyq-level-item-visual {
+  width: 4rem;
+  height: 2.25rem;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+}
+
+.veyq-level-item.is-list .veyq-level-item-visual > .veyq-level-item-icon,
+.veyq-level-item.is-compact .veyq-level-item-visual > .veyq-level-item-icon {
+  font-size: 1rem;
+}
+
+.veyq-level-item.is-compact .veyq-level-item-text {
+  padding: 0;
+}
+
+/* The list's rows: a hairline between two, the hover, focus and selection a tint of the one surface (its corners kept). */
+.veyq-level-item.is-list + .veyq-level-item.is-list {
+  border-top: 1px solid var(--app-line);
+}
+.veyq-level-item.is-list:first-child {
+  border-start-start-radius: calc(var(--app-radius) - 1px);
+  border-start-end-radius: calc(var(--app-radius) - 1px);
+}
+.veyq-level-item.is-list:last-child {
+  border-end-start-radius: calc(var(--app-radius) - 1px);
+  border-end-end-radius: calc(var(--app-radius) - 1px);
+}
+.veyq-level-item.is-list:hover,
+.veyq-level-item.is-list:focus-within {
+  background: var(--app-hover);
+}
+
+/* A folder's compact tile: a quiet frame, no shadow. */
+.veyq-level-item.is-compact {
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+}
+.veyq-level-item.is-compact:hover,
+.veyq-level-item.is-compact:focus-within {
+  border-color: color-mix(in srgb, var(--app-accent) 28%, var(--app-line));
 }
 
 .veyq-level-item.is-unsupported {
@@ -1219,15 +1320,24 @@ div.veyq-level-item-main,
 }
 
 /* The level's Select mode (inbox #421): a real checkbox over the visual's corner, the media tile's round check
-   (`.media-tile-check`) in core's own class; a selected item keeps the accent border. Tokens only, so no dark twin. */
-.veyq-level-item.is-selected {
+   (`.media-tile-check`) in core's own class - a tile's top-left (opposite its actions), a row's and a compact tile's over its
+   thumbnail; a selected row takes the accent tint, a compact tile the accent frame, a tile an accent ring round its cover.
+   Tokens only, so no dark twin. */
+.veyq-level-item.is-list.is-selected {
+  background: var(--app-accent-soft);
+}
+.veyq-level-item.is-compact.is-selected {
   border-color: var(--app-accent);
+}
+.veyq-level-item.is-grid:not(.is-compact).is-selected .veyq-level-item-visual {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
 }
 .veyq-level-item-check {
   position: absolute;
   z-index: 1;
-  top: 6px;
-  left: 6px;
+  top: 0.35rem;
+  left: 0.35rem;
   display: grid;
   place-items: center;
   width: 24px;
@@ -1236,6 +1346,12 @@ div.veyq-level-item-main,
   background: color-mix(in srgb, var(--app-backdrop-strong) 55%, transparent);
   color: var(--app-on-strong);
   cursor: pointer;
+}
+.veyq-level-item.is-list .veyq-level-item-check,
+.veyq-level-item.is-compact .veyq-level-item-check {
+  top: 50%;
+  left: 0.5rem;
+  transform: translateY(-50%);
 }
 .veyq-level-item-check.is-on {
   background: var(--app-accent);
@@ -1316,10 +1432,8 @@ div.veyq-level-item-main,
   }
 }
 
-/* A toggle action on an item (the Memory's heart, inbox #409 moves it to core): pressed = the accent-soft tile with the
-   filled favourite heart, the same purple tile the sidebar icons use. Two classes, so it beats the layer's outlined button. */
+/* A toggle action on an item (the favourite heart, inbox #409): pressed = the filled heart in the favourite colour, no tile
+   of its own (the row's actions are quiet). Two classes, so it beats the layer's text button. */
 .veyq-level-item-action.is-pressed {
-  border-color: color-mix(in srgb, var(--app-favorite) 30%, var(--app-line));
-  background: var(--app-accent-soft);
   color: var(--app-favorite);
 }

@@ -98,11 +98,12 @@ async function startSelecting(w: Level) {
 }
 
 describe('LevelView: Select', () => {
-  it('a toolbar button beside "New" and the trash; pressed, it puts a labelled checkbox on every row and shows the bar', async () => {
+  it('an icon button of the tools row, beside the trash; pressed, it puts a labelled checkbox on every row and shows the bar', async () => {
     const w = mountLevel()
     expect(w.findAll('input[type="checkbox"]'), 'no checkbox before the mode').toHaveLength(0)
     expect(selectButton(w).attributes('aria-pressed')).toBe('false')
-    expect(selectButton(w).text()).toBe(t('node.select.action'))
+    expect(selectButton(w).attributes('aria-label')).toBe(t('node.select.action'))
+    expect(selectButton(w).text(), 'an icon button: its words are its name and tooltip').toBe('')
     await startSelecting(w)
     expect(selectButton(w).attributes('aria-pressed')).toBe('true')
     // every row, by the node's own name - a real checkbox

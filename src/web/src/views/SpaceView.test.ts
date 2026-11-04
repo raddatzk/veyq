@@ -390,7 +390,7 @@ describe('SpaceView over the real registry', () => {
     expect(w.find('.name-stub').text()).toBe('create|-|-')
     expect(w.find('.create-stub').exists(), 'the Memory dialog gives way').toBe(false)
 
-    await w.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"], .veyq-level-toolbar button:not(.veyq-new-menu-button)`).trigger('click')
+    await w.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"]`).trigger('click')
     await flushPromises()
     expect(w.find('.trash-stub').exists()).toBe(true)
 
