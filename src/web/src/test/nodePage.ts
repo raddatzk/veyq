@@ -41,7 +41,6 @@ export function coverStandIn(opts: { covers?: Map<string, LoadedCover>; canSet?:
     covers,
     has: (id) => covers.value.has(id),
     ensure: () => {},
-    headerActions: () => [],
     rowActions: () => [],
     canSet: () => opts.canSet ?? false,
     editor: ref(null),

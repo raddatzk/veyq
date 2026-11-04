@@ -56,7 +56,6 @@ import { SaveTooLarge } from '../../../shared/saveStream'
 import { stubApi } from '../../../test/apiMock'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
-import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { chooseHeaderEntry, headerButtonIds, headerMenuIds } from '../../../test/nodeHeader'
 import { mountNodePage } from '../../../test/nodePage'
 
@@ -211,18 +210,18 @@ describe('an opened file: its page for a member', () => {
     expect(listFiles).toHaveBeenCalledWith({ scopeId: SCOPE, parentId: D })
   })
 
-  it('offers everything the matrix grants a member, all in the header: download, replace, share, rename, move and delete', async () => {
+  it('offers everything the matrix grants a member, all in the header: download, replace, share, move and delete - and its name renamed in place', async () => {
     const w = mountDetail()
     await flushPromises()
     expect(ariaLabels(w)).toEqual(expect.arrayContaining([
-      t('share.share'), t('node.rename'), t('node.move.action'),
+      t('share.share'), t('node.renameNamed', { name: 'Report.pdf' }),
       t('depot.download', { name: 'Report.pdf' }), t('depot.replace', { name: 'Report.pdf' }),
     ]))
     // owner decision 2026-10-14: the download and the replace are header actions; core's "Copy to…" beside the move
-    // (uc.platform.copy-node). In a file's priority (ADR 0110): favorite, download, share, replace, then editing and
-    // moving it; delete is the ⋯ menu's last entry, never a button.
-    expect(headerButtonIds(w)).toEqual(['favorite', 'download', 'share', 'replace', 'rename', 'move', 'copy'])
-    expect(await headerMenuIds(w)).toEqual(['delete'])
+    // (uc.platform.copy-node). In a file's priority (ADR 0110): favorite, download, share, replace as buttons; the move and
+    // the copy are ⋯ entries, delete its last, never a button; the name is no entry, it is renamed in place (decision 11).
+    expect(headerButtonIds(w)).toEqual(['favorite', 'download', 'share', 'replace'])
+    expect(await headerMenuIds(w)).toEqual(['move', 'copy', 'delete'])
     expect(w.findAll('button').filter((b) => !b.element.closest('.veyq-node-header') && !b.element.closest('.file-viewer')).map((b) => b.attributes('aria-label')), 'no action button below the header')
       .not.toEqual(expect.arrayContaining([t('depot.download', { name: 'Report.pdf' }), t('depot.replace', { name: 'Report.pdf' })]))
   })
@@ -244,19 +243,25 @@ describe('an opened file: its page for a member', () => {
     vi.mocked(isFavorite).mockReturnValue(false)
   })
 
-  it('the card\'s buttons reach the host: share, rename, delete and move as real clicks', async () => {
+  it('the card\'s actions reach the host: share, delete and move as real clicks, the rename in place through the source\'s write', async () => {
     const w = mountDetail()
     await flushPromises()
     await w.find(`.veyq-node-header-actions button[aria-label="${t('share.share')}"]`).trigger('click')
-    await w.find(`.veyq-node-header-actions button[aria-label="${t('node.rename')}"]`).trigger('click')
     await chooseHeaderEntry(w, 'delete')
     expect(w.calls.share).toEqual([[REPORT, { contribute: true }]])
-    expect(w.calls.rename).toEqual([[REPORT]])
     expect(w.calls.delete).toEqual([[REPORT]])
-    const move = w.find('.veyq-node-header-actions button[data-action="move"]')
-    expect(move.findComponent(VeyqButton).props('icon')).toBe('file-export')
-    await (move.element as HTMLButtonElement).click()
+    const move = await chooseHeaderEntry(w, 'move')
+    expect(move.querySelector('.veyq-menu__item-label')?.textContent?.trim()).toBe(t('node.move.action'))
     expect((w.calls.move as TreeNode[][]).map(([n]) => n.id)).toEqual([R])
+    // The name, renamed in place: pre-selected before its extension (core's rule for a file), written through the page's door.
+    await w.find('button[data-testid="node-header-rename"]').trigger('click')
+    const field = w.find<HTMLInputElement>('input[data-testid="node-header-name-input"]')
+    expect([field.element.selectionStart, field.element.selectionEnd]).toEqual([0, 'Report'.length])
+    await field.setValue('Bericht.pdf')
+    await field.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(w.calls.renameTo).toEqual([[REPORT, 'Bericht.pdf']])
+    expect(w.calls.rename, 'no dialog').toBeUndefined()
 
   })
 

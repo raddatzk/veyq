@@ -30,6 +30,7 @@ import { setAccountUserId } from '../../app/account'
 import { realI18n, t } from '../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
 import { hostFor } from '../../test/nodeHost'
+import { chooseHeaderEntry, headerMenuIds } from '../../test/nodeHeader'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { stubRows } from '../../test/stubRows'
 import { actionIdsOf, clickAction } from '../../test/levelRows'
@@ -81,11 +82,13 @@ describe('LevelView: Copy to…', () => {
     expect(w.calls.copy).toEqual([[[expect.objectContaining({ id: 'a1' })]], [[expect.objectContaining({ id: 'Sub' })]]])
   })
 
-  it('the folder\'s header offers it right after "Move to…"', async () => {
+  it('the folder\'s header offers it right after "Move to…", both entries of the ⋯ menu, never buttons', async () => {
     const w = mountLevel(unlocked)
-    const labels = headerLabels(w)
-    expect(labels.indexOf(t('node.copy.action'))).toBe(labels.indexOf(t('node.move.action')) + 1)
-    await w.find(`.veyq-node-header-actions button[aria-label="${t('node.copy.action')}"]`).trigger('click')
+    const ids = await headerMenuIds(w)
+    expect(ids.indexOf('copy')).toBe(ids.indexOf('move') + 1)
+    expect(ids.indexOf('move')).toBeGreaterThanOrEqual(0)
+    expect(headerLabels(w)).not.toContain(t('node.copy.action'))
+    await chooseHeaderEntry(w, 'copy')
     expect(w.calls.copy).toEqual([[[TRIPS]]])
   })
 
@@ -93,6 +96,7 @@ describe('LevelView: Copy to…', () => {
     for (const access of [guestAccessOf('READ'), guestAccessOf('READ_WRITE'), memberAccessOf()]) {
       const w = mountLevel(access)
       expect(headerLabels(w), access.mode).not.toContain(t('node.copy.action'))
+      expect(await headerMenuIds(w), access.mode).not.toContain('copy')
       for (const title of ['Sub', 'a1']) expect(await actionIdsOf(w, title), `${access.mode} ${title}`).not.toContain('copy')
       w.unmount()
     }

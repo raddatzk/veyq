@@ -76,6 +76,9 @@ function onReportMedium(item: MediaItem) {
   })
 }
 
+/** The page's rename in place of this node (the header's name), where it has the door. */
+const renameTo = host.renameTo ? (name: string) => host.renameTo!(props.node, name) : null
+
 function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevision: number }) {
   if (!guest) patchNodeMeta(e.nodeId, e.wrappedMeta, e.metaRevision)
 }
@@ -93,7 +96,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaRevi
     :chapters="chapters"
     :rights="rights"
     :source="source"
-    @rename="host.rename?.(node)"
+    :rename-to="renameTo"
     @move="host.move?.(node)"
     @delete="host.delete?.(node)"
     @create-chapter="host.createChild?.(CHAPTER_KIND, node)"

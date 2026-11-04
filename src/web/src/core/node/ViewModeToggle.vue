@@ -36,8 +36,12 @@ const { t } = useI18n()
 </template>
 
 <style scoped>
+/* In the level's head the switch is that head's one control height (`--veyq-level-control-height`, `styles/ui.css`), its
+   buttons filling it; elsewhere its own size. */
 .view-mode-toggle {
   display: inline-flex;
+  box-sizing: border-box;
+  height: var(--veyq-level-control-height, auto);
   gap: 0.15rem;
   padding: 0.15rem;
   border: 1px solid var(--app-line);
@@ -48,7 +52,7 @@ const { t } = useI18n()
   display: grid;
   place-items: center;
   width: 2rem;
-  height: 2rem;
+  min-height: calc(var(--veyq-level-control-height, calc(2.3rem + 2px)) - 0.3rem - 2px);
   padding: 0;
   border: 0;
   border-radius: calc(var(--app-radius-sm) - 2px);

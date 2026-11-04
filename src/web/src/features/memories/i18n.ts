@@ -36,6 +36,9 @@ const en = {
     // Who was there (ADR 0083, uc.memory.participants): opaque member ids sealed in the Memory's details; members only.
     participants: {
       title: 'Participants',
+      // The header's way to the picker: the button beside the people, the chip while nobody is listed.
+      edit: 'Edit participants',
+      add: 'Add participants',
       wasThere: 'I was there',
       wasThereHint: 'lists you among the participants',
       dialogTitle: 'Who was there?',
@@ -310,6 +313,8 @@ const de: typeof en = {
     // Wer dabei war (ADR 0083, uc.memory.participants): anonyme Mitglieds-IDs, in den Details der Erinnerung versiegelt; nur für Mitglieder.
     participants: {
       title: 'Beteiligte',
+      edit: 'Beteiligte bearbeiten',
+      add: 'Beteiligte hinzufügen',
       wasThere: 'Ich war dabei',
       wasThereHint: 'trägt dich bei den Beteiligten ein',
       dialogTitle: 'Wer war dabei?',

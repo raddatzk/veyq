@@ -245,6 +245,9 @@ describe('the guest of a single-file link sees the member\'s file view', () => {
     expect(labels(w)).toEqual([t('depot.download', { name: 'Report.pdf' })])
     expect(w.find('input[type="file"]').exists()).toBe(false)
     for (const icon of ['pencil', 'trash', 'share-alt', 'file-export', 'sync']) expect(buttonIcons(w), icon).not.toContain(icon)
+    // The name is plain text in the h1 for a guest: no rename in place (ADR 0110 decision 11).
+    expect(w.find('h1.veyq-node-header-title').text()).toBe('Report.pdf')
+    expect(w.find('h1.veyq-node-header-title button').exists()).toBe(false)
     expectNoMemberWorld()
   })
 
@@ -282,6 +285,8 @@ describe('the guest of a single-file link sees the member\'s file view', () => {
     const reload = vi.fn(async () => {})
     const w = await mountPage(ShareRole.ReadWrite, { requestGuest, reload })
     expect(w.findAll('.veyq-node-header-actions button').map((b) => b.attributes('data-action'))).toEqual(['download', 'replace'])
+    expect(w.find('h1.veyq-node-header-title').text(), 'a writing guest renames nothing either').toBe('Report.pdf')
+    expect(w.find('button[data-testid="node-header-rename"]').exists()).toBe(false)
     expect(w.find('.file-detail .veyq-form-copy').exists(), 'no standing sentence about the replace').toBe(false)
     expect(w.text()).not.toMatch(/owner too|cannot be restored/)
     for (const icon of ['pencil', 'trash', 'share-alt', 'file-export']) expect(buttonIcons(w), icon).not.toContain(icon)

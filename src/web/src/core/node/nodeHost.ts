@@ -37,8 +37,12 @@ export interface NodeShareOffer {
 export interface NodeHost {
   /** Open a node: its page, or the folder's level. */
   open?(node: TreeNode): void
-  /** Rename a node: core's `FolderNameDialog`, whatever its kind. */
+  /** Rename a node: core's `FolderNameDialog`, whatever its kind (a level row's rename). */
   rename?(node: TreeNode): void
+  /** Rename a node to `name` in place (a header's name, ADR 0110 decision 11): the same check and write as the dialog's
+   *  (`nodeName.ts`), then the page follows the node to its new path. Rejects with the refusal or the write's error. A host
+   *  hands it on together with `rename`, never alone. */
+  renameTo?(node: TreeNode, name: string): Promise<void>
   /** Move a node: core's `MoveNodeDialog` (inbox #358). */
   move?(node: TreeNode): void
   /** Move a level's selection: core's `MoveNodesDialog` (inbox #421). */
@@ -98,12 +102,13 @@ export function hostRights<T extends Partial<NodeRights>>(rights: T, host: NodeH
   }
 }
 
-/** The standard header actions' handlers of `node` (`standardNodeActions`) through `host`'s doors: absent where the door
- *  is. `offer` is what the share door hands its dialog. */
+/** The standard actions' handlers of `node` (`standardNodeActions`, `standardNodeRename`) through `host`'s doors: absent
+ *  where the door is. `offer` is what the share door hands its dialog. */
 export function hostHandlers(host: NodeHost, node: () => TreeNode, offer: () => NodeShareOffer): StandardActionHandlers {
   return {
     ...(host.share ? { share: () => host.share!(node(), offer()) } : {}),
     ...(host.rename ? { rename: () => host.rename!(node()) } : {}),
+    ...(host.renameTo ? { renameTo: (name: string) => host.renameTo!(node(), name) } : {}),
     ...(host.move ? { move: () => host.move!(node()) } : {}),
     ...(host.delete ? { remove: () => host.delete!(node()) } : {}),
   }

@@ -1,6 +1,6 @@
 // What a node page's detail adds to the header core draws above it (owner 2026-11-03, ADR 0110 decision 10). Core owns every
 // node page's header: `components/NodePage.vue` draws it from the kind's descriptor (icon, cover, order) and from what the
-// detail below contributes here - a subtitle, the application's own actions, its facts (`NodeHeaderFact`: a date, a place,
+// detail below contributes here - a subtitle, the application's own actions, the rename of its name in place, its facts (`NodeHeaderFact`: a date, a place,
 // people, a line of text) and a banner above the row. What it contributes depends on the detail's own state (a Memory's
 // gallery dates it, a file's listing names its uploader), so it is a reactive builder, not a registration.
 //
@@ -10,7 +10,7 @@
 // without core's page around it (a unit test of the detail alone) the call is a no-op and no header is drawn. The page holds
 // one contribution: the detail's (the last caller wins; a page mounts one detail). It is withdrawn when the caller unmounts.
 import { computed, inject, onBeforeUnmount, provide, shallowRef, type ComputedRef, type InjectionKey, type ShallowRef } from 'vue'
-import type { NodeHeaderAction, NodeHeaderBanner, NodeHeaderFact } from './nodeHeader'
+import type { NodeHeaderAction, NodeHeaderBanner, NodeHeaderFact, NodeHeaderRename } from './nodeHeader'
 
 /** What a detail adds to its page's header. Everything is optional; core's own actions (the heart, the cover, copy, the
  *  download, Report) are core's and never contributed. */
@@ -19,6 +19,9 @@ export interface NodeHeaderContribution {
   subtitle?: string
   /** The application's actions, each `shown` by its fail-closed rights function; merged with core's by the kind's `order`. */
   actions?: readonly NodeHeaderAction[]
+  /** The name edited in place (`standardNodeRename`): the kind's own rename write, given only where whoever looks may
+   *  rename the node. Absent: the name is plain text. */
+  rename?: NodeHeaderRename | null
   /** What core draws under the subtitle, in this order. */
   facts?: readonly NodeHeaderFact[]
   /** Drawn above the header row (Memories' banner). */

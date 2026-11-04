@@ -22,7 +22,7 @@ describe('registerDepot', () => {
       supported: true,
       kind: FILE_KIND,
       icon: 'file',
-      header: { order: ['favorite', 'download', 'share', 'replace', 'rename', 'move', 'copy'] },
+      header: { order: ['favorite', 'download', 'share', 'replace', 'move', 'copy'] },
       detail: FileDetail,
       shareDialog: FileShareDialog,
       deleteTitle: 'depot.deleteTitle',
@@ -85,7 +85,7 @@ describe('registerDepot', () => {
       supported: true,
       kind: DROPBOX_KIND,
       icon: 'inbox',
-      header: { order: ['favorite', 'share', 'download', 'cover', 'move', 'copy'] },
+      header: { order: ['favorite', 'share', 'download', 'move', 'copy'] },
       cover: {}, // a drop box carries a cover (inbox #411)
       detail: DropBoxDetail,
       deleteTitle: 'depot.dropBox.delete',

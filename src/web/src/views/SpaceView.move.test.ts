@@ -66,6 +66,7 @@ import { isFavorite } from '../core/favorites/favoritesStore'
 import { stubApi } from '../test/apiMock'
 import { filesApi } from '../features/depot/api'
 import { clickAction } from '../test/levelRows'
+import { chooseDocumentHeaderEntry, documentHeaderMenuIds } from '../test/nodeHeader'
 import { browserOpen as dialogOpen, crumbs, goTo, moveHere, placeNames } from '../test/moveBrowser'
 import { deleteSelection, moveSelection, selectRows, startSelecting } from '../test/levelSelection'
 
@@ -107,7 +108,8 @@ describe('a member moves a folder from its card', () => {
   it('Move to… opens core\'s dialog, the pick goes through moveNode, the URL follows the folder on screen, Undo moves it back', async () => {
     await mountAt('#~me/trips/rome/')
     expect(document.body.querySelector('.veyq-node-header-title')!.textContent).toBe('Rome')
-    await click(byLabel(t('node.move.action'))!)
+    expect(byLabel(t('node.move.action')), 'a ⋯ entry, never a button').toBeUndefined()
+    await chooseDocumentHeaderEntry('move')
     expect(dialogOpen()).toBe(true)
     // it opens where the folder is (the Memory there takes no folder); up at the space's root: the folders, no drop box
     expect(crumbs()).toEqual([t('shell.personal'), 'Trips'])
@@ -250,14 +252,15 @@ describe('a member moves a guest\'s folder out of a drop box', () => {
     await mountAt('#~me/inbox/anna/')
     const actions = [...document.body.querySelectorAll('.veyq-node-header-action')].map((b) => b.getAttribute('aria-label'))
     // a copy of it is an ordinary folder elsewhere (uc.platform.copy-node); the folder itself stays the guest's - in a
-    // folder header's priority (ADR 0110), and nothing in a ⋯ menu
-    expect(actions).toEqual([t('node.favorite'), t('export.action'), t('node.move.action'), t('node.copy.action')])
-    expect(document.body.querySelector('.veyq-node-header-more')).toBeNull()
+    // folder header's priority (ADR 0110), the move and the copy ⋯ entries; no rename, no delete
+    expect(actions).toEqual([t('node.favorite'), t('export.action')])
+    expect(await documentHeaderMenuIds()).toEqual(['move', 'copy'])
+    expect(document.body.querySelector('.veyq-node-header button[data-testid="node-header-rename"]')).toBeNull()
   })
 
   it('the drop box itself moves from its card, like any node', async () => {
     await mountAt('#~me/inbox')
-    await click(byLabel(t('node.move.action'))!)
+    await chooseDocumentHeaderEntry('move')
     await moveHere('Trips')
     expect(moveNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'inbox', 'trips')
   })

@@ -40,6 +40,35 @@ beforeEach(() => {
 })
 
 describe('MemoryBanner', () => {
+  // ADR 0110 decision 11: a drawn banner is its own way to its dialog; the header's menu offers none while it is drawn.
+  it('where it may be changed, a click on the banner opens its dialog - the frame, or a corner button while a video plays', async () => {
+    const edit = vi.fn()
+    const { wrapper } = mountBanner(image, { edit })
+    const button = wrapper.get('button[data-testid="memory-banner-edit"]')
+    expect(button.attributes('aria-label')).toBe(t('memory.banner.change'))
+    expect(button.classes()).not.toContain('is-corner')
+    await button.trigger('click')
+    expect(edit).toHaveBeenCalledOnce()
+
+    vi.mocked(registerPlayback).mockResolvedValueOnce('/__media/h1')
+    const playing = mountBanner(video, { edit }).wrapper
+    await playing.get('.memory-banner-play').trigger('click')
+    await flushPromises()
+    expect(playing.find('video').exists(), 'control: it plays').toBe(true)
+    const corner = playing.get('button[data-testid="memory-banner-edit"]')
+    expect(corner.classes()).toContain('is-corner')
+    await corner.trigger('click')
+    expect(edit).toHaveBeenCalledTimes(2)
+    playing.unmount()
+  })
+
+  it('a guest\'s banner (no edit) offers nothing', () => {
+    const { wrapper } = mountBanner(image)
+    expect(wrapper.find('img.banner-frame-media').exists(), 'control: the banner is drawn').toBe(true)
+    expect(wrapper.find('[data-testid="memory-banner-edit"]').exists()).toBe(false)
+    expect(wrapper.find('button').exists()).toBe(false)
+  })
+
   it('shows the whole medium as a decorative picture, the same picture blurred behind it - a stored fill and point ignored', () => {
     // `image` was framed by an earlier editor: `fill` around (0.2, 0.85). It is drawn whole all the same.
     const { wrapper } = mountBanner(image)

@@ -40,7 +40,7 @@ export function mountWithHeader(
           banner ? h(banner.component, banner.props ?? {}) : null,
           h(NodeHeader, {
             node, title: node.name, icon: kind?.icon, cover: !!kind?.cover, order: kind?.header?.order, linkPeople,
-            subtitle: header.value.subtitle, actions: header.value.actions, facts: header.value.facts,
+            subtitle: header.value.subtitle, actions: header.value.actions, facts: header.value.facts, rename: header.value.rename ?? null,
           }),
           h(view, attrs),
         ])
@@ -108,4 +108,38 @@ export async function chooseHeaderEntry(w: VueWrapper, id: string): Promise<HTML
   entry.querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
   await flushPromises()
   return entry
+}
+
+/** For a test that mounts a whole page into `document.body` and reads the DOM, not a wrapper: open the (first) header's ⋯
+ *  with a real click and return its entries' ids in order, the menu left open (none where it draws no ⋯). */
+export async function documentHeaderMenuIds(): Promise<string[]> {
+  const more = document.body.querySelector<HTMLElement>(`.veyq-node-header ${MORE}`)
+  if (!more) return []
+  more.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+  await flushPromises()
+  return openEntries().map(idOf)
+}
+
+/** As {@link chooseHeaderEntry}, for a page mounted into `document.body`: open the header's ⋯ and click the entry of this id. */
+export async function chooseDocumentHeaderEntry(id: string): Promise<void> {
+  const ids = await documentHeaderMenuIds()
+  const entry = openEntries().find((e) => idOf(e) === id)
+  if (!entry) throw new Error(`no header menu entry "${id}" among: ${ids.join(', ')}`)
+  entry.querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
+  await flushPromises()
+}
+
+/** For a page mounted into `document.body`: rename the node on screen in place - a real click on the header's name, `name`
+ *  typed into its field, Enter (ADR 0110 decision 11). Throws where the name is no button (no rename offered). */
+export async function renameInHeader(name: string): Promise<void> {
+  const button = document.body.querySelector<HTMLElement>('.veyq-node-header button[data-testid="node-header-rename"]')
+  if (!button) throw new Error('the header offers no rename in place')
+  button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+  await flushPromises()
+  const input = document.body.querySelector<HTMLInputElement>('.veyq-node-header input[data-testid="node-header-name-input"]')!
+  input.value = name
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  await flushPromises()
 }

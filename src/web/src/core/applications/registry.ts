@@ -631,7 +631,7 @@ export function createRegistry(): Registry {
     // A folder lives at the root or in another folder (the server's `FolderNodeRules`).
     [FOLDER_KIND, {
       // The folder header's priority (ADR 0110): favorite, then sharing, its content, its look, then editing and moving it.
-      kind: FOLDER_KIND, icon: 'folder', header: { order: ['favorite', 'share', 'download', 'cover', 'rename', 'move', 'copy'] },
+      kind: FOLDER_KIND, icon: 'folder', header: { order: ['favorite', 'share', 'download', 'move', 'copy'] },
       shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
       placement: { root: true, parents: [FOLDER_KIND] }, cover: {}, copyLosses: ['node.copy.lossFolderCover'],
       rekeyContent: nothingOfItsOwnToRekey,

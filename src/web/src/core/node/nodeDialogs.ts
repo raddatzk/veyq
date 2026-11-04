@@ -1,6 +1,6 @@
 // Core's dialogs behind the host doors (`nodeHost.ts`), ONE set for both host pages (owner 2026-11-01): the member's space
 // page and a share guest's page each call `useNodeDialogs` once and mount `components/NodeDialogs.vue` with its answer, so
-// the name dialog, the create dialogs, the move dialogs, the delete question, the share dialogs, the download, the copy,
+// the name dialog (and the rename in place it shares its write with), the create dialogs, the move dialogs, the delete question, the share dialogs, the download, the copy,
 // the import and the space's trash each exist once. The host hands on the `doors` its session has (a guest's: the move -
 // where its link moves anything -, the download and the create) and adds its own navigation (`open`).
 //
@@ -15,6 +15,7 @@
 // explain. The guest's create is core's naming of the new node (`ShareNameDialog`) through the page's own write
 // (`env.guestCreate`).
 import { computed, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Access, TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { sameKeyOr } from './tree'
@@ -23,6 +24,8 @@ import type { SelectedForDelete } from './selection'
 import type { ImportOffer } from '../export/importSource'
 import { nodeMover, type NodeMover } from './move'
 import type { NodeHost, NodeShareOffer } from './nodeHost'
+import { renameMemberNode } from './nodeName'
+import { useToast } from '../../shared/state/useToast'
 
 /** The page the dialogs serve (see the header). */
 export interface NodeDialogsEnv {
@@ -88,6 +91,8 @@ export interface NodeDialogs {
 }
 
 export function useNodeDialogs(env: NodeDialogsEnv): NodeDialogs {
+  const { t } = useI18n()
+  const toast = useToast()
   const state: NodeDialogState = {
     name: ref(null),
     create: shallowRef(null),
@@ -109,6 +114,16 @@ export function useNodeDialogs(env: NodeDialogsEnv): NodeDialogs {
     rename(node) {
       state.create.value = null
       state.name.value = { mode: 'rename', node, shown: shown() }
+    },
+    // The header's name edited in place (ADR 0110 decision 11): the name dialog's check and write (`nodeName.ts`), for the
+    // member's unlocked scope alone, then - as the dialog's `done` - the page follows what was on screen to its new path.
+    async renameTo(node, name) {
+      const a = env.access()
+      if (a.mode !== 'member' || !a.scopeId || !a.epochs) throw new Error('rename_unavailable')
+      const onScreen = shown()
+      const { resealed } = await renameMemberNode(a.scopeId, a.epochs, node, name)
+      if (!resealed) toast.error(t('share.nameResealFailed'))
+      stayOn(onScreen)
     },
     createChild(kind, parent) {
       if (env.access().mode === 'guest') {

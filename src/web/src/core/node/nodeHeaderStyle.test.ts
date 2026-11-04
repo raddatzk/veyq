@@ -5,6 +5,7 @@
 // look; this stops a rule being dropped unseen.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { headerRowCounts, type NodeHeaderFact } from './nodeHeader'
 
 const css = readFileSync(new URL('../../styles/ui.css', import.meta.url), 'utf8')
 
@@ -15,6 +16,53 @@ function rule(selector: string, within: string): string {
   if (!m) throw new Error(`no rule for ${selector}`)
   return m[1]
 }
+
+/** The custom properties a rule declares (a value may span lines: the visual's height is one `calc`). */
+function customProperties(declarations: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const d of declarations.split(';')) {
+    const m = /^\s*(--[\w-]+)\s*:\s*([\s\S]+?)\s*$/.exec(d)
+    if (m) out[m[1]] = m[2].replace(/\s+/g, ' ')
+  }
+  return out
+}
+
+/** A length in px as a browser computes it at a 16 px root: every `var()` resolved from `vars` (or its fallback), `rem` and
+ *  `px` to numbers, `calc` to the arithmetic it is. Anything else is refused, so the sheet cannot hide a unit this cannot read. */
+function evaluate(expr: string, vars: Record<string, string>): number {
+  let e = expr
+  for (let i = 0; i < 10 && e.includes('var('); i++) {
+    e = e.replace(/var\((--[\w-]+)(?:,\s*([^()]+))?\)/g, (_, name: string, fallback?: string) => {
+      const v = vars[name] ?? fallback
+      if (v === undefined) throw new Error(`unset ${name}`)
+      return `(${v})`
+    })
+  }
+  e = e.replace(/calc\(/g, '(').replace(/(\d*\.?\d+)rem/g, (_, n: string) => String(Number(n) * 16)).replace(/(\d*\.?\d+)px/g, '$1')
+  if (!/^[\d.\s+\-*/()]+$/.test(e)) throw new Error(`not a length: ${e}`)
+  return Function(`return (${e})`)() as number
+}
+
+/** The leading visual of a header that draws `subtitle` and `facts`: its height, a cover's wide width and the icon tile's, from
+ *  the sheet's own rules and the counts the component sets (`headerRowCounts`). */
+function visualOf(subtitle: boolean, facts: readonly NodeHeaderFact[]) {
+  const c = headerRowCounts(subtitle, facts)
+  const vars: Record<string, string> = {
+    ...customProperties(rule('.veyq-node-header', css)),
+    '--veyq-node-header-subtitle-rows': String(c.subtitle),
+    '--veyq-node-header-chip-rows': String(c.chips),
+    '--veyq-node-header-people-rows': String(c.people),
+    '--veyq-node-header-text-rows': String(c.text),
+  }
+  const height = evaluate('var(--veyq-node-header-visual-height)', vars)
+  const cover = evaluate(customProperties(rule('.veyq-node-header-cover', css))['--veyq-node-header-leading-wide'], vars)
+  const tile = evaluate(customProperties(rule('.veyq-node-header .veyq-node-header-icon', css))['--veyq-node-header-leading-wide'], vars)
+  return { height: Math.round(height * 10) / 10, cover: Math.round(cover * 10) / 10, tile: Math.round(tile * 10) / 10 }
+}
+const DATE: NodeHeaderFact = { kind: 'date', label: '2026' }
+const PLACE: NodeHeaderFact = { kind: 'place', label: 'Rome' }
+const PEOPLE: NodeHeaderFact = { kind: 'people', label: 'Participants', people: [] }
+const TEXT: NodeHeaderFact = { kind: 'text', text: 'In EUR' }
 
 describe('node header styles', () => {
   it('no viewport query places the header: the component\'s `is-compact` answer does (ADR 0110 decision 8)', () => {
@@ -37,22 +85,69 @@ describe('node header styles', () => {
     expect(rule('.veyq-node-header', css)).toMatch(/--veyq-node-header-name-min:\s*12rem/)
   })
 
-  it('every cover in a header is 244 px wide and 16:9, the icon tile a 4rem square, each sized from the wide width core reads', () => {
-    // The owner's rule (2026-11-03): the Memory's cover size, for every kind that takes a cover. Without the property the
-    // layout answer would read 0 and put the cover beside a name squeezed below its minimum.
-    expect(rule('.veyq-node-header-cover', css)).toMatch(/--veyq-node-header-leading-wide:\s*244px;[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
-    expect(rule('.veyq-node-header-cover', css)).toMatch(/aspect-ratio:\s*16 \/ 9/)
+  it('the leading visual is as tall as the rows core draws beside it: computed per row set, never measured (owner 2026-11-04)', () => {
+    // A Memory's four rows (the name, the count, date and place, the people): a cover near the former fixed 244 px.
+    expect(visualOf(true, [DATE, PLACE, PEOPLE])).toEqual({ height: 137.2, cover: 243.9, tile: 137.2 })
+    // A folder's name alone: a tile as tall as the name row (and a cover frame 16:9 at that height).
+    expect(visualOf(false, [])).toEqual({ height: 42, cover: 74.7, tile: 42 })
+    // A Pot (the name, its currency) and a file (the name, who uploaded it): each row its own size.
+    expect(visualOf(true, []).height).toBe(64.4)
+    expect(visualOf(false, [PEOPLE]).height).toBe(86.4)
+    expect(visualOf(false, [TEXT]).height).toBe(64.4)
+    // Consecutive chips are one row; a chip after a people row starts another.
+    expect(visualOf(false, [DATE, PLACE]).height).toBe(visualOf(false, [DATE]).height)
+    expect(visualOf(false, [DATE, PEOPLE, PLACE]).height).toBe(visualOf(false, [DATE, PLACE, PEOPLE]).height + visualOf(false, [DATE]).height - 42)
+  })
+
+  it('each row is its row\'s block size, so the sum is exact while nothing wraps; the body\'s gap is the sum\'s', () => {
+    expect(rule('.veyq-node-header-titlerow', css)).toMatch(/min-block-size:\s*var\(--veyq-node-header-row-title\)/)
+    expect(rule('.veyq-node-header-subtitle', css)).toMatch(/min-block-size:\s*var\(--veyq-node-header-row-subtitle\)/)
+    expect(rule('.veyq-node-header-facts.is-chips', css)).toMatch(/min-block-size:\s*var\(--veyq-node-header-row-chips\)/)
+    expect(rule('.veyq-node-header-facts.is-people', css)).toMatch(/min-block-size:\s*var\(--veyq-node-header-row-people\)/)
+    expect(rule('.veyq-node-header-facts.is-text', css)).toMatch(/min-block-size:\s*var\(--veyq-node-header-row-text\)/)
+    expect(rule('.veyq-node-header-body', css)).toMatch(/gap:\s*var\(--veyq-node-header-row-gap\)/)
+    // The content is centred against the visual (a folder's one-line name in the middle of its tile).
+    expect(rule('.veyq-node-header', css)).toMatch(/align-items:\s*center/)
+  })
+
+  it('a cover is 16:9 and the icon tile a square, each sized from the wide width core reads', () => {
+    // Without the property the layout answer would read 0 and put the cover beside a name squeezed below its minimum.
+    const cover = rule('.veyq-node-header-cover', css)
+    expect(cover).toMatch(/--veyq-node-header-leading-wide:\s*calc\(var\(--veyq-node-header-visual-height\) \* 16 \/ 9\);[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
+    expect(cover).toMatch(/aspect-ratio:\s*16 \/ 9/)
     const icon = rule('.veyq-node-header .veyq-node-header-icon', css)
-    expect(icon).toMatch(/--veyq-node-header-leading-wide:\s*4rem;[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
-    expect(icon).toMatch(/height:\s*4rem/)
+    expect(icon).toMatch(/--veyq-node-header-leading-wide:\s*var\(--veyq-node-header-visual-height\);[^}]*width:\s*var\(--veyq-node-header-leading-wide\)/)
+    expect(icon).toMatch(/height:\s*var\(--veyq-node-header-leading-wide\)/)
+    // The empty frame of a kind that takes a cover: the kind's icon in its middle, a line around it.
+    const empty = rule('.veyq-node-header-cover.is-empty', css)
+    expect(empty).toMatch(/place-items:\s*center/)
+    expect(empty).toMatch(/border:\s*1px solid var\(--app-line\)/)
     // No visual sizes itself by a query of its own: the header's `is-compact` answer is the only switch.
     expect(css).not.toMatch(/@container[^{]*\{[^}]*\.veyq-node-header/)
   })
 
-  it('the cover button\'s hint shows on hover and keyboard focus; its words only on a wide cover', () => {
-    expect(rule('.veyq-node-header-visual-button:hover .veyq-node-header-cover-hint,\n.veyq-node-header-visual-button:focus-visible .veyq-node-header-cover-hint', css)).toMatch(/opacity:\s*1/)
+  it('the name is one size, cover or not: 2rem wide, 1.5rem compact', () => {
+    expect(rule('.veyq-node-header-title', css)).toMatch(/font-size:\s*2rem/)
+    expect(rule('.veyq-node-header.is-compact .veyq-node-header-title', css)).toMatch(/font-size:\s*1\.5rem/)
+    expect(css).not.toMatch(/has-visual/)
+  })
+
+  it('the cover button\'s hint shows on hover, on keyboard focus and on an empty wide frame; its words only on a wide header', () => {
+    const shown = rule(
+      '.veyq-node-header-visual-button:hover .veyq-node-header-cover-hint,\n.veyq-node-header-visual-button:focus-visible .veyq-node-header-cover-hint,\n.veyq-node-header:not(.is-compact) .veyq-node-header-visual-button.is-empty .veyq-node-header-cover-hint',
+      css,
+    )
+    expect(shown).toMatch(/opacity:\s*1/)
     expect(rule('.veyq-node-header-cover-hint', css)).toMatch(/opacity:\s*0/)
-    expect(rule('.veyq-node-header-icon .veyq-node-header-cover-hint-label,\n.veyq-node-header.is-compact .veyq-node-header-cover-hint-label', css)).toMatch(/display:\s*none/)
+    expect(rule('.veyq-node-header.is-compact .veyq-node-header-cover-hint-label', css)).toMatch(/display:\s*none/)
+  })
+
+  it('on a folder level the header\'s action buttons and the toolbar\'s controls are one height', () => {
+    expect(rule('.veyq-level-head', css)).toMatch(/--veyq-level-control-height:\s*2\.25rem/)
+    expect(rule('.veyq-level-head .veyq-node-header-actions .veyq-button', css)).toMatch(/height:\s*var\(--veyq-level-control-height\)/)
+    expect(rule('.veyq-level-toolbar > .veyq-button', css)).toMatch(/height:\s*var\(--veyq-level-control-height\)/)
+    const toggle = readFileSync(new URL('./ViewModeToggle.vue', import.meta.url), 'utf8')
+    expect(toggle).toMatch(/height:\s*var\(--veyq-level-control-height, auto\)/)
   })
 
   it('core\'s page is the inline-size container an application\'s banner answers to', () => {
@@ -77,7 +172,7 @@ describe('node header styles', () => {
   })
 
   it('compact, the name is two lines at most, then an ellipsis', () => {
-    const title = rule('.veyq-node-header.is-compact .veyq-node-header-title', css)
+    const title = rule('.veyq-node-header.is-compact .veyq-node-header-title,\n.veyq-node-header.is-compact .veyq-node-header-rename', css)
     expect(title).toMatch(/display:\s*-webkit-box/)
     expect(title).toMatch(/white-space:\s*normal/)
     expect(title).toMatch(/-webkit-box-orient:\s*vertical/)

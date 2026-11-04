@@ -1,5 +1,6 @@
-// Core's DEFAULT row actions rename, move and delete (owner 2026-11-01): the level row's mirror of the header's
-// `standardNodeActions` (`nodeHeader.ts`), whose builder they share. Every node of every kind gets them - a folder, a Memory,
+// Core's DEFAULT row actions rename, move and delete (owner 2026-11-01), built by `standardActionList` (`nodeHeader.ts`), the
+// builder the header's `standardNodeActions` shares - a row keeps all three as entries (a row click opens the node), where a
+// header edits the name in place and has no rename entry (ADR 0110 decision 11). Every node of every kind gets them - a folder, a Memory,
 // a Pot, a file - and no application builds them: the row's application answers its fail-closed rights for THAT node in
 // `LevelRow.standard` (`levelRow.ts`; a folder's answer is core's `folderRights`), core adds the granted ones, and each runs
 // through the page's door (`nodeHost.ts`: core's name dialog, move dialog, and the delete question with its Undo).
@@ -15,7 +16,7 @@
 import type { TreeNode } from './tree'
 import type { LevelRow, LevelRowAction } from './levelRow'
 import type { NodeHost } from './nodeHost'
-import { standardNodeActions } from './nodeHeader'
+import { standardActionList } from './nodeHeader'
 
 type Translate = (key: string) => string
 
@@ -27,7 +28,7 @@ export const STANDARD_ROW_ACTION_IDS = ['rename', 'move', 'delete'] as const
 export function standardRowActions(t: Translate, node: TreeNode, row: Pick<LevelRow, 'standard' | 'selection'>, host: NodeHost): LevelRowAction[] {
   const granted = row.standard ?? {}
   const remove = row.selection?.remove
-  return standardNodeActions(
+  return standardActionList(
     t,
     { rename: !!granted.rename && !!host.rename, move: !!granted.move && !!host.move, delete: !!granted.delete && !!host.delete },
     {

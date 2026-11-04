@@ -31,7 +31,6 @@ import { fakeApi, stubApi } from '../../../test/apiMock'
 import { authenticatedCalls } from '../../../test/guestMode'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
-import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../../test/models'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
@@ -95,20 +94,24 @@ async function seedPhoto(): Promise<string> {
   return mediaId
 }
 
-describe('the Memory page\'s cover action opens core\'s dialog', () => {
-  it('"Set cover" opens it; the dialog offers choosing an image - no other source - and nothing to remove', async () => {
+/** The header's way to the cover: its leading visual (no action of its own, ADR 0110 decision 11). */
+const coverVisual = (w: Host) => w.get('.veyq-node-header-leading button[data-testid="node-header-cover"]')
+
+describe('the Memory page\'s cover visual opens core\'s dialog', () => {
+  it('"Set cover" (the empty frame) opens it; the dialog offers choosing an image - no other source - and nothing to remove', async () => {
     const w = await mountHost(writer())
-    expect(action(w, 'cover').attributes('aria-label')).toBe(t('node.cover.set'))
-    expect(w.findAllComponents(VeyqButton).find((b) => b.element === action(w, 'cover').element)?.props('icon')).toBe('image')
+    expect(coverVisual(w).attributes('aria-label')).toBe(t('node.cover.set'))
+    expect(coverVisual(w).classes()).toContain('is-empty')
+    expect(action(w, 'cover').exists(), 'no header action').toBe(false)
     expect(dialog()).toBeNull()
-    await action(w, 'cover').trigger('click')
+    await coverVisual(w).trigger('click')
     await vi.waitFor(() => expect(dialog()).not.toBeNull())
     expect(dialogButton(t('node.cover.choose'))).toBeTruthy()
     expect(dialog()!.textContent).not.toContain('gallery') // a cover is set only by an upload
     expect(dialogButton(t('node.cover.remove'))).toBeUndefined()
   })
 
-  it('the cover in core\'s header - the icon tile without one - opens the very same dialog', async () => {
+  it('the cover in core\'s header - the empty frame without one - opens the dialog with its words', async () => {
     const w = await mountHost(writer())
     await w.get('.veyq-node-header-leading [data-testid="node-header-cover"]').trigger('click')
     await vi.waitFor(() => expect(dialog()).not.toBeNull())
@@ -117,10 +120,9 @@ describe('the Memory page\'s cover action opens core\'s dialog', () => {
 
   it('a Memory with a cover says Change, has no separate Remove, and removes inside the dialog: ONE write with no cover', async () => {
     const w = await mountHost(writer(), uploadCover())
-    expect(action(w, 'cover').attributes('aria-label')).toBe(t('node.cover.change'))
-    expect(w.find('.veyq-node-header-actions button[data-action="cover-remove"]').exists()).toBe(false)
-    expect(w.findAll('.veyq-node-header-actions button').filter((b) => b.attributes('data-action')?.startsWith('cover'))).toHaveLength(1)
-    await action(w, 'cover').trigger('click')
+    expect(coverVisual(w).attributes('aria-label')).toBe(t('node.cover.change'))
+    expect(w.findAll('.veyq-node-header-actions button').filter((b) => b.attributes('data-action')?.startsWith('cover'))).toHaveLength(0)
+    await coverVisual(w).trigger('click')
     await vi.waitFor(() => expect(dialog()).not.toBeNull())
     dialogButton(t('node.cover.remove'))!.click()
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
@@ -145,7 +147,7 @@ describe('an uploaded image the gallery already stores is shared, not stored aga
     const mediaId = await seedPhoto()
     const preview = (await listMedia(SCOPE, ID)).find((m) => m.mediaId === mediaId)!.derivatives.find((d) => d.kind === 'PREVIEW')!.ref
     const w = await mountHost(writer())
-    await action(w, 'cover').trigger('click')
+    await coverVisual(w).trigger('click')
     await vi.waitFor(() => expect(dialog()).not.toBeNull())
     await pickAndSave(new File([new Uint8Array(8).fill(1)], 'same.jpg', { type: 'image/jpeg' }))
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
@@ -161,7 +163,7 @@ describe('an uploaded image the gallery already stores is shared, not stored aga
     await seedPhoto()
     vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'up-c', plan: { blobId: 'c-1', chunkCount: 1, byteSize: 32, wrappedBlobKey: 'd3JhcA==', ownerId: ID } })
     const w = await mountHost(writer())
-    await action(w, 'cover').trigger('click')
+    await coverVisual(w).trigger('click')
     await vi.waitFor(() => expect(dialog()).not.toBeNull())
     await pickAndSave(new File([new Uint8Array(8).fill(2)], 'other.jpg', { type: 'image/jpeg' }))
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())

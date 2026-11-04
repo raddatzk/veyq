@@ -436,20 +436,27 @@ describe('LevelView: the folder header', () => {
   it('shows none when the instance offers no public links', () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: false })
     expect(shareButton(w).exists()).toBe(false)
-    expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card actions render').toBe(true)
+    expect(w.find('button[data-testid="node-header-rename"]').exists(), 'control: the name is renamable').toBe(true)
   })
 
-  it('a folder\'s header in its priority (ADR 0110): favorite, share, download, cover, rename, move, copy; delete in the ⋯', async () => {
+  it('a folder\'s header in its priority (ADR 0110): favorite, share, download as buttons; move, copy, delete in the ⋯ - no rename, no cover entry', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true, unlocked: true })
-    expect(headerButtonIds(w)).toEqual(['favorite', 'share', 'download', 'cover', 'rename', 'move', 'copy'])
-    expect(await headerMenuIds(w)).toEqual(['delete'])
+    expect(headerButtonIds(w)).toEqual(['favorite', 'share', 'download'])
+    expect(await headerMenuIds(w)).toEqual(['move', 'copy', 'delete'])
+    // The name and the cover are edited at their place: the name's button, the leading visual (the empty frame here).
+    expect(w.find('button[data-testid="node-header-rename"]').exists()).toBe(true)
+    expect(w.find('.veyq-node-header-leading [data-testid="node-header-cover"]').exists()).toBe(true)
   })
 
-  it('emits renameFolder and deleteFolder from its actions', async () => {
+  it('renames the folder in place through the page\'s rename write, and deletes it from the ⋯', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS })
-    await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
+    await w.find('button[data-testid="node-header-rename"]').trigger('click')
+    const field = w.find('input[data-testid="node-header-name-input"]')
+    await field.setValue('Reisen')
+    await field.trigger('keydown', { key: 'Enter' })
     await chooseHeaderEntry(w, 'delete')
-    expect(w.calls.rename).toHaveLength(1)
+    expect(w.calls.renameTo).toEqual([[TRIPS, 'Reisen']])
+    expect(w.calls.rename, 'no dialog').toBeUndefined()
     expect(w.calls.delete).toHaveLength(1)
   })
 
@@ -460,32 +467,37 @@ describe('LevelView: the folder header', () => {
   it('shows the folder\'s actions in its priority, delete in the ⋯ menu, none with a width-hiding class', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true })
     const actions = w.findAll('.veyq-node-header-action')
-    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('share.share'), t('node.rename'), t('node.move.action')])
-    expect(await headerMenuIds(w)).toEqual(['delete'])
+    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('share.share')])
+    expect(await headerMenuIds(w)).toEqual(['move', 'delete'])
     for (const b of actions) {
       expect(b.classes()).not.toContain('memory-action-collapsible')
       expect(b.classes()).not.toContain('memory-action-inline')
     }
   })
 
-  it('keeps the share (a read of the links) but no rename/delete during a pending deletion', () => {
+  it('keeps the share (a read of the links) but no rename/delete during a pending deletion', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true, pending: true })
     expect(shareButton(w).exists()).toBe(true)
-    expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists()).toBe(false)
+    expect(w.find('h1.veyq-node-header-title').text(), 'control: the header is drawn').toBe('Trips')
+    expect(w.find('button[data-testid="node-header-rename"]').exists()).toBe(false)
+    expect(await headerMenuIds(w)).not.toContain('delete')
   })
 
   // A guest's identity folder (inbox #385): a member looks, downloads and deletes there — the folder itself offers no
   // share, rename or delete; its one action is the move OUT of the drop box (inbox #358, #377 (a)).
   it('offers only the move out on a guest\'s identity folder', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true, identityFolder: true })
-    const actions = w.findAll('.veyq-node-header-actions button')
-    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('node.move.action')])
-    await actions[1].trigger('click')
+    expect(headerButtonIds(w)).toEqual(['favorite'])
+    expect(await headerMenuIds(w)).toEqual(['move'])
+    expect(w.find('button[data-testid="node-header-rename"]').exists()).toBe(false)
+    await chooseHeaderEntry(w, 'move')
     expect(w.calls.move).toEqual([[TRIPS]])
   })
 
-  it('offers no move during a pending deletion', () => {
+  it('offers no move during a pending deletion', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicShares: true, pending: true })
+    expect(headerButtonIds(w), 'control: the header has its buttons').toContain('share')
+    expect(await headerMenuIds(w)).not.toContain('move')
     expect(w.find(`button[aria-label="${t('node.move.action')}"]`).exists()).toBe(false)
   })
 })

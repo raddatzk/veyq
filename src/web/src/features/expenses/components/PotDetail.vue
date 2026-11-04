@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // An opened Pot (ADR 0108, docs/apps/expenses.md): the body under core's header (core's page draws it, ADR 0110 decision 10;
-// this contributes the Pot's share, rename, move and delete and its currency as the subtitle), the ledger notice when the check finds a revision missing, and the tabs Entries /
+// this contributes the Pot's share, move and delete, the rename of its name in place, and its currency as the subtitle), the ledger notice when the check finds a revision missing, and the tabs Entries /
 // Overview (the balances, the settle-up and the costs) — and Settings (the people, the currency, the categories) for whoever
 // may add or manage people or change the Pot's meta (owner 2026-11-04). Every control is `../rights.ts`' answer for the
 // viewer: a member and a share guest of a `READ` or `READ_WRITE` link get this very page with functions removed (inbox
@@ -18,7 +18,7 @@ import VeyqTabPanels from '../../../shared/ui/VeyqTabPanels.vue'
 import VeyqTabPanel from '../../../shared/ui/VeyqTabPanel.vue'
 import type { NodeDetailProps } from '../../../core/applications/registry'
 import { hostHandlers, hostRights, injectNodeHost } from '../../../core/node/nodeHost'
-import { standardNodeActions } from '../../../core/node/nodeHeader'
+import { standardNodeActions, standardNodeRename } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { canReport, nodeTarget } from '../../../core/report/reportActions'
 import { useReportOffered } from '../../../core/report/report'
@@ -69,16 +69,13 @@ onMounted(() => {
 // Core's own actions of the Pot (the heart, "Copy to…", the download, Report) come with core's header for this node; this
 // page offers Report for an entry and a receipt on its own, by the same rule.
 const reportOn = useReportOffered()
-const headerActions = computed(() =>
-  standardNodeActions(
-    t,
-    { ...hostRights(rights.value, host), deleteLabel: t('expenses.delete') },
-    hostHandlers(host, () => props.node, () => ({ contribute: rights.value.shareContribute })),
-  ),
-)
+const handlers = hostHandlers(host, () => props.node, () => ({ contribute: rights.value.shareContribute }))
+const headerActions = computed(() => standardNodeActions(t, { ...hostRights(rights.value, host), deleteLabel: t('expenses.delete') }, handlers))
+// The Pot's name, renamed in place in the header where core's rename right and the page's door allow it.
+const headerRename = computed(() => standardNodeRename(hostRights(rights.value, host), handlers))
 const subtitle = computed(() => (meta.value ? t('expenses.inCurrency', { currency: meta.value.base.currency }) : undefined))
 // The header is core's (its order is the kind's `header.order`); the Pot adds its actions and its currency.
-contributeNodeHeader(() => ({ subtitle: subtitle.value, actions: headerActions.value }))
+contributeNodeHeader(() => ({ subtitle: subtitle.value, actions: headerActions.value, rename: headerRename.value }))
 
 const tab = ref('entries')
 /** The Settings tab: the people for whoever may add or manage them, the Pot's meta for whoever may change it. */

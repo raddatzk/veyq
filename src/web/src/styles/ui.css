@@ -483,6 +483,7 @@
    row of its own below the name rather than shortening it; the header then measures its own wider box (`NodeHeader`). The
    rule under the name is the head's, so it spans the toolbar too. Colours only from `--app-*` tokens, so no dark twin. */
 .veyq-level-head {
+  --veyq-level-control-height: 2.25rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -497,6 +498,19 @@
   flex: 1 1 auto;
   padding-bottom: 0;
   border-bottom: 0;
+}
+
+/* ONE control height in the level's head (owner 2026-11-04, `--veyq-level-control-height` above): the folder header's action
+   buttons, the toolbar's buttons and its view switch (`ViewModeToggle`, which reads the same property) are one size; the
+   header's content is centred against its visual and the head centres its items, so in one row they line up. */
+.veyq-level-head .veyq-node-header-actions .veyq-button {
+  width: var(--veyq-level-control-height);
+  min-width: var(--veyq-level-control-height);
+  height: var(--veyq-level-control-height);
+}
+
+.veyq-level-toolbar > .veyq-button {
+  height: var(--veyq-level-control-height);
 }
 
 /* The level view's own toolbar ("New", the space's trash, Select and the view switch, inbox #370/#385): one row at the
@@ -595,8 +609,9 @@
    the name takes its natural width and the actions yield to the ⋯ menu down to the kind's first two, only then is the name
    shortened with an ellipsis. COMPACT (`.is-compact`): a small leading visual, the name in two lines at most, the actions
    in a row of their own the header wide. As many actions as fit are buttons and the rest sit in one ⋯ menu — the component
-   measures it, so no action is lost at any width and none is hidden here. Tokens only, so the dark theme needs no rule of
-   its own beyond the icon tile's (dark.css). */
+   measures it, so no action is lost at any width and none is hidden here. The leading visual is as tall as the rows beside
+   it, the content centred against it. Tokens only, so the dark theme needs no rule of its own beyond the icon tile's and the
+   empty cover frame's (dark.css). */
 
 /* The two sizes the layout answer reads, registered as lengths so the computed style answers in px whatever unit a sheet
    uses. A leading visual sets its WIDE width here and sizes itself from it, so the answer never reads the compact size. */
@@ -612,11 +627,29 @@
   initial-value: 0px;
 }
 
-/* The column gap (leading ↔ body) is the same in both layouts: the layout answer reads it. */
+/* The rows beside the leading visual, each kind of row ONE block size (owner 2026-11-04): the title row, the subtitle, a row
+   of chips (a date and a place), a row of people, a line of text, and the gap between two rows. The component sets how many
+   of each it draws (`--veyq-node-header-*-rows`, `headerRowCounts`), so the visual's height is their exact sum - computed
+   from the data, never measured: a Memory's four rows 137.2 px (its cover 244 px wide), a folder's name alone 42 px. Each
+   row's content fits its size (`min-block-size`): only chips that wrap on a narrow window make the text taller than the
+   visual. The column gap (leading ↔ body) is the same in both layouts: the layout answer reads it. */
 .veyq-node-header {
   --veyq-node-header-name-min: 12rem;
+  --veyq-node-header-row-title: 2.625rem;
+  --veyq-node-header-row-subtitle: 1.25rem;
+  --veyq-node-header-row-chips: 1.625rem;
+  --veyq-node-header-row-people: 2.625rem;
+  --veyq-node-header-row-text: 1.25rem;
+  --veyq-node-header-row-gap: 0.15rem;
+  --veyq-node-header-visual-height: calc(
+    var(--veyq-node-header-row-title) +
+      var(--veyq-node-header-subtitle-rows, 0) * (var(--veyq-node-header-row-subtitle) + var(--veyq-node-header-row-gap)) +
+      var(--veyq-node-header-chip-rows, 0) * (var(--veyq-node-header-row-chips) + var(--veyq-node-header-row-gap)) +
+      var(--veyq-node-header-people-rows, 0) * (var(--veyq-node-header-row-people) + var(--veyq-node-header-row-gap)) +
+      var(--veyq-node-header-text-rows, 0) * (var(--veyq-node-header-row-text) + var(--veyq-node-header-row-gap))
+  );
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
   min-width: 0;
   padding-bottom: 1rem;
@@ -629,11 +662,10 @@
   align-items: center;
 }
 
-/* Every cover in a header is 244 px wide, 16:9 (owner 2026-11-03): as tall as the four rows a Memory's header holds beside
-   it - the name, the count, date and place, the people. The kind's icon tile, the default without a cover, is the 4rem
-   square below. Fixed numbers: the width the layout answer reads cannot follow the rows' height. */
+/* A cover is 16:9 at the rows' height (a Memory's four rows: 244 px wide). Without one, a kind that takes a cover shows the
+   empty frame (`.is-empty`): the kind's icon in its middle on the soft info tile, a line around it. */
 .veyq-node-header-cover {
-  --veyq-node-header-leading-wide: 244px;
+  --veyq-node-header-leading-wide: calc(var(--veyq-node-header-visual-height) * 16 / 9);
   display: block;
   width: var(--veyq-node-header-leading-wide);
   aspect-ratio: 16 / 9;
@@ -642,15 +674,31 @@
   background: var(--app-info-soft);
 }
 
+.veyq-node-header-cover.is-empty {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 1px solid var(--app-line);
+  color: var(--app-info-text);
+}
+
+.veyq-node-header .veyq-node-header-cover-icon {
+  font-size: 1.5rem;
+}
+
 /* The leading visual as the button that opens core's cover dialog (where whoever looks may set the cover): the cover or the
-   icon tile it is, with the hint over its foot on hover and keyboard focus - the words on a cover, the icon alone on the
-   icon tile and on a compact header (the words stay its accessible name and tooltip). */
+   empty frame it is, with the hint over its foot - on hover and keyboard focus, and always on an empty wide frame (it says
+   what the frame is for); the words on a wide header, the icon alone on a compact one (the words stay its accessible name
+   and tooltip). */
 .veyq-node-header-visual-button {
   position: relative;
   padding: 0;
-  border: 0;
   font-family: inherit;
   cursor: pointer;
+}
+
+.veyq-node-header-visual-button:not(.is-empty) {
+  border: 0;
 }
 
 .veyq-node-header-visual-button:focus-visible {
@@ -676,42 +724,41 @@
 }
 
 .veyq-node-header-visual-button:hover .veyq-node-header-cover-hint,
-.veyq-node-header-visual-button:focus-visible .veyq-node-header-cover-hint {
+.veyq-node-header-visual-button:focus-visible .veyq-node-header-cover-hint,
+.veyq-node-header:not(.is-compact) .veyq-node-header-visual-button.is-empty .veyq-node-header-cover-hint {
   opacity: 1;
 }
 
-.veyq-node-header-icon .veyq-node-header-cover-hint,
 .veyq-node-header.is-compact .veyq-node-header-cover-hint {
   inset-block-start: 0;
   padding: 0;
   font-size: 1rem;
 }
 
-.veyq-node-header-icon .veyq-node-header-cover-hint-label,
 .veyq-node-header.is-compact .veyq-node-header-cover-hint-label {
   display: none;
 }
 
 /* Two classes on purpose: the layer's own `.veyq-icon` (display, font-size) is loaded after this sheet and would otherwise win,
-   leaving a 16 px glyph in the corner of a tile that is meant to centre a larger one (seen in a real browser). A 4rem
-   square, its glyph half of it; compact, 42 px beside the name's two lines. */
+   leaving a 16 px glyph in the corner of a tile that is meant to centre a larger one (seen in a real browser). A kind
+   without a cover: a square as tall as the rows, its glyph half of it; compact, 42 px beside the name's two lines. */
 .veyq-node-header .veyq-node-header-icon {
-  --veyq-node-header-leading-wide: 4rem;
+  --veyq-node-header-leading-wide: var(--veyq-node-header-visual-height);
   display: grid;
   place-items: center;
   width: var(--veyq-node-header-leading-wide);
-  height: 4rem;
+  height: var(--veyq-node-header-leading-wide);
   border-radius: 12px;
   background: var(--app-info-soft);
   color: var(--app-info-text);
-  font-size: 2rem;
+  font-size: calc(var(--veyq-node-header-visual-height) / 2);
 }
 
 .veyq-node-header-body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--veyq-node-header-row-gap);
   min-width: 0;
 }
 
@@ -720,45 +767,108 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1rem;
-  min-height: 42px;
+  min-block-size: var(--veyq-node-header-row-title);
 }
 
-/* Wide, the name is one line at its natural width — the component reads that width (`scrollWidth`) and gives the buttons
-   the rest of the row, never fewer than the floor — and shrinks, with an ellipsis, only below the floor. */
+/* The name is ONE size whether or not there is a cover (owner 2026-11-04): 2rem wide, 1.5rem compact. Wide, it is one line
+   at its natural width — the component reads that width (`scrollWidth`) and gives the buttons the rest of the row, never
+   fewer than the floor — and shrinks, with an ellipsis, only below the floor. */
 .veyq-node-header-title {
   flex: 0 1 auto;
   min-width: 0;
   margin: 0;
   overflow: hidden;
   color: var(--app-text);
-  font-size: 1.15rem;
-  line-height: 1.2;
+  font-size: 2rem;
+  line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.veyq-node-header.has-visual .veyq-node-header-title {
-  font-size: 2rem;
-  line-height: 1.1;
+/* The name where it may be renamed: a real button that looks like the name (it carries the ellipsis then), a subtle hover so
+   it reads as editable; a click turns it into the field below. */
+.veyq-node-header-rename {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+
+.veyq-node-header-rename:hover {
+  background: var(--app-hover);
+}
+
+.veyq-node-header-rename:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+/* The field the name turns into: the name's size and the title row's height, as wide as the name was (the component sets
+   it), never wider than the row. */
+.veyq-node-header-title.is-editing {
+  overflow: visible;
+}
+
+.veyq-node-header .veyq-node-header-name-input {
+  box-sizing: border-box;
+  min-width: 12rem;
+  max-width: 100%;
+  height: var(--veyq-node-header-row-title);
+  min-height: 0;
+  padding-block: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.veyq-node-header-rename-error {
+  margin: 0;
+  color: var(--app-danger);
+  font-size: 0.85rem;
 }
 
 .veyq-node-header-subtitle {
+  min-block-size: var(--veyq-node-header-row-subtitle);
   margin: 0;
   color: var(--app-muted);
   font-size: 0.9rem;
   font-weight: 700;
+  line-height: var(--veyq-node-header-row-subtitle);
 }
 
-/* The facts under the subtitle (`NodeHeaderFact`): a row of chips, or one of people or text. A chip is a light, borderless
-   button (an accent icon and the value) that opens the application's editor, with a subtle hover so it still reads as
-   clickable; an absent value is muted (`.is-empty`). Pulled left by a chip's padding so its CONTENT starts flush with the
-   name above. */
+/* The facts under the subtitle (`NodeHeaderFact`): a row of chips, or one of people or text, each its row's block size. A
+   chip is a light, borderless button (an accent icon and the value) that opens the application's editor, with a subtle hover
+   so it still reads as clickable; an absent value is muted (`.is-empty`). Pulled left by a chip's padding so its CONTENT
+   starts flush with the name above. */
 .veyq-node-header-facts {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.2rem 0.4rem;
   margin-left: -0.45rem;
+}
+
+.veyq-node-header-facts.is-chips {
+  min-block-size: var(--veyq-node-header-row-chips);
+}
+
+.veyq-node-header-facts.is-people {
+  min-block-size: var(--veyq-node-header-row-people);
+}
+
+.veyq-node-header-facts.is-text {
+  min-block-size: var(--veyq-node-header-row-text);
 }
 
 .veyq-node-header-chip {
@@ -810,11 +920,17 @@
   color: var(--app-muted);
 }
 
+/* The people's editor beside them: the chip look, its icon alone (its words are its accessible name and tooltip). */
+.veyq-node-header-people-edit .veyq-icon {
+  color: var(--app-muted);
+}
+
 /* Text has no padding of its own to pull: it starts flush with the name. */
 .veyq-node-header-text {
   margin: 0 0 0 0.45rem;
   color: var(--app-muted);
   font-size: 0.9rem;
+  line-height: var(--veyq-node-header-row-text);
 }
 
 .veyq-node-header-actions {
@@ -853,8 +969,9 @@
   grid-column: 1 / -1;
 }
 
-/* The name has two lines of its own, then an ellipsis. */
-.veyq-node-header.is-compact .veyq-node-header-title {
+/* The name has two lines of its own, then an ellipsis - the rename button's too, where the name is one. */
+.veyq-node-header.is-compact .veyq-node-header-title,
+.veyq-node-header.is-compact .veyq-node-header-rename {
   display: -webkit-box;
   white-space: normal;
   -webkit-box-orient: vertical;
@@ -863,7 +980,7 @@
   overflow-wrap: anywhere;
 }
 
-.veyq-node-header.is-compact.has-visual .veyq-node-header-title {
+.veyq-node-header.is-compact .veyq-node-header-title {
   font-size: 1.5rem;
 }
 
@@ -871,9 +988,14 @@
   justify-content: flex-start;
 }
 
-/* A cover is a 64 × 36 px tile beside the name (ADR 0110 decision 1); its wide width stays what the answer reads. */
+/* A cover (or its empty frame) is a 64 × 36 px tile beside the name (ADR 0110 decision 1); its wide width stays what the
+   answer reads. */
 .veyq-node-header.is-compact .veyq-node-header-cover {
   width: 64px;
+}
+
+.veyq-node-header.is-compact .veyq-node-header-cover-icon {
+  font-size: 1rem;
 }
 
 .veyq-node-header.is-compact .veyq-node-header-icon {
