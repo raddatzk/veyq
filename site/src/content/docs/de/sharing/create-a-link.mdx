@@ -14,9 +14,11 @@ import Screenshot from '../../../../components/Screenshot.astro';
 1. Öffne den Ordner, die Datei oder die Erinnerung und wähle oben auf der Seite **Teilen**.
 2. Wähle **Neuer Link**.
 3. Gib dem Link einen **Name**, wenn du magst; nur du siehst ihn.
-4. Wähle unter **Was dürfen andere?** **Nur ansehen** oder **Ansehen + mitwirken** (bei einer Erinnerung: **Ansehen +
-   Fotos hinzufügen**). Bei einer Erinnerung gibt es außerdem **Nur Fotos hinzufügen** für einen
-   [Upload-Link](/veyq/de/sharing/request-uploads/). Du siehst nur die Möglichkeiten, die dein Server erlaubt.
+4. Wähle unter **Was dürfen andere?** **Nur ansehen** oder die Wahl, mit der man auch etwas hinzufügen kann: bei einem
+   Ordner **Ansehen + Dateien hinzufügen**, bei einer Datei **Ansehen + mitwirken**, bei einer Erinnerung **Ansehen +
+   Fotos hinzufügen**. Bei einer Erinnerung gibt es außerdem **Nur Fotos hinzufügen** für einen
+   [Upload-Link](/veyq/de/sharing/request-uploads/), bei einem Ordner **Nur Dateien hinzufügen**, das einen
+   [Briefkasten](/veyq/de/depot/drop-boxes/) anlegt. Du siehst nur die Möglichkeiten, die dein Server erlaubt.
 5. Füge, wenn du magst, etwas davon hinzu:
    - **Hinweis**: eine Nachricht für alle, die den Link öffnen. Schreib sie je Sprache mit **Bearbeiten**. Setze den
      Haken bei **Muss vor dem Öffnen akzeptiert werden**, wenn man sie zuerst lesen und akzeptieren soll.
@@ -33,13 +35,13 @@ import Screenshot from '../../../../components/Screenshot.astro';
 
 <Screenshot id="sharing-create-link" shows="Das Formular Neuer Link mit der Auswahl der Rolle, den Abschnitten Hinweis, Passwortschutz und Ablaufdatum und der Schaltfläche Link erstellen" />
 
-## Was „Ansehen + mitwirken“ erlaubt
+## Was ein Link zum Ansehen und Hinzufügen erlaubt
 
-- **Bei einem Ordner:** Gäste können Ordner anlegen und Dateien hochladen, eine neuere Fassung über eine Datei legen
+- **Bei einem Ordner** (**Ansehen + Dateien hinzufügen**): Gäste können Ordner anlegen und Dateien hochladen, eine neuere Fassung über eine Datei legen
   (veyq warnt, dass es keinen Versionsverlauf gibt) und Dinge innerhalb des geteilten Ordners verschieben. Löschen oder
   umbenennen können sie nichts, und eine Erinnerung oder einen Briefkasten können sie nicht anlegen.
-- **Bei einer Erinnerung:** Gäste können Fotos und Videos hinzufügen und ihre eigenen wieder löschen.
-- **Bei einer einzelnen Datei:** Gäste können sie ansehen, herunterladen und eine neuere Fassung an ihre Stelle legen.
+- **Bei einer Erinnerung** (**Ansehen + Fotos hinzufügen**): Gäste können Fotos und Videos hinzufügen und ihre eigenen wieder löschen.
+- **Bei einer einzelnen Datei** (**Ansehen + mitwirken**): Gäste können sie ansehen, herunterladen und eine neuere Fassung an ihre Stelle legen.
   veyq warnt vorher, dass sich die Datei für alle ändert, die den Link haben, auch für dich, und dass sich der alte
   Inhalt nicht zurückholen lässt.
 
