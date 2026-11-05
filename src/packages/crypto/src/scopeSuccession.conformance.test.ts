@@ -166,8 +166,9 @@ describe('verifySuccessionPath (ADR 0115 decision 5)', () => {
     expect(path([genuine()[1], genuine()[2], genuine()[0]])).toBe(true)
     // An earlier step and a later one, even a forged one, sit outside 3…5.
     expect(path([linkFor(2, { signer: strangerKey }), ...genuine(), linkFor(6, { signer: strangerKey })])).toBe(true)
-    // Not read, so not refused as a duplicate either: two for the held epoch itself.
+    // Not read, so not refused as a duplicate either: two for the held epoch itself, two for an epoch past the target.
     expect(path([linkFor(2), linkFor(2, { signer: strangerKey }), ...genuine()])).toBe(true)
+    expect(path([...genuine(), linkFor(6), linkFor(6, { signer: strangerKey })])).toBe(true)
     // From a scope's birth: epoch 0's key derives the first public key, and no statement precedes it.
     expect(path([linkFor(1), linkFor(2), ...genuine()], { heldEpoch: 0, heldPublicKey: pkOf(0) })).toBe(true)
   })
@@ -238,6 +239,12 @@ describe('verifySuccessionPath (ADR 0115 decision 5)', () => {
       expect(path([...genuine(), { ...linkFor(4), epoch }]), `statement epoch ${epoch}`).toBe(false)
       expect(path(genuine(), { heldEpoch: epoch }), `held epoch ${epoch}`).toBe(false)
       expect(path(genuine(), { targetEpoch: epoch }), `target epoch ${epoch}`).toBe(false)
+    }
+    // Where nothing after the epoch check could refuse — no statement to walk, the target key the held one — a held
+    // epoch, a target epoch, or both that are no unsigned integer still refuse (control: the same at epoch 2).
+    expect(path([], { targetEpoch: 2, targetPublicKey: pkOf(2) })).toBe(true)
+    for (const [heldEpoch, targetEpoch] of [[2.5, 2.5], [-1, -1], [1.5, 2], [Number.NaN, 2], [2, 2.5]]) {
+      expect(path([], { heldEpoch, targetEpoch, targetPublicKey: pkOf(2) }), `held ${heldEpoch}, target ${targetEpoch}`).toBe(false)
     }
     expect(path(genuine(), { heldPublicKey: pkOf(2).slice(0, 31) })).toBe(false)
     expect(path([], { targetEpoch: 2, heldPublicKey: new Uint8Array(31), targetPublicKey: new Uint8Array(31) })).toBe(false)

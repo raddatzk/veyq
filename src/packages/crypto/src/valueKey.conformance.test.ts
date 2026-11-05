@@ -116,9 +116,9 @@ describe('value key (#value_key, seal.sym[\'value-key\'], ADR 0115)', () => {
 
   it('a purpose that is not sealed under a value key has no address', () => {
     const entry = { purpose: 'content-key', ...vectors.seal.sym['content-key'].context } as unknown as v1.ValueContext
-    expect(() => v1.valueAddress(entry)).toThrow(v1.SealContextInvalid)
+    expect(() => v1.valueAddress(entry)).toThrow(new v1.SealContextInvalid('content-key is not sealed under a value key'))
     const wrapOfAWrap = { purpose: 'value-key', ...wrap.context } as unknown as v1.ValueContext
-    expect(() => v1.valueAddress(wrapOfAWrap)).toThrow(v1.SealContextInvalid)
+    expect(() => v1.valueAddress(wrapOfAWrap)).toThrow(new v1.SealContextInvalid('value-key is not sealed under a value key'))
     // Control: a value purpose with the same shape check passes.
     expect(v1.valueAddress(nameCtx)).toHaveLength(32)
   })
@@ -128,7 +128,7 @@ describe('value key (#value_key, seal.sym[\'value-key\'], ADR 0115)', () => {
     const b = v1.generateValueKey()
     expect(a).toHaveLength(v1.VALUE_KEY_BYTES)
     expect(hex(a)).not.toBe(hex(b))
-    expect(() => v1.wrapValueKey(unhex(wrap.kek), slot(), a.slice(0, 31))).toThrow(TypeError)
-    expect(() => v1.wrapValueKey(unhex(wrap.kek), slot(), new Uint8Array(33))).toThrow(TypeError)
+    expect(() => v1.wrapValueKey(unhex(wrap.kek), slot(), a.slice(0, 31))).toThrow(new TypeError('value key: not 32 bytes'))
+    expect(() => v1.wrapValueKey(unhex(wrap.kek), slot(), new Uint8Array(33))).toThrow(new TypeError('value key: not 32 bytes'))
   })
 })

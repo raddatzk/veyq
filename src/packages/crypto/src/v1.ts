@@ -794,21 +794,26 @@ export function verifyKeyChain(
 /** A served identity bundle that decodes, and a proof public key of Ed25519's size. */
 function keyChainKeysWellFormed(k: KeyChainKeys): boolean {
   if (!(k.secretKeyProofPublicKey instanceof Uint8Array) || k.secretKeyProofPublicKey.length !== 32) return false
+  // `return true` after the try, not inside it: an emptied catch then falls through to true, which a test sees — a
+  // catch that returned nothing would only have answered `undefined`, as falsy at the one call site as `false`.
   try {
     deserializeIdentityPublic(k.identityPublicKey)
-    return true
   } catch {
     return false
   }
+  return true
 }
 
-/** Ed25519 verify that answers false — never a throw — for a malformed key or signature. */
+/** Ed25519 verify that answers false — never a throw — for a malformed key or signature. The answer starts false and
+ *  only a verify that returns sets it, so there is no path that answers anything but a boolean. */
 function ed25519Verifies(publicKey: Uint8Array, message: Uint8Array, signature: Uint8Array): boolean {
+  let verifies = false
   try {
-    return ed25519.verify(signature, message, publicKey)
+    verifies = ed25519.verify(signature, message, publicKey)
   } catch {
-    return false
+    // a malformed key or signature: `verifies` stays false
   }
+  return verifies
 }
 
 // ── Rotation stage (ADR 0111 decision 6) ───────────────────────────────────────────────────────
@@ -831,12 +836,20 @@ export function rotationStageDigest(entries: Iterable<RotationStageEntry>): Uint
     }
     if (!Number.isSafeInteger(e.epoch) || e.epoch < 0) throw new SealContextInvalid('rotation-stage epoch is not an unsigned integer')
   }
-  const sorted = listed.sort((a, b) => (a.scopeId < b.scopeId ? -1 : a.scopeId > b.scopeId ? 1 : 0))
+  const byScope = new Map<string, RotationStageEntry>()
+  for (const e of listed) {
+    if (byScope.has(e.scopeId)) throw new SealContextInvalid('rotation stage holds one scope twice')
+    byScope.set(e.scopeId, e)
+  }
+  // The default sort, no comparator: the ids are canonical lowercase UUIDs, so its code-unit order is their byte order
+  // and two ids are never equal here. The three-way comparator this replaced had five mutants no test could tell apart
+  // (its `<=` for `<`, and its whole `a > b ? 1 : 0` arm as 0, 1, `>=` or `<=`): none of them moved one sorted list in
+  // 20,000 random ones with repeats (measured 2026-11-05, node 23).
   const parts: Uint8Array[] = [utf8('veyq/v1/rotation-stage')]
-  sorted.forEach((e, i) => {
-    if (i > 0 && sorted[i - 1].scopeId === e.scopeId) throw new SealContextInvalid('rotation stage holds one scope twice')
+  for (const scopeId of [...byScope.keys()].sort()) {
+    const e = byScope.get(scopeId) as RotationStageEntry
     parts.push(lp(utf8(e.scopeId)), lp(u64be(e.epoch)), lp(sha256(e.wrappedGrant)))
-  })
+  }
   return sha256(concat(...parts))
 }
 
@@ -961,7 +974,10 @@ export function verifySuccessionPath(p: {
   const { scopeId, heldEpoch, targetEpoch } = p
   if (!isEpoch(heldEpoch) || !isEpoch(targetEpoch) || targetEpoch < heldEpoch) return false
   if (!(p.heldPublicKey instanceof Uint8Array) || p.heldPublicKey.length !== 32) return false
-  if (!(p.targetPublicKey instanceof Uint8Array) || p.targetPublicKey.length !== 32) return false
+  // The target's length needs no check of its own: it is only ever compared, byte for byte and length included, with a
+  // key that is 32 bytes — the held one checked above, or one a statement proved (`scopeSuccessionStatement` refuses
+  // any other). A `length !== 32` here could not be told apart from its removal.
+  if (!(p.targetPublicKey instanceof Uint8Array)) return false
   const byEpoch = new Map<number, SuccessionLink>()
   for (const s of p.statements) {
     if (!isEpoch(s.epoch)) return false
