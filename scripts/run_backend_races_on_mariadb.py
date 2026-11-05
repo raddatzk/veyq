@@ -21,7 +21,9 @@ classpath — `:core`'s holds the core baseline only, `:apps:memories`' the core
 database fails the second project to boot: measured (cr-platform-gradle-modules step 8a), after the Memories run had
 applied both baselines, every `:core` class failed Flyway's validate on the Memories baseline it does not have
 (`FlywayValidateException`, 1 failed, 245 skipped). So the container holds a fresh database per project
-([database_of]) and each project runs in its own Gradle invocation, pointed at its own.
+([database_of]) and each project runs in its own Gradle invocation, pointed at its own. The split costs little: the
+runs after the first reuse its daemon and configured in 2–3 s each in the first CI run (2026-11-05). One invocation
+could run the projects in parallel only by routing each test task to its own database inside the build.
 
 **Also the schema check.** The default run adds `*EntitySchemaValidationTest` ([schema_classes]): Hibernate's own
 `validate` of every entity against the migrated MariaDB schema (a `UUID` column an entity maps without
@@ -38,8 +40,9 @@ name, binds a free 127.0.0.1 port, is created fresh per run (`--rm`, a fresh dat
 in a `finally`. Its image is read from `infra/docker/docker-compose.yml`, so the pin has one home.
 
 **Not a `validate_*` guard; a CI job, not yet an admitted one.** It needs Docker, so it runs as `ci.yml`'s
-`backend-races` job, not in the buildless glob. No run has executed that job yet (the repository has no remote), so
-until a run's log shows the race classes executed it admits nothing (ADR 0040), and a hand run stays the proof.
+`backend-races` job, not in the buildless glob. Its first CI run (2026-11-05) ran three of its four projects green
+and was cancelled at the job's budget inside `:core`'s, so until a run's log shows every project's race classes
+executed it admits nothing (ADR 0040), and a hand run stays the proof.
 
 Usage:
     python3 scripts/run_backend_races_on_mariadb.py [--tests PATTERN]...   # from the repo root

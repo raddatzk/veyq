@@ -167,9 +167,9 @@ samples only the server's own process, and the SQL counts are the database's glo
 Each stage is a job in a workflow file under `.github/workflows/`. The file says when the job runs, and the job's
 `timeout-minutes` is the stage's budget: the *Budget* column below holds the values (what a budget is for, and what a
 stage does when it outgrows one, is ADR 0091 decision 1), and a guard fails any job that has none. The *In
-CI* column is read from those files and has never run. The *Local run* column was measured on the development
-machine (a 14-core arm64 Mac) on 2026-10-15 and 2026-10-16, under whatever load other work put on it, so it says
-little about a CI runner's time.
+CI* column is read from those files; where a CI run has measured a stage, its *Local run* cell says so. The *Local
+run* column was measured on the development machine (a 14-core arm64 Mac) on 2026-10-15 and 2026-10-16, under
+whatever load other work put on it, so it says little about a CI runner's time.
 
 `ci.yml` is the pipeline. It runs on every push to `main` or a `release/<major>.x` branch and on every pull request
 into one, unless the change touches only docs, Markdown or the site, and once more when a publish is started by hand.
@@ -181,8 +181,8 @@ triggers.
 |---|---|---|---|
 | Guards | `ci.yml › guards`, every commit; and `trust-chain.yml › trust-chain`, every push and pull request to `main`, docs-only ones included — the only place a docs-only change is checked | 3 min | 1.5 min in the pipeline run; 97 s timed in sequence |
 | Guard gaps | `trust-chain.yml › guard-gaps`, always in full: when a push or pull request to `main` changes `scripts/`, the trust-chain skill or that workflow, nightly on `main`, and by hand. Locally it skips while nothing it reads changed since its last green full run | 10 min | 2.5–7 min with six workers (147–431 s over six runs, load average 13 to 99) |
-| Surface checks, crypto conformance | `ci.yml › backend` (`./gradlew check`), `› frontend` (crypto, web, admin-web), `› chart`; every commit | 15 min each | backend 8.1 min, frontend 5.0, chart 0.4 |
-| Races on MariaDB | `ci.yml › backend-races`, every commit | 10 min | 9.5 min beside the backend's check, 7.0 alone; once, under a heavier load, over its budget beside it. Locally the jobs share one machine; in CI each has its own runner |
+| Surface checks, crypto conformance | `ci.yml › backend` (`./gradlew check`), `› frontend` (crypto, web, admin-web), `› chart`; every commit | backend 30 min, frontend and chart 15 each | backend 8.1 min, frontend 5.0, chart 0.4. The backend's first CI run (2026-11-05, an empty Gradle cache, a 4-vCPU runner) outran its first budget of 15: 5.5 min to resolve the dependencies and build the build logic, 2 more to compile, the tests started at minute 7.7, and `:core`'s were still running at 15. Estimated at 18–21 min cold, from the share of the local test time each project had run; a cold cache is every dependency bump's, so the budget is set for it |
+| Races on MariaDB | `ci.yml › backend-races`, every commit | 20 min | 9.5 min beside the backend's check, 7.0 alone; once, under a heavier load, over its budget beside it. Locally the jobs share one machine; in CI each has its own runner. The first CI run (2026-11-05, cold) outran its first budget of 10 with three of its four projects green, inside `:core`'s; each of the three took about 17 s plus at most 1.24 times its classes' local time (a local run of 2026-11-02), which puts `:core`'s at 6 min and the job at 13–17 min cold |
 | API end-to-end | `ci.yml › web-e2e`, every commit | 15 min | 9.2 min for its 26 suites, run directly (2026-10-15); 13.8 min in the local pipeline, all 27 suites green, run alone while other work kept the machine busy (2026-10-16) |
 | API fuzzing | `ci.yml › api-fuzz`, every commit | 15 min | 5.7 to 7.3 min for a whole run with the image already built, the jar and the dependency install not counted (2026-10-19, with writes, sequences and the second member) |
 | Image build | `ci.yml › build`, every image (app, admin, tools) on amd64 and arm64, every commit; it writes to a registry only on a publish | 15 min | the app image 2.5–4.6 min uncached on arm64; **the amd64 legs have never run** |

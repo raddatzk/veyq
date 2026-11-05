@@ -105,7 +105,12 @@ jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Sized for a cold Gradle cache, which is no first-run accident: setup-java's `cache: gradle` keys on the build
+    # files' hash with no restore key and saves only from a green job, so every dependency bump starts cold. The first
+    # CI run (2026-11-05, cold, 4 vCPU) was cancelled at the old 15 with `:core:test` 6 min in: 5.5 min of dependency
+    # resolution and buildSrc before the first project task, 2 min of compiling, the tests from minute 7.7; the whole
+    # check is estimated at 18–21 min. The measurement behind the value is the stage map's (how-veyq-is-tested.md).
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -131,7 +136,9 @@ jobs:
     # race classes from the code and starts its own throwaway MariaDB from the image infra/docker/docker-compose.yml pins
     # (tag + digest), so the pin keeps one home — which is why this job declares no `services:`, as web-e2e does not.
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Cold, as `backend` above. The first CI run (2026-11-05) was cancelled at the old 10 inside the last of its four
+    # Gradle runs, `:core`'s; the three before it were green. The job is estimated at 13–17 min cold.
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
