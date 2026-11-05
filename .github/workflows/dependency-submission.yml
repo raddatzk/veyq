@@ -1,0 +1,67 @@
+# The backend's resolved dependency graph, submitted to GitHub so Dependabot's alerts see every Gradle dependency the
+# build resolves, transitive ones included. Dependabot reads the Gradle build files on its own (dependabot.yml), but
+# what it finds there is the declared versions only; the graph this job submits is the resolved one.
+#
+# Two jobs on purpose. Resolving the graph runs the build's scripts and every plugin they apply; submitting it needs
+# `contents: write`. So the job that runs Gradle holds a read-only token and hands the graph on as an artifact, and the
+# job that holds the write token runs no Gradle at all - the action's split for exactly this
+# (`generate-and-upload`, then `download-and-submit`). A tampered dependency that runs in the first job meets a
+# read-only token.
+#
+# Only `src/backend/` is a build to submit: the repository root's Gradle build is the dev launcher, which resolves no
+# dependency that ships (CLAUDE.md § Repository shape).
+#
+# UNPROVEN: this repository has never been pushed, so no run has executed this file. One risk is named ahead of the
+# first run: the action applies its graph plugin through an init script, and `src/backend/gradle/verification-metadata.xml`
+# verifies every artifact Gradle resolves (`verify-metadata` true) and lists no entry for that plugin
+# (`grep -c dependency-graph src/backend/gradle/verification-metadata.xml` -> 0 on 2026-11-05). Whether the
+# verification reaches an init script's classpath is remembered, not measured. If the first run is red on it, add the
+# plugin's checksums to the metadata; never answer it with `--dependency-verification lenient`.
+name: Dependency submission
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: Resolve the backend's dependency graph
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Validate the Gradle wrapper JAR
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Resolve the graph and keep it as an artifact
+        uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          build-root-directory: src/backend
+          dependency-graph: generate-and-upload
+
+  submit:
+    name: Submit the backend's dependency graph
+    needs: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Submit the graph the first job resolved
+        uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          dependency-graph: download-and-submit

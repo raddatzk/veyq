@@ -194,12 +194,15 @@ triggers.
 | Profiling | no job: run by hand on one quiet machine, and never a verdict | — | unlock, the Chapter and the encryption reading 8 min at `87266fe3` (2026-10-23); the upload's six runs 12 min at `d4eab6be` (2026-10-24); the upload's and the import's twelve runs, the import's download made first, 8 min at `3a44065b` (2026-10-29), the same twelve again, 8 min each, at `0d48e569` and with the import and the tiles changed (2026-10-29); the video upload's six runs, 5 min each, before, without the tiles' posters and after (2026-10-29), and again before, with the size probe's player let go, without the probe, after, without the tiles' posters and with them drawn but not shown (2026-10-29) |
 
 The jobs that are no stage carry a budget too, so that none runs on GitHub's 360-minute default: reading the version
-5 min, the publish 15, a path-filter job 5, CodeQL's analysis 30, the docs site's check 10 and its deploy 5. A budget no
+5 min, the publish 15, a path-filter job 5, CodeQL's analysis 30, the docs site's check 10 and its deploy 5,
+the dependency graph's resolve 15 and its submit 5. A budget no
 run has measured is an estimate until the first CI run replaces it.
 
 Per commit in CI, the longest path — the surface checks, or the image build and then the lanes — is *estimated* at
-20–25 minutes; the first CI run replaces the estimate. Two other workflows check the repository without being a stage:
-CodeQL's static analysis (`codeql.yml`) and the docs site's build (`site.yml`).
+20–25 minutes; the first CI run replaces the estimate. Three other workflows check the repository without being a stage:
+CodeQL's static analysis (`codeql.yml`), the docs site's build (`site.yml`) and the backend's resolved dependency
+graph, submitted on every push to `main` so Dependabot's alerts reach the transitive Gradle dependencies
+(`dependency-submission.yml`).
 
 ### One command runs the pipeline locally
 
