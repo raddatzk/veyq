@@ -18,32 +18,32 @@
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run verify:argon-worker && pnpm run build:cli"
   },
   "dependencies": {
-    "@lucide/vue": "^1.61.0",
+    "@lucide/vue": "^1.66.0",
     "@veyq/crypto": "workspace:*",
     "jspdf": "^4.2.1",
     "qrcode": "^1.5.4",
     "reka-ui": "^2.11.0",
-    "vue": "^3.5.42",
-    "vue-i18n": "^11.4.16",
-    "vue-router": "^5.1.0"
+    "vue": "^3.5.44",
+    "vue-i18n": "^11.4.17",
+    "vue-router": "^5.4.0"
   },
   "devDependencies": {
-    "@intlify/message-compiler": "^11.4.12",
-    "@openapitools/openapi-generator-cli": "^2.41.0",
-    "@types/node": "^22.0.0",
+    "@intlify/message-compiler": "^11.4.17",
+    "@openapitools/openapi-generator-cli": "^2.42.0",
+    "@types/node": "^26.6.6",
     "@types/qrcode": "^1.5.6",
-    "@vitejs/plugin-vue": "^6.0.7",
+    "@vitejs/plugin-vue": "^6.0.10",
     "@vue/eslint-config-typescript": "^14.9.0",
     "@vue/test-utils": "^2.5.1",
     "esbuild": "^0.28.2",
-    "eslint": "^10.7.0",
-    "eslint-plugin-vue": "^10.9.2",
+    "eslint": "^10.14.0",
+    "eslint-plugin-vue": "^10.12.0",
     "happy-dom": "^21.0.4",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.63.0",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.1.6",
-    "vitest": "^4.1.12",
+    "vitest": "^5.1.0",
     "vue-eslint-parser": "^10.4.1",
-    "vue-tsc": "^3.3.2"
+    "vue-tsc": "^3.3.14"
   }
 }
