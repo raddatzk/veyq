@@ -781,6 +781,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history: the lane turns the candidate into a release with the publish's own producer
+          # (scripts/release_assets.py), whose minor counts the commits since VERSION last changed and refuses a
+          # shallow checkout (the second GitHub run, 2026-11-05: every leg red at `assets` on it).
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
