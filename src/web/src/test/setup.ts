@@ -1,8 +1,14 @@
 // Vitest global setup.
 import { enableAutoUnmount } from '@vue/test-utils'
-import { beforeAll, beforeEach, afterEach, vi } from 'vitest'
+import { beforeAll, beforeEach, afterEach, expect, vi } from 'vitest'
 import { installWireRecorder } from './wireRecorder'
+import { byteArrayEquality } from './byteEquality'
 import { registerApplicationMessages } from '../applicationMessages'
+
+// Byte arrays compare as bytes, in one native pass, not element by element through vitest's generic equality: a
+// multi-MiB read-back asserted with `toEqual` otherwise costs seconds and passed the test timeout on a 4-vCPU CI
+// runner (byteEquality.ts says what it measured, byteEquality.test.ts proves this line is in force).
+expect.addEqualityTesters([byteArrayEquality])
 
 // The applications' strings (inbox #513): core's catalog holds core's namespaces only, and each application's arrive
 // through the composition root's catalog half, as in `main.ts` — for EVERY test file, the node-environment suites too
