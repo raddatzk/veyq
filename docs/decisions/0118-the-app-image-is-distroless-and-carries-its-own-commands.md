@@ -29,15 +29,17 @@ chart's probes are `httpGet`.
 
 ## Decision
 
-1. **The runtime is `gcr.io/distroless/java21-debian13:nonroot`**, pinned by its multi-arch index digest (amd64,
-   arm64, s390x, ppc64le, riscv64 — the registry's index read with `curl`, 2026-11-05). It carries Debian 13's glibc, CA
-   certificates and tzdata and the **Eclipse Temurin** 21 JRE that Google's distroless project packages from Adoptium's
-   builds: `21.0.13+9`, `java.version.date` 2026-10-20 — the October update in the image sixteen days later
-   (`java -XshowSettings:properties` in the pulled image). The vendor is the one the image had before, so nothing about
+1. **The runtime is `gcr.io/distroless/java25-debian13:nonroot`** (`java21-…` when this was decided; the Java major
+   moved with [ADR 0119](0119-the-backend-runs-on-java-25.md)), pinned by its multi-arch index digest (amd64,
+   arm64, s390x, ppc64le, riscv64 — `docker buildx imagetools inspect`, 2026-11-05). It carries Debian 13's glibc, CA
+   certificates and tzdata and the **Eclipse Temurin** JRE that Google's distroless project packages from Adoptium's
+   builds: `25.0.5+8`, `java.version.date` 2026-10-20 (`java -XshowSettings:properties` in the built image; the 21
+   image this was decided on carried `21.0.13+9` of the same date). The vendor is the one the image had before, so nothing about
    the JVM's behaviour moves with the base; the module set is a full JRE's, `jdk.localedata` included, which
    `RecipientCountriesTest` depends on (`java --list-modules`). Nothing in the backend uses AWT or fonts
-   (`grep -rn -E 'java\.awt|javax\.imageio|ImageIO|BufferedImage' --include='*.kt' src/backend` finds none). The image is 300.8 MB, 79.6 MB less;
-   2600 entries; on the `PATH` only `java`, and no `sh`, `bash`, `dash`, `busybox`, `curl`, `wget`, `apt`, `dpkg`, `tar`,
+   (`grep -rn -E 'java\.awt|javax\.imageio|ImageIO|BufferedImage' --include='*.kt' src/backend` finds none). The image is 300.8 MB, 79.6 MB less
+   (334.2 MB on Java 25, `docker image inspect` of `veyq:j25-agent`);
+   2600 entries (2606 on Java 25); on the `PATH` only `java`, and no `sh`, `bash`, `dash`, `busybox`, `curl`, `wget`, `apt`, `dpkg`, `tar`,
    `cat`, `mv` or `ls` anywhere (the same export and read, of `veyq:dl-agent`). Debian 13 rather than 12: both variants
    are published, and 13 is Debian's stable release, so its security support runs the longer. Dependabot's `docker`
    ecosystem proposes the `nonroot` tag's new digest like every other pin's (remembered, like the rest of
