@@ -100,8 +100,10 @@ def plan_cases() -> None:
         ok = plan.action == action and (owner is None or (plan.uid, plan.gid) == owner)
         check(f"plan: {label} → {action}{' ' + str(owner) if owner else ''}", ok, f"got {plan}")
     refused = P(501, 10001, 10001, None)
-    check("plan: the refusal names both ways out (root, or copy through the app container)",
-          "root" in refused.reason and "docker cp" in refused.reason and "kubectl cp" in refused.reason, refused.reason)
+    check("plan: the refusal names the ways out (root, the image's place-key, the chart's Secret) and no `cp`, "
+          "which a distroless app container cannot serve (ADR 0118)",
+          "root" in refused.reason and "place-key" in refused.reason and "existingSecret" in refused.reason
+          and " cp`" not in refused.reason, refused.reason)
 
 
 def place_cases(tmp: pathlib.Path) -> None:

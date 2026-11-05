@@ -19,7 +19,11 @@ render, asserts — deriving every anchor from the source rather than listing it
        the `Dockerfile`'s runtime `WORKDIR` — and the uid is the `Dockerfile`'s last `USER` in every `runtime-*`
        stage (which must agree). A claim comes up root-owned and, unlike a Docker named volume, inherits
        nothing from the image directory it covers; `fsGroup` is what makes it writable, so a chart without it
-       reproduces the AccessDeniedException restart-loop on its first-ever install.
+       reproduces the AccessDeniedException restart-loop on its first-ever install. **With
+       `app.configSecret.existingSecret`** (ADR 0118) the path is instead on a READ-ONLY mount of a `secret` volume
+       of exactly that Secret — the operator's key, which the server reads and never writes — and the erasure ledger
+       (`VEYQ_ERASURE_LEDGER_FILE`, which otherwise defaults to the key's directory, now unwritable) is set and on a
+       claim this render creates. Some file in `ci/` must render that branch.
   iii. **The app workload's update strategy is `Recreate`.** `quarkus.flyway.migrate-at-start=true` has no
        `%prod` gate, and the default RollingUpdate starts the new pod before the old one stops — two migrators
        on one schema during every `helm upgrade`. `replicas: 1` alone does not prevent that.
@@ -266,6 +270,7 @@ CONFIG_KT = backend_tree.source_file("me.raddatz.veyq.core.config.VeyqConfig")
 DOCKERFILE = repo_layout.APP_DOCKERFILE
 
 ENV_KEY = "VEYQ_SECURITY_CONFIG_SECRET_FILE"
+LEDGER_ENV = "VEYQ_ERASURE_LEDGER_FILE"
 # The same anchors the compose guards use, for the same reasons.
 STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 WORKDIR = re.compile(r"^\s*WORKDIR\s+(\S+)\s*$", re.IGNORECASE)
@@ -430,6 +435,25 @@ def resolve_secret_path(container: dict, workdir: str | None, default: str | Non
 def covers(path: str, mount_point: str) -> bool:
     mount_point = mount_point.rstrip("/") or "/"
     return path == mount_point or path.startswith(mount_point + "/")
+
+
+def check_own_key(tag: str, obj: dict, container: dict, volumes: dict, pvc_names: set, path: str, secret: str) -> None:
+    """(ii) with app.configSecret.existingSecret: the key on a read-only mount of that Secret, the ledger on a claim."""
+    mount = next((m for m in container.get("volumeMounts") or [] if covers(path, str(m.get("mountPath", "")))), None)
+    source = ((volumes.get((mount or {}).get("name")) or {}).get("secret") or {})
+    if mount is None or source.get("secretName") != secret:
+        errors.append(f"(ii) {tag}: {name_of(obj)}: app.configSecret.existingSecret is `{secret}`, but `{path}` is not on a mount "
+                      f"of that Secret ({mount}) — the app would generate a key of its own beside the operator's")
+    elif mount.get("readOnly") is not True:
+        errors.append(f"(ii) {tag}: {name_of(obj)}: the operator's key `{secret}` is mounted writable at `{mount.get('mountPath')}` — "
+                      f"the server never writes a key that is there, so nothing needs to (ADR 0118)")
+    ledger = next((e.get("value") for e in container.get("env") or [] if e.get("name") == LEDGER_ENV), None)
+    claim_mount = next((m for m in container.get("volumeMounts") or []
+                        if isinstance(ledger, str) and covers(posixpath.normpath(ledger), str(m.get("mountPath", "")))), None)
+    claim = ((volumes.get((claim_mount or {}).get("name")) or {}).get("persistentVolumeClaim") or {}).get("claimName")
+    if claim is None or claim not in pvc_names or (claim_mount or {}).get("readOnly"):
+        errors.append(f"(ii) {tag}: {name_of(obj)}: with the key from a Secret, {LEDGER_ENV} is {ledger!r}, not on a writable claim this "
+                      f"render creates — the ledger would default beside the key, into the read-only Secret (ADR 0056 decision 8)")
 
 
 def selects(match_labels: dict, labels: dict) -> bool:
@@ -1001,10 +1025,16 @@ def check(values_file: pathlib.Path) -> list[dict]:
             else:
                 errors.append(f"(iii) {tag}: {name_of(obj)} runs the app image as a {obj.get('kind')} — the app is a Deployment with strategy Recreate")
 
-            # (ii) the KEK path on a claim, and fsGroup = the image's runtime user.
+            # (ii) the KEK path on a claim — or on the operator's Secret, read-only, with the ledger on a claim — and
+            # fsGroup = the image's runtime user.
             path = resolve_secret_path(container, workdir, default_path)
+            own_secret = ((values.get("app") or {}).get("configSecret") or {}).get("existingSecret") or ""
+            if own_secret:
+                own_secret_rendered.add(tag)
             if path is None:
                 errors.append(f"(ii) {tag}: {name_of(obj)}: the config-secret path could not be resolved for container `{container.get('name')}`")
+            elif own_secret:
+                check_own_key(tag, obj, container, volumes, pvc_names, path, own_secret)
             else:
                 mount = next((m for m in container.get("volumeMounts") or [] if covers(path, str(m.get("mountPath", "")))), None)
                 if mount is None:
@@ -1180,6 +1210,7 @@ if not values_files:
     errors.append(f"{CI_DIR.relative_to(ROOT)} holds no values file — nothing would be rendered, and a run over nothing is not a green")
 digests_set: set[str] = set()
 proxy_rendered: set[str] = set()
+own_secret_rendered: set[str] = set()
 garage_on: set[str] = set()
 garage_off: set[str] = set()
 renders = {f.name: check(f) for f in values_files}
@@ -1194,6 +1225,9 @@ for side, files in (("on", garage_on), ("off", garage_off)):
     if values_files and not files:
         errors.append(f"(xix/xxvii) no file in {CI_DIR.relative_to(ROOT)} renders garage.enabled {side}, so that side's store "
                       f"objects and hint are checked by nobody")
+if values_files and not own_secret_rendered:
+    errors.append(f"(ii) no file in {CI_DIR.relative_to(ROOT)} sets app.configSecret.existingSecret, so the operator's-key render — the "
+                  f"Secret mount and the ledger on the claim — is checked by nobody")
 if values_files and not proxy_rendered:
     errors.append(f"(xxiii) no file in {CI_DIR.relative_to(ROOT)} sets app.clientPort.source: proxyProtocol, so the PROXY render — its env and its probes on the admin listener — is checked by nobody")
 if values_files:
@@ -1254,7 +1288,8 @@ if errors:
 summary = "; ".join(f"{name}: {len(objs)} objects" for name, objs in renders.items())
 print(
     f"chart meta check OK ({summary}): no object carries the sink's ownership value or is cluster-scoped; the app's "
-    f"config-secret path is on a claim with fsGroup={runtime_user}; strategy Recreate; every render byte-identical "
+    f"config-secret path is on a claim with fsGroup={runtime_user}, or read-only on the operator's Secret with the ledger on the claim "
+    f"(in {', '.join(sorted(own_secret_rendered))}); strategy Recreate; every render byte-identical "
     f"twice; every container restricted-compliant with a read-only root; the admin surface on a ClusterIP Service and "
     f"no route; the admin listener on a Service of its own that no route names and the admin surface points at, "
     f"admitted by policy from the admin pod alone; a default-deny over every pod, the public port admitted from "

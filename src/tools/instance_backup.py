@@ -1230,8 +1230,9 @@ def key_owner_plan(euid: int, parent_uid: int, parent_gid: int, existing_uid: in
             f"the key's directory belongs to uid {parent_uid}, and this tool runs as uid {euid}, which cannot hand "
             f"a file to another user — the key would be born yours, and an application running as uid "
             f"{parent_uid} could not read it (configSecretState: ABSENT). Run the restore as root (`sudo -E`), or "
-            f"restore the key to a file of your own and copy it in through the application container "
-            f"(`docker cp`, `kubectl cp`), as https://raddatzk.github.io/veyq/run/backup-and-restore/ shows."))
+            f"restore the key to a file of your own and put it in as the application: its image's `place-key` in a "
+            f"one-off app container (Compose), or a Secret the chart mounts (Kubernetes, "
+            f"app.configSecret.existingSecret), as https://raddatzk.github.io/veyq/run/backup-and-restore/ shows."))
     if existing_uid is not None and existing_uid != euid:
         return KeyOwnerPlan(REFUSE, reason=(
             f"a key already there belongs to uid {existing_uid}; overwriting it keeps that owner, which this tool "

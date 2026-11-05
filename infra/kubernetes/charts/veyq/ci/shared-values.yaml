@@ -41,3 +41,8 @@ gateway:
     secretName: wildcard-veyq-example-org
 backup:
   existingClaim: veyq-backup
+# The operator's own config-secret key (ADR 0118), another shape no other file selects: the key from this Secret,
+# read-only, and the erasure ledger on the claim.
+app:
+  configSecret:
+    existingSecret: veyq-config-secret-key

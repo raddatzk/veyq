@@ -178,9 +178,19 @@ spec:
                   name: {{ include "veyq.secretName" . }}
                   key: garageAdminToken
             {{- end }}
+            {{- with .Values.app.configSecret.existingSecret }}
+            # The KEK from the operator's Secret (app.configSecret in values.yaml, ADR 0050's "supply your own"),
+            # read-only: the server reads a key that is there and never writes one. The erasure ledger, which defaults to
+            # the key's directory, stays on the claim below — the Secret's mount cannot be written.
+            - name: VEYQ_SECURITY_CONFIG_SECRET_FILE
+              value: /run/secrets/veyq-config-secret/config-secret.key
+            - name: VEYQ_ERASURE_LEDGER_FILE
+              value: /var/lib/veyq/erasures.log
+            {{- else }}
             # The KEK, on the claim below — an ABSOLUTE path outside /work, which holds the application itself.
             - name: VEYQ_SECURITY_CONFIG_SECRET_FILE
               value: /var/lib/veyq/config-secret.key
+            {{- end }}
             # The bootstrap domain is routed by the chart's own HTTPRoute and EXCLUDED from the projection; the
             # Kubernetes-only half of the routing settings is the properties file below.
             - name: VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN
@@ -190,6 +200,11 @@ spec:
           volumeMounts:
             - name: config-secret
               mountPath: /var/lib/veyq
+            {{- if .Values.app.configSecret.existingSecret }}
+            - name: config-secret-key
+              mountPath: /run/secrets/veyq-config-secret
+              readOnly: true
+            {{- end }}
             - name: config
               mountPath: /etc/veyq
               readOnly: true
@@ -223,6 +238,18 @@ spec:
         - name: config-secret
           persistentVolumeClaim:
             claimName: veyq-config-secret
+        {{- with .Values.app.configSecret.existingSecret }}
+        # The one key of the operator's Secret, as the file the server reads. 0440 and no write bit: the kubelet gives a
+        # Secret's files the pod's fsGroup (10001, the app's group), and the app reads the key by that group (ADR 0118;
+        # remembered from the kubelet, not run on a cluster here).
+        - name: config-secret-key
+          secret:
+            secretName: {{ . | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ $.Values.app.configSecret.key | quote }}
+                path: config-secret.key
+        {{- end }}
         - name: config
           configMap:
             name: veyq-app
