@@ -205,12 +205,14 @@ Environment:
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import hmac
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -1181,6 +1183,39 @@ def loose_bits(path: Path) -> int:
     return path.stat().st_mode & 0o077
 
 
+# What "nothing is there" means to a path test. Up to Python 3.13 `Path.exists()`, `is_file()` and `is_dir()` answered
+# False for exactly these errors and raised every other one; since 3.14 they answer False for ANY OSError, so a file
+# behind a directory this user cannot search reads as absent there (measured: CI's 3.14 runner captured on without the
+# key the selftest had locked away). A test whose "absent" changes what this tool does — reads no key, takes no
+# record, overwrites — goes through `stat_or_none`, which keeps the 3.13 rule on every Python.
+ABSENT_ERRNOS = (errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP)
+
+
+def stat_or_none(path: Path) -> os.stat_result | None:
+    """`path`'s stat, symlinks followed — None when nothing is there, and a `PermissionError` (any OSError but
+    `ABSENT_ERRNOS`) raised, never read as absent."""
+    try:
+        return path.stat()
+    except OSError as e:
+        if e.errno in ABSENT_ERRNOS:
+            return None
+        raise
+
+
+def readable_file(path: Path, refusal: str) -> bool:
+    """Whether `path` is a file this user can read: False when none is there, `refusal` raised as a BackupError when
+    one is there it cannot read — or cannot even look for. Opened here, so a key found unreadable is found at the
+    gates, not at the copy after the first write."""
+    try:
+        found = stat_or_none(path)
+        if found is None or not stat.S_ISREG(found.st_mode):
+            return False
+        with path.open("rb"):
+            return True
+    except PermissionError:
+        raise BackupError(refusal) from None
+
+
 def write_key(source: Path, dest: Path) -> None:
     """Copy leg (c) to `dest`, born `0600` and never over an existing file.
 
@@ -1247,13 +1282,20 @@ def key_gate(target: Path, as_runtime_user: bool = False) -> KeyOwnerPlan:
     a claim's directory is root-owned — `fsGroup` gives it a group, never an owner — so the directory names nobody
     to hand the key to, and the key born to this process IS born to the application's uid."""
     parent = target.parent
-    if not parent.is_dir():
+    euid = effective_uid()
+    try:
+        st = stat_or_none(parent)
+        # Not `exists()`: on Python 3.14 a key in a directory this user cannot search is "not there", and the gate
+        # would pass a restore that then fails to write it after the database and the objects are in.
+        existing = stat_or_none(target) if st is not None and stat.S_ISDIR(st.st_mode) else None
+    except PermissionError:
+        raise BackupError(f"--config-secret-file {target}: this tool (uid {euid}) cannot look into {parent}, so it can "
+                          f"neither see a key already there nor write one. Run the restore as root (`sudo -E`).") from None
+    if st is None or not stat.S_ISDIR(st.st_mode):
         raise BackupError(f"--config-secret-file {target}: its directory {parent} does not exist. On the production "
                           f"recipe it is the veyq-config-secret volume's mountpoint, created by the first `up`; "
                           f"a missing one is almost always a wrong path, so this tool does not create it.")
-    st = parent.stat()
-    existing_uid = target.stat().st_uid if target.exists() else None
-    euid = effective_uid()
+    existing_uid = existing.st_uid if existing is not None else None
     if as_runtime_user:
         if euid == 0:
             raise BackupError(f"--key-as-runtime-user: this tool runs as root, so the key would be born root's — run it "
@@ -1389,19 +1431,15 @@ def key_readable(source: Path) -> bool:
 
     On the production recipe the key lives on the `veyq-config-secret` volume, owned by the app's uid 10001 and
     `0600`, so only that uid and root read it (inbox #250). Read here, before anything is written: found
-    unreadable only at the copy, the dump and the mirror would already lie on disk beside a `PermissionError`.
+    unreadable only at the copy, the dump and the mirror would already lie on disk beside a `PermissionError`. Never
+    `is_file()`: on Python 3.14 a key behind a volume this user cannot search is "not a file", and the capture would
+    go on without leg (c) (`stat_or_none`).
     """
-    try:
-        if not source.is_file():
-            return False
-        with source.open("rb"):
-            return True
-    except PermissionError:
-        raise BackupError(
-            f"--config-secret-file {source}: this tool (uid {effective_uid()}) cannot read it. On the production "
-            f"recipe it lives on the veyq-config-secret volume, owned by the application's uid and readable only "
-            f"by it and root. Run the capture as root with your environment kept (`sudo -E`), so the database and "
-            f"store credentials come along.") from None
+    return readable_file(source, (
+        f"--config-secret-file {source}: this tool (uid {effective_uid()}) cannot read it. On the production "
+        f"recipe it lives on the veyq-config-secret volume, owned by the application's uid and readable only "
+        f"by it and root. Run the capture as root with your environment kept (`sudo -E`), so the database and "
+        f"store credentials come along."))
 
 
 def cmd_capture(args: argparse.Namespace) -> int:
@@ -1427,7 +1465,13 @@ def cmd_capture(args: argparse.Namespace) -> int:
                 f"the key file exists to defend against (ADR 0056 §1, ADR 0050). Give it a destination of its "
                 f"own, ideally on a different medium, or pass --key-beside-dump to put it there knowingly."
             )
-        if key_dest.exists():
+        try:
+            taken = stat_or_none(key_dest) is not None  # not `exists()`, which 3.14 answers False when it cannot look
+        except PermissionError:
+            raise BackupError(f"--key-into {key_dest}: this tool (uid {effective_uid()}) cannot look into its directory, "
+                              f"so it can neither see an earlier capture's key there nor write this one. Name a "
+                              f"directory it can write.") from None
+        if taken:
             raise BackupError(
                 f"--key-into {key_dest} already exists. It is most likely an earlier capture's key, and "
                 f"replacing it would leave that capture unrestorable. Name a new file."
@@ -1901,9 +1945,13 @@ def cmd_restore(args: argparse.Namespace) -> int:
     require_key_from_fits(args, manifest)
     placement = manifest["configSecret"]["placement"]
     key_source: Path | None = None
+    # Read here, not first at the placement after the load: a key this tool cannot read — or, on Python 3.14, one in a
+    # directory it cannot search, which `is_file()` there calls absent — is refused before anything is written.
+    cannot_read = ("this tool (uid {uid}) cannot read it, and leg (c) is placed only after the database and the "
+                   "objects are in. Run the restore as a user who can read the key, or as root (`sudo -E`).")
     if placement == SEPARATE and args.key_from:
         key_source = Path(args.key_from)
-        if not key_source.is_file():
+        if not readable_file(key_source, f"--key-from {key_source}: " + cannot_read.format(uid=effective_uid())):
             raise BackupError(f"--key-from {key_source} is not a file — leg (c) is not where you said")
     elif placement == SEPARATE and not args.without_key:
         raise BackupError(
@@ -1915,12 +1963,13 @@ def cmd_restore(args: argparse.Namespace) -> int:
         )
     elif placement == BESIDE:
         key_source = backup / KEY_NAME
-        if not key_source.is_file() and not args.without_key:
+        there = readable_file(key_source, f"{key_source}: " + cannot_read.format(uid=effective_uid()))
+        if not there and not args.without_key:
             raise BackupError(
                 f"the manifest records leg (c) as captured beside the dump, but {key_source} is not there. "
                 f"Find the key, or restore without it knowingly with --without-key (A2)."
             )
-        if not key_source.is_file():
+        if not there:
             key_source = None
 
     # Where the key lands is checked HERE, not where it is written: placement runs after the database and the
@@ -2162,9 +2211,10 @@ def read_record(root: Path) -> dict | None:
     readable JSON FAILS, naming the file: "absent" means *capture and move on*, which would silently skip the
     downgrade refusal (ADR 0098 decision 2)."""
     path = root / STATE_NAME
-    if not path.exists():
-        return None
     try:
+        # Not `exists()`: on Python 3.14 a record this tool cannot look at would be "absent" (`stat_or_none`).
+        if stat_or_none(path) is None:
+            return None
         record = json.loads(path.read_text())
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
         raise BackupError(f"{path} is not a readable record ({e}). It is the gate's memory of which release this "
