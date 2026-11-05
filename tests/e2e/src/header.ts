@@ -13,8 +13,9 @@
 // helper waits until it equals the header's `clientWidth`, never a fixed sleep.
 import { expect, type Locator, type Page } from '@playwright/test'
 
-/** The ⋯'s accessible name, as `node.rowMore` gives it (src/web/src/i18n/index.ts), up to the node's name. */
-const MORE = /^More actions for /
+/** The ⋯'s accessible name, as `node.rowMore` gives it (src/web/src/i18n/index.ts), up to the node's name — in both
+ *  languages: a spec in German reaches the ⋯ too, where an action did not fit as a button (the Pot at 375 px). */
+const MORE = /^(?:More actions for|Weitere Aktionen für) /
 
 const nodeHeader = (page: Page): Locator => page.locator('header.veyq-node-header')
 
