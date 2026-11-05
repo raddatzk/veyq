@@ -11,7 +11,7 @@ sources:
 ---
 
 The person who runs a veyq server can ask you to **moderate** it: to look at what people report, in every space on
-that server, and to decide what happens with it ([Report something](/veyq/help/report-something/)). Reports arrive
+that server, and to decide what happens with it ([Report something](/help/report-something/)). Reports arrive
 sealed to the key you hold, what they name is kept for you, and you are mailed when a new case comes in. First you
 take up the role, so that you hold that key; then you review cases and decide.
 
@@ -44,7 +44,7 @@ Notices about new cases reach you only at a confirmed address. If the code did n
 4. If you hold the key and someone else is waiting for it, your page passes it on, after checking that person's key
    follows from the one you have seen before (the first time, the one the server shows). If it can't be confirmed, it
    is not passed on, and the page says so: compare your safety numbers in person
-   ([A key can't be confirmed](/veyq/help/key-changed/)).
+   ([A key can't be confirmed](/help/key-changed/)).
 5. Then the page shows **Reports**, the cases of every space on the server.
 
 If the page says it **stopped** because the key the server publishes is not the one you hold, do not go on, and tell

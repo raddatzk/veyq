@@ -36,7 +36,7 @@ works on what someone reports: exactly that opens to the moderators, and every s
 ## What a report does
 
 Anyone who sees something — a member of a space or a guest of a link — can choose **Report** on it
-([Report something](/veyq/help/report-something/)). What happens on your server
+([Report something](/help/report-something/)). What happens on your server
 ([uc.moderation.report](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/use-cases/uc.moderation.report.md)):
 
 - **It arrives sealed.** The reporter's device seals their text, their address — on its own, so it can be deleted
@@ -131,7 +131,7 @@ more information, write to the instance contact, go to court, and — where the 
 instance, as the sentence itself says — complain to the Digital Services Coordinator of the country they live in (DSA
 Art. 16(5), Art. 53); the sealed address itself is deleted six months
 later — or six months after the decision, where it could not be told — and the log keeps that the decision was sent. The statement names the instance, never the
-moderator. Without instance mail ([Configuration](/veyq/run/configuration/)) the statements are in veyq all the same.
+moderator. Without instance mail ([Configuration](/run/configuration/)) the statements are in veyq all the same.
 
 A measure decides the case, and its hold then ends six months after its statement is sent (after the decision, where
 nobody could be told). **Lift** on a measure — any
@@ -240,7 +240,7 @@ What it does ([uc.admin.suspend-tenant](https://github.com/raddatzk/veyq/blob/ma
 You still cannot read anything private, which is the design working as intended.
 
 To close a tenant for good, **Delete tenant** takes it offline the same way and erases it 30 days later
-([First-run setup and the admin console](/veyq/run/first-run/#tenants)); a deletion settles the tenant's open proposals
+([First-run setup and the admin console](/run/first-run/#tenants)); a deletion settles the tenant's open proposals
 as taken, as a suspension does. **Over content** it carries a statement of reasons to each owner of the tenant exactly
 as taking it offline does: the same **Because of the tenant's content** box and statement, above both buttons, or add `--over-content
 --ground <ground> [--provision <text>] [--facts <text>]` to `tenant delete`; a moderator's open proposal makes it over
@@ -252,7 +252,7 @@ was on, so its statement goes at its date instead of being kept forever.
 ## What else you have
 
 - **A storage quota per tenant** — the most a tenant may keep on your store
-  ([Plan your instance](/veyq/run/plan/#storage-and-quotas)).
+  ([Plan your instance](/run/plan/#storage-and-quotas)).
 - **Revoking a tenant** that was created but never accepted (a pending one) deletes it. There is no operation that
   deletes an active tenant.
 - **Switching a feature off for the whole instance**, for example public links or devices that unlock without a
@@ -262,7 +262,7 @@ was on, so its statement goes at its date instead of being kept forever.
 
 You can switch a feature off for the whole instance, for example public links, drop boxes or devices that unlock
 without a password, in the admin console or with `veyq-admin capabilities`. What each switch does to new and to
-existing data, and how to switch it, is on [Capabilities](/veyq/run/capabilities/).
+existing data, and how to switch it, is on [Capabilities](/run/capabilities/).
 
 ## Objections
 
@@ -428,7 +428,7 @@ Everything else expires.
 
 - **There is no switch for it.** The record is kept wherever a guest may write, so the capabilities that let guests
   write decide where: *Links to look and add* (`core.public-shares.contribute`) and *Drop boxes*
-  (`core.public-shares.drop-box`), yours and each space's ([Capabilities](/veyq/run/capabilities/)). Switch those off
+  (`core.public-shares.drop-box`), yours and each space's ([Capabilities](/run/capabilities/)). Switch those off
   and no guest writes, so nothing is kept. Kept rows go at the cleanup (hourly, and at every start) once older than N;
   what a report's hold copied stays for the hold's time.
 - **N** is set under **Server → Moderation**, or with `veyq-admin guest-write-record set <days>`: 7 by default, 1 to
@@ -438,7 +438,7 @@ Everything else expires.
 - **Guests are told** before their first write, on the page itself, with the N in effect and the right to object as a
   sentence of its own, and a link to the full information in [the privacy notice of the instance](#the-privacy-notice).
   You are the controller, not a space's owner.
-- **The address is the one the network vouches for**, never one the client wrote ([Networking](/veyq/run/networking/)).
+- **The address is the one the network vouches for**, never one the client wrote ([Networking](/run/networking/)).
   On Compose it is strong by construction; on Kubernetes it is only as strong as an enforced NetworkPolicy. The source
   port is known where your edge states it (on Compose, the recipe's Traefik always does); otherwise only the address is
   kept, and an address without a port may name no single subscriber behind carrier-grade NAT.
@@ -447,7 +447,7 @@ Everything else expires.
 - **Backups.** `veyqctl backup` (the instance backup) dumps the table's schema and none of its rows, so a capture never
   keeps a guest past N. If you back up otherwise — volume snapshots, a dump of your own — those copies hold the rows:
   keep such a backup at most B days — the instance's own backups are deleted at B, 30 until you set it under **Server →
-  Moderation → Backups** ([Backup and restore](/veyq/run/backup-and-restore/#how-long-a-backup-is-kept--b)) — open it
+  Moderation → Backups** ([Backup and restore](/run/backup-and-restore/#how-long-a-backup-is-kept--b)) — open it
   only to restore it, and let the restored instance start once (its cleanup then deletes what is past N at boot). A
   guest's data can then live N + B days, and the privacy notice says so with your B.
 - **A guest objects** (GDPR Art. 21(1)): unless you have compelling reasons to keep what was kept, delete it —
@@ -629,7 +629,7 @@ Questions the law leaves open, which veyq does not pursue and the notice answers
 notice names you alone), whether the breached-password check and the exchange rates may run by default (the notice
 states each as it runs, its recipient and its switch), whether one sentence plus this link meets Art. 13 on a guest's page, and what Art. 14 asks
 towards a person a report names. The record of processing, your contracts with processors, a breach and an access
-request are [Data protection](/veyq/run/data-protection/)'s.
+request are [Data protection](/run/data-protection/)'s.
 
 ## Not built
 
@@ -644,7 +644,7 @@ request are [Data protection](/veyq/run/data-protection/)'s.
 These are on the security model's target, decided in
 [ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
 and [ADR 0099](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md);
-see the [Security roadmap](/veyq/security/roadmap/).
+see the [Security roadmap](/security/roadmap/).
 
 **How far this is proven.** Suspension, reactivation, the feature switches, the review, every step above, the statement
 and the objection, an authority's order, its deferral and the report to an authority are covered by the backend's, the

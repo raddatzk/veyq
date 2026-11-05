@@ -49,7 +49,7 @@ see path or query parameters, presigned-URL query strings, database columns with
 undeclared headers, or the object-store key. A green run means "no unclassified field in a JSON body and no
 unclassified declared header", never "operator-blind, verified". What the server actually receives is a separate
 sensor ([ADR 0053](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0053-wire-assertion-canary-sweep.md));
-[Verify it yourself](/veyq/security/verify-it-yourself/) covers both.
+[Verify it yourself](/security/verify-it-yourself/) covers both.
 
 ## What is sealed
 
@@ -75,7 +75,7 @@ Sealed client-side, never readable by the server:
 Each text or icon field (a name, a node's or a medium's metadata, a share's note and label, a member's name and
 picture) seals under a key of its own, derived per write. Inside its ciphertext the server stores the 16-byte random
 salt that key was derived with, one per write and 16 bytes of length more, and learns nothing about any key from it
-([Cryptography](/veyq/security/cryptography/#what-a-seal-binds)).
+([Cryptography](/security/cryptography/#what-a-seal-binds)).
 
 ## What is server-visible
 
@@ -273,7 +273,7 @@ admin console's access log keeps no reader's address; the bundled proxy keeps no
 holds; the object store logs warnings only. A rate limiter keeps a client's address, or an email address for the
 recovery and invitation mails, in memory as a bucket's key until the bucket has refilled. Logs are bounded by size and
 never evidence: a report's evidence is a database record. Every end-to-end run fails if a log holds a sealed value, a
-token or an address a suite signed up with ([Verify it yourself](/veyq/security/verify-it-yourself/)).
+token or an address a suite signed up with ([Verify it yourself](/security/verify-it-yourself/)).
 
 ## The six concessions
 
@@ -291,7 +291,7 @@ stated reason.
 
 
 :::note
-Every server-visible fact on this page is also visible to a [passive operator](/veyq/security/threat-model/) and
+Every server-visible fact on this page is also visible to a [passive operator](/security/threat-model/) and
 to anyone holding a database dump. What an *active* operator can do beyond reading it is the subject of the
-[Threat model](/veyq/security/threat-model/).
+[Threat model](/security/threat-model/).
 :::

@@ -65,7 +65,7 @@ for, and its state: **On**, **Off**, or **Off through** the parent that is off. 
 that does to new and to existing data, in the entry's own words, and asks you to confirm. **Switch on** asks nothing.
 
 The CLI does the same
-([how to run it and sign in](/veyq/run/first-run/#the-veyq-admin-cli)):
+([how to run it and sign in](/run/first-run/#the-veyq-admin-cli)):
 
 ```sh
 docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env exec \
@@ -220,9 +220,9 @@ switch refuses only what is new.
   (`memories.places`, `memories.map`, `expenses.exchange-rates`) are off with it.
 - **An application left off is erased on its day.** When an application goes off for a tenant, at your level or the
   tenant owner's, the tenant gets a day: that moment plus `veyq.application.off.retention`, 30 days unless you set
-  another ([Configuration](/veyq/run/configuration/#backend-keys-for-tuning)). Every member sees a banner naming the
+  another ([Configuration](/run/configuration/#backend-keys-for-tuning)). Every member sees a banner naming the
   day, the tenant owner sees it beside the entry, and where the instance has its own mail
-  ([Storage and email](/veyq/run/storage-and-email/#the-instances-own-mail-to-you)) every member is mailed a notice and,
+  ([Storage and email](/run/storage-and-email/#the-instances-own-mail-to-you)) every member is mailed a notice and,
   seven days before the day, a reminder. On the day, everything of that application made before it is erased in every
   space of the tenant, personal spaces included, the way the trash's purge erases: its files, the erasure ledger a
   restore replays, and every moderation hold's copy kept. Folders stay. Switched back on before the day, nothing is

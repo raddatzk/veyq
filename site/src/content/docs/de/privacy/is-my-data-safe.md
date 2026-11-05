@@ -33,7 +33,7 @@ stehlen — nur unverständlicher Datenmüll:
 
 - deine **Fotos und Videos** (und die kleineren Vorschaubilder),
 - deine **Tagebuchtexte**,
-- deine **Dateien** — Dokumente, PDFs, alles, was du in [Depot](/veyq/de/depot/) ablegst — und ihre **Namen**,
+- deine **Dateien** — Dokumente, PDFs, alles, was du in [Depot](/de/depot/) ablegst — und ihre **Namen**,
 - die **sensiblen Details**: Titel, Bildunterschriften, Beschreibungen, Orte, die abgebildeten
   Personen, Schlagwörter,
 - **wo** ein Foto aufgenommen wurde (GPS) und **wann** es entstand,
@@ -118,8 +118,8 @@ ausdrückliche Handlung:
   Datenbank), kann darüber nichts hochladen.
 
 Wie die verschiedenen Links funktionieren — nur ansehen, ansehen und mitwirken, Briefkasten — steht unter
-[Teilen](/veyq/de/sharing/); wie du sie abschaltest und erneuerst, unter
-[Links ändern, abschalten, erneuern und löschen](/veyq/de/sharing/manage-links/).
+[Teilen](/de/sharing/); wie du sie abschaltest und erneuerst, unter
+[Links ändern, abschalten, erneuern und löschen](/de/sharing/manage-links/).
 
 Drei ehrliche Grenzen:
 - **Entteilen macht das Heruntergeladene nicht rückgängig.** Ein Entzug stoppt den *künftigen* Zugriff;
@@ -144,13 +144,13 @@ Bereichs oder ein Gast eines Links —, kann **Melden** wählen, und sein Gerät
 Schlüssel zu genau dem Gemeldeten, so versiegelt, dass nur diese Moderation sie öffnen kann. Sonst öffnet sich damit
 nichts vom Bereich, außer der Moderation erfährt niemand von der Meldung, und gesperrt wird dadurch nichts: Ein Mensch
 entscheidet. Was gemeldet wurde, bleibt für die Moderation bis zu 90 Tage erhalten, auch wenn es inzwischen gelöscht
-wird. [Etwas melden](/veyq/de/help/report-something/)
+wird. [Etwas melden](/de/help/report-something/)
 
 Reagieren können dann die Leute, die deinen Server betreiben, und die Moderation, die sie bestimmen. Eine zentrale
 Moderationsstelle gibt es nicht, weil es keinen zentralen Dienst gibt. Die Moderation kann sperren, was gemeldet
 wurde — einen Link, ein Element oder einen Gast, der über einen Link hochgeladen hat —, und alle sehen an seiner Stelle
 dann **Von der Moderation gesperrt**, ohne Begründung; eine Sperre löscht nichts und lässt sich aufheben
-([Etwas melden](/veyq/de/help/report-something/#von-der-moderation-gesperrt)). Die Anmeldung eines Mitglieds zu
+([Etwas melden](/de/help/report-something/#von-der-moderation-gesperrt)). Die Anmeldung eines Mitglieds zu
 sperren oder alles unter einer Adresse offline zu nehmen, ist Sache der Person, die den Server betreibt. Private
 Inhalte bleiben trotzdem unlesbar — genau das ist der Entwurf.
 
@@ -163,7 +163,7 @@ einzuführen, während alles, was du schon hast, lesbar bleibt, wie es ist. Das 
 vorhandenen Erinnerungen **wechseln nicht von selbst auf neue Schlösser** — heute gibt es nur einen Satz
 Schlösser, nötig war das also noch nie.
 
-Mehr: [Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?](/veyq/de/privacy/quantum-computers-and-your-photos/)
+Mehr: [Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?](/de/privacy/quantum-computers-and-your-photos/)
 
 ## Ist es wirklich *ihr* Schlüssel — und eine ehrliche Lücke
 
@@ -171,7 +171,7 @@ Wenn du mit einer anderen Person teilst, braucht deine App ihren Schlüssel, den
 Wer den Server unehrlich betreibt, könnte deiner App theoretisch den *falschen* Schlüssel unterschieben.
 
 **Deine App merkt sich den Schlüssel, den sie zuerst gesehen hat.** Sichert die Person
-[ihr Konto ab](/veyq/de/account/replace-your-keys/), ist ihr neuer Schlüssel mit ihrem vorherigen unterschrieben, und
+[ihr Konto ab](/de/account/replace-your-keys/), ist ihr neuer Schlüssel mit ihrem vorherigen unterschrieben, und
 deine App folgt dieser Unterschrift von dem Schlüssel aus, den sie sich gemerkt hat: Sie teilt weiter mit ihr, und in
 ihrem Profil steht **„Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben"**. Liefert der Server einen
 Schlüssel, der *nicht* aus dem gemerkten folgt, wird die Person mit **„Schlüssel nicht bestätigt"** markiert, und
@@ -193,7 +193,7 @@ kannst du jede Person selbst prüfen. Dein eigenes Profil zeigt *deine* Sicherhe
 und einen Code zum Scannen; öffne das Profil der anderen Person, scanne den Code auf ihrem Bildschirm oder lest euch
 die Ziffern vor, und stimmt beides überein, wird die Person als **„Verifiziert"** markiert — im Profil, wo steht, wer
 sie verifiziert hat, und in jeder Mitgliederliste, für alle in diesem Bereich (Schritt für Schritt:
-[Eine Person verifizieren](/veyq/de/account/verify-a-person/)). Sichert eine verifizierte Person ihr Konto ab, gilt
+[Eine Person verifizieren](/de/account/verify-a-person/)). Sichert eine verifizierte Person ihr Konto ab, gilt
 das für den neuen Schlüssel nicht weiter; vergleicht erneut, um es wiederzubekommen.
 
 **Der ehrliche Teil:** Ob ihr wirklich vergleicht, liegt bei dir. Nichts verlangt, dass du jemanden verifizierst, bevor du mit dieser
@@ -207,11 +207,11 @@ lügen kann, ist **geplant, aber nicht gebaut** — und das sagen wir lieber, al
   nicht am Passwort. Dein Notfall-Kit ist das, was dich wieder hineinbringt; ein Gerät, auf dem du noch
   angemeldet bist, funktioniert derweil weiter. Zum Zurücksetzen müssen zwei Dinge zusammenkommen: ein
   Link, den wir dir mailen, und der Secret Key aus deinem Kit. Keines von beiden reicht allein — mehr
-  dazu in [Passwort vergessen](/veyq/de/account/forgot-password/).
+  dazu in [Passwort vergessen](/de/account/forgot-password/).
 - **Alles verloren** — kein angemeldetes Gerät und kein Notfall-Kit? Dann ist es **weg.**
   Es gibt **keine Hintertür und keine Schlüsselhinterlegung**: Dasselbe, was *uns* am Lesen deiner
   Daten hindert, hindert uns auch daran, sie zu retten. Das sagen wir von vornherein. Weitere Situationen und was
-  zu tun ist: [Hilfe](/veyq/de/help/).
+  zu tun ist: [Hilfe](/de/help/).
 
 ## Die Seite selbst kommt vom Server — eine ehrliche Grenze
 
@@ -220,7 +220,7 @@ bei jedem Laden vom Server. Deine Sachen bleiben also verschlossen vor einer Per
 und vor allen, die nur an seine gespeicherten Daten kommen. Wer den Server betreibt und es darauf anlegt mitzulesen,
 könnte diese Seite aber verändern. Auf dem Server einer anderen Person schützt dich veyq im Browser also vor ehrlichem
 Betrieb, nicht vor böswilligem, und das sagen wir lieber, als mehr zu versprechen:
-[Bekannte Grenzen](/veyq/security/known-limitations/#the-operator-served-web-client-is-passive-operator-only) (auf
+[Bekannte Grenzen](/de/security/known-limitations/#the-operator-served-web-client-is-passive-operator-only) (auf
 Englisch)
 
 > **Hinweis fürs Self-Hosting:** Betreibst *du* deinen eigenen veyq-Server, liegt der Betrieb bei *dir* —
@@ -228,6 +228,6 @@ Englisch)
 
 ## Für technisch Interessierte
 
-Der Bereich Sicherheit erklärt das alles ausführlich, auf Englisch: [Start here](/veyq/security/start-here/),
-[What the server sees](/veyq/security/what-the-server-sees/), [Threat model](/veyq/security/threat-model/) und
-[Known limitations](/veyq/security/known-limitations/).
+Der Bereich Sicherheit erklärt das alles ausführlich, auf Englisch: [Start here](/de/security/start-here/),
+[What the server sees](/de/security/what-the-server-sees/), [Threat model](/de/security/threat-model/) und
+[Known limitations](/de/security/known-limitations/).

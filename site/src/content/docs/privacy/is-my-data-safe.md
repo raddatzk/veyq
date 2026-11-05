@@ -31,7 +31,7 @@ database:
 
 - your **photos and videos** (and the smaller preview versions),
 - your **journal text**,
-- your **files** — documents, PDFs, anything you keep in [Depot](/veyq/depot/) — and their **names**,
+- your **files** — documents, PDFs, anything you keep in [Depot](/depot/) — and their **names**,
 - the **sensitive details**: titles, captions, descriptions, places, the people in them, tags,
 - **where** a photo was taken (GPS) and **when** it was captured,
 - the **file's own name**, and everything the camera wrote into the picture: the camera and lens, how it was
@@ -111,8 +111,8 @@ Sharing is the one moment you **choose** to lower the wall — always by your ex
   a link that lets guests add photos, their app first has to prove it holds the secret, so someone who
   only has the address (say, from a copy of our database) cannot upload anything through it.
 
-How the different links work — view only, view and add, drop box — is in [Sharing](/veyq/sharing/); switching
-them off and renewing them in [Change, switch off, renew and delete links](/veyq/sharing/manage-links/).
+How the different links work — view only, view and add, drop box — is in [Sharing](/sharing/); switching
+them off and renewing them in [Change, switch off, renew and delete links](/sharing/manage-links/).
 
 Three honest limits:
 - **Un-sharing doesn't un-download.** Revoking access stops *future* access; it can't reach back and
@@ -135,12 +135,12 @@ point. What someone **reports** is different: anyone who sees something — a me
 link — can choose **Report**, and their device hands the moderators of the server the keys to exactly what was
 reported, sealed so that only those moderators can open them. Nothing else of the space opens with them, nobody but
 the moderators learns of the report, and nothing is blocked by it: a person decides. What was reported is kept for
-them for up to 90 days even if it is deleted in the meantime. [Report something](/veyq/help/report-something/)
+them for up to 90 days even if it is deleted in the meantime. [Report something](/help/report-something/)
 
 Who acts on it is the people who run your server and the moderators they appoint. There is no central moderation
 team, because there is no central service. The moderators can block what was reported — a link, an item or a guest
 who uploaded through a link — and everyone then sees **Blocked by the operator** in its place, without a reason; a
-block deletes nothing and can be lifted ([Report something](/veyq/help/report-something/#blocked-by-the-operator)).
+block deletes nothing and can be lifted ([Report something](/help/report-something/#blocked-by-the-operator)).
 Blocking a member's sign-in or taking everything on an address offline is up to the person who runs the server. They
 still cannot read anything private, which is the whole design.
 
@@ -152,7 +152,7 @@ room to add stronger locks later for new things you save, while what you already
 is. That also means your existing memories **don't move to new locks by themselves** — today there is only
 one set of locks, so nothing has needed to.
 
-More: [What happens to my photos when quantum computers arrive?](/veyq/privacy/quantum-computers-and-your-photos/)
+More: [What happens to my photos when quantum computers arrive?](/privacy/quantum-computers-and-your-photos/)
 
 ## Making sure it's really *their* key — and an honest gap
 
@@ -160,7 +160,7 @@ When you share with a friend, your app needs your friend's key, which it gets fr
 dishonest operator could, in theory, hand your app the *wrong* key.
 
 **Your app remembers the key it first saw.** When your friend
-[secures their account](/veyq/account/replace-your-keys/), their new key is signed by their previous one, and your
+[secures their account](/account/replace-your-keys/), their new key is signed by their previous one, and your
 app follows that signature from the key it remembered: it goes on sharing with them, and their profile says **"New
 identity, signed by their previous key"**. If the server hands over a key that does *not* follow from the one your
 app remembered, that person is marked **"Can't confirm this key"**, and your app gives that key nothing. There is no
@@ -178,7 +178,7 @@ the server's word; and outside a shared space your app has only the key it first
 yourself. Your own profile shows *your* safety number, a shorter chain code and a code to scan; open a friend's
 profile, scan the code on their screen or read the digits to each other, and if both match they are marked
 **"Verified"** — on their profile, where it says who verified them, and in every member list, for everyone in that
-space (step by step: [Verify a person](/veyq/account/verify-a-person/)).
+space (step by step: [Verify a person](/account/verify-a-person/)).
 When a verified friend secures their account, it doesn't carry over to the new key; compare again to restore it.
 
 **The honest part:** the comparing is up to you. Nothing requires
@@ -191,10 +191,10 @@ all, is **planned, not built** — and we'd rather tell you than imply otherwise
 - **Forgot your password?** You won't lose your memories — they're tied to your *key*, not your
   password. Your Emergency Kit is what gets you back in; a device you are still signed in on keeps
   working meanwhile. Resetting takes two things at once: a link we mail you, and the secret key from
-  your kit. Neither works alone — see [Forgot your password](/veyq/account/forgot-password/).
+  your kit. Neither works alone — see [Forgot your password](/account/forgot-password/).
 - **Lost everything** — no signed-in device and no Emergency Kit? Then it's **gone.** There is
   **no backdoor and no escrow**: the same thing that stops *us* from reading your data stops us from
-  rescuing it. That's the deal, stated up front. More situations, and what to do: [Help](/veyq/help/).
+  rescuing it. That's the deal, stated up front. More situations, and what to do: [Help](/help/).
 
 ## The page itself comes from the server — an honest limit
 
@@ -203,13 +203,13 @@ link, comes from the server each time you load it. So your things stay locked fr
 honestly, and from anyone who only gets hold of its stored data. But someone running the server who is set on reading
 along could change that page. On someone else's server, veyq in a browser protects you from an honest operator, not
 from a hostile one, and we would rather say so than claim more:
-[Known limitations](/veyq/security/known-limitations/#the-operator-served-web-client-is-passive-operator-only).
+[Known limitations](/security/known-limitations/#the-operator-served-web-client-is-passive-operator-only).
 
 > **Self-hosting note:** if *you* run your own veyq server, *you* are the operator — so the "can the
 > operator be trusted" question doesn't apply to your own instance.
 
 ## For the technically curious
 
-The Security area explains all of this in depth, in English: [Start here](/veyq/security/start-here/),
-[What the server sees](/veyq/security/what-the-server-sees/), [Threat model](/veyq/security/threat-model/) and
-[Known limitations](/veyq/security/known-limitations/).
+The Security area explains all of this in depth, in English: [Start here](/security/start-here/),
+[What the server sees](/security/what-the-server-sees/), [Threat model](/security/threat-model/) and
+[Known limitations](/security/known-limitations/).

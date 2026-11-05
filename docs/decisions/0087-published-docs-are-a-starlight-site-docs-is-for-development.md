@@ -96,8 +96,8 @@ copy (the drift the wiki's source guard was built after), and it lives only on G
   production sections before.
 - `docs/` holds no German and no user-facing prose; a German page is written from its English page, not from a
   use-case.
-- A self-hosted instance links its users to `github.io` for help, as it links to `github.com` today: a third
-  party sees the click. Serving the site from the instance itself is possible later, because the output is
+- A self-hosted instance links its users to the site (`https://veyq.app/`, a custom domain GitHub Pages serves) for
+  help, as it links to `github.com` today: a third party sees the click. Serving the site from the instance itself is possible later, because the output is
   static, and is not part of this decision.
 - The site adds Astro's dependency tree to the deprecated-package gate. If that tree cannot be kept green, this
   decision is reopened rather than the gate relaxed.

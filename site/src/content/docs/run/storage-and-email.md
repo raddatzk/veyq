@@ -21,7 +21,7 @@ through short-lived presigned links; the application never carries the bytes. Wh
 console, **Server → Object store**. A saved setting waits beside the one in use until it passes its check, and then
 applies at once, without a restart — so a mistyped key never reaches your media
 ([ADR 0089](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0089-instance-settings-live-in-admin-web-the-environment-only-bootstraps.md)).
-How to set it and its check: [First-run setup](/veyq/run/first-run/#connect-the-object-store).
+How to set it and its check: [First-run setup](/run/first-run/#connect-the-object-store).
 
 Until a store is set and has passed its check, the instance runs and answers, refuses uploads with a reason, and
 refuses to create a tenant. Once the first file is stored, the store's type, endpoint and bucket are fixed; moving an
@@ -34,9 +34,9 @@ store** returns to it from a store of your own. Either way the setting is a refe
 secrets; the store's access keys are derived from the token.
 **On Compose it is the default**: the browser reaches it under a path of each tenant's own domain, so no CORS rule is
 needed, and an instance leaves it out with its `compose.override.yml`
-([Set up a new instance](/veyq/run/new-instance/#install)). **On Kubernetes it is opt-in** (`garage.enabled`): one
+([Set up a new instance](/run/new-instance/#install)). **On Kubernetes it is opt-in** (`garage.enabled`): one
 node on one claim, with no replication or versioning, on a host of its own (`storeDomain`), where the application
-writes a CORS rule that allows any origin ([Kubernetes](/veyq/run/kubernetes/)). Where no hint is passed the console
+writes a CORS rule that allows any origin ([Kubernetes](/run/kubernetes/)). Where no hint is passed the console
 offers only a store of your own. The same-origin route to the bundled store on Compose exists only while it is the
 store in use or a saved setting waiting for its check, whose test upload travels that route.
 
@@ -48,7 +48,7 @@ store in use or a saved setting waiting for its check, whose test upload travels
   The check tests the instance's own domain only; a tenant on a domain of its own is a further origin the rule must
   allow, which the check does not see. The access key must also be allowed to **list** the bucket: the application
   compares the store with its database in the background, and without the list right the console reports that the
-  store refused it and counts nothing ([Operations](/veyq/run/operations/#objects-no-record-claims)). Give veyq a
+  store refused it and counts nothing ([Operations](/run/operations/#objects-no-record-claims)). Give veyq a
   bucket of its own — another server or tool writing into the same bucket is why the reconcile deletes nothing until
   you confirm the bucket is this server's alone.
 - **Garage:** veyq sets it up — layout, bucket, access key, grant and CORS rule — from the admin endpoint and token
@@ -60,7 +60,7 @@ background at every start, with a few retries over about two minutes; it never h
 **Object store** panel shows the state: in progress, ready, or failed, and the server log names the step that
 failed. A passing **Check store** runs the set-up again.
 
-**Quotas.** A tenant's quota and what counts towards it: [Plan your instance](/veyq/run/plan/#storage-and-quotas).
+**Quotas.** A tenant's quota and what counts towards it: [Plan your instance](/run/plan/#storage-and-quotas).
 
 ## Email
 
@@ -75,7 +75,7 @@ What is yours:
 - **Let the application send mail out:** outbound SMTP to the hosts the tenant owners choose (and yours, below), usually port 587. Both
   recipes leave the application's outbound traffic open for this; a firewall of yours must too.
 - **The first owner's invitation** of a new tenant is never mailed: the console gives you a link to pass on
-  ([First-run setup](/veyq/run/first-run/#tenants)).
+  ([First-run setup](/run/first-run/#tenants)).
 - **The key that seals the relays' passwords** (below).
 
 ### The instance's own mail, to you
@@ -85,12 +85,12 @@ console's **Server → Mail** — the same fields as a tenant's relay. It sends 
 already holds:
 
 - to **you**, at the address of your Server Owner account: the notices about new releases
-  ([Operations](/veyq/run/operations/#new-releases));
+  ([Operations](/run/operations/#new-releases));
 - to the **moderators** and the instance contact: moderation's notices; to a **reporter** and the people a decision
-  concerns: the receipt and the statement of reasons, at an address their client sent ([Moderation](/veyq/run/moderation/));
+  concerns: the receipt and the statement of reasons, at an address their client sent ([Moderation](/run/moderation/));
 - to the **people an erasure concerns**: an account being erased, every member of a tenant you delete, and every member
   of a tenant where an application was switched off — a notice naming the day its content there is erased, and a
-  reminder seven days before ([Capabilities](/veyq/run/capabilities/#what-acts-at-once-and-what-only-on-new-data)).
+  reminder seven days before ([Capabilities](/run/capabilities/#what-acts-at-once-and-what-only-on-new-data)).
 
 It never sends a tenant's mail, nor stands in for a tenant without one
 ([ADR 0097](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)).
@@ -98,7 +98,7 @@ Without it none of the above is mailed; a switched-off application's day is then
 
 1. Enter the relay and save. The instance mails an eight-digit code to your account's address.
 2. Type the code into **Server → Mail** within an hour. A wrong code counts; five spend it, and a save sends a new one.
-3. From then on each notice is mailed once, with the link to [Upgrade](/veyq/run/upgrade/); one with a date carries
+3. From then on each notice is mailed once, with the link to [Upgrade](/run/upgrade/); one with a date carries
    it as a calendar entry (`.ics`).
 
 Every save asks for a code again, and so does a changed address on your account. Its password is sealed under the
@@ -136,15 +136,15 @@ credentials, in the console. Content is never affected. Putting the original key
 everything again.
 
 Back the key up apart from the database and the store, on a medium of its own
-([Backup and restore](/veyq/run/backup-and-restore/)).
+([Backup and restore](/run/backup-and-restore/)).
 
 **Your own key.** The application generates one only where it finds none, so you can give it yours: 32 random bytes,
 base64 (`head -c 32 /dev/urandom | base64 > config-secret.key`), or the key a backup kept apart. Do it before
-[first-run setup](/veyq/run/first-run/), while nothing is sealed yet — a key replaced later leaves every secret sealed
+[first-run setup](/run/first-run/), while nothing is sealed yet — a key replaced later leaves every secret sealed
 under the old one `MISMATCH`.
 
 - **Kubernetes:** make it a Secret and name it in `app.configSecret.existingSecret`
-  ([Configuration](/veyq/run/configuration/)): `kubectl -n veyq create secret generic veyq-config-secret-key
+  ([Configuration](/run/configuration/)): `kubectl -n veyq create secret generic veyq-config-secret-key
   --from-file=config-secret.key`. The chart mounts it read-only and the application only reads it; the claim stays,
   for the erasure ledger. A GitOps tool or a secret operator can own the Secret.
 - **Docker Compose:** put it into the volume with the application image's own `place-key`, as a restore does, which

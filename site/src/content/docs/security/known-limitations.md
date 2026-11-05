@@ -29,8 +29,8 @@ operator is you, and the active-operator entries do not apply.
 
 | Limitation | Who can use it | Decided in | Closed by |
 |---|---|---|---|
-| [Operator-served web is passive-only](#the-operator-served-web-client-is-passive-operator-only) | the operator who serves your client | ADR 0026 | serving your own client; [trusted third-party client](/veyq/security/roadmap/) |
-| [TOFU's first-use gap](#identity-keys-tofus-first-use-gap) | active operator | ADR 0028, ADR 0111 | a safety-number compare (built); [Key Transparency, strict mode](/veyq/security/roadmap/) |
+| [Operator-served web is passive-only](#the-operator-served-web-client-is-passive-operator-only) | the operator who serves your client | ADR 0026 | serving your own client; [trusted third-party client](/security/roadmap/) |
+| [TOFU's first-use gap](#identity-keys-tofus-first-use-gap) | active operator | ADR 0028, ADR 0111 | a safety-number compare (built); [Key Transparency, strict mode](/security/roadmap/) |
 | [Freshness only where a device keeps a mark](#freshness-only-where-a-device-keeps-a-mark) | active operator | ADR 0072, ADR 0028 Decision 7 | nothing recorded beyond the three marks |
 | [Forks and queued rotations](#scope-rotation-forks-queued-rotations-and-an-invented-member) | active operator; a rotator, to junk a value | ADR 0024, ADR 0115 | nothing recorded; a junked value is visible |
 | [A member the operator presents as an owner](#identity-keys-tofus-first-use-gap) | active operator | ADR 0111 | signed roles and removals, not designed (a non-owner without a join record is an anomaly, built) |
@@ -38,7 +38,7 @@ operator is you, and the active-operator entries do not apply.
 | [Item favorites' count](#item-favorites-a-count-as-honest-as-the-operator) | the operator; with a member, forged entries | ADR 0068, ADR 0115 | a freshness floor covering them (ADR 0068 §9) |
 | [Departed members and copied links](#departed-members-and-the-links-they-could-copy) | removed member | ADR 0075, ADR 0109, ADR 0114 | a close or a re-issue (built; also against a dump of what is added after) |
 | [Guest names vs. a viewer link](#guest-names-and-an-operator-holding-a-link) | operator holding a link | ADR 0030 point 8 | accepted |
-| [Share password is access control](#a-share-password-is-access-control-not-cryptography) | operator colluding with a link holder | ADR 0037 | [cryptographic share password](/veyq/security/roadmap/) |
+| [Share password is access control](#a-share-password-is-access-control-not-cryptography) | operator colluding with a link holder | ADR 0037 | [cryptographic share password](/security/roadmap/) |
 | [Revocation cannot retract what was read](#revocation-cannot-retract-what-was-already-read) | any former recipient | security-model, ADR 0024, ADR 0025, ADR 0109, ADR 0114, ADR 0115 | inherent; links by a close or a re-issue |
 | [Server-visible metadata](#metadata-the-server-sees) | operator | security-model | by design |
 | [Append-only entries can be dropped or reordered](#applications-entries-are-not-bound-to-their-neighbours) | operator | security-model, ADR 0072 | a sequence number or hash chain per application |
@@ -63,7 +63,7 @@ A stronger unlock method does not change this: a passkey's secret is consumed by
 
 **Closed by:** self-hosting (the operator is you), or serving the web client yourself against someone else's
   server — the tier the rest of this page describes. In a browser on someone else's instance, only code from an
-  origin the operator does not control would close it: the [trusted third-party client](/veyq/security/roadmap/)
+  origin the operator does not control would close it: the [trusted third-party client](/security/roadmap/)
   on the Roadmap.
 
 ## Identity keys: TOFU's first-use gap
@@ -85,7 +85,7 @@ key and an Ed25519 signing key), which the server relays from its directory. Wha
   old identity **and** their old Secret-Key proof key; a client accepts the new key when the chain reaches it from the
   head it pinned, with no review. Any other key is an anomaly (*Can't confirm this key*): nobody wraps to it, a
   rotation declares that member pending, and the grant-delivery worker declines the job back to the server
-  ([Protocols](/veyq/security/protocols/#7-the-key-chain-and-securing-an-account)).
+  ([Protocols](/security/protocols/#7-the-key-chain-and-securing-an-account)).
 - **Safety numbers and chain codes.** Each member's profile shows their safety number, the chain code of their key
   chain's head and a QR of both; another member scans the QR or compares the digits, and a match writes a
   verification the verifier signs into the tenant, which every member there counts while it names the subject's
@@ -174,8 +174,8 @@ The same gap covers further cases:
 
 **Closed by:** the join record closes it inside a tenant for every member but an owner; a safety-number compare
   closes it for the members who make one. Signed roles are not designed. Enforcement
-  ([strict verification mode](/veyq/security/roadmap/)) and the end-state
-  ([Key Transparency](/veyq/security/roadmap/)) are on the Roadmap.
+  ([strict verification mode](/security/roadmap/)) and the end-state
+  ([Key Transparency](/security/roadmap/)) are on the Roadmap.
 
 ## Freshness only where a device keeps a mark
 
@@ -360,7 +360,7 @@ the stored verifier can brute-force offline at one Argon2id per guess.
 **Decided in:** [ADR 0037](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0037-password-protected-shares.md)
   § Operator-blindness & threat model.
 
-**Closed by:** the [cryptographic share password](/veyq/security/roadmap/) on the Roadmap.
+**Closed by:** the [cryptographic share password](/security/roadmap/) on the Roadmap.
 
 ## Revocation cannot retract what was already read
 
@@ -423,7 +423,7 @@ and day, with the same `Origin`, so that provider learns that this address write
 
 **Decided in:** [security-model § What is encrypted vs. server-visible](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-is-encrypted-vs-server-visible).
 
-**In full:** [What the server sees](/veyq/security/what-the-server-sees/).
+**In full:** [What the server sees](/security/what-the-server-sees/).
 
 ## Applications: entries are not bound to their neighbours
 

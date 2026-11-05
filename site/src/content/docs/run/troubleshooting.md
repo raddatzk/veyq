@@ -13,19 +13,19 @@ sources:
 
 Most failures in veyq are loud by design: a refusal names its reason, and a missing setting stops the thing that
 needs it, not the whole instance. Start with the admin console's **Server** section and the application's log
-([Operations](/veyq/run/operations/#logs)).
+([Operations](/run/operations/#logs)).
 
 ## Uploads are refused
 
 | What users see, or the reason code | Cause | What to do |
 |---|---|---|
 | `store_unavailable` | No object store is set, or its credentials cannot be opened (the config-secret key is ABSENT or MISMATCH) | Set and check the store in **Server → Object store**; re-enter its credentials if the console asks for them |
-| `quota_exceeded`; members are told there is no space left | The tenant's quota, or the link's own limit, is reached. The trash counts until it is emptied | Raise or remove the quota, or ask the tenant to empty its trash ([Plan your instance](/veyq/run/plan/#storage-and-quotas)) |
+| `quota_exceeded`; members are told there is no space left | The tenant's quota, or the link's own limit, is reached. The trash counts until it is emptied | Raise or remove the quota, or ask the tenant to empty its trash ([Plan your instance](/run/plan/#storage-and-quotas)) |
 | `budget_exceeded` | A single file over 20 GiB | — |
 | Uploads fail right after a start | A Garage store is still being set up | Wait for the **Object store** panel to show it ready |
 | The store's set-up failed | Garage could not be reached or refused a step; the log names it | Make the store reachable, then run **Check store** |
 | The bundled store stays a saved setting, its check failing at **Upload a test object**, **Read it back** or **Browser access (CORS)** | The domain, its certificate or the proxy was not ready in the ten minutes the server kept checking it after its start | Fix that, then run **Check store**, or restart the application, which checks it again |
-| Uploads fail in the browser, with a CORS error | A store of your own without a CORS rule for the domain the user is on | Allow that origin in the bucket's CORS rule ([Storage and email](/veyq/run/storage-and-email/#the-object-store)) |
+| Uploads fail in the browser, with a CORS error | A store of your own without a CORS rule for the domain the user is on | Allow that origin in the bucket's CORS rule ([Storage and email](/run/storage-and-email/#the-object-store)) |
 
 **A tenant cannot be created** (`store_not_ready`): no store has passed its check yet. Open **Server → Object store**:
 where the deployment brings its Garage the server has set the bundled store and checked it itself, and the page names
@@ -71,7 +71,7 @@ Read it in **Server → Config-secret key**, or with `veyq-admin config-secret`.
 
 Put the original key file back and restart the application. Without it: each affected tenant's owner re-enters the
 relay password in the app, and you re-enter the credentials of a store of your own in the console. Content is never
-affected ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key)).
+affected ([Storage and email](/run/storage-and-email/#the-config-secret-key)).
 
 ## The admin console cannot be reached
 
@@ -84,7 +84,7 @@ affected ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key
   8090 in its container.
 - **The admin container exits** at start: `VEYQ_HSTS_ENABLED` is something other than `true` or `false`.
 - **A Server-Owner operation answers `404` on the instance's domain:** that is by design. These operations answer only
-  through the admin surface ([First-run setup](/veyq/run/first-run/#reach-the-console)).
+  through the admin surface ([First-run setup](/run/first-run/#reach-the-console)).
 
 ## A tenant's domain does not answer
 
@@ -120,7 +120,7 @@ kubectl -n veyq logs deploy/veyq-app | grep '<id>'
 
 The line names the method, the route template, the exception's class chain, the database's SQLState where the
 database refused, and the first line of veyq's own code the error passed — never the error's text, which can carry a
-person's data ([Operations](/veyq/run/operations/#logs)). When that is not enough to act on, log the full text for a
+person's data ([Operations](/run/operations/#logs)). When that is not enough to act on, log the full text for a
 while by raising one category to `DEBUG`:
 
 - **Docker Compose:** add `services: app: environment: QUARKUS_LOG_CATEGORY__ME_RADDATZ_VEYQ_CORE_HTTP_UNEXPECTED_DETAIL__LEVEL: DEBUG`
@@ -137,7 +137,7 @@ run `./veyqctl start`, or `kubectl -n veyq set env deploy/veyq-app QUARKUS_LOG_C
 
 The application's image has no shell
 ([ADR 0118](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md)):
-`exec … sh` finds nothing to run. Its logs are the first place to look ([Operations](/veyq/run/operations/#logs)).
+`exec … sh` finds nothing to run. Its logs are the first place to look ([Operations](/run/operations/#logs)).
 To read one file, use the image's own command:
 
 ```sh

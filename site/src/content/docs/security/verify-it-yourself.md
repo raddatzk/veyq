@@ -39,7 +39,7 @@ that a test no CI run executes makes no coverage claim.
 | Wire sweep | Sealed plaintext and capability tokens appear on none of six operator-readable surfaces | `scripts/run_web_e2e.py` (Docker, live backend) |
 | Scope-access probe | Every operation answers a non-member, a proposal, a suspended tenant and a deleting group as the gate requires | backend, `OperatorBlindProbeTest` |
 | Doc ↔ code guards | Every reference resolves; every contract field declares what the server may read | `scripts/validate_*.py` (buildless) |
-| Release verification | The image you run is the one the publish workflow signed | [Verify a release](/veyq/run/verify-a-release/) |
+| Release verification | The image you run is the one the publish workflow signed | [Verify a release](/run/verify-a-release/) |
 
 ## Reproducing the crypto vectors
 
@@ -57,7 +57,7 @@ encoding, and most notes also name how the group was generated. Several say they
 independent Python implementation, not by the suite under test. To reproduce a group, implement the encoding its
 note describes and compare your bytes with the file.
 
-The vectors for the hybrid post-quantum KEM are covered on [Cryptography](/veyq/security/cryptography/).
+The vectors for the hybrid post-quantum KEM are covered on [Cryptography](/security/cryptography/).
 
 ### Who asserts the file
 
@@ -310,7 +310,7 @@ change one
 [ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)).
 The step-by-step check — resolve each tag to a digest once, verify each signature against the one workflow
 identity that publishes veyq, then deploy by digest — is on
-[Verify a release](/veyq/run/verify-a-release/).
+[Verify a release](/run/verify-a-release/).
 
 **Nothing on the publish side has been observed yet.** The repository has no remote and no workflow has ever
 executed. Every statement about what a publish *does* is therefore a statement about a file, not about a run.

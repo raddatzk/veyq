@@ -151,7 +151,7 @@ class InstanceNoticeMailer(
  */
 object InstanceMailCopy {
     /** The Run area's upgrade page on the published docs site (ADR 0087). */
-    const val UPGRADE_PAGE = "https://raddatzk.github.io/veyq/run/upgrade/"
+    const val UPGRADE_PAGE = "https://veyq.app/run/upgrade/"
 
     private val EXPIRY: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZone(ZoneOffset.UTC)
     private val DAY: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE

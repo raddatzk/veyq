@@ -508,7 +508,7 @@ def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
             if digest and not image.endswith(f"@{digest}"):
                 errors.append(
                     f"(xiv) {tag}: the {which} image renders as `{image}` although the values pin `{digest}` — the "
-                    f"operator verified that digest (https://raddatzk.github.io/veyq/run/verify-a-release/), and the pod pulls something else"
+                    f"operator verified that digest (https://veyq.app/run/verify-a-release/), and the pod pulls something else"
                 )
             if not digest and "@" in image:
                 errors.append(f"(xiv) {tag}: the {which} image renders as `{image}` with a digest the values never set")

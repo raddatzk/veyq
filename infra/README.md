@@ -190,7 +190,7 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
 
 ## Cutting a release
 
-For the maintainer; an operator starts at the [Run area](https://raddatzk.github.io/veyq/run/) of the docs site. The
+For the maintainer; an operator starts at the [Run area](https://veyq.app/run/) of the docs site. The
 release model itself — the version, snapshot and release, the assets, both targets, what is built and what is only
 decided — is [`docs/crosscutting/release-and-deployment.md`](../docs/crosscutting/release-and-deployment.md); this
 section keeps the commands. **Nothing is published by a push**
@@ -313,7 +313,7 @@ rows in SQL instead — that would leave their blob rows with no arm and their o
 The operator's procedures — verifying a release, setting up a new instance on Docker Compose or Kubernetes,
 upgrading, and backup and restore — are the **Run** area of the documentation site
 ([ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)), published at
-<https://raddatzk.github.io/veyq/run/> and written in [`site/src/content/docs/run/`](../site/src/content/docs/run/).
+<https://veyq.app/run/> and written in [`site/src/content/docs/run/`](../site/src/content/docs/run/).
 This file keeps the development stack and how a release is cut.
 
 ## Seeding the local dev principal

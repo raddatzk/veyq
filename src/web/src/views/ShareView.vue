@@ -187,8 +187,8 @@ const bodyHead = computed(() => (head.value?.noteAcceptance ? { ...head.value, n
 // German page sits under /de/ at the English page's path.
 const securityDocUrl = computed(() =>
   locale.value === 'de'
-    ? 'https://raddatzk.github.io/veyq/de/privacy/is-my-data-safe/'
-    : 'https://raddatzk.github.io/veyq/privacy/is-my-data-safe/',
+    ? 'https://veyq.app/de/privacy/is-my-data-safe/'
+    : 'https://veyq.app/privacy/is-my-data-safe/',
 )
 
 /** What renders this share behind the gates, or null (the explicit unavailable state): a `WRITE_ONLY` link's drop page

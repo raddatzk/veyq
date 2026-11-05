@@ -46,7 +46,7 @@ gates nothing; `ci.yml`'s `upgrade-proof` job, which `publish` needs, is disable
 ([backend/CLAUDE.md](https://github.com/raddatzk/veyq/blob/main/src/backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
 images, so a pull, an `up` that migrates, and the rollback stay unrehearsed; and it says nothing
 about the chart — `helm upgrade` from the predecessor's chart to the candidate's runs in no cluster; its immutable
-fields and claims are compared on rendered manifests by `scripts/chart_upgrade_check.py` ([Upgrade](/veyq/run/upgrade/), Kubernetes), and a cluster leg is inbox #430.
+fields and claims are compared on rendered manifests by `scripts/chart_upgrade_check.py` ([Upgrade](/run/upgrade/), Kubernetes), and a cluster leg is inbox #430.
 
 <Tabs syncKey="target">
   <TabItem label="Docker Compose">
@@ -63,7 +63,7 @@ runs, so you can do it by hand.
 
 1. **Resolve the release** `.env`'s `VEYQ_RELEASE` selects ([below](#which-release-upgrade-takes)). The running one:
    nothing to do. An older one: refused — there is no downgrade.
-2. **Verify it and fetch its files** into `releases/<new>/`, exactly as [Verify a release](/veyq/run/verify-a-release/)
+2. **Verify it and fetch its files** into `releases/<new>/`, exactly as [Verify a release](/run/verify-a-release/)
    shows: the manifest's signature first, then both images'. A signature that does not verify stops it here, with
    nothing pulled.
 3. **Check the new template against `.env`.** Every key the new `env.example` assigns that `.env` lacks, and every
@@ -87,7 +87,7 @@ runs, so you can do it by hand.
    their own interfaces (ADR 0056 §2). It captures the database and the store's **index** with the running release's
    own `instance_backup.py` into `backups/<stamp>-before-<new>/` — the pool topped up with what arrived since, the
    objects otherwise staying in the store, which the upgrade never rewrites — leg (c) to the file `--key-into` names,
-   and checks the capture — [Backup and restore § Capture](/veyq/run/backup-and-restore/#capture) shows each command. A capture that fails switches nothing and starts the running release again. Then `.env.next`
+   and checks the capture — [Backup and restore § Capture](/run/backup-and-restore/#capture) shows each command. A capture that fails switches nothing and starts the running release again. Then `.env.next`
    becomes `.env`, `state.json` names the new release, and the stack comes up on the new recipe:
    `docker compose -f releases/<new>/docker-compose.prod.yml --env-file .env up -d --wait` (plus your
    override). **The schema migrates during this boot. There is no gate and no prompt.** If the stack is not healthy,
@@ -96,10 +96,10 @@ runs, so you can do it by hand.
 
 `--key-into` is required, refused before anything else runs when it is missing, already exists or lies inside
 `backups/`: the dump plus the key opens every tenant's SMTP password, so they never sit side by side. Encrypt the
-capture before it leaves the host ([Capture](/veyq/run/backup-and-restore/#capture)). **The upgrade's capture is kept at
+capture before it leaves the host ([Capture](/run/backup-and-restore/#capture)). **The upgrade's capture is kept at
 most B days, like every other** — the instance's backup retention, 30 until you set it: the way back from an upgrade
 exists for that long, so roll back within it, or keep a copy elsewhere and delete it by B
-([How long a backup is kept](/veyq/run/backup-and-restore/#how-long-a-backup-is-kept--b)). The cluster's gate keeps its
+([How long a backup is kept](/run/backup-and-restore/#how-long-a-backup-is-kept--b)). The cluster's gate keeps its
 captures the same way.
 
 **What names the release you are leaving.** `releases/<old>/` stays, with the manifest that names its images by
@@ -174,13 +174,13 @@ The new chart names the new release as the images' tag; pin each image to the di
 for it: they ship as one release, only one of a mismatched pair migrated the schema, and the gate refuses an app
 release that is not its own. With a digest set the pod runs `repository:tag@digest`, and the node pulls by the
 digest. **Rollback** is the capture the gate took when you left that release, restored onto it with a one-off Job:
-[Restore under Helm](/veyq/run/backup-and-restore/#restore-under-helm).
+[Restore under Helm](/run/backup-and-restore/#restore-under-helm).
 
 **With `backup.enabled: false`** nothing captures before the migration, and the backup is yours, by hand, with the
 app **scaled to zero** — *cold* means the writer is stopped — through `kubectl port-forward` to MariaDB and, with `garage.enabled`, Garage — a store of your own by its address
-([Backup and restore](/veyq/run/backup-and-restore/)). The key is read out before the scale-down, by the image's own
+([Backup and restore](/run/backup-and-restore/)). The key is read out before the scale-down, by the image's own
 `read-file` — only the app pod mounts its claim, and the image has no shell — and goes on a medium of its own, never
-into the capture directory ([Capture](/veyq/run/backup-and-restore/#capture)). With `app.configSecret.existingSecret`
+into the capture directory ([Capture](/run/backup-and-restore/#capture)). With `app.configSecret.existingSecret`
 the key is your Secret's file instead: use that, and skip step 0. This procedure has not been run on a cluster.
 
 ```sh
@@ -272,14 +272,14 @@ stops it, restores the capture with the check only, places the key and starts. T
 uploaded under the failed release stay in it with no record that claims them. **Server → Object store** counts them
 under *Objects no record claims*, and deletes them after a 30-day grace once you confirm the bucket is this server's
 alone — the rollback, like every restore, restarts that grace and withdraws an earlier confirmation
-([Operations](/veyq/run/operations/#objects-no-record-claims)). `.env`'s `VEYQ_RELEASE` is left as it was, so pin it to the
+([Operations](/run/operations/#objects-no-record-claims)). `.env`'s `VEYQ_RELEASE` is left as it was, so pin it to the
 release you went back to if the next `upgrade` should not try again. Then verify as
-[Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) says.
+[Restore](/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) says.
 
 A store that lost objects since the upgrade — the volume gone — is not a rollback any more but a restore onto a fresh
-instance, from the object pool (`--objects-from`, [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance)).
+instance, from the object pool (`--objects-from`, [Restore](/run/backup-and-restore/#restore--onto-a-freshly-installed-instance)).
 Under Helm: the previous chart and images by their digests, the database emptied, then the restore Job with the check
-only ([Restore under Helm](/veyq/run/backup-and-restore/#restore-under-helm)).
+only ([Restore under Helm](/run/backup-and-restore/#restore-under-helm)).
 
 **How far this is proven:** `veyqctl rollback` ran once, live (2026-10-17): an instance upgraded from one local release
 to the next was rolled back in place, its config-secret state read `OK`, its store check passed, and every object the

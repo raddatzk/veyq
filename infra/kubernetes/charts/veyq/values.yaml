@@ -41,13 +41,13 @@ hsts:
 image:
   # The upstream's app image, cosign-signed by the same publish as the admin image and the chart — written out, as
   # the verify identity is (ADR 0057 §3), so a fork that deploys its own images overrides it knowingly.
-  # scripts/validate_release_identity.py holds it to the name https://raddatzk.github.io/veyq/run/verify-a-release/ verifies.
+  # scripts/validate_release_identity.py holds it to the name https://veyq.app/run/verify-a-release/ verifies.
   repository: ghcr.io/raddatzk/veyq
   # Defaults to the chart's appVersion: the release a published chart was packaged with (`<major>.<minor>`), and
   # a placeholder in a checkout, where it must be set. Pin one; `latest` moves, the schema migrates at boot with
   # no gate, and there is no downgrade path (ADR 0057).
   tag: ""
-  # The digest https://raddatzk.github.io/veyq/run/verify-a-release/ resolved and verified for that tag (`sha256:<64 hex>`).
+  # The digest https://veyq.app/run/verify-a-release/ resolved and verified for that tag (`sha256:<64 hex>`).
   # Set, the pod runs `repository:tag@digest` and the runtime pulls by the digest; the tag stays for a reader.
   # Leave it empty only if you accept running whatever the tag points at when the node pulls.
   digest: ""
@@ -169,7 +169,7 @@ backup:
   # and a plain `kubectl apply` all run it, and `--no-hooks` or a selective sync cannot skip it. A failed or refused
   # gate keeps the app from starting; nothing has migrated, and pinning the previous release back starts it again.
   # It never mounts the config-secret claim, so no capture holds the KEK: export the key once, by hand
-  # (https://raddatzk.github.io/veyq/run/backup-and-restore/).
+  # (https://veyq.app/run/backup-and-restore/).
   #
   # A REQUIRED choice, with no default that decides it for you (the schema refuses an install that makes none): name a
   # claim, or switch the gate off — and then take the backup before every upgrade by hand.
@@ -193,7 +193,7 @@ backup:
   request: ""
   image:
     # The upstream's tools image, released and signed with the app and admin images (ADR 0057; verified on
-    # https://raddatzk.github.io/veyq/run/verify-a-release/). The tag defaults to the APP image's tag: the gate runs
+    # https://veyq.app/run/verify-a-release/). The tag defaults to the APP image's tag: the gate runs
     # only in its own release's tools image, and refuses an app release that is not that image's.
     repository: ghcr.io/raddatzk/veyq-tools
     tag: ""

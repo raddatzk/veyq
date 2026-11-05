@@ -1267,7 +1267,7 @@ def key_owner_plan(euid: int, parent_uid: int, parent_gid: int, existing_uid: in
             f"{parent_uid} could not read it (configSecretState: ABSENT). Run the restore as root (`sudo -E`), or "
             f"restore the key to a file of your own and put it in as the application: its image's `place-key` in a "
             f"one-off app container (Compose), or a Secret the chart mounts (Kubernetes, "
-            f"app.configSecret.existingSecret), as https://raddatzk.github.io/veyq/run/backup-and-restore/ shows."))
+            f"app.configSecret.existingSecret), as https://veyq.app/run/backup-and-restore/ shows."))
     if existing_uid is not None and existing_uid != euid:
         return KeyOwnerPlan(REFUSE, reason=(
             f"a key already there belongs to uid {existing_uid}; overwriting it keeps that owner, which this tool "
@@ -2340,7 +2340,7 @@ def gate_refusal(record: dict | None, target: str, major_entry: str | None, root
                 f"Release {target} refuses to start on a schema history holding a migration it does not know (ADR 0056 "
                 f"§7), and nothing here can tell which this one holds; a way back is the backup's release plus a "
                 f"restore: {restore} "
-                f"(https://raddatzk.github.io/veyq/run/backup-and-restore/), or set the image back to {held}. "
+                f"(https://veyq.app/run/backup-and-restore/), or set the image back to {held}. "
                 f"Nothing was written.")
     if ours[0] > theirs[0] + 1:
         return (f"release {target} is more than one major ahead of release {held}: no run crosses more than one major "

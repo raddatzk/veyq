@@ -14,7 +14,8 @@ contract and is cited from four other files, so a rename would have rotted those
 joined with cr-wiki-pages-name-their-source: the published pages carried 36 relative links between themselves
 that no run read, so the one surface strangers see was the one whose links nothing checked. When the wiki became
 the Starlight site (ADR 0087) its pages stopped linking each other relatively — a link between them is a site URL
-under `/veyq/`, which the site's own `pnpm run check` resolves (starlight-links-validator), so this guard skips it.
+from the root (`/run/upgrade/`; the site has no `base` since it moved to https://veyq.app/), which the site's own
+`pnpm run check` resolves (starlight-links-validator), so this guard skips it.
 What a site page links in the repository is a GitHub URL (`https://github.com/raddatzk/veyq/blob/main/<path>`, the
 Security area's whole reading path), and that is read here as the repository path it names: a moved or deleted
 doc would otherwise leave a dead link in front of exactly the readers who follow them. The walk was three named trees
@@ -51,7 +52,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SITE = ROOT / "site" / "src" / "content" / "docs"
 SUFFIXES = (".md", ".mdx")
-SITE_BASE = "/veyq/"  # site/astro.config.mjs `base`: a link under it is a page URL, checked by the site's build
+# site/astro.config.mjs's `base` (none: the root): a site page's link under it is a page URL, checked by the site's build
+SITE_BASE = "/"
 REPO_URL = re.compile(r"^https://github\.com/raddatzk/veyq/(?:blob|tree)/main/(?P<path>[^#?]+)")
 
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")

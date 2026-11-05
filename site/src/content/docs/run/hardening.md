@@ -14,11 +14,11 @@ sources:
 
 Most of veyq's hardening is in the recipes and needs nothing from you except not undoing it. This page lists it by
 what it protects, says what is yours to decide, and names what stays open. What the operator can and cannot see is a
-separate question, answered by the [Security](/veyq/security/start-here/) area.
+separate question, answered by the [Security](/security/start-here/) area.
 
 ## Run only what was signed
 
-Deploy a release by digest, after checking its signatures: [Verify a release](/veyq/run/verify-a-release/). A tag can
+Deploy a release by digest, after checking its signatures: [Verify a release](/run/verify-a-release/). A tag can
 move between the check and the pull; a digest cannot. Pin both images, and on Kubernetes the tools image and the chart, to the digests
 that check resolved.
 
@@ -34,7 +34,7 @@ The application's image goes further: it is **distroless**
 ([ADR 0118](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md)) —
 the Java runtime, CA certificates and time zones, and no shell, no package manager, no `curl` and no `tar`. Its
 healthcheck and the few things a restore puts into it run on its own `java` (`/opt/veyq/image-commands.jar`). So
-`docker compose exec app sh` and `kubectl exec … -- sh` find nothing to run; [Troubleshooting](/veyq/run/troubleshooting/#look-inside-the-application-container)
+`docker compose exec app sh` and `kubectl exec … -- sh` find nothing to run; [Troubleshooting](/run/troubleshooting/#look-inside-the-application-container)
 says what to use instead. The admin and tools images are not distroless.
 
 ## Keep the admin listener local
@@ -64,7 +64,7 @@ local.
 
 The application takes the client address from the rightmost `X-Forwarded-For` entry that its trusted-proxies list does
 not name, and the rate limits key on it
-([Networking](/veyq/run/networking/#the-client-address-and-the-rate-limits)). Who may hand it that header is decided
+([Networking](/run/networking/#the-client-address-and-the-rate-limits)). Who may hand it that header is decided
 by the network: on Compose the network separation, on Kubernetes the NetworkPolicy. So `app.trustedProxies` lists
 only the hops **in front of** your gateway, such as an external load balancer, and stays empty when there are none.
 Never list the gateway's own pods: a pod-IP range wide enough to survive a restart trusts every pod beside it.
@@ -78,11 +78,11 @@ generates on first start, on the
 It defends a leaked database backup, not a compromised host. So:
 
 - Back it up, apart from the database and the store, on a medium of its own, and encrypt the rest of the backup
-  ([Backup and restore](/veyq/run/backup-and-restore/#capture)).
+  ([Backup and restore](/run/backup-and-restore/#capture)).
 - Never put it beside the database dump: the two together open every secret it seals.
 - Without it the instance boots and serves every page; a tenant whose relay needs a password refuses member
   invitations and password resets, and a store of your own is unreachable until you re-enter its credentials
-  ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key)).
+  ([Storage and email](/run/storage-and-email/#the-config-secret-key)).
 
 ## TLS, HSTS and CSP
 
@@ -94,7 +94,7 @@ It defends a leaked database backup, not a compromised host. So:
   days.
 - **The Content Security Policy is built in**: scripts only from the instance itself, no framing, and network
   connections only to the instance, its store and the outside services you configured (the breached-password check,
-  the map tiles, the place-name lookup and the exchange rates, [External services](/veyq/run/capabilities/#external-services)); a service
+  the map tiles, the place-name lookup and the exchange rates, [External services](/run/capabilities/#external-services)); a service
   without an address, or switched off, is not allowed at all
   ([cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md)). It also
   enforces Trusted Types: a browser that supports them refuses any markup or script address the web client did not

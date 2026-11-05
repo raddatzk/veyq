@@ -1399,7 +1399,7 @@ BUNDLED_WARNING = (
     f"no object pool is named ({POOL_TARGET_KEY} in .env). A backup holds the database and the store's INDEX, not "
     "the objects: a lost store volume loses every photo and file, whatever backups/ holds. Name a pool on another "
     f"disk — {POOL_TARGET_KEY}=/path/on/another/disk (or s3:<bucket> with VEYQ_BACKUP_POOL_*) — and every backup and "
-    "upgrade copies the new objects into it: https://raddatzk.github.io/veyq/run/backup-and-restore/")
+    "upgrade copies the new objects into it: https://veyq.app/run/backup-and-restore/")
 
 
 def pool_warning(host: Host, home: Path, state: State) -> None:
@@ -1477,7 +1477,7 @@ def retention_warning(host: Host, home: Path, state: State) -> None:
         say(f"WARNING: no capture under {home / BACKUPS_DIR} is younger than B ({answer.get('days')} days"
             + (f"; the newest, {newest}, is from {answer.get('youngestAt')}" if newest else "; there is none")
             + "). Every capture is deleted at B, so this instance has no backup to restore: run `veyqctl backup` — the "
-              "Run page gives a daily timer for it (https://raddatzk.github.io/veyq/run/backup-and-restore/)")
+              "Run page gives a daily timer for it (https://veyq.app/run/backup-and-restore/)")
 
 
 def read_ledger(host: Host, home: Path, state: State, key_path: str, into: Path) -> Path | None:

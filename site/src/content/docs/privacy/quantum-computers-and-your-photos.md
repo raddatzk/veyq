@@ -41,5 +41,5 @@ Nobody can make promises about the distant future. But veyq is built for **decad
 quantum-resistant protection on your data **now** and a design that leaves room for **stronger locks
 later** — so a copy taken today doesn't become a problem tomorrow.
 
-The cryptography behind this, in depth: [Cryptography](/veyq/security/cryptography/) and the
-[Roadmap](/veyq/security/roadmap/) for what is designed but not built.
+The cryptography behind this, in depth: [Cryptography](/security/cryptography/) and the
+[Roadmap](/security/roadmap/) for what is designed but not built.

@@ -18,7 +18,7 @@ sources:
 This is the one page of the Security area that describes things veyq does **not** do yet. Every item is named in a
 decision document as a planned or future step, and none of it is built. For each one: what exists today instead,
 the gap it would close, and how far its design has got. The residuals these items answer are listed with their
-reasons on [Known limitations](/veyq/security/known-limitations/).
+reasons on [Known limitations](/security/known-limitations/).
 
 :::note
 Nothing here is a promise of a date or of a final shape. Where a doc names only the direction and records no design,
@@ -147,7 +147,7 @@ operator-served web client, veyq remains passive-operator only with or without p
 ## Hybrid ML-DSA signatures
 
 **Today.** Encryption is post-quantum from the start (the hybrid post-quantum KEM; see
-[Cryptography](/veyq/security/cryptography/)). Signatures are classical Ed25519: the login auth key, the identity
+[Cryptography](/security/cryptography/)). Signatures are classical Ed25519: the login auth key, the identity
 signing key that signs every grant, and the Secret-Key proof key.
 
 **Gap it would close.** Signatures that are post-quantum as well. ADR 0017 makes the asymmetry deliberate: a
@@ -207,7 +207,7 @@ gate is tested. **The Server Owner switches them** in the admin console and its 
 restart, and each entry describes itself in English and German. A device switch acts at once: the server withholds
 what those devices unlock with, without deleting it, so their members need the password and the Secret Key until it
 is switched back on. A share switch acts at once too: every existing link of its kind answers a guest as a link that
-never existed, until it is switched back on. The [Capabilities](/veyq/run/capabilities/) page says how. There is no
+never existed, until it is switched back on. The [Capabilities](/run/capabilities/) page says how. There is no
 tenant-owner switch.
 
 **The gap.** A tenant owner who does not want password-less devices or public links in their tenant has no way to

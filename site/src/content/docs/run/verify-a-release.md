@@ -92,7 +92,7 @@ digest: `docker buildx imagetools inspect "ghcr.io/raddatzk/veyq:${release}" --f
 the manifest only after its `verify-blob` passed: until then, every digest and sha256 in it is the source's word.
 
 Under Helm, a third image of the same release runs too: `veyq-tools`, the backup gate's (see
-[Upgrade](/veyq/run/upgrade/)). Compose never runs it. The verified manifest names it as `images.tools`; verify it the
+[Upgrade](/run/upgrade/)). Compose never runs it. The verified manifest names it as `images.tools`; verify it the
 same way, and pin its digest as `backup.image.digest`:
 
 ```sh
@@ -127,7 +127,7 @@ it only `--unsigned-local`, which says on every line that nothing was verified.
 
 ## The chart, under Helm
 
-Verify the chart the same way, once, and install it by that digest ([Set up a new instance](/veyq/run/new-instance/#install), Kubernetes):
+Verify the chart the same way, once, and install it by that digest ([Set up a new instance](/run/new-instance/#install), Kubernetes):
 
 ```sh
 chart_digest="$(docker buildx imagetools inspect "ghcr.io/raddatzk/charts/veyq:${release}" --format '{{.Manifest.Digest}}')"
