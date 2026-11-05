@@ -25,7 +25,14 @@ What the cluster must have **before** `helm install` — the chart installs no C
 - **The Gateway API CRDs, v1.5 or later, standard channel.** Without them `helm install` fails whole, before it
   creates anything.
 - **A Gateway API implementation** serving the class you name. Find the address it gives the `Gateway` with
-  `kubectl -n veyq get gateway veyq`, and point every host's DNS there.
+  `kubectl -n veyq get gateway veyq`, and point every host's DNS there. **Traefik** attaches a `Gateway` listener
+  to the entrypoint whose *container* port is the listener's port, and the chart's `Gateway` listens on 80 and 443
+  while Traefik's Helm chart defaults its entrypoints to 8000 and 8443: with those defaults the `Gateway` is never
+  programmed. Set `ports.web.port: 80` and `ports.websecure.port: 443` (and the same `exposedPort`s) in Traefik's
+  values, plus the pod sysctl `net.ipv4.ip_unprivileged_port_start: "0"` under `podSecurityContext.sysctls`, so its
+  unprivileged process may bind them ([Set up a new instance](/run/new-instance/#install) has the snippet; measured
+  with Traefik 3.7.17 on k3s, 2026-11-05). With `kubectl -n veyq get gateway veyq` the `Gateway` then shows
+  `PROGRAMMED True`.
 - **Under `per-domain` TLS, an implementation that supports `ListenerSet`.** Every tenant domain gets its listener
   that way. Not every released implementation does yet: Traefik merged it for 3.8, while its latest release when
   these pages were written (3.7.15, 2026-10-15) ignores `ListenerSet`s — there the chart's own hosts get their
@@ -169,7 +176,11 @@ gateway:
   tenant is created: the creation is the order, and cert-manager checks reachability itself before it asks the CA
   to validate, so an order for a name that does not resolve yet waits there.
 - **`server` defaults to Let's Encrypt production**, as `VEYQ_ACME_CASERVER` does; any ACME CA is one URL. A
-  staging certificate is not browser-trusted — an instance left on staging boots and every browser refuses it.
+  staging certificate is not browser-trusted — an instance left on staging boots and every browser refuses it. The
+  app trusts it no more: with `garage.enabled`, its check of the bundled store fails (a PKIX error in its log) while
+  `storeDomain` has a staging certificate, retries with backoff, and passed about a minute after production
+  certificates replaced it (k3s, 2026-11-05). cert-manager keeps an issued certificate when you only change
+  `server`: delete the issued `Secret`s (`veyq-app`, `veyq-garage`, `veyq-admin`) so it orders new ones.
 - **Refused, not resolved:** `values.schema.json` rejects the opt-in with any mode but `per-domain`, with no
   e-mail, or beside an issuer annotation of your own — two issuers on one object would be cert-manager's
   choice, not yours.
@@ -187,14 +198,19 @@ install; do not set `veyq.tenant.ingress.kubernetes.namespace` in values, it is 
 
 **The config-secret key lives on a `PersistentVolumeClaim`, and the claim is kept.** Same loss, same place as
 under compose: without the key the instance boots and then refuses invites and resets. The claim
-(`veyq-config-secret`) is annotated `helm.sh/resource-policy: keep`, so `helm uninstall` leaves it behind, and
+(`veyq-config-secret`) is annotated `helm.sh/resource-policy: keep`, so `helm uninstall` leaves it behind (and for
+Argo CD, which ignores that policy, `argocd.argoproj.io/sync-options: Prune=false,Delete=false`; see
+[below](#deploying-with-argo-cd)), and
 the pod sets `fsGroup` to the image's runtime user because a claim comes up root-owned and — unlike a Docker
 named volume — inherits nothing from the image. Or give it your own key as a Secret, `app.configSecret.existingSecret`,
 which the app reads read-only; the claim then keeps only the erasure ledger
 ([Storage and email](/run/storage-and-email/#the-config-secret-key)). `scripts/chart_meta_check.py` holds that to the `Dockerfile`
 (and the rest of the chart's structure), outside the buildless guard glob because it renders the chart with
-`helm`. It checks the rendered manifests only: no `Gateway`, `ListenerSet` or certificate order of this chart has
-run in a cluster yet.
+`helm`. It checks the rendered manifests only. On a cluster the chart ran once, by the owner (2026-11-05:
+`0.2265-SNAPSHOT` on single-node k3s with Traefik 3.7.17, cert-manager 1.21.3 and Argo CD 3.5.7, `per-domain` with the
+ACME opt-in and `garage.enabled`): the `Gateway` was programmed, cert-manager issued certificates for the instance's
+and the store's host, the app migrated and set up the bundled store, and the store passed its check. No tenant
+domain, and so no `ListenerSet`, is recorded from that run; Traefik 3.7 ignores `ListenerSet`s anyway (above).
 
 **Backups are a choice the install makes, and a claim you create** ([ADR
 0098](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)).
@@ -211,3 +227,28 @@ writes only the claim, on the app pod's node. What it captures, refuses and keep
 restore](/run/backup-and-restore/#under-kubernetes). The values are on [Configuration](/run/configuration/).
 The gate ran once on a kind cluster in a `restricted` namespace (2026-10-17), with its claim on kind's local-path
 provisioner, which ignores `fsGroup`; on a storage class that applies it, the claim's directory is the pod's group's.
+On a first install it waits, bounded, for the bundled MariaDB that starts beside it, rather than failing until the
+database is up.
+
+## Deploying with Argo CD
+
+Argo CD renders the chart with `helm template` and applies the result itself, so two things differ from `helm
+install` (both seen on Argo CD 3.5.7, 2026-11-05):
+
+- **Compare on the server's side.** The API server fills defaults into the `Gateway`, the `HTTPRoute`s and the
+  StatefulSets (a `backendRef`'s `group`, `kind` and `weight`; a `volumeClaimTemplate`'s fields) that the rendered
+  manifests leave out, so with Argo CD's default diff those objects stay `OutOfSync` for good. Annotate the
+  `Application` with `argocd.argoproj.io/compare-options: ServerSideDiff=true`; that run also synced with
+  `ServerSideApply=true`.
+- **Helm's `keep` does not apply.** Argo CD ignores `helm.sh/resource-policy: keep`, so it is not what protects the
+  config-secret claim there. The chart also annotates the claim `argocd.argoproj.io/sync-options:
+  Prune=false,Delete=false`: a sync never prunes it, and deleting the `Application` with its resources leaves it
+  behind (Argo CD's documented sync options, not yet run on a cluster). A chart published before that annotation —
+  `0.2265-SNAPSHOT` and older — carries only Helm's: there the claim is safe from a sync only with pruning off
+  (`syncPolicy.automated.prune: false`, the run's setting, or `Prune=false` in the `Application`'s sync options), and
+  deleting the `Application` with its resources (its `resources-finalizer.argocd.argoproj.io` finalizer, or a
+  cascading `argocd app delete`) deletes it. With `app.configSecret.existingSecret` the key is in a `Secret` of your
+  own, which your GitOps tool owns, and the claim holds the erasure ledger alone.
+
+The backup gate is part of the Deployment, so a sync runs it as `helm upgrade` does ([Upgrade](/run/upgrade/)); a
+restore pauses automated sync first ([Backup and restore](/run/backup-and-restore/#under-kubernetes)).
