@@ -1263,17 +1263,13 @@ div.veyq-level-item-main,
     right: 0.35rem;
     transform: translateY(-50%);
   }
-  /* At rest a compact tile shows only a pressed heart, and it must not sit on the name: the other buttons fold to no width
-     (still in the Tab order - focus inside unfolds them), so the heart sits at the row's end, and the name keeps clear of it. */
-  .veyq-level-item.is-compact:not(:hover):not(:focus-within) .veyq-level-item-actions {
-    gap: 0;
-  }
-  .veyq-level-item.is-compact:not(:hover):not(:focus-within) .veyq-level-item-actions > .veyq-button:not(.is-pressed) {
-    width: 0;
-    min-width: 0;
-    padding: 0;
-    border-width: 0;
-    overflow: hidden;
+  /* At rest a compact tile shows only a pressed heart, and it must not sit on the name: the heart is drawn last, at the
+     row's end, and the name keeps clear of it. The other buttons keep their box and are only transparent at rest, like
+     every tile's - never folded to no width, which made the ⋯ a button with no box: hidden to a test driver's "visible"
+     (lane L1's export-import spec timed out on it) though still in the Tab order. Only the drawn order moves, so Tab
+     still reaches the heart before the ⋯. */
+  .veyq-level-item.is-compact .veyq-level-item-actions > .veyq-button.is-pressed {
+    order: 1;
   }
   .veyq-level-item.is-compact:has(.veyq-level-item-actions > .veyq-button.is-pressed) .veyq-level-item-main {
     padding-inline-end: 2.9rem;

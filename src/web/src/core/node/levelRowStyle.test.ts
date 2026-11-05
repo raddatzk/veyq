@@ -117,13 +117,12 @@ describe('level item styles', () => {
     expect(media('(hover: none)')).not.toMatch(/position:\s*absolute/)
   })
 
-  it('a folder\'s compact tile at rest keeps its pressed heart off the name: the other buttons fold away, the name leaves room', () => {
+  it('a folder\'s compact tile at rest keeps its pressed heart off the name: the heart drawn last, the name leaves room', () => {
     const hover = media('(hover: hover)')
-    const folded = rule('.veyq-level-item.is-compact:not(:hover):not(:focus-within) .veyq-level-item-actions > .veyq-button:not(.is-pressed)', hover)
-    expect(folded).toMatch(/width:\s*0/)
-    expect(folded).toMatch(/min-width:\s*0/)
-    // folded, never taken out of the Tab order
-    expect(folded).not.toMatch(/display:\s*none|visibility:\s*hidden/)
+    expect(rule('.veyq-level-item.is-compact .veyq-level-item-actions > .veyq-button.is-pressed', hover)).toMatch(/order:\s*1/)
+    // the other buttons keep their box (transparent at rest, never no width): a button with no box is hidden to a test
+    // driver's "visible" - lane L1's export-import spec timed out on the ⋯ when it was folded to width 0
+    expect(css).not.toMatch(/\.veyq-level-item[^{]*\.veyq-level-item-actions[^{]*\{[^}]*(?:^|[\s;])width:\s*0/m)
     // the room the heart takes (an icon button, 2.55rem, plus its inset) is kept free of the name
     expect(rule('.veyq-level-item.is-compact:has(.veyq-level-item-actions > .veyq-button.is-pressed) .veyq-level-item-main', hover))
       .toMatch(/padding-inline-end:\s*2\.9rem/)
