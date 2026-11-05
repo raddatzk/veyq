@@ -28,8 +28,21 @@ packages:
 # signature, and the path is unreachable here anyway (get-uri's ftp: scheme serves a PAC file fetched over ftp://,
 # which no generator run configures). Drop this override once get-uri depends on basic-ftp >= 6.2.1 and the
 # generator's proxy-agent pin reaches that get-uri.
+#
+# minimatch + glob (added 2026-11-05): GHSA-g3hv-75wg-m249 (minimatch globparts amplification DoS, >=7.0.0 <11.0.1)
+# and GHSA-3g3m-2fjr-6pw4 (glob AbortSignal cancellation bypass, >=9.0.0 <=14.0.1) have no fix inside the majors the
+# consumers ask for, and no consumer release asks for a fixed one (measured 2026-11-05: @eslint/config-array 0.23.5,
+# the latest, wants minimatch ^10.2.4; @openapitools/openapi-generator-cli 2.42.0, the latest, pins glob EXACTLY
+# 13.0.6; js-beautify 2.0.3, the latest, wants glob ^13.0.6) — so only an override reaches the fix, and both move
+# together because glob 14 itself asks minimatch ^11. Dev tooling only (eslint; the generator CLI; @vue/test-utils'
+# js-beautify), and every call they make keeps its signature: config-array's `new Minimatch(pattern, options)`, the
+# generator CLI's `glob.sync` (reached only for an openapitools.json `generators` glob, which no surface configures)
+# and js-beautify's `globSync`/`hasMagic` (its CLI only). Drop both once those consumers ask for minimatch >= 11.0.1
+# and glob >= 14.0.2.
 overrides:
   basic-ftp: ^6.2.1
+  glob: ^14.0.2
+  minimatch: ^11.0.1
   qs: ^6.16.1
 
 # Which dependencies may run their own install scripts. pnpm runs none it is not told to, and refuses an install

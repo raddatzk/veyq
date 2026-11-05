@@ -72,6 +72,17 @@ dependencies {
 
     // PIT's JUnit-5 runner (our tests are JUnit Platform). 1.2.3 requires PIT >= 1.19.4 — pinned together below.
     pitest("org.pitest:pitest-junit5-plugin:1.2.3")
+    // PIT 1.19.6 -> commons-text 1.12.0 asks commons-lang3 3.14.0 (GHSA-j288-q9x7-2f5v, uncontrolled recursion, fixed
+    // in 3.18.0). A floor rather than a PIT bump: the first PIT whose commons-text asks a fixed one is a jump of eleven
+    // minors (1.30.x -> commons-text 1.14.0 -> 3.18.0, measured 2026-11-05), and the gate's own semantics are measured
+    // against 1.19.6 (scripts/mutation_meta_check_backend.py: which statuses count as detected) — a security floor
+    // does not re-measure the gate. 3.20.0 is the version the rest of the build already resolves. **Drop it with the
+    // PIT bump that brings commons-lang3 3.18.0 or later.**
+    constraints {
+        pitest("org.apache.commons:commons-lang3:3.20.0") {
+            because("GHSA-j288-q9x7-2f5v: 3.14.0 via PIT's commons-text 1.12.0, fixed in 3.18.0")
+        }
+    }
 }
 
 // The mutate scope is read from pitest.scope.json — the SAME manifest a scripts/ meta-check consumes, so the mutator
