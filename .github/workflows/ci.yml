@@ -561,6 +561,31 @@ jobs:
           echo "release ${VERSION} enters its major from: ${entry:-no release}"
           echo "value=${entry}" >> "$GITHUB_OUTPUT"
 
+      # The tools build below is `load:`ed, and with provenance and SBOM its result is an image index, which only
+      # Docker's containerd image store takes: the classic store refuses it ("docker exporter does not currently
+      # support exporting manifest lists"). Docker 29 turns that store on by default, Docker 28 does not, and the runner
+      # images differ — on the first GitHub run (2026-11-05) the leg passed on ubuntu-26.04 (Docker 29.4.2, containerd)
+      # and failed on ubuntu-24.04-arm (Docker 28.0.4, overlay2), and `ubuntu-latest` moves between the two while it
+      # migrates. So the leg switches the store on itself, before Buildx starts its builder in that daemon, and stops
+      # unless Docker then reports it. Never on scripts/run_pipeline.py's host, whose Docker is the developer's own.
+      - name: Use the containerd image store (tools)
+        if: matrix.image == 'veyq-tools' && runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          store() { docker info --format '{{json .DriverStatus}}'; }
+          if [[ "$(store)" != *'"io.containerd.snapshotter.v1"'* ]]; then
+            config=/etc/docker/daemon.json
+            current='{}'
+            if sudo test -s "$config"; then current="$(sudo cat "$config")"; fi
+            jq '.features["containerd-snapshotter"] = true' <<< "$current" | sudo tee "$config" > /dev/null
+            sudo systemctl restart docker
+          fi
+          echo "image store: $(store)"
+          if [[ "$(store)" != *'"io.containerd.snapshotter.v1"'* ]]; then
+            echo "Docker is not on the containerd image store, so it cannot load the tools image's index" >&2
+            exit 1
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -600,7 +625,8 @@ jobs:
 
       # The tools image, built as the step above builds the other two plus the one stamp only it declares, the major
       # entry — a step of its own because validate_release_identity.py holds each build step's stamps to every target
-      # stage it builds. Also loaded into this runner's Docker, because the artifact must RUN before it counts (below).
+      # stage it builds. Also loaded into this runner's Docker (its containerd image store, above), because the artifact
+      # must RUN before it counts (below).
       - name: Build image (tools)
         id: image-tools
         if: matrix.image == 'veyq-tools'
