@@ -20,7 +20,11 @@ This asserts, with no daemon and no root:
   4. that `cmd_capture` run by a user who cannot read the key (inbox #250: on the production recipe it lives on
      the app's uid-10001 volume) refuses with a message naming `sudo -E`, not a `PermissionError` traceback, and
      before the capture directory exists — for a key whose directory it cannot search and for one it cannot
-     read — with the same kind of positive control. Skipped as root, which reads both;
+     read — with the same kind of positive control; and every other path it cannot look at refused at the gates,
+     never read as absent: a `--key-into` directory, a restore's key directory, its `--key-from` (unreadable, or in
+     a directory it cannot search) and the gate's record. All of it twice: as this Python answers `Path.exists()`
+     and `is_file()`, and as 3.14 does — False for any OSError — which CI's 3.14 runner showed the tool reading as
+     "no key" (`path_tests_as_in_python_3_14`, no 3.14 interpreter needed). Skipped as root, which reads both;
   5. the restore's version gate (ADR 0056 §7): Flyway's version order where string order disagrees (`9` vs
      `44`, a longer number that sorts first as a string, trailing zeros), that a NEWER backup is refused with a
      message naming the release it came from (and saying so when the manifest records none), that the same and
@@ -152,16 +156,20 @@ class ReachedDatabase(Exception):
     """Raised by the stub `Database` — the restore got past every gate to the seam in front of its first write."""
 
 
-def restore_reaches_seam(tmp: pathlib.Path, euid: int) -> tuple[str, bool]:
-    """Drive `cmd_restore` with the effective uid planned as `euid`; report how it ended and whether it wrote."""
-    backup = tmp / f"backup-{euid}"
+def restore_reaches_seam(tmp: pathlib.Path, euid: int, label: str = "", lock=None) -> tuple[str, bool]:
+    """Drive `cmd_restore` with the effective uid planned as `euid` — after `lock(volume, kept_dir, kept)`, when given,
+    has made the key's target directory or the kept key inaccessible; report how it ended and whether it wrote."""
+    tag = f"{euid}{label}"
+    backup = tmp / f"backup-{tag}"
     backup.mkdir()
     (backup / ib.MANIFEST_NAME).write_text(json.dumps({
         "backupFormat": ib.INDEX_FORMAT, "domains": ["veyq.test"], "configSecret": {"placement": ib.SEPARATE},
         "store": {"leg": ib.INDEX, "index": [], "blobs": []}}))
-    kept = tmp / f"kept-{euid}.key"
+    kept_dir = tmp / f"kept-{tag}"
+    kept_dir.mkdir()
+    kept = kept_dir / "kept.key"
     kept.write_bytes(b"k")
-    target_dir = tmp / f"volume-{euid}"
+    target_dir = tmp / f"volume-{tag}"
     target_dir.mkdir()
     target = target_dir / ib.KEY_NAME
     args = argparse.Namespace(backup=str(backup), domain="veyq.test", key_from=str(kept), without_key=False,
@@ -173,6 +181,8 @@ def restore_reaches_seam(tmp: pathlib.Path, euid: int) -> tuple[str, bool]:
 
     saved = (ib.Database, ib.require_db_password, ib.effective_uid)
     ib.Database, ib.require_db_password, ib.effective_uid = StubDatabase, (lambda: "x"), (lambda: euid)
+    if lock is not None:
+        lock(target_dir, kept_dir, kept)
     try:
         ib.cmd_restore(args)
         outcome = "returned"
@@ -180,7 +190,12 @@ def restore_reaches_seam(tmp: pathlib.Path, euid: int) -> tuple[str, bool]:
         outcome = "reached-database"
     except ib.BackupError as e:
         outcome = f"refused: {e}"
+    except OSError as e:
+        outcome = f"traceback: {e!r}"
     finally:
+        os.chmod(target_dir, 0o700)
+        os.chmod(kept_dir, 0o700)
+        os.chmod(kept, 0o600)
         ib.Database, ib.require_db_password, ib.effective_uid = saved
     return outcome, target.exists()
 
@@ -204,8 +219,10 @@ def capture_reaches_seam(tmp: pathlib.Path, label: str, lock) -> tuple[str, bool
     key = volume / ib.KEY_NAME
     key.write_bytes(b"k")
     into = tmp / f"capture-{label}"
+    kept_dir = tmp / f"kept-{label}"
+    kept_dir.mkdir()
     args = argparse.Namespace(into=str(into), config_secret_file=str(key), key_beside_dump=False,
-                              key_into=str(tmp / f"kept-{label}.key"))
+                              key_into=str(kept_dir / "kept.key"))
 
     class StubDatabase:
         def __init__(self, *_a, **_k):
@@ -223,7 +240,7 @@ def capture_reaches_seam(tmp: pathlib.Path, label: str, lock) -> tuple[str, bool
 
     saved = (ib.Database, ib.Store, ib.require_db_password)
     ib.Database, ib.Store, ib.require_db_password = StubDatabase, StubStore, (lambda: "x")
-    lock(volume, key)
+    lock(volume, key, kept_dir)
     try:
         ib.cmd_capture(args)
         outcome = "returned"
@@ -236,24 +253,112 @@ def capture_reaches_seam(tmp: pathlib.Path, label: str, lock) -> tuple[str, bool
     finally:
         os.chmod(volume, 0o700)
         os.chmod(key, 0o600)
+        os.chmod(kept_dir, 0o700)
         ib.Database, ib.Store, ib.require_db_password = saved
     return outcome, into.exists()
 
 
-def capture_cases(tmp: pathlib.Path) -> None:
-    if os.geteuid() == 0:
-        print("skip capture: running as root, which reads a key whatever its mode")
-        return
-    outcome, wrote = capture_reaches_seam(tmp, "readable", lambda volume, key: None)
-    check("capture (control): a readable key passes the gate and reaches the database",
+@contextlib.contextmanager
+def path_tests_as_in_python_3_14():
+    """`Path.exists()`, `is_file()`, `is_dir()` and `is_symlink()` as Python 3.14 answers them — False for ANY OSError,
+    where 3.9 to 3.13 raise every one but "nothing is there" (the 3.14 docs: "Changed in version 3.14"). CI runs 3.14
+    and this Mac 3.9, and the tool ships to both, so the inaccessible cases run once as this Python answers and once
+    like this — no 3.14 interpreter needed. On 3.14 itself the wrapper changes nothing."""
+    names = ("exists", "is_file", "is_dir", "is_symlink")
+    own = {name: pathlib.Path.__dict__[name] for name in names if name in pathlib.Path.__dict__}
+    tests = {name: getattr(pathlib.Path, name) for name in names}
+
+    def swallowing(test):
+        def as_in_3_14(self, *args, **kwargs):
+            try:
+                return test(self, *args, **kwargs)
+            except OSError:
+                return False
+        return as_in_3_14
+
+    for name, test in tests.items():
+        setattr(pathlib.Path, name, swallowing(test))
+    try:
+        yield
+    finally:
+        for name in names:
+            if name in own:
+                setattr(pathlib.Path, name, own[name])
+            else:
+                delattr(pathlib.Path, name)
+
+
+def record_outcome(root: pathlib.Path) -> str:
+    try:
+        return f"read: {ib.read_record(root)!r}"
+    except ib.BackupError as e:
+        return f"refused: {e}"
+    except OSError as e:
+        return f"traceback: {e!r}"
+
+
+def inaccessible_cases(tmp: pathlib.Path, as_3_14: bool) -> None:
+    """What the tool does with a path it cannot look at: refuse, at the gates, naming it — never read it as absent."""
+    mode = "py3.14" if as_3_14 else "this python"
+    tmp = tmp / ("as-3.14" if as_3_14 else "as-this")
+    tmp.mkdir()
+    if as_3_14:
+        # The simulation itself, or the cases below could pass on a wrapper that changes nothing.
+        shut = tmp / "shut"
+        shut.mkdir()
+        (shut / "file").write_bytes(b"x")
+        os.chmod(shut, 0o000)
+        try:
+            check(f"[{mode}] the simulation: a file in a directory this user cannot search reads as absent, no raise",
+                  (shut / "file").is_file() is False and (shut / "file").exists() is False)
+        finally:
+            os.chmod(shut, 0o700)
+
+    outcome, wrote = capture_reaches_seam(tmp, "readable", lambda volume, key, kept: None)
+    check(f"[{mode}] capture (control): a readable key passes the gate and reaches the database",
           outcome == "reached-database", f"{outcome}, wrote={wrote}")
     for label, lock in [
-        ("an unsearchable volume", lambda volume, key: os.chmod(volume, 0o000)),
-        ("an unreadable key", lambda volume, key: os.chmod(key, 0o000)),
+        ("an unsearchable volume", lambda volume, key, kept: os.chmod(volume, 0o000)),
+        ("an unreadable key", lambda volume, key, kept: os.chmod(key, 0o000)),
     ]:
         outcome, wrote = capture_reaches_seam(tmp, label.replace(" ", "-"), lock)
-        check(f"capture: {label} is refused naming `sudo -E`, before the capture directory exists",
+        check(f"[{mode}] capture: {label} is refused naming `sudo -E`, before the capture directory exists",
               outcome.startswith("refused:") and "sudo -E" in outcome and not wrote, f"{outcome}, wrote={wrote}")
+    outcome, wrote = capture_reaches_seam(tmp, "unsearchable-key-into", lambda volume, key, kept: os.chmod(kept, 0o000))
+    check(f"[{mode}] capture: a --key-into whose directory it cannot search is refused before the capture directory "
+          f"exists, not taken for free", outcome.startswith("refused:") and "--key-into" in outcome and not wrote,
+          f"{outcome}, wrote={wrote}")
+
+    me = os.geteuid()
+    for label, lock, says in [
+        ("a key directory it cannot search", lambda volume, kept_dir, kept: os.chmod(volume, 0o000), "cannot look into"),
+        ("a --key-from in a directory it cannot search", lambda volume, kept_dir, kept: os.chmod(kept_dir, 0o000),
+         "cannot read it"),
+        ("an unreadable --key-from", lambda volume, kept_dir, kept: os.chmod(kept, 0o000), "cannot read it"),
+    ]:
+        outcome, wrote = restore_reaches_seam(tmp, me, "-" + label.replace(" ", "-"), lock)
+        check(f"[{mode}] restore: {label} is refused at the gates, before the database is touched",
+              outcome.startswith("refused:") and says in outcome and not wrote, f"{outcome}, wrote={wrote}")
+
+    record_root = tmp / "record"
+    record_root.mkdir()
+    os.chmod(record_root, 0o000)
+    try:
+        outcome = record_outcome(record_root)
+    finally:
+        os.chmod(record_root, 0o700)
+    check(f"[{mode}] gate record: one it cannot look at FAILS naming it, never reads as no record (ADR 0098 decision 2)",
+          outcome.startswith("refused:") and ib.STATE_NAME in outcome, outcome)
+    check(f"[{mode}] gate record (control): an empty claim has no record", record_outcome(record_root) == "read: None")
+
+
+def capture_cases(tmp: pathlib.Path) -> None:
+    if os.geteuid() == 0:
+        print("skip inaccessible paths: running as root, which reads and searches whatever the mode")
+        return
+    inaccessible_cases(tmp, as_3_14=False)
+    with path_tests_as_in_python_3_14():
+        inaccessible_cases(tmp, as_3_14=True)
 
 
 def version_cases() -> None:
