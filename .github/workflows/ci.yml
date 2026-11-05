@@ -284,6 +284,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history: scripts/upgrade_proof_selftest.py finds the commit before the code surfaces moved under
+          # src/ (ADR 0106) in it, and a shallow checkout holds HEAD alone (the second GitHub run, 2026-11-05: "no
+          # commit carries web/package.json").
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
