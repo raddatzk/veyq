@@ -75,7 +75,8 @@ sequenceDiagram
   read-only until restore/purge, [uc.spaces.delete-group](uc.spaces.delete-group.md) A4).
 - **A3 — the caller is not an OWNER:** `403 not_scope_owner` (a plain MEMBER is not the name authority).
 - **A4 — blank / oversized name:** rejected at the contract boundary (`400` — non-blank, base64, `maxLength`), same
-  validation as create.
+  validation as create. So is an invitee entry with exactly one of its key and its digest `null` (the schema's rule);
+  one invitee named twice is `422 invitee_repeated` — a rule across the items no schema states. Nothing written.
 - **A5 — an invitee's key moved:** the invitee secured their account since the owner's device read it →
   `409 recipient_key_not_current`, nothing written; the client re-reads and retries once.
 - **E1 — a rename between a consent-invite and its accept:** the rename hands the pending invitee the new name's

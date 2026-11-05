@@ -953,7 +953,18 @@ components:
       description: >
         The `cursor` the last page answered, echoed verbatim (opaque to the client: the server's position of that
         page's last row, its kind and then its id). Omitted on the first page, which carries the group name and the icon.
-      schema: { type: string, maxLength: 80, example: "shares,3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i" }
+        Another shape is `400 invalid_request`.
+      # The shape the server pages by (ScopeRekeyCommit.Cursor): one of the listing's kinds, a comma, then the id of
+      # that kind's last row, as its column holds it — a node's and a member's uuid, a link's id, a verification's
+      # `verifier|subject` uuids. Exact, because the keyset compares the id with a uuid column: an id of another shape
+      # that passed would be the database's conversion error, a 500 (measured on H2: `verifs,a|b`). So a value the
+      # schema admits is one the server reads, and every other is the shape's 400 before the handler
+      # (ScopeRekeySliceTest holds both sides, and every cursor the server answers, to this pattern).
+      schema:
+        type: string
+        maxLength: 80
+        pattern: "^(nodes,[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|shares,[A-Za-z0-9_-]{43}|members,[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|verifs,[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[|][0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+        example: "shares,3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i"
     ScopeRekeyLimit:
       name: limit
       in: query

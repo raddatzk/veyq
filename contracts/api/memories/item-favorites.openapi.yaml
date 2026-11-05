@@ -148,8 +148,16 @@ paths:
           # An empty value (`?since=`) is this parameter's absence: Quarkus REST never converts it (cr-api-fuzzing).
           allowEmptyValue: true
           required: false
-          description: The `cursor` the last page answered, echoed verbatim; omitted on the first page.
-          schema: { type: string, maxLength: 80, example: "2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e" }
+          description: >
+            The `cursor` the last page answered, echoed verbatim; omitted on the first page. Another shape is `400
+            invalid_request`.
+          # The shape the server pages by: the last mark's id, a canonical uuid (ItemFavoritesScopeRekeySliceTest holds
+          # every cursor the server answers to it). A string, not `format: uuid`: the cursor stays opaque to the client.
+          schema:
+            type: string
+            maxLength: 36
+            pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            example: "2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"
         - name: limit
           in: query
           # An empty value (`?limit=`) is this parameter's absence, as for `since` (cr-api-fuzzing).

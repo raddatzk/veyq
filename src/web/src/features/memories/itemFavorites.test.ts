@@ -257,10 +257,10 @@ describe('how many marks one Memory holds (inbox #500)', () => {
   it('the cap the client enforces is the contract\'s, on every item-mark ciphertext', () => {
     const spec = readFileSync(new URL('../../../../../contracts/api/memories/item-favorites.openapi.yaml', import.meta.url), 'utf8')
     const caps = [...spec.matchAll(/maxLength: (\d+)/g)].map((m) => Number(m[1]))
-    // the re-key listing's cursor (80) and a value key's wrap (128) are no ciphertext; every other cap is one — the
-    // stored, the written and the own listing's (ADR 0115: a re-key lists and stages wraps only, never a set) — and the
-    // client's
-    const ciphertextCaps = caps.filter((c) => c !== 80 && c !== 128)
+    // the re-key listing's cursor (80 as answered, 36 as sent back: a mark's uuid) and a value key's wrap (128) are no
+    // ciphertext; every other cap is one — the stored, the written and the own listing's (ADR 0115: a re-key lists and
+    // stages wraps only, never a set) — and the client's
+    const ciphertextCaps = caps.filter((c) => c !== 80 && c !== 36 && c !== 128)
     expect(ciphertextCaps).toEqual(Array(3).fill(ITEM_MARKS_CIPHERTEXT_MAX))
     // a wrap beside each of them, and on each of the re-key's listed and staged rows — a staged one beside the wrap it
     // replaces

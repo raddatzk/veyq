@@ -3787,6 +3787,43 @@ components:
     AcceptInviteRequest:
       type: object
       required: [bootstrapSecret, username]
+      # The profile fields' shape (TenantsResource.profileShapeHolds, 400 before any answer about the instance's state):
+      # a sealed field and its value key's wrap come together, and a sealed field brings the `epoch` its wrap is under.
+      # The server reads a `null` as the field's absence, so the rule hangs on a non-null value — `dependentSchemas`, not
+      # `dependentRequired`, which a `null` satisfies and a wrap sent alone escapes neither way (the API fuzzing sent a
+      # wrap without its field as valid). The generators ignore the keyword (content's UpdateNodeRequest note);
+      # Schemathesis reads it. RegisterAndAcceptRequest states the same rules.
+      dependentSchemas:
+        sealedJoinRecord:
+          if: { properties: { sealedJoinRecord: { type: string } } }
+          then:
+            required: [wrappedJoinRecordValueKey, epoch]
+            properties: { wrappedJoinRecordValueKey: { type: string }, epoch: { type: integer } }
+        wrappedJoinRecordValueKey:
+          if: { properties: { wrappedJoinRecordValueKey: { type: string } } }
+          then:
+            required: [sealedJoinRecord]
+            properties: { sealedJoinRecord: { type: string } }
+        sealedName:
+          if: { properties: { sealedName: { type: string } } }
+          then:
+            required: [wrappedNameValueKey, epoch]
+            properties: { wrappedNameValueKey: { type: string }, epoch: { type: integer } }
+        wrappedNameValueKey:
+          if: { properties: { wrappedNameValueKey: { type: string } } }
+          then:
+            required: [sealedName]
+            properties: { sealedName: { type: string } }
+        sealedAvatar:
+          if: { properties: { sealedAvatar: { type: string } } }
+          then:
+            required: [wrappedAvatarValueKey, epoch]
+            properties: { wrappedAvatarValueKey: { type: string }, epoch: { type: integer } }
+        wrappedAvatarValueKey:
+          if: { properties: { wrappedAvatarValueKey: { type: string } } }
+          then:
+            required: [sealedAvatar]
+            properties: { sealedAvatar: { type: string } }
       properties:
         bootstrapSecret:
           x-veyq-visibility: token
@@ -4146,6 +4183,39 @@ components:
     RegisterAndAcceptRequest:
       type: object
       required: [bootstrapSecret, userId, username, account]
+      # AcceptInviteRequest's profile-field rules, the same (TenantsResource.profileShapeHolds; its note says why
+      # `dependentSchemas`).
+      dependentSchemas:
+        sealedJoinRecord:
+          if: { properties: { sealedJoinRecord: { type: string } } }
+          then:
+            required: [wrappedJoinRecordValueKey, epoch]
+            properties: { wrappedJoinRecordValueKey: { type: string }, epoch: { type: integer } }
+        wrappedJoinRecordValueKey:
+          if: { properties: { wrappedJoinRecordValueKey: { type: string } } }
+          then:
+            required: [sealedJoinRecord]
+            properties: { sealedJoinRecord: { type: string } }
+        sealedName:
+          if: { properties: { sealedName: { type: string } } }
+          then:
+            required: [wrappedNameValueKey, epoch]
+            properties: { wrappedNameValueKey: { type: string }, epoch: { type: integer } }
+        wrappedNameValueKey:
+          if: { properties: { wrappedNameValueKey: { type: string } } }
+          then:
+            required: [sealedName]
+            properties: { sealedName: { type: string } }
+        sealedAvatar:
+          if: { properties: { sealedAvatar: { type: string } } }
+          then:
+            required: [wrappedAvatarValueKey, epoch]
+            properties: { wrappedAvatarValueKey: { type: string }, epoch: { type: integer } }
+        wrappedAvatarValueKey:
+          if: { properties: { wrappedAvatarValueKey: { type: string } } }
+          then:
+            required: [sealedAvatar]
+            properties: { sealedAvatar: { type: string } }
       properties:
         userId:
           x-veyq-visibility: id
