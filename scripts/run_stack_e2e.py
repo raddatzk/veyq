@@ -223,6 +223,14 @@ def run(*cmd: str, check: bool = True, capture: bool = True, **kw) -> subprocess
     return result
 
 
+def tls_context(cafile: Path | None = None) -> ssl.SSLContext:
+    """Every TLS client context of this run: TLS 1.2 at the least on each Python it runs on. 3.10+ sets that floor
+    itself (bpo-43998); 3.9 takes its TLS library's, and macOS's system 3.9 (LibreSSL 2.8.3) allows TLS 1.0."""
+    ctx = ssl.create_default_context(cafile=None if cafile is None else str(cafile))
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    return ctx
+
+
 # ---------------------------------------------------------------- the host, before and after
 
 
@@ -705,7 +713,7 @@ def teardown(project: str, workdir: Path) -> None:
 
 def pebble_root(compose: list[str], workdir: Path) -> Path:
     published = run(*compose, "port", "pebble", str(PEBBLE_MANAGEMENT_PORT)).stdout.strip()
-    ctx = ssl.create_default_context(cafile=str(workdir / "pebble-minica.pem"))
+    ctx = tls_context(workdir / "pebble-minica.pem")
     url = f"https://{published}/roots/0"
     deadline = time.monotonic() + 30
     while True:
@@ -730,7 +738,7 @@ def describe(der: bytes) -> str:
 
 def served_certificate() -> str:
     """What :443 serves for the domain, unverified — for the red message only."""
-    ctx = ssl.create_default_context()
+    ctx = tls_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     try:
@@ -763,7 +771,7 @@ def pebble(release: Release, workdir: Path, values: dict[str, str], app_image: s
 def certificate(workdir: Path) -> None:
     root = workdir / "pebble-root.pem"
     # cafile given → the default trust store is NOT loaded: the run's Pebble root is the only CA.
-    ctx = ssl.create_default_context(cafile=str(root))
+    ctx = tls_context(root)
     deadline = time.monotonic() + CERT_SECS
     while True:
         try:
@@ -917,7 +925,7 @@ def plant_store_sentinel(stamp: str, workdir: Path) -> str:
     the run's start rests on `--since` being the run's first timestamp (`main`), which no sentinel proves any more.
     """
     sentinel, key = sweeps.store_sentinel(stamp)
-    ctx = ssl.create_default_context(cafile=str(workdir / "pebble-root.pem"))
+    ctx = tls_context(workdir / "pebble-root.pem")
     with socket.create_connection(("127.0.0.1", 443), timeout=10) as raw:
         with ctx.wrap_socket(raw, server_hostname=DOMAIN) as tls:
             tls.sendall(f"GET /{STORE_BUCKET}/{key} HTTP/1.1\r\nHost: {DOMAIN}\r\nConnection: close\r\n\r\n".encode())
