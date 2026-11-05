@@ -7,10 +7,14 @@
 # `javac --release`, and every workflow's `setup-java` (ADR 0119). A mismatch is loud: Gradle finds no toolchain, or
 # the runtime refuses the class files.
 java = "25"
-kotlin = "2.4.10"
+kotlin = "2.4.21"
 quarkus = "3.40.1.1"
-# Above the BOM's 1.62.0 on purpose, applied by the root build's substitution (build.gradle.kts says why and when it goes).
+# The next three are above the Quarkus BOM's own versions on purpose, each for a published advisory: the root build lifts
+# the BOM's constraint to them (build.gradle.kts `liftedAboveBom` says why and when each goes).
 opentelemetry = "1.67.0"
+mariadb-jdbc = "3.5.11"
+# Also the floor `buildSrc` holds its own classpath to (buildSrc/build.gradle.kts).
+guava = "33.7.2-jre"
 
 [libraries]
 quarkus-bom = { module = "io.quarkus.platform:quarkus-bom", version.ref = "quarkus" }

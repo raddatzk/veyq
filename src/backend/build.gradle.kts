@@ -17,26 +17,50 @@ repositories {
     mavenCentral()
 }
 
-// OpenTelemetry above the Quarkus BOM, for GHSA-ccrj-gw8r-854m (quadratic CPU in W3C `tracestate` parsing, fixed in
-// opentelemetry-api 1.67.0): the BOM of Quarkus 3.40.1.1 pins 1.62.0, and no Quarkus release pins 1.67.0 yet. veyq ships
-// no OpenTelemetry extension — the API reaches the fast-jar only through quarkus-scheduler's
-// opentelemetry-instrumentation-api — so no request header reaches the propagator today; it is lifted anyway, so the
-// shipped jar carries no published advisory. The whole `io.opentelemetry` group moves together (its artifacts are
-// released in lockstep; `-alpha` is the incubator's suffix), and only that group: instrumentation and semconv keep the
-// BOM's. A substitution, not a constraint: the BOM is an `enforcedPlatform`, whose forced versions a constraint loses
-// to. Applied to every project's configurations, Quarkus' own (app model, dev-mode bootstrap) included. **Remove it,
-// and `opentelemetry` in gradle/libs.versions.toml, once the Quarkus BOM pins opentelemetry-api 1.67.0 or later.**
-val otel = libs.versions.opentelemetry.get()
+// Versions lifted above the Quarkus BOM, each for a published advisory the BOM's own version carries and no Quarkus 3.x
+// release fixes yet (measured 2026-11-05: 3.40.1.1 is the newest 3.x platform BOM). **Remove an entry, and its version in
+// gradle/libs.versions.toml, once the Quarkus BOM pins that version or later.**
+//   - `io.opentelemetry` (GHSA-ccrj-gw8r-854m, quadratic CPU in W3C `tracestate` parsing, fixed in opentelemetry-api
+//     1.67.0; the BOM pins 1.62.0). veyq ships no OpenTelemetry extension — the API reaches the fast-jar only through
+//     quarkus-scheduler's opentelemetry-instrumentation-api — so no request header reaches the propagator today; it is
+//     lifted anyway, so the shipped jar carries no published advisory. The whole group moves together (released in
+//     lockstep; `-alpha` is the incubator's suffix), and only that group: instrumentation and semconv keep the BOM's.
+//   - `mariadb-java-client` (GHSA-h599-m3w5-9m7x, GHSA-4jq2-8v3c-97w8, GHSA-fhx5-2xqw-2cgm, GHSA-grfq-r75j-rw9x, fixed in
+//     3.5.11; the BOM pins 3.5.10). It ships: quarkus-jdbc-mariadb puts it in the fast-jar's lib.
+//   - `guava` (GHSA-xxph-c9ww-hj94, deserialization of its compact collections, fixed in 33.7.2; the BOM pins
+//     33.6.0-jre). Nothing that ships carries it — only test, native-test and dev-mode deployment classpaths do (measured
+//     2026-11-05: `runtimeClasspath` and `quarkusProdRuntimeClasspathConfiguration` hold none) — but those run on the
+//     developer's and CI's machines. (buildSrc reads `guava` too, for a classpath no BOM reaches.)
+// The BOM's own constraint is rewritten — a component metadata rule on `quarkus-bom` — rather than each configuration's
+// resolution: the BOM is an `enforcedPlatform`, whose forced versions a plain constraint loses to, and a rule reaches
+// every resolution in the project, Quarkus' own (app model, dev-mode bootstrap) and a plugin's detached configuration
+// included. A per-configuration substitution, the first form of this block, reaches no detached configuration: the PIT
+// plugin's (`addJUnitPlatformLauncherDependencyIfNeeded` resolves a detached copy of `:core`'s `testImplementation` to
+// find the JUnit Platform version) kept the BOM's opentelemetry-api 1.62.0 in the graph `dependency-submission.yml`
+// reports, and so its alert open after the jar no longer carried it (measured 2026-11-05 with a
+// `DependencyResolutionListener` init script: `:core:detachedConfiguration12`).
+val liftedAboveBom = libs.versions.opentelemetry.get().let { otel ->
+    mapOf(
+        "io.opentelemetry:opentelemetry-api" to otel,
+        "io.opentelemetry:opentelemetry-context" to otel,
+        "io.opentelemetry:opentelemetry-common" to otel,
+        "io.opentelemetry:opentelemetry-api-incubator" to "$otel-alpha",
+        "org.mariadb.jdbc:mariadb-java-client" to libs.versions.mariadb.jdbc.get(),
+        "com.google.guava:guava" to libs.versions.guava.get(),
+    )
+}
+val quarkusBomModule = libs.quarkus.bom.get().module.toString() // read here: inside `allprojects`, `libs` is the subproject's
 allprojects {
-    configurations.configureEach {
-        resolutionStrategy.dependencySubstitution {
-            listOf("opentelemetry-api", "opentelemetry-context", "opentelemetry-common").forEach {
-                substitute(module("io.opentelemetry:$it")).using(module("io.opentelemetry:$it:$otel"))
-                    .because("GHSA-ccrj-gw8r-854m, fixed in opentelemetry-api $otel")
+    dependencies.components.withModule(quarkusBomModule) {
+        allVariants {
+            withDependencyConstraints {
+                forEach { constraint ->
+                    liftedAboveBom["${constraint.group}:${constraint.name}"]?.let { lifted ->
+                        constraint.version { require(lifted) }
+                        constraint.because("lifted above the Quarkus BOM for a published advisory (build.gradle.kts)")
+                    }
+                }
             }
-            substitute(module("io.opentelemetry:opentelemetry-api-incubator"))
-                .using(module("io.opentelemetry:opentelemetry-api-incubator:$otel-alpha"))
-                .because("released in lockstep with opentelemetry-api $otel")
         }
     }
 }
