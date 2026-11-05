@@ -2042,11 +2042,22 @@ components:
         A profile change — set the `username` (re-checked unique in the tenant), the `sealedName` blob with its value
         key's wrap and the `epoch` that wrap is under, and/or the account-global `requireGroupAddConsent` preference.
         Omit a field to leave it unchanged.
-      # A `sealedName` brings its `epoch` and its wrap (ProfileHandler's shape check, 400 before any answer about the
-      # instance's state). The generators ignore the keyword (content's UpdateNodeRequest note); Schemathesis reads it.
-      dependentRequired:
-        sealedName: [epoch, wrappedNameValueKey]
-        wrappedNameValueKey: [sealedName]
+      # A `sealedName` brings its `epoch` and its wrap, and a wrap its `sealedName` (AccountProfileHandler.update's shape
+      # check, 400 before any answer about the instance's state). The server reads a `null` as the field's absence, so
+      # a `null` brings nothing and is brought by nothing: `dependentSchemas` on a non-null value, never
+      # `dependentRequired` (which a `null` satisfies — the API fuzzing sent `"epoch": null` beside a `sealedName` as
+      # valid). The generators ignore the keyword (content's UpdateNodeRequest note); Schemathesis reads it.
+      dependentSchemas:
+        sealedName:
+          if: { properties: { sealedName: { type: string } } }
+          then:
+            required: [epoch, wrappedNameValueKey]
+            properties: { epoch: { type: integer }, wrappedNameValueKey: { type: string } }
+        wrappedNameValueKey:
+          if: { properties: { wrappedNameValueKey: { type: string } } }
+          then:
+            required: [sealedName]
+            properties: { sealedName: { type: string } }
       properties:
         username:
           x-veyq-visibility: pii
@@ -2086,8 +2097,9 @@ components:
           x-veyq-visibility: structure
           type: [integer, "null"]
           description: >
-            With `sealedName` (required there, else `400 invalid_request`): the tenant epoch whose key wraps its value
-            key — the tenant scope's current one, else `409 stale_epoch` (ADR 0115 decision 3). Ignored without it.
+            With `sealedName` (required there, and not `null`, else `400 invalid_request`): the tenant epoch whose key
+            wraps its value key — the tenant scope's current one, else `409 stale_epoch` (ADR 0115 decision 3). Ignored
+            without it.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
