@@ -1,7 +1,7 @@
 # ADR 0087 — Published documentation is a Starlight site; `docs/` is for development only
 
 - Status: Accepted
-- Built: partly (not built: decision 1's publish to GitHub Pages)
+- Built: yes (decision 1's publish: the first deploy to GitHub Pages ran on 2026-11-05, `site.yml` run 42055478631, at https://veyq.app/)
 - Date: 2026-10-15
 
 ## Context
@@ -89,8 +89,8 @@ copy (the drift the wiki's source guard was built after), and it lives only on G
 
 ## Consequences
 
-- **The first GitHub Pages deploy runs on the first push to the public remote.** Until then the site is built and
-  checked, and nothing is published.
+- **The site deploys on every push to `main`** (`site.yml`); the first ran on 2026-11-05. Its domain, `veyq.app`, is a
+  Pages setting, not a file: a workflow-published site reads no `CNAME`.
 - The GitHub Wiki is gone, and in-app help links point at the site.
 - The guards follow the content: they read the site's pages where they read the wiki and `infra/README.md`'s
   production sections before.
