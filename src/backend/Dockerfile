@@ -56,7 +56,8 @@ COPY VERSION /repo/VERSION
 RUN pnpm run build && pnpm run verify:no-backdoor && pnpm run verify:csp && pnpm run verify:license-sources
 
 # --- backend (JVM) ---------------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk-jammy@sha256:c7d5863b5dd8f26b90c64f1d80cc2b0e5a5e4642f8db9955a370d348edd8f438 AS backend-build-base
+# The JDK is the backend's one Java major (gradle/libs.versions.toml's `java`, ADR 0119): Gradle's toolchain finds it here.
+FROM eclipse-temurin:25-jdk-jammy@sha256:e4f029273ed9e4444697df30bb6098dbe51477291598aebc54dd0b48d95d6ae7 AS backend-build-base
 WORKDIR /repo/src/backend
 # gradle.properties (build-JVM heap) is not an optional extra, and neither is :core's pitest.scope.json:
 # core/build.gradle.kts parses the PIT manifest at CONFIGURATION time, so even `gradlew help` dies without it. Both
@@ -109,12 +110,12 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # published it. A native image returns only as a decision with its own CI build and e2e run (inbox #243).
 
 # --- runtime base and its preparation ----------------------------------------------------------------------
-# The runtime is distroless (ADR 0118): Debian 13's glibc, CA certificates and tzdata, and the Eclipse Temurin 21 JRE
+# The runtime is distroless (ADR 0118): Debian 13's glibc, CA certificates and tzdata, and the Eclipse Temurin 25 JRE
 # Google's distroless project packages from Adoptium's builds — and nothing else: no shell, no package manager, no
 # coreutils, no curl, no tar. `nonroot` is the variant whose default user is not root; the stage below sets its own
 # anyway. Pinned by the multi-arch index digest (amd64 + arm64, validate_image_pins.py's limits say how it was
 # checked); Dependabot's `docker` ecosystem bumps the digest of the `nonroot` tag.
-FROM gcr.io/distroless/java21-debian13:nonroot@sha256:b22857e939bd95abd69d9d747f0421a274f9f70855ecfc335f7d97f6eeef578d AS distroless-java
+FROM gcr.io/distroless/java25-debian13:nonroot@sha256:a90a5fadd78dc37b643da72dca2f744ef67eba625eca7227a5b375b548e6b1c2 AS distroless-java
 
 # Everything the runtime needs a shell for happens here, on the build JDK, and travels into the runtime as files: a
 # distroless stage can run nothing but `java`, so it has no `RUN`.
@@ -132,7 +133,7 @@ COPY --from=distroless-java /etc/passwd /etc/group /prep/etc/
 RUN mkdir -p /prep/classes /prep/opt/veyq /prep/empty /prep/etc/traefik /prep/smoke \
     && echo 'veyq:x:10001:10001:veyq:/nonexistent:/sbin/nologin' >> /prep/etc/passwd \
     && echo 'veyq:x:10001:' >> /prep/etc/group \
-    && javac --release 21 -Xlint:all -Werror -d /prep/classes /prep/src/ImageCommands.java \
+    && javac --release 25 -Xlint:all -Werror -d /prep/classes /prep/src/ImageCommands.java \
     && jar --create --file /prep/opt/veyq/image-commands.jar --main-class ImageCommands -C /prep/classes . \
     && printf 'smoke-key' | java -jar /prep/opt/veyq/image-commands.jar place-key /prep/smoke/key \
     && test "$(stat -c %a /prep/smoke/key)" = 600 \
