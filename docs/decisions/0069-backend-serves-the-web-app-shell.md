@@ -69,9 +69,10 @@ inert lives in the signer for the same reason ([ADR 0013](0013-blob-storage-pres
    boot quietly. A returning `<meta>` would also block every store fetch on Kubernetes again, and no CI run
    would notice. A backend with no shell on its classpath serves the API only, as in dev, where Vite serves the
    app.
-4. **Security headers.** The app sends `frame-ancestors 'none'` (inside the policy),
-   `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and HSTS. HSTS is on by
-   default with a moderate `max-age`, and a deployment can switch it off. Values and reasons are in
+4. **Security headers.** The app sends them itself, here, never a proxy (below): `frame-ancestors 'none'` (inside
+   the policy), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, HSTS,
+   `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy` and a `Permissions-Policy`. HSTS is on by default
+   with a moderate `max-age`, and a deployment can switch it off. Values and reasons are in
    [cc.security.csp](../crosscutting/cc.security.csp.md).
 5. **Caching.** `index.html`, every fallback answer and `sw.js` are sent as `Cache-Control: no-cache`, so the
    next load after an upgrade revalidates the shell. The content-hashed `/assets/*` stay `immutable`.

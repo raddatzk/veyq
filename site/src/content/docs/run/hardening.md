@@ -3,6 +3,7 @@ title: Hardening
 description: A checklist of what is hardened by default, what you must keep that way, and the few settings that are yours.
 sources:
   - docs/decisions/0071-runtime-hardening-on-both-targets.md
+  - docs/decisions/0117-the-web-client-enforces-trusted-types.md
   - docs/decisions/0065-admin-ui-cli-separate-service.md
   - docs/decisions/0050-operator-config-secret-encryption.md
   - docs/crosscutting/cc.security.csp.md
@@ -87,7 +88,17 @@ It defends a leaked database backup, not a compromised host. So:
   connections only to the instance, its store and the outside services you configured (the breached-password check,
   the map tiles, the place-name lookup and the exchange rates, [External services](/veyq/run/capabilities/#external-services)); a service
   without an address, or switched off, is not allowed at all
-  ([cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md)).
+  ([cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md)). It also
+  enforces Trusted Types: a browser that supports them refuses any markup or script address the web client did not
+  make through its own sanitizer or its short list of library literals
+  ([ADR 0117](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0117-the-web-client-enforces-trusted-types.md)).
+  The admin console sends its own, stricter policy, also as a header.
+- **The other security headers are built in too**, on the application and the admin console alike: no
+  content-type sniffing, a page keeps no handle on the page that opened it nor that page on it
+  (`Cross-Origin-Opener-Policy`), no other site may embed or read a response of the instance
+  (`Cross-Origin-Resource-Policy`), and every browser feature the client does not use — the position and the
+  microphone among them — is switched off (`Permissions-Policy`). There is nothing to set; a proxy of yours that
+  rewrites or strips response headers must leave them as they are.
 - **Test certificates against a staging directory** (`VEYQ_ACME_CASERVER` / `gateway.tls.acme.server`), and switch
   back before anyone uses the instance: staging certificates are not trusted by browsers.
 

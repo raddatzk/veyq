@@ -13,15 +13,16 @@
 ## Protects against
 
 The web client is where **all** content crypto happens. It holds decryption keys in memory and renders
-**decrypted** content (Memory notes, terms, and share notes via `v-html`). The dominant residual risk is *content
+**decrypted** content as markup (share notes, terms, the privacy notice). The dominant residual risk is *content
 injection*: a hostile string reaches the DOM, for example through a crafted shared note or a compromised
 dependency, and turns into executing script. Without a CSP, such a script could send keys and plaintext to any
 host.
 
 The CSP is the browser-enforced backstop. Even if injection happened, `script-src 'self'` stops a foreign script
-from running, and `connect-src` stops it from phoning home. It is **defense-in-depth**, not the first line. The
-first line is that decrypted HTML is sanitised escape-first ([`renderMarkdown`](../../src/web/src/shared/markdown.ts)).
-The CSP is what holds if that ever fails.
+from running, and `connect-src` stops it from phoning home. Markup itself comes only from the escape-first renderer
+([`renderMarkdown`](../../src/web/src/shared/markdown.ts)), and the policy makes the browser enforce that: under
+Trusted Types no string reaches an HTML sink or a script URL unless one of the client's two policies made it
+(§ *Trusted Types*, [ADR 0117](../decisions/0117-the-web-client-enforces-trusted-types.md)).
 
 This does **not** re-blind the operator or a third party; it is orthogonal to
 [security-model](security-model.md). Map tiles and geocoding remain a *consented* third-party boundary
@@ -40,9 +41,11 @@ app's own provider config ([`src/web/vite.config.ts`](../../src/web/vite.config.
   Service Worker under the policy. The shell refuses to start when `index.html` is present but the emitted
   policy is missing, or when `index.html` still carries a CSP `<meta>`.
 - **In dev** the Vite dev server sends the same policy as a header, so dev and production match and violations
-  surface while developing. Dev differs in two sources: `ws:` for HMR, and a style nonce. Vite injects every
-  stylesheet as a `<style>` element, so it stamps them with a nonce drawn fresh at each dev-server start
-  (`html.cspNonce`) and the header names it; the build loads its CSS as files and carries no nonce.
+  surface while developing. Dev differs in two sources and one pair of directives: `ws:` for HMR, a style nonce, and
+  no Trusted Types. Vite injects every stylesheet as a `<style>` element, so it stamps them with a nonce drawn fresh
+  at each dev-server start (`html.cspNonce`) and the header names it; the build loads its CSS as files and carries no
+  nonce. Vite's client writes its error overlay with `innerHTML`, and the dev server loads Vue without the build's
+  patch (§ *Trusted Types*), so Trusted Types are the built policy's alone and lane L1 is where they run.
 
 The policy:
 
@@ -50,7 +53,8 @@ The policy:
 default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none';
 script-src 'self'; worker-src 'self'; style-src 'self' <reka-style-hashes>;
 img-src 'self' data: blob: [<tile-origin>]; media-src 'self' blob:; font-src 'self';
-connect-src 'self' [<store-origin>] [<geocoder-origin>] [<breach-check-origin>] [<rates-origin>]; form-action 'self'
+connect-src 'self' [<store-origin>] [<geocoder-origin>] [<breach-check-origin>] [<rates-origin>]; form-action 'self';
+require-trusted-types-for 'script'; trusted-types veyq default
 ```
 
 The bracketed origins are appended by the backend on every response; the built policy names none of them.
@@ -65,7 +69,7 @@ Why each non-obvious source is there:
 - **`style-src 'self'` and hashes, no `'unsafe-inline'`** (inbox #523). The built CSS is same-origin files. Vue applies
   `:style` bindings, `v-show` and Leaflet's and pdf.js's positioning through the CSSOM (`el.style.x = …`), which
   `style-src` does not govern; what it governs is a `<style>` element and a `style="…"` attribute parsed from markup,
-  and the app has neither (no static `style=` in a template, `v-html` gets the escape-first markdown, which writes
+  and the app has neither (no static `style=` in a template, `v-safe-html` gets the escape-first markdown, which writes
   none). The one `<style>` a component we use renders is reka-ui's `SelectViewport`, a fixed rule that hides its
   list's scrollbar; a fixed text is allowed by its hash (`REKA_STYLE_HASHES` in `csp.ts`). pdf.js loads a PDF's fonts
   through the FontFace API, and the Emergency Kit's jsPDF draws text and a QR image only, so html2canvas (which would
@@ -103,6 +107,42 @@ Why each non-obvious source is there:
   - `store-origin` (Kubernetes, [ADR 0064](../decisions/0064-kubernetes-helm-deployment-target.md)) appends
     the origin of `public-endpoint`;
   - `internal-endpoint` (a publicly reachable external S3) appends the origin of `endpoint`.
+
+## Trusted Types
+
+`require-trusted-types-for 'script'` makes a browser with Trusted Types refuse a plain string at every HTML sink and
+every script-URL sink; `trusted-types veyq default` names the only two policies that may make a value for one, both
+created by [`trustedTypes.ts`](../../src/web/src/shared/security/trustedTypes.ts) before any library module loads (the
+first import of `main.ts`). Why this shape and not another is [ADR 0117](../decisions/0117-the-web-client-enforces-trusted-types.md).
+
+- **`veyq`** is the sanitizer: its `createHTML` runs `renderMarkdown`. A template shows markup only as
+  `markdownHtml(text)` through `v-safe-html`, which takes no string (by type, and at run time in every browser).
+  Its second purpose, `parseInertXml`, parses a photo's XMP into a document of its own for the EXIF library.
+- **`default`** answers for code that cannot name `veyq`: it passes the exact fixed markup in `LIBRARY_MARKUP` and, as
+  a script URL, only a same-origin file under `assets/` or `sw.js`; anything else is refused.
+- **Vue's `vue` policy** (a pass-through Vue writes `v-html` with) is compiled out of the build, and `verify:csp`
+  checks it is gone.
+
+The sinks, measured in the built bundle and the source on 2026-11-05 (`grep` of `dist/` for `innerHTML`, `outerHTML`,
+`insertAdjacentHTML`, `document.write`, `DOMParser`, `createContextualFragment`, `srcdoc`, `new Worker`,
+`importScripts`, `serviceWorker.register`, `createPolicy`, a `script` element's `src`):
+
+| Where | Sink | How it passes |
+|---|---|---|
+| Our templates: share notes, terms, the operator section, the privacy notice | `innerHTML` | `markdownHtml` → `v-safe-html` (`veyq`) |
+| `exifTags.ts` → ExifReader's XMP parse | `DOMParser.parseFromString` | `parseInertXml` handed as its `domParser` (`veyq`) |
+| Our four workers (digest, frames, listing opener, media deriver), `@veyq/crypto`'s Argon2 worker, pdf.js' worker | `new Worker(url)` | `default`'s script-URL rule |
+| The media service worker | `serviceWorker.register('/sw.js')` | `default`'s script-URL rule |
+| Leaflet: the inline-SVG probe at load, the zoom buttons | `innerHTML` of a fixed literal | `default`'s `LIBRARY_MARKUP` |
+| Leaflet: the attribution control | `innerHTML` of a joined string | not used: both maps add ours, built from nodes (`mapAttribution.ts`) |
+| Leaflet: a `divIcon`'s `html` | `innerHTML` when it is a string | every icon hands an element |
+| Leaflet: popups, layers and scale controls, VML probe | `innerHTML` | not used (no popup, no such control; VML only without SVG) |
+| Vue: `v-html`, an `innerHTML` binding, compiled static content | `innerHTML` | none in the client (`v-html` unused; `verify:csp` refuses static content) |
+| jsPDF's `html()`, html2canvas, DOMPurify, canvg | `innerHTML`, `DOMParser`, a policy `dompurify` | lazy chunks the client never loads (the Emergency Kit draws text and an image) |
+| vue-i18n, reka-ui, qrcode, jsQR, pdf.js' page thread | none | |
+
+A library upgrade that writes a new string, or changes one of the listed literals, is refused at run time and fails
+lane L1 (§ *Verification*).
 
 ## A dependency that parses untrusted bytes: pdf.js (inbox #412)
 
@@ -150,6 +190,24 @@ The app shell sends these on the app origin alongside the policy
 
   Over plain HTTP a browser ignores the header, so a local or LAN instance is unaffected.
 
+- **`Cross-Origin-Opener-Policy: same-origin`.** A share link is opened from a mail or another site: the page
+  keeps no handle on its opener, nor the opener on it. Nothing in the client opens a cross-origin window that must
+  talk back (no OAuth or payment popup, no `window.open`; measured 2026-11-05 by `grep`).
+- **`Cross-Origin-Resource-Policy: same-origin`.** No other origin embeds or reads a response of the instance
+  no-cors: the client loads everything from its own origin, and no mail embeds an image from it.
+- **`Permissions-Policy`.** The features the client calls, for its own origin: `camera` (the Emergency Kit scanner),
+  `clipboard-write` (copying a link, a guest id, a text), `fullscreen` (the file viewer, a video's control),
+  `autoplay` (the lightbox's and the banner's video, the media deriver's muted `play()`) and `picture-in-picture` (a
+  video's own control); every other feature Chromium knows off — the position and the microphone among them. A name
+  Chromium does not know is left out, because it logs an error for it on every page (`bluetooth` and `web-share`,
+  in lane L1 on 2026-11-05). The list is `AppShellRoutes.PERMISSIONS_POLICY`, with the call behind each feature; a feature the client starts to use is
+  added there.
+- **Not `Cross-Origin-Embedder-Policy`.** It would refuse the map tiles, which come from another origin that sends
+  no CORP of its own ([ADR 0018](../decisions/0018-map-tiles-provider-neutrality.md)).
+
+These six go on **every** response, the API's included: each acts on a document or a no-cors read and is inert on
+JSON, and an API path opened as a page is a document like any other. The policy goes on the shell's responses only.
+
 Store responses are **not** the app shell's. Wherever the store is reached, including on the app's own origin
 through the compose path route, the rule that makes those responses inert is ADR 0013 §6.
 
@@ -159,24 +217,21 @@ The Server-Owner console ([ADR 0065](../decisions/0065-admin-ui-cli-separate-ser
 container's nginx ([`src/admin-web/nginx.conf.template`](../../src/admin-web/nginx.conf.template)), and that nginx sends
 every header of the admin origin.
 
-- **The policy stays a `<meta>`.** Its one source is
-  [`src/admin-web/src/shared/security/csp.ts`](../../src/admin-web/src/shared/security/csp.ts), and
-  `src/admin-web/vite.config.ts` delivers it as a `<meta>` in the build and as a header on the Vite dev server. It
-  follows web's `style-src` rule (no `'unsafe-inline'`; reka's fixed `<style>` texts by hash, here `SelectViewport`'s
-  and `ComboboxViewport`'s; on the dev server a nonce, which both the header and the dev page's `<meta>` carry,
-  because a `<meta>` without it would intersect the header and refuse Vite's styles again). It names `worker-src
-  'self'` although `script-src 'self'` already covers the Argon2 worker by fallback, so no edit of `script-src` can
-  widen what may run as a worker. It is
-  stricter than web's: there are no map providers, so the only origin besides its own is the HIBP range API's
-  default origin in `connect-src`. A `<meta>` built into a static file cannot follow the Server Owner's setting, so
-  the console's own first-run check reaches only that default origin: a mirror elsewhere reads there as "could not
-  check", and no check runs at all while the instance's manifest carries no `core.breached-password`. It carries **no `frame-ancestors`**, because a `<meta>` ignores it. Anti-framing is nginx's
-  `X-Frame-Options: DENY`, which is the whole guard, not a second layer.
-
-  It is not moved into a header. The app's policy needs a header because it contains a value that is only known
-  at runtime, the store origin ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)). This policy
-  has no runtime value, and `X-Frame-Options` already covers the one directive a `<meta>` drops. Revisit if the
-  admin policy gains a runtime value, or needs `frame-ancestors` or reporting of its own.
+- **The policy is a header nginx sends**, its one delivery: a header carries `frame-ancestors 'none'`, which a
+  `<meta>` would ignore. Its one source is
+  [`src/admin-web/src/shared/security/csp.ts`](../../src/admin-web/src/shared/security/csp.ts) (`ADMIN_CSP`); the
+  template's `add_header Content-Security-Policy` line is held equal to it by `csp.test.ts`, and the Vite dev server
+  sends it as a header too. It follows web's `style-src` rule (no `'unsafe-inline'`; reka's fixed `<style>` texts by
+  hash, here `SelectViewport`'s and `ComboboxViewport`'s; on the dev server a nonce). It names `worker-src 'self'`
+  although `script-src 'self'` already covers the Argon2 worker by fallback, so no edit of `script-src` can widen what
+  may run as a worker. It is stricter than web's: there are no map providers, so the only origin besides its own is
+  the HIBP range API's default origin in `connect-src`. A literal in the template cannot follow the Server Owner's
+  setting, so the console's own first-run check reaches only that default origin: a mirror elsewhere reads there as
+  "could not check", and no check runs at all while the instance's manifest carries no `core.breached-password`.
+  `X-Frame-Options: DENY` stays for a browser older than `frame-ancestors`. The console does not enforce Trusted Types
+  ([ADR 0117](../decisions/0117-the-web-client-enforces-trusted-types.md)): it renders no user content.
+- **COOP, CORP and a Permissions-Policy**, as the app origin's (§ *The other response headers*): `same-origin` both,
+  and of the features only `clipboard-write` (copying an invite link and an order's text) for its own origin.
 - **HSTS: the app's value, under the app's switch.** nginx sends the same `Strict-Transport-Security` as the app
   shell (§ *The other response headers*), and the one deployment switch turns it off on both origins. There is one
   switch and not two, because two could not be independent. The admin nginx passes the backend's `/api/*` responses
@@ -209,22 +264,33 @@ every header of the admin origin.
   - the hashes equal exactly those of the fixed `<style>` texts the reka-ui components the client imports render,
     recomputed from the installed reka-ui by following its own imports, so an upgrade that changes a text or a new
     import of a styling component turns it red;
-  - `frame-ancestors 'none'` in dev and production alike.
+  - `frame-ancestors 'none'` in dev and production alike;
+  - `require-trusted-types-for 'script'` and `trusted-types veyq default` in the build, neither in dev.
   Bitten 2026-10-23: the old `style-src 'self' 'unsafe-inline'`, an emptied hash list and a probe component importing
   `ScrollAreaViewport` each turn it red.
+- [`src/web/src/shared/security/trustedTypes.test.ts`](../../src/web/src/shared/security/trustedTypes.test.ts), over a
+  stand-in Trusted Types factory: the module creates exactly the two policies the built CSP names; `markdownHtml` is the
+  renderer's output as the policy's value; `veyq` makes nothing without one of its purposes; `v-safe-html` refuses a
+  string, with and without Trusted Types; `default` passes exactly `LIBRARY_MARKUP` and the client's own script URLs (a
+  foreign origin, `/api/`, `/blobs/`, `..`, `data:`, `blob:`, `javascript:` refused); a string assigned to `SafeHtml`
+  does not compile (`@ts-expect-error`, held by `pnpm run typecheck`). Bitten 2026-11-05: a template that binds a
+  string to `v-safe-html` fails `vue-tsc` (`Type 'string' is not assignable to type 'SafeHtml'`).
 - [`src/web/scripts/assert-pdf-worker-in-dist.mjs`](../../src/web/scripts/assert-pdf-worker-in-dist.mjs) (`pnpm run verify:pdf-worker`,
   in `pnpm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval, no WASM
   (§ *A dependency that parses untrusted bytes*). **Run in a real browser 2026-10-12** against a local server sending the
   built header: the worker started, pages drew, a standard font loaded from the same origin, no violation fired.
 - [`src/web/scripts/assert-csp-policy-in-dist.mjs`](../../src/web/scripts/assert-csp-policy-in-dist.mjs)
   (`pnpm run verify:csp`, run by `pnpm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
-  has no emitted policy or whose `index.html` carries a CSP `<meta>`.
+  has no emitted policy or whose `index.html` carries a CSP `<meta>`, whose policy lacks the two Trusted Types
+  directives, or whose scripts still create Vue's `vue` policy or a static vnode. Bitten 2026-11-05: without the build
+  plugin that removes Vue's policy it is red (`a bundled script still creates Vue's \`vue\` policy`).
 - The backend's app shell (`src/backend/core/src/main/kotlin/me/raddatz/veyq/core/appshell/`):
   - `AppShellTest` compares the appended store origin, per signing mode, with the origin of a URL the signer
     produced in that mode, and pins the fail-closed refusals (no policy, a CSP `<meta>`);
   - `AppShellSliceTest` runs over a fixture shell. It covers the fallback, with a positive control for every
     negative (not HTML, a missing chunk, `/api`, `/__media`, `/__download`), the `no-cache`/`immutable` split, the policy on
-    shell responses and `sw.js` but not on `/api`, and the plain headers on both;
+    shell responses and `sw.js` but not on `/api`, and the plain headers — COOP, CORP and the Permissions-Policy among
+    them — on the shell, `sw.js`, an asset and `/api`, no COEP, and each feature granted to `'self'` at most;
   - `AppShellStoreOriginSliceTest` shows the store origin reaching a real response in `store-origin` mode;
     `AppShellHstsOffSliceTest` the HSTS switch; `AppShellAbsentSliceTest` the no-shell branch.
 - Live-verified on 2026-09-24 (cr-app-shell-served-by-backend), against a fast-jar built with `dist` in
@@ -242,8 +308,10 @@ every header of the admin origin.
 - [`src/admin-web/src/shared/security/csp.test.ts`](../../src/admin-web/src/shared/security/csp.test.ts) pins admin-web's
   policy the same way: same-origin scripts, `worker-src` exactly `'self'`, `style-src` exactly `'self'` plus its reka
   hashes (recomputed as web's are; the nonce in dev only), `connect-src` exactly `'self'` + the HIBP origin, no other
-  third-party origin anywhere, no `frame-ancestors`. Bitten 2026-10-23 with the old `style-src` and without
-  `worker-src`.
+  third-party origin anywhere, `frame-ancestors 'none'`; and it reads `nginx.conf.template` as nginx does and holds its
+  `Content-Security-Policy` equal to `ADMIN_CSP`, COOP and CORP `same-origin`, `X-Frame-Options: DENY`, and a
+  Permissions-Policy whose one `(self)` feature is `clipboard-write`. Bitten 2026-10-23 with the old `style-src` and
+  without `worker-src`; 2026-11-05 with the template's `frame-ancestors 'self'` and a CORP `cross-origin`.
 - **Without `'unsafe-inline'`, measured in a browser on 2026-10-23** (inbox #523, #527), a document-level
   `securitypolicyviolation` listener and the console read on every screen:
   - web, the dev server and the built app behind the backend's own app shell (`dist` in `META-INF/resources`, one origin
@@ -266,7 +334,23 @@ every header of the admin origin.
   session restore: `POST /api/token/refresh` with no refresh cookie, which now answers `401 no_session` by contract
   (`auth.openapi.yaml`, inbox #535; then `400 invalid_request`), with a stale one `401 refresh_rejected`, on both
   clients.
-- The admin origin's headers (§ *admin-web*) have no CI test: no workflow starts the admin container. Checked
+- **Lane L1's violation fixture** ([`tests/e2e/src/cspViolations.ts`](../../tests/e2e/src/cspViolations.ts), every
+  spec's `test`; `tests/e2e/eslint.config.js` refuses Playwright's own): each context the suite opens reports every
+  `securitypolicyviolation` of its documents and frames, and every CSP or Trusted Types message its pages' and workers'
+  consoles log, and a test fails on what was reported since the previous one. It is what proves Trusted Types at run
+  time; measured 2026-11-05 on the release candidate built from this tree (`scripts/run_stack_e2e.py`, the whole
+  suite in one run, Chromium of the pinned Playwright image): 166 tests passed in all 38 spec files — first run and the
+  console, the Memory round trip (a photo whose XMP the EXIF reader parses), lightbox, video playback and seeking through
+  the service worker, the banner, the share password and guest pages, Depot with its file viewer and downloads, the
+  safety number's QR scan by camera, the account, terms and privacy pages, moderation, Expenses, export and import —
+  with no violation and no CSP or Trusted Types console message. Two tests failed on a visibility assertion and failed
+  the same way on an image of the commit before this change, so they are not this policy's. Bitten the same day: an
+  image whose `main.ts` assigns `'<b>bite</b>'` to an `innerHTML` (inside a `try`, so the app still runs) turns the
+  first setup test red, naming `require-trusted-types-for enforce - Element innerHTML|<b>bite</b>` and Chromium's console
+  report. **Not verified:** Firefox and Safari, which the lane does not drive; a browser without Trusted Types still runs
+  the renderer and `v-safe-html`'s refusal, never the enforcement.
+- The admin origin's headers (§ *admin-web*): the template is pinned by admin-web's `csp.test.ts`, and lane L1 drives
+  the admin image (first-run setup, the console) under them; no workflow inspects the served headers themselves. Checked
   once on 2026-09-27 (cr-admin-origin-hsts), without nginx:
   - the entrypoint hook, run against the template, renders the HSTS directive for the switch unset, empty and
     `true`, renders it commented out for `false`, and exits 1 naming `VEYQ_HSTS_ENABLED` for `bogus` and

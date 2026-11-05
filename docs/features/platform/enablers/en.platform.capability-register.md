@@ -149,7 +149,7 @@ creation the request's, node creation the scope's; the key material and pairing 
 - **Requirements**: share only with verified identities (not buildable as specified: the server knows no verified
   identity) and `core.offline-cache` (only a native client can keep it).
 - **Configuration as code**: switches declared in compose or Helm values.
-- **admin-web's own CSP**: a static `<meta>` that keeps the default HIBP origin whatever the instance configured.
+- **admin-web's own CSP**: a static header from its nginx that keeps the default HIBP origin whatever the instance configured.
 - **The deprecation lifecycle**, per-user "new feature" notices, audience filtering, and folding `suites` into the
   manifest ([ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) Consequences).
 
