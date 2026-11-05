@@ -139,7 +139,7 @@ here; the server is blind.
   — `src/web/`'s (the six crypto-logic files that stayed) and `src/packages/crypto/`'s (the shared suite);
   run both, because Stryker's runner is the project's own vitest and neither project sees the other's suites.
   With no remote, that CI job has never run, so **a commit that touches `src/packages/crypto/src` records the
-  package gate's exit code** (`pnpm run mutation -- --force`) in its message. **Footgun: it mutates the real source files _in place_**
+  package gate's exit code** (`pnpm run mutation --force`; pnpm hands every argument after the script name on, so an npm-style `--` reaches Stryker as a second argument and is refused) in its message. **Footgun: it mutates the real source files _in place_**
   (originals backed up to `.stryker-tmp/backup-*`, restored on exit), so mid-run `git status` shows hundreds of
   transient `M` files + stray `stryker-setup-*.js` — never run other `src/web/` work (git ops, `pnpm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.

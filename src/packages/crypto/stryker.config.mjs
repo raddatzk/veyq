@@ -22,6 +22,10 @@ const manifest = JSON.parse(readFileSync(new URL('./stryker.mutate.json', import
 const config = {
   mutate: manifest.mutate,
   testRunner: 'vitest',
+  // Named, not discovered: Stryker's default `plugins` glob looks for `@stryker-mutator/*` beside its own core, and
+  // pnpm's strict node_modules puts only core's own dependencies there - the runner, this package's dependency, is
+  // not among them ("no TestRunner plugins were loaded", the first GitHub run of mutation.yml, 2026-11-05).
+  plugins: ['@stryker-mutator/vitest-runner'],
   inPlace: true,
   coverageAnalysis: 'perTest',
   reporters: ['clear-text', 'html', 'json'],
