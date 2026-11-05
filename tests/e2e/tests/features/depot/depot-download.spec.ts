@@ -20,7 +20,8 @@
 // presign refresh past 10 min, sign-out or a closed tab mid-download (inbox #371 keeps them).
 //
 // It starts from the tenant whose owner the round trip activated (the `depot` project).
-import { test, expect, type BrowserContext, type Page } from '@playwright/test'
+import { expect, type BrowserContext, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

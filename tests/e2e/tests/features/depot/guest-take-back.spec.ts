@@ -9,7 +9,8 @@
 // It starts from the tenant whose owner the round trip activated (the `depot` project); the per-link limit it
 // lowers is restored at its end (the next feature scenario uploads through a link). Labels are src/web/'s own
 // (src/web/src/i18n/index.ts, en).
-import { test, expect, type Page, type Request } from '@playwright/test'
+import { expect, type Page, type Request } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../../src/devices'

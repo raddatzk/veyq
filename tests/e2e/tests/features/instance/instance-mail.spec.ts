@@ -16,7 +16,8 @@
 // The labels and the mail's words are admin-web's own (src/admin-web/src/i18n/index.ts, en) and the backend's
 // (InstanceMailCopy). It starts from the instance the setup project left (the Server Owner exists); the first test
 // restores what it switches, and the last leaves the check switched off, as an offline run's must be (ADR 0097).
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { openConsole } from '../../../src/console'
 import { instance, newDevice, type Device } from '../../../src/devices'
 import { attachmentText, awaitMails, mailsTo, type Mail } from '../../../src/mail'

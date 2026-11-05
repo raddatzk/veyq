@@ -8,7 +8,8 @@
 //
 // The labels are src/web/'s own (src/web/src/i18n/index.ts, en), so a renamed button is a red run here. One browser context
 // per device, each confined to the instance (egress.ts); the tests run in order and hand state on in this file.
-import { test, expect, type BrowserContext, type Locator, type Page } from '@playwright/test'
+import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test'
+import { test } from '../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

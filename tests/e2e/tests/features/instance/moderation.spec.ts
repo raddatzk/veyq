@@ -10,7 +10,8 @@
 //
 // It runs after instance-mail.spec.ts (the instance mail it relies on is set up and confirmed there). The labels are the
 // web client's and admin-web's own (each package's i18n, en).
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { freshOwner, readKit } from '../../../src/accounts'
 import { recordTyped } from '../../../src/canaries'
 import { instance, newDevice, passwordField, saveDeputy, tenantOrigin, type Device } from '../../../src/devices'

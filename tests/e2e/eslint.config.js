@@ -21,4 +21,24 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Every test runs under the policy-violation fixture (src/cspViolations.ts, ADR 0117): a spec that took `test` from
+    // Playwright itself would run with a violation counted as nothing.
+    name: 'veyq-e2e/csp-violation-fixture',
+    files: ['tests/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@playwright/test',
+              importNames: ['test'],
+              message: "Import `test` from src/cspViolations: there a page's Content-Security-Policy violation fails the test.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 )

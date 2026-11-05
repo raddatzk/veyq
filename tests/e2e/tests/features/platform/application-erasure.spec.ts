@@ -26,7 +26,8 @@
 // tick that erases is a race with the tick's phase, not a state a browser can hold; ApplicationErasureSweepTest drives
 // it). The labels are src/web/'s own (src/web/src/i18n/index.ts, en and de), the entry's words the catalog's
 // (contracts/platform/capabilities.json, which the image serves), the mail's ApplicationErasureMail's.
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

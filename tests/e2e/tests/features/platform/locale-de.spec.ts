@@ -16,7 +16,8 @@
 // Every value typed is a canary (recordTyped). The labels are src/web/'s own German ones (src/web/src/i18n/index.ts,
 // src/web/src/features/depot/i18n.ts, src/web/src/features/memories/i18n.ts, de); the English sign-in before the switch
 // is devices.ts's.
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { birthTenant } from '../../../src/console'

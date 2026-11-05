@@ -11,7 +11,8 @@
 //      the instance's database and holds it to them: the recorded address is the browser's own, and the recorded port
 //      is the port of one of the browser's own sockets — the one Traefik accepted. The lane's `client port` stage reads
 //      an echo; this reads the app's record.
-import { test, expect, type Request } from '@playwright/test'
+import { expect, type Request } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { readFileSync, writeFileSync } from 'node:fs'

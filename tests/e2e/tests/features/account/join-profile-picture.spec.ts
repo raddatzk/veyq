@@ -21,7 +21,8 @@
 // holding no current key sees no notice — a new member holds it from its accept on, so that state has no window a
 // browser could hold still; the notice's absence before the key is FinishProfilePrompt.test.ts's. The labels are src/web/'s and admin-web's own (each
 // package's i18n, en). Every name and secret typed is a canary (recordTyped); the handles are declared plaintext.
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { freshOwner, readKit } from '../../../src/accounts'
 import { recordTyped } from '../../../src/canaries'

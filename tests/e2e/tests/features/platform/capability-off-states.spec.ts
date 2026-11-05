@@ -14,7 +14,8 @@
 // show its sign-in screen (a reload of a signed-in tab restores the tab's session vault). The labels are src/web/'s and
 // admin-web's own (their `src/i18n/index.ts`, en); the entries' words are the catalog's
 // (`contracts/platform/capabilities.json`, which the image serves).
-import { test, expect, type Browser, type BrowserContext, type Page, type Request } from '@playwright/test'
+import { expect, type Browser, type BrowserContext, type Page, type Request } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { randomBytes } from 'node:crypto'

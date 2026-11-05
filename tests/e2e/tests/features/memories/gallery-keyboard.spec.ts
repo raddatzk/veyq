@@ -8,7 +8,8 @@
 // out square and the viewport is made small enough that 120 of them are several screens. It starts from the tenant whose
 // owner the round trip activated (the `memories` project). Every value typed is a canary (recordTyped). Labels are
 // src/web/'s own (src/web/src/i18n/index.ts, en).
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

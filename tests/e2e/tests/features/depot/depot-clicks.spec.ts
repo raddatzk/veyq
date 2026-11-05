@@ -38,7 +38,8 @@
 // It starts from the tenant whose owner the round trip activated (the `depot` project) and switches nothing of the
 // instance; what it creates is its own folder. Labels are src/web/'s own (src/web/src/i18n/index.ts and
 // src/web/src/features/depot/i18n.ts, en).
-import { test, expect, type Locator, type Page, type Request, type Route } from '@playwright/test'
+import { expect, type Locator, type Page, type Request, type Route } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { recordTyped } from '../../../src/canaries'

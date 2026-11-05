@@ -20,7 +20,8 @@
 //
 // The name, the reasons and the facts are canaries (`recordTyped`), so lane L1's sweep proves they reached the server
 // sealed. The labels are src/web/'s own (src/web/src/i18n/index.ts, en).
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { birthTenant } from '../../../src/console'

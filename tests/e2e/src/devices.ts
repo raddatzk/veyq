@@ -1,6 +1,7 @@
 // A device of the scenarios: one browser context, confined to the instance (egress.ts), and the tenant owner the
 // round trip activated (instance.json in the run directory) signing in on it with both secrets, as a new device must.
 import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test'
+import { armContext } from './cspViolations'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { recordTyped } from './canaries'
 import { confineToInstance, type Confinement } from './egress'
@@ -42,6 +43,8 @@ export function saveDeputy(d: Deputy): void {
 /** A new device, confined to the instance; [options] for one that is not the suite's default (another `locale`). */
 export async function newDevice(browser: Browser, options: BrowserContextOptions = {}): Promise<Device> {
   const context = await browser.newContext(options)
+  // Armed by the suite's `browser` already; a browser a spec launched itself is armed here (cspViolations.ts).
+  await armContext(context)
   const confinement = await confineToInstance(context)
   return { context, page: await context.newPage(), confinement }
 }

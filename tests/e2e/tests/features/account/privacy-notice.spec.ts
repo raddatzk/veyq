@@ -14,7 +14,8 @@
 //
 // The invite acceptance's link is first-run setup's (`first-run.setup.ts`), where the one invite of the run is opened;
 // the German notice with its gap is `terms-operator-section.spec.ts`'s.
-import { test, expect, type BrowserContext, type Page } from '@playwright/test'
+import { expect, type BrowserContext, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { confineToInstance } from '../../../src/egress'

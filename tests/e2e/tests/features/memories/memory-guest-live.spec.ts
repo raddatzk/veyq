@@ -15,7 +15,8 @@
 // stays a `304` — the slice suite pins that (`ShareMediaLivePollSliceTest`).
 //
 // It starts from the tenant whose owner the round trip activated (the `memories` project). Labels are src/web/'s own.
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

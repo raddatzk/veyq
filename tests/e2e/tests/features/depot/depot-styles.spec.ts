@@ -12,7 +12,8 @@
 // The PDF is built in place (`src/pdf.ts`), one page with one line of Helvetica, so no fixture file stands behind it. It starts from the tenant
 // whose owner the round trip activated (the `depot` project). Every value typed is a canary (recordTyped). Labels are
 // src/web/'s own (src/web/src/i18n/index.ts and src/web/src/features/depot/i18n.ts, en).
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { createFolder, downloadButton, pickFiles } from '../../../src/depot'
 import { newDevice, signInOwner, tenantOrigin, watchConsole, type ConsoleErrors, type Device } from '../../../src/devices'
