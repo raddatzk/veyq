@@ -204,8 +204,12 @@ services:
     healthcheck:
       # /api/setup: unauthenticated, served only once Flyway has migrated, and the first call every client
       # makes — the same probe scripts/run_web_e2e.py uses. This backend has no smallrye-health extension, so
-      # there is no /q/health/ready to poll.
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/setup"]
+      # there is no /q/health/ready to poll. `veyqctl` waits on this status (`up --wait`), so it is load-bearing.
+      # The image is distroless (ADR 0118): no curl, no shell, so the probe is the image's own command on its own
+      # `java` — a second, short JVM in this container per run: about 50 ms of CPU and 36 MB committed with these
+      # flags (C1 only, the serial collector, a 16 MB heap cap, no hsperfdata file on /tmp), measured 2026-11-05.
+      test: ["CMD", "java", "-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-Xmx16m", "-XX:-UsePerfData",
+             "-jar", "/opt/veyq/image-commands.jar", "health"]
       interval: 15s
       timeout: 5s
       retries: 20

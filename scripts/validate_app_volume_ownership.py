@@ -3,11 +3,13 @@
 
 **What it asserts.** For each service of the Compose files (`repo_layout.COMPOSE_FILES`) that runs the veyq app, take every mount whose
 source is a **named volume declared in that file** and that is not read-only, and assert that every
-`runtime-*` stage of the `Dockerfile` (a) creates the mount's container path and (b) `chown`s it to the
-runtime user the stage's `USER` names. Both halves matter and neither implies the other: Docker seeds a fresh
-named volume from the image directory it covers — ownership included — so a path the image does not create is
-a volume that comes up `root:root`, and a path it creates but leaves root-owned is the same failure spelled
-differently.
+`runtime-*` stage of the `Dockerfile` (a) creates the mount's container path and (b) gives it to the runtime user
+the stage's `USER` names. Both halves matter and neither implies the other: Docker seeds a fresh named volume from
+the image directory it covers — ownership included — so a path the image does not create is a volume that comes up
+`root:root`, and a path it creates but leaves root-owned is the same failure spelled differently. The runtime stage
+is distroless (ADR 0118) and has no `RUN`, so both halves are ONE instruction: a `COPY` whose destination is exactly
+the path and which carries `--chown=<the USER's uid>` — BuildKit gives the destination that owner (measured
+2026-11-05: an empty directory copied this way came out `10001:10001` with its `--chmod`).
 
 **The defect that bought it — measured, not reasoned.** `infra/docker/docker-compose.prod.yml` mounts
 `veyq-traefik-dynamic` at `/etc/traefik/dynamic` for the tenant-ingress projection (ADR 0063). No runtime
@@ -128,41 +130,35 @@ def runtime_user(stage_body: str) -> str | None:
     return found[-1] if found else None
 
 
-# The argument list of ONE shell command: everything up to the newline, the line-continuation backslash or the
-# next `&&`. Getting this boundary right is the whole predicate — see `creates` below.
-def _arguments(command: str, stage_body: str) -> list[str]:
-    return [m.group(1) for m in re.finditer(rf"\b{command}((?:[^\n\\&]|&(?!&))*)", stage_body)]
+def copies(stage_body: str) -> list[tuple[list[str], str]]:
+    """Every `COPY` of the stage as `(flags, destination)`, continuation lines joined. The destination is the
+    instruction's LAST word — never "a word somewhere in it": a path that is only a source (`COPY /var/lib/veyq /x`)
+    creates nothing at the path, and that is this predicate's own bite test."""
+    logical = re.sub(r"\\\n", " ", stage_body)
+    out: list[tuple[list[str], str]] = []
+    for line in logical.splitlines():
+        words = line.split()
+        if len(words) < 3 or words[0].upper() != "COPY":
+            continue
+        flags = [w for w in words[1:] if w.startswith("--")]
+        out.append((flags, words[-1].rstrip("/") or "/"))
+    return out
 
 
 def creates(stage_body: str, path: str) -> bool:
-    """Does the stage `mkdir` this exact path?
-
-    The argument list is bounded to a SINGLE command on purpose, and that bound is the guard's own bite test.
-    The first version of this predicate was `mkdir\s+(?:-\S+\s+)*(?:\S+\s+)*<path>` — and `\s` matches
-    newlines, so it happily chewed across `&& chmod …` and `&& chown …` and found the path in a LATER
-    command's arguments. Under it, deleting a path from `mkdir` while leaving it in `chown` read as green: the
-    guard passed a Dockerfile that could not seed the volume. Caught by biting the guard on exactly that edit,
-    which is why the boundary is spelled out rather than left to `\s`.
-
-    Matched as a whole word so `/var/lib/veyq` never satisfies a claim about `/var/lib/veyq-other`."""
-    return any(
-        re.search(rf"(?:^|\s){re.escape(path)}(?=\s|$)", args) for args in _arguments("mkdir", stage_body)
-    )
+    """Does a `COPY` of the stage land exactly on this path? Matched whole, so `/var/lib/veyq` never satisfies a claim
+    about `/var/lib/veyq-other`, nor a copy INTO it (`/var/lib/veyq/x`) a claim about the directory."""
+    return any(dest == path for _, dest in copies(stage_body))
 
 
 def chowns(stage_body: str, path: str, user: str) -> bool:
-    """Does the stage `chown` this exact path to the runtime user? The uid is matched as it appears in the
-    `USER` line, so a stage that runs as `10001` must chown to `10001:` (a `veyq:veyq` chown would be a
-    different claim this guard cannot resolve to a uid without reading an /etc/passwd it does not have)."""
-    for args in _arguments("chown", stage_body):
-        parts = args.split()
-        while parts and parts[0].startswith("-"):
-            parts.pop(0)
-        if not parts or parts[0].split(":")[0] != user:
-            continue
-        if path in parts[1:]:
-            return True
-    return False
+    """Does a `COPY` onto this exact path carry `--chown=` the runtime user? The uid is matched as it appears in the
+    `USER` line, so a stage that runs as `10001` must copy with `--chown=10001` or `--chown=10001:<gid>` (a
+    `veyq:veyq` would be a different claim this guard cannot resolve to a uid without an /etc/passwd it does not
+    have). A copy without `--chown` is root-owned, which is the defect."""
+    return any(dest == path and any(f.split("=", 1)[-1].split(":")[0] == user for f in flags
+                                    if f.lower().startswith("--chown="))
+               for flags, dest in copies(stage_body))
 
 
 stages = runtime_stages()
@@ -201,14 +197,14 @@ for compose in repo_layout.COMPOSE_FILES:
                         f"{compose.relative_to(ROOT)}: service `{name}` mounts the named volume `{source}` at "
                         f"`{target}`, but Dockerfile stage `{stage}` never creates that directory. Docker seeds "
                         f"a fresh named volume from the image directory it covers — with nothing to seed from "
-                        f"it comes up root:root, and the app (USER {user}) cannot write it. Add it to the "
-                        f"stage's `mkdir -p` and `chown`."
+                        f"it comes up root:root, and the app (USER {user}) cannot write it. COPY an empty "
+                        f"directory onto it with `--chown={user}:{user}` (the stage has no shell, ADR 0118)."
                     )
                 elif not chowns(body, target, user):
                     errors.append(
                         f"{compose.relative_to(ROOT)}: service `{name}` mounts the named volume `{source}` at "
-                        f"`{target}`; Dockerfile stage `{stage}` creates that directory but never chowns it to "
-                        f"`{user}` — a root-owned seed is the same failure as no seed at all."
+                        f"`{target}`; Dockerfile stage `{stage}` creates that directory but never with "
+                        f"`--chown={user}` — a root-owned seed is the same failure as no seed at all."
                     )
 
 if checked == 0:

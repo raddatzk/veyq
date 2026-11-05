@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0071-runtime-hardening-on-both-targets.md
   - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
   - docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md
+  - docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md
 ---
 
 The install itself — `helm install` by the digests you verified, and the Server Owner created over a
@@ -188,7 +189,9 @@ install; do not set `veyq.tenant.ingress.kubernetes.namespace` in values, it is 
 under compose: without the key the instance boots and then refuses invites and resets. The claim
 (`veyq-config-secret`) is annotated `helm.sh/resource-policy: keep`, so `helm uninstall` leaves it behind, and
 the pod sets `fsGroup` to the image's runtime user because a claim comes up root-owned and — unlike a Docker
-named volume — inherits nothing from the image. `scripts/chart_meta_check.py` holds that to the `Dockerfile`
+named volume — inherits nothing from the image. Or give it your own key as a Secret, `app.configSecret.existingSecret`,
+which the app reads read-only; the claim then keeps only the erasure ledger
+([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key)). `scripts/chart_meta_check.py` holds that to the `Dockerfile`
 (and the rest of the chart's structure), outside the buildless guard glob because it renders the chart with
 `helm`. It checks the rendered manifests only: no `Gateway`, `ListenerSet` or certificate order of this chart has
 run in a cluster yet.

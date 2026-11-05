@@ -8,6 +8,7 @@ sources:
   - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
   - docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
+  - docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md
 ---
 
 The use-case owns the goal and the failure modes
@@ -309,17 +310,16 @@ docker compose -f "$recipe" --env-file .env stop app
 # 2. Load all three legs; the tool writes leg (c) to a file you own. The erasure ledger out of the app's volume
 #    first (absent on a fresh host: leave --erasures out, or name the copy you carried).
 (umask 077; mkdir .key)
-docker compose -f "$recipe" --env-file .env run --rm --no-deps -T --entrypoint /bin/sh app \
-  -c 'cat "$1"' read-ledger /var/lib/veyq/erasures.log > .key/erasures.log
+docker compose -f "$recipe" --env-file .env run --rm --no-deps -T --entrypoint java app \
+  -jar /opt/veyq/image-commands.jar read-file /var/lib/veyq/erasures.log > .key/erasures.log
 python3 "releases/${release}/instance_backup.py" restore /media/restore/<stamp> \
     --domain <the tenant's domain> --compose-file "$recipe" --docker-network veyq_edge \
     --config-secret-file .key/config-secret.key --key-from /media/usb-stick/veyq-<stamp>.key \
     --objects-from /mnt/backup-disk/veyq-objects --erasures .key/erasures.log
 
 # 3. Leg (c) into the app's volume, written by the image's own user, the key on stdin; then drop the copy.
-docker compose -f "$recipe" --env-file .env run --rm --no-deps -T --entrypoint /bin/sh app \
-  -c 'umask 077 && cat > "$1.veyqctl" && mv -f "$1.veyqctl" "$1"' place-key /var/lib/veyq/config-secret.key \
-  < .key/config-secret.key
+docker compose -f "$recipe" --env-file .env run --rm --no-deps -T --entrypoint java app \
+  -jar /opt/veyq/image-commands.jar place-key /var/lib/veyq/config-secret.key < .key/config-secret.key
 rm -r .key
 
 # 4. Start the application, then VERIFY — this is the step that separates a restore from a hope.
@@ -387,12 +387,13 @@ Your part:
     Garage left behind deletes the objects**: they outlive `garage.enabled: false` and `helm uninstall` alike, and
     `garage.enabled: true` again restores an instance whose store was the bundled one.
   - **The key, exported once**, after the first start, onto a medium of its own. It does not change between
-    upgrades, and the gate never reads it:
+    upgrades, and the gate never reads it. With `app.configSecret.existingSecret` it is your Secret, which you made
+    from a file: keep that file. Otherwise the app generated it onto its claim, and the image's own `read-file` reads
+    it out (the image is distroless: no shell, and no `tar` for `kubectl cp`):
 
     ```sh
-    (umask 077; kubectl -n veyq cp -c app "$(kubectl -n veyq get pod \
-      -l app.kubernetes.io/name=veyq,app.kubernetes.io/component=app -o jsonpath='{.items[0].metadata.name}')":/var/lib/veyq/config-secret.key \
-      ./veyq-config-secret.key)
+    (umask 077; kubectl -n veyq exec deploy/veyq-app -c app -- \
+      java -jar /opt/veyq/image-commands.jar read-file /var/lib/veyq/config-secret.key > ./veyq-config-secret.key)
     # move it to its medium, then delete ./veyq-config-secret.key
     ```
 - **A store of your own** — the default here, since the bundled Garage is opt-in. The gate cannot open its secret key (that would need the key above), so name a Secret
@@ -510,6 +511,10 @@ spec:
           emptyDir: {}
 ```
 
+**With `app.configSecret.existingSecret`** leg (c) is that Secret, not a file on the claim: make sure it holds the
+capture's key before step 3 (`kubectl create secret generic` from your medium, as in [the hand
+restore](#a-capture-taken-by-hand)), and give the Job `--without-key` in place of `--key-from`, `--config-secret-file`
+and `--key-as-runtime-user`, and no `restore-key` volume — what it would write there the app never reads.
 `--erasures` reads the erasure ledger from the config-secret claim the Job mounts anyway, so an object erased after
 the capture is reported as erased, not missing; on a claim that holds none yet (a new cluster), leave it out. The app's
 next start re-applies the ledger itself. `--record /backup` is the Job's last step: it writes the backup's release into the gate's record, so the next start
@@ -522,10 +527,11 @@ own.
 
 A capture taken by hand with `backup.enabled: false` is the database and the store's index, like every capture —
 name a pool with `--objects-to` to keep the objects too — and restores through port-forwards: onto a freshly installed
-release, whose store is empty, from that pool (`--objects-from`). The tool reaches MariaDB and Garage through port-forwards and cannot reach the app's claim, so it
-writes leg (c) to a local file of your own, and `kubectl cp` puts it in the pod. `kubectl cp` unpacks as the
-container's user, uid 10001, so the key is born the app's — the property the Compose restore gets from its one-off
-container of the `app` service. Onto a **freshly installed** release, exactly as [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires:
+release, whose store is empty, from that pool (`--objects-from`). The tool reaches MariaDB and Garage through
+port-forwards and cannot reach the app's claim, so it writes leg (c) to a local file of your own, and the key goes into
+the pod as a **Secret** the chart mounts (`app.configSecret.existingSecret`): the app image is distroless, with no
+shell and no `tar`, so `kubectl cp` cannot put a file into it. The Secret's file is read-only and the app only reads it;
+the erasure ledger stays on the claim. Onto a **freshly installed** release, exactly as [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires:
 
 ```sh
 kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application
@@ -534,19 +540,25 @@ kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the applicatio
 #    VEYQ_BUNDLED_STORE_ENDPOINT at the forwarded Garage S3 port; then the Restore command, with
 #    --config-secret-file ./veyq-config-secret.key --key-from /media/usb-stick/veyq-<stamp>.key
 #    (a file you own, so the tool writes it 0600 as you)
-kubectl -n veyq scale deploy/veyq-app --replicas=1      # 3. the pod mounts the claim again
-kubectl -n veyq rollout status deploy/veyq-app
-kubectl -n veyq cp ./veyq-config-secret.key "$(kubectl -n veyq get pod -l app.kubernetes.io/component=app \
-  -o jsonpath='{.items[0].metadata.name}')":/var/lib/veyq/config-secret.key   # 4. leg (c) in
+kubectl -n veyq create secret generic veyq-config-secret-key \
+  --from-file=config-secret.key=./veyq-config-secret.key   # 3. leg (c) as the Secret the app reads
 rm ./veyq-config-secret.key
-kubectl -n veyq rollout restart deploy/veyq-app         # 5. NOT optional — see below
-# 6. verify as Restore says: veyq-admin config-secret reads OK, then a person opens a Memory with media
+# 4. name it in your values (app.configSecret.existingSecret: veyq-config-secret-key) and apply them with the
+#    installed release's chart and digests (Verify a release); then start the app on the restored key
+helm upgrade veyq "oci://ghcr.io/raddatzk/charts/veyq@${chart_digest}" -n veyq -f my-values.yaml \
+  --set image.digest="${app_digest}" --set admin.image.digest="${admin_digest}"
+kubectl -n veyq scale deploy/veyq-app --replicas=1
+kubectl -n veyq rollout status deploy/veyq-app
+# 5. verify as Restore says: veyq-admin config-secret reads OK, then a person opens a Memory with media
 ```
 
-The restart is part of the procedure: anything that touched the seal between step 3 and step 4 holds the fresh
-install's key in memory, and the instance would report `MISMATCH` until it restarts. `kubectl cp` needs `tar` in
-the container — the app image (`runtime-jvm`, the Dockerfile's only runtime target) has it (measured
-2026-10-01). **Derived, not rehearsed**: no cluster has run it.
+Step 4 starts a pod that has never held another key, so nothing has to be restarted after it. From then on the key is
+that Secret — keep it in your values (or your GitOps tool's), and keep the key file on its medium: the claim still
+holds the key the fresh install generated, which nothing reads any more. An instance that already names a Secret
+replaces its content instead (`kubectl create secret generic … --dry-run=client -o yaml | kubectl apply -f -`) and
+restarts the app (`kubectl -n veyq rollout restart deploy/veyq-app`). **Derived, not rehearsed**: no cluster has run
+it; the chart's half — the Secret mounted read-only, the key path on it, the ledger on the claim — is
+`scripts/chart_meta_check.py`'s (ii), on rendered manifests.
 
 ### The volume-copy fast path — and what it is not
 

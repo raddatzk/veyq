@@ -1409,16 +1409,21 @@ def pool_warning(host: Host, home: Path, state: State) -> None:
         say(BUNDLED_WARNING)
 
 
+# The app image's own commands (ADR 0118): the image is distroless, so a one-off container of the `app` service runs
+# them on the image's `java` — there is no shell to run anything else. `src/backend/image/ImageCommands.java`.
+IMAGE_COMMANDS = ["--entrypoint", "java", "app", "-jar", "/opt/veyq/image-commands.jar"]
+
+
 def place_key(host: Host, home: Path, state: State, key: Path, key_path: str) -> None:
     """Leg (c) into the app's volume, written by the app image's own user through a one-off container of the service.
 
     The restored key must be the application's (uid 10001, `0600`) — a key born `root:root` there is one the app
     cannot read (inbox #188). A host path into the volume needs root and a Docker whose data root the host can see;
-    a container of the service itself, run as the image's user, needs neither. The key travels on stdin, never argv.
+    a container of the service itself, run as the image's user, needs neither. The key travels on stdin, never argv,
+    into a sibling born `0600` and renamed over the key (the image's `place-key`).
     """
-    script = 'umask 077 && cat > "$1.veyqctl" && mv -f "$1.veyqctl" "$1"'
-    host.run([*compose(home, state.release, state.project), "run", "--rm", "--no-deps", "-T", "--entrypoint", "/bin/sh",
-              "app", "-c", script, "place-key", key_path], stdin=key.read_bytes())
+    host.run([*compose(home, state.release, state.project), "run", "--rm", "--no-deps", "-T", *IMAGE_COMMANDS,
+              "place-key", key_path], stdin=key.read_bytes())
 
 
 def stop_app(host: Host, home: Path, state: State) -> None:
@@ -1469,9 +1474,8 @@ def read_ledger(host: Host, home: Path, state: State, key_path: str, into: Path)
     one-off container of the `app` service, as `place_key` writes the key in. The file at [into], or None when the
     volume holds none (an instance older than the ledger, or none written yet): the tool then checks as before."""
     ledger = str(Path(key_path).parent / LEDGER_FILE)
-    script = 'test -f "$1" || exit 3; cat "$1"'
-    result = host.run([*compose(home, state.release, state.project), "run", "--rm", "--no-deps", "-T", "--entrypoint",
-                       "/bin/sh", "app", "-c", script, "read-ledger", ledger], check=False)
+    result = host.run([*compose(home, state.release, state.project), "run", "--rm", "--no-deps", "-T", *IMAGE_COMMANDS,
+                       "read-file", ledger], check=False)
     if result.returncode != 0:
         say(f"no erasure ledger at {ledger} in the app's volume: the restore's object check runs without it")
         return None

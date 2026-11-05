@@ -189,7 +189,7 @@ class FakeHost(vc.Host):
             if cmd[2] == "restore" and not rc:  # the tool places leg (c) where veyqctl told it to
                 key = cmd[cmd.index("--config-secret-file") + 1]
                 pathlib.Path(key).write_bytes(b"restored-key")
-        elif "read-ledger" in cmd:  # the erasure ledger read out of the app's volume by a one-off container
+        elif "read-file" in cmd:  # the erasure ledger read out of the app's volume by a one-off container
             rc, out = (3, "") if self.ledger is None else (0, self.ledger)
         elif cmd[:2] == ["docker", "cp"]:
             pathlib.Path(cmd[3]).write_bytes(b"the-instance-key")
@@ -844,6 +844,11 @@ def test_backup_restore(tmp: pathlib.Path) -> None:
           place[:3] == ["docker", "compose", "-p"] and "--no-deps" in place
           and place[-1] == "/var/lib/veyq/config-secret.key" and host.stdins == [b"restored-key"]
           and not any("restored-key" in arg for arg in place), str(place))
+    # ADR 0118: the image is distroless — a one-off container runs the image's own commands on its `java`, never a shell.
+    check("restore: the key is placed by the image's own command on its java, never through a shell",
+          place[place.index("--entrypoint") + 1:place.index("place-key")] == ["java", "app", "-jar",
+                                                                               "/opt/veyq/image-commands.jar"]
+          and not any(arg.endswith("sh") for arg in place), str(place))
     steps = [first("stop", "app"), first("restore"), first("run", "--rm", "app", "place-key"), first("up")]
     check("restore: stop the app, restore, place the key, up — in that order", steps == sorted(steps), str(steps))
     check("restore: the key's copy in the home is gone afterwards",
@@ -1161,11 +1166,12 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
                              "--key-from", str(tmp / "b-ret.key")], host)
         first = first_of(host)
         restore = host.commands[first("restore")] if host.ran("restore") else []
-        read = host.commands[first("read-ledger")] if host.ran("read-ledger") else []
+        read = host.commands[first("read-file")] if host.ran("read-file") else []
         handed = restore[restore.index("--erasures") + 1] if "--erasures" in restore else None
         check(f"restore: {label} — read from beside the key through a one-off app container, before the restore",
               rc == 0 and read[-1] == "/var/lib/veyq/erasures.log" and "--no-deps" in read
-              and first("stop", "app") < first("read-ledger") < first("restore"), str(read))
+              and read[read.index("--entrypoint") + 1] == "java" and not any(arg.endswith("sh") for arg in read)
+              and first("stop", "app") < first("read-file") < first("restore"), str(read))
         check(f"restore: {label} — " + ("handed to the tool as --erasures" if ledger else "no --erasures, the tool "
                                         "checks as before"),
               (handed is not None) == (ledger is not None), str(restore))
@@ -1188,7 +1194,7 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
     verify = host.commands[first("verify", "--against-store")] if host.ran("verify", "--against-store") else []
     restore = host.commands[first("restore")] if host.ran("restore") else []
     check("rollback: the ledger read before anything stops, handed to the verify against the live store and the restore",
-          rc == 0 and first("read-ledger") < first("verify", "--against-store") < first("stop", "app")
+          rc == 0 and first("read-file") < first("verify", "--against-store") < first("stop", "app")
           and "--erasures" in verify and "--erasures" in restore
           and not any(p.name.startswith(".ledger-") for p in rb.iterdir()), out[-400:])
 

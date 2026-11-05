@@ -104,9 +104,11 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `app.livenessProbe.periodSeconds` | `30` | |
 | `app.livenessProbe.timeoutSeconds` | `5` | |
 | `app.livenessProbe.failureThreshold` | `6` | |
-| `app.persistence.size` | `100Mi` | The claim for the config-secret key; kept on uninstall |
+| `app.persistence.size` | `100Mi` | The claim for the config-secret key and the erasure ledger; kept on uninstall |
 | `app.persistence.storageClass` | — | |
 | `app.persistence.accessMode` | `ReadWriteOnce` | |
+| `app.configSecret.existingSecret` | — | A Secret holding your own config-secret key; the app reads it read-only and generates none ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key)). The claim still holds the erasure ledger |
+| `app.configSecret.key` | `config-secret.key` | The Secret's key that holds it |
 | `admin.resources.limits.memory` | `128Mi` | |
 | `admin.resources.requests.cpu` | `50m` | |
 | `admin.resources.requests.memory` | `32Mi` | |

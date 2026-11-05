@@ -8,6 +8,7 @@ sources:
   - docs/decisions/0092-logs-are-operational-and-name-no-person.md
   - docs/features/account/use-cases/uc.account.rotate-keys.md
   - docs/decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md
+  - docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md
 ---
 
 Most failures in veyq are loud by design: a refusal names its reason, and a missing setting stops the thing that
@@ -132,7 +133,33 @@ data on purpose. **Set it back** as soon as you have what you need: remove the l
 run `./veyqctl start`, or `kubectl -n veyq set env deploy/veyq-app QUARKUS_LOG_CATEGORY__ME_RADDATZ_VEYQ_CORE_HTTP_UNEXPECTED_DETAIL__LEVEL-`
 (the next `helm upgrade` drops it too).
 
+## Look inside the application container
+
+The application's image has no shell
+([ADR 0118](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md)):
+`exec … sh` finds nothing to run. Its logs are the first place to look ([Operations](/veyq/run/operations/#logs)).
+To read one file, use the image's own command:
+
+```sh
+docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env exec app \
+  java -jar /opt/veyq/image-commands.jar read-file /etc/traefik/dynamic/tenants.yml
+kubectl -n veyq exec deploy/veyq-app -c app -- java -jar /opt/veyq/image-commands.jar read-file /etc/veyq/application.properties
+```
+
+For more, bring a container of your own choosing beside the application, never into its image. It sees the
+application's processes and network; run it as uid 10001 to read the application's files under `/proc/1/root/`:
+
+```sh
+docker run --rm -it --pid container:veyq-app-1 --network container:veyq-app-1 --user 10001 <an image you trust> sh
+kubectl -n veyq debug -it deploy/veyq-app --target=app --profile=restricted --image=<an image you trust> -- sh
+```
+
+A `restricted` namespace admits the debug container only as a non-root user, which is what `--profile=restricted`
+asks for. Remove it when you are done: an ephemeral container stays in the pod until the pod is replaced.
+
 ## How far this is proven
 
-Each cause and code on this page is the backend's or the console's own, read from their code, contracts and tests. The
+Of *Look inside the application container*, the Compose `read-file` ran against a lane L1 instance (2026-11-05), where
+`sh` and `id` were not found; the `kubectl` forms and both debug containers have not been run. Each cause and code on
+this page is the backend's or the console's own, read from their code, contracts and tests. The
 fixes for Kubernetes have not been tried in a cluster.

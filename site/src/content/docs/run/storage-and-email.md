@@ -11,6 +11,7 @@ sources:
   - docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md
   - docs/crosscutting/cc.storage.object-lifecycle.md
   - docs/crosscutting/cc.mail.md
+  - docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md
 ---
 
 ## The object store
@@ -136,6 +137,28 @@ everything again.
 
 Back the key up apart from the database and the store, on a medium of its own
 ([Backup and restore](/veyq/run/backup-and-restore/)).
+
+**Your own key.** The application generates one only where it finds none, so you can give it yours: 32 random bytes,
+base64 (`head -c 32 /dev/urandom | base64 > config-secret.key`), or the key a backup kept apart. Do it before
+[first-run setup](/veyq/run/first-run/), while nothing is sealed yet — a key replaced later leaves every secret sealed
+under the old one `MISMATCH`.
+
+- **Kubernetes:** make it a Secret and name it in `app.configSecret.existingSecret`
+  ([Configuration](/veyq/run/configuration/)): `kubectl -n veyq create secret generic veyq-config-secret-key
+  --from-file=config-secret.key`. The chart mounts it read-only and the application only reads it; the claim stays,
+  for the erasure ledger. A GitOps tool or a secret operator can own the Secret.
+- **Docker Compose:** put it into the volume with the application image's own `place-key`, as a restore does, which
+  makes it the application's (uid 10001, `0600`); the image has no shell, so this is its one way in:
+
+  ```sh
+  ./veyqctl stop                         # or: docker compose … stop app
+  docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env run --rm --no-deps -T \
+    --entrypoint java app -jar /opt/veyq/image-commands.jar place-key /var/lib/veyq/config-secret.key < config-secret.key
+  ./veyqctl start
+  ```
+
+  A Compose `secrets:` file mounted over the path would serve the application too, but `veyqctl restore` puts a
+  restored key into the volume, so keep it there.
 
 ## How far this is proven
 

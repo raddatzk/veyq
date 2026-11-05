@@ -108,6 +108,7 @@ paths from `scripts/repo_layout.py`.
 | Bundled store | on, on the app's origin ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md) § 4): a URL is presigned for the tenant's domain | opt-in (`garage.enabled`), on a host of its own with a CORS policy written at runtime ([ADR 0067](../decisions/0067-store-provisioning-from-a-declared-type.md)): a URL is presigned for the store's own host (decision 5) |
 | Admin console | the `admin` container, reachable on the host's loopback; `ADMIN_DOMAIN` optional, set after setup | the same image, its own `HTTPRoute` only when `admin.domain` is set |
 | Hardening | every container unprivileged, reachable only by its peers ([ADR 0071](../decisions/0071-runtime-hardening-on-both-targets.md)) | every pod passes `restricted`; a default-deny NetworkPolicy set (ADR 0071) |
+| The app's health | the healthcheck is the image's own `health` command on its `java` — the image is distroless, no shell, no `curl` ([ADR 0118](../decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md)); `veyqctl` waits on it | `httpGet` probes on `/api/setup` |
 | Backup before a migrating start | `veyqctl upgrade` | the `backup-gate` init container ([ADR 0098](../decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)) |
 
 **Tenant routing is one projection with a sink per target**
@@ -117,7 +118,8 @@ patch; which proxy it tells is named by `veyq.tenant.ingress.sink`, never inferr
 projection fails neither the tenant operation that triggered it nor the start.
 
 **The chart generates no secret**: every value is the operator's, enforced by `values.schema.json`, except the
-config-secret KEK, which the app generates onto its own claim ([ADR 0050](../decisions/0050-operator-config-secret-encryption.md)).
+config-secret KEK, which the app generates onto its own claim ([ADR 0050](../decisions/0050-operator-config-secret-encryption.md))
+unless the operator names a Secret holding their own (`app.configSecret.existingSecret`, ADR 0118).
 The app migrates its schema at start, which is why it is one pod under `Recreate`. Two checks need `helm` and sit
 outside the guard glob, in `ci.yml`'s `chart` job: `scripts/chart_meta_check.py` holds the rendered manifests to these
 rules, and `scripts/chart_upgrade_check.py` renders the predecessor's chart and the candidate's with the same values and
@@ -129,7 +131,9 @@ nothing.
 
 **The config-secret key** ([ADR 0050](../decisions/0050-operator-config-secret-encryption.md)) is a file the app
 generates at its first start onto its own persistent volume (a named volume under Compose, a claim of its own under
-Kubernetes), never in the database and never a Kubernetes `Secret`. It seals three holders: the tenants' SMTP passwords,
+Kubernetes), never in the database — or the operator's own: under Kubernetes a `Secret` the chart mounts read-only, the
+erasure ledger then set onto the claim; under Compose a key put into the volume with the image's `place-key`
+([ADR 0118](../decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md) decision 6). It seals three holders: the tenants' SMTP passwords,
 the instance mail password and the object store's setting. Each sealed value carries the fingerprint of the key that
 sealed it, so a missing or replaced key is detected per value; it degrades and never bricks: what it cannot open is
 named in admin-web and only what needs it stops, until that value is entered again. A capture keeps the key apart from

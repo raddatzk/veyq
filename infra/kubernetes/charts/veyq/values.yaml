@@ -119,10 +119,22 @@ app:
     # root-owned — unlike a Docker named volume, it is NOT seeded from the image directory it covers — so the
     # pod sets fsGroup to the image's runtime uid; scripts/chart_meta_check.py holds this to the Dockerfile.
     # The claim is annotated helm.sh/resource-policy: keep, so `helm uninstall` leaves the key behind rather
-    # than turning a reinstall into an instance that boots and then refuses invites and resets.
+    # than turning a reinstall into an instance that boots and then refuses invites and resets. With
+    # configSecret.existingSecret below the key comes from that Secret instead, and the claim still holds the
+    # erasure ledger (ADR 0056 decision 8), so it is rendered either way.
     size: 100Mi
     storageClass: ""
     accessMode: ReadWriteOnce
+  configSecret:
+    # Your own config-secret key (ADR 0050's "supply your own", ADR 0118): the name of a Secret in this namespace
+    # holding the base64 32-byte key under `key`. Set, the app reads it read-only from that Secret and generates
+    # none; empty — the default — it generates one onto the claim above on its first start. A Secret is how a key gets
+    # into a pod at all: the app image is distroless, with no shell and no tar for `kubectl cp`. The key never changes
+    # by itself, so a GitOps tool or a secret operator can own it; replacing it is a new key (MISMATCH, ADR 0050).
+    #   head -c 32 /dev/urandom | base64 > config-secret.key          # or the key a backup kept apart (leg c)
+    #   kubectl -n veyq create secret generic veyq-config-secret-key --from-file=config-secret.key
+    existingSecret: ""
+    key: config-secret.key
 
 admin:
   image:

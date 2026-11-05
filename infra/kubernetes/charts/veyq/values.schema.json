@@ -44,6 +44,15 @@
             "source": { "enum": ["none", "proxyProtocol", "header"] },
             "header": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$" }
           }
+        },
+        "configSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "$comment": "ADR 0118: the operator's own config-secret key (ADR 0050), mounted read-only from this Secret; empty, the app generates one onto the claim, which is rendered either way for the erasure ledger.",
+          "properties": {
+            "existingSecret": { "type": "string", "maxLength": 253, "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$" },
+            "key": { "type": "string", "pattern": "^[-._a-zA-Z0-9]+$" }
+          }
         }
       }
     },

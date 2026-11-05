@@ -9,6 +9,7 @@ sources:
   - docs/decisions/0085-one-major-moved-on-a-yearly-train.md
   - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
   - docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md
+  - docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -177,14 +178,15 @@ digest. **Rollback** is the capture the gate took when you left that release, re
 
 **With `backup.enabled: false`** nothing captures before the migration, and the backup is yours, by hand, with the
 app **scaled to zero** — *cold* means the writer is stopped — through `kubectl port-forward` to MariaDB and, with `garage.enabled`, Garage — a store of your own by its address
-([Backup and restore](/veyq/run/backup-and-restore/)). The key is copied out before the scale-down, because only the
-app pod mounts its claim, and goes on a medium of its own, never into the capture directory
-([Capture](/veyq/run/backup-and-restore/#capture)). This procedure has not been run on a cluster.
+([Backup and restore](/veyq/run/backup-and-restore/)). The key is read out before the scale-down, by the image's own
+`read-file` — only the app pod mounts its claim, and the image has no shell — and goes on a medium of its own, never
+into the capture directory ([Capture](/veyq/run/backup-and-restore/#capture)). With `app.configSecret.existingSecret`
+the key is your Secret's file instead: use that, and skip step 0. This procedure has not been run on a cluster.
 
 ```sh
 # 0. leg (c) out of the pod first, while it still mounts the claim, to a file only you can read
-(umask 077; kubectl -n veyq cp "$(kubectl -n veyq get pod -l app.kubernetes.io/component=app \
-  -o jsonpath='{.items[0].metadata.name}')":/var/lib/veyq/config-secret.key ./veyq-config-secret.key)
+(umask 077; kubectl -n veyq exec deploy/veyq-app -c app -- \
+  java -jar /opt/veyq/image-commands.jar read-file /var/lib/veyq/config-secret.key > ./veyq-config-secret.key)
 kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application, and only it
 # 2. capture and verify — Backup and restore, through port-forwards, with
 #    --config-secret-file ./veyq-config-secret.key --key-into /media/usb-stick/veyq-<stamp>.key;

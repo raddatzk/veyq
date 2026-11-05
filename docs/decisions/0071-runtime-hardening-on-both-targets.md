@@ -48,7 +48,8 @@ Forces:
    `cap_drop: [ALL]`, `no-new-privileges` and `read_only` to every service. It adds `user:` only where the
    image starts as root: MariaDB 999, Garage 1000 as in the chart, and Traefik. The app and admin images
    already declare a non-root `USER`, and a second copy of that uid would drift from the Dockerfile the guards
-   read.
+   read. The app image goes further and carries no shell or package manager at all
+   ([ADR 0118](0118-the-app-image-is-distroless-and-carries-its-own-commands.md)).
 2. **Compose sets volume ownership with a one-shot init service.** It runs before Garage and Traefik
    (`depends_on: … service_completed_successfully`) and holds only `CAP_CHOWN`. It changes a volume root only
    when that root is not already owned by the target uid: a no-op after the first run, and it never walks a
