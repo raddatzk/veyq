@@ -33,6 +33,8 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.yaml.snakeyaml.Yaml
+import java.io.File
 import java.time.Instant
 import java.util.UUID
 
@@ -408,6 +410,48 @@ class ScopeRekeySliceTest {
         parts(g.owner, g.scopeId).statusCode(200).body("currentEpoch", equalTo(0)).body("cursor", notNullValue())
     }
 
+    /**
+     * The listing's cursor and the contract's `ScopeRekeySince` are one shape, both ways. Every cursor the server answers
+     * — a page per row, through every kind a group and a tenant hold — matches the contract's pattern, so a client that
+     * echoes it is never refused. A value outside it is the `400 invalid_request` the operation declares: the API
+     * fuzzing's `since` of 79 zeros, which the contract once admitted while the server could not read it (ST202, run of
+     * 2026-11-05), and every near miss — the contract refuses each too. A value inside it that names no row is read,
+     * never refused (a schema-valid request is no 400) and never a 500: `verifs,a|b`, which a looser pattern admitted,
+     * reached the uuid column and failed in the database.
+     */
+    @Test
+    fun theCursorIsTheContractsShapeBothWays() {
+        val shape = Regex(sincePattern())
+        val g = groupWorld()
+        val t = tenantWorld()
+        val kinds = mutableSetOf<String>()
+        for ((owner, scopeId) in listOf(g.owner to g.scopeId, t.owner to t.tenantId)) {
+            var since: String? = null
+            do {
+                val page = parts(owner, scopeId, since = since, limit = 1).statusCode(200).extract()
+                since = page.path<String?>("cursor")
+                since?.let {
+                    assertTrue(shape.matches(it), "the server answered the cursor '$it', which the contract's $shape refuses")
+                    kinds += it.substringBefore(',')
+                }
+            } while (page.path<Boolean>("more"))
+        }
+        assertEquals(ScopeRekeyCommit.KINDS.toSet(), kinds, "every kind's cursor was answered and held to the contract")
+
+        val (u, v) = UUID.randomUUID() to UUID.randomUUID()
+        for (refused in listOf(
+            "0".repeat(79), "nodes,zzzz", "nodes,${u.toString().uppercase()}", "shares,0", "shares,${"A".repeat(44)}",
+            "members,$u,", "verifs,$u", "verifs,a|b", "verifs,$u|$v|$u", "groups,$u", ",$u", "nodes",
+        )) {
+            assertFalse(shape.matches(refused), "the contract admits '$refused'")
+            parts(t.owner, t.tenantId, since = refused, limit = 256).statusCode(400).body("code", equalTo("invalid_request"))
+        }
+        for (admitted in listOf("nodes,$u", "shares,${"A".repeat(43)}", "shares,${"-_".repeat(21)}z", "members,$u", "verifs,$u|$v")) {
+            assertTrue(shape.matches(admitted), "the contract refuses '$admitted'")
+            parts(t.owner, t.tenantId, since = admitted).statusCode(200)
+        }
+    }
+
     // --- the worlds ---
 
     private inner class GroupWorld(
@@ -556,6 +600,14 @@ class ScopeRekeySliceTest {
             .`when`().post("/api/scopes/$scopeId/epochs").then()
 
     private fun <T> tx(block: () -> T): T = QuarkusTransaction.requiringNew().call(block)
+
+    /** `ScopeRekeySince`'s pattern as `contracts/api/content.openapi.yaml` states it — a missing one is a failure. */
+    @Suppress("UNCHECKED_CAST")
+    private fun sincePattern(): String {
+        val spec = Yaml().load<Map<String, Any?>>(File("../../contracts/api/content.openapi.yaml").readText())
+        val parameter = ((spec["components"] as Map<String, Any?>)["parameters"] as Map<String, Any?>)["ScopeRekeySince"] as Map<String, Any?>
+        return (parameter["schema"] as Map<String, Any?>)["pattern"] as? String ?: error("ScopeRekeySince states no pattern")
+    }
 
     private companion object {
         const val COPY = "cmVjb3Zlcnk="

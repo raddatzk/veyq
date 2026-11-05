@@ -345,8 +345,8 @@ class TenantsResource(
     @Authenticated
     override fun acceptTenantInvite(acceptInviteRequest: AcceptInviteRequest): Response {
         val r = acceptInviteRequest
-        // A sealed field and its value key's wrap come together (ADR 0115, the contract's rule): one alone is malformed.
-        if (!profileFieldsPair(r.sealedJoinRecord, r.wrappedJoinRecordValueKey, r.sealedName, r.wrappedNameValueKey, r.sealedAvatar, r.wrappedAvatarValueKey)) {
+        // A sealed field and its value key's wrap come together, under a stated epoch (ADR 0115, the contract's rule).
+        if (!profileShapeHolds(r.sealedJoinRecord, r.wrappedJoinRecordValueKey, r.sealedName, r.wrappedNameValueKey, r.sealedAvatar, r.wrappedAvatarValueKey, r.epoch)) {
             return httpError(AcceptOutcome.MissingGrant)
         }
         return when (val outcome = acceptHandler.accept(
@@ -378,7 +378,7 @@ class TenantsResource(
             wraps = a.masterKeyWraps.map { WrapData(it.method.value, it.wrappedKey, it.kdfParams) },
         )
         val r = registerAndAcceptRequest
-        if (!profileFieldsPair(r.sealedJoinRecord, r.wrappedJoinRecordValueKey, r.sealedName, r.wrappedNameValueKey, r.sealedAvatar, r.wrappedAvatarValueKey)) {
+        if (!profileShapeHolds(r.sealedJoinRecord, r.wrappedJoinRecordValueKey, r.sealedName, r.wrappedNameValueKey, r.sealedAvatar, r.wrappedAvatarValueKey, r.epoch)) {
             return httpError(RegisterAcceptOutcome.MissingGrant)
         }
         return when (val outcome = acceptHandler.registerAndAccept(
@@ -632,9 +632,18 @@ private fun InviteSelfGrant?.join(inviteProof: String?, joinRecord: SealedValue?
         signerIdentityDigest,
     )
 
-/** Whether each of an accept's sealed profile fields comes with its value key's wrap, or neither does (ADR 0115). */
-private fun profileFieldsPair(vararg valueThenWrap: String?): Boolean =
-    valueThenWrap.toList().chunked(2).all { (value, wrap) -> SealedValue.pairs(value, wrap) }
+/**
+ * Whether an accept's sealed profile fields have the contract's shape (`dependentSchemas` on both accept bodies): each
+ * comes with its value key's wrap, or neither does, and any of them brings the `epoch` its wrap is under (ADR 0115). A
+ * `null` is the field's absence. A join record without its epoch is refused here even when the join around it is
+ * incomplete — the schema states it so, and a schema-valid body is one this check passes.
+ */
+private fun profileShapeHolds(
+    joinRecord: String?, joinRecordWrap: String?, name: String?, nameWrap: String?, avatar: String?, avatarWrap: String?,
+    epoch: Int?,
+): Boolean =
+    SealedValue.pairs(joinRecord, joinRecordWrap) && SealedValue.pairs(name, nameWrap) && SealedValue.pairs(avatar, avatarWrap) &&
+        (epoch != null || listOfNotNull(joinRecord, name, avatar).isEmpty())
 
 /** A live MEMBER invite as its invitee reads it in the preview — null when it holds no key (none to check): its key,
  *  signer chain, anchor, carried grant and the succession statements between the two (ADR 0111 decision 19, ADR 0115

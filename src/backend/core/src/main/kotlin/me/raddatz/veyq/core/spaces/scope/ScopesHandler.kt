@@ -192,8 +192,11 @@ sealed interface RenameGroupOutcome {
     object Incomplete : RenameGroupOutcome, HttpFailure by httpFailure("rename_incomplete", CONFLICT)
     /** An invitee's name key is sealed to a key that is not their current identity (ADR 0111 decision 10). */
     object RecipientKeyNotCurrent : RenameGroupOutcome, HttpFailure by Failures.recipientKeyNotCurrent
-    /** An invitee entry with exactly one of its key and its digest, or one invitee named twice. */
+    /** An invitee entry with exactly one of its key and its digest: the schema's own rule (`InviteeNameKey`). */
     object InvalidRequest : RenameGroupOutcome, HttpFailure by Failures.invalidRequest
+    /** One invitee named twice: a rule across the items no schema states (`uniqueItems` compares whole items), so not
+     *  the shape's 400 — a request the schema admits is never refused as malformed (the API fuzzing's ST202). */
+    object InviteeRepeated : RenameGroupOutcome, HttpFailure by httpFailure("invitee_repeated", UNPROCESSABLE)
 }
 
 /** Outcome of setting/replacing a scope icon (uc.spaces.set-space-icon). Owner-gated, TENANT or GROUP
@@ -366,12 +369,10 @@ class ScopesHandler(
     fun renameGroup(
         callerId: String, scopeId: String, name: SealedValue, nameEpoch: Int, invitees: List<InviteeNameKey>,
     ): RenameGroupOutcome {
-        // The request's own shape first: an invitee's key and its digest come together, and one invitee is named once.
-        if (invitees.any { (it.sealedNameKey == null) != (it.recipientIdentityDigest == null) } ||
-            invitees.map { it.userId }.toSet().size != invitees.size
-        ) {
-            return RenameGroupOutcome.InvalidRequest
-        }
+        // The request's own shape first: an invitee's key and its digest come together (the schema's rule, 400); then
+        // one invitee is named once (a rule across the items, 422). Both before any answer about the instance's state.
+        if (invitees.any { (it.sealedNameKey == null) != (it.recipientIdentityDigest == null) }) return RenameGroupOutcome.InvalidRequest
+        if (invitees.map { it.userId }.toSet().size != invitees.size) return RenameGroupOutcome.InviteeRepeated
         access.check(callerId, scopeId, WRITE)
             .refusal(RenameGroupOutcome.ScopeNotFound, RenameGroupOutcome.Suspended, RenameGroupOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return RenameGroupOutcome.ScopeNotFound

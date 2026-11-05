@@ -17,7 +17,11 @@ import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.nullValue
 import org.hamcrest.Matchers.hasItem
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.yaml.snakeyaml.Yaml
+import java.io.File
 import java.time.Instant
 import java.util.UUID
 
@@ -147,6 +151,38 @@ class ItemFavoritesScopeRekeySliceTest {
             .statusCode(409).body("code", equalTo("stale_epoch"))
     }
 
+    /**
+     * The listing's cursor and the contract's `since` are one shape, both ways: every cursor the server answers matches
+     * the contract's pattern (a client echoing it is never refused); a value outside it is the declared `400
+     * invalid_request` — the API fuzzing's 79 zeros, which the contract once admitted while the server could not read
+     * it (ST202, run of 2026-11-05) — and a value inside it that names no mark is read, never refused.
+     */
+    @Test
+    fun theCursorIsTheContractsShapeBothWays() {
+        val shape = Regex(sincePattern())
+        val w = world()
+        var since: String? = null
+        var cursors = 0
+        do {
+            val page = list(w.owner, w.scopeId, since = since, limit = 1).statusCode(200).extract()
+            since = page.path<String?>("cursor")
+            since?.let {
+                assertTrue(shape.matches(it), "the server answered the cursor '$it', which the contract's $shape refuses")
+                cursors++
+            }
+        } while (page.path<Boolean>("more"))
+        assertEquals(2, cursors, "a page per mark, each cursor held to the contract")
+
+        val id = UUID.randomUUID().toString()
+        // `0-0-0-0-0` and an upper-case id are uuids to `UUID.fromString`, but not the cursor's shape: the contract's.
+        for (refused in listOf("0".repeat(79), "0-0-0-0-0", id.uppercase(), "$id,", id.replace("-", ""))) {
+            assertFalse(shape.matches(refused), "the contract admits '$refused'")
+            list(w.owner, w.scopeId, since = refused, limit = 256).statusCode(400).body("code", equalTo("invalid_request"))
+        }
+        assertTrue(shape.matches(id))
+        list(w.owner, w.scopeId, since = id).statusCode(200)
+    }
+
     private data class World(val owner: String, val member: String, val scopeId: String, val node: String)
 
     /** A group whose owner and member each marked items in one Memory, at epoch 0. */
@@ -165,8 +201,20 @@ class ItemFavoritesScopeRekeySliceTest {
             .body("""{"ciphertext":"$ciphertext","wrappedValueKey":"${TestGrants.freshWrap()}","epoch":$epoch}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/item-favorites").then()
 
-    private fun list(caller: String, scopeId: String): ValidatableResponse =
-        given().header("Authorization", bearer(caller)).`when`().get("/api/scopes/$scopeId/item-favorites-rekey").then()
+    private fun list(caller: String, scopeId: String, since: String? = null, limit: Int? = null): ValidatableResponse =
+        given().header("Authorization", bearer(caller))
+            .apply { since?.let { queryParam("since", it) }; limit?.let { queryParam("limit", it) } }
+            .`when`().get("/api/scopes/$scopeId/item-favorites-rekey").then()
+
+    /** The `since` parameter's pattern as `contracts/api/memories/item-favorites.openapi.yaml` states it — a missing one
+     *  is a failure. */
+    @Suppress("UNCHECKED_CAST")
+    private fun sincePattern(): String {
+        val spec = Yaml().load<Map<String, Any?>>(File("../../contracts/api/memories/item-favorites.openapi.yaml").readText())
+        val operation = ((spec["paths"] as Map<String, Any?>)["/api/scopes/{scopeId}/item-favorites-rekey"] as Map<String, Any?>)["get"] as Map<String, Any?>
+        val since = (operation["parameters"] as List<Map<String, Any?>>).single { it["name"] == "since" }
+        return (since["schema"] as Map<String, Any?>)["pattern"] as? String ?: error("listScopeItemFavoritesRekey's since states no pattern")
+    }
 
     /** Stage [marks] (`markId` to its re-wrapped value key), each beside the wrap it replaces: [opened]'s, or by default
      *  what the row holds as the rotator reads it now. */
