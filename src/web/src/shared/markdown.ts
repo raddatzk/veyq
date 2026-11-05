@@ -1,11 +1,11 @@
 // A deliberately small, safe Markdown→HTML renderer: headings (1-3), bold/italic/inline-code, links, bullet/
 // ordered lists, and paragraphs. Everything is HTML-escaped FIRST, so no raw HTML or script can pass through
-// (only http(s) links survive) — safe to feed to `v-html` without a separate sanitizer. Ported from the legacy
-// journal renderer (`legacy/frontend/.../journal/markdown.ts`); first consumer is the tenant terms (cr-0114),
-// and the journal reuses it when it lands. Rich embed tokens (::media / ::track …) are out of scope here.
+// (only http(s) links survive). It is the sanitizer of the Trusted Types policy `veyq` (ADR 0117): a page reaches it
+// through `markdownHtml` and shows the result with `v-safe-html` (shared/security/trustedTypes.ts), never as a string.
+// Rich embed tokens (::media / ::track …) are out of scope here.
 
-/** Escape text for a place that parses HTML (also Leaflet's attribution control, which writes `innerHTML`). */
-export function escapeHtml(s: string): string {
+/** Escape text for a place that parses HTML. */
+function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
@@ -18,7 +18,7 @@ function renderInline(escaped: string): string {
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')
 }
 
-/** Render a safe Markdown subset to an HTML string (escape-first, so it is safe for `v-html`). */
+/** Render a safe Markdown subset to an HTML string (escape-first). The `veyq` policy's `createHTML`. */
 export function renderMarkdown(markdown: string): string {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n')
   const html: string[] = []

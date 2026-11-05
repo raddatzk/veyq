@@ -19,6 +19,17 @@
 // - frame-ancestors 'none': no page on any origin may frame the app (anti-clickjacking). It only works in a
 //   response header, which is one reason the policy is never a <meta>: the build emits it as a file the backend's
 //   app shell sends as a header, and the dev server sends it as one too. See cc.security.csp.md.
+// - require-trusted-types-for 'script' + trusted-types veyq default (ADR 0117): a browser with Trusted Types refuses a
+//   plain string at every HTML and script-URL sink, so markup reaches the page only through the `veyq` policy's
+//   sanitizer and a library's string only through the `default` policy's exact list (shared/security/trustedTypes.ts).
+//   No other name - Vue's own pass-through `vue` policy is compiled out of the build (vite.config.ts), and no
+//   'allow-duplicates'. The dev server sends neither: Vite's client writes its error overlay with `innerHTML`, and dev
+//   loads Vue unpatched; lane L1 runs the built policy.
+
+/** The two Trusted Types policies the built policy allows, and the only two the client creates (trustedTypes.ts). Here,
+ *  not there, because `vite.config.ts` loads this file on Node, which resolves no import of the app's modules. */
+export const VEYQ_POLICY = 'veyq'
+export const DEFAULT_POLICY = 'default'
 
 export interface CspOptions {
   /** Dev only: the basemap tile origin (Leaflet loads tiles as <img> → img-src), or null to allow none. */
@@ -63,6 +74,10 @@ export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, ratesOrigin
   if (ratesOrigin) connectSrc.push(ratesOrigin)
   if (dev) connectSrc.push('ws:') // Vite HMR socket — dev server only, never in a production build
 
+  const trustedTypes: Record<string, string[]> = dev
+    ? {}
+    : { 'require-trusted-types-for': ["'script'"], 'trusted-types': [VEYQ_POLICY, DEFAULT_POLICY] }
+
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
     'base-uri': ["'self'"],
@@ -77,6 +92,7 @@ export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, ratesOrigin
     'font-src': ["'self'"],
     'connect-src': connectSrc,
     'form-action': ["'self'"],
+    ...trustedTypes,
   }
 
   return Object.entries(directives)

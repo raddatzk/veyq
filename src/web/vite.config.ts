@@ -60,6 +60,36 @@ function cspPlugin(dev: boolean): Plugin {
   }
 }
 
+// Vue's runtime creates a Trusted Types policy named `vue` that passes every string through, and writes `v-html` and an
+// `innerHTML` binding through it (runtime-dom's `unsafeToTrustedHTML`): were it allowed, a plain string in a `v-html`
+// would pass the browser's enforcement unseen. The built policy does not name it (csp.ts, ADR 0117), and this plugin
+// compiles its creation out, so Vue neither makes it nor reports a refused one on every page load; without a policy Vue
+// hands the sink the value as it is, which the browser then refuses unless it is a TrustedHTML (`v-safe-html` makes
+// those). The line must be found exactly once in exactly one copy of Vue, or the build fails: a Vue release that moved
+// it is read again before it ships. `verify:csp` checks that no `vue` policy is left in dist.
+const VUE_TRUSTED_TYPES_LINE = 'const tt = typeof window !== "undefined" && window.trustedTypes;'
+const VUE_RUNTIME_DOM = /\/@vue\/runtime-dom\/dist\/runtime-dom\.esm-bundler\.js$/
+function vueWithoutPassThroughPolicyPlugin(): Plugin {
+  let patched = 0
+  return {
+    name: 'veyq-vue-without-pass-through-policy',
+    apply: 'build',
+    buildStart() {
+      patched = 0
+    },
+    transform(code, id) {
+      if (!VUE_RUNTIME_DOM.test(id)) return
+      const found = code.split(VUE_TRUSTED_TYPES_LINE).length - 1
+      if (found !== 1) return this.error(`${id}: expected Vue's Trusted Types line once, found it ${found} times - read the new Vue's policy before building`)
+      patched++
+      return { code: code.replace(VUE_TRUSTED_TYPES_LINE, 'const tt = false; // veyq: no pass-through policy (vite.config.ts)'), map: null }
+    },
+    buildEnd(error) {
+      if (!error && patched !== 1) this.error(`Vue's runtime-dom was patched ${patched} times, expected once (vueWithoutPassThroughPolicyPlugin)`)
+    },
+  }
+}
+
 // Vite's `build.license` file names each bundled package, its version and its licence text, but not where its source is.
 // MPL-2.0 §3.2(a) asks exactly that of a copy in executable form - ExifReader is MPL-2.0 and ships minified - so this
 // plugin adds, under every package's heading, its published source at that version on npm (the tarball that was bundled,
@@ -253,7 +283,7 @@ function platformMajor(): number {
 
 export default defineConfig(({ command }) => {
   return {
-    plugins: [vue(), cspPlugin(command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin()],
+    plugins: [vue(), vueWithoutPassThroughPolicyPlugin(), cspPlugin(command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin()],
     define: {
       __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
       // The platform's one major (ADR 0085 decision 1), read from the repository's VERSION as the backend's build reads

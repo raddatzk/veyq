@@ -16,7 +16,7 @@ import { tenantError } from '../features/tenant/tenantError'
 import { activeSpace, markTermsAccepted } from '../app/activeSpace'
 import { takeRoute } from '../app/pendingRoute'
 import { signOut } from '../features/account/login/signOut'
-import { renderMarkdown } from '../shared/markdown'
+import { markdownHtml, vSafeHtml } from '../shared/security/trustedTypes'
 import OperatorSectionView from '../core/terms/OperatorSectionView.vue'
 import { pairOf } from '../core/terms/operatorSection'
 import { handle401 } from '../shared/handle401'
@@ -41,8 +41,8 @@ const body = computed(() => {
   return preferred || tm.en || tm.de || ''
 })
 
-// Rendered to a safe HTML subset (escape-first — no raw HTML/script survives), so `v-html` is safe here.
-const renderedBody = computed(() => renderMarkdown(body.value))
+// Rendered to a safe HTML subset (escape-first — no raw HTML/script survives) by `markdownHtml`, shown by `v-safe-html`.
+const renderedBody = computed(() => markdownHtml(body.value))
 
 onMounted(async () => {
   // Reached directly (a reload on /terms) before the shell resolved a tenant → bounce to home; the shell enters
@@ -105,8 +105,7 @@ async function accept() {
       <template v-else-if="phase === 'ready'">
         <p class="veyq-form-copy">{{ t('terms.gateIntro') }}</p>
         <div class="terms-body">
-          <!-- eslint-disable-next-line vue/no-v-html — renderMarkdown escapes first (safe subset, no raw HTML). -->
-          <div class="markdown-body" v-html="renderedBody"></div>
+          <div class="markdown-body" v-safe-html="renderedBody"></div>
           <OperatorSectionView v-if="terms" :section="terms.operatorSection" />
         </div>
         <VeyqMessage v-if="error" tone="warn">{{ error }}</VeyqMessage>

@@ -21,7 +21,7 @@ import { getTenantTerms, updateTenantTerms, type LocalizedMarkdown } from './ten
 import { TERMS_TEMPLATE } from './termsTemplate'
 import { listMyTenants } from '../spaces/scopes'
 import { activeSpace } from '../../app/activeSpace'
-import { renderMarkdown } from '../../shared/markdown'
+import { markdownHtml, vSafeHtml } from '../../shared/security/trustedTypes'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useToast } from '../../shared/state/useToast'
@@ -67,7 +67,7 @@ const templated = (loc: string): loc is keyof typeof TERMS_TEMPLATE => loc in TE
 // read-only view. `||` and not `??`: a language that exists but is still empty must fall through to one that
 // has text, or the preview would go blank on a language somebody just added.
 const previewBody = computed(() => terms.value[locale.value] || terms.value.en || terms.value.de || '')
-const renderedPreview = computed(() => renderMarkdown(previewBody.value))
+const renderedPreview = computed(() => markdownHtml(previewBody.value))
 
 const { pending: loading, error: loadErr } = useAsyncData(async () => {
   if (!activeSpace.tenantId) throw new Error('no-active-tenant') // no HTTP status → classified as 'failed' below
@@ -198,15 +198,13 @@ async function save() {
 
         <div v-if="previewBody" class="terms-preview">
           <span class="settings-muted terms-preview-label">{{ t('terms.preview') }}</span>
-          <!-- eslint-disable-next-line vue/no-v-html — renderMarkdown escapes first (safe subset). -->
-          <div class="markdown-body" v-html="renderedPreview"></div>
+          <div class="markdown-body" v-safe-html="renderedPreview"></div>
         </div>
       </template>
 
       <template v-else>
         <VeyqMessage tone="info">{{ t('terms.readonlyNote') }}</VeyqMessage>
-        <!-- eslint-disable-next-line vue/no-v-html — renderMarkdown escapes first (safe subset). -->
-        <div v-if="previewBody" class="markdown-body terms-readonly" v-html="renderedPreview"></div>
+        <div v-if="previewBody" class="markdown-body terms-readonly" v-safe-html="renderedPreview"></div>
         <p v-else class="settings-muted">{{ t('terms.noneSet') }}</p>
       </template>
 

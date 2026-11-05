@@ -5,8 +5,8 @@
 // (`OperatorIdentification`) and, at the passage that concerns them, from the places that collect (`privacyLink`); the
 // passage a link names is scrolled into view once rendered. Each right to object stands apart (Art. 21(4)). Read
 // through the PUBLIC client; a failed read says so, names the instance contact where it loads, and blocks nothing.
-// The markdown is the server's rendering of veyq's fixed text with values the Server Owner typed; `renderMarkdown`
-// escapes first (safe subset), so `v-html` is safe.
+// The markdown is the server's rendering of veyq's fixed text with values the Server Owner typed; `markdownHtml` runs
+// the escape-first renderer (safe subset) and `v-safe-html` shows only what it made (ADR 0117).
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -16,7 +16,7 @@ import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 import { loadPublishedOperator } from '../core/operator/operatorDetails'
 import { loadPrivacyNotice, type PrivacyNotice } from '../core/privacy/privacyNotice'
 import { pickSectionText, type SectionText } from '../core/terms/operatorSection'
-import { renderMarkdown } from '../shared/markdown'
+import { markdownHtml, vSafeHtml } from '../shared/security/trustedTypes'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -26,7 +26,7 @@ const contact = ref<string | null>(null)
 
 const rendered = (text: SectionText | null | undefined) => {
   const md = pickSectionText(text, locale.value)
-  return md ? renderMarkdown(md) : ''
+  return md ? markdownHtml(md) : null
 }
 const passages = computed(() => (notice.value?.passages ?? []).map((p) => ({ id: p.id, separate: p.separate, html: rendered(p.text) })))
 
@@ -59,10 +59,8 @@ onMounted(async () => {
       </template>
       <section v-else class="privacy-notice" data-testid="privacy-notice">
         <template v-for="p in passages" :key="p.id">
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <aside v-if="p.separate" :id="p.id" class="markdown-body privacy-notice__objection" v-html="p.html"></aside>
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <div v-else :id="p.id" class="markdown-body" v-html="p.html"></div>
+          <aside v-if="p.separate" :id="p.id" class="markdown-body privacy-notice__objection" v-safe-html="p.html"></aside>
+          <div v-else :id="p.id" class="markdown-body" v-safe-html="p.html"></div>
         </template>
       </section>
     </template>

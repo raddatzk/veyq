@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { buildCsp, REKA_STYLE_HASHES } from './csp'
+import { buildCsp, DEFAULT_POLICY, REKA_STYLE_HASHES, VEYQ_POLICY } from './csp'
 import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIGIN } from '../state/mapDefaults'
 
 // Guard the CSP the app ships with (cr-0133). These pins exist so a directive can't be silently loosened or a
@@ -110,6 +110,18 @@ describe('buildCsp', () => {
   it("forbids framing in dev and production alike (the policy is always a header, never a <meta>)", () => {
     expect(csp).toContain("frame-ancestors 'none'")
     expect(buildCsp(DEV)).toContain("frame-ancestors 'none'")
+  })
+
+  it('enforces Trusted Types in the build, with exactly the two policies the client creates (ADR 0117)', () => {
+    expect(directive(csp, 'require-trusted-types-for')).toEqual(["'script'"])
+    expect(directive(csp, 'trusted-types')).toEqual([VEYQ_POLICY, DEFAULT_POLICY])
+    // No Vue pass-through policy, no second copy of a policy: a name or a keyword more is a door a string walks through.
+    expect(csp).not.toMatch(/trusted-types[^;]*\b(vue|'allow-duplicates'|\*)/)
+  })
+
+  it('sends no Trusted Types directive from the dev server, whose Vite client writes its overlay with innerHTML', () => {
+    expect(directive(buildCsp(DEV), 'require-trusted-types-for')).toBeUndefined()
+    expect(directive(buildCsp(DEV), 'trusted-types')).toBeUndefined()
   })
 
   it('adds the Vite HMR websocket only in dev', () => {

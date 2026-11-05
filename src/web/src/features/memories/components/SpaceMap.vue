@@ -22,7 +22,7 @@ import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import MapConsentPrompt from './MapConsentPrompt.vue'
 import MapOffButton from './MapOffButton.vue'
 import { createIconElement } from '../../../shared/ui/iconElement'
-import { escapeHtml } from '../../../shared/markdown'
+import { addAttribution } from '../mapAttribution'
 
 // `covers` maps a node id → the node's chosen cover (a decrypted thumbnail URL + its crop, loaded by the host,
 // cr-0072); a pin with one shows that cropped cover via the shared `coverImageStyle` formula, the rest fall back to
@@ -52,11 +52,13 @@ let spiderLayer: L.LayerGroup | null = null // the expanded fan (legs + member p
 let activeKey: string | null = null // which cluster is currently spiderfied
 let collapseTimer: ReturnType<typeof setTimeout> | null = null
 
-/** A cluster badge showing the member count. */
+/** A cluster badge showing the member count: an element, as every icon here - a string would be written as markup. */
 function clusterIcon(count: number): L.DivIcon {
+  const label = document.createElement('span')
+  label.textContent = String(count)
   return L.divIcon({
     className: 'veyq-space-cluster',
-    html: `<span>${count}</span>`,
+    html: label,
     iconSize: [40, 40],
     iconAnchor: [20, 20],
   })
@@ -225,9 +227,10 @@ function fitPins() {
 
 function initMap() {
   if (map || !el.value) return
-  map = L.map(el.value).setView([20, 0], 2)
-  // Leaflet writes the attribution as HTML; the Server Owner's text is shown as text, never as markup.
-  L.tileLayer(tileUrl.value, { attribution: escapeHtml(tileAttribution.value), maxZoom: tileMaxZoom }).addTo(map)
+  // Leaflet's attribution control writes its line as a string of markup, which Trusted Types refuses: ours builds it.
+  map = L.map(el.value, { attributionControl: false }).setView([20, 0], 2)
+  L.tileLayer(tileUrl.value, { maxZoom: tileMaxZoom }).addTo(map)
+  addAttribution(map, tileAttribution.value)
   map.on('zoomend moveend', renderClusters) // re-cluster + collapse when the projection changes
   map.on('click', collapse) // a tap on empty map closes an open fan (touch + desktop)
   fitPins()

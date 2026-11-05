@@ -30,7 +30,7 @@ import StatementNotice from '../../moderation/statement/StatementNotice.vue'
 import { collectPickedFiles, inferMediaType, enqueueUploads, retryFile, removeFile } from '../uploadQueue'
 import { useOptimisticTiles } from '../useOptimisticTiles'
 import { byCaptureTime } from '../optimisticUpload'
-import { renderMarkdown } from '../../../shared/markdown'
+import { markdownHtml, vSafeHtml } from '../../../shared/security/trustedTypes'
 import { ShareRole } from '../../../api/generated/sharing'
 import MediaGrid from './MediaGrid.vue'
 import OptimisticTile from './OptimisticTile.vue'
@@ -53,10 +53,10 @@ const { t, locale } = useI18n()
 // A share's id never changes under a mounted page (the shell re-mounts per route).
 const shareId = props.shareId
 // cr-0115: the curator's note — on a drop page the instruction ("please upload here") — for the viewer's locale
-// (cr-0116), as markdown (the safe escape-first subset, so v-html is safe).
+// (cr-0116), as markdown (the safe escape-first subset, `markdownHtml` + `v-safe-html`).
 const renderedNote = computed(() => {
   const note = pickLocaleText(props.head.noteByLocale, locale.value)
-  return note ? renderMarkdown(note) : ''
+  return note ? markdownHtml(note) : null
 })
 
 // The drop public key and the node it belongs to (ADR 0031 point 7) — never a `K_node`. Opened from the shell's head on
@@ -171,8 +171,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
     <div class="veyq-surface share-name-card">
       <h1>{{ head.name }}</h1>
       <p class="share-name-intro">{{ t('share.uploaderIntro') }}</p>
-      <!-- eslint-disable-next-line vue/no-v-html -->
-      <div v-if="renderedNote" class="share-note markdown-body" v-html="renderedNote"></div>
+      <div v-if="renderedNote" class="share-note markdown-body" v-safe-html="renderedNote"></div>
       <!-- warning #1 of 4 (ADR 0031 §5): the session-only ephemerality, up front before the first upload -->
       <p class="share-uploader-warning">
         <VeyqIcon name="info-circle" />
@@ -210,8 +209,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
       </div>
     </header>
 
-    <!-- eslint-disable-next-line vue/no-v-html -->
-    <div v-if="renderedNote" class="share-note markdown-body" v-html="renderedNote"></div>
+    <div v-if="renderedNote" class="share-note markdown-body" v-safe-html="renderedNote"></div>
 
     <!-- ADR 0093 § 7: a drop page has no placeholder, so every statement of reasons a moderator's measure on this guest's
          uploads gave it is shown here. -->
@@ -313,7 +311,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
   color: var(--app-warning-text);
 }
 /* cr-0115: the curator note — a card banner under the header / the instruction in the name pre-screen. The inner
-   elements come from the safe markdown renderer via v-html, so they need :deep. */
+   elements come from the safe markdown renderer via v-safe-html, so they need :deep. */
 .share-note {
   margin: 0 0 1.15rem;
   padding: 0.85rem 1rem;
