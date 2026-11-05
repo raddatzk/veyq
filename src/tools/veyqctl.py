@@ -176,6 +176,7 @@ from __future__ import annotations  # `str | None` below — the repo's scripts 
 
 import argparse
 import datetime
+import errno
 import hashlib
 import json
 import os
@@ -1270,7 +1271,17 @@ def key_destination(home: Path, raw: str | None, why: str) -> Path:
                       f"its own — the dump plus the key opens every tenant's SMTP password (ADR 0056 §1). Nothing "
                       f"was stopped.")
     path = Path(raw).expanduser().absolute()
-    if path.exists():
+    # Not `path.exists()`: since Python 3.14 that answers False for a path it cannot look at, and this check would pass
+    # a key it cannot see, for the capture to trip over after the app has stopped. The 3.13 rule, spelled out.
+    try:
+        path.stat()
+        taken = True
+    except OSError as e:
+        if e.errno not in (errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP):
+            raise Refused(f"--key-into {path}: veyqctl cannot look into its directory ({e.strerror}) — name one it can "
+                          f"write. Nothing was stopped.") from None
+        taken = False
+    if taken:
         raise Refused(f"--key-into {path} exists — most likely an earlier capture's key; name a new file")
     if not path.parent.is_dir():
         raise Refused(f"--key-into {path}: its directory does not exist")

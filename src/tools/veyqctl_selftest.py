@@ -47,8 +47,8 @@ what prove it. Everything here runs against a mirror directory this file writes 
      same; a pin below the running release is refused); decision 5's order (both images, the staged `.env` checked by Compose,
      then the app stopped, leg (c) copied out, the capture by the RUNNING release's tool and its check, the switch,
      `up` on the new recipe) with nothing stopped before step 4; the new `.env` (the new image lines, the operator's
-     values and kept keys carried over); and the refusals — `--key-into` omitted, existing or inside `backups/`
-     before any command, a value the new template or recipe requires named before anything stops (never the
+     values and kept keys carried over); and the refusals — `--key-into` omitted, existing, inside `backups/` or in a
+     directory veyqctl cannot search (as this Python and as 3.14 answer `exists()`) before any command, a value the new template or recipe requires named before anything stops (never the
      template's example), a failed backup switching nothing and starting the running release again;
   9. **`backup` / `restore`** — the order (stop, key out, capture, check, up / stop, restore, key in, up), the tool's
      Compose pointed at this instance with its credentials in the environment and in no argv, a tool that changed on
@@ -95,6 +95,35 @@ def check(label: str, ok: bool, detail: str = "") -> None:
     print(f"{'ok  ' if ok else 'FAIL'} {label}{(' — ' + detail) if detail and not ok else ''}")
     if not ok:
         failures.append(label)
+
+
+@contextlib.contextmanager
+def path_tests_as_in_python_3_14():
+    """`Path.exists()`, `is_file()`, `is_dir()` and `is_symlink()` as Python 3.14 answers them — False for ANY OSError,
+    where 3.9 to 3.13 raise every one but "nothing is there". CI runs 3.14 and this Mac 3.9; a case that must hold on
+    both runs under this too. On 3.14 itself the wrapper changes nothing."""
+    names = ("exists", "is_file", "is_dir", "is_symlink")
+    own = {name: pathlib.Path.__dict__[name] for name in names if name in pathlib.Path.__dict__}
+    tests = {name: getattr(pathlib.Path, name) for name in names}
+
+    def swallowing(test):
+        def as_in_3_14(self, *args, **kwargs):
+            try:
+                return test(self, *args, **kwargs)
+            except OSError:
+                return False
+        return as_in_3_14
+
+    for name, test in tests.items():
+        setattr(pathlib.Path, name, swallowing(test))
+    try:
+        yield
+    finally:
+        for name in names:
+            if name in own:
+                setattr(pathlib.Path, name, own[name])
+            else:
+                delattr(pathlib.Path, name)
 
 
 def refused(fn, *args, **kwargs) -> str:
@@ -780,6 +809,22 @@ def test_upgrade_refusals(tmp: pathlib.Path) -> None:
     rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(home / vc.BACKUPS_DIR / "k.key"))
     check("upgrade: --key-into inside backups/ (beside the dumps) is refused", rc == 1 and "beside the dumps" in out
           and not host.commands)
+    if os.geteuid() != 0:  # root searches whatever the mode
+        shut = tmp / "shut-keys"
+        shut.mkdir()
+        for mode, simulated in (("this python", contextlib.nullcontext()), ("py3.14", path_tests_as_in_python_3_14())):
+            host = FakeHost(local_images=all_images())
+            os.chmod(shut, 0o000)
+            try:
+                with simulated:
+                    rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(shut / "k.key"))
+            except OSError as e:
+                rc, out = -1, f"traceback: {e!r}"
+            finally:
+                os.chmod(shut, 0o700)
+            check(f"[{mode}] upgrade: a --key-into in a directory veyqctl cannot search is refused before any command, "
+                  f"never taken for a new file", rc == 1 and "cannot look into" in out and not host.commands
+                  and untouched(), out[-300:])
 
     host = FakeHost(local_images=all_images(), project="veyq-proof", fail_tool="capture")
     rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(tmp / "fail.key"))
