@@ -171,7 +171,9 @@ describe('syncAvatars', () => {
     await done
     expect(getMemberAvatar).toHaveBeenCalledTimes(1000)
     expect(rows.every(({ userId }) => avatarUrlOf(userId) !== null)).toBe(true)
-  })
+    // 1,000 real seals and opens — the roster's scale is what the case is about: 1.3 s on an Apple Silicon core, 3.8 s on a
+    // 4-vCPU CI runner with three workers (measured 2026-11-05), too near the default 5 s to stay green there.
+  }, 30_000)
 
   it('a failed picture request frees its slot for the next one', async () => {
     getMemberAvatar.mockRejectedValue(new Error('offline'))
