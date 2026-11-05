@@ -51,9 +51,13 @@ server {
     # reconnaissance for anyone who reached it at all.
     server_tokens off;
 
-    # These headers are the ONLY anti-framing guard this page has: the SPA's CSP ships as a <meta>, and a meta
-    # policy ignores frame-ancestors, so X-Frame-Options here is not a second layer but the whole of it. The
-    # robots noindex is belt-and-braces with the page's own <meta name="robots">.
+    # The console's security headers. The Content-Security-Policy is sent here as a header, its one delivery: a header
+    # can carry `frame-ancestors`, which a <meta> ignores. Its value is `ADMIN_CSP` (src/shared/security/csp.ts), which
+    # `csp.test.ts` holds equal to the line below - edit both. X-Frame-Options stays for a browser older than
+    # frame-ancestors. COOP: the console keeps no handle on a page it opens, nor that page on it; it opens no popup that
+    # talks back. CORP: no other origin embeds or reads a response of this origin no-cors. The Permissions-Policy grants
+    # the one feature the console uses, `clipboard-write` (copying an invite link and an order's text), to this origin,
+    # and switches every other off. The robots noindex is belt-and-braces with the page's own <meta name="robots">.
     #
     # TRAP, and why `add_header_inherit merge` is here: by default `add_header` does NOT merge across levels — a
     # location that declares even one `add_header` of its own inherits NONE of the server-level ones. That bit
@@ -63,7 +67,11 @@ server {
     # once, here: a location that does not declare the directive takes the server's value (the headers module
     # merges it like any other setting), so a future location's `add_header` ADDS to this set, never replaces it.
     add_header_inherit merge;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'sha256-60LHlRjW/B3CtzIoE/Lf1/NEDvko9efWMFaGVhHu/cs=' 'sha256-0sLsI2a+NIcumVvBF9zD/ArGqlZR2xfnxsALPmK7nj8='; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.pwnedpasswords.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
     add_header X-Frame-Options DENY always;
+    add_header Cross-Origin-Opener-Policy same-origin always;
+    add_header Cross-Origin-Resource-Policy same-origin always;
+    add_header Permissions-Policy "clipboard-write=(self), accelerometer=(), autoplay=(), browsing-topics=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), identity-credentials-get=(), idle-detection=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), picture-in-picture=(), publickey-credentials-create=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), storage-access=(), usb=(), window-management=(), xr-spatial-tracking=()" always;
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy no-referrer always;
     add_header X-Robots-Tag "noindex, nofollow" always;

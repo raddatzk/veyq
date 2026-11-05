@@ -94,9 +94,45 @@ describe('ADMIN_CSP', () => {
     expect(origins).toEqual([PWNED_ORIGIN])
   })
 
-  it('carries no frame-ancestors — a <meta> policy ignores it; nginx X-Frame-Options is the real guard', () => {
-    // Present, it reads as an anti-framing guarantee this delivery cannot give — the claim the nginx comment
-    // once leaned on.
-    expect(directives.has('frame-ancestors')).toBe(false)
+  it('forbids framing: the policy is a header, which carries frame-ancestors (a <meta> would ignore it)', () => {
+    expect(directives.get('frame-ancestors')).toEqual(["'none'"])
+  })
+})
+
+// The console's nginx is the policy's delivery (one image for Compose and Helm, rendered by the same entrypoint), so the
+// template is read as nginx reads it: every server-level `add_header`, comments stripped.
+const template = readFileSync(fileURLToPath(new URL('../../../nginx.conf.template', import.meta.url)), 'utf8')
+const code = template
+  .split('\n')
+  .map((line) => line.replace(/#.*$/, ''))
+  .join('\n')
+const headers = new Map(
+  [...code.matchAll(/^\s*add_header\s+(\S+)\s+("[^"]*"|\S+)\s+always;/gm)].map((m) => [m[1], m[2].replace(/^"|"$/g, '')] as const),
+)
+
+describe('the headers nginx sends with the console', () => {
+  it('sends ADMIN_CSP as its Content-Security-Policy, the same policy byte for byte', () => {
+    expect(headers.get('Content-Security-Policy')).toBe(ADMIN_CSP)
+  })
+
+  it('ships no CSP <meta> in the page: the header is the one delivery', () => {
+    const index = readFileSync(fileURLToPath(new URL('../../../index.html', import.meta.url)), 'utf8')
+    expect(index).not.toMatch(/http-equiv\s*=\s*["']?content-security-policy/i)
+    const viteConfig = readFileSync(fileURLToPath(new URL('../../../vite.config.ts', import.meta.url)), 'utf8')
+    expect(viteConfig).not.toMatch(/'http-equiv'/)
+  })
+
+  it('isolates the console from other origins: no opener handle either way, no no-cors read, no framing', () => {
+    expect(headers.get('Cross-Origin-Opener-Policy')).toBe('same-origin')
+    expect(headers.get('Cross-Origin-Resource-Policy')).toBe('same-origin')
+    expect(headers.get('X-Frame-Options')).toBe('DENY')
+  })
+
+  it('grants the one browser feature the console uses, clipboard-write, to itself and switches the rest off', () => {
+    const features = new Map(headers.get('Permissions-Policy')!.split(', ').map((f) => f.split('=') as [string, string]))
+    for (const off of ['camera', 'microphone', 'geolocation', 'fullscreen', 'payment', 'usb', 'display-capture'])
+      expect(features.get(off), off).toBe('()')
+    expect([...features.values()].every((v) => v === '()' || v === '(self)')).toBe(true)
+    expect([...features.entries()].filter(([, v]) => v === '(self)').map(([k]) => k)).toEqual(['clipboard-write'])
   })
 })
