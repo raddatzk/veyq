@@ -614,8 +614,8 @@ def boot(database: str, secret_file: Path, log_path: Path, bucket: str | None = 
         env["VEYQ_BUNDLED_STORE_BUCKET"] = bucket
     handle = log_path.open("w")
     # The log is a sweep surface ([sweep_logs]), so the bytes it holds must not depend on the host: with stdout a
-    # FILE, Java 21 encodes it in the host locale's charset. Measured: without these two flags, under `LC_ALL=C`,
-    # the boot log's `—` came out as `?` — and a non-ASCII canary would too, which the needles then miss.
+    # FILE, the JVM encodes it in the host locale's charset. Measured (on Java 21): without these two flags, under
+    # `LC_ALL=C`, the boot log's `—` came out as `?` — and a non-ASCII canary would too, which the needles then miss.
     # Pinned here; [sweep_logs] reads the file as UTF-8.
     return subprocess.Popen(
         ["java", "-Dquarkus.profile=e2e", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8", "-jar", str(jar)],

@@ -2,6 +2,11 @@
 # convention plugins put the Kotlin, all-open and Quarkus plugins on every build script's classpath. A Quarkus bump
 # moves the plugin and the BOM together; any bump here regenerates gradle/verification-metadata.xml (src/backend/CLAUDE.md).
 [versions]
+# The Java the backend compiles for and its tests run on (the Gradle toolchain of the root and of every module,
+# `veyq.module`). The JDKs outside Gradle follow it by hand: the Dockerfile's build and runtime images and its
+# `javac --release`, and every workflow's `setup-java` (ADR 0119). A mismatch is loud: Gradle finds no toolchain, or
+# the runtime refuses the class files.
+java = "25"
 kotlin = "2.4.10"
 quarkus = "3.40.1.1"
 # Above the BOM's 1.62.0 on purpose, applied by the root build's substitution (build.gradle.kts says why and when it goes).

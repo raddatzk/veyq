@@ -114,11 +114,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Add any setup steps before running the `github/codeql-action/init` action.
-      # This includes steps like installing compilers or runtimes (`actions/setup-node`
-      # or others). This is typically only required for manual builds.
-      # - name: Setup runtime (example)
-      #   uses: actions/setup-example@v1
+      # The backend's Gradle toolchain asks for its one Java major (src/backend/gradle/libs.versions.toml's `java`,
+      # ADR 0119) and resolves no JDK of its own, so autobuild needs it installed — the same setup ci.yml's jobs run.
+      - name: Set up Java
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "25"
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL

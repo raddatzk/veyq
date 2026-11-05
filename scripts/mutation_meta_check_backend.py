@@ -27,7 +27,7 @@ for four of the five classes** and abolish the very headroom it was copied from.
 mutant states the same intent independently of class size, and does not need re-tuning as the scope grows.
 
 **The undetected set is PIT's own, not a hand-rolled status list.** A mutant counts as a survivor here when
-its `detected` attribute is not `"true"`. Measured against PIT 1.19.4's `DetectionStatus.isDetected()`:
+its `detected` attribute is not `"true"`. Measured against PIT 1.19.6's `DetectionStatus.isDetected()`:
 KILLED, TIMED_OUT, **NON_VIABLE**, MEMORY_ERROR and RUN_ERROR are detected; SURVIVED, NO_COVERAGE, NOT_STARTED
 and STARTED are not. So a non-viable mutant — reported but never a real survivor — is excluded for free, and
 an uncovered one correctly counts against the budget. Re-measure with:
