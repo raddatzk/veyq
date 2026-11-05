@@ -41,9 +41,10 @@ allprojects {
     }
 }
 
+// The Java version is the catalog's (gradle/libs.versions.toml), the same one every module's `veyq.module` reads.
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+        languageVersion.set(JavaLanguageVersion.of(libs.versions.java.get().toInt()))
     }
 }
 

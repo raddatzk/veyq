@@ -11,7 +11,7 @@ import java.io.File
 /**
  * A privacy-notice recipient's country (ADR 0035 decision 8): the codes the backend accepts are the JDK's, the clients'
  * copy in `contracts/terms/recipient-countries.json` is that list, and the JDK names a country in each page's language.
- * The names are pinned as the JDK measured them (Temurin 21 — the JRE the image's distroless base carries, `jdk.localedata`
+ * The names are pinned as the JDK measured them (Temurin 25 — the JRE the image's distroless base carries, `jdk.localedata`
  * included — CLDR locale data):
  * a runtime without the German locale data would name every country in English, and this test is what turns red.
  */

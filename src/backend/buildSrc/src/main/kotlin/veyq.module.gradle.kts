@@ -22,8 +22,10 @@ repositories {
     mavenCentral()
 }
 
+// The catalog's Java version (gradle/libs.versions.toml), the one the root's toolchain reads too.
+val javaVersion = the<VersionCatalogsExtension>().named("libs").findVersion("java").get().requiredVersion.toInt()
 java {
-    toolchain { languageVersion.set(JavaLanguageVersion.of(21)) }
+    toolchain { languageVersion.set(JavaLanguageVersion.of(javaVersion)) }
 }
 
 // Hibernate needs entity classes to be open + have a no-arg constructor (the root's all-open list, the same three).

@@ -82,7 +82,10 @@ val pitScope = groovy.json.JsonSlurper().parse(file("pitest.scope.json")) as Map
 fun pitScopeList(key: String): List<String> = (pitScope[key] as List<*>).map { it as String }
 
 pitest {
-    pitestVersion.set("1.19.4") // paired with pitest-junit5-plugin 1.2.3 (its floor)
+    // 1.19.6, not 1.19.4: PIT reads the classes it mutates with ASM, and 1.19.4's ASM 9.7.1 knows class files up to
+    // Java 24 (`Opcodes.V24`) — the backend compiles for 25 (ADR 0119), and 1.19.6 is the first PIT on ASM 9.8 (`V25`;
+    // pitest-parent's `asm.version`). Still above pitest-junit5-plugin 1.2.3's floor of 1.19.4.
+    pitestVersion.set("1.19.6")
     junit5PluginVersion.set("1.2.3")
     targetClasses.set(pitScopeList("targetClasses"))
     targetTests.set(pitScopeList("targetTests"))
