@@ -277,10 +277,11 @@ jobs:
     # staying green. scripts/run_web_e2e.py supplies the whole world itself: it brings up the bundled compose
     # stack (MariaDB + Garage), then per e2e file gives it its own database and a fresh %e2e backend boot. That
     # is why this job declares no `services:` and no `env:` — adding either would split the truth in two.
-    # 30 min: on the first GitHub run (2026-11-05) a cold Gradle cache made the fast-jar 2.8 min and the install
-    # 0.7 min before any suite, and the suites take 9.2-13.8 min locally, about 1.24x that on a 4-vCPU runner.
+    # 40 min: measured on GitHub (2026-11-05) the suites take 14.2 min green and 20.7 min with two red, and the jar and
+    # install before them 3.5 min warm and 6.7 min after a change to the build files emptied the Gradle cache - one
+    # job took 27.5 of the former 30.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
