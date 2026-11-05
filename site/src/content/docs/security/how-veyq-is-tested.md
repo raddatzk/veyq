@@ -17,15 +17,14 @@ checks that run on every change. What you can rely on is what those checks show,
 them, says what each one proves and where it stops, and marks which are built and which are only designed
 ([ADR 0091](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)).
 
-:::caution[Nothing here has run in CI yet]
-This repository has had no remote since it was imported on 2026-08-06, so no workflow has ever executed in it.
-Every check described below as *built* runs on a developer machine; none has run in CI. The project's own rule is
-that a test no CI run executes makes no coverage claim
+:::caution[CI has only just started running]
+The repository's first push and so its first CI run were on 2026-11-05; until then every check described below as
+*built* had run only on a developer machine. That first run was red in several jobs on the CI machines' own terms (a
+cold cache over the budgets, a newer Python, a slower runner), and the fixes land before a run shows them green. The
+project's own rule is that a test no CI run executes makes no coverage claim
 ([ADR 0040](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md)),
-and this page follows it: a stage moves to *runs in CI* only after a CI log shows it executed. What the pipeline
-would run in CI is read from its workflow files; until the first CI run, that is a statement about a file, not
-about a run. The remote comes when the owner judges veyq ready to publish, and it will be public; that first push is
-also the first CI run.
+and this page follows it: a stage moves to *runs in CI* only after a CI log shows it executed. Until then, what the
+pipeline would run in CI is read from its workflow files, a statement about a file, not about a run.
 :::
 
 ## Why checks, and how they are kept honest
@@ -183,9 +182,9 @@ triggers.
 | Guard gaps | `trust-chain.yml › guard-gaps`, always in full: when a push or pull request to `main` changes `scripts/`, the trust-chain skill or that workflow, nightly on `main`, and by hand. Locally it skips while nothing it reads changed since its last green full run | 10 min | 2.5–7 min with six workers (147–431 s over six runs, load average 13 to 99) |
 | Surface checks, crypto conformance | `ci.yml › backend` (`./gradlew check`), `› frontend` (crypto, web, admin-web), `› chart`; every commit | backend 30 min, frontend and chart 15 each | backend 8.1 min, frontend 5.0, chart 0.4. The backend's first CI run (2026-11-05, an empty Gradle cache, a 4-vCPU runner) outran its first budget of 15: 5.5 min to resolve the dependencies and build the build logic, 2 more to compile, the tests started at minute 7.7, and `:core`'s were still running at 15. Estimated at 18–21 min cold, from the share of the local test time each project had run; a cold cache is every dependency bump's, so the budget is set for it |
 | Races on MariaDB | `ci.yml › backend-races`, every commit | 20 min | 9.5 min beside the backend's check, 7.0 alone; once, under a heavier load, over its budget beside it. Locally the jobs share one machine; in CI each has its own runner. The first CI run (2026-11-05, cold) outran its first budget of 10 with three of its four projects green, inside `:core`'s; each of the three took about 17 s plus at most 1.24 times its classes' local time (a local run of 2026-11-02), which puts `:core`'s at 6 min and the job at 13–17 min cold |
-| API end-to-end | `ci.yml › web-e2e`, every commit | 15 min | 9.2 min for its 26 suites, run directly (2026-10-15); 13.8 min in the local pipeline, all 27 suites green, run alone while other work kept the machine busy (2026-10-16) |
-| API fuzzing | `ci.yml › api-fuzz`, every commit | 15 min | 5.7 to 7.3 min for a whole run with the image already built, the jar and the dependency install not counted (2026-10-19, with writes, sequences and the second member) |
-| Image build | `ci.yml › build`, every image (app, admin, tools) on amd64 and arm64, every commit; it writes to a registry only on a publish | 15 min | the app image 2.5–4.6 min uncached on arm64; **the amd64 legs have never run** |
+| API end-to-end | `ci.yml › web-e2e`, every commit | 30 min | 9.2 min for its 26 suites, run directly (2026-10-15); 13.8 min in the local pipeline, all 27 suites green, run alone while other work kept the machine busy (2026-10-16); on GitHub's first run (2026-11-05) a cold cache added 3.5 min of jar and install before the suites |
+| API fuzzing | `ci.yml › api-fuzz`, every commit | 20 min | 5.7 to 7.3 min for a whole run with the image already built, the jar and the dependency install not counted (2026-10-19, with writes, sequences and the second member); on GitHub's first run (2026-11-05) a cold cache added 5.1 min of jar and install before it |
+| Image build | `ci.yml › build`, every image (app, admin, tools) on amd64 and arm64, every commit; it writes to a registry only on a publish | 15 min | the app image 2.5–4.6 min uncached on arm64; on GitHub's first run (2026-11-05) 6.4 min on amd64 and 7.1 on arm64 |
 | Stack lane L1 | `ci.yml › stack`, per architecture after the image build, in one leg per domain of the suite (account, Depot, Expenses, Memories, moderation, platform), each with an instance of its own: a push on both architectures, a pull request on amd64 only; on a publish it installs the images the build pushed, pulled by digest | 15 min per leg | 2026-10-26, the images built, arm64: the slowest leg 4.0 min (Depot, its browser 3.5 min), the fastest 2.9 min (Memories), 20.9 min for the six together — each runs first run, the round trip and the instance-wide scenarios; the whole suite in one run 14.0 min (13.3, 165 tests); **the local pipeline cannot run this job** (below) |
 | Mutation | `mutation.yml` when a push or pull request to `main` changes the crypto package or web's sources, `mutation-backend.yml` when one changes a scoped backend file or its test; both when their own configuration changes, and by hand | 30 min per gate, an estimate | not timed as a whole; an incremental run on a pull request is estimated at 1–3 min |
 | Upgrade proof | `ci.yml › upgrade-proof`, switched off until the first release, one leg per predecessor: the default one, and the release's major entry where it is another | 15 min per leg, an estimate | 3.5 min for one leg, run directly (2026-10-15) |

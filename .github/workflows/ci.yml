@@ -277,8 +277,10 @@ jobs:
     # staying green. scripts/run_web_e2e.py supplies the whole world itself: it brings up the bundled compose
     # stack (MariaDB + Garage), then per e2e file gives it its own database and a fresh %e2e backend boot. That
     # is why this job declares no `services:` and no `env:` — adding either would split the truth in two.
+    # 30 min: on the first GitHub run (2026-11-05) a cold Gradle cache made the fast-jar 2.8 min and the install
+    # 0.7 min before any suite, and the suites take 9.2-13.8 min locally, about 1.24x that on a 4-vCPU runner.
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -365,8 +367,10 @@ jobs:
     # malformed request accepted or echoed, a valid one refused as malformed, a peer let through, a failure not in
     # tests/fuzz/baseline.json, or an invocation that tested nothing. A stage of its own beside web-e2e, which has no
     # budget left for it. Like web-e2e it declares no `services:`: the runner brings up the compose stack itself.
+    # 20 min: on the first GitHub run (2026-11-05) a cold Gradle cache made the fast-jar 4.0 min and the install
+    # 1.1 min before the run, which takes 5.7-7.3 min locally, about 1.24x that on a 4-vCPU runner.
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
