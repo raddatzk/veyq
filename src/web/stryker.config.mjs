@@ -28,6 +28,9 @@ const config = {
   // pnpm's strict node_modules puts only core's own dependencies there - the runner, this package's dependency, is
   // not among them ("no TestRunner plugins were loaded", the first GitHub run of mutation.yml, 2026-11-05).
   plugins: ['@stryker-mutator/vitest-runner'],
+  // The initial test run is the whole suite (3747 tests): 4 min 57 s on a lightly loaded Apple Silicon machine and
+  // 7 min 39 s under load (2026-11-05), past Stryker's default 5 min, so the gate failed before testing a mutant.
+  dryRunTimeoutMinutes: 20,
   inPlace: true,
   coverageAnalysis: 'perTest',
   reporters: ['clear-text', 'html', 'json'],

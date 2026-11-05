@@ -59,8 +59,10 @@ permissions:
 jobs:
   mutation:
     name: Crypto mutation gate
+    # 45 min: both gates run in this one job, and a run without the incremental cache is a full one - measured locally
+    # under load (2026-11-05) at 3.6 min for the shared crypto package and 16.7 min for web's six files.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
