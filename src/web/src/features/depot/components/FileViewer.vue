@@ -19,7 +19,7 @@
 //   unmount and on a failure.
 //
 // The same component serves the member and the share guest (inbox #401): it gets a reader and the facts, whoever opened it.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../../shared/ui/VeyqInput.vue'
@@ -103,7 +103,7 @@ const passwordInput = ref<{ $el: HTMLInputElement } | null>(null)
 const prompting = computed(() => state.value.status === 'password')
 const passwordWrong = computed(() => state.value.status === 'password' && state.value.wrong)
 const passwordBusy = computed(() => state.value.status === 'password' && state.value.busy)
-const passwordFieldId = `file-viewer-password-${Math.random().toString(36).slice(2, 8)}`
+const passwordFieldId = `file-viewer-password-${useId()}`
 const passwordDescribedBy = computed(() => `${passwordFieldId}-hint${passwordWrong.value ? ` ${passwordFieldId}-error` : ''}`)
 
 function onSubmitPassword(): void {
