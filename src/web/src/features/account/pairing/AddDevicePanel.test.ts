@@ -557,7 +557,10 @@ describe('AddDevicePanel — a relay that substitutes its own key (ADR 0059 §11
     expect(w.text()).toContain(t('pairing.answerRefused'))
     expect(delegate).not.toHaveBeenCalled()
     expect(seal).not.toHaveBeenCalled()
-  })
+    // The grind's length is geometric, not fixed - about 10⁵ hashes on average (0.5-2 s locally) with no upper bound,
+    // because the relay's key is fresh each run. On GitHub's 4-vCPU runner it passed the 5 s default (the first CI runs,
+    // 2026-11-05); 30 s leaves the tail of e^-10 or so at a mean three times the local one.
+  }, 30_000)
 })
 
 const PAIRING_CODE_DOMAIN = v1.utf8('veyq/v1/pairing-code')

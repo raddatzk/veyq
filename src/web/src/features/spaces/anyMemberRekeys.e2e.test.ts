@@ -180,7 +180,11 @@ describe.skipIf(!process.env.VEYQ_E2E)('any member re-keys (ADR 0111 decision 11
     await runScopeRotationWorker()
     const created = await guestWrite
     const afterResume = await listTree(gG, openedB.epochs)
-    expect(afterResume.every((n) => n.epoch === 1), 'every node re-keyed by the member\'s worker').toBe(true)
+    // Current is `scopeEpoch`, the scope epoch a node's key was minted under (ADR 0115 decision 4); `epoch` is that key's
+    // own generation (ADR 0114 decision 3), 1 on a re-keyed node and 0 on the guest's folder, whose key was born under 1.
+    expect(afterResume.every((n) => n.scopeEpoch === 1), 'every node\'s key is of the scope\'s new epoch').toBe(true)
+    expect(afterResume.filter((n) => n.id !== created.nodeId).every((n) => n.epoch === 1), 'every node that was there re-keyed by the member\'s worker').toBe(true)
+    expect(afterResume.find((n) => n.id === created.nodeId)?.epoch, 'the guest\'s folder holds the key it was born with').toBe(0)
     expect(afterResume.find((n) => n.id === created.nodeId)?.name, 'the guest\'s folder landed under the new key').toBe(GUEST_FOLDER)
     expect((await listMyScopes()).find((s) => s.id === gG)?.rekeying).toBe(false)
 

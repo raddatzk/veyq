@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
-import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { b64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import {
   acceptGroupInvitation, addGroupMember, inviteMember, listMemberInvites, listMyGroupInvitations, listScopeMembers,
@@ -27,6 +27,7 @@ import { memberInviteFragment, memberJoinFrom } from '../../test/memberJoin'
 import { mailCursor, waitForMail } from '../../test/mailpit'
 import { recordCanaries, recordPii } from '../../test/canaries'
 import { ScopeKind } from '../../api/generated/scopes'
+import { openJoinRecord } from '../account/tenantTrust'
 
 const TENANT_FOLDER = 'Familienrezepte Oma Hildegard'
 const GROUP_NAME = 'Segelfreunde Ammersee'
@@ -105,15 +106,20 @@ describe.skipIf(!process.env.VEYQ_E2E)('a member invite is a placeholder member 
     await become(A)
     const rowOfB = (await listScopeMembers(tenantId)).find((m) => m.userId === B.userId)
     expect(rowOfB?.sealedJoinRecord, 'the listing serves B\'s sealed join record').toBeTruthy()
-    const envelope = fromB64std(rowOfB!.sealedJoinRecord!)
-    const tenantKey = (await openScope(ScopeKind.Tenant))!.epochs.key // the tenant's one key (ADR 0115 decision 1)
-    const record = invite.openJoinRecord(tenantKey, { tenantId, userId: B.userId! }, envelope)
+    // Sealed under a value key of its own, wrapped under the tenant key (ADR 0115 decision 8): opened the way the
+    // client's own reader opens it, `tenantTrust.openJoinRecord`, never with the tenant key directly.
+    expect(rowOfB?.wrappedJoinRecordValueKey, 'the listing serves the record\'s wrapped value key beside it').toBeTruthy()
+    const tenantEpochs = (await openScope(ScopeKind.Tenant))!.epochs
+    const openRecordAs = (userId: string) =>
+      openJoinRecord(tenantId, userId, rowOfB!.sealedJoinRecord!, rowOfB!.wrappedJoinRecordValueKey, tenantEpochs)
+    const record = openRecordAs(B.userId!)!
+    expect(record, 'the record opens').toBeTruthy()
     expect(invite.joinRecordVerifies({ tenantId, userId: B.userId! }, record), 'both signatures and A\'s invite-key signature verify').toBe(true)
     expect(b64std(record.identityPublicKey), 'it names B\'s identity').toBe(b64std(v1.serializeIdentityPublic(B.built.identity.pub)))
     expect(b64std(record.secretKeyProofPublicKey), 'and the Secret-Key proof key B registered').toBe(B.built.material.secretKeyProofPublicKey)
     expect(record.signerUserId, 'through the invite A signed').toBe(A.userId)
     // Control: the record is bound to its member — opened as another member's, it does not open.
-    expect(() => invite.openJoinRecord(tenantKey, { tenantId, userId: A.userId! }, envelope), 'bound to (tenant, B)').toThrow()
+    expect(openRecordAs(A.userId!), 'bound to (tenant, B)').toBeNull()
 
     // --- a revoked invite: its link is gone at preview ----------------------------------------------------------
     const R = mkActor('r')
