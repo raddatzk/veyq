@@ -35,7 +35,8 @@ This asserts, with no daemon and no root:
   7. the store's credentials for a run (ADR 0089): the bundled store's key pair derived from its admin token — one
      pinned vector, the one `BundledStoreCredentialsTest` pins on the backend's side — an operator's own pair winning
      over a token, half a pair refused, and a run that names no store refused naming both ways;
-  8. the cluster's gate (G1–G8, behind fake Database and Store seams), and that every capture is the index (G6);
+  8. the cluster's gate (G1–G9, behind fake Database and Store seams), and that every capture is the index (G6); and
+     that it waits, bounded and on a fake clock, for a database still starting, failing closed past the bound (G9);
   9. the object pool (P1–P9, ADR 0056 §3 and §7): the REAL Store and Pool driving an rclone interpreted in memory
      (`Rclone`, through `--rclone-binary`, so every argv and environment the tool builds is the one it would run) —
      the top-up of exactly the index's keys, a short pool failing the capture, the prune keeping exactly what the
@@ -553,6 +554,8 @@ def store_cases() -> None:
 # --------------------------------------------------------------------------------------------------------
 
 SCHEMA = "202610161746"
+# What the client prints while the database's first initialisation still runs with networking off (k3s, 2026-11-05).
+NOT_YET = "ERROR 2002 (HY000): Can't connect to server on 'veyq-mariadb' (115)"
 KEY_BYTES = b"the-config-secret-key-bytes\n"
 
 
@@ -560,8 +563,12 @@ class World:
     """What the fakes answer: a database that holds data or not, its blob rows, its store setting, the live listing."""
 
     def __init__(self, data: bool = True, blobs=(("sk1", 2),), listing=None, setting=None, dump_fails=False,
-                 retention=(30, "the default, none set")):
+                 retention=(30, "the default, none set"), down=0, refusal=None):
         self.data = data
+        # Connection attempts the database refuses before it accepts one (None: it never does), and what the client
+        # prints meanwhile. Every query while it refuses fails as the real client's would, so a gate that decides
+        # before it waits is refused by its own first query.
+        self.down, self.refusal, self.pings, self.clock = down, refusal or NOT_YET, 0, 0.0
         self.retention = retention  # what `retention_days` answers: B and where it came from
         self.blobs = [list(b) for b in blobs]
         self.listing = [list(e) for e in (listing if listing is not None else
@@ -575,7 +582,18 @@ class FakeDatabase:
     def __init__(self, world: World):
         self.w, self.name = world, "veyq"
 
+    def ping(self):
+        self.w.pings += 1
+        if self.w.pings > 1000:  # a wait with no bound would spin forever on the fake clock: end it as a red instead
+            raise ib.BackupError("the gate kept trying past any bound")
+        if self.w.down is None or self.w.down > 0:
+            self.w.down = None if self.w.down is None else self.w.down - 1
+            return False, self.w.refusal
+        return True, ""
+
     def populated_tables(self):
+        if self.w.down is None or self.w.down > 0:
+            raise ib.BackupError(f"query failed against the fake database: {self.w.refusal}")
         return [("veyq_tenant", 1)] if self.w.data else []
 
     def domains(self):
@@ -641,14 +659,20 @@ class Seams:
         self.world = world
 
     def __enter__(self):
-        self.saved = (ib.Database, ib.Store, ib.require_db_password)
+        self.saved = (ib.Database, ib.Store, ib.require_db_password, ib._monotonic, ib._sleep)
         ib.Database = lambda *_a, **_k: FakeDatabase(self.world)
         ib.Store = lambda *_a, **_k: FakeStore(self.world)
         ib.require_db_password = lambda: "x"
+        # The database wait on a fake clock: a pause advances the world's, so the test knows how long was waited.
+        world = self.world
+
+        def pause(seconds):
+            world.clock += seconds
+        ib._monotonic, ib._sleep = (lambda: world.clock), pause
         return self.world
 
     def __exit__(self, *_exc):
-        ib.Database, ib.Store, ib.require_db_password = self.saved
+        ib.Database, ib.Store, ib.require_db_password, ib._monotonic, ib._sleep = self.saved
 
 
 GATE_ENV = {"VEYQ_BUNDLED_STORE_ENDPOINT": "http://veyq-garage:3900", "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": VECTOR_TOKEN}
@@ -662,7 +686,7 @@ def volume_state(root: pathlib.Path) -> list:
 
 
 def gate(tmp: pathlib.Path, name: str, world: World, *, target="0.5", image=None, entry=None, request="", keep=3,
-         record=None, prepare=None):
+         record=None, prepare=None, db_wait=ib.DB_WAIT_SECONDS):
     """One run of `cmd_gate` against a fresh volume: (outcome, volume root, the volume before the run)."""
     root = tmp / name
     root.mkdir()
@@ -678,7 +702,7 @@ def gate(tmp: pathlib.Path, name: str, world: World, *, target="0.5", image=None
     args = argparse.Namespace(dir=str(root), target_release=target, request=request, keep=keep,
                               release_file=str(release_file), db_url="jdbc:mariadb://veyq-mariadb:3306/veyq",
                               db_user="veyq", rclone_binary="rclone", store_endpoint=None, store_access_key=None,
-                              store_secret_key=None, store_bucket="blobs", store_region="us-east-1")
+                              store_secret_key=None, store_bucket="blobs", store_region="us-east-1", db_wait=db_wait)
     with Seams(world):
         try:
             with contextlib.redirect_stdout(io.StringIO()):
@@ -939,7 +963,43 @@ def g8_no_key(tmp: pathlib.Path) -> None:
           and not any(p.name == ib.KEY_NAME or KEY_BYTES in p.read_bytes() for p in files), outcome)
 
 
+@guarded
+def g9_database_wait(tmp: pathlib.Path) -> None:
+    """The gate waits, bounded, for a database still starting — a first install starts MariaDB beside the app pod —
+    and fails closed, writing nothing, when it never comes up or answers an error that is no start-up."""
+    world = World(data=False, down=3)
+    outcome, root, _ = gate(tmp, "g9-first-install", world)
+    check("G9 gate: a database that refuses three attempts and then accepts is waited for; the first install records",
+          outcome == "ok 0" and world.pings == 4 and world.clock == 3 * ib.DB_WAIT_INTERVAL
+          and record_of(root)["release"] == "0.5" and captures(root) == [],
+          f"{outcome} pings={world.pings} clock={world.clock}")
+    world = World(down=2)
+    outcome, root, _ = gate(tmp, "g9-upgrade", world, record={"release": "0.4", "request": ""})
+    check("G9 gate: after the wait, a new release still captures",
+          outcome == "ok 0" and len(captures(root)) == 1 and record_of(root)["release"] == "0.5", outcome)
+    world = World(down=None)
+    outcome, root, before = gate(tmp, "g9-never", world, record={"release": "0.4", "request": ""}, db_wait=30)
+    check("G9 gate: a database that never accepts fails closed after the bound, naming it and the last error, "
+          "writing nothing",
+          outcome.startswith("refused:") and "did not accept a connection within 30 s" in outcome
+          and "(115)" in outcome and volume_state(root) == before
+          and 30 <= world.clock < 30 + 2 * ib.DB_WAIT_INTERVAL, f"{outcome} clock={world.clock}")
+    denied = "ERROR 1045 (28000): Access denied for user 'veyq'@'10.42.0.9' (using password: YES)"
+    world = World(down=None, refusal=denied)
+    outcome, root, before = gate(tmp, "g9-denied", world, record={"release": "0.4", "request": ""})
+    check("G9 gate: an error that is no start-up (access denied) is refused at once, not waited on, writing nothing",
+          outcome.startswith("refused:") and "Access denied" in outcome and "does not wait" in outcome
+          and world.pings == 1 and world.clock == 0 and volume_state(root) == before, f"{outcome} pings={world.pings}")
+    check("G9 the start-up errors: by code and by the client's words, and nothing else",
+          all(ib.DB_NOT_YET.search(e) for e in (
+              NOT_YET, "ERROR 2003 (HY000): Can't connect to MySQL server on 'db' (111)",
+              "ERROR 2005 (HY000): Unknown server host 'veyq-mariadb' (-2)",
+              "ERROR 2013 (HY000): Lost connection to server at 'handshake: reading initial communication packet'"))
+          and not any(ib.DB_NOT_YET.search(e) for e in (denied, "ERROR 1049 (42000): Unknown database 'veyq'")))
+
+
 def gate_cases(tmp: pathlib.Path) -> None:
+    g9_database_wait(tmp)
     g1_decision_table(tmp)
     g2_refusals(tmp)
     g3_order(tmp)
