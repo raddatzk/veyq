@@ -450,6 +450,16 @@ def store_is_provisioned() -> bool:
     throwaway instance below has no owner at all — it exists precisely to be pre-setup — so the read is not
     reachable from here. Reading the store directly is the better oracle anyway: a state field saying
     PROVISIONED while the bucket was not actually usable is exactly the failure this needs to catch.
+
+    **A cold store has two "not yet" answers, not one.** Without a layout, Garage cannot serve a bucket call at
+    all: `GetBucketInfo` answers 503 `ServiceUnavailable` ("Could not reach quorum of 1"), and only once the
+    provisioner's first step has applied a role does it answer the 404 `NoSuchBucket` a missing bucket gets
+    (measured on the pinned v2.0.0, 2026-11-05: 503 on a fresh node, 404 right after `ApplyClusterLayout`). Neither
+    the compose file's `--wait` nor Garage's own `/health` can say the layout is there — `/health` answers 200 on a
+    layout-less node, which is exactly why the chart probes it (no readiness may wait on the backend's bring-up). So
+    a 503 is read as "not provisioned" only when the node demonstrably has no layout role ([store_has_layout]); a
+    503 from a node that has one is a store that is broken, and still refused. Reading the 503 as a refusal outright
+    failed the first CI run on its first look at a cold store (`run_api_fuzz.provision_store` asks before booting).
     """
     request = urllib.request.Request(
         f"{GARAGE_ADMIN}/v2/GetBucketInfo?globalAlias={STORE_BUCKET}",
@@ -461,11 +471,43 @@ def store_is_provisioned() -> bool:
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return False  # the ordinary state of a cold store — not an error
-        raise SystemExit(f"[e2e] STORE ADMIN API REFUSED: {GARAGE_ADMIN} answered {e.code} for {STORE_BUCKET}")
+        said = _admin_error(e)
+        if e.code == 503 and not store_has_layout():
+            return False  # a node with no layout yet: the provisioner's first step has not run
+        raise SystemExit(f"[e2e] STORE ADMIN API REFUSED: {GARAGE_ADMIN} answered {e.code} for {STORE_BUCKET}: {said}")
     except (urllib.error.URLError, OSError) as e:
         raise SystemExit(f"[e2e] STORE ADMIN API UNREACHABLE at {GARAGE_ADMIN}: {e}") from e
     return any(k.get("name") == STORE_KEY_ALIAS and (k.get("permissions") or {}).get("owner")
                for k in info.get("keys") or [])
+
+
+def store_has_layout() -> bool:
+    """Does the store's node carry an APPLIED layout role? `GetClusterLayout` answers on a layout-less node too
+    (measured: version 0, `roles: []`); a role only staged by `UpdateClusterLayout` sits in `stagedRoleChanges`, not
+    in `roles`, so it counts as none — a staged role serves no bucket call either."""
+    request = urllib.request.Request(
+        f"{GARAGE_ADMIN}/v2/GetClusterLayout",
+        headers={"Authorization": f"Bearer {GARAGE_ADMIN_TOKEN}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as r:
+            layout = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        raise SystemExit(f"[e2e] STORE ADMIN API REFUSED: {GARAGE_ADMIN} answered {e.code} for its cluster layout: "
+                         f"{_admin_error(e)}")
+    except (urllib.error.URLError, OSError) as e:
+        raise SystemExit(f"[e2e] STORE ADMIN API UNREACHABLE at {GARAGE_ADMIN}: {e}") from e
+    return bool(layout.get("roles"))
+
+
+def _admin_error(e: urllib.error.HTTPError) -> str:
+    """Garage's own `code: message` for a refused admin call — the half of the answer the status alone hides (the
+    503 above read only as "answered 503" until its body said "Could not reach quorum")."""
+    try:
+        body = json.loads(e.read().decode())
+        return f"{body.get('code')}: {body.get('message')}"[:400]
+    except (ValueError, OSError, AttributeError):
+        return "(no readable body)"
 
 
 def provision_store(workdir: Path, timeout: int = 120) -> None:
