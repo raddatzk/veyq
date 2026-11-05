@@ -11,12 +11,11 @@
 # Only `src/backend/` is a build to submit: the repository root's Gradle build is the dev launcher, which resolves no
 # dependency that ships (CLAUDE.md § Repository shape).
 #
-# UNPROVEN: this repository has never been pushed, so no run has executed this file. One risk is named ahead of the
-# first run: the action applies its graph plugin through an init script, and `src/backend/gradle/verification-metadata.xml`
-# verifies every artifact Gradle resolves (`verify-metadata` true) and lists no entry for that plugin
-# (`grep -c dependency-graph src/backend/gradle/verification-metadata.xml` -> 0 on 2026-11-05). Whether the
-# verification reaches an init script's classpath is remembered, not measured. If the first run is red on it, add the
-# plugin's checksums to the metadata; never answer it with `--dependency-verification lenient`.
+# The graph plugin comes in through an init script, and `src/backend/gradle/verification-metadata.xml` lists no entry
+# for it (`grep -c dependency-graph src/backend/gradle/verification-metadata.xml` -> 0 on 2026-11-05); the first runs on
+# GitHub (2026-11-05, run 42030101864 and the next) were green with verification on, so it does not reach that
+# classpath. Should a later version be refused there, add the plugin's checksums to the metadata; never answer it with
+# `--dependency-verification lenient`.
 name: Dependency submission
 
 on:
@@ -52,6 +51,9 @@ jobs:
         with:
           build-root-directory: src/backend
           dependency-graph: generate-and-upload
+          # The action's default, `enhanced`, is its "commercial caching service (gradle-actions-caching)" (action.yml at
+          # this pin); `basic` is its open-source one on the GitHub Actions cache. CLAUDE.md: no closed dependency.
+          cache-provider: basic
 
   submit:
     name: Submit the backend's dependency graph
@@ -65,3 +67,5 @@ jobs:
         uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           dependency-graph: download-and-submit
+          # This job runs no Gradle, so it has nothing to cache - and so never reaches the commercial default above.
+          cache-disabled: true
