@@ -40,6 +40,12 @@ const leaflet = vi.hoisted(() => {
     marker: () => ({ addTo: () => ({}), setLatLng: () => ({}) }),
     circleMarker: () => ({ addTo: () => ({}) }),
     divIcon: () => ({}),
+    // The attribution control the maps add (`mapAttribution.ts`); what it draws is not this test's subject.
+    Control: class {
+      addTo() {
+        return this
+      }
+    },
   }
   return { L, calls, handlers }
 })

@@ -16,7 +16,8 @@
 // project: the instance mail the erasure and deletion mails go through is set up and confirmed there); the accounts and
 // tenants it erases are its own, so it disturbs no other scenario. The labels are the web client's and admin-web's own
 // (each package's i18n, en).
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { freshOwner, readKit } from '../../../src/accounts'
 import { recordTyped } from '../../../src/canaries'

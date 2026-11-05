@@ -21,7 +21,8 @@
 // the Server Owner creates it for a fresh owner, who points its mail at the run's relay and invites a fresh member by
 // mail. The labels are src/web/'s and admin-web's own (each package's i18n, en). Every secret typed is a canary
 // (recordTyped); the handles are declared plaintext.
-import { test, expect, type Browser, type LaunchOptions, type Locator, type Page } from '@playwright/test'
+import { expect, type Browser, type LaunchOptions, type Locator, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { freshOwner, readKit } from '../../../src/accounts'

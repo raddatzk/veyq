@@ -14,7 +14,8 @@
 // the pasted links (their fragment is the share's key, which must never reach the server) and every name are canaries
 // (`recordTyped`): lane L1's sweep proves they reached the server sealed or not at all. The labels are src/web/'s and
 // admin-web's own (each package's i18n, en).
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

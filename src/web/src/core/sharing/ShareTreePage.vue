@@ -58,7 +58,7 @@ import { pickLocaleText, type PublicShareHead } from './resolvePublicShare'
 import { guestTreeContext, createShareNodeAsGuest, guestTreeErrorMessageKey } from './guestTree'
 import { guestTreeSource, type GuestTreeSource } from './guestAccess'
 import { useGuestSession } from './guestIdentity'
-import { renderMarkdown } from '../../shared/markdown'
+import { markdownHtml, vSafeHtml } from '../../shared/security/trustedTypes'
 import NodeDialogs from '../node/components/NodeDialogs.vue'
 import { useNodeDialogs } from '../node/nodeDialogs'
 import { provideNodeHost, type NodeHost } from '../node/nodeHost'
@@ -99,7 +99,7 @@ watch(
 )
 
 const note = computed(() => pickLocaleText(props.head.noteByLocale, locale.value))
-const renderedNote = computed(() => (note.value ? renderMarkdown(note.value) : ''))
+const renderedNote = computed(() => (note.value ? markdownHtml(note.value) : null))
 
 /** The node on screen: `?node=` when the walk opened it, else the root. */
 const currentId = computed<string | null>(() => {
@@ -232,9 +232,8 @@ function createError(e: unknown): string {
       <VeyqBreadcrumb :home="home" :items="crumbs" :drop-target="crumbTarget" class="app-breadcrumb" :aria-label="t('share.folder.breadcrumbRoot')" />
       <span class="share-folder-badge">{{ badge }}</span>
     </div>
-    <!-- The share's note (the curator's), once for the whole page. Safe markdown (escape-first), so v-html is safe. -->
-    <!-- eslint-disable-next-line vue/no-v-html -->
-    <div v-if="renderedNote" class="veyq-surface markdown-body" v-html="renderedNote"></div>
+    <!-- The share's note (the curator's), once for the whole page. Safe markdown (escape-first), shown by v-safe-html. -->
+    <div v-if="renderedNote" class="veyq-surface markdown-body" v-safe-html="renderedNote"></div>
 
     <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — a guest sees what a member sees; a member
          the statement of reasons names reads it below (uc.moderation.object-to-a-measure). -->

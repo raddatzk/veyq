@@ -36,7 +36,8 @@
 // It starts from the tenant whose owner the round trip activated (the `platform` project); every name is new (a random
 // stamp), and what it creates stays in its own folders. The labels are src/web/'s own (src/web/src/i18n/index.ts and
 // src/web/src/features/memories/i18n.ts, en).
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

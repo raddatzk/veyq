@@ -1,8 +1,8 @@
-// Content-Security-Policy for the admin console (ADR 0065). `vite.config.ts` injects it as a <meta http-equiv> so
-// it ships inside the static build with no server needed (self-hostable by default), and mirrors it onto the dev
-// server as a real header. Strictly tighter than src/web/'s: this app loads NO third-party origin but one — no tiles,
-// no geocoder, no fonts — so `default-src 'self'` needs one escape hatch: `blob:` images for the Emergency Kit PDF the
-// browser hands to the operator to save.
+// Content-Security-Policy for the admin console (ADR 0065). The console's nginx sends it as a response header
+// (`nginx.conf.template`, held equal to `ADMIN_CSP` by csp.test.ts) and the dev server sends it as one too; never a
+// <meta>, which would ignore `frame-ancestors`. Strictly tighter than src/web/'s: this app loads NO third-party origin
+// but one — no tiles, no geocoder, no fonts — so `default-src 'self'` needs one escape hatch: `blob:` images for the
+// Emergency Kit PDF the browser hands to the operator to save.
 //
 // style-src has no 'unsafe-inline' (inbox #523): the built CSS is same-origin files and Vue applies :style bindings
 // through the CSSOM, which style-src does not govern. The fixed <style> elements the components we use render are
@@ -10,14 +10,13 @@
 // worker-src is spelled out although script-src 'self' already covers the Argon2 worker by fallback, so no edit of
 // script-src can widen what may run as a worker (inbox #527).
 //
-// frame-ancestors is deliberately ABSENT: a <meta> policy ignores it, so writing it here only reads as a
-// guarantee. Anti-framing comes from the container's nginx, which sends `X-Frame-Options: DENY` as a real header
-// (`src/admin-web/nginx.conf.template`). See docs/crosscutting/cc.security.csp.md.
+// frame-ancestors 'none': no page on any origin may frame the console; nginx also sends `X-Frame-Options: DENY` for a
+// browser older than it. See docs/crosscutting/cc.security.csp.md.
 
 /** The pwned-password range API's default origin (k-anonymity: only a 5-hex SHA-1 prefix leaves the device) — the ONE
  *  outbound call this surface makes, automatically over a finished password, and only while the instance's manifest
- *  carries `core.breached-password` (ADR 0088 decision 7). This policy is a static `<meta>` served by nginx, outside
- *  the backend, so it cannot follow the Server Owner's setting: a mirror at another origin is refused here and setup
+ *  carries `core.breached-password` (ADR 0088 decision 7). This policy is a static header nginx sends, outside the
+ *  backend, so it cannot follow the Server Owner's setting: a mirror at another origin is refused here and setup
  *  says the check could not run (uc.admin.configure-external-services A3), as on a firewalled admin container. */
 export const PWNED_ORIGIN = 'https://api.pwnedpasswords.com'
 
@@ -42,6 +41,7 @@ export function adminCsp(devStyleNonce?: string): string {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
+    "frame-ancestors 'none'",
   ].join('; ')
 }
 

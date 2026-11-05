@@ -44,6 +44,12 @@ const leaflet = vi.hoisted(() => {
     polyline: mk,
     divIcon: () => ({}),
     DomEvent: { stop: () => {} },
+    // The attribution control the maps add (`mapAttribution.ts`); what it draws is not this test's subject.
+    Control: class {
+      addTo() {
+        return this
+      }
+    },
   }
   return { L, calls }
 })

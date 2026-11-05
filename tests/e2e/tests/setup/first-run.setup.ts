@@ -8,7 +8,8 @@
 // credentials and Secret Key, the tenant's domain and invite link — to them in `instance.json` in the run directory,
 // never in the repository. What it types that the product promises never to send — the password — is recorded for the
 // orchestrator's sweep (src/canaries.ts); the email and the tenant's name are declared plaintext and are not.
-import { test, expect, type BrowserContext, type Page } from '@playwright/test'
+import { expect, type BrowserContext, type Page } from '@playwright/test'
+import { test } from '../../src/cspViolations'
 import { writeFileSync } from 'node:fs'
 import { freshOwner, readKit } from '../../src/accounts'
 import { recordTyped } from '../../src/canaries'

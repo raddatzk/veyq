@@ -151,10 +151,12 @@
   not a matter of memory: every field in `contracts/api/` declares its visibility class
   ([ADR 0044](../decisions/0044-field-visibility-declared-at-the-field.md)), and an unclassified one fails the
   build.
-- **Sanitization is a client duty, safe-by-construction.** Decrypted content rendered as HTML — above all
-  journal Markdown — must never reach `v-html`/`innerHTML` unsanitized. Use an escape-first renderer
-  (HTML-escape, then a fixed safe subset; links forced to `https?://` + `rel="noopener noreferrer"`) or
-  DOMPurify. This is a security rule, not formatting.
+- **Sanitization is a client duty, safe-by-construction.** Decrypted content rendered as HTML reaches the page
+  only as `markdownHtml(text)` through `v-safe-html` — the escape-first renderer (HTML-escape, then a fixed safe
+  subset; links forced to `https?://` + `rel="noopener noreferrer"`) behind the Trusted Types policy `veyq`. Never
+  `v-html`, never an `innerHTML` of a string: the built policy enforces Trusted Types, so the browser refuses it, and
+  a library's string sink is the `default` policy's exact list
+  ([ADR 0117](../decisions/0117-the-web-client-enforces-trusted-types.md)). This is a security rule, not formatting.
 
 ## 5. Naming
 

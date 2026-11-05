@@ -10,7 +10,8 @@
 // The reasons are canaries (`recordTyped`): lane L1's sweep then proves they reached no table, no bucket object, no log
 // and no statement — the report arrived sealed. That the hold pinned the file's objects is read off the kept stack's
 // database after the run (the CR's record). The labels are src/web/'s own (src/web/src/i18n/index.ts, en).
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { awaitMails } from '../../../src/mail'

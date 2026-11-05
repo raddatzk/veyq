@@ -1,3 +1,6 @@
+// FIRST, before any library module evaluates: it creates the Trusted Types policies the page's CSP names, and Leaflet
+// writes `innerHTML` the moment it loads (ADR 0117, shared/security/trustedTypes.ts).
+import './shared/security/trustedTypes'
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'

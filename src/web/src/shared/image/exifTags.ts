@@ -11,7 +11,9 @@
 // 1. **Its ES module source, `exifreader/src/exif-reader.js`, never the package's main entry.** That entry is a webpack
 //    UMD with literal `require('@xmldom/xmldom')`, `require('fs')`, `require('http')`, `require('https')` in it, which a
 //    bundler follows: wherever the optional `@xmldom/xmldom` is installed (a plain `pnpm install` installs it) it would be
-//    bundled. The source names none of them; it parses XMP with the browser's own `DOMParser`.
+//    bundled. The source names none of them; it parses XMP with the browser's own `DOMParser`, which it is handed
+//    (`XMP_PARSER`): under the page's Trusted Types a `DOMParser` refuses a plain string, so the parse goes through the
+//    one policy's inert-XML door (ADR 0117) - without it every XMP tag would be lost to a refused, swallowed parse.
 // 2. **Loaded on first use**, so the initial chunk does not carry it.
 // 3. **Never the whole file.** At pick time every picked photo is read at once (`useOptimisticTiles`' probe), so what one
 //    read holds is multiplied by the pick. The library gets a `File` and `length: 'auto'`: it reads 128 KiB, then on only
@@ -26,6 +28,7 @@
 //    (`xmpDate`, inbox #808). What is not parsed cannot be mis-parsed.
 // It fetches nothing: a URL or a path is the only input it would fetch for, and this module hands it neither.
 import type { IncludeTagsOptions } from 'exifreader'
+import { parseInertXml } from '../security/trustedTypes'
 
 /** The tags a caller can read. Every field is optional: a tag the file does not carry, or carries unreadably, is absent. */
 export type ExifTags = {
@@ -250,6 +253,10 @@ function containerOf(head: Uint8Array): 'tiff' | 'chunked' | 'sliced' {
   return 'sliced'
 }
 
+/** The XMP block's parser: the browser's, through the policy; none where there is no `DOMParser` (the library then has none). */
+const XMP_PARSER = () =>
+  typeof DOMParser === 'undefined' ? undefined : { parseFromString: (xml: string) => parseInertXml(xml, 'application/xml') }
+
 /**
  * Read `image`'s tags, or `undefined` when it carries none this reads. Rejects for a file the library cannot parse
  * (a damaged or unknown container) and for a read the browser refuses - the caller decides what that means.
@@ -257,15 +264,16 @@ function containerOf(head: Uint8Array): 'tiff' | 'chunked' | 'sliced' {
 export async function readExifTags(image: Blob, scope: ExifScope): Promise<ExifTags | undefined> {
   const { load } = await import('exifreader/src/exif-reader.js')
   const includeTags = INCLUDE_TAGS[scope]
+  const domParser = XMP_PARSER()
   const container = containerOf(new Uint8Array(await image.slice(0, 12).arrayBuffer()))
   if (container === 'tiff') {
     // `length: 'auto'` finds no container in a bare TIFF, so its head is handed over as bytes.
     const head = await image.slice(0, TIFF_PREFIX).arrayBuffer()
-    return tagsFrom(load(head, { includeTags, computed: true, expanded: true }) as Expanded, scope)
+    return tagsFrom(load(head, { includeTags, domParser, computed: true, expanded: true }) as Expanded, scope)
   }
   const bounded = container === 'chunked' ? image.slice(0, CHUNKED_PREFIX) : image
   // A `File` is what makes the library read slices; a plain Blob would be taken for bytes and rejected.
   const file = bounded instanceof File ? bounded : new File([bounded], '')
-  const expanded = await load(file, { includeTags, computed: true, expanded: true, includeOffsets: true, length: 'auto' })
+  const expanded = await load(file, { includeTags, domParser, computed: true, expanded: true, includeOffsets: true, length: 'auto' })
   return tagsFrom(expanded as Expanded, scope)
 }

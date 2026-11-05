@@ -3,11 +3,11 @@
 // and the public page show it: after the space's own text, read-only. The guest-write record's passage (always served:
 // the record is kept wherever a guest may write, ADR 0093 § 10) is a pointer to the record's Art. 13 information, which is the instance privacy notice's (ADR 0035 decision 8, Q27 of
 // cr-instance-privacy-notice), with a link there — in a tab of its own, so a share page's gate keeps its fragment key.
-// The markdown is the server's rendering of veyq's fixed text with values the Server Owner typed; `renderMarkdown`
-// escapes first (safe subset), so `v-html` is safe.
+// The markdown is the server's rendering of veyq's fixed text with values the Server Owner typed; `markdownHtml` runs
+// the escape-first renderer (safe subset) and `v-safe-html` shows only what it made (ADR 0117).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { renderMarkdown } from '../../shared/markdown'
+import { markdownHtml, vSafeHtml } from '../../shared/security/trustedTypes'
 import { PRIVACY_ANCHOR, privacyLink } from '../privacy/privacyNotice'
 import { pickSectionText, RECORD_ANCHOR, type OperatorSection } from './operatorSection'
 
@@ -16,7 +16,7 @@ const { t, locale } = useI18n()
 
 const rendered = (text: OperatorSection['text'] | null | undefined) => {
   const md = pickSectionText(text, locale.value)
-  return md ? renderMarkdown(md) : ''
+  return md ? markdownHtml(md) : null
 }
 const text = computed(() => rendered(props.section.text))
 const record = computed(() => rendered(props.section.record))
@@ -24,12 +24,9 @@ const record = computed(() => rendered(props.section.record))
 
 <template>
   <section class="operator-section" data-testid="operator-section">
-    <!-- eslint-disable-next-line vue/no-v-html -->
-    <div class="markdown-body" v-html="text"></div>
-    <!-- eslint-disable-next-line vue/no-v-html -->
+    <div class="markdown-body" v-safe-html="text"></div>
     <div v-if="record" :id="RECORD_ANCHOR" class="markdown-body operator-section__record" data-testid="operator-section-record">
-      <!-- eslint-disable-next-line vue/no-v-html -->
-      <div v-html="record"></div>
+      <div v-safe-html="record"></div>
       <a class="operator-section__record-link" :href="privacyLink(PRIVACY_ANCHOR.guestWriteRecord)" target="_blank" rel="noopener">{{ t('operatorTerms.recordLink') }}</a>
     </div>
   </section>

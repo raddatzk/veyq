@@ -49,7 +49,8 @@
 //
 // It starts from the tenant whose owner the round trip activated (the `depot` project), uploads its own file, and
 // leaves the instance as it found it: its device signs out, which ends only this device's session.
-import { test, expect, type Page, type Response as PwResponse, type Route } from '@playwright/test'
+import { expect, type Page, type Response as PwResponse, type Route } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createFolder, downloadButton, pickFiles, sha256 } from '../../../src/depot'

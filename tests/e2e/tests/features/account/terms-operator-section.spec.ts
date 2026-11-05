@@ -15,7 +15,8 @@
 // 2026-10-26 it ran in the round trip's tenant and was named to sort after the other feature scenarios; once the specs
 // moved into domain folders (ADR 0090 decision 7) a whole run put it first, and every later guest of that tenant met
 // the gate. A space of its own leaves the shared one ungated whatever runs after it.
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { addLanguage } from '../../../src/localeEditor'

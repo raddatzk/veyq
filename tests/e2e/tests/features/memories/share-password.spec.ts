@@ -15,7 +15,8 @@
 // It starts from the tenant whose owner the round trip activated (the `memories` project). Every value typed is a canary
 // (recordTyped) — the password above all, which the page never sends (it sends Argon2id of it). Labels are src/web/'s own
 // (src/web/src/i18n/index.ts, en).
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

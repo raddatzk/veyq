@@ -52,7 +52,7 @@ import { guestAccess } from '../core/sharing/guestAccess'
 import { forgetGuestSession, nameShareGuest, useGuestSession, type GuestIdentity } from '../core/sharing/guestIdentity'
 import { ShareRole } from '../api/generated/sharing'
 import GuestNaming from '../core/sharing/GuestNaming.vue'
-import { renderMarkdown } from '../shared/markdown'
+import { markdownHtml, vSafeHtml } from '../shared/security/trustedTypes'
 import { setPreferenceAudience } from '../shared/state/scopedPreference'
 import { shareTreeFingerprint } from '../core/sharing/shareTreeFingerprint'
 import { isNoteAccepted, recordNoteAccepted } from '../core/sharing/shareNote'
@@ -110,7 +110,7 @@ const termsRevision = ref(0) // 0 = no gate (also the fail-open value on a fetch
 const operatorSection = ref<OperatorSection | null>(null)
 const acceptedKeys = ref<string[]>([]) // the locally-recorded accepted pairs; extended in-memory on accept so the gate clears
 const termsMarkdown = ref('')
-const renderedTerms = computed(() => (termsMarkdown.value ? renderMarkdown(termsMarkdown.value) : ''))
+const renderedTerms = computed(() => (termsMarkdown.value ? markdownHtml(termsMarkdown.value) : null))
 const currentKey = computed(() =>
   operatorSection.value ? pairKey(pairOf(termsRevision.value, operatorSection.value)) : '',
 )
@@ -163,7 +163,7 @@ const noteGate = ref<string | null>(null)
 const needsNote = computed(() => status.value === 'ready' && noteGate.value !== null)
 const renderedNote = computed(() => {
   const text = needsNote.value && head.value ? pickLocaleText(head.value.noteByLocale, locale.value) : ''
-  return text ? renderMarkdown(text) : ''
+  return text ? markdownHtml(text) : null
 })
 /** The gate a resolved head asks for: its note's digest unless this device (or this visit) accepted that very text. */
 function noteGateOf(h: PublicShareHead): string | null {
@@ -390,15 +390,14 @@ onMounted(() => {
     <!-- The accountless terms gate (uc.sharing.share-accept, ADR 0035 §3): the space's terms + an Accept button,
          BETWEEN the password shell and the display-name pre-screen (password → terms → name → content). Acceptance
          is client-only (localStorage) — an operational gate, not enforcement: it records + surfaces consent, it does
-         not police access. renderMarkdown escapes first (safe subset), so v-html is safe. -->
+         not police access. markdownHtml escapes first (safe subset), shown by v-safe-html. -->
     <div v-else-if="needsTerms" class="share-view-state share-name-gate">
       <div class="veyq-surface share-name-card share-terms-card">
         <VeyqIcon name="file-check" class="share-terms-icon" />
         <h1>{{ t('share.termsTitle') }}</h1>
         <p class="share-name-intro">{{ t('share.termsIntro') }}</p>
         <div class="share-terms-body">
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <div class="markdown-body" v-html="renderedTerms"></div>
+          <div class="markdown-body" v-safe-html="renderedTerms"></div>
           <OperatorSectionView v-if="operatorSection" :section="operatorSection" />
         </div>
         <button class="share-name-submit" type="button" @click="acceptTerms">{{ t('share.termsAccept') }}</button>
@@ -406,15 +405,14 @@ onMounted(() => {
     </div>
 
     <!-- The note's acceptance gate (uc.sharing.share-note): the curator's note + Accept, AFTER the terms and before
-         anything of the share (every role). No decline: closing the tab is the decline. renderMarkdown escapes first
-         (safe subset), so v-html is safe. -->
+         anything of the share (every role). No decline: closing the tab is the decline. markdownHtml escapes first
+         (safe subset), shown by v-safe-html. -->
     <div v-else-if="needsNote" class="share-view-state share-name-gate">
       <div class="veyq-surface share-name-card share-terms-card" data-testid="share-note-gate">
         <VeyqIcon name="envelope" class="share-terms-icon" />
         <h1>{{ t('share.noteGateTitle') }}</h1>
         <p class="share-name-intro">{{ t('share.noteGateIntro') }}</p>
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div class="share-terms-body markdown-body" v-html="renderedNote"></div>
+        <div class="share-terms-body markdown-body" v-safe-html="renderedNote"></div>
         <button class="share-name-submit" type="button" @click="acceptNote">{{ t('share.noteGateAccept') }}</button>
       </div>
     </div>

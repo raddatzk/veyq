@@ -20,7 +20,8 @@
 // The images are drawn in the browser (a canvas, so no fixture of a size the frame needs), the video is the suite's test
 // pattern (`fixtures/testsrc2-6s-vp8.webm`; landscape - a portrait video is not among the fixtures). The console is read
 // for errors throughout. Every value typed is a canary (recordTyped). Labels are src/web/'s own (src/web/src/i18n/index.ts, en).
-import { test, expect, type Page, type Request } from '@playwright/test'
+import { expect, type Page, type Request } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

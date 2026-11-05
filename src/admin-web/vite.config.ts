@@ -15,10 +15,11 @@ import { adminCsp } from './src/shared/security/csp.ts'
 const apiTarget = process.env.VEYQ_API_TARGET ?? 'http://127.0.0.1:8090'
 const port = Number(process.env.VITE_ADMIN_PORT) || 5174
 
-// The CSP lives in src/shared/security/csp.ts, where it is tested; this only delivers it (meta tag + dev header). The dev
-// server injects every stylesheet as a <style> element, so there Vite stamps them with a nonce drawn fresh per start
-// (`html.cspNonce`) and both the header and the <meta> name it — a <meta> without it would intersect the header and
-// refuse them again. The build loads its CSS as files and carries no nonce.
+// The CSP lives in src/shared/security/csp.ts, where it is tested. The built console gets it as a header from its nginx
+// (nginx.conf.template, held equal to it by csp.test.ts), never as a <meta>, which would ignore `frame-ancestors`; this
+// only sends it from the dev server. The dev server injects every stylesheet as a <style> element, so there Vite stamps
+// them with a nonce drawn fresh per start (`html.cspNonce`) and the header names it. The build loads its CSS as files and
+// carries no nonce.
 
 export default defineConfig(({ command }) => {
   const devStyleNonce = command === 'serve' ? randomBytes(18).toString('base64') : undefined
@@ -30,16 +31,6 @@ export default defineConfig(({ command }) => {
         name: 'veyq-admin-csp',
         config: () =>
           command === 'serve' ? { html: { cspNonce: devStyleNonce }, server: { headers: { 'Content-Security-Policy': csp } } } : {},
-        transformIndexHtml: (html: string) => ({
-          html,
-          tags: [
-            {
-              tag: 'meta',
-              attrs: { 'http-equiv': 'Content-Security-Policy', content: csp },
-              injectTo: 'head-prepend' as const,
-            },
-          ],
-        }),
       },
     ],
     test: {

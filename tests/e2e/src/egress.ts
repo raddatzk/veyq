@@ -12,8 +12,8 @@
 // What a page TRIED counts, not only what reached the network: the page's own Content-Security-Policy refuses most
 // foreign requests inside the renderer, before any route sees them (measured when the lane was built — an injected
 // `fetch('https://example.org/')` on admin-web never reached the route and the run stayed green). A refusal is the
-// policy working, and still a finding here: the page wanted something that is not the instance. So every CSP
-// violation a page reports is recorded beside the aborted requests.
+// policy working, and still a finding: the page wanted something that is not the instance. Every CSP violation of
+// every context fails its test through the violation fixture (`cspViolations.ts`), so this file records none itself.
 //
 // And two layers, so neither is the only thing between a page and the internet: the routes below decide per
 // request, and the browser's resolver (playwright.config.ts) knows only the instance's names — a request that got
@@ -52,15 +52,6 @@ export async function confineToInstance(context: BrowserContext): Promise<Confin
   const breach: string[] = []
   const rates: RateQuery[] = []
 
-  await context.exposeBinding('__veyqCspViolation', ({ page }, violation: string) => {
-    foreign.push(`refused by ${new URL(page.url()).origin}'s CSP: ${violation}`)
-  })
-  await context.addInitScript(() => {
-    document.addEventListener('securitypolicyviolation', (e) => {
-      const report = (window as unknown as { __veyqCspViolation: (v: string) => void }).__veyqCspViolation
-      void report(`${e.effectiveDirective} ${e.blockedURI || '(no URI)'}`)
-    })
-  })
   const own = (url: URL) =>
     url.origin === adminOrigin || (url.protocol === 'https:' && (url.hostname === domain || url.hostname.endsWith(`.${domain}`)))
 

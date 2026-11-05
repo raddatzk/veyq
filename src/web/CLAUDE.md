@@ -532,6 +532,10 @@ here; the server is blind.
   itself (`activeSpace`, `coverStore`, `rotateKeys` tests). A suite that stubs the registry delegates through a
   `Proxy` onto a fresh `createRegistry()` (`ShareView.registry.test.ts`, `SpaceView.registry.test.ts`): a
   hand-listed set of methods silently misses the next one the registry gains.
+- **Markup only through `v-safe-html`** (developer styleguide § 4, [ADR 0117](../../docs/decisions/0117-the-web-client-enforces-trusted-types.md)):
+  the built CSP enforces Trusted Types, so a string at any HTML sink or script URL is refused at run time, in a
+  browser only. A new library that writes markup or starts a worker is read for its sinks before it lands
+  (`shared/security/trustedTypes.ts`' `default` policy, cc.security.csp § Trusted Types), and lane L1 is the proof.
 - **Wire encoding:** opaque fields are **standard base64** (`b64std`), not base64url — the contract pins
   `[A-Za-z0-9+/]*={0,2}`, so base64url is rejected with 400 at the boundary.
 - **Operator-blind:** seal/derive everything client-side; never send the password, plaintext or raw keys.

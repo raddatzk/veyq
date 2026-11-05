@@ -6,7 +6,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const leaflet = vi.hoisted(() => {
   const markers: Array<{ latlng: [number, number]; click: ((e?: unknown) => void) | null }> = []
   // How often a map was created with its tile layer, and removed: a withdrawn consent must remove it and add no other.
-  const calls = { tileLayers: 0, removed: 0, attribution: undefined as string | undefined }
+  const calls = {
+    tileLayers: 0,
+    removed: 0,
+    tileOptions: undefined as Record<string, unknown> | undefined,
+    mapOptions: undefined as Record<string, unknown> | undefined,
+    attributionLine: undefined as HTMLElement | undefined,
+  }
   const map = {
     setView: () => map,
     fitBounds: () => map,
@@ -19,10 +25,13 @@ const leaflet = vi.hoisted(() => {
     layerPointToLatLng: ([x, y]: [number, number]) => ({ lat: y / 1000, lng: x / 1000 }),
   }
   const L = {
-    map: () => map,
-    tileLayer: (_url: string, options?: { attribution?: string }) => {
+    map: (_el: unknown, options?: Record<string, unknown>) => {
+      calls.mapOptions = options
+      return map
+    },
+    tileLayer: (_url: string, options?: Record<string, unknown>) => {
       calls.tileLayers++
-      calls.attribution = options?.attribution
+      calls.tileOptions = options
       return { addTo: () => ({}) }
     },
     layerGroup: () => {
@@ -46,7 +55,15 @@ const leaflet = vi.hoisted(() => {
     },
     polyline: () => ({ on: () => ({}), addTo: () => ({}) }),
     divIcon: () => ({}),
-    DomEvent: { stop: () => {} },
+    DomEvent: { stop: () => {}, disableClickPropagation: () => {} },
+    // The attribution control (`mapAttribution.ts`): what its onAdd builds is recorded as Leaflet would place it.
+    Control: class {
+      onAdd?: () => HTMLElement
+      addTo() {
+        calls.attributionLine = this.onAdd?.()
+        return this
+      }
+    },
   }
   return { L, markers, calls }
 })
@@ -130,12 +147,18 @@ describe('SpaceMap', () => {
     expect(person.find('h2').exists()).toBe(false)
   })
 
-  it('hands Leaflet the attribution escaped: it writes it as HTML, and the Server Owner\'s text must stay text', async () => {
+  it("shows the attribution as text in a line of its own: Leaflet's control writes markup, Trusted Types refuses it (ADR 0117)", async () => {
     setTileUrl(DEFAULT_TEST_TILES, '© <a href="https://evil.example">Tiles</a> & co') // the consented host, new text
     setMapsConsent(true)
     mountMap([pin('m1', 'Rome', 41.9, 12.5)])
     await flushPromises()
-    expect(leaflet.calls.attribution).toBe('© &lt;a href=&quot;https://evil.example&quot;&gt;Tiles&lt;/a&gt; &amp; co')
+    expect(leaflet.calls.mapOptions).toEqual({ attributionControl: false })
+    expect(leaflet.calls.tileOptions).not.toHaveProperty('attribution')
+    const line = leaflet.calls.attributionLine!
+    // Control: Leaflet's own link is there, as an element - so the absence below is of the Server Owner's markup alone.
+    expect(line.querySelector('a[href="https://leafletjs.com"]')).not.toBeNull()
+    expect(line.querySelector('a[href="https://evil.example"]')).toBeNull()
+    expect(line.textContent).toBe(' Leaflet | © <a href="https://evil.example">Tiles</a> & co')
   })
 
   it('"Turn map off" withdraws at once: the map is removed, no further tile layer is made, the consent prompt returns', async () => {

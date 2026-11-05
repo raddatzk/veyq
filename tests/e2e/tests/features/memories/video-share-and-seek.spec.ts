@@ -40,7 +40,8 @@
 // It starts from the tenant whose owner the round trip activated (the `memories` project) and switches nothing back
 // or forth. Every value typed is a canary (recordTyped). Labels are src/web/'s own (src/web/src/i18n/index.ts and
 // src/web/src/features/memories/i18n.ts, en).
-import { test, expect, type Page, type Response } from '@playwright/test'
+import { expect, type Page, type Response } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { createHash, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

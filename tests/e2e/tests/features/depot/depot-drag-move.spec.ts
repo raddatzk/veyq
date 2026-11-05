@@ -6,7 +6,8 @@
 //
 // It starts from the tenant whose owner the round trip activated (the `depot` project). Labels are src/web/'s own
 // (src/web/src/i18n/index.ts, en).
-import { test, expect, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { createFolder, downloadButton } from '../../../src/depot'
