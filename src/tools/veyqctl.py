@@ -184,6 +184,7 @@ import re
 import secrets
 import shlex
 import shutil
+import ssl
 import stat
 import subprocess
 import sys
@@ -402,10 +403,19 @@ class DirSource(Source):
             raise Refused(f"{path} cannot be read: {e}") from None
 
 
+def _tls_context() -> ssl.SSLContext:
+    """The default verifying context with TLS 1.2 as its floor: on Python 3.9 `create_default_context()` still admits
+    TLS 1.0 under the host's TLS library (measured 2026-11-05 under LibreSSL 2.8.3), and an operator's host may run 3.9.
+    The assets are signature-checked either way; this keeps the transport from offering what no mirror should speak."""
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 def _http_get(url: str) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": "veyqctl", "Accept": "*/*"})
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with urllib.request.urlopen(request, timeout=120, context=_tls_context()) as response:
             return response.read()
     except (urllib.error.URLError, OSError) as e:
         raise Refused(f"GET {url} failed: {e}") from None
