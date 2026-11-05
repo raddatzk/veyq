@@ -51,7 +51,39 @@ What had to move, measured on this tree (Gradle 9.8.2, Kotlin 2.4.10, Quarkus 3.
    the committed heap is what the container holds, and it does not move. A flag that changes the object layout of every
    allocation for that is not worth carrying while it is new. The JVM picked the serial collector on its own at this
    limit (`Using Serial`, the log's first line). Inbox #825 says when to measure again.
-4. **The AOT cache is not built here** (JEP 483, 514, 515; Quarkus's own support) — inbox #826 holds what was learnt.
+4. **The image carries no AOT cache** (JEP 483, 514, 515), neither for the server nor for the healthcheck's probe:
+   measured, neither earns what it costs. Each cache was written by the runtime image's own `java`
+   (`-XX:AOTCacheOutput`, in a `docker run` of the image) and copied into an image built on it; arm64, 2026-11-05,
+   load average 7–11 throughout (the IDE indexing beside the runs, not a quiet machine), the variants interleaved run
+   by run so the load fell on all of them alike.
+   - **The server.** Time from `docker start` to the first 200 on `/api/setup`, polled every 10 ms from the host, a
+     fresh container of lane L1's kept instance per run (its env, volumes, networks and 1 GiB limit; Flyway up to
+     date), seven runs each, medians: **2.60 s without a cache, 2.09 s with one a build could train.** A build has no
+     database, and Quarkus's own training mode (`-Dquarkus.appcds.generate=true`, what `quarkus.package.jar.aot.*`
+     runs) does not stop at static init here: the boot goes on until Hibernate asks for the datasource and fails with
+     exit 1 after 4.5 s. That cache is 89 MB (20 MB gzipped) on an image of 334 MB, and it serves 9,896 of the
+     20,252 classes a full boot loads (`-Xlog:class+load`; 1,447 come from the JDK's default CDS archive without
+     it) — custom-loader classes included, so Quarkus's fast-jar loader does not shut it out. The ceiling, a cache
+     trained by a full boot against the database and store (which a build cannot have): 1.54 s, 160 MB.
+     Quarkus's `aot-jar` packaging (every jar on the JDK's class path) is 0.14 s slower without a cache (2.74 s),
+     1.89 s with a build-trainable one and 1.17 s with the full-boot one, 166 MB. Half a second off a start that
+     happens once per deploy is nothing an operator waits on; a quarter more image on every pull is.
+   - **The probe.** CPU per run in a holder container's cgroup (`cpu.stat` `usage_usec` across 20 `docker exec`s of
+     the Compose healthcheck's command, read from the VM's cgroup tree), the probe answered by the live app, three
+     rounds each: **53.0 ms with today's flags, 42.8 ms with a cache** (10.9 MB, 2.9 MB gzipped), a wall time of
+     67 against 61 ms including `docker exec`. `-Xint` added to today's flags does more for no bytes:
+     39.6 ms, and 34.7 ms with the cache on top — inbox #827. A probe that cannot reach the app exits 1, so a
+     training run of it in the image's last stage needs a command of its own to exit 0 (as the server's would).
+   - **What a cache would risk, measured:** a cache that does not match is reported and ignored, never fatal unless
+     `-XX:AOTMode=on` — another class path ("shared class paths mismatch"), another JVM build (the build stage's JDK:
+     "This file is not the one used while building the AOT cache: …/lib/modules, size has changed"), an absent file,
+     each exit 0; ZGC cannot use it in 25 ("Unable to use AOT cache"), G1 maps a cache the serial collector wrote.
+     Written in the image's last stage after the `COPY` of the jars, it could not go stale inside one image: any
+     change to a jar or the base invalidates the layer that writes it (BuildKit's layer cache, remembered), and the
+     JVM checks the files it was built from besides (their size, as the JDK case shows).
+
+   Measure again when a start becomes something someone waits on (a Kubernetes rollout that scales on demand), or
+   when Quarkus can train without a datasource.
 
 ## Consequences
 
