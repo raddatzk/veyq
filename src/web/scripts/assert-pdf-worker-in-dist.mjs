@@ -31,6 +31,8 @@ const ASSETS = join(DIST, 'assets')
 const WORKER = /^pdf\.worker\.min-[^/]+\.js$/
 const RUNTIME = /^pdfjsRuntime-[^/]+\.js$/
 const DATA_DIRS = ['cmaps', 'standard_fonts', 'iccs']
+// A file name as a literal inside a RegExp: every metacharacter escaped, the backslash first among them.
+const escapeRegExp = (text) => text.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
 
 let names
 try {
@@ -64,8 +66,8 @@ if (runtimes.length === 1) {
   const html = readFileSync(join(DIST, 'index.html'), 'utf8')
   if (html.includes(runtime) || (workers[0] && html.includes(workers[0]))) failures.push('(iii) index.html loads pdf.js directly (script or modulepreload)')
   const jsNames = names.filter((n) => n.endsWith('.js') && n !== runtime && n !== workers[0])
-  const dynamic = new RegExp('import\\(\\s*[`"\']\\./' + runtime.replace(/[.]/g, '\\.') + '[`"\']')
-  const staticRef = new RegExp('(?:from|import)\\s*[`"\']\\./' + runtime.replace(/[.]/g, '\\.') + '[`"\']')
+  const dynamic = new RegExp('import\\(\\s*[`"\']\\./' + escapeRegExp(runtime) + '[`"\']')
+  const staticRef = new RegExp('(?:from|import)\\s*[`"\']\\./' + escapeRegExp(runtime) + '[`"\']')
   const referrers = jsNames.filter((n) => text(n).includes(runtime))
   if (referrers.length === 0) failures.push(`(iii) no chunk references ${runtime} - the viewer cannot load pdf.js`)
   for (const n of referrers) {

@@ -186,6 +186,8 @@ class Instance:
     def setup_status(self) -> int:
         """GET https://<domain>/api/setup over the pinned connection, trusting the run's Pebble root only."""
         ctx = ssl.create_default_context(cafile=str(self.dir / "pebble-root.pem"))
+        # 3.10+ sets this floor itself (bpo-43998); 3.9 takes its TLS library's, which on macOS's LibreSSL is TLS 1.0.
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         try:
             with socket.create_connection(CONNECT, timeout=5) as raw:
                 with ctx.wrap_socket(raw, server_hostname=DOMAIN) as tls:
