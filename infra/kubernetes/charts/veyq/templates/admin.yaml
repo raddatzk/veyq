@@ -37,8 +37,13 @@ spec:
             # Where nginx proxies /api/* — the app's admin listener through its own Service, never the public
             # domain and never `veyq-app`, whose port 404s every Server-Owner operation (ADR 0065). The image's
             # entrypoint hook defaults this to the compose service name (`app:8090`), which does not exist here.
+            # The Service's FULL name, never the short `veyq-app-admin`: nginx resolves the upstream at request time
+            # with its own `resolver` directive, which asks the nameserver for the name as written and ignores
+            # resolv.conf's search list — the short name is NXDOMAIN on a cluster, and first-run setup 502s
+            # (measured on a k3s cluster, 2026-11-05). Compose hides this: Docker's DNS answers short names itself.
+            # scripts/chart_meta_check.py (xii) holds the form.
             - name: BACKEND_URL
-              value: http://veyq-app-admin:8090
+              value: http://veyq-app-admin.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8090
             # The deployment's HSTS switch, rendered from the same value as the app Deployment's — one switch for
             # both origins (docs/crosscutting/cc.security.csp.md § admin-web).
             - name: VEYQ_HSTS_ENABLED

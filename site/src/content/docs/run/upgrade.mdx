@@ -129,7 +129,9 @@ way back. Four things are specific to this target.
   upgrade; `Recreate` is what makes "one migrator at a time" true, at the cost of a short outage per upgrade. It is
   also what makes the gate's capture cold: the old pod has terminated before the new one is created. An upgrade
   here is `helm upgrade`, started by hand (ADR 0096 decision 8).
-- **What the gate does.** It keeps a record on the backup claim of the release whose data the database holds. When
+- **What the gate does.** It first waits, up to 180 seconds, for the database to accept a connection — on a first
+  install the bundled MariaDB starts beside it — and fails, writing nothing, if it never does or refuses the login.
+  It keeps a record on the backup claim of the release whose data the database holds. When
   the pod starts a different release, it captures the database and an index of the store (every object's key,
   size and checksum; the objects stay in the store) onto `backup.existingClaim`, verifies the capture, moves the
   record and lets the app migrate. A restart, a rescheduled pod or a sync that changed nothing passes in a second. It

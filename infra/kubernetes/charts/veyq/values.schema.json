@@ -26,6 +26,7 @@
   "properties": {
     "domain": { "$ref": "#/$defs/hostname" },
     "storeDomain": { "type": "string" },
+    "clusterDomain": { "$ref": "#/$defs/hostname" },
     "hsts": {
       "type": "object",
       "additionalProperties": false,

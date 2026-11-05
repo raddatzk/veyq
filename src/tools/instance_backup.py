@@ -87,7 +87,9 @@ construction. The **in-pod mode** it uses: the database by the app's own JDBC UR
 `jdbc:mariadb://host[:port]/database` and no other form) and user, the client binaries and `rclone` on `PATH`, no
 Docker and no fallback; the release named by the caller, never asked of Docker. It keeps one record on the backup
 volume, `state.json` — the release whose data the database holds and the last request it served — and in this order:
-a database holding no data records the target and passes (the first install, and the documented rollback, which
+first it waits, bounded (`--db-wait`, 180 s), for the database to accept a connection — a first install starts MariaDB
+beside the app pod — and fails closed, writing nothing, when it never does or answers an error that is no start-up
+([await_database]); a database holding no data records the target and passes (the first install, and the documented rollback, which
 empties the database); the target and request the record's pass; then the refusals, which write nothing — a
 downgrade, more than one major, a major entered from any release but the one this image bakes as tested (`majorEntry`
 in `/opt/veyq/release.json`), a target that is no release or not this image's own, an unreadable record; otherwise an
@@ -188,6 +190,7 @@ Environment:
     VEYQ_BACKUP_DIR, VEYQ_BACKUP_TARGET_RELEASE, VEYQ_BACKUP_REQUEST, VEYQ_BACKUP_KEEP
                                     The gate's volume, target, request and count bound — the chart renders them (the
                                     daily prune reads VEYQ_BACKUP_DIR's layout and VEYQ_BACKUP_KEEP too).
+    VEYQ_BACKUP_DB_WAIT             Seconds the gate waits for the database to accept a connection (default 180).
     VEYQ_BUNDLED_STORE_ENDPOINT     The bundled store's S3 endpoint the *rclone container* must reach — an internal
     VEYQ_BUNDLED_STORE_ADMIN_TOKEN  name such as `http://garage:3900`, not a host-published port — and its admin
                                     token (environment only, never a flag).
@@ -216,6 +219,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import NamedTuple
@@ -441,7 +445,21 @@ class Database:
         return args
 
     def _env(self) -> dict[str, str]:
+        # A TRAP in the log, not a weakness: the `mariadb` 11.4 client prints "option --ssl-verify-server-cert is
+        # disabled, because of an insecure passwordless login" because the password reaches it through MYSQL_PWD
+        # rather than `-p`, so its option check sees none (libmariadb reads the variable later, at connect, and the
+        # login does use it — remembered from the client's source, not measured here). Only the client's own check of
+        # the server's certificate is off; the app's JDBC
+        # connection to the same database uses no TLS at all (the driver's default), so this is the stronger of the
+        # two paths, and the NetworkPolicy admits only the app pod and the prune there (ADR 0071 §3). `-p<pw>` would
+        # silence it and put the password in argv, which this tool never does.
         return {**os.environ, "MYSQL_PWD": self.password}
+
+    def ping(self) -> tuple[bool, str]:
+        """One connection attempt that reads nothing: whether the database accepted it, and the client's stderr."""
+        cmd = self._wrap("mariadb") + self._conn() + ["--connect-timeout=5", "-N", "--batch", "-e", "SELECT 1", self.name]
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=self._env())
+        return proc.returncode == 0, proc.stderr.strip()
 
     def query(self, sql: str) -> list[list[str]]:
         """Rows as raw columns. `-N` drops the header, `--batch` makes it TAB-separated and NULL-explicit."""
@@ -2400,9 +2418,51 @@ def gate_store(args: argparse.Namespace, db: Database, env: dict[str, str]) -> S
     return Store(args)
 
 
+# How long the gate waits for the database to accept a connection, and how often it tries. On a first install the
+# chart starts MariaDB and the app pod together, and the image's first initialisation runs with networking off — so
+# the gate's first attempts are refused ("Can't connect … (115)", measured on a single-node k3s, 2026-11-05) and, without
+# a wait, the pod went through init restarts and their backoff for about two minutes. 180 s covers that first
+# initialisation on a small node with room; past it the gate fails closed, and the kubelet's restart tries again.
+DB_WAIT_SECONDS = 180
+DB_WAIT_INTERVAL = 3
+# The client's errors that mean "nobody accepted the connection yet" (libmariadb's CR_* codes): 2002 and 2003 can't
+# connect, 2005 the host does not resolve yet, 2006 and 2013 the server went away or dropped the handshake while it
+# was starting — by code, and by the message's words where a client prints no code. Any other error — access denied
+# (1045), an unknown database (1049) — is no start-up and is not waited on.
+DB_NOT_YET = re.compile(r"\bERROR (2002|2003|2005|2006|2013)\b|Can't connect to|Unknown server host|Lost connection to")
+# The clock and the pause the wait uses — module names so the self-test can run it on a fake clock.
+_monotonic = time.monotonic
+_sleep = time.sleep
+
+
+def await_database(db, timeout: float, interval: float = DB_WAIT_INTERVAL) -> None:
+    """Return once `db` accepts a connection; refuse, naming the last error, when it has not within `timeout` seconds
+    or answers with an error that is no start-up. Reads and writes nothing, so a refusal leaves the volume as it was."""
+    deadline = _monotonic() + timeout
+    waited = False
+    while True:
+        accepted, error = db.ping()
+        if accepted:
+            if waited:
+                log(f"{db.describe()} accepts connections")
+            return
+        if not DB_NOT_YET.search(error):
+            raise BackupError(f"{db.describe()} refused the connection: {error[-500:] or 'no message'}. That is no "
+                              f"database still starting, so the gate does not wait; nothing was captured or recorded.")
+        if _monotonic() >= deadline:
+            raise BackupError(f"{db.describe()} did not accept a connection within {timeout:g} s (last: "
+                              f"{error[-300:]}). Nothing was captured or recorded, and the app does not start; the "
+                              f"pod's restart tries again. Check that the database runs and that its Service and "
+                              f"NetworkPolicy admit this pod.")
+        if not waited:
+            log(f"waiting up to {timeout:g} s for {db.describe()} to accept connections: {error[-200:]}")
+            waited = True
+        _sleep(interval)
+
+
 def cmd_gate(args: argparse.Namespace, env: dict[str, str] | None = None) -> int:
     """ADR 0098 decisions 2, 3, 5 and 7, in the order the self-test pins:
-    the inputs; (1) the record; (2) a database holding no data — record the target, pass; (3) the target and
+    the inputs; (1) the record, and the bounded wait for the database to accept a connection; (2) a database holding no data — record the target, pass; (3) the target and
     the request the record's — pass; (4) the refusals, writing nothing; (5) capture into `captures/<UTC>.partial/`,
     verify it, rename; (6) move the record; (7) prune."""
     env = os.environ if env is None else env
@@ -2427,6 +2487,8 @@ def cmd_gate(args: argparse.Namespace, env: dict[str, str] | None = None) -> int
 
     record = read_record(root)                                                          # (1)
     db = Database(args, require_db_password())
+    # Before any decision: a database still starting is waited for, bounded; one that never comes up fails closed.
+    await_database(db, getattr(args, "db_wait", DB_WAIT_SECONDS))
 
     def prune_by_age() -> list[str]:
         # ADR 0056 decision 8: at every start, every capture older than B, the newest included — never on a refusal
@@ -2694,6 +2756,9 @@ def main(argv: list[str]) -> int:
                       help="complete captures kept, the newest always (env VEYQ_BACKUP_KEEP; default 3)")
     gate.add_argument("--release-file", default=str(RELEASE_FILE),
                       help=f"what the tools image bakes (default {RELEASE_FILE})")
+    gate.add_argument("--db-wait", type=float, default=os.environ.get("VEYQ_BACKUP_DB_WAIT") or str(DB_WAIT_SECONDS),
+                      help=f"seconds to wait for the database to accept a connection before failing closed "
+                           f"(env VEYQ_BACKUP_DB_WAIT; default {DB_WAIT_SECONDS})")
     add_pod_db(gate)
     gate.add_argument("--rclone-binary", default=shutil.which("rclone"), help=argparse.SUPPRESS)
     gate.set_defaults(func=cmd_gate, needs_store=False, db_name="veyq", db_host=None, db_port=3306,

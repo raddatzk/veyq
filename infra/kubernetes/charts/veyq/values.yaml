@@ -31,6 +31,12 @@ domain: ""
 # for a multi-tenant instance — so the chart templates no origin list.
 storeDomain: ""
 
+# The cluster's DNS domain — the suffix of every Service's full name, `<service>.<namespace>.svc.<clusterDomain>`.
+# The admin surface's nginx reaches the app's admin listener by that full name, because its resolver applies no search
+# list (templates/admin.yaml). `cluster.local` is Kubernetes' default and k3s's; change it only if your cluster was set
+# up with another (the kubelet's `clusterDomain`, e.g. `grep search /etc/resolv.conf` in any pod).
+clusterDomain: cluster.local
+
 # Strict-Transport-Security on this deployment's responses (ADR 0069; 180 days, no includeSubDomains, no
 # preload). A top-level value and not one under `app:`, because it is the deployment's switch rather than one
 # container's. Turn it off only if a host of this release is also served over plain HTTP somewhere, or the
@@ -119,7 +125,8 @@ app:
     # root-owned — unlike a Docker named volume, it is NOT seeded from the image directory it covers — so the
     # pod sets fsGroup to the image's runtime uid; scripts/chart_meta_check.py holds this to the Dockerfile.
     # The claim is annotated helm.sh/resource-policy: keep, so `helm uninstall` leaves the key behind rather
-    # than turning a reinstall into an instance that boots and then refuses invites and resets. With
+    # than turning a reinstall into an instance that boots and then refuses invites and resets — and, because Argo CD
+    # ignores that policy, argocd.argoproj.io/sync-options: Prune=false,Delete=false for the same under Argo CD. With
     # configSecret.existingSecret below the key comes from that Secret instead, and the claim still holds the
     # erasure ledger (ADR 0056 decision 8), so it is rendered either way.
     size: 100Mi
@@ -302,7 +309,8 @@ gateway:
       # internal step-ca is one URL). While you test a deployment, use Let's Encrypt staging:
       #   https://acme-staging-v02.api.letsencrypt.org/directory
       # — its certificates are NOT browser-trusted, so an instance left on staging boots and every browser
-      # refuses it. What production costs a test (letsencrypt.org/docs/rate-limits): 5 failed validations per
+      # refuses it; with garage.enabled the app's own check of the bundled store fails on the store host's staging
+      # certificate too, and passes on a later try once a production one replaces it. What production costs a test (letsencrypt.org/docs/rate-limits): 5 failed validations per
       # hostname per hour, and 50 new certificates per registered domain per week.
       server: https://acme-v02.api.letsencrypt.org/directory
 

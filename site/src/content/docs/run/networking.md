@@ -26,7 +26,8 @@ the file, it logs that loudly and every domain, the instance's own included, sta
 bypasses Traefik, so you keep a way in.
 
 **Kubernetes.** A Gateway API implementation of your choice does the routing (Traefik is the example these pages
-use, never a requirement). The chart renders one `Gateway`, `veyq`, of the `GatewayClass` you name in
+use, never a requirement; its entrypoints must listen on 80 and 443 inside the pod, [Kubernetes](/run/kubernetes/)
+says how). The chart renders one `Gateway`, `veyq`, of the `GatewayClass` you name in
 `gateway.className`, and an `HTTPRoute` for the instance's domain, with `garage.enabled` one for the bundled store's host (`storeDomain`) and, if
 set, one for the admin surface; the application writes one `HTTPRoute` per tenant into its own namespace, attached to
 that `Gateway` — and under `per-domain` TLS a `ListenerSet` beside it. It may manage routes and `ListenerSet`s in that
@@ -119,7 +120,10 @@ client behind it shares one bucket: list the load balancer.
 - **Keep the client's address up to the gateway.** A layer-4 load balancer in front of your gateway that rewrites
   the source address makes the gateway see a node, not the client, and no setting in veyq can repair that. Check
   the setting that keeps it: for a Kubernetes `LoadBalancer` Service, `externalTrafficPolicy: Local`, or the PROXY
-  protocol where your load balancer and gateway support it.
+  protocol where your load balancer and gateway support it. On a single-node k3s, whose built-in ServiceLB answers
+  on the node's own ports, that is the gateway's Service: for Traefik from its Helm chart,
+  `service.spec.externalTrafficPolicy: Local`. **Not measured:** no run has yet checked that the gateway then sees
+  the client's address through ServiceLB.
 - **Kubernetes without an enforced NetworkPolicy.** With `networkPolicy.enabled: false`, or a CNI that enforces no
   NetworkPolicy, any pod can reach the application and write the whole header. Nothing then tells it apart from your
   gateway, and the rate limit can key on a forged address. The chart's install notes say so.
@@ -173,8 +177,11 @@ the host's time synchronised (NTP).
 ## How far this is proven
 
 The hardened Compose recipe was brought up once (2026-09-28, on Docker Desktop, with the staging directory set);
-no certificate order against a public domain is recorded. On Kubernetes only the rendered chart is checked; no
-`Gateway`, `ListenerSet`, certificate or NetworkPolicy has run in a cluster, and no gateway implementation has
-accepted these routes. The Compose recipe's client-address plugin is proven on every run of the release's stack test:
+no certificate order against a public domain is recorded. On Kubernetes the chart ran once, by the owner (2026-11-05,
+single-node k3s): Traefik 3.7.17 programmed the `Gateway` and accepted the chart's routes once its entrypoints listened
+on 80 and 443 ([Kubernetes](/run/kubernetes/)), cert-manager issued Let's Encrypt certificates for the instance's and
+the store's host over HTTP-01 under `per-domain`, and the app reached its database and store under the chart's
+NetworkPolicy set (k3s enforces NetworkPolicy by default). No `ListenerSet` has run, nothing checked that the policies refuse
+what they should, and whether Traefik saw the client's address through k3s's ServiceLB is open. The Compose recipe's client-address plugin is proven on every run of the release's stack test:
 the release's own Traefik and plugin replace a forged header with the sender's own address and port. No gateway has
 yet sent the PROXY protocol to the chart, and the Envoy Gateway header above is read from its source, not run.

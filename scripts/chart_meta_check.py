@@ -65,7 +65,11 @@ render, asserts — deriving every anchor from the source rather than listing it
        it behind every route aimed at that Service, the chart's, a projected tenant one or an operator's
        (ADR 0065). No `HTTPRoute` in any render has a backend on such a Service, `admin.domain` set or not. The admin
        container's `BACKEND_URL` names one of them at its Service port — the public port 404s every Server-Owner
-       operation, so an admin surface pointed there works for nothing.
+       operation, so an admin surface pointed there works for nothing — and by its FULL name,
+       `<service>.<namespace>.svc.<clusterDomain>`: the admin image's nginx resolves its upstream with its own
+       `resolver`, which applies no search list, so a short name is NXDOMAIN on a cluster. The domain must be the
+       render's `clusterDomain` (the chart's default where the file sets none), and one extra render of the first
+       `ci/` file into another namespace and another `clusterDomain` must follow both, so neither can be spelled.
   xiii.**A NetworkPolicy admits the public port from `networkPolicy.ingressFrom` exactly, and the admin port from
        the admin pod alone.** Every ingress rule of every NetworkPolicy selecting the app pods that reaches the
        admin port — a rule listing it by name or number, or a rule with no `ports` at all, which reaches every
@@ -177,6 +181,10 @@ pinned so they cannot be re-argued into the chart. (vii)–(xi) came with the AC
 against the chart before the opt-in existed; (x) apart from (ix) because removing the helper from the
 ConfigMap alone was the injection that turned only one of them red. (xii) and (xiii) came with the admin
 channel (uc.admin.admin-channel), both run red against the chart before its admin Service and policy existed.
+(xii)'s full-name half was live when written: the chart rendered `http://veyq-app-admin:8090`, which Compose's DNS
+would have answered and a cluster's did not — the first install on a real cluster (single-node k3s, 2026-11-05) got
+`could not be resolved (3: Host not found)` from nginx and a 502 on `/api/setup`, so first-run setup could not start.
+Run against that template it was red; it was bitten by injection (the short name, the namespace spelled `default`).
 (xiv) came with deploy-by-digest (cr-image-provenance-verifiable, ADR 0057 §3): no incident in the chart, which had
 no digest value at all; it pins that the digest an operator verified is the one the pod pulls, and each of its
 three halves was bitten by injection (template, schema pattern, the `ci/` file). The read-only root in (v), the
@@ -279,6 +287,10 @@ KT_DEFAULT = re.compile(r'@WithDefault\("([^"]*)"\)\s*\n\s*fun\s+configSecretFil
 # `const val OWNER_LABEL = "…"` / `OWNER_VALUE` / the two listener names — the sink's own constants, read not retyped.
 KT_ADMIN_PORT = re.compile(r'interface\s+AdminChannel\s*\{.*?@WithDefault\("(\d+)"\)\s*\n\s*fun\s+port\s*\(\s*\)', re.DOTALL)
 ADMIN_PORT_ENV = "VEYQ_ADMIN_CHANNEL_PORT"
+# (xii) the cluster domain a render without its own `clusterDomain` gets — the chart's default, read, never spelled —
+# and the namespace and domain of the probe render that proves both are read rather than spelled in the template.
+DEFAULT_CLUSTER_DOMAIN = str((yaml.safe_load((CHART / "values.yaml").read_text()) or {}).get("clusterDomain") or "")
+PROBE_NAMESPACE, PROBE_CLUSTER_DOMAIN = "veyq-probe-ns", "probe.internal"
 # (xxiii) the two variables the PROXY source sets together, and the probes they move.
 PROXY_ENV = "QUARKUS_HTTP_PROXY_USE_PROXY_PROTOCOL"
 PORT_SOURCE_ENV = "VEYQ_HTTP_CLIENT_PORT_SOURCE"
@@ -656,8 +668,12 @@ def check_store_log(tag: str, garage: bool, rendered: list[dict]) -> None:
                           f"logs every request with the peer's address (ADR 0092 § 5)")
 
 
-def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list) -> None:
-    """(xii) and (xiii): the admin listener's Service, the routes that must not name it, and the policy."""
+def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list,
+                        cluster_domain: str, namespace: str | None = None) -> None:
+    """(xii) and (xiii): the admin listener's Service, the routes that must not name it, and the policy.
+
+    `cluster_domain` is the render's `clusterDomain`; `namespace`, when given, the namespace it was rendered into —
+    the probe render passes both, so a namespace or a domain spelled into the template instead of read is a red."""
     workloads = [(o, s) for o in rendered if (s := pod_spec(o))]
     labels_of = {name_of(o): pod_labels(o) for o, _ in workloads}
     app = next(((o, c) for o, s in workloads for c in s.get("containers") or [] if is_app_container(c)), None)
@@ -699,11 +715,23 @@ def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, in
                 errors.append(f"(xii) {tag}: {name_of(obj)} routes to {backend}, the admin listener's Service — no route may, admin.domain set or not (ADR 0065)")
     backend_url = next((e.get("value") for e in admin[1].get("env") or [] if e.get("name") == "BACKEND_URL"), None)
     target = re.fullmatch(r"https?://([^:/]+):(\d+)/?", str(backend_url or ""))
-    if target is None or listener_services.get(target.group(1)) != int(target.group(2)):
+    service, _, suffix = (target.group(1) if target else "").partition(".")
+    if target is None or listener_services.get(service) != int(target.group(2)):
         errors.append(
             f"(xii) {tag}: the admin container's BACKEND_URL is {backend_url!r}, not the admin listener's Service "
             f"({', '.join(f'{n}:{p}' for n, p in listener_services.items()) or 'none'}) — the public port 404s every Server-Owner operation"
         )
+    else:
+        # The Service's FULL name: nginx's `resolver` asks for the name as written, with no search list, so a short
+        # name is NXDOMAIN on a cluster and first-run setup 502s (measured on a k3s cluster, 2026-11-05).
+        full = re.fullmatch(r"([a-z0-9]([-a-z0-9]*[a-z0-9])?)\.svc\.(.+)", suffix)
+        if full is None or full.group(3) != cluster_domain or (namespace is not None and full.group(1) != namespace):
+            wanted = f"{service}.{namespace or '<namespace>'}.svc.{cluster_domain}"
+            errors.append(
+                f"(xii) {tag}: the admin container's BACKEND_URL names {target.group(1)!r}, not the Service's full name "
+                f"{wanted!r} — the admin image's nginx resolves its upstream with its own `resolver`, which applies no "
+                f"search list, so any other form is NXDOMAIN on a cluster and first-run setup 502s"
+            )
 
     # (xiii) the policy
     if not policy_enabled:
@@ -1100,7 +1128,8 @@ def check(values_file: pathlib.Path) -> list[dict]:
 
     network_policy = values.get("networkPolicy") or {}
     policy_enabled = network_policy.get("enabled", True) is not False  # the chart's default is true
-    check_admin_channel(tag, rendered, policy_enabled, network_policy.get("ingressFrom") or [])
+    check_admin_channel(tag, rendered, policy_enabled, network_policy.get("ingressFrom") or [],
+                        values.get("clusterDomain") or DEFAULT_CLUSTER_DOMAIN)
     if policy_enabled:
         check_network_policies(tag, rendered)
     check_image_digests(tag, values, rendered)
@@ -1267,6 +1296,17 @@ if values_files:
             errors.append(f"(xxvi) `helm lint {' '.join(extra)}` failed, but its output never names `/backup`:\n{output.strip()}")
         elif not refused and code != 0:
             errors.append(f"(xxvi) `helm lint {' '.join(extra)}` failed — that is a choice the schema must accept:\n{output.strip()}")
+    # (xii) the admin surface's upstream is the Service's full name in the release's OWN namespace and cluster domain:
+    # rendered into another of each, both must follow — a namespace or a domain spelled into the template is a red.
+    probe = render(base, ["--namespace", PROBE_NAMESPACE, "--set", f"clusterDomain={PROBE_CLUSTER_DOMAIN}"])
+    if probe:
+        base_values = yaml.safe_load(base.read_text()) or {}
+        base_policy = base_values.get("networkPolicy") or {}
+        check_admin_channel(f"{base.name} (namespace {PROBE_NAMESPACE}, clusterDomain {PROBE_CLUSTER_DOMAIN})",
+                            objects(probe), base_policy.get("enabled", True) is not False,
+                            base_policy.get("ingressFrom") or [], PROBE_CLUSTER_DOMAIN, PROBE_NAMESPACE)
+    else:
+        errors.append(f"(xii) {base.name}: the render into namespace {PROBE_NAMESPACE} failed, so the admin upstream's full name is unchecked")
     code, output = lint(base, ["--set", "app.clientPort.source=bogus"])
     if code == 0:
         errors.append("(xxiii) `helm lint --set app.clientPort.source=bogus` passed — the schema must refuse a port source outside its enum")

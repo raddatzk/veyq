@@ -24,6 +24,36 @@ VEYQ_RESOLVERS=$(awk '/^nameserver/ { print ($2 ~ /:/) ? "[" $2 "]" : $2 }' /etc
 : "${VEYQ_RESOLVERS:=127.0.0.11}"
 export VEYQ_RESOLVERS
 
+# nginx's `resolver` asks those nameservers for the upstream's name AS WRITTEN: unlike the C library it applies no
+# `search` list from /etc/resolv.conf. A single-label host (`app`) therefore resolves only where the nameserver itself
+# answers short names — Docker's embedded DNS (127.0.0.11) does; a Kubernetes cluster's does not, and there every
+# /api/* request is a 502 "could not be resolved (3: Host not found)" while the console loads (measured on a k3s
+# cluster, 2026-11-05). Resolving once at start instead would bring back the startup failure the template's
+# `location /api/` explains, so the hook only names the case here, at start, rather than in the first failed request:
+# the chart renders the Service's full name (templates/admin.yaml), and an operator running the image elsewhere must
+# give one too.
+veyq_host=${BACKEND_URL#*://}
+veyq_host=${veyq_host%%/*}
+case "$veyq_host" in
+  \[*) ;;  # an IPv6 literal
+  *)
+    veyq_host=${veyq_host%%:*}
+    case "$veyq_host" in
+      *.*) ;;
+      *)
+        case " $VEYQ_RESOLVERS " in
+          *" 127.0.0.11 "*) ;;
+          *)
+            echo "veyq-admin: WARNING: BACKEND_URL names the single-label host '${veyq_host}', and nginx's resolver" \
+              "applies no search list: unless ${VEYQ_RESOLVERS% } answers that name as written, every /api/* request" \
+              "fails with 502. Give its full name (on Kubernetes <service>.<namespace>.svc.<cluster domain>)." >&2
+            ;;
+        esac
+        ;;
+    esac
+    ;;
+esac
+
 # The deployment's HSTS switch — fed from the same key as the app's (`VEYQ_HSTS_ENABLED` in infra/docker/.env,
 # `hsts.enabled` in the chart; https://veyq.app/run/new-instance/), so one value governs both origins;
 # docs/crosscutting/cc.security.csp.md § admin-web says why there is one and not two. Exactly `true` (the default

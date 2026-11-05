@@ -15,7 +15,11 @@ No published release has been installed on either target yet. On Compose, every 
 (`scripts/run_stack_e2e.py`) installs its candidate exactly as below, from a release produced from the tree with images
 built on the host, with `--unsigned-local` in place of the signature check; it has run on a developer machine only (the
 repository has no remote). The recipe's hardening is checked by `scripts/validate_compose_posture.py`, and the rendered
-chart by `scripts/chart_meta_check.py`.
+chart by `scripts/chart_meta_check.py`. On Kubernetes, the owner installed the signed pre-release snapshot
+`0.2265-SNAPSHOT` once from the published chart by digest (2026-11-05: single-node k3s, Traefik, cert-manager, Argo
+CD): the `Gateway` was programmed, both hosts got certificates, the app migrated and set up the bundled store. That run
+found what this tab and [Kubernetes](/run/kubernetes/) now say about Traefik's ports and Argo CD, and an admin surface
+that could not reach the app, fixed in the chart after that snapshot.
 :::
 
 ## Install
@@ -150,9 +154,26 @@ exactly what you verified. Helm finds a veyq chart **only by its digest or its e
 the version has two parts, and Helm's tag listing skips every tag that is not three-part SemVer, so `helm install`
 without a version, or with a range, finds nothing (measured with Helm 4.0.1, ADR 0064).
 
-**From a checkout** the chart is `./charts/veyq`, and its in-tree version is a placeholder (`0.0-dev`) no publish
+**With Traefik as the implementation, its entrypoints listen on 80 and 443 inside the pod.** Traefik attaches a
+`Gateway` listener to the entrypoint whose *container* port is the listener's port. The chart's `Gateway` listens
+on 80 and 443, and Traefik's Helm chart defaults its entrypoints to 8000 and 8443, so with those defaults the
+`Gateway` is never programmed and nothing routes. In Traefik's Helm values (Traefik 3.7.17 on k3s, 2026-11-05):
+
+```yaml
+ports:
+  web: {port: 80, exposedPort: 80}
+  websecure: {port: 443, exposedPort: 443}
+podSecurityContext:
+  sysctls:
+    # lets Traefik's unprivileged process bind 80 and 443, with no capability added
+    - {name: net.ipv4.ip_unprivileged_port_start, value: "0"}
+```
+
+The rest of the gateway's setup, and Argo CD, are on [Kubernetes](/run/kubernetes/).
+
+**From a checkout** the chart is `./infra/kubernetes/charts/veyq`, and its in-tree version is a placeholder (`0.0-dev`) no publish
 uses, so name the release yourself: add `--set image.tag="${release}" --set admin.image.tag="${release}"` to the
-same `helm install`, with `./charts/veyq` in place of `"$chart"`.
+same `helm install` (the tools image follows `image.tag`), with `./infra/kubernetes/charts/veyq` in place of `"$chart"`.
 
 The rest of what is specific to this target is on [Kubernetes](/run/kubernetes/).
 
