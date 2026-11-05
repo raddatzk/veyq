@@ -1,8 +1,9 @@
 version: 2
 
-# UNPROVEN BY CONSTRUCTION: this repository has no remote, so Dependabot has never read this file. Every entry
-# below is a claim about what Dependabot would do, checked against its source (dependabot-core, main, 2026-09-25)
-# rather than against a run.
+# Read by Dependabot since the first push (2026-11-05). Its first read refused the file, so no update ran: an update
+# that belongs to a multi-ecosystem group may not carry `open-pull-requests-limit` ("should only be set on the
+# associated multi-ecosystem group"); a group is one pull request per run anyway, so its members carry none. What is
+# still marked "remembered" below has not been seen in a run.
 
 multi-ecosystem-groups:
   app-runtime:
@@ -28,7 +29,6 @@ updates:
     patterns:
       - "*"
     multi-ecosystem-group: "app-runtime"
-    open-pull-requests-limit: 1
 
   # The docs site is its own package with its own lockfile, deliberately outside the root workspace (site/package.json
   # says why), so the entry above never reads it (remembered, NOT read from dependabot-core: the file fetcher follows
@@ -58,7 +58,6 @@ updates:
     patterns:
       - "*"
     multi-ecosystem-group: "app-runtime"
-    open-pull-requests-limit: 1
 
   # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): each image's beside
   # the code it ships — the app image's in src/backend/, the admin image's in src/admin-web/, the tools image's in
