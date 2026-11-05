@@ -108,27 +108,73 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # chose it, it was never seen to build (it OOMs an 8 GB Docker VM), nothing tested it, and the release never
 # published it. A native image returns only as a decision with its own CI build and e2e run (inbox #243).
 
+# --- runtime base and its preparation ----------------------------------------------------------------------
+# The runtime is distroless (ADR 0118): Debian 13's glibc, CA certificates and tzdata, and the Eclipse Temurin 21 JRE
+# Google's distroless project packages from Adoptium's builds — and nothing else: no shell, no package manager, no
+# coreutils, no curl, no tar. `nonroot` is the variant whose default user is not root; the stage below sets its own
+# anyway. Pinned by the multi-arch index digest (amd64 + arm64, validate_image_pins.py's limits say how it was
+# checked); Dependabot's `docker` ecosystem bumps the digest of the `nonroot` tag.
+FROM gcr.io/distroless/java21-debian13:nonroot@sha256:b22857e939bd95abd69d9d747f0421a274f9f70855ecfc335f7d97f6eeef578d AS distroless-java
+
+# Everything the runtime needs a shell for happens here, on the build JDK, and travels into the runtime as files: a
+# distroless stage can run nothing but `java`, so it has no `RUN`.
+FROM backend-build-base AS image-prep
+# The image's own commands (src/backend/image/ImageCommands.java): the Compose healthcheck, and the key placement and
+# file read veyqctl and the Run pages run in a one-off container of the app — what `curl`, `cat` and `mv` did before.
+COPY src/backend/image/ImageCommands.java /prep/src/
+# The base's own user database, plus the runtime user: uid and gid 10001, as before the move (ADR 0118 decision 2), with
+# a home that does not exist — the JVM's `user.name` is `veyq`, as it was, and `user.home` names no directory.
+COPY --from=distroless-java /etc/passwd /etc/group /prep/etc/
+# The commands are compiled with -Werror and smoke-tested HERE, so an image whose key placement or file read is broken
+# never builds: a key is born 0600 and reads back byte for byte, a missing file is exit 3, an empty stdin writes no key,
+# and a probe of a port nobody listens on is unhealthy. The healthy half of the probe is lane L1's: `veyqctl install`
+# waits on it.
+RUN mkdir -p /prep/classes /prep/opt/veyq /prep/empty /prep/etc/traefik /prep/smoke \
+    && echo 'veyq:x:10001:10001:veyq:/nonexistent:/sbin/nologin' >> /prep/etc/passwd \
+    && echo 'veyq:x:10001:' >> /prep/etc/group \
+    && javac --release 21 -Xlint:all -Werror -d /prep/classes /prep/src/ImageCommands.java \
+    && jar --create --file /prep/opt/veyq/image-commands.jar --main-class ImageCommands -C /prep/classes . \
+    && printf 'smoke-key' | java -jar /prep/opt/veyq/image-commands.jar place-key /prep/smoke/key \
+    && test "$(stat -c %a /prep/smoke/key)" = 600 \
+    && test "$(java -jar /prep/opt/veyq/image-commands.jar read-file /prep/smoke/key)" = smoke-key \
+    && { java -jar /prep/opt/veyq/image-commands.jar read-file /prep/smoke/absent; test $? -eq 3; } \
+    && ! printf '' | java -jar /prep/opt/veyq/image-commands.jar place-key /prep/smoke/key \
+    && test "$(java -jar /prep/opt/veyq/image-commands.jar read-file /prep/smoke/key)" = smoke-key \
+    && ! java -jar /prep/opt/veyq/image-commands.jar health http://127.0.0.1:9/ \
+    && rm -r /prep/smoke /prep/classes /prep/src
+
 # --- runtime (JVM) — the target ci.yml's `build` job builds -------------------------------------------------
 # The LAST stage on purpose: a build with no `--target` (`docker build -f src/backend/Dockerfile .`) builds the last
 # stage, so it builds what the release publishes. scripts/validate_images_run_unprivileged.py holds every published target to its file's last stage.
-FROM eclipse-temurin:21-jre-jammy@sha256:61d6c7b34d36aee3f45d043101259f97f3c6d428dc2a6f75513789983c5e254f AS runtime-jvm
-WORKDIR /work/
-# curl: container healthcheck only. No ffmpeg — the operator-blind backend never transcodes (thumbnails and
-# previews are client-generated blobs), so no server-side media binary is ever invoked.
+FROM distroless-java AS runtime-jvm
+# No ffmpeg — the operator-blind backend never transcodes (thumbnails and previews are client-generated blobs), so no
+# server-side media binary is ever invoked. And no curl since ADR 0118: the Compose healthcheck is
+# `java -jar /opt/veyq/image-commands.jar health` (infra/docker/docker-compose.prod.yml), the chart probes over HTTP.
 # Dropped the original's /data/veyq-media dir + chown: media bytes go to an S3-compatible store, never to a
 # local path (ADR 0013 / cr-0105 — BlobStoreStartupCheck aborts startup without a store endpoint), and
 # `grep -rn veyq-media src/backend/src/main infra/ .github/` finds nothing that would mount it.
+#
+# Every directory below is created by a `COPY` of an empty directory from `image-prep`, its owner and mode set by
+# `--chown`/`--chmod` on that line — the shape a stage with no shell has, and what
+# scripts/validate_app_volume_ownership.py reads. Measured on BuildKit: such a COPY gives the destination itself that
+# owner and mode, and gives it to a parent it has to create too, which is why /etc/traefik comes first, root-owned,
+# with the user database.
+COPY --from=image-prep /prep/etc/ /etc/
+#
 # /work MUST stay writable by the runtime user: veyq.security.config-secret-file defaults to
 # `config-secret.key` relative to the process CWD and the server GENERATES it 0600 on first start
 # (ADR 0050, the @WithDefault in VeyqConfig.kt's `Security` interface). A container without a persisted key
 # path regenerates the KEK on every recreate, which the veyq_instance fingerprint then reports as MISMATCH.
+COPY --from=image-prep --chown=10001:10001 --chmod=0755 /prep/empty /work
+WORKDIR /work/
 #
-# /var/lib/veyq is that path, and it exists here ONLY so a named volume mounted on it inherits uid 10001 —
-# Docker seeds a fresh volume from the image directory it covers, ownership included, and a root-owned mount
-# would leave the server unable to write its own key. Deployments set
+# /var/lib/veyq is that path, and it exists here ONLY so a named volume mounted on it inherits uid 10001 and mode
+# 0700 — Docker seeds a fresh volume from the image directory it covers, ownership and mode included, and a root-owned
+# mount would leave the server unable to write its own key. Deployments set
 # VEYQ_SECURITY_CONFIG_SECRET_FILE=/var/lib/veyq/config-secret.key and mount a volume here;
 # infra/docker/docker-compose.prod.yml does exactly that, and scripts/validate_config_secret_persistence.py holds
 # the three files to it.
+COPY --from=image-prep --chown=10001:10001 --chmod=0700 /prep/empty /var/lib/veyq
 #
 # /etc/traefik/dynamic is the SECOND such path and was missing until 2026-09-08 — the tenant-ingress
 # projection (ADR 0063) mounts a named volume there and the app writes the whole router set into it at
@@ -144,6 +190,7 @@ WORKDIR /work/
 #
 # scripts/validate_app_volume_ownership.py now derives this set from the compose file rather than trusting
 # this comment, so the NEXT volume added to the app service cannot repeat it.
+COPY --from=image-prep --chown=10001:10001 --chmod=0755 /prep/empty /etc/traefik/dynamic
 #
 # NOT /work, and not a `VOLUME` declaration — two deliberate omissions:
 #   - /work already holds quarkus-app/. A named volume mounted there is seeded from the image ONCE and then
@@ -153,15 +200,9 @@ WORKDIR /work/
 #     persistence (the key survives a restart) while `--rm` and `compose down -v` still discard it under a
 #     name no `docker volume ls` identifies. The defect must stay visible where nothing mounts the path;
 #     detection is the remedy ADR 0050's amendment chose.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd -r -g 10001 veyq \
-    && useradd -r -u 10001 -g veyq -s /usr/sbin/nologin veyq \
-    && mkdir -p /var/lib/veyq /etc/traefik/dynamic \
-    && chmod 0700 /var/lib/veyq \
-    && chmod 0755 /etc/traefik/dynamic \
-    && chown -R 10001:10001 /work /var/lib/veyq /etc/traefik/dynamic
+#
+# Root-owned and world-readable: the commands run as any user, and none of them may be rewritten by the one that runs.
+COPY --from=image-prep /prep/opt/veyq/image-commands.jar /opt/veyq/image-commands.jar
 COPY --from=backend-build-jvm --chown=10001:10001 /repo/src/backend/build/quarkus-app /work/quarkus-app
 # The AGPL travels with the object code it covers (§4/§6): a pulled image is a conveyed copy. The same path in
 # both images, beside the notices of every jar in /work/quarkus-app/lib (buildSrc's ThirdPartyLicenses) and of every
@@ -171,10 +212,10 @@ COPY --from=backend-build-jvm --chown=10001:10001 /repo/src/backend/build/quarku
 COPY LICENSE NOTICE /usr/share/licenses/veyq/
 COPY --from=backend-build-jvm /repo/src/backend/build/third-party-licenses/THIRD-PARTY-LICENSES.txt /usr/share/licenses/veyq/
 COPY --from=frontend-build /repo/src/web/dist/third-party-licenses.txt /usr/share/licenses/veyq/THIRD-PARTY-LICENSES-WEB.txt
-# The two stamps, after the last layer on purpose: a stamp declared before a RUN enters its cache key, which re-ran the
-# `apt-get` layer above at every commit (measured in the heavy stage's round 2, 2026-10-24). Nothing above reads them.
-# The labels are the image's identity as `docker inspect` shows it, set here only: no build step passes a label, and
-# every OCI key a base image lends (Ubuntu's `version` 22.04) is overwritten. A label is config, never a cached layer,
+# The two stamps, after the last layer on purpose: a stamp declared before a layer enters its cache key, which re-ran the
+# runtime's former `apt-get` layer at every commit (measured in the heavy stage's round 2, 2026-10-24). Nothing above
+# reads them. The labels are the image's identity as `docker inspect` shows it, set here only: no build step passes a
+# label, and every OCI key a base image could lend is overwritten (the distroless base lends none today). A label is config, never a cached layer,
 # so it names the commit built whatever the cache held (validate_release_identity.py assertion 12, measured by
 # scripts/image_identity_cache_proof.py).
 ARG VEYQ_VERSION=""

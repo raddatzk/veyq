@@ -749,9 +749,11 @@ def pebble(release: Release, workdir: Path, values: dict[str, str], app_image: s
     compose = pebble_compose(release, workdir, values)
     run(*compose, "up", "-d", "--wait", "pebble")
     root = pebble_root(compose, workdir)
-    # The candidate's own keytool, as the uid of this run, writing into the run directory; no network.
+    # The candidate's own keytool, as the uid of this run, writing into the run directory; no network. Through `java`:
+    # the distroless image puts only `java` on the PATH (ADR 0118), and keytool's launcher is this main class of
+    # java.base under an architecture-specific JRE path.
     run("docker", "run", "--rm", "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}",
-        "-v", f"{workdir}:/w", "--entrypoint", "keytool", app_image,
+        "-v", f"{workdir}:/w", "--entrypoint", "java", app_image, "-m", "java.base/sun.security.tools.keytool.Main",
         "-importcert", "-noprompt", "-alias", "veyq-e2e-pebble-root", "-file", f"/w/{root.name}",
         "-keystore", f"/w/{APP_TRUSTSTORE}", "-storetype", "PKCS12", "-storepass", APP_TRUSTSTORE_PASSWORD)
     print(f"pebble: the app trusts {describe(ssl.PEM_cert_to_DER_cert(root.read_text()))} and nothing else", flush=True)
