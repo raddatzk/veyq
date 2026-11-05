@@ -106,10 +106,32 @@ class AppShellSliceTest {
 
     @Test
     fun thePlainHeadersGoOnTheShellAndOnTheApi() {
-        for (response in listOf(html("/recover"), given().`when`().get("/api/setup"), html("/api/no-such-endpoint"))) {
+        val sw = given().`when`().get("/sw.js")
+        val asset = given().`when`().get("/assets/app-fixture.js")
+        for (response in listOf(html("/recover"), sw, asset, given().`when`().get("/api/setup"), html("/api/no-such-endpoint"))) {
             assertEquals("nosniff", response.header("X-Content-Type-Options"))
             assertEquals("strict-origin-when-cross-origin", response.header("Referrer-Policy"))
+            assertEquals("same-origin", response.header("Cross-Origin-Opener-Policy"))
+            assertEquals("same-origin", response.header("Cross-Origin-Resource-Policy"))
+            assertEquals(PERMISSIONS_POLICY, response.header("Permissions-Policy"))
         }
+        // Not COEP: it would refuse the map tiles, which come from another origin with no CORP of theirs (ADR 0018).
+        assertNull(html("/recover").header("Cross-Origin-Embedder-Policy"))
+    }
+
+    @Test
+    fun thePermissionsPolicyGrantsTheUsedFeaturesToThisOriginAndNoFeatureToAnyOther() {
+        val features = PERMISSIONS_POLICY.split(", ").associate { it.substringBefore('=') to it.substringAfter('=') }
+        // What the client calls (AppShellRoutes.PERMISSIONS_POLICY names each call): this origin, never another one.
+        for (used in listOf("camera", "clipboard-write", "fullscreen", "autoplay", "picture-in-picture")) {
+            assertEquals("(self)", features[used], used)
+        }
+        // A sample of what it never calls, each switched off - the position and the microphone above all.
+        for (unused in listOf("geolocation", "microphone", "payment", "usb", "display-capture", "screen-wake-lock")) {
+            assertEquals("()", features[unused], unused)
+        }
+        // No feature is granted wider than this origin.
+        assertTrue(features.values.all { it == "()" || it == "(self)" }, PERMISSIONS_POLICY)
     }
 
     @Test
@@ -148,6 +170,15 @@ class AppShellSliceTest {
         const val HTML = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         const val CSP = "Content-Security-Policy"
         const val FIXTURE_MARKER = "app-shell-fixture"
+
+        /** The Permissions-Policy the shell and the API send, written out here rather than read from the code. */
+        const val PERMISSIONS_POLICY =
+            "camera=(self), clipboard-write=(self), fullscreen=(self), autoplay=(self), picture-in-picture=(self), " +
+                "accelerometer=(), browsing-topics=(), display-capture=(), encrypted-media=(), gamepad=(), " +
+                "geolocation=(), gyroscope=(), hid=(), identity-credentials-get=(), idle-detection=(), local-fonts=(), " +
+                "magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), publickey-credentials-create=(), " +
+                "publickey-credentials-get=(), screen-wake-lock=(), serial=(), storage-access=(), usb=(), " +
+                "window-management=(), xr-spatial-tracking=()"
 
         /** `src/test/resources/META-INF/resources/content-security-policy.txt`, without its trailing newline. */
         const val FIXTURE_POLICY =

@@ -40,6 +40,9 @@ class AppShellAbsentSliceTest {
         // The plain headers are the API's, and do not depend on a shell.
         assertEquals("nosniff", response.header("X-Content-Type-Options"))
         assertEquals("strict-origin-when-cross-origin", response.header("Referrer-Policy"))
+        assertEquals("same-origin", response.header("Cross-Origin-Opener-Policy"))
+        assertEquals("same-origin", response.header("Cross-Origin-Resource-Policy"))
+        assertEquals(AppShellSliceTest.PERMISSIONS_POLICY, response.header("Permissions-Policy"))
     }
 
     @Test

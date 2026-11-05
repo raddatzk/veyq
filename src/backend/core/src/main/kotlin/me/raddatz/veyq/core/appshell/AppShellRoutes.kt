@@ -109,6 +109,14 @@ class AppShellRoutes(
         // (ADR 0016). This value sends the origin cross-origin, never a path.
         headers.set(REFERRER_POLICY_HEADER, "strict-origin-when-cross-origin")
         hsts?.let { headers.set(HSTS_HEADER, it) }
+        // Isolation, on every response like the three above: each takes effect on a document or a no-cors read and is
+        // inert on the API's JSON, and an API path opened as a page is a document like any other (cc.security.csp.md).
+        // COOP: a page opened from a mail or another site keeps no handle on the opener, nor it on us; nothing here opens
+        // a cross-origin popup that must talk back (no OAuth, no payment window). CORP: no other origin embeds or reads
+        // a response of ours no-cors. Not COEP: it would refuse the cross-origin map tiles (ADR 0018).
+        headers.set(COOP_HEADER, "same-origin")
+        headers.set(CORP_HEADER, "same-origin")
+        headers.set(PERMISSIONS_POLICY_HEADER, PERMISSIONS_POLICY)
 
         val shell = shell as? AppShell.Present ?: return
         val path = ctx.normalizedPath()
@@ -153,6 +161,27 @@ class AppShellRoutes(
         const val NOSNIFF_HEADER = "X-Content-Type-Options"
         const val REFERRER_POLICY_HEADER = "Referrer-Policy"
         const val HSTS_HEADER = "Strict-Transport-Security"
+        const val COOP_HEADER = "Cross-Origin-Opener-Policy"
+        const val CORP_HEADER = "Cross-Origin-Resource-Policy"
+        const val PERMISSIONS_POLICY_HEADER = "Permissions-Policy"
+
+        /**
+         * The browser features the web client uses, for its own origin only, and every other one switched off - so a
+         * script that got in cannot reach the microphone or the position either. Used, with the call that needs it:
+         * `camera` (the Emergency Kit scanner's `getUserMedia`, `KitScanner.vue`), `clipboard-write` (`writeText` of a
+         * share link, a guest id, a text), `fullscreen` (the file viewer's `requestFullscreen`, a video's own button),
+         * `autoplay` (the lightbox's and the Memory banner's `<video autoplay>`, the deriver's muted `play()`) and
+         * `picture-in-picture` (a video's own control). A feature the client starts to use is added here and in
+         * cc.security.csp.md, or the browser refuses it. Only features Chromium knows: it logs an error for every
+         * other name on every page (`bluetooth` and `web-share` were, in lane L1's Chromium, 2026-11-05).
+         */
+        const val PERMISSIONS_POLICY =
+            "camera=(self), clipboard-write=(self), fullscreen=(self), autoplay=(self), picture-in-picture=(self), " +
+                "accelerometer=(), browsing-topics=(), display-capture=(), encrypted-media=(), gamepad=(), " +
+                "geolocation=(), gyroscope=(), hid=(), identity-credentials-get=(), idle-detection=(), local-fonts=(), " +
+                "magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), publickey-credentials-create=(), " +
+                "publickey-credentials-get=(), screen-wake-lock=(), serial=(), storage-access=(), usb=(), " +
+                "window-management=(), xr-spatial-tracking=()"
 
         fun isUnder(path: String, prefix: String) = path == prefix || path.startsWith("$prefix/")
 
