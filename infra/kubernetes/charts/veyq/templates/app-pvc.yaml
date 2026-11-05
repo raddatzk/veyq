@@ -9,6 +9,10 @@ metadata:
     {{- include "veyq.labels" . | nindent 4 }}
   annotations:
     helm.sh/resource-policy: keep
+    # The same intent for Argo CD, which renders the chart with `helm template` and ignores Helm's policy: never pruned
+    # by a sync, and left behind when the Application is deleted (Argo CD's sync options `Prune=false` and
+    # `Delete=false`; remembered from its documentation, not run on a cluster). Ignored by Helm and everything else.
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
 spec:
   accessModes: [{{ .Values.app.persistence.accessMode }}]
   {{- with .Values.app.persistence.storageClass }}

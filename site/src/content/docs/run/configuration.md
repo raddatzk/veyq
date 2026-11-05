@@ -76,6 +76,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `domain` | — | The instance's domain, as `VEYQ_DOMAIN` above |
 | `storeDomain` | — | The bundled store's own host; browsers upload to and download from it. Required, and read, only with `garage.enabled` |
 | `hsts.enabled` | `true` | HSTS on the instance and the admin surface |
+| `clusterDomain` | `cluster.local` | The cluster's DNS domain. The admin surface reaches the app's admin listener by the full name `veyq-app-admin.<namespace>.svc.<clusterDomain>`, because its proxy's resolver applies no search list. Change it only if your cluster uses another |
 | `image.repository` | `ghcr.io/raddatzk/veyq` | The application image |
 | `image.tag` | the chart's `appVersion` | The release; set it when installing from a checkout |
 | `image.digest` | — | The digest you verified; the image is then pulled by digest |
