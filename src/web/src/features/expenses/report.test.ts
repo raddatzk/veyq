@@ -14,10 +14,19 @@ import { ANNA, BEN, POT_ID, PotServer, SCOPE, expense, person } from './potTestU
 
 const DINNER = '0e000000-0000-4000-9000-000000000001'
 
+// Each edit goes through the real write path against the revisions held so far, opened once each: `append`'s default
+// opens every row again on every call, which over the cap's 256 edits is quadratic — 1.8 s of the fixture alone on an
+// Apple Silicon core and past the 5 s test timeout on a 4-vCPU CI runner (measured 2026-11-05), for the same rows.
 function potWithEdits(edits: number): PotServer {
   const s = new PotServer(v1.randomBytes(32))
-  s.append([{ entryId: ANNA, content: person('Anna', 1) }, { entryId: BEN, content: person('Ben', 2) }])
-  for (let i = 0; i < edits; i++) s.append([{ entryId: DINNER, content: expense(`Dinner ${i}`, 1000 + i, ANNA, [ANNA, BEN]) }])
+  let held = s.held()
+  const append = (writes: Parameters<PotServer['append']>[0]) => {
+    const from = s.rows.length
+    s.append(writes, undefined, held)
+    held = [...held, ...s.held(s.rows.slice(from))]
+  }
+  append([{ entryId: ANNA, content: person('Anna', 1) }, { entryId: BEN, content: person('Ben', 2) }])
+  for (let i = 0; i < edits; i++) append([{ entryId: DINNER, content: expense(`Dinner ${i}`, 1000 + i, ANNA, [ANNA, BEN]) }])
   return s
 }
 
