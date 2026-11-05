@@ -3,6 +3,7 @@ title: Hardening
 description: A checklist of what is hardened by default, what you must keep that way, and the few settings that are yours.
 sources:
   - docs/decisions/0071-runtime-hardening-on-both-targets.md
+  - docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md
   - docs/decisions/0117-the-web-client-enforces-trusted-types.md
   - docs/decisions/0065-admin-ui-cli-separate-service.md
   - docs/decisions/0050-operator-config-secret-encryption.md
@@ -28,6 +29,13 @@ filesystem ([ADR 0071](https://github.com/raddatzk/veyq/blob/main/docs/decisions
 On Kubernetes every pod passes the `restricted` PodSecurity standard, so you can label the namespace with it from the
 start. Do not add capabilities or a writable root in an override: a path a process writes is a named volume or a
 `tmpfs` that was measured for it.
+
+The application's image goes further: it is **distroless**
+([ADR 0118](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md)) —
+the Java runtime, CA certificates and time zones, and no shell, no package manager, no `curl` and no `tar`. Its
+healthcheck and the few things a restore puts into it run on its own `java` (`/opt/veyq/image-commands.jar`). So
+`docker compose exec app sh` and `kubectl exec … -- sh` find nothing to run; [Troubleshooting](/veyq/run/troubleshooting/#look-inside-the-application-container)
+says what to use instead. The admin and tools images are not distroless.
 
 ## Keep the admin listener local
 
@@ -115,5 +123,7 @@ Neither recipe passes a setting for them.
 The hardened Compose recipe was brought up live once (2026-09-28, on Docker Desktop with locally built images): every
 service up, the database unreachable from the proxy, the application reachable through the admin port. The rules are
 checked in the repository by `scripts/validate_compose_posture.py`, `scripts/chart_meta_check.py` and
-`scripts/validate_images_run_unprivileged.py`, which no CI run has executed yet. On Kubernetes, only what the chart renders is checked; no policy has
+`scripts/validate_images_run_unprivileged.py`, which no CI run has executed yet. The distroless application image ran
+lane L1 whole once (2026-11-05, arm64, locally built): `veyqctl install` waited on its own health probe, 172 browser
+tests passed, and `veyqctl`'s key placement and ledger read ran against that instance; an amd64 build has not run. On Kubernetes, only what the chart renders is checked; no policy has
 been enforced in a cluster.
