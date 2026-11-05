@@ -91,7 +91,9 @@ describe('buildCsp', () => {
 
   it("hashes exactly the <style> elements the reka-ui components this client imports render", () => {
     expect(rekaStyleHashes(fileURLToPath(new URL('../..', import.meta.url)))).toEqual([...REKA_STYLE_HASHES].sort())
-  })
+    // A synchronous read of every source file (1720 files, 19 MB with the generated clients): 183 ms alone, but past
+    // vitest's 5 s default when the suite's other workers contend for the disk (four times on 2026-11-05, load 8-17).
+  }, 30_000)
 
   it('bakes NO third-party origin into the build: the backend appends the services in use (ADR 0088 decision 7)', () => {
     expect(csp).toContain("img-src 'self' data: blob:;")

@@ -544,7 +544,9 @@ describe('the page holds nothing a PDF could act through', () => {
       expect(src, file).not.toMatch(/import\s+[^(]*from\s+['"][^'"]*pdfjsRuntime/)
     }
     expect(readFileSync(join(base, 'shared/pdf/pdfEngine.ts'), 'utf8')).toMatch(/await import\('\.\/pdfjsRuntime'\)/)
-  })
+    // A synchronous read of every source file (1720 files, 19 MB with the generated clients): 183 ms alone, but past
+    // vitest's 5 s default when the suite's other workers contend for the disk (four times on 2026-11-05, load 8-17).
+  }, 30_000)
 })
 
 // --- the text layer ------------------------------------------------------------------------------------------------------------
