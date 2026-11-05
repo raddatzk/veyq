@@ -1,5 +1,5 @@
 # Production stack for a self-hosted veyq instance: the app, its database, the bundled object store, and a
-# Traefik that terminates TLS in front of both. See https://raddatzk.github.io/veyq/run/new-instance/.
+# Traefik that terminates TLS in front of both. See https://veyq.app/run/new-instance/.
 #
 #     docker compose -f infra/docker/docker-compose.prod.yml up -d
 #
@@ -131,7 +131,7 @@ services:
       - veyq-garage-snapshots:/var/lib/garage/snapshots
 
   app:
-    image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/docker/.env, e.g. ghcr.io/raddatzk/veyq:1.0@sha256:<digest> (https://raddatzk.github.io/veyq/run/verify-a-release/)}
+    image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/docker/.env, e.g. ghcr.io/raddatzk/veyq:1.0@sha256:<digest> (https://veyq.app/run/verify-a-release/)}
     restart: unless-stopped
     # No `user:` — the image declares it (Dockerfile `USER`), and the guards read it there. /tmp is the JVM's
     # scratch (hsperfdata, the Vert.x cache).
@@ -155,7 +155,7 @@ services:
       QUARKUS_DATASOURCE_USERNAME: veyq
       QUARKUS_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/docker/.env}
       # HSTS on the app's responses (ADR 0069). The switch is the DEPLOYMENT's, named for it rather than for
-      # this service, so every origin this stack serves answers to the one value — https://raddatzk.github.io/veyq/run/new-instance/ says when to
+      # this service, so every origin this stack serves answers to the one value — https://veyq.app/run/new-instance/ says when to
       # turn it off. Traefik adds nothing: the app sends its own headers.
       VEYQ_HTTP_HSTS_ENABLED: ${VEYQ_HSTS_ENABLED:-true}
       # The BUNDLED-STORE HINT (ADR 0089) — the one store value the environment carries: where this stack's
@@ -228,7 +228,7 @@ services:
   # surface this instance serves, which is the exact opposite of what extracting it was for. The container
   # side is 8080, not 80: the admin image runs unprivileged (uid 101, src/admin-web/Dockerfile) and cannot bind 80.
   admin:
-    image: ${VEYQ_ADMIN_IMAGE:?set VEYQ_ADMIN_IMAGE in infra/docker/.env, e.g. ghcr.io/raddatzk/veyq-admin:1.0@sha256:<digest> (https://raddatzk.github.io/veyq/run/verify-a-release/)}
+    image: ${VEYQ_ADMIN_IMAGE:?set VEYQ_ADMIN_IMAGE in infra/docker/.env, e.g. ghcr.io/raddatzk/veyq-admin:1.0@sha256:<digest> (https://veyq.app/run/verify-a-release/)}
     restart: unless-stopped
     # No `user:`, as for the app. /tmp holds nginx's pid and temp paths; the entrypoint renders its site into
     # conf.d. A tmpfs over an image directory keeps that directory's root-owned 0775, so conf.d is opened to its

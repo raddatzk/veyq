@@ -102,17 +102,17 @@ gate keeps it down with its data untouched. So upgrade with a timeout above the 
     kubectl -n {{ .Release.Namespace }} logs deploy/veyq-app -c backup-gate
 {{- if .Values.app.configSecret.existingSecret }}
 The gate never reads the config-secret key, which is your Secret {{ .Values.app.configSecret.existingSecret }}: keep
-the file you made it from apart from the claim — see https://raddatzk.github.io/veyq/run/backup-and-restore/ (and keep
+the file you made it from apart from the claim — see https://veyq.app/run/backup-and-restore/ (and keep
 the store's own versioning on: the gate indexes the objects, it does not copy them).
 {{- else }}
 The gate never reads the config-secret key: export it once, now, and keep it apart from the claim — see
-https://raddatzk.github.io/veyq/run/backup-and-restore/ (and keep the store's own versioning on: the gate indexes
+https://veyq.app/run/backup-and-restore/ (and keep the store's own versioning on: the gate indexes
 the objects, it does not copy them).
 {{- end }}
 {{- else }}
 
 Backups: backup.enabled is false. Nothing captures the database before a release change migrates it: taking that
-backup before every upgrade is yours, by the hand procedure on https://raddatzk.github.io/veyq/run/upgrade/.
+backup before every upgrade is yours, by the hand procedure on https://veyq.app/run/upgrade/.
 {{- end }}
 {{- if not .Values.networkPolicy.enabled }}
 

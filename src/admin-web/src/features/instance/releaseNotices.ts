@@ -32,7 +32,7 @@ export function noticesMailedTo(mail: InstanceMailSettings): string | null {
 }
 
 /** The Run area's upgrade page (ADR 0087) — the same link the notice mail carries. */
-export const UPGRADE_PAGE = 'https://raddatzk.github.io/veyq/run/upgrade/'
+export const UPGRADE_PAGE = 'https://veyq.app/run/upgrade/'
 
 /** An unscheduled major is the one notice that means "now" (ADR 0085 decision 4): the console and the CLI mark it. */
 export function isUrgent(notice: InstanceReleaseNotice): boolean {
