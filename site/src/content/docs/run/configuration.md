@@ -24,7 +24,7 @@ veyq splits its configuration in two
 ## Docker Compose: `.env`
 
 `veyqctl install` writes `/opt/veyq/.env` (mode `0600`) from the release's template, `env.example` — the tree's
-`infra/docker/.env.example` ([Set up a new instance](/veyq/run/new-instance/#install)). It generates the four secrets, writes
+`infra/docker/.env.example` ([Set up a new instance](/run/new-instance/#install)). It generates the four secrets, writes
 the two image lines from the release's manifest, and takes every other value from `--set KEY=VALUE` or asks for it; an
 optional variable is given the same way. `upgrade` keeps every value, and every key the new template does not name.
 By hand, copy the template to `.env` and fill it in: every required variable has no default, and a missing one fails
@@ -33,21 +33,21 @@ By hand, copy the template to `.env` and fill it in: every required variable has
 
 | Variable | Required | Default | Meaning |
 |---|---|---|---|
-| `VEYQ_RELEASE` | No | `latest` | Read by `veyqctl` only: the release line `install` and `upgrade` take. `<major>.<minor>` pins one release, `<major>` takes the newest of that major, `latest` the newest of all; a new major is entered only from the release it was tested from ([Upgrade](/veyq/run/upgrade/#which-release-upgrade-takes)) |
+| `VEYQ_RELEASE` | No | `latest` | Read by `veyqctl` only: the release line `install` and `upgrade` take. `<major>.<minor>` pins one release, `<major>` takes the newest of that major, `latest` the newest of all; a new major is entered only from the release it was tested from ([Upgrade](/run/upgrade/#which-release-upgrade-takes)) |
 | `VEYQ_DOMAIN` | Yes | — | The instance's domain. It is written into every invitation and recovery link, so changing it later is not supported, and a restore must target the same domain |
-| `VEYQ_IMAGE` | Yes | — | The application image, as `ghcr.io/raddatzk/veyq:<major>.<minor>@sha256:<digest>`. `veyqctl` writes it from the release's manifest ([Verify a release](/veyq/run/verify-a-release/)) and refuses it as a `--set` |
+| `VEYQ_IMAGE` | Yes | — | The application image, as `ghcr.io/raddatzk/veyq:<major>.<minor>@sha256:<digest>`. `veyqctl` writes it from the release's manifest ([Verify a release](/run/verify-a-release/)) and refuses it as a `--set` |
 | `VEYQ_ADMIN_IMAGE` | Yes | — | The admin image of the same release, pinned the same way |
 | `MARIADB_PASSWORD` | Yes | — | The application's database password |
 | `MARIADB_ROOT_PASSWORD` | Yes | — | MariaDB's root password; a backup capture uses it |
 | `GARAGE_RPC_SECRET` | Yes | — | The bundled Garage's node secret, exactly 64 hex characters |
 | `GARAGE_ADMIN_TOKEN` | Yes | — | The bundled Garage's admin token. The application reads it too: it sets the bundled store up with it and derives the store's access keys from it, so there is no store key to set |
 | `VEYQ_ACME_EMAIL` | Yes | — | The Let's Encrypt account email |
-| `ADMIN_DOMAIN` | No | unset | A hostname of the admin surface's own. Unset, the console is reachable from the host only ([First-run setup](/veyq/run/first-run/#reach-the-console)); set it only after the Server Owner exists |
+| `ADMIN_DOMAIN` | No | unset | A hostname of the admin surface's own. Unset, the console is reachable from the host only ([First-run setup](/run/first-run/#reach-the-console)); set it only after the Server Owner exists |
 | `ADMIN_PORT` | No | `8081` | The host port the admin surface is published on, on `127.0.0.1` only |
 | `VEYQ_ACME_CASERVER` | No | Let's Encrypt production | The ACME directory; point it at the staging directory while testing |
-| `VEYQ_HSTS_ENABLED` | No | `true` | HSTS on the instance and the admin surface ([Hardening](/veyq/run/hardening/#tls-hsts-and-csp)) |
+| `VEYQ_HSTS_ENABLED` | No | `true` | HSTS on the instance and the admin surface ([Hardening](/run/hardening/#tls-hsts-and-csp)) |
 | `VEYQ_MEM_LIMIT` | No | `1g` | The application container's memory limit; the JVM heap is 60 % of it |
-| `VEYQ_BACKUP_OBJECTS_TO` | No | unset | Read by `veyqctl` only: the object pool every `backup` and `upgrade` copies the store's new objects into — an absolute directory on another disk, or `s3:<bucket>[/<prefix>]`. Unset, a backup holds no object, and `veyqctl status` warns while the bundled store is in use ([Backup and restore](/veyq/run/backup-and-restore/#capture)) |
+| `VEYQ_BACKUP_OBJECTS_TO` | No | unset | Read by `veyqctl` only: the object pool every `backup` and `upgrade` copies the store's new objects into — an absolute directory on another disk, or `s3:<bucket>[/<prefix>]`. Unset, a backup holds no object, and `veyqctl status` warns while the bundled store is in use ([Backup and restore](/run/backup-and-restore/#capture)) |
 | `VEYQ_BACKUP_POOL_ENDPOINT` | With an S3 pool | — | The S3 pool's endpoint, as the backup tool's container reaches it |
 | `VEYQ_BACKUP_POOL_ACCESS_KEY` | With an S3 pool | — | The S3 pool's access key; reaches the tool through its environment, never a capture |
 | `VEYQ_BACKUP_POOL_SECRET_KEY` | With an S3 pool | — | Its secret key, the same way |
@@ -56,7 +56,7 @@ By hand, copy the template to `.env` and fill it in: every required variable has
 
 The compose file sets the rest of the application's environment itself (the database URL, the bundled store's
 internal addresses, the config-secret key path, the routing file, and `VEYQ_HTTP_CLIENT_PORT_SOURCE: header`, which
-goes with the recipe's Traefik plugin — [Networking](/veyq/run/networking/#where-the-source-port-comes-from)). Leave
+goes with the recipe's Traefik plugin — [Networking](/run/networking/#where-the-source-port-comes-from)). Leave
 those to it.
 
 ## Kubernetes: the chart's values
@@ -90,8 +90,8 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 
 | Value | Default | Meaning |
 |---|---|---|
-| `app.trustedProxies` | — | The hops in front of the gateway, such as a load balancer: IP addresses and CIDR ranges, comma-separated; renders `VEYQ_HTTP_TRUSTED_PROXIES` ([Hardening](/veyq/run/hardening/#list-only-the-hops-in-front-of-the-gateway)) |
-| `app.clientPort.source` | `none` | Where the client's source port comes from: `none`, `proxyProtocol` (the gateway sends the PROXY protocol to the app's routes; also turns it on in the app and moves the probes to the admin listener) or `header` (your edge overwrites the header on every request); renders `VEYQ_HTTP_CLIENT_PORT_SOURCE` ([Networking](/veyq/run/networking/#where-the-source-port-comes-from)) |
+| `app.trustedProxies` | — | The hops in front of the gateway, such as a load balancer: IP addresses and CIDR ranges, comma-separated; renders `VEYQ_HTTP_TRUSTED_PROXIES` ([Hardening](/run/hardening/#list-only-the-hops-in-front-of-the-gateway)) |
+| `app.clientPort.source` | `none` | Where the client's source port comes from: `none`, `proxyProtocol` (the gateway sends the PROXY protocol to the app's routes; also turns it on in the app and moves the probes to the admin listener) or `header` (your edge overwrites the header on every request); renders `VEYQ_HTTP_CLIENT_PORT_SOURCE` ([Networking](/run/networking/#where-the-source-port-comes-from)) |
 | `app.clientPort.header` | `X-Veyq-Client-Addr` | The header `header` reads; rendered as `VEYQ_HTTP_CLIENT_PORT_HEADER` only when it differs |
 | `app.resources.limits.memory` | `1Gi` | The memory limit; the JVM heap is 60 % of it |
 | `app.resources.requests.cpu` | `250m` | |
@@ -107,7 +107,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `app.persistence.size` | `100Mi` | The claim for the config-secret key and the erasure ledger; kept on uninstall |
 | `app.persistence.storageClass` | — | |
 | `app.persistence.accessMode` | `ReadWriteOnce` | |
-| `app.configSecret.existingSecret` | — | A Secret holding your own config-secret key; the app reads it read-only and generates none ([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key)). The claim still holds the erasure ledger |
+| `app.configSecret.existingSecret` | — | A Secret holding your own config-secret key; the app reads it read-only and generates none ([Storage and email](/run/storage-and-email/#the-config-secret-key)). The claim still holds the erasure ledger |
 | `app.configSecret.key` | `config-secret.key` | The Secret's key that holds it |
 | `admin.resources.limits.memory` | `128Mi` | |
 | `admin.resources.requests.cpu` | `50m` | |
@@ -150,9 +150,9 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `mariadb.resources.requests.memory` | `256Mi` | |
 | `externalDatabase.jdbcUrl` | — | `jdbc:mariadb://…` of your own database; the password is still `secrets.mariadbPassword` |
 | `externalDatabase.username` | `veyq` | |
-| `garage.enabled` | `false` | `true` deploys the bundled Garage and offers it in the console. Off by default here, unlike on Compose: on a cluster it is one node on one claim, with no replication or versioning, and needs a host of its own. Off, set a store of your own after the install ([Storage and email](/veyq/run/storage-and-email/)) |
+| `garage.enabled` | `false` | `true` deploys the bundled Garage and offers it in the console. Off by default here, unlike on Compose: on a cluster it is one node on one claim, with no replication or versioning, and needs a host of its own. Off, set a store of your own after the install ([Storage and email](/run/storage-and-email/)) |
 | `garage.image` | `dxflrs/garage:v2.0.0@sha256:…` | Pinned by digest |
-| `garage.logFilter` | `garage=warn` | The store's `RUST_LOG`. At `info` it logs every request with the reader's address; raise it only to troubleshoot ([Operations](/veyq/run/operations/#logs)) |
+| `garage.logFilter` | `garage=warn` | The store's `RUST_LOG`. At `info` it logs every request with the reader's address; raise it only to troubleshoot ([Operations](/run/operations/#logs)) |
 | `garage.persistence.storageClass` | — | |
 | `garage.persistence.meta.size` | `1Gi` | |
 | `garage.persistence.data.size` | `50Gi` | The stored media |
@@ -169,7 +169,7 @@ If you replicate it with a binary log, use `binlog_format=ROW` or `MIXED` (Maria
 ### Backups
 
 The backup gate captures the database and an index of the store before a release change migrates them
-([Upgrade](/veyq/run/upgrade/), [Backup and restore](/veyq/run/backup-and-restore/)).
+([Upgrade](/run/upgrade/), [Backup and restore](/run/backup-and-restore/)).
 
 | Value | Default | Meaning |
 |---|---|---|
@@ -191,11 +191,11 @@ The backup gate captures the database and an index of the store before a release
 
 | Setting | Where | Meaning |
 |---|---|---|
-| The object store | **Server → Object store**, or `veyq-admin store set` | The bundled store, an S3-compatible store of your own, or a Garage of your own, with its endpoint, bucket, region and keys. It applies once it has passed its check, before which no tenant can be created; where the deployment brings its Garage and nothing is saved, the server sets the bundled store and checks it itself ([First-run setup](/veyq/run/first-run/#connect-the-object-store)) |
-| A tenant's storage quota | the tenant's panel, or `veyq-admin tenant quota` | The most a tenant may keep on the store ([Plan your instance](/veyq/run/plan/#storage-and-quotas)) |
-| How long a guest's write is kept | **Server → Moderation**, or `veyq-admin guest-write-record set <days>` | N, 1 to 30 days, 7 by default: how long a link guest's IP address, source port and time are kept. It is kept wherever a guest may write: switching off *Links to look and add* and *Drop boxes* keeps none ([Moderation](/veyq/run/moderation/#what-a-guests-write-keeps)) |
-| How long a backup is kept | **Server → Moderation → Backups**, or `veyq-admin backup-retention set <days>` | B, 7 to 365 days, 30 by default: every capture veyq's tools wrote — `veyqctl`'s and the cluster gate's — is deleted once it is older, the newest too; the erasure ledger drops its lines at the same age ([Backup and restore](/veyq/run/backup-and-restore/#how-long-a-backup-is-kept--b)) |
-| Who runs the instance | **Server → Operator**, or `veyq-admin operator set` | The instance contact and its languages, the statement address, the provider identification, the supervisory authority — all public, each optional and published as *not stated by this operator* while empty — and the private notification address, confirmed by a code ([Moderation](/veyq/run/moderation/#who-runs-the-instance)) |
+| The object store | **Server → Object store**, or `veyq-admin store set` | The bundled store, an S3-compatible store of your own, or a Garage of your own, with its endpoint, bucket, region and keys. It applies once it has passed its check, before which no tenant can be created; where the deployment brings its Garage and nothing is saved, the server sets the bundled store and checks it itself ([First-run setup](/run/first-run/#connect-the-object-store)) |
+| A tenant's storage quota | the tenant's panel, or `veyq-admin tenant quota` | The most a tenant may keep on the store ([Plan your instance](/run/plan/#storage-and-quotas)) |
+| How long a guest's write is kept | **Server → Moderation**, or `veyq-admin guest-write-record set <days>` | N, 1 to 30 days, 7 by default: how long a link guest's IP address, source port and time are kept. It is kept wherever a guest may write: switching off *Links to look and add* and *Drop boxes* keeps none ([Moderation](/run/moderation/#what-a-guests-write-keeps)) |
+| How long a backup is kept | **Server → Moderation → Backups**, or `veyq-admin backup-retention set <days>` | B, 7 to 365 days, 30 by default: every capture veyq's tools wrote — `veyqctl`'s and the cluster gate's — is deleted once it is older, the newest too; the erasure ledger drops its lines at the same age ([Backup and restore](/run/backup-and-restore/#how-long-a-backup-is-kept--b)) |
+| Who runs the instance | **Server → Operator**, or `veyq-admin operator set` | The instance contact and its languages, the statement address, the provider identification, the supervisory authority — all public, each optional and published as *not stated by this operator* while empty — and the private notification address, confirmed by a code ([Moderation](/run/moderation/#who-runs-the-instance)) |
 
 A tenant's mail server, terms and per-link upload limit are its owner's, set in the app, not here.
 
@@ -223,13 +223,13 @@ environment-variable form is the key in upper case with `.` and `-` turned into 
 | `veyq.pairing.channel.ttl` | `PT10M` | How long a device-linking code is valid |
 | `veyq.node.trash.retention` | `P30D` | How long trashed folders, Memories, photos and videos can be restored |
 | `veyq.scope.delete.retention` | `P30D` | How long a deleted group stays restorable, and how long a deleted tenant waits before it is erased |
-| `veyq.account.erasure.window` | `P14D` | How long after the request an account is erased, its own spaces with it; until then you can stop the erasure ([Accounts](/veyq/run/first-run/#accounts)). It must be positive and, with the hourly purge, at most 28 days (the shortest calendar month), or the application refuses to start; a change applies to requests made after it |
-| `veyq.application.off.retention` | `P30D` | How long an application stays switched off in a tenant before its content there is erased; the day is the switch-off plus this ([Capabilities](/veyq/run/capabilities/#what-acts-at-once-and-what-only-on-new-data)) |
+| `veyq.account.erasure.window` | `P14D` | How long after the request an account is erased, its own spaces with it; until then you can stop the erasure ([Accounts](/run/first-run/#accounts)). It must be positive and, with the hourly purge, at most 28 days (the shortest calendar month), or the application refuses to start; a change applies to requests made after it |
+| `veyq.application.off.retention` | `P30D` | How long an application stays switched off in a tenant before its content there is erased; the day is the switch-off plus this ([Capabilities](/run/capabilities/#what-acts-at-once-and-what-only-on-new-data)) |
 | `veyq.blob.max-bytes` | 20 GiB | The largest single file |
 | `veyq.blob.upload.retention` | `PT1H` | When an abandoned upload is cleaned up; must be longer than the presigned-link lifetime |
 | `veyq.blob-store.presign-ttl-seconds` | `600` | The lifetime of a presigned upload or download link |
 | `veyq.blob-store.garage.node-capacity` | `1G` | The capacity veyq declares when it lays out a Garage it sets up |
-| `veyq.store-reconcile.grace` | `P30D` | How long an object no record claims stays before it is deleted, once you confirmed the bucket ([Operations](/veyq/run/operations/#objects-no-record-claims)) |
+| `veyq.store-reconcile.grace` | `P30D` | How long an object no record claims stays before it is deleted, once you confirmed the bucket ([Operations](/run/operations/#objects-no-record-claims)) |
 | `veyq.store-reconcile.period` | `PT6H` | How long after one full listing of the store the next one starts |
 | `veyq.store-reconcile.max-gap` | `P1D` | Two listings further apart than this restart every grace period; must exceed the period by more than a minute, or the application refuses to start |
 | `veyq.ratelimit.*` | see [cc.security.rate-limit](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.rate-limit.md) | The rate limits of the public endpoints, per address and per account |

@@ -53,7 +53,7 @@ warnings, such as a transaction timing out, are written as they are.
 (`POST /api/scopes/{scopeId}/nodes`, never the address the request was sent to or its query), the exception's class
 chain, the database's SQLState and code where the database refused, and the first line of veyq's own code it passed.
 Not the error's text. A user who reports an error can hand you the id, and you find its one line with
-`./veyqctl logs app | grep <id>`. When that line is not enough, [Troubleshooting](/veyq/run/troubleshooting/) says how
+`./veyqctl logs app | grep <id>`. When that line is not enough, [Troubleshooting](/run/troubleshooting/) says how
 to log the full text for a while.
 
 What each source holds:
@@ -136,7 +136,7 @@ how many no record claims and their size, how many are not this server's — and
 The store check's probe object and anything not named like veyq's objects (another tool's, an object pool kept in the
 same bucket) are never counted as unclaimed and never deleted.
 
-**Where they come from.** After an [in-place rollback](/veyq/run/upgrade/#rollback), the uploads made under the
+**Where they come from.** After an [in-place rollback](/run/upgrade/#rollback), the uploads made under the
 failed release: their records went with the emptied database, so nobody can read them again. Otherwise, a writer other
 than this instance in the same bucket, or a defect — report that one.
 
@@ -145,9 +145,9 @@ than this instance in the same bucket, or a defect — report that one.
 1. **You confirmed the bucket is this server's alone.** Until you press *Confirm exclusive bucket* (or run
    `veyq-admin store reconcile --confirm-exclusive-bucket`), the application only counts. Confirm only when no other
    server and no other tool writes to this bucket: their objects would look unclaimed here. The confirmation is for the
-   store in use; another store setting withdraws it, and so does every [restore](/veyq/run/backup-and-restore/).
+   store in use; another store setting withdraws it, and so does every [restore](/run/backup-and-restore/).
 2. **The object stayed unclaimed for the grace period** — 30 days from when it was first seen, in every listing since
-   ([`veyq.store-reconcile.grace`](/veyq/run/configuration/#backend-keys-for-tuning)). A record that comes back (a
+   ([`veyq.store-reconcile.grace`](/run/configuration/#backend-keys-for-tuning)). A record that comes back (a
    restore of the right backup) takes it out again. A restore or a rollback restarts every grace period, and so does a
    gap of more than a day between two listings: the grace counts only time the application actually watched.
 3. **You did not pause it.** *Pause deleting* (`--pause`) stops the deleting and keeps the counting; *Resume deleting*
@@ -159,7 +159,7 @@ sweep deletes it about an hour later; a pause does not reach what is already on 
 never deletes an object here.
 
 The listing needs the store's key to be allowed to **list** the bucket. Where it is not, the page says *the store
-refused it* and nothing is counted ([Storage and email](/veyq/run/storage-and-email/)).
+refused it* and nothing is counted ([Storage and email](/run/storage-and-email/)).
 
 ## New releases
 
@@ -175,8 +175,8 @@ forgotten instance still hears of a security fix.
 - **What it does with the answer.** Nothing but show it: the console's **Server → Release** lists every newer release
   — a newer one of your major, a planned new major with the day your major leaves the apps' window, an unscheduled
   major marked **urgent** — and `veyq-admin release` prints the same. Upgrading stays yours
-  ([Upgrade](/veyq/run/upgrade/)). With the instance's own mail set up and confirmed, each notice is also mailed to
-  you once ([Storage and email](/veyq/run/storage-and-email/#the-instances-own-mail-to-you)); until then the panel says,
+  ([Upgrade](/run/upgrade/)). With the instance's own mail set up and confirmed, each notice is also mailed to
+  you once ([Storage and email](/run/storage-and-email/#the-instances-own-mail-to-you)); until then the panel says,
   beside the switch, that finds are only shown, and `veyq-admin release` prints `noticesMailedTo` as null.
 - **When it fails.** A source that cannot be reached, answers slowly (10 s), too much or something that is not a
   release list is logged as a warning and asked again the next day. Nothing waits on it. The panel shows when it

@@ -26,7 +26,7 @@ vectors [`contracts/crypto/vectors/v1.json`](https://github.com/raddatzk/veyq/bl
 Every wrap and seal named below also binds its purpose **and the object it is stored as** (the scope, node,
 blob, share or member, plus the epoch or revision stored with it), so a ciphertext served for another object fails to
 open. That rule is [ADR 0072](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0072-a-seal-binds-its-object.md).
-The primitives are on [Cryptography](/veyq/security/cryptography/).
+The primitives are on [Cryptography](/security/cryptography/).
 :::
 
 :::caution[Which operator this holds against]
@@ -35,7 +35,7 @@ a **passive** operator only: an active one can serve code that reads the keys af
 ([ADR 0026](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0026-client-trust-tiers.md)). How much
 holds against an active operator on a client it does not serve is
 [security-model § What holds today](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve);
-see also [Threat model](/veyq/security/threat-model/).
+see also [Threat model](/security/threat-model/).
 :::
 
 ## The shape
@@ -172,7 +172,7 @@ What each account key is for:
 The identity key's two halves do different work. Others seal scope grants to its encryption key; its signing key
 signs every grant this user issues. Its public bundle is what the safety number is computed over, and the key chain's head that a contact pins names it
 ([ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md);
-[Protocols](/veyq/security/protocols/)). The Master Key also seals the account's **identity-pin store** — one entry
+[Protocols](/security/protocols/)). The Master Key also seals the account's **identity-pin store** — one entry
 per pin, at an id derived under a key of its own (`veyq/v1/identity-pin-index`), and a head over all of them — and the
 **device register**, which is why a rotation re-seals both in the same transaction, every pin entry moving to the new
 key's ids.
@@ -207,7 +207,7 @@ device** deletes it, and the next unlock there needs the Secret Key again.
 
 Each KEK is derived with a stored salt, used to open its one wrap, then discarded. **A password change, a reset and a rotation keep only the two cold wraps** (`PASSWORD`,
 `RECOVERY`) and delete every other one, so a device-held KEK does not outlive the credential it was enrolled under.
-A passkey method is designed but not built; see [Roadmap](/veyq/security/roadmap/).
+A passkey method is designed but not built; see [Roadmap](/security/roadmap/).
 
 A linked device receives the Master Key and the identity private key on one human confirmation, but never the
 password or the Secret Key ([ADR 0059](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0059-device-linking.md)).
@@ -236,7 +236,7 @@ The new Emergency Kit is saved and confirmed before anything is published.
 
 **Access moves first, security after.** One transaction appends the step and re-grants every scope the account
 holds a grant on, in every tenant, at its current epoch, to the new identity; the grants were staged just before and
-are verified under that identity ([Protocols](/veyq/security/protocols/#7-the-key-chain-and-securing-an-account)).
+are verified under that identity ([Protocols](/security/protocols/#7-the-key-chain-and-securing-an-account)).
 The same transaction installs the new identity as the signer of the account's open member invites, which it
 re-signed, and writes its endorsements of the join records it rooted, so neither ends with the old key. Then
 the account mints each scope's next epoch itself, from any of its devices, and any member re-keys the nodes
@@ -287,7 +287,7 @@ decisions 1–5 and 19). Every other wrap to a member in a tenant — a rotation
 goes only to a key the recipient's key chain reaches from the step their join record names, rooted at an owner this
 account anchors; a non-owner without a join record is never wrapped to, and an owner without one (the tenant's first)
 is trusted on first use, from then on only where the chain reaches from the head this account pinned
-([Known limitations](/veyq/security/known-limitations/#identity-keys-tofus-first-use-gap)).
+([Known limitations](/security/known-limitations/#identity-keys-tofus-first-use-gap)).
 
 **Freshness has one mark here.** Each device remembers the highest epoch it has held for each scope and the
 succession public key of that key. It never seals under, and never opens a grant below, that mark, whatever current
@@ -344,7 +344,7 @@ that member keeps the tenant key until an explicit re-key
 After a re-key, an open link they could rebuild still opens the new key until it is closed or re-issued. Against an
 honest server, deleting the membership or the share is the cut
 ([ADR 0080](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
-Decision 5; [ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) § Consequences). See [Known limitations](/veyq/security/known-limitations/).
+Decision 5; [ADR 0109](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) § Consequences). See [Known limitations](/security/known-limitations/).
 :::
 
 ## Layer 4: sharing keys

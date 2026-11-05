@@ -11,7 +11,7 @@ sources:
 ---
 
 Die Person, die einen veyq-Server betreibt, kann dich bitten, ihn zu **moderieren**: dir anzusehen, was gemeldet wird,
-in jedem Bereich auf diesem Server, und zu entscheiden, was damit geschieht ([Etwas melden](/veyq/de/help/report-something/)).
+in jedem Bereich auf diesem Server, und zu entscheiden, was damit geschieht ([Etwas melden](/de/help/report-something/)).
 Meldungen kommen versiegelt für den Schlüssel an, den du hältst, was sie nennen, bleibt für dich erhalten, und du
 bekommst eine Mail, wenn ein neuer Fall eingeht. Zuerst übernimmst du die Aufgabe, damit du diesen Schlüssel hältst;
 dann prüfst du Fälle und entscheidest.
@@ -45,7 +45,7 @@ er nicht mehr, wähle **Neuen Code senden**. Änderst du die Adresse deines Kont
 4. Hältst du den Schlüssel und wartet jemand anderes darauf, gibt deine Seite ihn weiter, nachdem sie geprüft hat, dass
    der Schlüssel dieser Person aus dem folgt, den du schon kennst (beim ersten Mal: aus dem, den der Server zeigt).
    Lässt er sich nicht bestätigen, geht er nicht weiter, und die Seite sagt das: Vergleicht eure Sicherheitsnummern
-   persönlich ([Ein Schlüssel lässt sich nicht bestätigen](/veyq/de/help/key-changed/)).
+   persönlich ([Ein Schlüssel lässt sich nicht bestätigen](/de/help/key-changed/)).
 5. Danach zeigt die Seite **Meldungen**, die Fälle aller Bereiche auf dem Server.
 
 Sagt die Seite, sie habe **abgebrochen**, weil der Schlüssel, den der Server veröffentlicht, nicht der ist, den du

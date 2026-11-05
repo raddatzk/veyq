@@ -22,7 +22,7 @@ hand.
 **An instance's durable state is exactly three legs:** (a) the database, (b) the object store's *contents*,
 (c) the **config-secret key file**. The database leg holds every table but the rows of one: the guest-write record
 (a guest's address, port and time, kept at most 30 days as evidence) travels as its schema only, so a restored instance
-has it empty ([Moderation](/veyq/run/moderation/#what-a-guests-write-keeps)). A backup made any other way holds those
+has it empty ([Moderation](/run/moderation/#what-a-guests-write-keeps)). A backup made any other way holds those
 rows; the same section says how long to keep it. Two legs produce an instance that boots, serves content, and refuses member
 invites and password resets with `503 mail_unavailable` — the leg that gets forgotten is the one whose absence
 looks like health.
@@ -186,7 +186,7 @@ entered in the console (the console never shows them again, and neither can the 
 bundled pair, plus `VEYQ_BACKUP_STORE_BUCKET` and `VEYQ_BACKUP_STORE_REGION` when they are not `blobs` and
 `us-east-1`. Keep them in a password manager: after a lost config-secret key the console asks for the same
 credentials again. `veyqctl` passes the same variables from its shell through to the tool. Where your
-`compose.override.yml` leaves the bundled store out ([Set up a new instance](/veyq/run/new-instance/#install)), they are
+`compose.override.yml` leaves the bundled store out ([Set up a new instance](/run/new-instance/#install)), they are
 the only pair: `veyqctl` then runs the tool's rclone container on Docker's default network, where it reaches your store
 like any other host, and refuses `backup`, `upgrade` and `restore` before anything stops while one of the three is not
 exported, naming it. Its prune and `status` read only the database and need none.
@@ -234,7 +234,7 @@ single sweep drains that list, so a capture taken between the two legitimately h
 — a reclaim *pending*, not a deletion that failed unnoticed. Orphans are therefore still counted and tolerated,
 and the instance itself counts the rest: **Server → Object store** shows the objects waiting on the deletion list,
 the ones it gave up on, and every object no record claims at all
-([Operations](/veyq/run/operations/#objects-no-record-claims)). (Abandoned upload sessions
+([Operations](/run/operations/#objects-no-record-claims)). (Abandoned upload sessions
 themselves are reclaimed, by `UploadSessionPurge`.) A **row with no object** is fatal (A4): it
 restores as a Memory whose picture yields a valid presigned URL and a `404`, with no server-side error anywhere
 — so `verify` names every missing object and exits non-zero. It exits `2`, with a different headline, when the
@@ -251,7 +251,7 @@ empty instance and nothing reconciles two populated ones (A5).
 ([ADR 0056](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) §7).
 Two forms:
 
-- **Without a source** — the objects are already in the store the capture indexed (a rollback, [Upgrade](/veyq/run/upgrade/#rollback)):
+- **Without a source** — the objects are already in the store the capture indexed (a rollback, [Upgrade](/run/upgrade/#rollback)):
   every object the dump's rows require must be there with the indexed size and MD5, or the restore refuses naming
   each, and nothing is written to the store. Onto a fresh install, whose store holds nothing, this form refuses and
   names the pool the capture recorded.
@@ -268,7 +268,7 @@ ones, each a Memory whose picture yields a `404`.
 keeps of objects no record claims, so every such object's 30-day grace starts again, and your confirmation that the
 bucket is this server's alone is gone with it: nothing is deleted until you confirm again under **Server → Object
 store** — after a restore of the wrong backup, those objects are exactly what the right one needs
-([Operations](/veyq/run/operations/#objects-no-record-claims)).
+([Operations](/run/operations/#objects-no-record-claims)).
 
 **It compares the backup's schema with the target's before it writes anything** ([ADR 0056](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) §7),
 in Flyway's version order. A backup **newer** than the target is refused, and the message names the release it
@@ -277,7 +277,7 @@ older one** is accepted: the restore first drops every table of the target — s
 proved it holds no data, and needed because the dump recreates only the tables it names — then loads the dump,
 and the application migrates the data up at its next start, the same forward migration every upgrade runs. So
 "install the backup's release, restore, upgrade" is "restore, start". When the backup is older the restore says
-so, because that is an upgrade — and if you meant a rollback, it is not one ([Upgrade](/veyq/run/upgrade/)).
+so, because that is an upgrade — and if you meant a rollback, it is not one ([Upgrade](/run/upgrade/)).
 
 **Watch the log line, not `GET /api/instance/store-provisioning`:** `./veyqctl logs app` shows
 `Object store provisioned` once the store is usable. The endpoint answers the Server Owner only.
@@ -364,7 +364,7 @@ of *"it looked fine"*.
 ### Under Kubernetes
 
 On a cluster the chart's **backup gate** captures before every release change, in the app pod before the container
-that migrates ([Upgrade](/veyq/run/upgrade/),
+that migrates ([Upgrade](/run/upgrade/),
 [ADR 0098](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)).
 Your part:
 
@@ -407,7 +407,7 @@ Your part:
   may still name `--objects-from`, like any restore — then only into an empty store.
 
 With `backup.enabled: false` none of this runs, and the capture before an upgrade is yours, by hand
-([Upgrade](/veyq/run/upgrade/), Kubernetes).
+([Upgrade](/run/upgrade/), Kubernetes).
 
 ### Restore under Helm
 
@@ -531,7 +531,7 @@ release, whose store is empty, from that pool (`--objects-from`). The tool reach
 port-forwards and cannot reach the app's claim, so it writes leg (c) to a local file of your own, and the key goes into
 the pod as a **Secret** the chart mounts (`app.configSecret.existingSecret`): the app image is distroless, with no
 shell and no `tar`, so `kubectl cp` cannot put a file into it. The Secret's file is read-only and the app only reads it;
-the erasure ledger stays on the claim. Onto a **freshly installed** release, exactly as [Restore](/veyq/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires:
+the erasure ledger stays on the claim. Onto a **freshly installed** release, exactly as [Restore](/run/backup-and-restore/#restore--onto-a-freshly-installed-instance) requires:
 
 ```sh
 kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application

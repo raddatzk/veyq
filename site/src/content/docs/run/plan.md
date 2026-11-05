@@ -76,7 +76,7 @@ scheduled purge.
   off).
 
 **Backups.** A capture is the database and an index of the stored objects, never the objects, so a capture is about the
-size of the database ([Backup and restore](/veyq/run/backup-and-restore/)). The objects are kept by the store — or, on
+size of the database ([Backup and restore](/run/backup-and-restore/)). The objects are kept by the store — or, on
 the bundled store, which keeps no versions, by an **object pool** on another disk or store: plan space there for every
 stored object once, growing by the new uploads at each backup and pruned to what the newest captures need.
 

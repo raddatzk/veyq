@@ -25,7 +25,7 @@ chart by `scripts/chart_meta_check.py`.
 
 `veyqctl` installs the instance from a release ([ADR 0096](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)):
 the app, its administration surface, MariaDB, Garage, and a Traefik that terminates TLS in front of them. Fetch and
-verify `veyqctl` first ([Verify a release](/veyq/run/verify-a-release/#veyqctl-the-first-time)), then:
+verify `veyqctl` first ([Verify a release](/run/verify-a-release/#veyqctl-the-first-time)), then:
 
 ```sh
 cd /opt/veyq
@@ -34,9 +34,9 @@ cd /opt/veyq
 ```
 
 `VEYQ_RELEASE` is the release line the instance stays on: a major (`1`, its newest release), an exact release
-(`1.4`, pinned) or `latest` (the default); [Upgrade](/veyq/run/upgrade/#which-release-upgrade-takes) says what each
+(`1.4`, pinned) or `latest` (the default); [Upgrade](/run/upgrade/#which-release-upgrade-takes) says what each
 means later. A value you do not pass is asked for at a terminal, and refused by name without one. An optional
-variable ([Configuration](/veyq/run/configuration/)) is passed the same way, `--set ADMIN_DOMAIN=…`.
+variable ([Configuration](/run/configuration/)) is passed the same way, `--set ADMIN_DOMAIN=…`.
 
 `install` refuses a home that already holds an instance, and then, in order:
 
@@ -45,7 +45,7 @@ variable ([Configuration](/veyq/run/configuration/)) is passed the same way, `--
 2. **Verifies the release's `manifest.json`** against its signature, then **both images** by the digests it names,
    before anything is pulled, and
    **fetches the release's files** into `releases/<release>/`, each checked against its sha256 — both exactly as
-   [Verify a release](/veyq/run/verify-a-release/) shows by hand.
+   [Verify a release](/run/verify-a-release/) shows by hand.
 3. **Writes `.env`** (mode `0600`) from the release's template, `env.example`: the four secrets generated, the two
    image lines from the manifest, your values filled in. Every secret is required and has no default in the recipe,
    so an `up` with one missing fails with its name instead of starting on a password printed in this repository.
@@ -65,7 +65,7 @@ The instance lives in `/opt/veyq` (`--home` names another):
 
 **Leave the bundled store out** when the instance uses an S3-compatible store of
 your own: this `compose.override.yml` disables the recipe's Garage and blanks the hint the application reads, so the
-console offers only a store of your own ([Storage and email](/veyq/run/storage-and-email/)):
+console offers only a store of your own ([Storage and email](/run/storage-and-email/)):
 
 ```yaml
 services:
@@ -80,17 +80,17 @@ services:
 Nothing else is needed: the application's dependency on `garage` is optional, so Compose drops the service from the
 stack (measured with Compose v5.6.0). `GARAGE_RPC_SECRET` and `GARAGE_ADMIN_TOKEN` stay required in `.env` all the same
 — Compose reads them for the disabled service too, and `install` generates both. Its backups take your store's endpoint
-and key pair from the shell ([Backup and restore](/veyq/run/backup-and-restore/#capture)). Leave the bundled store out
+and key pair from the shell ([Backup and restore](/run/backup-and-restore/#capture)). Leave the bundled store out
 before the first store is chosen: an instance already on it keeps its objects in Garage's volumes.
 
 No directory here holds an object pool: it lives where `.env`'s `VEYQ_BACKUP_OBJECTS_TO` names — by intent another disk
-or another store, since a pool on the store's own disk dies with it ([Backup and restore](/veyq/run/backup-and-restore/#capture)).
+or another store, since a pool on the store's own disk dies with it ([Backup and restore](/run/backup-and-restore/#capture)).
 
 `start`, `stop`, `status` and `logs [-f] [service]` address the stack by its project; `status` exits non-zero unless
 every service is healthy.
 
 **By hand**, without `veyqctl`: verify the release and fetch its files into `releases/<release>/` as
-[Verify a release](/veyq/run/verify-a-release/) shows, then
+[Verify a release](/run/verify-a-release/) shows, then
 
 ```sh
 cd /opt/veyq
@@ -154,7 +154,7 @@ without a version, or with a range, finds nothing (measured with Helm 4.0.1, ADR
 uses, so name the release yourself: add `--set image.tag="${release}" --set admin.image.tag="${release}"` to the
 same `helm install`, with `./charts/veyq` in place of `"$chart"`.
 
-The rest of what is specific to this target is on [Kubernetes](/veyq/run/kubernetes/).
+The rest of what is specific to this target is on [Kubernetes](/run/kubernetes/).
 
   </TabItem>
 </Tabs>
@@ -162,17 +162,17 @@ The rest of what is specific to this target is on [Kubernetes](/veyq/run/kuberne
 ## Then: set it up
 
 Bring the stack up, then create the Server Owner over the tunnel or port-forward, connect the object store, and
-only then worry about DNS and TLS: [First-run setup and the admin console](/veyq/run/first-run/).
+only then worry about DNS and TLS: [First-run setup and the admin console](/run/first-run/).
 
 ## Worth knowing
 
 The admin surface's two exposure modes and the `veyq-admin` CLI are on
-[First-run setup and the admin console](/veyq/run/first-run/).
+[First-run setup and the admin console](/run/first-run/).
 
-Routing, certificates and HSTS are on [Networking and TLS](/veyq/run/networking/); the config-secret volume
-and why it must persist are on [Storage and email](/veyq/run/storage-and-email/#the-config-secret-key).
+Routing, certificates and HSTS are on [Networking and TLS](/run/networking/); the config-secret volume
+and why it must persist are on [Storage and email](/run/storage-and-email/#the-config-secret-key).
 
-- **Upgrading is a procedure, not a flag change.** It has its own section — [Upgrade](/veyq/run/upgrade/) — and
+- **Upgrading is a procedure, not a flag change.** It has its own section — [Upgrade](/run/upgrade/) — and
   the reason it is not one line is that the schema migrates at boot with no gate and no downgrade path.
 - **There are two images per release, and they are pinned together.** `VEYQ_IMAGE` and `VEYQ_ADMIN_IMAGE` are
   built, versioned and cosign-signed by the same publish ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md)),

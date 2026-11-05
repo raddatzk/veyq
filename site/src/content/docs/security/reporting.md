@@ -34,8 +34,8 @@ claims against an *actively* malicious operator is its section
 [What holds today on a client the operator does not serve](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve):
 a table of attacks with the state of each today, followed by a list of what stays open even once every row reads
 *Cannot*. A finding that shows a row's *Cannot* to be false is in scope. A finding that restates an item on the
-"stays open" list is not new. See also [Known limitations](/veyq/security/known-limitations/) and
-[Roadmap](/veyq/security/roadmap/).
+"stays open" list is not new. See also [Known limitations](/security/known-limitations/) and
+[Roadmap](/security/roadmap/).
 
 ## In scope
 
@@ -61,7 +61,7 @@ a table of attacks with the state of each today, followed by a list of what stay
   owners, contacts outside a shared tenant). A new key is accepted only through a
   key-chain step signed by the old identity and the old Secret-Key proof key, every grant is signed by its granter, and out-of-band safety-number verification is built, but nothing *enforces* it. The
   opt-in strict mode that would require a verified key before a first share is not built, and its shape is still
-  open ([Roadmap](/veyq/security/roadmap/)).
+  open ([Roadmap](/security/roadmap/)).
 - **Findings against the development stack** in
   [`infra/`](https://github.com/raddatzk/veyq/blob/main/infra/README.md), which is not a production deployment and
   is not presented as one.
@@ -73,4 +73,4 @@ a table of attacks with the state of each today, followed by a list of what stay
 
 veyq is pre-V1. There are no released versions and no backported fixes: fixes land on `main`.
 
-To check a claim yourself before reporting, see [Verify it yourself](/veyq/security/verify-it-yourself/).
+To check a claim yourself before reporting, see [Verify it yourself](/security/verify-it-yourself/).

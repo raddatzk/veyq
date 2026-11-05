@@ -58,7 +58,7 @@ each one runs](#where-and-when-each-stage-runs) follows it.
 | **Guards** (`scripts/validate_*.py`) | The tree keeps its written rules: every reference resolves, every contract field declares what the server may read, every image is pinned by digest, the production recipe is hardened. | That what a reference points at carries weight — a cited test that asserts nothing passes. | Built. |
 | **Guard gaps** (`validate_guard_gaps.py`) | The guards still reject the forgeries they claim to reject, and their documented limits are still exactly where they are written. | A guard's limit that was never documented. | Built. |
 | **Surface checks** (`./gradlew check`, `pnpm run check` per package, the chart check) | Each part's unit and integration tests: the backend against an in-memory database and in-process fakes, the web client, the admin console and the crypto package in their test runners; the Helm chart's renders keep the production recipe's structural rules, and an upgrade from the previous chart changes no field Kubernetes refuses to change. | The real database, the real object store, the real browser. | Built. |
-| **Crypto conformance** | The bytes of the cryptographic suite cannot move silently: every primitive is pinned to published test vectors. | Whether a correct primitive is used correctly. | Built, inside the surface checks; see [Verify it yourself](/veyq/security/verify-it-yourself/). |
+| **Crypto conformance** | The bytes of the cryptographic suite cannot move silently: every primitive is pinned to published test vectors. | Whether a correct primitive is used correctly. | Built, inside the surface checks; see [Verify it yourself](/security/verify-it-yourself/). |
 | **Mutation** | The tests of the scoped crypto and policy files fail when that code changes; on the backend, each scoped class also on its own, within a budget of one surviving change, so a weak class cannot pass on the score of the others. | Files outside the scope. | Built. |
 | **Races on MariaDB** | Concurrent writes behave on the production database as they do in the in-memory one. | Races no test provokes. | Built. |
 | **API end-to-end** (`scripts/run_web_e2e.py`) | Real client cryptography against a live backend, database and object store, a fresh instance per suite; backup and restore round trips; no sealed plaintext or capability token readable in the database, the store, the HTTP traffic, the logs, the SQL statements or the mail. | Only the values the suite unsealed; no browser, no production image. | Built. |
@@ -243,7 +243,7 @@ The rest is designed, not built (ADR 0091): every green push publishes its image
 bytes that were tested, with each stack lane's result attached as a signed attestation, and a release does not build
 again — it gives that snapshot's bytes the release name and signature, after checking the attestations. So a release
 is always bytes every test saw, and anyone can check which release they run against its signature
-([Verify a release](/veyq/run/verify-a-release/)).
+([Verify a release](/run/verify-a-release/)).
 
 ## What no test here can prove
 
@@ -258,9 +258,9 @@ is always bytes every test saw, and anyone can check which release they run agai
 - **Anything against an actively malicious operator.** These checks run on the server's side of the line. The
   operator is the server, so no server-side check closes a row of
   [What holds today](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve);
-  see [Start here](/veyq/security/start-here/).
+  see [Start here](/security/start-here/).
 - **The absence of defects.** Tests show that defects they look for are absent. There has been no external audit
-  ([Known limitations](/veyq/security/known-limitations/)).
+  ([Known limitations](/security/known-limitations/)).
 
 ## Re-run it
 
@@ -275,4 +275,4 @@ the job that needs the local compose stack and reports it as not run). Stage by 
 ports 80 and 443 free), and the profile with
 `python3 scripts/profile_hot_paths.py --app <app image> --admin <admin image>` (the same, ffmpeg on the path for the
 synthetic photos, and a machine whose one-minute load is at most 3). How to reproduce the security-specific checks, and what each pins,
-is on [Verify it yourself](/veyq/security/verify-it-yourself/).
+is on [Verify it yourself](/security/verify-it-yourself/).

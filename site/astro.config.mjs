@@ -4,10 +4,11 @@ import starlight from '@astrojs/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
 
 // The published documentation (ADR 0087). Static output only, so it is hostable anywhere; GitHub Pages serves it
-// at https://raddatzk.github.io/veyq/, hence `base`.
+// at the domain root of https://veyq.app/ (the custom domain is a Pages setting: a site deployed by a workflow reads
+// no CNAME file), so there is no `base` and a page links another as `/run/upgrade/`. The old project URL
+// https://raddatzk.github.io/veyq/… redirects there, which keeps links in shipped releases working.
 export default defineConfig({
-  site: 'https://raddatzk.github.io',
-  base: '/veyq/',
+  site: 'https://veyq.app',
   integrations: [
     starlight({
       title: 'veyq',
@@ -207,10 +208,11 @@ export default defineConfig({
         },
       ],
       // Fails the build on a broken internal link or anchor — the link check of `pnpm run check`. A link to a
-      // fallback page is valid: Run and Security are English-only by design. Not checked: a German page linking
-      // the English URL instead of its /de/ counterpart — the plugin's `errorOnInconsistentLocale` matches `/de/`
-      // at the start of the link, so behind this `base` it never fires (bitten 2026-10-15: green on such a link).
-      plugins: [starlightLinksValidator({ errorOnFallbackPages: false })],
+      // fallback page is valid: Run and Security are English-only by design. A German page linking the English URL
+      // instead of its /de/ counterpart fails too (`errorOnInconsistentLocale`). That option matches `/de/` at the
+      // start of the link, so it never fired while the site had a `/veyq/` base (bitten 2026-10-15: green on such a
+      // link); a `base` brought back turns it blind again.
+      plugins: [starlightLinksValidator({ errorOnFallbackPages: false, errorOnInconsistentLocale: true })],
     }),
   ],
 });

@@ -20,7 +20,7 @@ The decision behind all of it is
 :::caution[Strong crypto is not a client-integrity answer]
 All of this runs in the client. On a web client the operator serves, an active operator can ship code that reads
 keys after they are opened, so there veyq holds against a passive operator only
-([Start here](/veyq/security/start-here/)).
+([Start here](/security/start-here/)).
 :::
 
 ## The stance
@@ -32,7 +32,7 @@ keys after they are opened, so there veyq holds against a passive operator only
   public key uses a hybrid KEM that stays secure if **either** of its two components holds.
 - **Classical signatures, on purpose.** A signature is verified once; there is nothing to harvest and decrypt
   later. Post-quantum urgency is therefore high for encryption and low for signatures, and veyq signs with Ed25519
-  today. Hybrid ML-DSA signatures are on the [Roadmap](/veyq/security/roadmap/).
+  today. Hybrid ML-DSA signatures are on the [Roadmap](/security/roadmap/).
 - **Content is AES-256-GCM alone.** The hybrid KEM wraps keys; it never touches content. A 256-bit AES key is
   already quantum-resistant.
 
@@ -70,7 +70,7 @@ combiner shape and cites X-Wing for its analysis.
 test vectors, copied verbatim from revision 11. Other implementations produced them, so this group is a
 **cross-implementation anchor**: if a later draft changed X-Wing, veyq's bytes would not follow silently, and an
 implementation that disagrees with the draft fails the test. Every other vector group is a single-implementation
-regression pin ([Verify it yourself](/veyq/security/verify-it-yourself/)).
+regression pin ([Verify it yourself](/security/verify-it-yourself/)).
 
 **What it replaced.** Before V1 the suite's hybrid KEM used a combiner of its own over separately generated X25519
 and ML-KEM keys. Nothing found it unsound, but no document recorded a reason for it or an analysis of it, which
@@ -121,7 +121,7 @@ frame count from the declared size and range streaming seeks on it.
 Each `K_blob` is random, so identical files become different ciphertexts; deduplication across a space is declined
 because it would show the operator which blobs are equal (ADR 0013 §5). The one exception is inside a single Memory or
 chapter: a cover or banner equal to one of its gallery items shares that item's stored object, and the operator sees
-which one ([What the server sees](/veyq/security/what-the-server-sees/)).
+which one ([What the server sees](/security/what-the-server-sees/)).
 
 ## What a seal binds
 
@@ -160,7 +160,7 @@ and a test compares the purposes in code with the vector set in both directions.
 Two limits are part of the decision. **Parents are not bound**: the tree's shape is server-visible, and a move
 re-seals only the moved node, never its subtree. **Binding makes an epoch or a revision authentic, not fresh**:
 which authentic one the server serves is still its choice, except where a device keeps a mark of its own
-([Known limitations](/veyq/security/known-limitations/)).
+([Known limitations](/security/known-limitations/)).
 
 ## Suite agility
 

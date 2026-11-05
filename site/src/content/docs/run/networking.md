@@ -32,7 +32,7 @@ set, one for the admin surface; the application writes one `HTTPRoute` per tenan
 that `Gateway` — and under `per-domain` TLS a `ListenerSet` beside it. It may manage routes and `ListenerSet`s in that
 namespace and nothing else; the `Gateway` is the chart's. The Gateway API CRDs (v1.5 or later, standard channel)
 and the implementation are yours to install first
-([Kubernetes](/veyq/run/kubernetes/)).
+([Kubernetes](/run/kubernetes/)).
 
 ## TLS is required
 
@@ -154,7 +154,7 @@ most gateways pass a header they do not know straight through, so a header nobod
   **Send it to the application's routes only, never to the whole `Gateway`:** the object store speaks no PROXY
   protocol, and every upload and download would fail. The chart renders none of these objects. With PROXY on, the
   application closes every connection that does not start with a PROXY header, so the chart moves its probes to the
-  admin listener ([Operations](/veyq/run/operations/#health)).
+  admin listener ([Operations](/run/operations/#health)).
 
 A port is only as good as the server's clock: carrier-grade NAT hands a port to the next subscriber quickly, so keep
 the host's time synchronised (NTP).
@@ -162,7 +162,7 @@ the host's time synchronised (NTP).
 ## A proxy of your own in front
 
 - **Route only the public port, 8080.** Nothing but the admin container may ever reach 8090
-  ([Hardening](/veyq/run/hardening/#keep-the-admin-listener-local)). The admin listener ignores forwarded headers by
+  ([Hardening](/run/hardening/#keep-the-admin-listener-local)). The admin listener ignores forwarded headers by
   design: it trusts the socket's peer, never a header.
 - **Turn HSTS off** in veyq if your proxy sets the header.
 - **Let `/.well-known/acme-challenge/` through to Traefik on port 80,** or Let's Encrypt cannot validate.

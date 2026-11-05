@@ -8,18 +8,18 @@ private. No technical background needed.
 
 ## Using veyq
 
-- [Getting started](/veyq/getting-started/): what veyq is, accepting an invitation, your Emergency Kit, signing in
-- [Your account](/veyq/account/devices-and-sessions/): devices, password, email address, keys, profile
-- [Spaces](/veyq/spaces/): your spaces, folders, groups, the trash, download and import
-- [Applications](/veyq/applications/): [Memories](/veyq/memories/) for photos and videos, [Depot](/veyq/depot/) for files,
-  [Expenses](/veyq/expenses/) for shared costs
-- [Sharing](/veyq/sharing/): links for people who have no account
-- [For space owners](/veyq/space-owners/who-gets-into-your-space/): members, terms, email, storage
-- [Privacy](/veyq/privacy/is-my-data-safe/): is my data safe?
-- [Help](/veyq/help/): a forgotten password, a lost kit or device, and more
+- [Getting started](/getting-started/): what veyq is, accepting an invitation, your Emergency Kit, signing in
+- [Your account](/account/devices-and-sessions/): devices, password, email address, keys, profile
+- [Spaces](/spaces/): your spaces, folders, groups, the trash, download and import
+- [Applications](/applications/): [Memories](/memories/) for photos and videos, [Depot](/depot/) for files,
+  [Expenses](/expenses/) for shared costs
+- [Sharing](/sharing/): links for people who have no account
+- [For space owners](/space-owners/who-gets-into-your-space/): members, terms, email, storage
+- [Privacy](/privacy/is-my-data-safe/): is my data safe?
+- [Help](/help/): a forgotten password, a lost kit or device, and more
 
 ## Running an instance
 
 Technical, English only — for whoever operates a server rather than uses one.
 
-- [Running your own instance](/veyq/run/)
+- [Running your own instance](/run/)

@@ -68,7 +68,7 @@ console its own hostname and certificate, and it puts the admin listener on the 
 app never links to the admin surface and carries no hint that it exists. Nothing enforces the order; it is yours.
 
 If you put a proxy of your own in front of the application, route only its public port, 8080. Nothing but the admin
-container may ever be pointed at 8090 ([Hardening](/veyq/run/hardening/)).
+container may ever be pointed at 8090 ([Hardening](/run/hardening/)).
 
 ## Create the Server Owner
 
@@ -87,10 +87,10 @@ On a fresh instance the console opens on **Set up this instance**
    household exemption ends once a link is shared publicly, a club or a company probably owes a name, a postal address
    and the controller's contact, it covers every space — and that this is your own assessment, not veyq's. There is
    nothing to choose or tick; every value stays optional, set later under **Server → Operator**
-   ([What you may owe](/veyq/run/moderation/#what-you-may-owe)). Then **Create the account and sign in**. Only now is
+   ([What you may owe](/run/moderation/#what-you-may-owe)). Then **Create the account and sign in**. Only now is
    the account created, and from this moment the instance is set up: the setup screen does not open again. The same
    step makes the instance's first moderation key, sealed to your new account: you are its first moderator, and reports can be made from the first day
-   ([Moderation](/veyq/run/moderation/)).
+   ([Moderation](/run/moderation/)).
 5. **Sign in** with your email and password.
 
 :::caution[The Emergency Kit is shown once]
@@ -151,7 +151,7 @@ quota*.
 
 - **Create tenant** — **Tenant name**, **Domain** (the web address the tenant is reached at), and **Who should own
   this tenant? (email)**. The tenant's domain must resolve to the instance first
-  ([Plan your instance](/veyq/run/plan/#domains)).
+  ([Plan your instance](/run/plan/#domains)).
 - **The owner's invitation is yours to pass on.** A new tenant has no email set up until its owner configures it, so
   the console shows a link (`https://<domain>/tenant/accept#…`) to copy and send them. It is valid for seven days.
   While the tenant is **Pending**: **Re-issue invite** mints a new link, **Reassign invite** binds it to another
@@ -160,7 +160,7 @@ quota*.
   one at once.
 - **Storage quota (GiB)** — **Save quota** or **Remove quota**. Uploads that would go over it are refused; nothing
   already stored is removed, and trash counts until it is emptied.
-- **Take offline** / **Bring back online** — see [Moderation](/veyq/run/moderation/).
+- **Take offline** / **Bring back online** — see [Moderation](/run/moderation/).
 - **Delete tenant** — for an active or offline tenant, at the end of its page beside **Take offline**. Type its domain into **Type the tenant's domain, …, to confirm**
   first. The tenant goes offline at once, exactly as **Take offline** takes it, shows **Being deleted** with the date,
   and everything in it is erased on that date — 30 days later, the trash's retention. Until then **Stop deletion**
@@ -168,8 +168,8 @@ quota*.
   and every account stays, also one the deletion leaves in no tenant: nobody's account is erased without their asking.
   Holds and the moderation records survive the deletion to their own ends. A deletion **over content** carries a
   statement of reasons to the tenant's owners: tick **Because of the tenant's content** above the two buttons and fill it in (see
-  [Moderation](/veyq/run/moderation/)). Whom it reached the page says under the tenant's name, and whom it did not, you
-  tell through the instance contact ([What the mail reached](/veyq/run/moderation/#what-the-mail-reached)).
+  [Moderation](/run/moderation/)). Whom it reached the page says under the tenant's name, and whom it did not, you
+  tell through the instance contact ([What the mail reached](/run/moderation/#what-the-mail-reached)).
 - **No owner** — a tenant whose last owner's account you erased (see [Accounts](#accounts)) has nobody to run it. Its
   two ways on: **Invite owner** with the address of one of its members — they accept the link and become its owner; it
   must be a member, because only a member already holds the tenant's key and you can admit nobody into it — or
@@ -181,7 +181,7 @@ app.
 ### Server
 
 - **Release** — the release this instance runs, the version to name if an update ever has to be undone
-  ([Upgrade](/veyq/run/upgrade/)). A build that was never published says so.
+  ([Upgrade](/run/upgrade/)). A build that was never published says so.
 - **Object store** — the setting and its check, as above. For a Garage store it also shows whether the server has
   set it up: in progress, ready, or failed (the server log names the failed step).
 - **Config-secret key** — whether the key that seals the server's stored secrets is the one they were sealed with:
@@ -192,13 +192,13 @@ app.
     unaffected; put the original key file back and restart, or re-enter the sealed secrets.
 
   After a restore or an update, this is the reading that says the key came along
-  ([Backup and restore](/veyq/run/backup-and-restore/)).
+  ([Backup and restore](/run/backup-and-restore/)).
 - **Capabilities** — what the instance offers at all, as a tree of switches
-  ([Capabilities](/veyq/run/capabilities/)).
+  ([Capabilities](/run/capabilities/)).
 - **Operator** — what an operator may owe, as information; the instance contact, the provider identification and the
   supervisory authority, the recipients and a data-protection officer for the privacy notice, each optional and shown
   as not stated while empty, and the private notification address with its code
-  ([Moderation](/veyq/run/moderation/#who-runs-the-instance), [The privacy notice](/veyq/run/moderation/#the-privacy-notice)).
+  ([Moderation](/run/moderation/#who-runs-the-instance), [The privacy notice](/run/moderation/#the-privacy-notice)).
 - **Accounts** — erase an account for a request that reached you another way, and stop a pending erasure
   ([below](#accounts)).
 
@@ -211,7 +211,7 @@ someone who lost their password — you answer it here (GDPR Art. 17; you have a
 - The account stops at once: every session ends, sign-in is refused, it leaves every tenant as a removal takes it
   (its own spaces into the trash, shared ones cut, a group it owned alone handed on) and the moderator roster.
 - It is erased 14 days later with its own spaces, its address and everything kept about it
-  (`veyq.account.erasure.window`, [Configuration](/veyq/run/configuration/#backend-keys-for-tuning)). What it put into
+  (`veyq.account.erasure.window`, [Configuration](/run/configuration/#backend-keys-for-tuning)). What it put into
   shared spaces stays with them, shown as a former member's; holds and the moderation records naming it stay to their
   own ends. A tenant its person chose in the settings to delete along with it waits out a tenant deletion's 30 days,
   as one you delete does.
@@ -223,7 +223,7 @@ someone who lost their password — you answer it here (GDPR Art. 17; you have a
   with the account, and every report and held copy sealed only to it can no longer be read. Only after you accept
   **Erase and lose the key** is it erased (`veyq-admin account erase` refuses with the same warning until you add
   `--lose-moderation-key`). When that person erases their own account in their settings instead, their browser hands
-  the key to you first, and you are a moderator holding it again ([Moderation](/veyq/run/moderation/#moderators)).
+  the key to you first, and you are a moderator holding it again ([Moderation](/run/moderation/#moderators)).
 - The person is told by mail through the instance mail.
 
 ## The veyq-admin CLI
@@ -264,7 +264,7 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `store set --endpoint <url> --bucket <bucket> --region <region> --access-key <id> [--type S3\|GARAGE] [--public-endpoint <url>] [--garage-admin-endpoint <url>]` | Save a store of your own; `store check` puts it in use. The secret key comes from `VEYQ_STORE_SECRET_KEY` and the Garage token from `VEYQ_STORE_GARAGE_ADMIN_TOKEN`, never from a flag |
 | `store check` | Check the saved change (else the store in use) and print every step; a passing saved change is put in use; exits `1` if it failed |
 | `store discard` | Drop a saved change that has not passed its check; the store in use stays |
-| `capabilities list` / `capabilities off <id>` / `capabilities on <id>` | Print the switches as a tree, switch one off or on; prints text, not JSON ([Capabilities](/veyq/run/capabilities/#switch-an-entry)) |
+| `capabilities list` / `capabilities off <id>` / `capabilities on <id>` | Print the switches as a tree, switch one off or on; prints text, not JSON ([Capabilities](/run/capabilities/#switch-an-entry)) |
 | `operator show` / `operator set --<value> <text>` / `operator clear` | Print the operator details, every value present and `null` where none is set (published as *not stated by this operator*); change the values given (`none` clears one) and keep the rest — `--recipients '<name>\|<kind>\|<country>; …'` replaces the privacy notice's whole list (the kind `hosting`, `object-storage`, `mail-relay`, `backup` or `other:<what they do>`; the country a two-letter ISO 3166-1 code such as `DE`), `--data-protection-officer` sets the officer; clear them all. The notification address's code is typed into the console, never the CLI |
 
 Output is JSON on standard output. A failure prints one line, `veyq-admin: <reason>`, to standard error and exits

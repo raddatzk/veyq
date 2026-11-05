@@ -11,7 +11,7 @@ sources:
 ---
 
 The install itself — `helm install` by the digests you verified, and the Server Owner created over a
-port-forward — is on [Set up a new instance](/veyq/run/new-instance/#install), beside the Docker Compose one. This
+port-forward — is on [Set up a new instance](/run/new-instance/#install), beside the Docker Compose one. This
 page is what is specific to the chart.
 
 **Routing is the Gateway API, and the chart owns its `Gateway`** ([ADR
@@ -51,12 +51,12 @@ NetworkPolicy renders the set and enforces none of it.** On such a cluster, or i
 `networkPolicy.enabled: false`, which removes every policy the chart renders, including the one on the admin
 listener. Without an enforced policy any pod can reach the app and write the whole `X-Forwarded-For` header, so
 the rate limits can key on a forged address; the install notes say so
-([Networking](/veyq/run/networking/#the-client-address-and-the-rate-limits)). `app.trustedProxies` stays unset
+([Networking](/run/networking/#the-client-address-and-the-rate-limits)). `app.trustedProxies` stays unset
 unless a load balancer sits in front of your gateway: it lists the hops in front of the gateway, never the
 gateway's own data plane. A pod-IP range wide enough to survive a data-plane pod's restart trusts every pod beside
 it. Whether the application learns a client's source port is `app.clientPort.source`: the PROXY protocol from your
 gateway to the app's routes alone (never the store's), or a header your edge overwrites, configured both on your
-gateway and here ([Networking](/veyq/run/networking/#where-the-source-port-comes-from)).
+gateway and here ([Networking](/run/networking/#where-the-source-port-comes-from)).
 
 **The bundled store is opt-in here** (`garage.enabled`, `false` by default; [ADR
 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)). The store
@@ -64,7 +64,7 @@ itself is not a value. Off, the Server Owner enters an S3-compatible store of yo
 (**Server → Object store**) after the install and checks it; on, the app sets the bundled store itself once it has set
 Garage up, and checks it. No tenant is created before a store passes. Off, the chart renders
 nothing of Garage and the console offers no bundled store; the backup gate then reads that store through
-`backup.store.existingSecret` ([Backup and restore](/veyq/run/backup-and-restore/#under-kubernetes)).
+`backup.store.existingSecret` ([Backup and restore](/run/backup-and-restore/#under-kubernetes)).
 
 Turn it on only knowing what it is on a cluster: **one Garage node on one claim**, with no replication and no object
 versions, so keeping its objects is your volume snapshots' job; and a host of its own, `storeDomain`, with its DNS,
@@ -191,7 +191,7 @@ under compose: without the key the instance boots and then refuses invites and r
 the pod sets `fsGroup` to the image's runtime user because a claim comes up root-owned and — unlike a Docker
 named volume — inherits nothing from the image. Or give it your own key as a Secret, `app.configSecret.existingSecret`,
 which the app reads read-only; the claim then keeps only the erasure ledger
-([Storage and email](/veyq/run/storage-and-email/#the-config-secret-key)). `scripts/chart_meta_check.py` holds that to the `Dockerfile`
+([Storage and email](/run/storage-and-email/#the-config-secret-key)). `scripts/chart_meta_check.py` holds that to the `Dockerfile`
 (and the rest of the chart's structure), outside the buildless guard glob because it renders the chart with
 `helm`. It checks the rendered manifests only: no `Gateway`, `ListenerSet` or certificate order of this chart has
 run in a cluster yet.
@@ -207,7 +207,7 @@ and never mounts the config-secret claim, so no capture holds the key; export th
 older than B — the instance's backup retention, 30 days until the Server Owner sets it — is deleted at every start and
 by a daily CronJob, `veyq-backup-prune` (`backup.prune.schedule`), on the gate's image and claim: the one pod the
 chart adds for it, which reaches the database to read B (its own NetworkPolicy, and the database's admits it) and
-writes only the claim, on the app pod's node. What it captures, refuses and keeps, and the restore Job: [Upgrade](/veyq/run/upgrade/) and [Backup and
-restore](/veyq/run/backup-and-restore/#under-kubernetes). The values are on [Configuration](/veyq/run/configuration/).
+writes only the claim, on the app pod's node. What it captures, refuses and keeps, and the restore Job: [Upgrade](/run/upgrade/) and [Backup and
+restore](/run/backup-and-restore/#under-kubernetes). The values are on [Configuration](/run/configuration/).
 The gate ran once on a kind cluster in a `restricted` namespace (2026-10-17), with its claim on kind's local-path
 provisioner, which ignores `fsGroup`; on a storage class that applies it, the claim's directory is the pod's group's.
