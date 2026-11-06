@@ -3,6 +3,7 @@
 
     python3 scripts/release_assets.py <out> --app <ref> --admin <ref> [--tools <ref>] [--unscheduled]
     python3 scripts/release_assets.py --major-entry <release>   # what the tools image bakes as its major entry
+    python3 scripts/release_assets.py --asset-set <out>/<tag>   # the hash of a produced release's asset set
 
 writes, for the release the tree names (`v<major>.<minor>`, counted the way `ci.yml`'s version step counts it):
 
@@ -366,6 +367,29 @@ def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, tools: s
     return dest
 
 
+def asset_set_digest(dest: pathlib.Path) -> str:
+    """`sha256:<hex>` of the asset set a produced release `dest` (`<out>/<tag>/`) carries: the manifest's `assets` map —
+    every asset by name and sha256 — as canonical JSON (sorted keys, no whitespace), after checking each file against it.
+
+    Lane L1 records it in its attestation for the set it installed, and a promotion produces the set again from the
+    same commit and refuses another hash (ADR 0091 decision 5). Deliberately NOT the manifest's bytes: its `date`, its
+    image references (the lane's local `name:tag`, a release's `tag@digest` — the images are attested by digest on
+    their own) and `unscheduled` (a promotion's input) differ between two productions of one commit; everything a lane
+    installs from the set is in the map."""
+    try:
+        assets = json.loads((dest / MANIFEST).read_text()).get("assets")
+    except (OSError, ValueError) as e:
+        raise ReleaseError(f"{dest / MANIFEST} cannot be read ({e}), so the asset set has no hash")
+    if not isinstance(assets, dict) or not assets:
+        raise ReleaseError(f"{dest / MANIFEST} lists no assets, so the asset set has no hash")
+    for name, want in sorted(assets.items()):
+        path = dest / name
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != want:
+            raise ReleaseError(f"{path} is missing or is not the file the manifest lists, so the set is not the produced one")
+    canonical = json.dumps(assets, sort_keys=True, separators=(",", ":")).encode()
+    return f"sha256:{hashlib.sha256(canonical).hexdigest()}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Produce one veyq release as files, in the mirror layout.")
     parser.add_argument("out", type=pathlib.Path, nargs="?",
@@ -378,7 +402,16 @@ def main() -> int:
     parser.add_argument("--major-entry", metavar="RELEASE", default=None,
                         help="print the release the tools image of RELEASE bakes as its major entry (empty: none), "
                              "and write nothing")
+    parser.add_argument("--asset-set", metavar="RELEASE_DIR", type=pathlib.Path, default=None,
+                        help="print the asset-set hash of a produced release (<out>/<tag>/) and write nothing")
     args = parser.parse_args()
+    if args.asset_set is not None:
+        try:
+            print(asset_set_digest(args.asset_set))
+        except ReleaseError as e:
+            print(f"release_assets: {e}", file=sys.stderr)
+            return 1
+        return 0
     if args.major_entry is not None:
         try:
             print(major_entry(args.major_entry) or "")
