@@ -1264,7 +1264,7 @@ paths:
         ADR 0093 § 13 (uc.moderation.report-to-an-authority): what the server holds in the clear and nothing it would
         have to open — the case id and category, every time in UTC, the measures, the uploaders the held rows name (a
         member's account id, a guest's share identity id), and every held guest-write record (address, source port where
-        one was recorded, the time it was observed). The surface renders a text block to copy; it never downloads
+        one was recorded, the `Origin` its request carried where it carried one, the time it was observed). The surface renders a text block to copy; it never downloads
         content. Key-proved over this case.
       security:
         - bearerAuth: []
@@ -2837,6 +2837,21 @@ components:
           format: int32
           description: The client's source port, as the record kept it; null where none was recorded.
           example: 51234
+        origin:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >
+            The `Origin` header the write's request carried, which the guest-write record keeps beside the address (ADR
+            0093 § 10) so a write a foreign page made a visitor's browser send — whose address is the visitor's, not the
+            sender's (ADR 0121) — can be told apart; served only from a hold behind the moderation role and key proof,
+            for the Art. 18 report ADR 0093 § 13 asks for.
+          type: string
+          description: >
+            The `Origin` header the write's request carried, as the record kept it: a serialized origin
+            (`scheme://host[:port]`), the text `null` an opaque origin sends, `invalid` for a header of any other shape
+            or longer than 255 characters; absent where the request carried none. A browser sets it and a page cannot; any
+            other client chooses it.
+          maxLength: 255
+          example: https://veyq.example.org
         observedAt:
           x-veyq-visibility: time
           type: string
