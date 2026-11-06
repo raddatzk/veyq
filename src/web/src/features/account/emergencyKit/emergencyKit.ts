@@ -10,7 +10,7 @@
 // need, is lazier still (`pdfEngine.ts` loads it on the first PDF that does not carry the token raw).
 //
 // The PDF's layout is admin-web's `features/setup/emergencyKit.ts` too, kept as alike as the one difference allows:
-// a member's kit names the address it was made on ("Created on <host>"), the Server Owner's — made on the
+// a member's kit names the address it was made on ("Created at <host>"), the Server Owner's — made on the
 // localhost-only admin surface, whose address means nothing to a member — does not. A shared layout would be UI in
 // `@veyq/crypto`, which holds nothing but crypto (ADR 0065).
 

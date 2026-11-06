@@ -701,7 +701,7 @@ const en = {
     pdfEmail: 'Email',
     pdfSecretKey: 'Secret Key',
     pdfWhere: 'Where you sign in',
-    pdfCreatedOn: 'Created on',
+    pdfCreatedOn: 'Created at',
     pdfMoreAddresses: 'Other addresses where you sign in – type them here, or write them in after printing:',
     pdfRestore: 'Quick restore',
     pdfStep1: 'Open veyq on the new device and choose “Sign in”.',
