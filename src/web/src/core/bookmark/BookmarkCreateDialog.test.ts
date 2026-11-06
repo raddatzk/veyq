@@ -96,6 +96,16 @@ describe('BookmarkCreateDialog', () => {
     expect(bookmarkOf(unsealNodeMeta(KEY, { scopeId: SCOPE, nodeId: NODE }, state.meta))?.password).toBeNull()
   })
 
+  it('numbers the suggested name past a sibling that already holds it', async () => {
+    treeStore.nodes = [treeNode({ id: 'n1', kind: SHARE_BOOKMARK_KIND, name: 'Link from photos.other.example', parentId: null })]
+    await open()
+    await set(field('bookmark-link'), FOREIGN)
+    expect(field('bookmark-name').value).toBe('Link from photos.other.example (2)')
+    submit().click()
+    await flushPromises()
+    expect(state.names).toEqual(['Link from photos.other.example (2)'])
+  })
+
   it('says what is wrong with a malformed link, and creates nothing', async () => {
     await open()
     for (const [input, key] of [

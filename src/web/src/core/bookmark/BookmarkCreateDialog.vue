@@ -38,7 +38,18 @@ const passwordId = useId()
 const parsed = computed(() => parseShareLink(linkInput.value))
 /** What is wrong with the link, shown once something was typed. */
 const linkProblem = computed(() => (!parsed.value.ok && parsed.value.problem !== 'empty' ? t(`node.bookmark.problem.${parsed.value.problem}`) : null))
-const suggestedName = computed(() => (parsed.value.ok ? t('node.bookmark.defaultName', { host: hostOf(parsed.value.value) }) : ''))
+/** The host's name, numbered past a sibling that already holds it ("… (2)"), so a second link of one host does not
+ *  collide only when it is saved. */
+const suggestedName = computed(() => {
+  if (!parsed.value.ok) return ''
+  const base = t('node.bookmark.defaultName', { host: hostOf(parsed.value.value) })
+  const taken = (name: string) => !!collidingSibling(treeStore.nodes, props.parentId ?? null, SHARE_BOOKMARK_KIND, name)
+  for (let n = 1; n < 100; n++) {
+    const name = n === 1 ? base : `${base} (${n})`
+    if (!taken(name)) return name
+  }
+  return base
+})
 const shownName = computed({
   get: () => (named.value ? name.value : suggestedName.value),
   set: (v: string) => {
