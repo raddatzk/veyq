@@ -18,6 +18,7 @@ import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.http.ClientSeen
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteObject
 import me.raddatz.veyq.core.moderation.guestwrite.GuestWriteRecords
+import me.raddatz.veyq.core.node.CoreNodeKinds
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.persistence.createOrConflict
 import io.quarkus.arc.All
@@ -228,6 +229,9 @@ class ShareNodesHandler(
             if (nodeId == root) return@call UpdateShareNodeOutcome.IllegalStructure
             val node = tree.findInScope(scopeId, nodeId)
             if (node == null || !tree.withinSubtree(scopeId, root, nodeId)) return@call UpdateShareNodeOutcome.NodeNotFound
+            // A bookmark is never served to a guest (ADR 0120 decision 7), so a guest who learned its id finds nothing to
+            // move or rename either.
+            if (node.kind == CoreNodeKinds.SHARE_BOOKMARK) return@call UpdateShareNodeOutcome.NodeNotFound
             if (!tree.withinSubtree(scopeId, root, parentId)) return@call UpdateShareNodeOutcome.IllegalStructure
             // Only a member moves anything out of a drop box (ADR 0080 decision 11, owner decision 2026-10-08, inbox #377
             // (a)): a guest places neither a guest's identity folder nor anything inside one — known by core's own column

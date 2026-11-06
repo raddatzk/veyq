@@ -16,6 +16,7 @@ import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 import me.raddatz.veyq.core.moderation.hold.HoldTarget
 import me.raddatz.veyq.core.moderation.hold.HoldTrigger
 import me.raddatz.veyq.core.moderation.hold.Holds
+import me.raddatz.veyq.core.node.CoreNodeKinds
 import me.raddatz.veyq.core.sharing.ShareAccessPolicy
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestGate
@@ -66,6 +67,9 @@ object ReportFailures {
     val shareNotFound = httpFailure("share_not_found", FailureStatus.NOT_FOUND)
     val sharePasswordIncorrect = httpFailure("share_password_incorrect", FailureStatus.FORBIDDEN)
     val reporterBarred = httpFailure("reporter_barred", FailureStatus.FORBIDDEN)
+    /** A `NODE` item that is a bookmark (ADR 0120 decision 6): its key opens another link, perhaps another operator's share,
+     *  so it is reported by its `NAME` here and its share where the share lives. */
+    val targetKind = httpFailure("report_target_kind", FailureStatus.UNPROCESSABLE)
 }
 
 /**
@@ -123,7 +127,12 @@ class ReportHandler(
         nodes.lockScope(m.scopeId)
         val placed = r.items.map { item ->
             val inReach = when (item.kind) {
-                ReportItemKind.NODE, ReportItemKind.NAME -> nodes.findInScope(m.scopeId, item.id!!) != null
+                ReportItemKind.NODE -> {
+                    val node = nodes.findInScope(m.scopeId, item.id!!)
+                    if (node?.kind == CoreNodeKinds.SHARE_BOOKMARK) return refused(ReportFailures.targetKind)
+                    node != null
+                }
+                ReportItemKind.NAME -> nodes.findInScope(m.scopeId, item.id!!) != null
                 ReportItemKind.ITEM -> locate(item.id!!)?.let { it.scopeId == m.scopeId && nodes.findInScope(m.scopeId, it.nodeId) != null } == true
                 ReportItemKind.LINK -> false
             }
@@ -176,7 +185,8 @@ class ReportHandler(
         return receive(r, placed, now, reporterAccount = null, reporterShare = share.id)
     }
 
-    /** The live nodes a viewing guest of [share] sees: its root's live subtree, nothing while the root is trashed. */
+    /** The live nodes a viewing guest of [share] sees: its root's live subtree, nothing while the root is trashed — and no
+     *  bookmark, which no link serves (`SharingStore.liveSubtreeIds`, ADR 0120 decision 7). */
     private fun reachOf(share: ShareEntity): Set<String> =
         if (sharing.findNode(share.nodeId)?.deletedAt != null) emptySet() else sharing.liveSubtreeIds(share.scopeId, share.nodeId).toSet()
 

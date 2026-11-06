@@ -193,7 +193,8 @@ class ModuleCompositionTest {
         val file = "FILE"
         val dropBox = "DEPOT_DROPBOX"
         val pot = "EXPENSES_POT"
-        val kinds = listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", file, dropBox, pot)
+        val bookmark = "SHARE_BOOKMARK"
+        val kinds = listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", file, dropBox, pot, bookmark)
         for (kind in kinds) {
             val claiming = kindRules.filter { it.handles(kind) }.map(::beanClass)
             assertEquals(1, claiming.size, "node kind $kind must be handled by exactly one NodeKindRules: $claiming")
@@ -214,6 +215,13 @@ class ModuleCompositionTest {
             assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(file)), "a $child inside a file")
             // ADR 0080 decision 11: nothing is placed into a drop box — its identity folders are core's own placement
             assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(dropBox)), "a $child placed in a drop box")
+            // ADR 0120 decision 2: a bookmark holds no child, and lives in no application's node
+            assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(bookmark)), "a $child inside a bookmark")
+        }
+        assertEquals("me.raddatz.veyq.core.node.ShareBookmarkNodeRules", beanClass(kindRules.single { it.handles(bookmark) }), "SHARE_BOOKMARK is core's")
+        assertNull(NodeKindRules.applicationOf(kindRules, bookmark), "a bookmark is switched with no application")
+        for (container in listOf("MEMORY", "CHAPTER", pot)) {
+            assertFalse(NodeKindRules.parentAllows(kindRules, bookmark, ParentSlot.Node(container)), "a bookmark inside a $container")
         }
         assertTrue(NodeKindRules.parentAllows(kindRules, dropBox, ParentSlot.Node(NodeEntity.FOLDER)), "control: a drop box in a folder")
         // control: a file at the root and in a folder, never in a Memory; a chapter in its Memory

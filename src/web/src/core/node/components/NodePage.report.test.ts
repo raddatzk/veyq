@@ -27,7 +27,7 @@ vi.mock('../../report/report', async (orig) => {
 
 import { flushPromises, mount } from '@vue/test-utils'
 import { registry } from '../../applications/registry'
-import { FOLDER_KIND } from '../kind'
+import { FOLDER_KIND, SHARE_BOOKMARK_KIND } from '../kind'
 import { childrenOf } from '../browse'
 import LevelView from '../LevelView.vue'
 import { blobApi } from '../../../api/client'
@@ -97,7 +97,7 @@ async function mountPage(kind: string) {
 
 describe('Report on every node\'s page (a legal duty, DSA Art. 16)', () => {
   it('walks every application\'s kinds (the anchor: a walk that saw none proves nothing)', () => {
-    expect(pageKinds()).toEqual(expect.arrayContaining([MEMORY_KIND, CHAPTER_KIND, FILE_KIND, DROPBOX_KIND, POT_KIND]))
+    expect(pageKinds()).toEqual(expect.arrayContaining([SHARE_BOOKMARK_KIND, MEMORY_KIND, CHAPTER_KIND, FILE_KIND, DROPBOX_KIND, POT_KIND]))
   })
 
   // One test that walks the kinds at RUN time: the registry is filled in the setup's `beforeAll`, after this file's
@@ -114,7 +114,10 @@ describe('Report on every node\'s page (a legal duty, DSA Art. 16)', () => {
       expect(menu.slice(menu.indexOf('report')), `${kind}: report, then delete at most`).toEqual(menu.includes('delete') ? ['report', 'delete'] : ['report'])
       await chooseHeaderEntry(w, 'report')
       expect(vi.mocked(openReport), `${kind}: the report opens`).toHaveBeenCalledOnce()
-      expect(vi.mocked(openReport).mock.calls[0]![0].targets.map((x) => [x.kind, 'id' in x ? x.id : null]), kind).toEqual([['NODE', nodeOf(kind).id]])
+      // A bookmark is reported here by its name alone: its key opens another link (ADR 0120 decision 6; its share's own
+      // report is handed to the share page, `core/bookmark/bookmarkReport.test.ts`).
+      const expected = kind === SHARE_BOOKMARK_KIND ? 'NAME' : 'NODE'
+      expect(vi.mocked(openReport).mock.calls[0]![0].targets.map((x) => [x.kind, 'id' in x ? x.id : null]), kind).toEqual([[expected, nodeOf(kind).id]])
       w.unmount()
     }
   })

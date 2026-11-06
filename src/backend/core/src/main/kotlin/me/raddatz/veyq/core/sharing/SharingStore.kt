@@ -6,6 +6,7 @@ import me.raddatz.veyq.core.identity.PrincipalKey
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.node.CoreNodeKinds
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import me.raddatz.veyq.core.sharing.ShareEntity
@@ -680,7 +681,10 @@ class SharingStore(
         // predicate SEPARATELY on purpose: either one covering for the other is how a later change to the other
         // reopens the hole silently. `ShareDeletedNodeSliceTest` bites each on its own.
         val nodeById = NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().associateBy { it.id }
-        return subtreeIds.mapNotNull { nodeById[it] }
+        // A bookmark is a member's received link, not the space's content (ADR 0120 decision 7): no link above it serves
+        // it — not its entry, its wrapped key or its meta, which holds another link's key — and so no guest reaches it, no
+        // moderator's review of a reported folder reads it, and no hold of one copies it. It holds no child to lose.
+        return subtreeIds.mapNotNull { id -> nodeById[id]?.takeIf { it.kind != CoreNodeKinds.SHARE_BOOKMARK } }
     }
 
     /**

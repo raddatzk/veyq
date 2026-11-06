@@ -535,6 +535,21 @@ server-blind token makes this work without the server ever seeing a name:
   link does until the scope next rotates (a group removal's own rotation; the tenant's explicit re-key), which
   re-keys every node — the ADR 0012 class; after it, a link they could rebuild reads what is added below its root
   until it is re-issued.
+- **A bookmark passes a link to everyone who can open its place**
+  ([ADR 0120](../decisions/0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md)).
+  A member who keeps a received link — of this or another instance — as a `SHARE_BOOKMARK` node seals the link and its
+  password in the node's meta under its own `K_node`; so every member who reaches that node holds the link's key and
+  reads what it shows, on whichever instance: placing it in a group space is forwarding it to the group, and the create
+  dialog says so. The operator learns that a node of this kind exists, where and when, and a padded meta size — not the
+  instance, the share id or a password. **No link serves a bookmark**: a public link of an enclosing folder omits its
+  entry, wrap and meta, its guest reports, moves and renames none, and a reported folder's hold leaves it out — so on an
+  honest server neither a link guest nor a moderator is handed another operator's link. **Residual:** whoever holds a
+  key above the bookmark (a link guest of an enclosing folder, a moderator of a reported one) reads its link with a
+  database dump — the attacker who already reads every other node below that key; what is new is a reach into a share
+  elsewhere that its own operator cannot see. A space's rotation re-keys the bookmark but closes nothing on another
+  instance; only the link's own owner closes it. This instance's moderators are handed a bookmark's **name** alone
+  (`422 report_target_kind` on a `NODE` item of one); its share is reported to the share's own operator, through the
+  share page.
 - **An optional share password** is an **operator-blind access-control gate**, *not* a cryptographic one
   ([ADR 0037](../decisions/0037-password-protected-shares.md)): the content stays E2EE under the unchanged
   `K_share` fragment, and the password gates **what the server serves** (a locked resolve returns only the

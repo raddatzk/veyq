@@ -18,7 +18,9 @@
   [uc.sharing.share-password](../use-cases/uc.sharing.share-password.md),
   [uc.sharing.share-link-storage-limit](../use-cases/uc.sharing.share-link-storage-limit.md),
   [uc.sharing.share-accept](../use-cases/uc.sharing.share-accept.md),
-  [uc.sharing.close-link-rekeys-subtree](../use-cases/uc.sharing.close-link-rekeys-subtree.md).
+  [uc.sharing.close-link-rekeys-subtree](../use-cases/uc.sharing.close-link-rekeys-subtree.md),
+  [uc.sharing.keep-a-received-link](../use-cases/uc.sharing.keep-a-received-link.md) (a received link kept as a node, the
+  link's shape read and its key sealed; [ADR 0120](../../../decisions/0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md)).
 - **Depends on:** [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (the keys a link hangs
   off: `K_SC`, node keys, the node re-key), [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md)
   (the node tree and its keys), [scopes and tenancy](../../../crosscutting/scopes-and-tenancy.md) (who is a member,

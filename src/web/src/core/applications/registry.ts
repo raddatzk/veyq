@@ -592,6 +592,11 @@ export interface ApplicationRegistrar {
 }
 
 export interface Registry {
+  /** Register one of core's own kinds beside FOLDER (core's bookmark, ADR 0120): served like an application's kind - its
+   *  rows, page and create entry - but owned by no application, so no switch turns it off, it claims no route segment and
+   *  names no content schema. Called once per kind by the composition root (`src/applications.ts`), before the
+   *  applications; a kind registered before throws. */
+  registerCoreKind(kind: NodeKind, registration: KindRegistration): void
   /** Name an application - its register id and its name's i18n key - and answer its registrar (see the header). Throws on
    *  an id named before. */
   registerApplication(info: ApplicationInfo): ApplicationRegistrar
@@ -720,11 +725,12 @@ export function createRegistry(): Registry {
     }
     if (failure) throw failure.error
   }
-  /** Register `kind` for application `id` (the registrar's `kind`). */
-  function registerKind(id: string, kind: NodeKind, registration: KindRegistration) {
+  /** Register `kind` for application `id` (the registrar's `kind`), or as core's own with `id` null (core's bookmark, ADR
+   *  0120: no application, so no switch, no route segment and no content schema of an application). */
+  function registerKind(id: string | null, kind: NodeKind, registration: KindRegistration) {
     if (kinds.has(kind)) throw new Error(`node kind ${kind} is already registered`)
     const { contentSchema, ...rest } = registration
-    const descriptor: KindDescriptor = { ...rest, kind, ...(contentSchema ? { contentSchema: { application: id, version: contentSchema.version } } : {}) }
+    const descriptor: KindDescriptor = { ...rest, kind, ...(contentSchema && id !== null ? { contentSchema: { application: id, version: contentSchema.version } } : {}) }
     // Checked before anything is stored, so a contradiction registers nothing.
     if (descriptor.listed === false && descriptor.list) throw new Error(`node kind ${kind} is not listed but names a list`)
     const joinList = listJoin(listEntries, tabEntries, kind, descriptor.list)
@@ -739,7 +745,7 @@ export function createRegistry(): Registry {
       }
     }
     kinds.set(kind, descriptor)
-    applicationOfKind.set(kind, id)
+    if (id !== null) applicationOfKind.set(kind, id)
     joinList()
   }
   /** The registrar of application `id` (see the header). */
@@ -793,6 +799,7 @@ export function createRegistry(): Registry {
     })
   }
   return {
+    registerCoreKind: (kind, registration) => registerKind(null, kind, registration),
     registerApplication({ id, name }) {
       if (applications.some((a) => a.id === id)) throw new Error(`application ${id} is already registered`)
       applications.push({ id, name })

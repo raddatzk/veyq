@@ -7,6 +7,7 @@ import AppShell from './components/app/AppShell.vue'
 import ConfirmDialog from './shared/ui/ConfirmDialog.vue'
 import VeyqToaster from './shared/ui/VeyqToaster.vue'
 import ReportDialog from './core/report/ReportDialog.vue'
+import BookmarkOpenDialog from './core/bookmark/BookmarkOpenDialog.vue'
 </script>
 
 <template>
@@ -18,5 +19,7 @@ import ReportDialog from './core/report/ReportDialog.vue'
   <!-- The one report dialog (uc.moderation.report), driven by `core/report/report.ts`: opened from a level, a header, the
        lightbox or an upload link's page, for a member and a guest alike. -->
   <ReportDialog />
+  <!-- The one dialog a bookmark of another instance with a password opens before its tab (ADR 0120 decision 5). -->
+  <BookmarkOpenDialog />
   <VeyqToaster />
 </template>

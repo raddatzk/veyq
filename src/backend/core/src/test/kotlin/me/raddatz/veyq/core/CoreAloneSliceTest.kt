@@ -41,6 +41,7 @@ import me.raddatz.veyq.core.node.FolderNodeRules
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.content.CoreMemberBlobRoles
 import me.raddatz.veyq.core.node.NodeKindRules
+import me.raddatz.veyq.core.node.ShareBookmarkNodeRules
 import me.raddatz.veyq.core.favorites.FavoritesScopeEraser
 import me.raddatz.veyq.core.node.NodeScopeEraser
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
@@ -206,7 +207,7 @@ class CoreAloneSliceTest {
         )
         assertEquals(setOf(AttachmentSharedSubtreeContributor::class.java, ApplicationBlobSharedSubtreeContributor::class.java), classes(contributors),
             "SharedSubtreeContributor: core's attachments and blob service only")
-        assertEquals(setOf(FolderNodeRules::class.java), classes(kindRules), "NodeKindRules: core's FOLDER rule only")
+        assertEquals(setOf(FolderNodeRules::class.java, ShareBookmarkNodeRules::class.java), classes(kindRules), "NodeKindRules: core's FOLDER and bookmark rules only")
         assertEquals(setOf(FolderShareRoots::class.java), classes(shareRoots), "ShareRoots: core's FOLDER answer only")
         assertEquals(setOf(FolderGuestPlaceholders::class.java), classes(guestPlaceholders), "GuestPlaceholders: core's FOLDER answer only")
         assertEquals(setOf(VerificationMembershipEraser::class.java), classes(membershipErasers),
