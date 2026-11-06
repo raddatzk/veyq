@@ -14,7 +14,7 @@ name: CI
 #
 # This file signs SNAPSHOTS. Keyless signing names the workflow that signed, so a snapshot's identity is
 # `.github/workflows/ci.yml` on `main` or `release/<major>.x`; a release is a promotion of a snapshot, signed by another
-# workflow, `.github/workflows/release.yml` (cr-release-promotes-a-tested-snapshot phase 3, not built), so that
+# workflow, `.github/workflows/release.yml` (ADR 0091 decision 5's promotion, not built yet), so that
 # `cosign verify` with the release identity — site/src/content/docs/run/verify-a-release.md, `veyqctl` — answers
 # whether a digest is a release. Renaming this file changes the snapshot identity; scripts/validate_release_identity.py
 # holds the release identity to rejecting it.
@@ -1205,7 +1205,7 @@ jobs:
 
       # The chart beside the images (ADR 0064), as `<version>-SNAPSHOT` for its `version` and `appVersion`: its
       # `appVersion` is the image tag its values default to, so this chart runs this snapshot's images, and the release's
-      # chart is packaged again by the promotion (cr-release-promotes-a-tested-snapshot decision 3). `helm push` appends
+      # chart is packaged again by the promotion. `helm push` appends
       # the chart's NAME to the target, so it lands on ghcr.io/<owner>/charts/veyq. A chart this commit already pushed
       # (the refusal step said `present`) is kept, not pushed twice.
       - name: Package and push the chart

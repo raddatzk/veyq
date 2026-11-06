@@ -5,7 +5,6 @@ sources:
   - docs/crosscutting/release-and-deployment.md
   - docs/decisions/0057-release-identity-and-deployment-recipe.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
-  - docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md
   - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
 ---
 

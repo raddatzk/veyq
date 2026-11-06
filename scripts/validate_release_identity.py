@@ -67,7 +67,7 @@ snapshot happens:
      signature.
  11. **(Retired here.)** A release's one immutable GitHub Release, created last (ADR 0096 decision 3), left this
      pipeline with the release kind: a release is a promotion of a snapshot in a workflow of its own
-     (cr-release-promotes-a-tested-snapshot phase 3, which re-homes the assertion there). What stays of it: **the
+     (ADR 0091 decision 5's promotion, not built yet, which re-homes the assertion there). What stays of it: **the
      cosign that signs is the line operators verify with** (inbox #474): exactly one `sigstore/cosign-installer` step
      in the file, in the `snapshot` job before every step that runs `cosign`, with `cosign-release` an exact
      `v<major>.<minor>.<patch>` no older than `src/tools/veyqctl.py`'s `COSIGN_MIN_VERSION` — never the installer's
@@ -91,7 +91,7 @@ snapshot happens:
      where every derived file must be, byte-identical to the tree (the `.env` template under its asset name,
      `env.example`). Every `*_ASSET` name `src/tools/veyqctl.py` fetches must be one a release has — the producer's
      files, the manifest, or one of the two bundle names the producer reserves and a release's publish writes (the
-     promotion, cr-release-promotes-a-tested-snapshot phase 3)
+     promotion, ADR 0091 decision 5)
      — and its `MANIFEST_BUNDLE_ASSET`, the file it verifies the manifest against, is the manifest's bundle by name.
      The derived list is printed on the OK line. Plus: every veyq image
      tag written down in a tracked deployment file (`TAG_SCAN_DIRS`: `infra/`, lane L1's overlay, the API fuzzer)
@@ -199,7 +199,7 @@ not have. The producer now names it `env.example` and refuses a recipe file GitH
 `veyqctl`'s asset names to what the producer writes. Its two signatures came with inbox #469 (cr-signed-release-manifest):
 the manifest was unsigned, so whoever controls the source could serve a forged manifest with a forged compose file that
 matched it. Its release half left this pipeline with the release kind (ADR 0091 decision 5) and is re-homed in the
-promotion's workflow by cr-release-promotes-a-tested-snapshot phase 3.
+promotion's workflow when it is built.
 
 Assertion 11's cosign half came with inbox #474, from a measured gap rather than an incident: the publish installed
 cosign through `sigstore/cosign-installer` v3.9.1, whose default is cosign v2.5.2, while `veyqctl` and the Run page
@@ -329,7 +329,7 @@ CHART_DIR = repo_layout.CHART_DIR
 # plain fenced blocks so this guard can read them; it moved there from infra/README.md, which keeps the dev stack.
 VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
 # The workflow whose keyless signature says "release": the promotion of a snapshot (ADR 0091 decision 5;
-# cr-release-promotes-a-tested-snapshot phase 3 builds it). Named once, here; the identity's owner and repository are
+# not built yet). Named once, here; the identity's owner and repository are
 # not — they are the chart's `home:` (assertion 7), so a move of the repository changes that one line and this guard
 # names every line that must follow it (`veyqctl`'s constant, the Run page's commands, the chart's image defaults).
 RELEASE_WORKFLOW = ".github/workflows/release.yml"

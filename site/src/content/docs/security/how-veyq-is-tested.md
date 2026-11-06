@@ -171,7 +171,7 @@ run* column was measured on the development machine (a 14-core arm64 Mac) on 202
 whatever load other work put on it, so it says little about a CI runner's time.
 
 `ci.yml` is the pipeline. It runs on every push to `main` or a `release/<major>.x` branch and on every pull request
-into one, unless the change touches only docs, Markdown or the site, and once more when a publish is started by hand.
+into one, unless the change touches only docs, Markdown or the site, and once more when a snapshot is started by hand.
 Its stages start together; only lane L1 waits for others: the image build, and the frontend's surface check, the one
 install that asks the package registry about the lockfile the images install. *Every commit* below means those
 triggers.
@@ -184,8 +184,8 @@ triggers.
 | Races on MariaDB | `ci.yml › backend-races`, every commit | 20 min | 9.5 min beside the backend's check, 7.0 alone; once, under a heavier load, over its budget beside it. Locally the jobs share one machine; in CI each has its own runner. The first CI run (2026-11-05, cold) outran its first budget of 10 with three of its four projects green, inside `:core`'s; each of the three took about 17 s plus at most 1.24 times its classes' local time (a local run of 2026-11-02), which puts `:core`'s at 6 min and the job at 13–17 min cold |
 | API end-to-end | `ci.yml › web-e2e`, every commit | 40 min | 9.2 min for its 26 suites, run directly (2026-10-15); 13.8 min in the local pipeline, all 27 suites green, run alone while other work kept the machine busy (2026-10-16); on GitHub (2026-11-05) the suites 14.2 min green and 20.7 with two red, after 3.5 min of jar and install warm and 6.7 cold; one job took 27.5 min |
 | API fuzzing | `ci.yml › api-fuzz`, every commit | 20 min | 5.7 to 7.3 min for a whole run with the image already built, the jar and the dependency install not counted (2026-10-19, with writes, sequences and the second member); on GitHub's first run (2026-11-05) a cold cache added 5.1 min of jar and install before it |
-| Image build | `ci.yml › build`, every image (app, admin, tools) on amd64 and arm64, every commit; it writes to a registry only on a publish | 15 min | the app image 2.5–4.6 min uncached on arm64; on GitHub's first run (2026-11-05) 6.4 min on amd64 and 7.1 on arm64 |
-| Stack lane L1 | `ci.yml › stack`, per architecture after the image build, in one leg per domain of the suite (account, Depot, Expenses, Memories, moderation, platform), each with an instance of its own: a push on both architectures, a pull request on amd64 only; on a publish it installs the images the build pushed, pulled by digest | 15 min per leg | 2026-10-26, the images built, arm64: the slowest leg 4.0 min (Depot, its browser 3.5 min), the fastest 2.9 min (Memories), 20.9 min for the six together — each runs first run, the round trip and the instance-wide scenarios; the whole suite in one run 14.0 min (13.3, 165 tests); **the local pipeline cannot run this job** (below) |
+| Image build | `ci.yml › build`, every image (app, admin, tools) on amd64 and arm64, every commit; it writes to a registry on a push to `main` or a `release/<major>.x` branch, never on a pull request | 15 min | the app image 2.5–4.6 min uncached on arm64; on GitHub's first run (2026-11-05) 6.4 min on amd64 and 7.1 on arm64 |
+| Stack lane L1 | `ci.yml › stack`, per architecture after the image build, in one leg per domain of the suite (account, Depot, Expenses, Memories, moderation, platform), each with an instance of its own: a push on both architectures, a pull request on amd64 only; on a push it installs the images the build pushed, pulled by digest, and each green leg records what it ran for the snapshot's attestation | 15 min per leg | 2026-10-26, the images built, arm64: the slowest leg 4.0 min (Depot, its browser 3.5 min), the fastest 2.9 min (Memories), 20.9 min for the six together — each runs first run, the round trip and the instance-wide scenarios; the whole suite in one run 14.0 min (13.3, 165 tests); **the local pipeline cannot run this job** (below) |
 | Mutation | `mutation.yml` when a push or pull request to `main` changes the crypto package or web's sources, `mutation-backend.yml` when one changes a scoped backend file or its test; both when their own configuration changes, and by hand | 45 min for `mutation.yml`'s one job (both web-side gates), 30 for the backend's | a full run of the crypto package's gate 3.6 min and of web's 16.7 min, under load (2026-11-05); an incremental run on a pull request is estimated at 1–3 min |
 | Upgrade proof | `ci.yml › upgrade-proof`, switched off until the first release, one leg per predecessor: the default one, and the release's major entry where it is another | 15 min per leg, an estimate | 3.5 min for one leg, run directly (2026-10-15) |
 | Stack lanes L2, L3 | no job | — | — |
@@ -193,7 +193,7 @@ triggers.
 | Profiling | no job: run by hand on one quiet machine, and never a verdict | — | unlock, the Chapter and the encryption reading 8 min at `87266fe3` (2026-10-23); the upload's six runs 12 min at `d4eab6be` (2026-10-24); the upload's and the import's twelve runs, the import's download made first, 8 min at `3a44065b` (2026-10-29), the same twelve again, 8 min each, at `0d48e569` and with the import and the tiles changed (2026-10-29); the video upload's six runs, 5 min each, before, without the tiles' posters and after (2026-10-29), and again before, with the size probe's player let go, without the probe, after, without the tiles' posters and with them drawn but not shown (2026-10-29) |
 
 The jobs that are no stage carry a budget too, so that none runs on GitHub's 360-minute default: reading the version
-5 min, the publish 15, a path-filter job 5, CodeQL's analysis 30, the docs site's check 10 and its deploy 5,
+5 min, the snapshot's publish 15 and its tag 5, a path-filter job 5, CodeQL's analysis 30, the docs site's check 10 and its deploy 5,
 the dependency graph's resolve 15 and its submit 5. A budget no
 run has measured is an estimate until the first CI run replaces it.
 
@@ -220,7 +220,8 @@ passed, and it named what it did not run:
 - the amd64 legs of the image build, since the machine is arm64;
 - the steps only GitHub runs: the check of the Gradle wrapper against Gradle's published checksums, and the image
   build's own action with its provenance and SBOM;
-- `upgrade-proof` and `publish`, skipped by their own conditions on a push, as they are in CI.
+- `upgrade-proof` and `publish`, skipped by their own conditions on a push, as they were in CI then. (Since a push
+  publishes a snapshot, the publishing jobs are skipped in a local run because the run is not on GitHub's runners.)
 
 The `stack` job came after that run. The local pipeline cannot run it on any one machine: it waits for every leg of the
 image build, and one machine builds only its own architecture.
@@ -231,19 +232,20 @@ writes, sequences and second member were added the same day, which made the run 
 
 ## How a release will be gated
 
-A publish is started by hand from `main` or a `release/<major>.x` branch and runs the whole pipeline once more. The
-image build pushes each image to the registry under a staging tag, unsigned and carrying no release name; lane L1
-installs exactly those images, pulled by digest; and the `publish` job runs only when every other job of that run is
-green (the switched-off upgrade proof excepted). It then names those same digests — a snapshot `<major>.<minor>-SNAPSHOT`
-by default, a release `<major>.<minor>` when asked — signs them and the Helm chart keylessly, and for a release creates
-the tag `v<major>.<minor>` and the immutable GitHub Release with its files. All of that is a workflow file. It has
-never run: there is no remote, and a registry write and keyless signing cannot run on a developer machine at all.
+Every push to `main` or a `release/<major>.x` branch publishes a **snapshot** once every stage is green. The image
+build pushes each image to the registry under a staging tag, unsigned and carrying no published name; lane L1 installs
+exactly those images, pulled by digest, and each green leg records what it ran; and the `snapshot` job runs only when
+every stage of that run is green (the switched-off upgrade proof excepted). It names those same digests
+`<major>.<minor>-SNAPSHOT` — written once, never replaced — signs them and the Helm chart keylessly, and attaches each
+stack lane's result per architecture as a signed attestation naming what it ran on: the images and the hash of the
+release files it installed. A job of its own then tags the commit `snapshot-<major>.<minor>`. A pull request publishes
+nothing. All of that is a workflow file, and its first run on GitHub is still to be observed.
 
-The rest is designed, not built (ADR 0091): every green push publishes its images as a signed snapshot on exactly the
-bytes that were tested, with each stack lane's result attached as a signed attestation, and a release does not build
-again — it gives that snapshot's bytes the release name and signature, after checking the attestations. So a release
-is always bytes every test saw, and anyone can check which release they run against its signature
-([Verify a release](/run/verify-a-release/)).
+The rest is designed, not built (ADR 0091): a release does not build again — it is started from a draft on a snapshot's
+tag, checks that snapshot's signature and attestations, produces the release files again and refuses if they differ
+from the ones the lanes installed, and gives the snapshot's bytes the release name and a release signature from a
+workflow of its own. So a release is always bytes every test saw, and anyone can check which release they run against
+its signature ([Verify a release](/run/verify-a-release/)); a snapshot's signature does not pass that check.
 
 ## What no test here can prove
 
