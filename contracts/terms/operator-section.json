@@ -1,5 +1,5 @@
 {
-  "revision": 3,
+  "revision": 4,
   "note": "The operator section of the terms (ADR 0035 decision 6, ADR 0093 § 14; uc.admin.tenant-terms, uc.account.accept-terms, uc.sharing.share-accept): fixed text veyq ships, DE and EN, served after every space's own terms by the endpoints that serve them, filled with the values the Server Owner sets. Read by the backend alone (core/terms/OperatorSectionRenderer.kt renders it); clients render what the endpoints serve. Nobody edits it at runtime. 'revision' moves with the text and only with it, in the release that changes it; a bump reopens every terms gate. The section has one form on every instance (ADR 0093 § 14: no operating mode, revision 3). Every passage renders in order, except the one marked 'record': true — the pointer to the guest-write record's GDPR Art. 13 information, served apart as the section's 'record' and always present, since the record is kept wherever a guest may write (ADR 0093 § 10); the information itself, with its right to object apart, is the instance privacy notice's, contracts/terms/privacy-notice.json — one home for every Art. 13 passage (ADR 0035 decision 8). Lines are joined by a newline (markdown: a heading, a bullet or a paragraph line; an empty line ends a paragraph). A line with a placeholder whose value is empty is left out where the line is 'optional'; otherwise the value renders as 'gap' — a visible 'not stated by this operator', never an empty sentence. Placeholders: {providerName}, {providerAddress}, {providerEmail}, {providerRepresentative}, {supervisoryAuthority}, {contactEmail}, {contactLanguages} (the tags, joined by ', '), {privacyContact} (the address the disclosures name, else the contact) and {retention} (N with its unit, from 'retentionUnit'). Each takes a value the Server Owner typed to be published, never user data; a newline in a value renders as ', '.",
   "gap": {
     "en": "not stated by this operator",
@@ -20,12 +20,12 @@
       "id": "intro",
       "lines": [
         {
-          "en": "## On this instance: reports, measures and what is kept",
-          "de": "## Auf dieser Instanz: Meldungen, Maßnahmen und Aufbewahrung"
+          "en": "## On this server: reports, measures and what is kept",
+          "de": "## Auf diesem Server: Meldungen, Maßnahmen und Aufbewahrung"
         },
         {
-          "en": "This section is the same for every space on this veyq instance. veyq provides its text, whoever runs the instance (the operator) provides the details in it, and the owner of a space can neither change nor remove it.",
-          "de": "Dieser Abschnitt gilt gleich für jeden Bereich auf dieser veyq-Instanz. Den Text stellt veyq bereit, die Angaben darin macht, wer die Instanz betreibt (die Betreiberseite), und wem ein Bereich gehört, kann ihn weder ändern noch entfernen."
+          "en": "This section is the same for every space on this veyq server. veyq provides its text, whoever runs the server (the operator) provides the details in it, and the owner of a space can neither change nor remove it.",
+          "de": "Dieser Abschnitt gilt gleich für jeden Bereich auf diesem veyq-Server. Den Text stellt veyq bereit, die Angaben darin macht, wer den Server betreibt (die Betreiberseite), und wem ein Bereich gehört, kann ihn weder ändern noch entfernen."
         }
       ]
     },
@@ -63,8 +63,8 @@
           "de": "### Inhalte melden"
         },
         {
-          "en": "Anyone who can see something on this instance can report it: a member, and a guest of a link that shows content. A guest of an upload link reports the link itself. Use *Report* on what you see.",
-          "de": "Wer auf dieser Instanz etwas sehen kann, kann es melden: ein Mitglied, und ein Gast über einen Link, der Inhalte zeigt. Wer als Gast über einen Upload-Link kommt, meldet den Link selbst. Nutze dafür *Melden* an dem, was du siehst."
+          "en": "Anyone who can see something on this server can report it: a member, and a guest of a link that shows content. A guest of an upload link reports the link itself. Use *Report* on what you see.",
+          "de": "Wer auf diesem Server etwas sehen kann, kann es melden: ein Mitglied, und ein Gast über einen Link, der Inhalte zeigt. Wer als Gast über einen Upload-Link kommt, meldet den Link selbst. Nutze dafür *Melden* an dem, was du siehst."
         },
         {
           "en": "",
@@ -79,8 +79,8 @@
           "de": ""
         },
         {
-          "en": "A report is encrypted so that only the moderators of this instance can read it, and nobody else learns of it: not the person who shared the content, nor the space's owner. A person reviews every report; a report alone blocks nothing. Moderators see only what was reported; everything else stays end-to-end encrypted, unreadable to the operator.",
-          "de": "Eine Meldung wird so verschlüsselt, dass nur die Moderation dieser Instanz sie lesen kann, und sonst erfährt niemand davon: weder die Person, die den Inhalt geteilt hat, noch wem der Bereich gehört. Jede Meldung prüft ein Mensch; eine Meldung allein sperrt nichts. Die Moderation sieht nur, was gemeldet wurde; alles andere bleibt Ende-zu-Ende-verschlüsselt und für die Betreiberseite unlesbar."
+          "en": "A report is encrypted so that only the moderators of this server can read it, and nobody else learns of it: not the person who shared the content, nor the space's owner. A person reviews every report; a report alone blocks nothing. Moderators see only what was reported; everything else stays end-to-end encrypted, unreadable to the operator.",
+          "de": "Eine Meldung wird so verschlüsselt, dass nur die Moderation dieses Servers sie lesen kann, und sonst erfährt niemand davon: weder die Person, die den Inhalt geteilt hat, noch wem der Bereich gehört. Jede Meldung prüft ein Mensch; eine Meldung allein sperrt nichts. Die Moderation sieht nur, was gemeldet wurde; alles andere bleibt Ende-zu-Ende-verschlüsselt und für die Betreiberseite unlesbar."
         },
         {
           "en": "",
@@ -157,8 +157,8 @@
           "de": "- ein Gast wird gesperrt, zusammen mit dem Link, über den der Gast kam;"
         },
         {
-          "en": "- the operator blocks a member's sign-in on this instance, or takes a whole space offline.",
-          "de": "- die Betreiberseite sperrt die Anmeldung eines Mitglieds auf dieser Instanz oder nimmt einen ganzen Bereich vom Netz."
+          "en": "- the operator blocks a member's sign-in on this server, or takes a whole space offline.",
+          "de": "- die Betreiberseite sperrt die Anmeldung eines Mitglieds auf diesem Server oder nimmt einen ganzen Bereich vom Netz."
         },
         {
           "en": "A measure deletes nothing, and every measure can be lifted.",
@@ -203,8 +203,8 @@
           "de": ""
         },
         {
-          "en": "The statement also names the facts found, whether a report or an authority's order led to the measure, that a person and no automated means decided, the ground with the law or the clause of the terms it relies on, that the measure applies wherever this instance is reached until it is lifted, and that the courts are open at any time, without an objection first.",
-          "de": "Die Begründung nennt außerdem die festgestellten Tatsachen, ob eine Meldung oder eine behördliche Anordnung zu der Maßnahme geführt hat, dass ein Mensch und kein automatisiertes Verfahren entschieden hat, den Grund mit dem Gesetz oder der Klausel der Nutzungsbedingungen, auf die sie sich stützt, dass die Maßnahme überall gilt, wo diese Instanz erreichbar ist, bis sie aufgehoben wird, und dass der Weg zu den Gerichten jederzeit offensteht, auch ohne vorherigen Widerspruch."
+          "en": "The statement also names the facts found, whether a report or an authority's order led to the measure, that a person and no automated means decided, the ground with the law or the clause of the terms it relies on, that the measure applies wherever this server is reached until it is lifted, and that the courts are open at any time, without an objection first.",
+          "de": "Die Begründung nennt außerdem die festgestellten Tatsachen, ob eine Meldung oder eine behördliche Anordnung zu der Maßnahme geführt hat, dass ein Mensch und kein automatisiertes Verfahren entschieden hat, den Grund mit dem Gesetz oder der Klausel der Nutzungsbedingungen, auf die sie sich stützt, dass die Maßnahme überall gilt, wo dieser Server erreichbar ist, bis sie aufgehoben wird, und dass der Weg zu den Gerichten jederzeit offensteht, auch ohne vorherigen Widerspruch."
         }
       ]
     },
@@ -233,8 +233,8 @@
           "de": ""
         },
         {
-          "en": "Terrorist content is prohibited on this instance. Once the operator knows of it, it is blocked; an authority's removal order is carried out within one hour of its receipt, and what it blocked is kept for six months, longer while an authority asks. A preservation order keeps what it names for 60 days, another order for the time it names, else six months. No automated means detect content here: the server cannot read it.",
-          "de": "Terroristische Inhalte sind auf dieser Instanz verboten. Sobald die Betreiberseite davon weiß, werden sie gesperrt; eine Entfernungsanordnung einer Behörde wird binnen einer Stunde nach ihrem Eingang umgesetzt, und was sie gesperrt hat, wird sechs Monate aufbewahrt, länger, solange eine Behörde darum bittet. Eine Sicherungsanordnung bewahrt, was sie nennt, 60 Tage auf, eine andere Anordnung für die Zeit, die sie nennt, sonst sechs Monate. Kein automatisiertes Verfahren erkennt hier Inhalte: Der Server kann sie nicht lesen."
+          "en": "Terrorist content is prohibited on this server. Once the operator knows of it, it is blocked; an authority's removal order is carried out within one hour of its receipt, and what it blocked is kept for six months, longer while an authority asks. A preservation order keeps what it names for 60 days, another order for the time it names, else six months. No automated means detect content here: the server cannot read it.",
+          "de": "Terroristische Inhalte sind auf diesem Server verboten. Sobald die Betreiberseite davon weiß, werden sie gesperrt; eine Entfernungsanordnung einer Behörde wird binnen einer Stunde nach ihrem Eingang umgesetzt, und was sie gesperrt hat, wird sechs Monate aufbewahrt, länger, solange eine Behörde darum bittet. Eine Sicherungsanordnung bewahrt, was sie nennt, 60 Tage auf, eine andere Anordnung für die Zeit, die sie nennt, sonst sechs Monate. Kein automatisiertes Verfahren erkennt hier Inhalte: Der Server kann sie nicht lesen."
         },
         {
           "en": "",
@@ -255,8 +255,8 @@
           "de": "### Deine IP-Adresse, wenn du als Gast etwas hinzufügst"
         },
         {
-          "en": "This instance records a guest's writes through a link. What it records, why, for how long, who receives it and your right to object are in the privacy notice of this instance.",
-          "de": "Diese Instanz zeichnet Schreibvorgänge von Gästen über einen Link auf. Was sie aufzeichnet, warum, wie lange, wer es erhält und dein Widerspruchsrecht stehen in der Datenschutzerklärung dieser Instanz."
+          "en": "This server records a guest's writes through a link. What it records, why, for how long, who receives it and your right to object are in the privacy notice of this server.",
+          "de": "Dieser Server zeichnet Schreibvorgänge von Gästen über einen Link auf. Was er aufzeichnet, warum, wie lange, wer es erhält und dein Widerspruchsrecht stehen in der Datenschutzerklärung dieses Servers."
         }
       ]
     }

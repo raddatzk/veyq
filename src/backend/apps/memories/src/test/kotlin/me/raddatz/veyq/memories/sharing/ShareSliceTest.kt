@@ -244,8 +244,8 @@ class ShareSliceTest {
             // key; the section has one form, so no variant does (ADR 0093 § 14).
             .body("operatorSection.revision", greaterThanOrEqualTo(1))
             .body("operatorSection.variant", nullValue())
-            .body("operatorSection.text.en", containsString("## On this instance"))
-            .body("operatorSection.text.de", containsString("## Auf dieser Instanz"))
+            .body("operatorSection.text.en", containsString("## On this server"))
+            .body("operatorSection.text.de", containsString("## Auf diesem Server"))
 
         // (c) the server records NOTHING about the accountless visitor — no acceptance row exists for the tenant.
         val acceptances = QuarkusTransaction.requiringNew().call {
@@ -266,7 +266,7 @@ class ShareSliceTest {
             .body("termsRevision", equalTo(0))
             .body("terms", nullValue())
             // the operator section is served without a gate (ADR 0035 decision 6)
-            .body("operatorSection.text.en", containsString("## On this instance"))
+            .body("operatorSection.text.en", containsString("## On this server"))
     }
 
     @Test

@@ -85,7 +85,7 @@ object StatementTemplate {
         ),
         "MEMBER_SIGN_IN" to MeasureTexts(
             measure = Texts("your account was blocked from signing in", "dein Konto wurde für die Anmeldung gesperrt"),
-            reach = Texts("You cannot sign in to this veyq instance, and every session of your account was ended; nothing was deleted.", "Du kannst dich auf dieser veyq-Instanz nicht anmelden, und jede Sitzung deines Kontos wurde beendet; gelöscht wurde nichts."),
+            reach = Texts("You cannot sign in to this veyq server, and every session of your account was ended; nothing was deleted.", "Du kannst dich auf diesem veyq-Server nicht anmelden, und jede Sitzung deines Kontos wurde beendet; gelöscht wurde nichts."),
         ),
         "TENANT_OFFLINE" to MeasureTexts(
             measure = Texts("a space you own, {domain}, was taken offline", "ein Bereich, der dir gehört, {domain}, wurde offline genommen"),
@@ -118,16 +118,16 @@ object StatementTemplate {
     val ROLES_JOINER = Texts(" and ", " und ")
     val GAP = Texts("not stated by this operator", "von der Betreiberseite nicht angegeben")
     val PASSAGES: List<Passage> = listOf(
-        Passage("measure", condition = null, text = Texts("On {date}, the people who run this veyq instance took a measure: {measure}. {reach}", "Am {date} wurde auf dieser veyq-Instanz eine Maßnahme ergriffen: {measure}. {reach}")),
+        Passage("measure", condition = null, text = Texts("On {date}, the people who run this veyq server took a measure: {measure}. {reach}", "Am {date} wurde auf diesem veyq-Server eine Maßnahme ergriffen: {measure}. {reach}")),
         Passage("roles", condition = null, text = Texts("You are told as {roles}.", "Du erhältst diese Begründung als {roles}.")),
         Passage("facts", condition = "facts", text = Texts("What they found:", "Was sie festgestellt haben:")),
         Passage("basis", condition = null, text = Texts("The measure was taken after {basis}.", "Die Maßnahme wurde ergriffen nach {basis}.")),
         Passage("automation", condition = null, text = Texts("No automated means found or decided it: a person did.", "Kein automatisiertes Verfahren hat das erkannt oder entschieden, sondern ein Mensch.")),
         Passage("ground", condition = null, text = Texts("The ground: {ground}.", "Der Grund: {ground}.")),
         Passage("provision", condition = "provision", text = Texts("It relies on {provision}.", "Sie stützt sich auf {provision}.")),
-        Passage("scope", condition = null, text = Texts("It applies wherever this veyq instance is reached, and lasts until it is lifted.", "Sie gilt überall, wo diese veyq-Instanz erreichbar ist, und dauert an, bis sie aufgehoben wird.")),
+        Passage("scope", condition = null, text = Texts("It applies wherever this veyq server is reached, and lasts until it is lifted.", "Sie gilt überall, wo dieser veyq-Server erreichbar ist, und dauert an, bis sie aufgehoben wird.")),
         Passage("objection", condition = "inApp", text = Texts("If you disagree, you can object once, in veyq, where you see this statement. Another moderator reviews your objection where there is one.", "Wenn du nicht einverstanden bist, kannst du einmal widersprechen, in veyq, dort, wo du diese Begründung siehst. Eine andere Person aus der Moderation prüft deinen Widerspruch, sofern es eine gibt.")),
-        Passage("objectionByContact", condition = "byContact", text = Texts("If you disagree, write to {contact}: the people who run this instance look at it again.", "Wenn du nicht einverstanden bist, schreib an {contact}: Wer diese Instanz betreibt, prüft es erneut.")),
+        Passage("objectionByContact", condition = "byContact", text = Texts("If you disagree, write to {contact}: the people who run this server look at it again.", "Wenn du nicht einverstanden bist, schreib an {contact}: Wer diesen Server betreibt, prüft es erneut.")),
         Passage("contact", condition = null, text = Texts("Questions go to {contact}.", "Fragen gehen an {contact}.")),
         Passage("courts", condition = null, text = Texts("You can also go to court; you do not need to object first.", "Du kannst dich auch an ein Gericht wenden; ein Widerspruch vorher ist dafür nicht nötig.")),
     )
@@ -135,7 +135,7 @@ object StatementTemplate {
         Passage("again", condition = null, text = Texts("If you have more information, you can report it again.", "Wenn du weitere Informationen hast, kannst du es erneut melden.")),
         Passage("contact", condition = null, text = Texts("Questions go to {contact}.", "Fragen gehen an {contact}.")),
         Passage("courts", condition = null, text = Texts("You can also go to court.", "Du kannst dich auch an ein Gericht wenden.")),
-        Passage("coordinator", condition = null, text = Texts("Where the Digital Services Act (DSA) applies to this instance, you can also complain to the Digital Services Coordinator of the Member State where you live or are established.", "Soweit das Gesetz über digitale Dienste (DSA) für diese Instanz gilt, kannst du dich auch beim Koordinator für digitale Dienste des Mitgliedstaats beschweren, in dem du lebst oder niedergelassen bist.")),
+        Passage("coordinator", condition = null, text = Texts("Where the Digital Services Act (DSA) applies to this server, you can also complain to the Digital Services Coordinator of the Member State where you live or are established.", "Soweit das Gesetz über digitale Dienste (DSA) für diesen Server gilt, kannst du dich auch beim Koordinator für digitale Dienste des Mitgliedstaats beschweren, in dem du lebst oder niedergelassen bist.")),
     )
     val MAIL_SUBJECT = Texts("veyq: a moderation decision concerns you", "veyq: eine Moderationsentscheidung betrifft dich")
     val MAIL_FACTS_IN_VEYQ = Texts("What they found is in veyq: sign in at {domain} to read it.", "Was sie festgestellt haben, steht in veyq: Melde dich unter {domain} an, um es zu lesen.")

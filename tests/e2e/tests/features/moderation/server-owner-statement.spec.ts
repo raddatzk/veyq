@@ -239,7 +239,7 @@ test(
     expect(mail!.text).toContain('You are told as the holder of the account.')
     expect(mail!.text, 'the Server Owner\'s own words reach the member, who cannot sign in to read them').toContain(`What they found: ${facts}`)
     expect(mail!.text).toContain(`It relies on ${provision}.`)
-    expect(mail!.text).toContain('It applies wherever this veyq instance is reached')
+    expect(mail!.text).toContain('It applies wherever this veyq server is reached')
     expect(mail!.text).not.toContain('you can object once, in veyq')
     expect(mail!.text).toContain('Was sie festgestellt haben:')
 

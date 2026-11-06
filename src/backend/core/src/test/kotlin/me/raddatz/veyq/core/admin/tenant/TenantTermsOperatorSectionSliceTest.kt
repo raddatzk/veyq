@@ -83,7 +83,7 @@ class TenantTermsOperatorSectionSliceTest {
         val r = read(owner, tenantId)
         assertEquals(0, r.getInt("termsRevision"), "revision 0: nothing gates (the client gates only above 0)")
         assertNull(r.get<Any?>("terms"))
-        assertTrue(r.getString("operatorSection.text.en").contains("## On this instance"), "the section is served all the same")
+        assertTrue(r.getString("operatorSection.text.en").contains("## On this server"), "the section is served all the same")
 
         // And publicly, without an account (DSA Art. 14(1)), the same section.
         val public = given().`when`().get("/api/operator/terms").then().statusCode(200).extract().jsonPath()
@@ -158,7 +158,7 @@ class TenantTermsOperatorSectionSliceTest {
         // pointer, always there since the record is kept wherever a guest may write (ADR 0093 § 10).
         val (tenantId, member) = acceptedMember("terms-op-record.example.com")
         val r = read(member, tenantId)
-        assertTrue(r.getString("operatorSection.record.en").contains("privacy notice of this instance"))
+        assertTrue(r.getString("operatorSection.record.en").contains("privacy notice of this server"))
         assertNull(r.get<Any?>("operatorSection.variant"), "the section has one form: no variant on the wire")
         assertNull(r.get<Any?>("operatorSection.objection"), "the right to object moved to the notice")
         records.setRetention(12)

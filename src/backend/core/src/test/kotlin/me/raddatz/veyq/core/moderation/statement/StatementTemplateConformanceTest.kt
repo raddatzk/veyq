@@ -67,7 +67,7 @@ class StatementTemplateConformanceTest {
         assertTrue(mail.contains("The measure was taken after a report by someone who could see it."), mail)
         assertTrue(mail.contains("No automated means found or decided it: a person did."), mail)
         assertTrue(mail.contains("The ground: it breaches the terms of use that apply here. It relies on § 86a StGB."), mail)
-        assertTrue(mail.contains("It applies wherever this veyq instance is reached, and lasts until it is lifted."), mail)
+        assertTrue(mail.contains("It applies wherever this veyq server is reached, and lasts until it is lifted."), mail)
         assertTrue(mail.contains("you can object once, in veyq"), mail)
         assertTrue(mail.contains("Questions go to abuse@example.org."), mail)
         assertTrue(mail.contains("You can also go to court; you do not need to object first."), mail)
@@ -178,12 +178,12 @@ class StatementTemplateConformanceTest {
     fun aReportersRedressIsWholeWithTheDsaQualifierAndTheGap() {
         assertEquals(
             "If you have more information, you can report it again. Questions go to abuse@example.org. You can also go to court. " +
-                "Where the Digital Services Act (DSA) applies to this instance, you can also complain to the Digital Services " +
+                "Where the Digital Services Act (DSA) applies to this server, you can also complain to the Digital Services " +
                 "Coordinator of the Member State where you live or are established.",
             StatementTemplate.renderRedress(StatementLang.EN, "abuse@example.org"),
         )
         val noContact = StatementTemplate.renderRedress(StatementLang.DE, null)
         assertTrue(noContact.contains("Fragen gehen an von der Betreiberseite nicht angegeben."), noContact)
-        assertTrue(noContact.contains("Soweit das Gesetz über digitale Dienste (DSA) für diese Instanz gilt"), noContact)
+        assertTrue(noContact.contains("Soweit das Gesetz über digitale Dienste (DSA) für diesen Server gilt"), noContact)
     }
 }

@@ -17,7 +17,7 @@ import { activeSpace, termsStale, markTermsAccepted, clearActiveSpace } from '..
 
 const TENANT = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 
-const SECTION = { revision: 1, text: { de: '## Auf dieser Instanz', en: '## On this instance' }, record: { de: '### Deine IP-Adresse', en: '### Your IP address' } }
+const SECTION = { revision: 1, text: { de: '## Auf diesem Server', en: '## On this server' }, record: { de: '### Deine IP-Adresse', en: '### Your IP address' } }
 
 function stubTerms() {
   return stubApi(tenantsApi, {

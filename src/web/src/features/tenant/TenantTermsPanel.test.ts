@@ -75,7 +75,7 @@ async function answer(w: VueWrapper, accepted: boolean) {
   return asked
 }
 
-const SECTION = { revision: 1, text: { de: '## Auf dieser Instanz', en: '## On this instance' }, record: { de: '### Deine IP-Adresse', en: '### Your IP address' } }
+const SECTION = { revision: 1, text: { de: '## Auf diesem Server', en: '## On this server' }, record: { de: '### Deine IP-Adresse', en: '### Your IP address' } }
 
 describe('TenantTermsPanel — the languages that carry terms', () => {
   beforeEach(() => {
@@ -258,7 +258,7 @@ describe('TenantTermsPanel — the operator section below the space’s terms (A
     const w = await mountPanel()
     const part = w.find('[data-testid="terms-operator-section"]')
     expect(part.text()).toContain(t('terms.operatorSectionNote'))
-    expect(part.find('[data-testid="operator-section"]').text()).toContain('On this instance')
+    expect(part.find('[data-testid="operator-section"]').text()).toContain('On this server')
     expect(part.find('textarea').exists()).toBe(false)
     expect(part.findAll('button')).toHaveLength(0)
     expect(rows(w)).toHaveLength(1) // control: the owner's own editor is there, holding only the space's language

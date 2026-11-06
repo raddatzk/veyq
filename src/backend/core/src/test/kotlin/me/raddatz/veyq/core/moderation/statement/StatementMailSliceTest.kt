@@ -216,8 +216,8 @@ class StatementMailSliceTest {
             assertTrue(mail.contains("If you have more information, you can report it again."), mail)
             assertTrue(mail.contains("Questions go to not stated by this operator."), mail)
             assertTrue(mail.contains("You can also go to court."), mail)
-            assertTrue(mail.contains("Where the Digital Services Act (DSA) applies to this instance, you can also complain to the Digital Services Coordinator"), mail)
-            assertTrue(mail.contains("Soweit das Gesetz über digitale Dienste (DSA) für diese Instanz gilt"), mail)
+            assertTrue(mail.contains("Where the Digital Services Act (DSA) applies to this server, you can also complain to the Digital Services Coordinator"), mail)
+            assertTrue(mail.contains("Soweit das Gesetz über digitale Dienste (DSA) für diesen Server gilt"), mail)
 
             contact("abuse@example.org")
             mailbox.purgeEmailFromAllMailboxes()

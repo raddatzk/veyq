@@ -103,7 +103,7 @@ describe('ShareView — accountless terms gate', () => {
     // the terms markdown is rendered (safe markdown) inside the gate, the operator section after it
     const body = wrapper.find('.share-terms-body').text()
     expect(body).toContain('Rules')
-    expect(body.indexOf('On this instance')).toBeGreaterThan(body.indexOf('Rules'))
+    expect(body.indexOf('On this server')).toBeGreaterThan(body.indexOf('Rules'))
   })
 
   it('accepting clears the gate, reveals the content, and persists per tenant', async () => {
@@ -146,7 +146,7 @@ describe('ShareView — accountless terms gate', () => {
       await flushPromises()
       return w.find('.share-terms-card').exists()
     }
-    served({ ...OPERATOR_SECTION, text: { en: '## On this instance\nOperator: Neuer Verein e. V.' } })
+    served({ ...OPERATOR_SECTION, text: { en: '## On this server\nOperator: Neuer Verein e. V.' } })
     expect(await gated()).toBe(false) // control: a changed value reopens nothing
     served({ ...OPERATOR_SECTION, revision: 2 })
     expect(await gated()).toBe(true) // a release changed the section
