@@ -19,8 +19,8 @@
 1. **The export.** The case offers "Prepare a report to an authority". The server answers, behind the key proof, the
    clear fields it holds and nothing it would have to open: the case id, the category, every time in UTC (the reports
    received, the measures taken), the uploaders the held rows name — a member's account id, a guest's share identity
-   id — and every held guest-write record (address, source port where one was recorded, the time it was observed,
-   and the share identity), with the time zone stated. The surface renders it as a text block to copy: never a file
+   id — and every held guest-write record (address, source port where one was recorded, the `Origin` its request
+   carried where it carried one, the time it was observed, and the share identity), with the time zone stated. The surface renders it as a text block to copy: never a file
    download, never content.
 2. **Where it goes** (ADR 0093 § 13): in Germany to the BKA through its portal, registered ahead; without a
    registration a criminal complaint with the police; in acute danger, 110. The Run docs carry the emergency page.

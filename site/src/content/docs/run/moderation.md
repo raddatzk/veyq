@@ -327,7 +327,8 @@ A suspicion of an offence against life or safety — child sexual abuse included
 [ADR 0093 § 13](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
 In a case, **Prepare the fields for the report** lays out what the instance holds in the clear: the case, its category,
 every time in UTC, the measures, the uploaders the held copy names — a member's account id, a guest's identity id — and
-every guest-write record it held, with the address, the source port where one was kept, and the time. It is a text
+every guest-write record it held, with the address, the source port where one was kept, the `Origin` header the
+write's request carried where it carried one, and the time. It is a text
 block to copy into the authority's form: never a file, never content. **Record that it was reported to an authority**
 (or that information was given) writes the handover into the case's log with the reference, sealed. So copy the fields
 **before** you record it: on a child-sexual-abuse case recording the handover ends the hold (below), and the fields then
@@ -420,11 +421,18 @@ decision 6. **This is your own assessment, not veyq's, and not legal advice.**
 ## What a guest's write keeps
 
 When a guest of a link adds or names something — names itself, creates, renames or moves a folder or file, adds a
-photo or a file — veyq keeps the guest's IP address, its source port and the time to the millisecond, with the guest
-identity and what was written, for **N days** ([en.moderation.guest-write-record](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.guest-write-record.md), [ADR 0093 § 10](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
+photo or a file — veyq keeps the guest's IP address, its source port, the time to the millisecond and the `Origin`
+header its request carried, with the guest identity and what was written, for **N days** ([en.moderation.guest-write-record](https://github.com/raddatzk/veyq/blob/main/docs/features/moderation/enablers/en.moderation.guest-write-record.md), [ADR 0093 § 10](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)).
 Nothing a member does and nothing anyone only looks at is kept, and never a User-Agent or content. It is evidence: if
 what a guest added is reported, the report's hold copies these rows, and a moderator can hand them to an authority.
 Everything else expires.
+
+**Read the address with its origin.** While *Links shown on other servers* is on, any website that knows a link which
+lets its guests add can make its visitors' browsers add through it, and the address kept is then the visitor's. A
+browser sends the site a write came from as `Origin`, and no page can change it: your own instance's address or another
+veyq server showing the link is expected; an unrelated site marks an address that may belong to a bystander. `null`
+is an opaque origin (a sandboxed frame, a local file), `invalid` a header no browser sends, and none a client that sent
+none, such as a script. The origin is proof only of a browser's word: a client that is no browser sends any it likes.
 
 - **There is no switch for it.** The record is kept wherever a guest may write, so the capabilities that let guests
   write decide where: *Links to look and add* (`core.public-shares.contribute`) and *Drop boxes*

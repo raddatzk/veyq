@@ -159,6 +159,7 @@ release only where what is built would be unlawful on a plausible reading and a 
 | Whether erasing a switched-off application's content needs a basis in the terms | ADR 0093 Still open 12 |
 | Whether the notice of that erasure is adequate | ADR 0093 Still open 13 |
 | Whether switching an application off is a moderation decision | ADR 0093 Still open 14 |
+| Whether keeping a guest write's `Origin` beside its address stays within the record's purpose and data minimisation | ADR 0093 Still open 15 |
 | A log's period stated as a criterion | ADR 0092 Still open 1 |
 | The admin console's error log names the hop | ADR 0092 Still open 2 |
 | Whether DSA Art. 14(1) reaches a space's own terms before sign-in | ADR 0035 decision 6 |

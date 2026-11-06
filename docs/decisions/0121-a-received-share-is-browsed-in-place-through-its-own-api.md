@@ -86,8 +86,8 @@ proxy through this instance would make it learn what each member reads.
    are the share page's.
 7. **Writes are the link's guest's.** A `READ_WRITE` link's create, upload, move and abandon, a `WRITE_ONLY` link's
    drop, go through the share's API under the guest identity this device holds for it; the share's operator records the
-   member's address per write as for any guest ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
-   § 10).
+   member's address per write as for any guest, with this page's origin as the request's `Origin`
+   ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 10).
 8. **A report from the embedded view is a guest's report to the share's instance**, sealed to that instance's
    moderation key (ADR 0120 decision 6 unchanged).
 
@@ -97,8 +97,40 @@ proxy through this instance would make it learn what each member reads.
   directly. That instance learns the member's address and every read and write, as when the link is opened.
 - **The CSP widening is per tenant and visible**: `cc.security.csp` and the Security pages name `https:` and the switch
   that removes it; an operator who wants the backstop back switches `core.share-embedding` off.
+- **What the backstop was, honestly.** `connect-src 'self'` never was a tight one: a top-level navigation (`location`,
+  `window.open` to an attacker's URL that carries the data; CSP has no `navigate-to`) passes it, and in Chromium so do
+  WebRTC and DNS prefetch. What `https:` adds is the silent, repeated, bulk `fetch` — the channel that drains a space
+  without a visible page change ([cc.security.csp](../crosscutting/cc.security.csp.md)).
+- **A bookmark may point at a hostile "veyq" server.** Whoever mints a link chooses its host, and a server that answers
+  the discovery of decision 4 as a veyq of this major is embedded. Then: (1) this client parses responses that server
+  shapes — and seals, since it holds the link's key — and draws them with the rules every peer's content meets (the
+  decrypted bytes decide the kind, text as text, no markup; a PDF through pdf.js within `PDF_MAX_PAGES` and its pixel
+  caps, `shared/pdf/pdfOptions.ts`; the image and video header parsers' own bounds, `shared/image/imageHeader.ts`,
+  `videoHeader.ts`). No byte cap of the client's own bounds a JSON answer or a chunk: the generated clients read a whole
+  body, the chunk reader a whole frame (`core/blob/readScheduler.ts`), so a hostile server can exhaust the tab's memory —
+  a denial of service to that page, nothing more. (2) It follows the presigned URLs that server hands out to any `https`
+  host: a `GET` with no credentials, its answer carrying nothing of this instance — tracking, not data. (3) That server
+  learns the member's address and the time **each time the bookmark's page is opened** — before this ADR only when the
+  member chose to open the link.
+- **Write laundering.** Answering every origin, the guest write endpoints included, lets a hostile page that knows a
+  `READ_WRITE` or `WRITE_ONLY` link make an unsuspecting visitor's browser write through it — no credential is needed,
+  the link is the capability — and the share's guest-write record (ADR 0093 § 10) would then name the visitor's address
+  as the writer's. Before this ADR the missing preflight answer stopped such a write. The address alone is therefore no
+  longer enough evidence: the record also keeps the request's `Origin`, which a browser states and no page can change,
+  so a write through the share's own page or a veyq page embedding it tells itself apart from one through an unrelated
+  page, whose address is then read as possibly a bystander's. The origin proves nothing the other way (a client that is
+  no browser chooses it), and the write itself still lands, as it would from `curl`.
 - **The register grows by two entries**, both switchable; an instance that switches `core.public-shares.embeddable` off
   is opened in a new tab by every other instance, as before.
+- **Deferred: the embed in an isolated document.** A sandboxed iframe of an `/embed.html` on this origin, without
+  `allow-same-origin`, under a policy of its own with `connect-src https:`, the app's document keeping `'self'`. It
+  contains script injected through FOREIGN content — today a foreign share renders in the member's document, beside the
+  member's keys — but not a targeted injection in the app itself: the embed then becomes a confused deputy (a crafted
+  link whose host carries the data), and a navigation still leaves. Its cost is of class L: a second policy, CORS on
+  `/assets`, a second entry point, a `postMessage`/`MessagePort` contract, a storage proxy, no worker or service worker
+  in the opaque origin, dialogs clipped to the frame. It is the answer once hostile foreign content is prioritised as a
+  threat of its own, settled first by a one-hour browser spike of the bundle loading in the sandbox; the owner kept
+  the switch for now (2026-11-06).
 - **Rejected:** a proxy through this instance (it would learn every read); an iframe (both sides forbid framing); a
   `connect-src` computed from each member's bookmarks (the server would learn the origins); an operator-kept partner
   list (it keeps the backstop; the owner chose against it); `Access-Control-Allow-Credentials` (no endpoint needs it, and

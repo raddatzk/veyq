@@ -20,7 +20,10 @@ host.
 
 The CSP is the browser-enforced backstop. Even if injection happened, `script-src 'self'` stops a foreign script
 from running, and `connect-src` stops it from phoning home — except while `core.share-embedding` is on, which admits every
-`https` origin (§ *Mechanism*, `https:`) and leaves that half to `script-src` and Trusted Types. Markup itself comes only from the escape-first renderer
+`https` origin (§ *Mechanism*, `https:`) and leaves that half to `script-src` and Trusted Types. `connect-src 'self'` was
+never a tight half, either: a top-level navigation (`location`, `window.open` to a URL that carries the data; CSP has no
+`navigate-to`) passes it, and so, in Chromium, do WebRTC and DNS prefetch. What it stops is the silent, repeated, bulk
+`fetch`, and that is what `https:` gives back. Markup itself comes only from the escape-first renderer
 ([`renderMarkdown`](../../src/web/src/shared/markdown.ts)), and the policy makes the browser enforce that: under
 Trusted Types no string reaches an HTML sink or a script URL unless one of the client's two policies made it
 (§ *Trusted Types*, [ADR 0117](../decisions/0117-the-web-client-enforces-trusted-types.md)).
@@ -104,7 +107,9 @@ Why each non-obvious source is there:
   decision 2; on by default, owner 2026-11-06). A kept link's page browses its share in place, reading the share's own
   instance's API directly, and that instance can be any `https` origin; the server must not learn which ones (a list
   computed from the members' bookmarks would tell it). **What it costs:** an injected script may send what it reads to a
-  host of its choice; `script-src 'self'`, Trusted Types and the absence of inline script remain in front of it. The
+  host of its choice by a silent, repeatable `fetch` — the one way out `'self'` closed, since a navigation, and in Chromium
+  WebRTC and DNS prefetch, pass it anyway; `script-src 'self'`, Trusted Types and the absence of inline script remain in
+  front of it. The
   switch is per tenant (operator `*`, tenant owner `+`): the backend appends `https:` for the tenant whose domain serves
   the page, and for a host that claims no tenant at the instance level. Like the origins above it is read from a
   snapshot (`ShareEmbeddingHosts`, by domain), recomputed after every switch write and every tenant write that moves a

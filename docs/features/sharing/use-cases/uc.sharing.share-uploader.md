@@ -87,7 +87,7 @@ sequenceDiagram
   a `404`, and serves again unchanged once it is back on; a drop box node stays ([uc.admin.switch-capabilities](../../admin/use-cases/uc.admin.switch-capabilities.md) A3, ADR 0088 decision 5).
 - **A3 — the instance records guest writes** ([en.moderation.guest-write-record](../../moderation/enablers/en.moderation.guest-write-record.md),
   ADR 0093 § 10): the drop page says, before the first upload,
-  that the guest's IP address, source port and the time are kept for N days (the N the resolve serves), with the right
+  that the guest's IP address, source port, the time and the website it came from are kept for N days (the N the resolve serves), with the right
   to object as a sentence of its own, both linking the operator section of the terms; naming itself and every photo it
   adds then record that address, port and time. The record has no switch: it is kept wherever a guest may write.
 - **E1 — blank name:** the pre-screen blocks submission until a non-blank name is entered.
