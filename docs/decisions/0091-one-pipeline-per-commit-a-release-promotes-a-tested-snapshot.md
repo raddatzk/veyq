@@ -103,7 +103,11 @@ Three structural costs sat on top of what a run took:
      sets the git tag `snapshot-<major>.<minor>` on its commit, from a job of its own that holds `contents: write` and
      does nothing else; the retention job below deletes a snapshot's tag with its images, so the release page's tag
      list offers exactly the snapshots that can still be promoted. The owner saves a **draft** release on one of them,
-     with the notes in their words, and the draft (`release: created`) starts the promotion: it refuses unless the tag
+     with the notes in their words, then presses *Run workflow* on `release.yml` — a dispatch with no required input,
+     not the commit-naming one: it promotes the one draft on a `snapshot-` tag and refuses none or several. A saved
+     draft starts no workflow by itself (GitHub runs none for a draft's `created`, `edited` or `deleted`, measured
+     2026-11-06 on the events page), and its publication comes too late to attach anything (owner's choice of trigger,
+     2026-11-06). The promotion refuses unless the tag
      is a `snapshot-` tag whose version is its commit's, verifies and completes the attestations as below, then moves
      the draft to `v<major>.<minor>`, attaches the asset set and publishes it — publishing last, because an immutable
      release takes no asset once it is published. A refused promotion leaves the draft unpublished and writes why
