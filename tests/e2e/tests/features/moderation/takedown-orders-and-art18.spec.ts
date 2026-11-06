@@ -197,7 +197,7 @@ test(
     const notice = g.locator('[data-testid="order-notice"]')
     await expect(notice).toBeVisible({ timeout: 60_000 })
     await expect(notice).toContainText(ORDER_NOTICE)
-    await expect(notice).toContainText(/For the reasons, or a copy of the order, (write to|ask the people who run this veyq instance)/)
+    await expect(notice).toContainText(/For the reasons, or a copy of the order, (write to|ask the people who run this veyq server)/)
     // A browser that holds no identity for the link — any other visitor — sees the unavailable page and nothing more.
     const stranger = await newDevice(browser)
     try {

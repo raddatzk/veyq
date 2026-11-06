@@ -58,7 +58,7 @@ test(
     const owner = freshOwner(`e2e.${stack().domain}`)
 
     await page.goto(stack().adminOrigin)
-    await expect(page.getByText('Set up this instance', { exact: true })).toBeVisible()
+    await expect(page.getByText('Set up this server', { exact: true })).toBeVisible()
     await page.getByLabel('Email', { exact: true }).fill(owner.email)
     // The password never leaves the page (Model B: only what Argon2id derives from it does) — a canary for the sweep.
     await password(page).fill(recordTyped(owner.password))
@@ -87,7 +87,7 @@ test(
     await create.click()
 
     // Only now is the account created; the console asks for a sign-in.
-    await expect(page.getByText('Sign in as the Server Owner to administer this instance.')).toBeVisible()
+    await expect(page.getByText('Sign in as the Server Owner to administer this server.')).toBeVisible()
     await page.getByLabel('Email', { exact: true }).fill(owner.email)
     await password(page).fill(recordTyped(owner.password))
     await page.getByRole('button', { name: 'Sign in' }).click()
@@ -215,7 +215,7 @@ test(
     // GDPR Art. 13 applies where the account is born: the invite links the privacy notice's account passage, in a tab
     // of its own (the invitation's secret rides this page's fragment), readable with no account at all.
     const opened = invitee.waitForEvent('page')
-    await tab.getByRole('link', { name: 'What this instance keeps about your account, and why' }).click()
+    await tab.getByRole('link', { name: 'What this server keeps about your account, and why' }).click()
     const notice = await opened
     expect(new URL(notice.url()).pathname + new URL(notice.url()).hash).toBe('/privacy#account')
     await expect(notice.locator('#account')).toContainText('the server keeps your email address', { timeout: 60_000 })
