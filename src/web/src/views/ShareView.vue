@@ -28,8 +28,15 @@
 // resolved — none of the shell's public reads (`resolvePublicShare`, the terms, the poll) runs — and the review renders
 // behind the moderation gate (`features/moderation/review/ShareReview.vue`), the held snapshot drawn by the same guest
 // views over the review's own key-proved data source. The fragment carries no key.
-import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+//
+// **A bookmark's hand-off** (ADR 0120 decisions 5 and 6). A bookmark of this instance opens this page in the same tab and
+// may hand it the link's password in memory (`core/sharing/handedPassword.ts`): it is entered once, when the link asks
+// for one, and a wrong one leaves the password form. A fragment parameter `report` (beside `k=`, from a bookmark here or on
+// another instance) opens this page's own report dialog once the gates are passed - for what the link shows, as its guest
+// would report it: the root of a `READ` / `READ_WRITE` link, the link itself for an upload link - and is dropped from the
+// URL as it is read, so a reload or a copied address does not ask again.
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   resolvePublicShare,
@@ -48,7 +55,10 @@ import {
 import { registry } from '../core/applications/registry'
 import { FOLDER_KIND } from '../core/node/kind'
 import ShareTreePage from '../core/sharing/ShareTreePage.vue'
-import { guestAccess } from '../core/sharing/guestAccess'
+import { guestAccess, guestTreeSource } from '../core/sharing/guestAccess'
+import { takeHandedSharePassword } from '../core/sharing/handedPassword'
+import { asksForReport, withoutReport } from '../core/bookmark/bookmarkLink'
+import { reportNodes } from '../core/report/reportActions'
 import { forgetGuestSession, nameShareGuest, useGuestSession, type GuestIdentity } from '../core/sharing/guestIdentity'
 import { ShareRole } from '../api/generated/sharing'
 import GuestNaming from '../core/sharing/GuestNaming.vue'
@@ -74,6 +84,9 @@ const { t, locale } = useI18n()
 const shareId = String(route.params.shareId ?? '')
 /** The moderation mode: read once — a review never becomes a link's page, nor a link's page a review. */
 const moderation = route.hash === '#moderation'
+/** A bookmark's report hand-off (ADR 0120 decision 6): read once, then dropped from the URL. */
+const reportAsked = !moderation && asksForReport(route.hash)
+if (reportAsked) void useRouter().replace({ query: route.query, hash: withoutReport(route.hash) })
 // The fragment key rides `#k=<base64url>` (ADR 0015) — read on device, never sent. Router history strips it from
 // route.hash into `#k=...`; parse it here (empty if absent → an inert link, handled as unavailable).
 const fragmentKey = computed(() => {
@@ -288,6 +301,12 @@ function failWith(e: unknown): boolean {
   if (e instanceof SharePasswordRequiredError) {
     pwSalt.value = e.pwSalt
     status.value = 'locked'
+    // A bookmark of this instance handed the link's password (ADR 0120 decision 5): entered once, as the reader would.
+    const handed = takeHandedSharePassword(shareId)
+    if (handed) {
+      pwInput.value = handed
+      void submitPassword()
+    }
   } else if (e instanceof SharePasswordIncorrectError) {
     pwError.value = true
     status.value = 'locked'
@@ -342,6 +361,26 @@ async function submitPassword() {
 onMounted(() => {
   if (!moderation) void load()
 })
+
+// The report a bookmark asked for, opened once the page shows the link's content (every gate passed) and this instance
+// takes reports: what the link shows, as its guest reports it - never before, and never twice.
+let reported = false
+watch(
+  () => reportAsked && !reported && reportOn.value && status.value === 'ready' && !needsTerms.value && !needsNote.value && !!access.value,
+  (ready) => {
+    const a = access.value
+    if (!ready || !a) return
+    reported = true
+    if (a.head.role === ShareRole.WriteOnly) {
+      reportLink()
+      return
+    }
+    const tree = guestTreeSource(a.head, route)
+    const root = tree.node(tree.rootId)
+    if (root) reportNodes(a, tree, [root], null)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

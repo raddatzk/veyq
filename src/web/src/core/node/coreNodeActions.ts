@@ -24,6 +24,10 @@ import { downloadHeaderActions, downloadRowActions } from '../export/downloadAct
 import { reportHeaderActions, reportNodes, reportRowActions } from '../report/reportActions'
 import { useReportOffered } from '../report/report'
 import { useToast } from '../../shared/state/useToast'
+import { targetOf } from '../access'
+import { SHARE_BOOKMARK_KIND } from './kind'
+import { bookmarkRights } from '../bookmark/rights'
+import { bookmarkOfNode, openBookmark, useBookmarkDoors } from '../bookmark/openBookmark'
 
 /** The host's dialogs core's actions open; an absent door is an action not offered. */
 export interface CoreNodeDoors {
@@ -64,6 +68,22 @@ export function useCoreNodeActions(
   const cover = useNodeCover(access, tree, nodes)
   const reportOn = useReportOffered()
   const report = (node: TreeNode) => () => reportNodes(access(), tree(), [node], null)
+  const bookmarkDoors = useBookmarkDoors()
+  /** A bookmark's Report is its share's (ADR 0120 decision 6): handed to the share page where the share lives, as that
+   *  link's guest would report it, offered wherever the bookmark opens - whether or not THIS instance takes reports. Its
+   *  name, the one thing of it that is content here, is this instance's to judge by core's rule (`nodeTarget` reports a
+   *  bookmark by its name alone): `report-name` beside the share's, or `report` itself where no link reads. */
+  function bookmarkReport(node: TreeNode): (CoreRowAction & CoreHeaderAction)[] {
+    const a = access()
+    const kept = bookmarkRights(a, targetOf(tree(), node)).open ? bookmarkOfNode(a, tree(), node) : null
+    const name = reportRowActions(t, reportOn.value, a, node, report(node)).map((r) => ({ ...r, label: t('node.bookmark.reportName') }))
+    if (!kept) return name
+    return [
+      ...name.map((r) => ({ ...r, id: 'report-name' })),
+      { id: 'report', label: t('node.bookmark.reportShare'), icon: 'flag', placement: 'after', menuOnly: true, shown: true,
+        onClick: () => openBookmark(kept, true, bookmarkDoors) },
+    ]
+  }
   const copy = (node: TreeNode) => () => doors.copy?.([node])
   const download = (node: TreeNode) => () => doors.download?.(node)
   // The rights functions answer whether an action may be offered; the door whether the host can open it - both must say yes.
@@ -78,7 +98,7 @@ export function useCoreNodeActions(
         ...favoriteHeaderActions(t, toast.error, a, node),
         ...(doors.copy ? copyHeaderActions(t, a, node, copy(node)).map((c) => ({ ...c, menuOnly: true })) : []),
         ...(doors.download ? downloadHeaderActions(t, a, node, download(node)) : []),
-        ...reportHeaderActions(t, reportOn.value, a, node, report(node)),
+        ...(node.kind === SHARE_BOOKMARK_KIND ? bookmarkReport(node) : reportHeaderActions(t, reportOn.value, a, node, report(node))),
       ]
     },
     row(node) {
@@ -88,7 +108,7 @@ export function useCoreNodeActions(
         ...cover.rowActions(node),
         ...(doors.copy ? copyRowActions(t, a, node, copy(node)) : []),
         ...(doors.download ? downloadRowActions(t, a, node, download(node)) : []),
-        ...reportRowActions(t, reportOn.value, a, node, report(node)),
+        ...(node.kind === SHARE_BOOKMARK_KIND ? bookmarkReport(node) : reportRowActions(t, reportOn.value, a, node, report(node))),
       ]
     },
   }

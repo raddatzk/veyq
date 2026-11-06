@@ -11,7 +11,12 @@
 // `pullRekeyPath` — the same per-node commit, on the written node and its lagging ancestors only — then retries at once.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
-import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
+import { SHARE_BOOKMARK_KIND } from '../kind'
+import { keptLink } from '../../bookmark/bookmarkLink'
+import { bookmarkMetaObject, bookmarkOf } from '../../bookmark/bookmarkMeta'
+import { shareBookmarkKind } from '../../bookmark/kind'
+import { registry } from '../../applications/registry'
 import type { ScopeKey } from '../../../features/spaces/epochs'
 import { blobKeyContext, unwrapBlobKey } from '../../blob/keys'
 import { SHARE_KEY } from '../../sharing/shareTree'
@@ -314,6 +319,28 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
     expect(() => unwrapBlobKey(SCOPE, K.root, { blobId: ids.cover, ownerId: ids.root, role: 'COVER', wrappedBlobKey: inMeta })).toThrow(v1.OpenRefused)
     const reader = server.identities.find((i) => i.identityId === ids.reader)!
     expect(new TextDecoder().decode(v1.openField(identityNameContext(SCOPE, ids.link, ids.reader), newRoot, fromB64std(reader.sealedDisplayName)))).toBe('Ada')
+  })
+
+  // ADR 0120 decision 3: a bookmark's link and password live in its meta under its own key, which the rotation replaces
+  // like every node's; the link reads the same under the new key and nothing of it under the key from before.
+  it('re-seals a bookmark\'s link and password under its new key, and none of it opens under the key from before', async () => {
+    // a node-environment file is given no registry by the setup (`src/test/setup.ts`): core's bookmark is registered here
+    // as the composition root registers it
+    if (!registry.kind(SHARE_BOOKMARK_KIND).supported) registry.registerCoreKind(SHARE_BOOKMARK_KIND, shareBookmarkKind)
+    const kBookmark = v1.randomBytes(32)
+    const bookmarkId = crypto.randomUUID()
+    const link = keptLink(`https://photos.other.example/s/${'C'.repeat(43)}#k=${b64url(v1.randomBytes(32))}`)!
+    const at = { scopeId: SCOPE, nodeId: bookmarkId }
+    server.nodes.set(bookmarkId, node(bookmarkId, ids.root, K.root, kBookmark, 'kept link', {
+      kind: SHARE_BOOKMARK_KIND, wrappedMeta: sealNodeMeta(kBookmark, at, bookmarkMetaObject(link, 'pw')),
+    }))
+    await rekeyScope(SCOPE)
+    expect(server.commits).toContain(bookmarkId)
+    const fresh = keyOf(bookmarkId)
+    expect(fresh).not.toEqual(kBookmark)
+    const sealed = server.nodes.get(bookmarkId)!.wrappedMeta
+    expect(bookmarkOf(unsealNodeMeta(fresh, at, sealed))).toEqual({ link, password: 'pw' })
+    expect(bookmarkOf(unsealNodeMeta(kBookmark, at, sealed)), 'the key from before opens nothing of it').toBeNull()
   })
 
   // uc.spaces.rekey-after-rotation:resumable

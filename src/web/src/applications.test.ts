@@ -20,7 +20,8 @@ import FileDetail from './features/depot/components/FileDetail.vue'
 import FileShareDialog from './features/depot/components/FileShareDialog.vue'
 import MemoryNodeDialog from './features/memories/components/MemoryNodeDialog.vue'
 import ShareDialog from './features/memories/components/ShareDialog.vue'
-import { FOLDER_KIND } from './core/node/kind'
+import { FOLDER_KIND, SHARE_BOOKMARK_KIND } from './core/node/kind'
+import { bookmarkRows } from './core/bookmark/bookmarkRows'
 
 // `src/test/setup.ts` has already called registerApplications() once for this file, exactly as main.ts does.
 describe('composition root', () => {
@@ -62,9 +63,10 @@ describe('composition root', () => {
 
   // The level view is core's (P4b) and draws every row itself (inbox #407): Memories' row factory serves both its kinds, Depot's serves
   // FILE and the drop box; each kind has its tab, in registration order (Memories first).
-  it('gives the level view three row sources: Memories\' for MEMORY and CHAPTER, Depot\'s for FILE and the drop box, Expenses\' for the Pot', () => {
+  it('gives the level view four row sources: core\'s bookmark, Memories\' for MEMORY and CHAPTER, Depot\'s for FILE and the drop box, Expenses\' for the Pot', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
     expect(registry.lists().map((l) => ({ ...l, views: l.views.map((v) => v.mode) }))).toEqual([
+      { rows: bookmarkRows, views: [], kinds: [SHARE_BOOKMARK_KIND] },
       { rows: memoryRows, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { rows: depotRows, views: [], kinds: [FILE_KIND, DROPBOX_KIND] },
       { rows: potRows, views: [], kinds: [POT_KIND] },
@@ -105,8 +107,8 @@ describe('composition root', () => {
   // (ADR 0015). A kind left out of either would be never switched off, or numbered among another application's plain names.
   // Two owners or two route claims of one kind throw at registration (`registry.test.ts`), so "at least one" here is
   // "exactly one".
-  it('gives every registered kind but FOLDER exactly one application and one route decision', () => {
-    const kinds = registry.kinds().filter((k) => k !== FOLDER_KIND)
+  it('gives every registered kind but core\'s exactly one application and one route decision', () => {
+    const kinds = registry.kinds().filter((k) => k !== FOLDER_KIND && k !== SHARE_BOOKMARK_KIND)
     expect(kinds).toEqual(expect.arrayContaining([MEMORY_KIND, CHAPTER_KIND, FILE_KIND, DROPBOX_KIND, POT_KIND])) // the anchor
     const ids = registry.applications().map((a) => a.id)
     for (const kind of kinds) {
@@ -115,8 +117,12 @@ describe('composition root', () => {
       expect(ids.filter((id) => id === owner), `${kind}'s application is registered once`).toHaveLength(1)
       expect(registry.routeDecided(kind), `${kind}'s route`).toBe(true)
     }
-    expect(registry.applicationOf(FOLDER_KIND)).toBeNull() // core's own kind: no application, no claim
-    expect(registry.routeDecided(FOLDER_KIND)).toBe(false)
+    // core's own kinds: no application, no claim (ADR 0079 decision 3, ADR 0120 decision 1)
+    for (const kind of [FOLDER_KIND, SHARE_BOOKMARK_KIND]) {
+      expect(registry.kind(kind).supported, kind).toBe(true)
+      expect(registry.applicationOf(kind), kind).toBeNull()
+      expect(registry.routeDecided(kind), kind).toBe(false)
+    }
   })
 
   it('is write-once end to end: registering the applications a second time throws', () => {

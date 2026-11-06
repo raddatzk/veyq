@@ -62,7 +62,8 @@ import { activeSpace } from '../app/activeSpace'
 import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../core/favorites/favoritesStore'
-import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
+import { FOLDER_KIND, SHARE_BOOKMARK_KIND, type NodeKind } from '../core/node/kind'
+import { bookmarkRows } from '../core/bookmark/bookmarkRows'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
 import { sealNodeMeta, type RawNodeMeta } from '../core/node/nodeMeta'
 import type { TreeNode } from '../core/node/tree'
@@ -183,6 +184,7 @@ describe('the Memories level view (golden)', () => {
   it('control: the level view renders the real Memories, Depot and Expenses registrations', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
     expect(registry.lists().map((l) => ({ ...l, views: l.views.map((v) => v.mode) }))).toEqual([
+      { rows: bookmarkRows, views: [], kinds: [SHARE_BOOKMARK_KIND] }, // core's bookmark (ADR 0120)
       { rows: memoryRows, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { rows: depotRows, views: [], kinds: [FILE_KIND, DROPBOX_KIND] },
       { rows: potRows, views: [], kinds: [POT_KIND] },

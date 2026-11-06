@@ -9,6 +9,7 @@ import type { CoreHeaderAction } from '../node/nodeHeader'
 import type { CoreRowAction } from '../node/levelRow'
 import type { TreeNode } from '../node/tree'
 import { ShareRole } from '../../api/generated/sharing'
+import { SHARE_BOOKMARK_KIND } from '../node/kind'
 import { nameReportKeys, nodeReportKeys } from './reportKeys'
 import { openReport, type ReportTarget } from './report'
 import { activeReview } from '../sharing/review'
@@ -26,8 +27,14 @@ export function reportScope(access: Access): string {
   return access.mode === 'guest' ? access.head.scopeId : access.scopeId
 }
 
-/** A node as a report target: its keys computed when the report is sent. */
+/**
+ * A node as a report target: its keys computed when the report is sent. A bookmark is reported here by its NAME alone,
+ * wherever it is reported from (its row, a selection, above the cap): its key opens another link, perhaps another
+ * operator's share, which this instance's moderators are never handed (ADR 0120 decision 6; the server refuses a `NODE`
+ * item of one, `report_target_kind`). Its share is reported where the share lives (`core/bookmark/openBookmark.ts`).
+ */
 export function nodeTarget(access: Access, tree: TreeSource, node: TreeNode): ReportTarget {
+  if (node.kind === SHARE_BOOKMARK_KIND) return { kind: 'NAME', id: node.id, keys: () => nameReportKeys(access, tree, reportScope(access), node) }
   return { kind: 'NODE', id: node.id, keys: () => nodeReportKeys(access, tree, reportScope(access), node) }
 }
 
@@ -45,7 +52,8 @@ export function nameTarget(access: Access, tree: TreeSource, node: TreeNode): Re
  * its name on its own as the other choice.
  */
 export function reportNodes(access: Access, tree: TreeSource, nodes: readonly TreeNode[], enclosing: TreeNode | null): void {
-  const name = nodes.length === 1 ? nameTarget(access, tree, nodes[0]!) : null
+  // a bookmark's target already IS its name (`nodeTarget`): no second choice of the same
+  const name = nodes.length === 1 && nodes[0]!.kind !== SHARE_BOOKMARK_KIND ? nameTarget(access, tree, nodes[0]!) : null
   openReport({
     access,
     scopeId: reportScope(access),
