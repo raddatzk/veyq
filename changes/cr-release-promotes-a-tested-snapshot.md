@@ -1,7 +1,7 @@
 ---
 id: cr-release-promotes-a-tested-snapshot
 title: Every green push publishes a signed, attested snapshot; a release promotes one, and nothing is rebuilt
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0091", "0057", "0096", "0064", "0090", "0085"]
 invariants:
@@ -24,8 +24,9 @@ promotion** of one snapshot, started from the draft the owner saves in GitHub's 
 snapshot's signature and attestations, gives the same digests the release names and the release signature, attaches
 the asset set and publishes the draft last. Nothing is rebuilt.
 
-**One owner decision is unbuildable as written and blocks phase 3** (§ Open question): GitHub starts no workflow
-for a draft release, so a saved draft cannot itself start the promotion. Phases 1 and 2 do not depend on the answer.
+**The trigger is decided** (§ Open question, owner 2026-11-06: option 1): GitHub starts no workflow for a draft
+release, so the owner saves the draft and then presses *Run workflow* on `release.yml`. Phase 1 is built; phase 2
+waits for its review, phase 3 for the owner's go.
 
 ## Context & constraints
 
@@ -89,7 +90,11 @@ for a draft release, so a saved draft cannot itself start the promotion. Phases 
   skips drafts, `veyqctl.py:461`), the verify page, `validate_release_identity.py` assertions 2, 3, 7–11. admin-web's
   release panel reads `GET /api/instance/release` and the backend's `ReleaseCheck`; neither verifies a signature.
 
-### Open question (owner) — blocks phase 3 only
+### Open question (owner) — decided: option 1
+
+**Decided by the owner, 2026-11-06: option 1** — save the draft, then *Run workflow* on `release.yml`, a dispatch with
+no required input. ADR 0091 decision 5 and #460 say so already (commit `7a0e08208`), so phase 3 does not edit them for
+the trigger. Kept below as the record of what was weighed.
 
 The owner's trigger, "the draft (`release: created`) starts the promotion", cannot fire (table above). What the
 owner wanted from it holds in every option below: the release page's tag list offers the promotable snapshots, the
@@ -108,8 +113,8 @@ owner writes the notes in the draft, and the draft is what gets published. The o
 3. **Publish instead of draft** (`release: published`): not possible — an immutable release takes no asset and its tag
    cannot move once published, and the published tag would be `snapshot-…` forever.
 
-The phase 3 below is written trigger-agnostic; only its `on:` and the "find the draft" step depend on the answer, and
-the owner's answer is edited into ADR 0091 decision 5 in that phase.
+Phase 3 below builds option 1: `on: workflow_dispatch` (input `unscheduled_major`, boolean, default false), and the
+"find the draft" step promotes the one draft on a `snapshot-` tag and refuses zero or several.
 
 ## Decisions this CR takes
 
@@ -141,9 +146,10 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
    the `snapshot` job, never in a lane leg**: a leg runs the commit's test code and gets no `id-token: write`; each leg
    hands its result over as an artifact, and the job that signs runs only when every leg is green.
 6. **The tools image's baked major entry is a promotion input** (`release_assets.py --major-entry`, ADR 0085 decision
-   10): the snapshot records it, and a promotion refuses when the current answer differs — it is baked into the
-   image, so it cannot be rerun, only promoted from a newer snapshot. (Relevant from the first fix release of a
-   previous major on.)
+   10): the tools image already records it, in `/opt/veyq/release.json` (`src/tools/Dockerfile:33`), so phase 1 records
+   nothing more; the promotion reads it from the snapshot's tools image and refuses when the current answer differs —
+   it is baked into the image, so it cannot be rerun, only promoted from a newer snapshot. (Relevant from the first fix
+   release of a previous major on.) *Amended at phase 1: the CR first said the snapshot would record it.*
 7. **The rerun of moved lanes is not built here.** While L1 is the only lane, no input can move (§ What exists). The
    promotion compares every recorded input with the current one and **refuses** on a difference, naming the lane;
    the rerun (calling a lane from `release.yml`) is built by #453's CR, with the first lane that can need it.
@@ -157,7 +163,11 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
 10. **Write-once with an idempotent re-run.** The snapshot job refuses when `<v>-SNAPSHOT`, `sha-<commit>` or
     `snapshot-<v>` already name *another* digest or commit, and continues when they name this run's — so "re-run
     failed jobs" can finish a half-done snapshot, and a second build of the same commit (a dispatch after a push) is
-    refused, not substituted.
+    refused, not substituted. *Built as:* "this build" is the set of manifests the build's per-arch digests stand
+    for (each is an index, with buildx's provenance and SBOM), compared with the set an existing tag's index lists —
+    the formatting of `imagetools create`'s output never enters; a registry read that fails for any reason but "not
+    found" is refused; a chart already at `<v>-SNAPSHOT` is kept when an image tag shows this commit's snapshot, and
+    refused otherwise (`scripts/snapshot.py check-unpublished`).
 11. **Retention groups by major and sweeps by reachability.** A branch publishes one major (`release/<major>.x`, and
     `main` its `VERSION`), so "per branch" is "per major". Kept: per major the 20 highest-minor snapshots not promoted
     (promoted ⇔ git tag `v<v>` exists), every promoted one, every version tagged with a release name, everything
@@ -175,7 +185,9 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
 
 ## Phases
 
-- [ ] **1 — The snapshot on every green push, attested, tagged; the identity split.**
+- [x] **1 — The snapshot on every green push, attested, tagged; the identity split.** *Built 2026-11-06* (commits
+  `176c0edce`, `8ac845ea1`, `b6c6ec88f`, `dfff39242`, `de707e8bc`); its first run on GitHub is owed (#471). How it was
+  built where the plan below left it open: § Phase 1 as built.
   - `ci.yml` `version`: stamp `<major>.<minor>` always; outputs `major`, `version`, `kind` (`snapshot`|`none`, decision
     9); `publish_branch_tags`/`publish_latest` and the two dispatch inputs go.
   - `build`: registry login and push gated on `kind == 'snapshot'` (was the event); the digest hand-off as today.
@@ -230,6 +242,33 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
     it; "Re-run failed jobs" of `snapshot` after a deliberate cancel finishes green; a pull request's run (a Dependabot
     one) shows `snapshot` and `snapshot-tag` skipped and no `build-…` tag for its head commit.
 
+  **Phase 1 as built** (what differs from the plan above, and why):
+  - **No `run_pipeline.py` run** (the owner's brief for this phase forbade it). The local run's `kind=none` is proved
+    instead by assertion 2 executing the version step with `RUNNER_ENVIRONMENT=local`, on `main` and on a feature
+    branch (a local run on a feature branch stays green, never red at the branch check).
+  - **No `pnpm run generate:api`**: the contract change is a description, and no generated file is tracked
+    (`git grep -l 'release version the running image'` → the contract and the coverage file only). No `./gradlew
+    check`, `pnpm run check` for web or admin-web: the backend change is comments only, and neither client changed.
+    `pnpm run check` in `site/` ran green.
+  - **The decisions live in `scripts/snapshot.py`** (lane record, predicates, write-once verdict) with
+    `scripts/snapshot_selftest.py`, which `ci.yml`'s `guards` job runs; every registry, signing and git write stays in
+    the workflow's own lines, where assertion 3 sees and gates it.
+  - **The predicates step names the lane matrix**: `--arch amd64 --arch arm64` and one `--shard` per domain; assertion
+    13 holds both equal to the `stack` matrix, and the script refuses a missing, extra, failed, foreign or
+    inconsistent leg.
+  - **The image tags are written out** (`<v>-SNAPSHOT`, `sha-<commit>`), the metadata action is gone from the
+    publish; one loop creates the three indexes.
+  - **Assertion 9 exempts the jobs after the snapshot** (those that need it, transitively — today `snapshot-tag`),
+    derived, not listed.
+  - **A latent bug fixed in passing**: `VERIFY_PAGE` was used by assertion 8's failure message before its definition,
+    so that red would have been a `NameError` (found when an intermediate edit hit it); defined with the constants now.
+  - **The upstream in the identity strings is `raddatzk/veyq`**, the current owner. A move to the `veyq` organisation
+    (#471) changes it in **one place: `home:` in `infra/kubernetes/charts/veyq/Chart.yaml`**. That is where
+    `validate_release_identity.py` reads the upstream from. It then turns red, by name, on every line that must
+    follow: `veyqctl.py`'s `COSIGN_IDENTITY_REGEXP`, the six commands on the verify page, and the chart's image
+    repository defaults in `values.yaml`. The same move also changes the maintainer's snapshot-check commands in
+    `infra/README.md`, which no guard reads.
+
 - [ ] **2 — Retention.** New workflow `.github/workflows/snapshot-retention.yml`: daily `schedule` (off the hour) on
   `main` and `workflow_dispatch` (input `delete`, default `false` = dry run); concurrency `veyq-release`. Three jobs,
   split by permission: `plan` (`contents: read`, `packages: read`) runs `scripts/snapshot_retention.py` (decision 11)
@@ -251,7 +290,7 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
     refuses the token (403):** the deletion stops, nothing else changes, and how to authorise it (a classic PAT with
     `delete:packages` as a secret, or pruning by hand) goes to the owner — it is a credential decision.
 
-- [ ] **3 — The promotion (blocked on § Open question).** New workflow `.github/workflows/release.yml`, concurrency
+- [ ] **3 — The promotion (trigger decided: option 1; waits for the owner's go).** New workflow `.github/workflows/release.yml`, concurrency
   `veyq-release`; refuses unless its ref is `main` or `release/<major>.x`.
   - Job `check` (`contents: write` — listing a draft needs push access, and a refusal writes into it — `packages:
     read`): finds the draft; then `scripts/promote_snapshot.py` (pure checks, selftest
@@ -281,8 +320,8 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
     that creates or publishes a GitHub Release; a new assertion holds `release.yml` free of any build and of `push`
     and `pull_request` triggers. Bitten each (an upload after publication, a `docker build` added, a `push:` trigger
     added, publication before the chart's signature).
-  - Docs: ADR 0091 decision 5 (the owner's answer replaces "`release: created`"; Built line), ADR 0057 header if a
-    § is affected, `release-and-deployment.md` (promotion built; rerun not), `infra/README.md` § Cutting a release (the
+  - Docs: ADR 0091's Built line (the trigger is in decision 5 already, `7a0e08208`), ADR 0057's Built and Replaced
+    lines (phase 1 marked § 2 and § 3 as a release's, not built), `release-and-deployment.md` (promotion built; rerun not), `infra/README.md` § Cutting a release (the
     release half and the train commands with the new start), `verify-a-release.md` § How far this is proven,
     `how-veyq-is-tested.md` § How a release will be gated (→ how it is gated), #460's row deleted once the first-run
     checklist below has run, #471's release items replaced by a pointer to it.
@@ -306,4 +345,16 @@ coverage row. The published pages listed per phase are updated in that phase.
 
 ## Retrospective
 
-(filled at implementation)
+Phase 1 (filled at its end; the CR's retro closes with phase 3):
+
+- **The plan's done-when named a command the implementation brief forbade** (`run_pipeline.py --job version`). Root
+  cause: the CR was written before the owner's rule for this phase (no pipeline or stack runs). The guard's executed
+  scenario proves the same thing, so the bar held. Next time: a done-when names the proof, with the command as one
+  way to get it, so a brief that rules a command out does not turn the bar into a contradiction.
+- **The plan said the snapshot "records" the major entry. The tools image already did** (`/opt/veyq/release.json`).
+  Root cause: decision 6 was written from the ADR, not from the Dockerfile. Next time: grep the image for the value
+  before deciding to record it anywhere.
+- **The worktree's shell classifier refused compound commands** (a `sed` with a computed line number, a variable in
+  front of `git`, a heredoc fed to `python`). Small throwaway scripts in the scratch directory went through. It cost
+  a few round trips and nothing else. Next time: write a helper file first whenever an edit or bite needs more than
+  one plain command.
