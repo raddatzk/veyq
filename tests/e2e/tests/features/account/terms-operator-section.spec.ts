@@ -68,9 +68,9 @@ test(
     await page.goto(tenantOrigin())
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible({ timeout: 60_000 })
     const opened = context.waitForEvent('page')
-    await page.getByRole('link', { name: 'Terms of this instance' }).click()
+    await page.getByRole('link', { name: 'Terms of this server' }).click()
     const terms = await opened
-    await expect(terms.getByText('Terms of this instance').first()).toBeVisible({ timeout: 60_000 })
+    await expect(terms.getByText('Terms of this server').first()).toBeVisible({ timeout: 60_000 })
     const section = terms.getByTestId('operator-section')
     await expect(section.getByRole('heading', { name: 'On this instance: reports, measures and what is kept' })).toBeVisible()
     await expect(section.getByRole('heading', { name: 'Authorities and contact' })).toBeVisible() // the one form

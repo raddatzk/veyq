@@ -72,7 +72,7 @@ describe('OperatorIdentification (uc.admin.operator-details, web)', () => {
     stubApi(publicOperatorApi, { getOperatorDetails: details() })
     const w = await mountIt()
     const link = w.find('.operator-identification__terms')
-    expect(link.text()).toBe('Terms of this instance')
+    expect(link.text()).toBe('Terms of this server')
     expect(link.attributes('href')).toBe('/operator-terms')
     expect(link.attributes('target')).toBe('_blank')
   })
@@ -92,7 +92,7 @@ describe('OperatorIdentification (uc.admin.operator-details, web)', () => {
     i18n.global.locale.value = 'de'
     const w = await mountIt()
     expect(w.find('.operator-identification__link').text()).toBe('Impressum')
-    expect(w.find('.operator-identification__terms').text()).toBe('Bedingungen dieser Instanz')
+    expect(w.find('.operator-identification__terms').text()).toBe('Bedingungen dieses Servers')
     expect(w.find('.operator-identification__privacy').text()).toBe('Datenschutz')
   })
 
