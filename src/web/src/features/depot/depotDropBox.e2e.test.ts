@@ -109,7 +109,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files drop box e2e (live, real crypto, a
     // Ben writes nothing into Anna's folder; neither sees anything of the drop box.
     const intoAnna = await failure(guestFileUploadJob({ ctx: dropGuestContext(head, ben, { ...benFolder, nodeId: annaFolder.nodeId }), parentId: annaFolder.nodeId }, fileOf(bytesOf(5, 4), 'x.bin')).run(ctx()))
     expect(intoAnna).not.toBeNull()
-    expect((await publicShareFilesApi().listShareFiles({ shareId: link.shareId })).items).toEqual([])
+    expect((await publicShareFilesApi('').listShareFiles({ shareId: link.shareId })).items).toEqual([])
 
     // --- the member opens both folders through the drop box's key ---------------------------------------------------
     const memberReads = async () => {

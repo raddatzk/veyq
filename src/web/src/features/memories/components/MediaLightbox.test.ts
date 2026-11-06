@@ -1345,7 +1345,7 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
     await doubleClick(w)
     await key('+')
     expect(openShareOriginal).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(openShareOriginal).mock.calls[0][0]).toBe('share-1')
+    expect(vi.mocked(openShareOriginal).mock.calls[0][0]).toEqual({ shareId: 'share-1', apiBase: '' }) // the link where it lives (ADR 0121)
     expect(store.blob.presignBlobDownloads, "no member read").not.toHaveBeenCalled()
     expect(scaleOf(w)).toBe(3)
     w.unmount()

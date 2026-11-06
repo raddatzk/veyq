@@ -69,7 +69,7 @@ async function readPot(ctx: ExportNodeContext): Promise<HeldRevision[]> {
     const read = await readMemberPot(ctx.scopeId, ctx.node.id)
     return read.notModified ? [] : applyPotChange([], read, pot)
   }
-  const read = await readGuestPot(a.shareId, ctx.node.id, { pwToken: a.pwToken })
+  const read = await readGuestPot(a, ctx.node.id, { pwToken: a.pwToken })
   return read ? applyPotChange([], { items: read.revisions, ids: null }, pot) : []
 }
 
@@ -78,7 +78,7 @@ async function readReceipts(ctx: ExportNodeContext): Promise<HeldReceipt[]> {
   const a = ctx.access
   const read = a.mode === 'member'
     ? await readMemberReceipts(ctx.scopeId, ctx.node.id)
-    : await readGuestReceipts(a.shareId, ctx.node.id, { pwToken: a.pwToken })
+    : await readGuestReceipts(a, ctx.node.id, { pwToken: a.pwToken })
   return read?.receipts ?? []
 }
 

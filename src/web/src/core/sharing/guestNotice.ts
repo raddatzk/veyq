@@ -11,6 +11,7 @@ import { reactive } from 'vue'
 import type { ShareGuestStatement } from '../../api/generated/sharing'
 import { loadGuestSession } from './guestIdentity'
 import { readGuestNotice } from './guestNoticeRead'
+import { deviceKey, shareIdOf, type ShareAt } from './shareAt'
 
 /** What the guest is told: the removal orders by when each was received, the moderators' statements, and the contact. */
 export type GuestNotice = { receivedAt: Date[]; statements: ShareGuestStatement[]; contact: string | null }
@@ -23,7 +24,8 @@ export const guestPage = reactive({ shareId: null as string | null, notice: null
 
 // The read is the page's and the session's: a guest who forgot itself ("Not you?") and the one who names itself next on
 // this device each get their own identity's answer, never the other's.
-let reading: { shareId: string; token: string | null; read: Promise<GuestNotice | null> } | null = null
+// Keyed by the share as this device addresses it (`./shareAt.ts`): another instance's link of the same id is another read.
+let reading: { key: string; token: string | null; read: Promise<GuestNotice | null> } | null = null
 
 /** The page at [shareId] is open: its placeholders and notice read that link's answer. */
 export function openGuestPage(shareId: string): void {
@@ -40,17 +42,20 @@ export function closeGuestPage(): void {
 }
 
 /**
- * The notice for this device's identity on [shareId], read once per page (or [fresh]: the § 12 notice reads afresh where
- * it mounts, the link having gone away under the page), or null — no session here, or nothing to tell. A failed read
- * throws, and is asked again by the next one.
+ * The notice for this device's identity on the share [at], read once per page (or [fresh]: the § 12 notice reads afresh
+ * where it mounts, the link having gone away under the page), or null — no session here, or nothing to tell. A failed
+ * read throws, and is asked again by the next one. Another instance's link (a bookmark's page, ADR 0121) is asked there,
+ * and never feeds the share page's {@link guestPage}, which is this origin's.
  */
-export function loadGuestNotice(shareId: string, fresh = false): Promise<GuestNotice | null> {
-  const token = loadGuestSession(shareId)?.contributorToken ?? null
-  if (!fresh && reading?.shareId === shareId && reading.token === token) return reading.read
-  if (reading && reading.token !== token && guestPage.shareId === shareId) guestPage.notice = null
+export function loadGuestNotice(at: ShareAt, fresh = false): Promise<GuestNotice | null> {
+  const shareId = typeof at === 'string' || at.apiBase === '' ? shareIdOf(at) : null
+  const key = deviceKey('', at)
+  const token = loadGuestSession(at)?.contributorToken ?? null
+  if (!fresh && reading?.key === key && reading.token === token) return reading.read
+  if (reading && reading.token !== token && shareId !== null && guestPage.shareId === shareId) guestPage.notice = null
   const read = (async () => {
     if (!token) return null
-    const notice = await readGuestNotice(shareId, token)
+    const notice = await readGuestNotice(at, token)
     if (!notice) return null
     return {
       receivedAt: notice.removals.map((r) => r.orderReceivedAt),
@@ -58,11 +63,11 @@ export function loadGuestNotice(shareId: string, fresh = false): Promise<GuestNo
       contact: notice.contactAddress ?? null,
     }
   })()
-  const entry = { shareId, token, read }
+  const entry = { key, token, read }
   reading = entry
   read.then(
     (n) => {
-      if (reading === entry && guestPage.shareId === shareId) guestPage.notice = n
+      if (reading === entry && shareId !== null && guestPage.shareId === shareId) guestPage.notice = n
     },
     () => {
       if (reading === entry) reading = null

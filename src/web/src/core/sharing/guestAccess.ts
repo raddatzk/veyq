@@ -117,6 +117,7 @@ export function guestAccess(fields: {
   return {
     mode: 'guest',
     shareId: fields.head.shareId,
+    apiBase: fields.head.apiBase ?? '',
     role: fields.head.role,
     pwToken: fields.pwToken,
     head: fields.head,

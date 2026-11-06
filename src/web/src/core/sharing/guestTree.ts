@@ -32,7 +32,7 @@ import type { NodeKind } from '../node/kind'
 import { registry } from '../applications/registry'
 import { decodeHttpError, HttpStatus, isCodedError } from '../../shared/httpError'
 import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
-import { resolvePublicShare, ShareUnavailableError, type PublicShareHead } from './resolvePublicShare'
+import { resolvePublicShare, shareAtOf, ShareUnavailableError, type PublicShareHead } from './resolvePublicShare'
 import { openShareRoot, walkSubtree, type SharedSubtree } from './shareTree'
 
 /** What a resolve of the link opens: the head, the root's id, and every reachable node's key, name and served row
@@ -43,6 +43,8 @@ export type GuestTreeParts = SharedSubtree & { head: PublicShareHead; rootId: st
  *  and how to re-read the subtree when a placement lost a race ({@link placeShareNodeAsGuest}). */
 export type GuestTreeContext = GuestTreeParts & {
   shareId: string
+  /** The instance that serves the link (`''`: this origin; ADR 0121, `./shareAt.ts`): every write goes there. */
+  apiBase: string
   scopeId: string
   pwToken?: string
   contributorToken: string
@@ -66,10 +68,11 @@ export function guestTreeContext(
   return {
     ...openGuestTreeParts(head),
     shareId: head.shareId,
+    apiBase: head.apiBase ?? '',
     scopeId: head.scopeId,
     pwToken,
     contributorToken,
-    reresolve: async () => openGuestTreeParts(await resolvePublicShare(head.shareId, fragmentKey, pwToken)),
+    reresolve: async () => openGuestTreeParts(await resolvePublicShare(shareAtOf(head), fragmentKey, pwToken)),
   }
 }
 
@@ -165,7 +168,7 @@ export async function createShareNodeAsGuest(
       // the new key is minted under the scope epoch the parent's key was (the scope's current one while the parent is not
       // due, ADR 0114 decision 3): what its seals bind and the create states; it starts at its own epoch 0
       const node = { scopeId: ctx.scopeId, nodeId: crypto.randomUUID(), scopeEpoch: parent.scopeEpoch, placementRevision: 0 }
-      const res = await publicSharesApi().createShareNode({
+      const res = await publicSharesApi(ctx.apiBase).createShareNode({
         shareId: ctx.shareId,
         xContributorToken: ctx.contributorToken,
         xSharePassword: ctx.pwToken,
@@ -196,10 +199,10 @@ export async function createShareNodeAsGuest(
  * {@link GuestTreeError} `not_a_placeholder`, and nothing changes.
  */
 export async function abandonShareNodeAsGuest(
-  ctx: Pick<GuestTreeContext, 'shareId' | 'contributorToken' | 'pwToken'>, nodeId: string,
+  ctx: Pick<GuestTreeContext, 'shareId' | 'apiBase' | 'contributorToken' | 'pwToken'>, nodeId: string,
 ): Promise<void> {
   try {
-    await publicSharesApi().abandonShareNode({
+    await publicSharesApi(ctx.apiBase).abandonShareNode({
       shareId: ctx.shareId, nodeId, xContributorToken: ctx.contributorToken, xSharePassword: ctx.pwToken,
     })
   } catch (e) {
@@ -252,7 +255,7 @@ async function sendGuestPlacement(
   }
   assertNameFree(parts, newParentId, node.kind, name, nodeId)
   const sealedAt = { scopeId: ctx.scopeId, nodeId, scopeEpoch: node.scopeEpoch, placementRevision: node.placementRevision + 1 }
-  await publicSharesApi().updateShareNode({
+  await publicSharesApi(ctx.apiBase).updateShareNode({
     shareId: ctx.shareId,
     nodeId,
     xContributorToken: ctx.contributorToken,

@@ -11,9 +11,9 @@ export function expensesApi(): ExpensesApi {
 }
 
 /** A guest's Pot operations on a share link (the `share-expenses` tag, no auth): read a Pot's revisions without their
- *  writers, and — on a `READ_WRITE` link — append. */
-export function publicShareExpensesApi(): ShareExpensesApi {
-  return new ShareExpensesApi(new ExpensesConfiguration(publicParams()))
+ *  writers, and — on a `READ_WRITE` link — append. `apiBase`: the instance that serves the link (`''` this origin, ADR 0121). */
+export function publicShareExpensesApi(apiBase: string): ShareExpensesApi {
+  return new ShareExpensesApi(new ExpensesConfiguration(publicParams(apiBase)))
 }
 
 /** A moderator's read of a case's held Pot revisions (`listCasePotRevisions`, uc.moderation.review-a-case). */

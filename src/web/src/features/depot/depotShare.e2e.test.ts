@@ -92,7 +92,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     const readHead = await resolvePublicShare(read.shareId, b64url(read.kShare))
     const readParts = openGuestTreeParts(readHead)
     expect(readParts.names.get(memberFile)).toBe(MEMBER_FILE)
-    const readListing = (await publicShareFilesApi().listShareFiles({ shareId: read.shareId })).items
+    const readListing = (await publicShareFilesApi('').listShareFiles({ shareId: read.shareId })).items
     expect(readListing.map((i) => i.nodeId)).toEqual([memberFile])
     const memberBlob = readListing[0].fileBlob!
     const guestRead = await fetchFileContent(readHead.scopeId, readParts.keys.get(memberFile)!, memberFile, memberBlob, (b) => shareChunkUrls(read.shareId, b))
@@ -109,7 +109,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     const guestFile = created.nodeId
 
     // a READ link refuses the same write: its token names no identity there, and its role takes none
-    const readWrite = await failure(publicShareFilesApi().completeShareFile({
+    const readWrite = await failure(publicShareFilesApi('').completeShareFile({
       shareId: read.shareId, nodeId: guestFile, shareFileCompleteRequest: { contributorToken: guest.contributorToken, uploadId: crypto.randomUUID(), nodeEpoch: 0 },
     }))
     expect(httpStatus(readWrite)).toBe(403)
@@ -140,7 +140,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     expect(await contentOf(await fetchFileContent(scopeId, memberKey, memberFile, replacedBlob))).toEqual(Array.from(replacement))
     expect(fileFacts(scopeId, memberKey, memberFile, replacedBlob).size).toBe(replacement.length)
     // a guest of the link reads the same meta through the chain's key, from the link's listing
-    const guestListed = (await publicShareFilesApi().listShareFiles({ shareId: rw.shareId })).items.find((i) => i.nodeId === memberFile)!.fileBlob!
+    const guestListed = (await publicShareFilesApi('').listShareFiles({ shareId: rw.shareId })).items.find((i) => i.nodeId === memberFile)!.fileBlob!
     expect(fileFacts(scopeId, rwKeys.get(memberFile)!, memberFile, guestListed).meta).toMatchObject({ type: MIME, name: MEMBER_FILE })
     const stale = await failure(guestFileUploadJob({
       ctx: guestCtx(), parentId: folderId,
@@ -151,9 +151,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
 
     // --- the member trashes the guest's file: for the guest it is gone ---------------------------------------------
     await deleteNode(scopeId, guestFile)
-    expect((await publicShareFilesApi().listShareFiles({ shareId: rw.shareId })).items.map((i) => i.nodeId)).toEqual([memberFile])
+    expect((await publicShareFilesApi('').listShareFiles({ shareId: rw.shareId })).items.map((i) => i.nodeId)).toEqual([memberFile])
     expect(httpStatus(await failure(shareChunkUrls(rw.shareId, guestBlob.blobId)))).toBe(404)
-    const to = { shareId: rw.shareId, contributorToken: guest.contributorToken, nodeId: guestFile }
+    const to = { shareId: rw.shareId, apiBase: '', contributorToken: guest.contributorToken, nodeId: guestFile }
     const intoTrash = await failure(reserveAndPump(
       [planBlob(scopeId, { ownerId: guestFile, role: FILE_CONTENT_ROLE }, guestKey, new Blob([bytesOf(10, 5) as BlobPart]))],
       (d) => guestReserve(to, d), guestWindow(to),

@@ -26,6 +26,7 @@ import type { BlobChunkProvider } from '../../core/blob/transport'
 import { downloadName, type OpenedBlobMeta } from '../../core/blob/meta'
 import type { BlobSource } from '../../core/blob/types'
 import type { Access } from '../../core/access'
+import type { ShareAt } from '../../core/sharing/shareAt'
 import type { PotTarget, PotWriteKey } from './domain/potApi'
 
 /** The role a receipt's blob is declared and wrapped in (the backend's `EXPENSES_RECEIPT`, 16 characters). */
@@ -83,8 +84,8 @@ export async function readMemberReceipts(scopeId: string, nodeId: string, ifNone
 }
 
 /** A guest's read of a Pot's receipts under its link (no writer: the guest's schema has none). */
-export async function readGuestReceipts(shareId: string, nodeId: string, opts: { pwToken?: string; ifNoneMatch?: string } = {}): Promise<ReceiptsRead | null> {
-  return asReceipts(await readGuestApplicationBlobs(shareId, nodeId, opts))
+export async function readGuestReceipts(at: ShareAt, nodeId: string, opts: { pwToken?: string; ifNoneMatch?: string } = {}): Promise<ReceiptsRead | null> {
+  return asReceipts(await readGuestApplicationBlobs(at, nodeId, opts))
 }
 
 // --- the upload -------------------------------------------------------------------------------------------------------

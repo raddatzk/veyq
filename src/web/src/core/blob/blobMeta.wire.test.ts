@@ -104,7 +104,7 @@ describe('a member\'s declare (startBlobUploads)', () => {
 describe('a guest\'s declare on a link (startShareBlobUploads)', () => {
   it('carries the meta too — core\'s guest transport forwards the declare as planned', async () => {
     const sent = fakeServer()
-    const to = { shareId: SHARE, contributorToken: 'tok-guest', nodeId: OWNER.ownerId }
+    const to = { shareId: SHARE, apiBase: '', contributorToken: 'tok-guest', nodeId: OWNER.ownerId }
     await reserveAndPump([planBlob(SCOPE, OWNER, ownerKey, file(), META)], (d) => guestReserve(to, d), guestWindow(to))
 
     const { start, item, kBlob } = declared(sent)

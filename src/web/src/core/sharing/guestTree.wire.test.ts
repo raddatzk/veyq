@@ -82,7 +82,7 @@ function head(nodes: ShareNode[] = servedNodes()): PublicShareHead {
 }
 
 function context(reresolve: () => Promise<GuestTreeParts> = () => Promise.reject(new Error('no re-resolve expected'))): GuestTreeContext {
-  return { ...openGuestTreeParts(head()), shareId: SHARE_ID, scopeId: SCOPE_ID, pwToken: PW, contributorToken: TOKEN, reresolve: vi.fn(reresolve) }
+  return { ...openGuestTreeParts(head()), shareId: SHARE_ID, apiBase: '', scopeId: SCOPE_ID, pwToken: PW, contributorToken: TOKEN, reresolve: vi.fn(reresolve) }
 }
 
 type Sent = { url: string; method: string; headers: Headers; json: Record<string, unknown> }

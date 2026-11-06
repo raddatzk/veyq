@@ -29,7 +29,7 @@ describe('a start its application\'s switch refused', () => {
 
   it('reaches a guest\'s queue as capability_disabled', async () => {
     refuseWith(422, 'capability_disabled')
-    await expect(guestReserve({ shareId: SHARE, contributorToken: 'token' }, [DECLARE])).rejects.toThrow(APPLICATION_OFF)
+    await expect(guestReserve({ shareId: SHARE, apiBase: '', contributorToken: 'token' }, [DECLARE])).rejects.toThrow(APPLICATION_OFF)
   })
 
   it('control: another 422 keeps its own shape (not taken for a switch)', async () => {

@@ -112,3 +112,36 @@ one seam) and red; the P6 pass recorded; nothing merged.
   ADR 0088's "the served CSP is the instance level's" gains this one tenant-dependent source.
 - **P3 - dev policy.** The Vite policy serves as if the switch were on: `https:` and `http://*.localhost:*`;
   `verify:csp` refuses a scheme or wildcard in the built `connect-src`.
+- **P4 - where a guest call goes: `ShareAt`** (`core/sharing/shareAt.ts`): a share as this device addresses it, a bare id
+  (this origin) or `{ shareId, apiBase }`. A `GuestAccess` carries `apiBase` (required) and so IS a `ShareAt`: a view hands
+  `access` to every guest read and write. The head records where it was resolved (`PublicShareHead.apiBase`, ABSENT for
+  this origin, so the share page's head is deep-equal to before), and what starts from a head (`guestTreeContext`, its
+  re-resolve, `nameShareGuest`, a drop-box guest's naming and folder) goes there. The public factories take `apiBase` as a
+  REQUIRED argument (`publicParams`, `publicSharesApi`, `publicShareApplicationBlobsApi`, `publicModerationApi`,
+  `publicShareMediaApi`, `publicShareFilesApi`, `publicShareExpensesApi`), so no guest call reaches a base its caller did
+  not choose; `setupApi(apiBase = '')` and the this-origin factories (`publicPairingApi`, `publicOperatorApi`) pass `''`.
+  A positional `shareId` parameter became `ShareAt` (`shareChunkUrls`, `readGuestNotice`, Memories' share reads, Expenses'
+  `readGuestPot`/`readGuestReceipts`, `readGuestApplicationBlobs`); an object target gained a required `apiBase`
+  (`GuestUploadTarget`, `GuestTreeContext`, `ApplicationBlobTarget`/`PotTarget` guest). `fetch` sends no cookie to another
+  origin by default and no factory sets `credentials`; the wire tests assert no `Authorization` and no `include`.
+- **P4 - device keys.** This origin's are byte-identical (`<prefix>:<id>`); another instance's are `<prefix>@<origin>:<id>`
+  (`deviceKey`/`originKey`) - the character after the prefix (`:` / `@`) tells them apart, so no id a `/s/:shareId` route
+  hands the share page (vue-router decodes `%2F`, so it can hold anything) reads another origin's entry. Covered: the
+  guest's session (and a drop-box guest's), a note's acceptance, the accepted terms (per tenant AND origin: a foreign
+  tenant id is that instance's), Memories' record of its own uploads, the presigner cache, the guest-notice read cache.
+- **P4 - reporting per instance.** `publishedKey(fresh, apiBase)` and `useReportOffered(apiBase)` hold one answer per
+  instance; `reportBaseOf(access)` is a guest's link's base, a member's `''`. The level, core's node actions, Memories'
+  detail host and the Pot page pass it, so a foreign guest's Report shows by the foreign instance's key and seals to it.
+- **P4 - "no answer" is its own unavailable.** `ShareUnavailableError('unreachable')` (`SHARE_UNREACHABLE`) where the
+  generated client got no HTTP response (network, or a browser that withheld a cross-origin answer); every refusal stays
+  `not_found`. The share page treats both alike; a bookmark's page falls back on `unreachable`.
+- **P4 - embeddability** (`core/sharing/shareInstance.ts`): `embeddability({ embedding, setup, major })`, pure, refusals
+  `switchedOff` (this instance's `core.share-embedding`), `unreachable` (no answer, or no version/capability list),
+  `otherVersion` (any major but `EXPECTED_MAJOR`), `noLinks`, `notEmbeddable`; `readShareInstance(apiBase)` reads
+  `/api/setup` and turns every failure into null. `.contribute` is not read (the share's server refuses a write).
+- **P4 - tests changed outside the new ones, and why.** `src/test/apiMock.ts`' `ApiFactory` takes the base; every test
+  that called a public factory to reach its mock now passes `''` (13 files, `ShareView.memory.test.ts` among them: four
+  `publicShareMediaApi()` -> `publicShareMediaApi('')`, the assertions unchanged); assertions on `shareChunkUrls`,
+  `openShare*`, `deleteSharePhoto`, `saveDropGuest`/`forgetDropGuest` now name the share's address
+  (`{ shareId, apiBase: '' }`) where they named its id; test literals of a `GuestAccess`, `GuestUploadTarget`,
+  `GuestTreeContext` and `PotTarget` gained `apiBase: ''`; `access.test.ts` lists `apiBase` among a guest access's keys.

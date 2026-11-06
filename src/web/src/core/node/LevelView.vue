@@ -130,7 +130,7 @@ import LevelNotices from './components/LevelNotices.vue'
 import { standardNodeActions, standardNodeRename } from './nodeHeader'
 import { canCopy } from '../export/copyActions'
 import { canReport, reportNodes } from '../report/reportActions'
-import { useReportOffered } from '../report/report'
+import { reportBaseOf, useReportOffered } from '../report/report'
 import { isDownloadArchive } from '../export/importSubtree'
 import {
   directoryHoldsManifest, holdsManifest, readDroppedDirectory, type DirectoryInput, type DroppedDirectory, type DroppedEntry,
@@ -420,7 +420,7 @@ const copiesNode = (id: string): boolean => {
 const anyCopy = computed(() => !!host.copy && [...levelItems.value.keys()].some(copiesNode))
 // "Report" is core's (uc.moderation.report): anyone who sees a node reports it, a READ guest included — so it alone
 // makes a level selectable — while the instance publishes a moderation key.
-const reportOn = useReportOffered()
+const reportOn = useReportOffered(reportBaseOf(props.access))
 const reportsNode = (id: string): boolean => {
   const item = levelItems.value.get(id)
   return !!item && !item.unsupported

@@ -5,4 +5,6 @@
 import { publicModerationApi } from '../../api/client'
 import type { ModerationEpochKey } from '../../api/generated/moderation'
 
-export const readModerationKey = (): Promise<ModerationEpochKey> => publicModerationApi().getModerationKey()
+/** The key published by the instance at `apiBase` (`''`: this one; another's for a guest of its link shown in a bookmark's
+ *  page, whose report goes there — ADR 0121 decision 8). */
+export const readModerationKey = (apiBase = ''): Promise<ModerationEpochKey> => publicModerationApi(apiBase).getModerationKey()

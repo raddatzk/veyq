@@ -52,8 +52,11 @@ export const fetchApi: typeof fetch = async (input, init) => {
   return response
 }
 
-export function setupApi(): SetupApi {
-  return new SetupApi(new Configuration({ basePath: session.apiBase, fetchApi }))
+/** The instance's pre-auth setup status (ADR 0032). `apiBase` is another instance's origin where a bookmark's page asks
+ *  that instance what it serves (ADR 0121 decision 4): token-less either way, and `/api/setup` answers any origin there
+ *  while it lets its links be embedded. Omitted: this origin. */
+export function setupApi(apiBase = ''): SetupApi {
+  return new SetupApi(new Configuration(publicParams(apiBase)))
 }
 
 // The one bearer-credential contract every authed client shares: same-origin basePath + the access token
@@ -62,10 +65,13 @@ export function setupApi(): SetupApi {
 // application's own clients (`features/memories/api.ts`), which core does not import (ADR 0079).
 export const bearerParams = () => ({ basePath: session.apiBase, accessToken: () => session.accessToken ?? '', fetchApi })
 
-// The token-less counterpart: same-origin basePath and no credential at all, so no Authorization header is sent.
-// For the calls a caller makes without a session by design ([publicPairingApi], [publicSharesApi], and an
-// application's guest operations).
-export const publicParams = () => ({ basePath: session.apiBase, fetchApi })
+// The token-less counterpart: no credential at all, so no Authorization header is sent. For the calls a caller makes
+// without a session by design ([publicPairingApi], [publicSharesApi], and an application's guest operations). `apiBase`
+// is where the call goes: `''` for this origin (`session.apiBase`), or the origin of the instance that serves a share a
+// bookmark's page shows in place (ADR 0121 decision 5, `core/sharing/shareAt.ts`) - REQUIRED, so no guest call reaches a
+// base its caller did not choose. Nothing of this origin's session ever travels with it: no token here, and `fetch`
+// sends no cookie to another origin by default (`credentials: 'same-origin'`), which the generated runtime leaves alone.
+export const publicParams = (apiBase: string) => ({ basePath: apiBase || session.apiBase, fetchApi })
 
 export function loginApi(): LoginApi {
   return new LoginApi(new AuthConfiguration(bearerParams()))
@@ -99,7 +105,7 @@ export function pairingApi(): PairingApi {
  *  [publicSharesApi]: the same generated class, constructed without the bearer credential, so no Authorization
  *  header is ever sent from a device that has no business identifying itself. */
 export function publicPairingApi(): PairingApi {
-  return new PairingApi(new AuthConfiguration(publicParams()))
+  return new PairingApi(new AuthConfiguration(publicParams('')))
 }
 
 export function accountApi(): AccountApi {
@@ -190,8 +196,8 @@ export function applicationBlobsApi(): ApplicationBlobsApi {
   return new ApplicationBlobsApi(new BlobConfiguration(bearerParams()))
 }
 
-export function publicShareApplicationBlobsApi(): ShareApplicationBlobsApi {
-  return new ShareApplicationBlobsApi(new BlobConfiguration(publicParams()))
+export function publicShareApplicationBlobsApi(apiBase: string): ShareApplicationBlobsApi {
+  return new ShareApplicationBlobsApi(new BlobConfiguration(publicParams(apiBase)))
 }
 
 export function caseApplicationBlobsApi(): CaseApplicationBlobsApi {
@@ -209,9 +215,10 @@ export function moderationApi(): ModerationApi {
 }
 
 /** The published moderation key a reporter seals to (`getModerationKey`, ADR 0099 § 2): read before any sign-in, by a
- *  member and by a guest of a link alike, so token-less — a guest's page sends no Authorization header. */
-export function publicModerationApi(): ModerationApi {
-  return new ModerationApi(new ModerationConfiguration(publicParams()))
+ *  member and by a guest of a link alike, so token-less — a guest's page sends no Authorization header. `apiBase`: the
+ *  instance the report goes to — a guest of another instance's link reports there (ADR 0121 decision 8). */
+export function publicModerationApi(apiBase: string): ModerationApi {
+  return new ModerationApi(new ModerationConfiguration(publicParams(apiBase)))
 }
 
 /** A member's report of what their space holds (uc.moderation.report). A guest reports through `publicSharesApi`. */
@@ -232,8 +239,9 @@ export function sharesApi(): SharingApi {
   return new SharingApi(new SharingConfiguration(bearerParams()))
 }
 
-export function publicSharesApi(): SharingApi {
-  return new SharingApi(new SharingConfiguration(publicParams()))
+/** `apiBase`: the instance that serves the link (`''`: this origin; another's for a link a bookmark's page shows in place). */
+export function publicSharesApi(apiBase: string): SharingApi {
+  return new SharingApi(new SharingConfiguration(publicParams(apiBase)))
 }
 
 /** A moderator's review of a case (uc.moderation.review-a-case): the held snapshot in the guest viewer's shapes, behind
@@ -245,5 +253,5 @@ export function caseReviewApi(): CaseReviewApi {
 // Who runs this instance (ADR 0093 § 11, ADR 0035 decision 7): the operator's published values, read before sign-in on
 // the login and share pages. Token-less like the guest reads: nobody needs a session to learn who runs a server.
 export function publicOperatorApi(): OperatorApi {
-  return new OperatorApi(new OperatorConfiguration(publicParams()))
+  return new OperatorApi(new OperatorConfiguration(publicParams('')))
 }

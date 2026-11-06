@@ -196,7 +196,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
   it("READ: the gallery polls the link's listing on its tag — an idle poll changes nothing, a change shows without a reload", async () => {
     const w = await mountPage(ShareRole.Read)
     const tick = vi.mocked(startMediaRevisionPolling).mock.calls.at(-1)![0]
-    const raw = vi.mocked(publicShareMediaApi().listShareMediaRaw)
+    const raw = vi.mocked(publicShareMediaApi('').listShareMediaRaw)
     const asked = () => raw.mock.calls.at(-1)![0]
 
     raw.mockRejectedValueOnce(httpError(304))
@@ -223,7 +223,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
   it('READ: a medium blocked while the gallery is open turns to the placeholder without a reload, and back on its lift', async () => {
     const w = await mountPage(ShareRole.Read)
     const tick = vi.mocked(startMediaRevisionPolling).mock.calls.at(-1)![0]
-    const raw = vi.mocked(publicShareMediaApi().listShareMediaRaw)
+    const raw = vi.mocked(publicShareMediaApi('').listShareMediaRaw)
     const blocked = () => w.find('[data-media-id="m-1"] .media-tile-blocked')
 
     raw.mockResolvedValueOnce(apiResponse({ media: [{ ...row('m-1', MEMORY), blockedByOperator: true }, row('m-own', MEMORY)], identities: [], more: false }, { ETag: '"t2"' }))
@@ -334,7 +334,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     expect(confirm.isOpen()).toBe(true)
     confirm.click(t('share.deleteOwnAccept'))
     await flushPromises()
-    expect(publicShareMediaApi().deleteShareMedia).toHaveBeenCalledWith({ shareId: SHARE, mediaId: 'm-own', xContributorToken: GUEST.contributorToken, xSharePassword: PW })
+    expect(publicShareMediaApi('').deleteShareMedia).toHaveBeenCalledWith({ shareId: SHARE, mediaId: 'm-own', xContributorToken: GUEST.contributorToken, xSharePassword: PW })
     await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
     expectGuestOnly(w)
     w.unmount()
@@ -362,7 +362,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     expect(confirm.isOpen(), 'asked first').toBe(true)
     confirm.click(t('share.deleteOwnAccept'))
     await flushPromises()
-    expect(publicShareMediaApi().deleteShareMedia).toHaveBeenCalledWith({ shareId: SHARE, mediaId: 'm-own', xContributorToken: GUEST.contributorToken, xSharePassword: PW })
+    expect(publicShareMediaApi('').deleteShareMedia).toHaveBeenCalledWith({ shareId: SHARE, mediaId: 'm-own', xContributorToken: GUEST.contributorToken, xSharePassword: PW })
     await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
     expectGuestOnly(w)
     w.unmount()

@@ -19,7 +19,7 @@ import { hostRights, injectNodeHost } from '../../../core/node/nodeHost'
 import { CHAPTER_KIND } from '../kinds'
 import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
 import { canReport, reportScope } from '../../../core/report/reportActions'
-import { openReport, useReportOffered } from '../../../core/report/report'
+import { openReport, reportBaseOf, useReportOffered } from '../../../core/report/report'
 import { mediumReportKeys, type MediaItem } from '../media'
 import { injectCoreNodeActions } from '../../../core/node/coreNodeActions'
 import { patchNodeMeta } from '../../../core/node/treeStore'
@@ -61,7 +61,7 @@ const personalScope = computed(() => !guest && activeSpace.kind === 'PERSONAL')
 // `cover.findStored`), so the cover shares it. While that dialog is open the lightbox leaves the keyboard to it.
 const page = injectCoreNodeActions()
 const coverEditing = computed(() => (page?.cover.editor.value ?? null) !== null)
-const reportOn = useReportOffered()
+const reportOn = useReportOffered(reportBaseOf(props.access))
 // Core's "Report" (uc.moderation.report) for one medium in the lightbox, beside the header's for the Memory itself: the
 // medium is this application's item, so its keys are Memories' to name (`mediumReportKeys`).
 const reportsMedia = computed(() => reportOn.value && canReport(props.access))

@@ -6,7 +6,7 @@
 // Two actors on one instance, serialized (the `chapterShare.e2e` / `folderShareGuest.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`); a folder holding a Memory (with a chapter
 //                and a photo of A's).
-//   anonymous  = guests with NO session — every call goes through `publicSharesApi()` or `publicShareMediaApi()`.
+//   anonymous  = guests with NO session — every call goes through `publicSharesApi('')` or `publicShareMediaApi('')`.
 //
 // What only this layer can prove: that the server files the guest's uploads on the named nodes and the member opens
 // them; that the guest's NAME — sealed under the FOLDER's key, the link's root — is read by the member on the Memory
@@ -121,8 +121,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share upload e2e (live, real cryp
     // --- the raw wire: a second guest uploads too; what the first is served names neither identity -----------------
     const other = await createGuestIdentity(head, rootKey, { name: OTHER_GUEST_NAME, fragmentKey, rootEpoch: shareRootEpoch(head.share) })
     await addSharePhoto({ ...other, shareId, scopeId: head.scopeId, sealKey: keys.get(memory.nodeId)!, nodeEpoch: epochOf(memory.nodeId), nodeId: memory.nodeId }, photo(5))
-    const resolveWire = JSON.stringify(await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json())
-    const mediaWire = JSON.stringify(await (await publicShareMediaApi().listShareMediaRaw({ shareId })).raw.json())
+    const resolveWire = JSON.stringify(await (await publicSharesApi('').resolveShareRaw({ shareId })).raw.json())
+    const mediaWire = JSON.stringify(await (await publicShareMediaApi('').listShareMediaRaw({ shareId })).raw.json())
     for (const id of [other.identityId, guest.identityId]) {
       expect(resolveWire.includes(id), 'the resolve names no guest identity').toBe(false)
       expect(mediaWire.includes(id), "the media read names no READ_WRITE guest's identity").toBe(false)

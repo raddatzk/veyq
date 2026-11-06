@@ -17,6 +17,7 @@ import { withRefresh } from '../../../app/sessionRefresh'
 import { HttpStatus, isHttpStatus } from '../../../shared/httpError'
 import type { PotGuestWriter, PotRevision, PotRevisionWrite, SharePotRevision } from '../../../api/generated/expenses'
 import { expensesApi, publicShareExpensesApi } from '../api'
+import { apiBaseOf, shareIdOf, type ShareAt } from '../../../core/sharing/shareAt'
 import { sealRevision } from './codec'
 import { isMoney, type RevisionContent } from './format'
 import { headsToName } from './heads'
@@ -110,11 +111,12 @@ export type GuestPotRead = { revisions: ServedRevision[]; etag: string | null; e
  * never conditional, and carry no tag. The rows have no writer: the guest's schema has none.
  */
 export async function readGuestPot(
-  shareId: string,
+  at: ShareAt,
   nodeId: string,
   opts: { pwToken?: string; ifNoneMatch?: string } = {},
 ): Promise<GuestPotRead | null> {
-  const api = publicShareExpensesApi()
+  const api = publicShareExpensesApi(apiBaseOf(at)) // the instance that serves the link (ADR 0121)
+  const shareId = shareIdOf(at)
   let res
   try {
     res = await api.listSharePotRevisionsRaw({ shareId, nodeId, xSharePassword: opts.pwToken, limit: POT_PAGE_LIMIT, ifNoneMatch: opts.ifNoneMatch })
@@ -146,7 +148,7 @@ export type PotWriteKey = { key: Uint8Array; epoch: number }
  *  contributor token (`createShareIdentity`). */
 export type PotTarget =
   | { kind: 'member'; scopeId: string; nodeId: string }
-  | { kind: 'guest'; scopeId: string; nodeId: string; shareId: string; contributorToken: string; pwToken?: string }
+  | { kind: 'guest'; scopeId: string; nodeId: string; shareId: string; apiBase: string; contributorToken: string; pwToken?: string }
 
 /** One record's next revision: a new record (its id minted by the caller, ADR 0072 decision 3) or the next of one held.
  *  [basedOn] is the revision the writer's change was made on — an open editor's, which the live poll may have moved past
@@ -298,7 +300,7 @@ export async function appendPotWrites(
         expensesApi().appendPotRevisions({ scopeId: target.scopeId, nodeId: target.nodeId, potAppendRequest: { nodeEpoch: key.epoch, revisions } }),
       )
     } else {
-      await publicShareExpensesApi().appendSharePotRevisions({
+      await publicShareExpensesApi(target.apiBase).appendSharePotRevisions({
         shareId: target.shareId,
         nodeId: target.nodeId,
         xSharePassword: target.pwToken,

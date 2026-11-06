@@ -56,7 +56,7 @@ async function completeGuestFile(
   ctx: GuestTreeContext, nodeId: string, nodeEpoch: number, uploadId: string, expectedBlobId: string | null,
 ): Promise<FileBlobRef> {
   try {
-    return await publicShareFilesApi().completeShareFile({
+    return await publicShareFilesApi(ctx.apiBase).completeShareFile({
       shareId: ctx.shareId,
       nodeId,
       shareFileCompleteRequest: { nodeEpoch, contributorToken: ctx.contributorToken, uploadId, expectedBlobId: expectedBlobId ?? undefined },
@@ -84,7 +84,7 @@ export function guestFileUploadJob(target: GuestFileTarget, file: File): UploadJ
         node = { ...(await createGuestFileNode(target, file.name)), expectedBlobId: null }
         created = node.nodeId
       }
-      const to: GuestUploadTarget = { shareId: ctx.shareId, contributorToken: ctx.contributorToken, pwToken: ctx.pwToken, nodeId: node.nodeId }
+      const to: GuestUploadTarget = { shareId: ctx.shareId, apiBase: ctx.apiBase, contributorToken: ctx.contributorToken, pwToken: ctx.pwToken, nodeId: node.nodeId }
       const plan = planBlob(ctx.scopeId, { ownerId: node.nodeId, role: FILE_CONTENT_ROLE }, node.nodeKey, file, fileBlobMeta(file))
       const [uploadId] = await reserveAndPump([plan], (d) => guestReserve(to, d), guestWindow(to), onProgress, signal)
       throwIfAborted(signal)

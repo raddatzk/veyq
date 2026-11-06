@@ -25,7 +25,7 @@ const ENTRY = '0e000000-0000-4000-9000-000000000001'
 const RECEIPT = '0e000000-0000-4000-a000-000000000001'
 const potKey = v1.randomBytes(32)
 const MEMBER: PotTarget = { kind: 'member', scopeId: SCOPE, nodeId: POT }
-const GUEST: PotTarget = { kind: 'guest', scopeId: SCOPE, nodeId: POT, shareId: SHARE, contributorToken: 'dG9rZW4=', pwToken: 'cHc=' }
+const GUEST: PotTarget = { kind: 'guest', scopeId: SCOPE, nodeId: POT, shareId: SHARE, apiBase: '', contributorToken: 'dG9rZW4=', pwToken: 'cHc=' }
 const NAME = 'Hotel-Rechnung.pdf'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -131,6 +131,16 @@ describe('a guest uploads a receipt', () => {
       expect(q.headers['x-share-password']).toBe('cHc=')
       expect(q.headers.authorization).toBeUndefined()
     }
+  })
+})
+
+describe('a guest of another instance\'s link (a bookmark\'s page, ADR 0121)', () => {
+  it('starts and completes the upload at that instance\'s origin', async () => {
+    const away = 'https://photos.example.org'
+    fakeServer()
+    await uploadReceipt({ ...GUEST, apiBase: away }, { key: potKey, epoch: 0 }, ENTRY, RECEIPT, fileOf(10))
+    const api = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((u) => !u.startsWith('https://store.test'))
+    expect(api).toEqual([`${away}/api/shares/${SHARE}/blob-uploads`, `${away}/api/shares/${SHARE}/nodes/${POT}/application-blobs`])
   })
 })
 

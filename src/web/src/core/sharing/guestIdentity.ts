@@ -9,7 +9,8 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
 import { i18n } from '../../i18n'
-import { resolvePublicShare, shareRootEpoch, type PublicShareHead } from './resolvePublicShare'
+import { resolvePublicShare, shareAtOf, shareRootEpoch, type PublicShareHead } from './resolvePublicShare'
+import { deviceKey, type ShareAt } from './shareAt'
 import { writeAtNodeEpoch } from '../../shared/rekeyRetry'
 import { openShareRoot } from './shareTree'
 
@@ -71,14 +72,14 @@ export type GuestIdentity = { identityId: string; contributorToken: string; disp
  * the name, the key or the person.
  */
 export async function createGuestIdentity(
-  head: Pick<PublicShareHead, 'shareId' | 'scopeId'>,
+  head: Pick<PublicShareHead, 'shareId' | 'scopeId' | 'apiBase'>,
   rootKey: Uint8Array,
   { name, fragmentKey, pwToken, rootEpoch }: { name: string; fragmentKey: string; pwToken?: string; rootEpoch: number },
 ): Promise<GuestIdentity> {
   const { shareId, scopeId } = head
   const identityId = crypto.randomUUID() // client-minted: the name is sealed bound to it (ADR 0072)
   const sealedDisplayName = b64std(v1.sealField(identityNameContext(scopeId, shareId, identityId), rootKey, v1.utf8(name)))
-  const { contributorToken } = await publicSharesApi().createShareIdentity({
+  const { contributorToken } = await publicSharesApi(head.apiBase ?? '').createShareIdentity({
     shareId,
     createShareIdentityRequest: { identityId, sealedDisplayName, nodeEpoch: rootEpoch },
     xSharePassword: pwToken, // cr-0164: the password gate fronts the write path too
@@ -100,54 +101,55 @@ export async function nameShareGuest(
   head: PublicShareHead, { name, fragmentKey, pwToken }: { name: string; fragmentKey: string; pwToken?: string },
 ): Promise<GuestIdentity> {
   const created = await writeAtNodeEpoch(async (reread) => {
-    const at = reread ? await resolvePublicShare(head.shareId, fragmentKey, pwToken) : head
+    const at = reread ? await resolvePublicShare(shareAtOf(head), fragmentKey, pwToken) : head
     return createGuestIdentity(at, openShareRoot(at).key, { name, fragmentKey, pwToken, rootEpoch: shareRootEpoch(at.share) })
   })
   const identity: GuestIdentity = { ...created, displayName: name }
-  saveGuestSession(head.shareId, identity)
+  saveGuestSession(shareAtOf(head), identity)
   return identity
 }
 
 // --- the guest's session on its device -------------------------------------------------------------------------------
 
-const sessionKey = (shareId: string) => `veyq:share-contributor:${shareId}`
+// Keyed by the share's id - and, for another instance's link, its origin (`./shareAt.ts`): this origin's key is unchanged.
+const sessionKey = (at: ShareAt) => deviceKey('veyq:share-contributor', at)
 // Bumped on every save and forget, so {@link useGuestSession} re-reads the store: whichever body or section of the page
 // named the guest, or forgot it ("Not you?"), every other one sees it at once — no copy of the session to fall stale.
 const sessionRevision = ref(0)
 
-/** The guest's saved session for `shareId` — its identity and token, plus whatever an application keeps beside them
+/** The guest's saved session for the share `at` — its identity and token, plus whatever an application keeps beside them
  *  (`S`; Memories' uploader keeps its `K_up`) — or null when there is none or the store is unreadable. One per link,
  *  whichever body named the guest; it never leaves the device (localStorage, so a reload keeps the name). */
-export function loadGuestSession<S extends GuestIdentity = GuestIdentity>(shareId: string): S | null {
+export function loadGuestSession<S extends GuestIdentity = GuestIdentity>(at: ShareAt): S | null {
   try {
-    const raw = localStorage.getItem(sessionKey(shareId))
+    const raw = localStorage.getItem(sessionKey(at))
     return raw ? (JSON.parse(raw) as S) : null
   } catch {
     return null
   }
 }
 
-/** Save the guest's session for `shareId`. Throws when the store refuses the write, as the caller's naming step reports. */
-export function saveGuestSession(shareId: string, session: GuestIdentity): void {
-  localStorage.setItem(sessionKey(shareId), JSON.stringify(session))
+/** Save the guest's session for the share `at`. Throws when the store refuses the write, as the caller's naming step reports. */
+export function saveGuestSession(at: ShareAt, session: GuestIdentity): void {
+  localStorage.setItem(sessionKey(at), JSON.stringify(session))
   sessionRevision.value++
 }
 
-/** The guest's saved session for `shareId`, reactive: it changes when any part of the page saves or forgets it
+/** The guest's saved session for the share `at`, reactive: it changes when any part of the page saves or forgets it
  *  ({@link saveGuestSession}, {@link forgetGuestSession}). Read-only — write through those two. */
-export function useGuestSession<S extends GuestIdentity = GuestIdentity>(shareId: string): ComputedRef<S | null> {
+export function useGuestSession<S extends GuestIdentity = GuestIdentity>(at: ShareAt): ComputedRef<S | null> {
   return computed(() => {
     void sessionRevision.value
-    return loadGuestSession<S>(shareId)
+    return loadGuestSession<S>(at)
   })
 }
 
-/** Forget the guest's session for `shareId` on this device (core's "Not you?", `GuestNaming.vue`): the next visitor
+/** Forget the guest's session for the share `at` on this device (core's "Not you?", `GuestNaming.vue`): the next visitor
  *  names itself afresh. The identity, and whatever it left on the server, stay as they are. A store that refuses is
  *  ignored — every reader drops the session either way. */
-export function forgetGuestSession(shareId: string): void {
+export function forgetGuestSession(at: ShareAt): void {
   try {
-    localStorage.removeItem(sessionKey(shareId))
+    localStorage.removeItem(sessionKey(at))
   } catch {
     /* unreadable store: nothing was kept there either */
   }

@@ -9,7 +9,8 @@ import { useI18n } from 'vue-i18n'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { loadGuestNotice, type GuestNotice } from './guestNotice'
 
-const props = defineProps<{ shareId: string }>()
+// `apiBase`: the instance that serves the link, for one a bookmark's page shows in place (ADR 0121); absent, this origin.
+const props = defineProps<{ shareId: string; apiBase?: string }>()
 
 const { t, locale } = useI18n()
 const notice = ref<GuestNotice | null>(null)
@@ -18,7 +19,7 @@ const day = (d: Date) => d.toLocaleDateString(locale.value, { year: 'numeric', m
 
 async function load() {
   try {
-    notice.value = await loadGuestNotice(props.shareId, true)
+    notice.value = await loadGuestNotice({ shareId: props.shareId, apiBase: props.apiBase ?? '' }, true)
   } catch {
     notice.value = null // a failed read tells the guest nothing rather than something wrong
   }

@@ -20,6 +20,7 @@ import { heldScopeEpochs, memberCreateOptions } from '../../core/node/rereadNode
 import { mintShare, NO_NOTE, type MintedShare, type ShareRootKey } from '../../core/sharing/manageShares'
 import { dropKeysForShare, mintIdentityKey, openDropPublicKey } from '../../core/sharing/dropKey'
 import { forgetGuestSession, identityNameContext, loadGuestSession, saveGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
+import type { ShareAt } from '../../core/sharing/shareAt'
 import { shareRootEpoch, shareRootScopeEpoch, type PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { GuestTreeError, type GuestTreeContext } from '../../core/sharing/guestTree'
 import type { UploadJob } from '../../core/blob/queue'
@@ -88,22 +89,23 @@ export function mintDropBoxLink(
  *  before the name was kept has none. */
 export type DropGuestSession = GuestIdentity & { identityKey: string; displayName?: string }
 
-/** The saved session of `shareId`, when it is a drop-box guest's (it carries a `K_up`). */
-export function loadDropGuest(shareId: string): DropGuestSession | null {
-  const s = loadGuestSession<DropGuestSession>(shareId)
+/** The saved session of the share `at` (a bare id: this origin's; ADR 0121), when it is a drop-box guest's (it carries a
+ *  `K_up`). */
+export function loadDropGuest(at: ShareAt): DropGuestSession | null {
+  const s = loadGuestSession<DropGuestSession>(at)
   return s?.identityKey ? s : null
 }
 
 /** Keep a drop-box guest's session on its device (localStorage, the platform's one session per link). Throws when the
  *  store refuses it. */
-export function saveDropGuest(shareId: string, session: DropGuestSession): void {
-  saveGuestSession(shareId, session)
+export function saveDropGuest(at: ShareAt, session: DropGuestSession): void {
+  saveGuestSession(at, session)
 }
 
 /** "Not you?": forget this device's session of `shareId`, so the next visitor names itself afresh under a new identity.
  *  The old identity's folder and files stay in the drop box, untouched. */
-export function forgetDropGuest(shareId: string): void {
-  forgetGuestSession(shareId)
+export function forgetDropGuest(at: ShareAt): void {
+  forgetGuestSession(at)
 }
 
 /**
@@ -124,7 +126,7 @@ export async function nameDropGuest(
   const identityId = crypto.randomUUID() // client-minted: the name and the key wrap are sealed bound to it (ADR 0072)
   const minted = mintIdentityKey(scopeId, dropBoxId, identityId, openDropPublicKey(kShare, sealedDropPublicKey))
   const sealedDisplayName = b64std(v1.sealField(identityNameContext(scopeId, shareId, identityId), minted.identityKey, v1.utf8(name)))
-  const { contributorToken } = await publicSharesApi().createShareIdentity({
+  const { contributorToken } = await publicSharesApi(head.apiBase ?? '').createShareIdentity({
     shareId,
     // `K_up` is sealed to the drop box's drop public key, which a re-key replaces: the root's epoch as read (ADR 0109 point 6)
     createShareIdentityRequest: { nodeEpoch: shareRootEpoch(head.share), identityId, sealedDisplayName, wrappedIdentityKey: minted.wrappedIdentityKey },
@@ -153,7 +155,7 @@ export async function ensureDropFolder(
   const identityKey = fromB64std(session.identityKey)
   const address = { scopeId, nodeId: crypto.randomUUID(), scopeEpoch: shareRootScopeEpoch(head.share), placementRevision: 0 }
   const folderKey = v1.randomBytes(32)
-  const res = await publicShareFilesApi().ensureShareDropFolder({
+  const res = await publicShareFilesApi(head.apiBase ?? '').ensureShareDropFolder({
     shareId,
     xSharePassword: pwToken,
     dropFolderRequest: {
@@ -191,6 +193,7 @@ export function dropGuestContext(head: PublicShareHead, session: DropGuestSessio
   return {
     ...parts,
     shareId: head.shareId,
+    apiBase: head.apiBase ?? '',
     scopeId: head.scopeId,
     pwToken,
     contributorToken: session.contributorToken,

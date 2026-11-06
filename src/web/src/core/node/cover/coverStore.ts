@@ -50,7 +50,7 @@ export interface CoverStore {
 /** Open an uploaded cover blob: the member's presign, or the link's own gated one for a guest. */
 async function openUploaded(scopeId: string, key: Uint8Array, ref: Parameters<typeof openBlob>[2], guest: GuestAccess | null): Promise<Uint8Array> {
   if (!guest) return openBlob(scopeId, key, ref)
-  return openBlobVia(scopeId, key, ref, () => shareChunkUrls(guest.shareId, ref.blobId, guest.pwToken))
+  return openBlobVia(scopeId, key, ref, () => shareChunkUrls(guest, ref.blobId, guest.pwToken))
 }
 
 /** One node's cover image from its sealed meta, or null. */

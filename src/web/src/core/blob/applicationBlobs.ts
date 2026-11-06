@@ -15,6 +15,7 @@
 // - **A moderator's case read**: every application blob the case's hold copied (`listCaseApplicationBlobs`, key-proved).
 import { readBlobMeta, makeChunkProvider, planBlob, presignAllChunks, reserveAndPump, authedReserve, authedWindow, throwIfAborted, unwrapBlobKey, type BlobChunkProvider } from './transport'
 import { guestReserve, guestWindow, shareChunkUrls } from '../sharing/guestBlob'
+import { apiBaseOf, shareIdOf, type ShareAt } from '../sharing/shareAt'
 import { streamBlob, type ByteSink } from './stream'
 import type { BlobMeta, OpenedBlobMeta } from './meta'
 import type { BlobRef, BlobSource } from './types'
@@ -117,11 +118,13 @@ export function readMemberApplicationBlobs(scopeId: string, nodeId: string, ifNo
   )
 }
 
-/** A guest's read of a node's application blobs under its link (no writer: the guest's schema has none). */
+/** A guest's read of a node's application blobs under its link `at`, of the instance that serves it (no writer: the
+ *  guest's schema has none). */
 export function readGuestApplicationBlobs(
-  shareId: string, nodeId: string, opts: { pwToken?: string; ifNoneMatch?: string } = {},
+  at: ShareAt, nodeId: string, opts: { pwToken?: string; ifNoneMatch?: string } = {},
 ): Promise<ApplicationBlobsRead | null> {
-  const api = publicShareApplicationBlobsApi()
+  const api = publicShareApplicationBlobsApi(apiBaseOf(at))
+  const shareId = shareIdOf(at)
   return readPages(
     () => api.listShareApplicationBlobsRaw({ shareId, nodeId, xSharePassword: opts.pwToken, limit: PAGE_LIMIT, ifNoneMatch: opts.ifNoneMatch }),
     (after) => api.listShareApplicationBlobs({ shareId, nodeId, xSharePassword: opts.pwToken, after, limit: PAGE_LIMIT }),
@@ -138,11 +141,11 @@ export async function readCaseApplicationBlobs(
 
 // --- the upload -------------------------------------------------------------------------------------------------------
 
-/** Where an upload goes: a member's scope path, or a guest's share path with the link's password token and the guest's
- *  contributor token (`createShareIdentity`). */
+/** Where an upload goes: a member's scope path, or a guest's share path on the instance that serves the link (`apiBase`,
+ *  `''` this origin — ADR 0121) with the link's password token and the guest's contributor token (`createShareIdentity`). */
 export type ApplicationBlobTarget =
   | { kind: 'member'; scopeId: string; nodeId: string }
-  | { kind: 'guest'; scopeId: string; nodeId: string; shareId: string; contributorToken: string; pwToken?: string }
+  | { kind: 'guest'; scopeId: string; nodeId: string; shareId: string; apiBase: string; contributorToken: string; pwToken?: string }
 
 /** The node's key and epoch an upload is wrapped and stated under. */
 export type ApplicationBlobKey = { key: Uint8Array; epoch: number }
@@ -175,10 +178,10 @@ export async function uploadApplicationBlob(
       }),
     )
   } else {
-    const to = { shareId: target.shareId, contributorToken: target.contributorToken, pwToken: target.pwToken, nodeId }
+    const to = { shareId: target.shareId, apiBase: target.apiBase, contributorToken: target.contributorToken, pwToken: target.pwToken, nodeId }
     const [uploadId] = await reserveAndPump([plan], (d) => guestReserve(to, d), guestWindow(to), opts.onProgress, opts.signal)
     throwIfAborted(opts.signal)
-    blob = await publicShareApplicationBlobsApi().completeShareApplicationBlob({
+    blob = await publicShareApplicationBlobsApi(target.apiBase).completeShareApplicationBlob({
       shareId: target.shareId,
       nodeId,
       xSharePassword: target.pwToken,
@@ -218,7 +221,7 @@ export function applicationBlobKeyOf(scopeId: string, nodeKey: Uint8Array, nodeI
 
 /** Who presigns a blob's chunks for whoever looks: a member's scope READ gate, or a guest's link. */
 export function applicationBlobPresign(access: Access, scopeId: string): (blobId: string) => Promise<string[]> {
-  if (access.mode === 'guest') return (blobId) => shareChunkUrls(access.shareId, blobId, access.pwToken)
+  if (access.mode === 'guest') return (blobId) => shareChunkUrls(access, blobId, access.pwToken)
   return (blobId) => presignAllChunks(scopeId, blobId)
 }
 

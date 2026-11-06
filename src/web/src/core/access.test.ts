@@ -74,7 +74,8 @@ describe('Access: the two shapes', () => {
     expectTypeOf<GuestAccess>().not.toHaveProperty('scopeId')
     expectTypeOf<GuestAccess>().not.toHaveProperty('readonly')
     const g = guestAccessOf('READ')
-    expect(Object.keys(g).sort()).toEqual(['fragmentKey', 'head', 'mode', 'reload', 'requestGuest', 'role', 'shareId'])
+    // `apiBase`: where the link lives (ADR 0121) - its instance's API base, '' for this origin's
+    expect(Object.keys(g).sort()).toEqual(['apiBase', 'fragmentKey', 'head', 'mode', 'reload', 'requestGuest', 'role', 'shareId'])
   })
 
   it('is told apart by `mode` alone (a discriminated union)', () => {

@@ -156,7 +156,7 @@ describe.each([ShareRole.Read, ShareRole.ReadWrite])('the viewer for a %s guest 
     expect([scopeId, nodeId, blob.blobId]).toEqual([SCOPE, FILE, BLOB.blobId])
     expect(Array.from(key)).toEqual(Array.from(fileKey))
     await presign!(BLOB.blobId)
-    expect(shareChunkUrls).toHaveBeenCalledWith(SHARE, BLOB.blobId, PW)
+    expect(shareChunkUrls).toHaveBeenCalledWith(expect.objectContaining({ shareId: SHARE, apiBase: '' }), BLOB.blobId, PW) // the link where it lives (ADR 0121)
     const img = w.find('.file-viewer img')
     expect(img.exists()).toBe(true)
     expect(img.attributes('alt')).toBe('Report.pdf')
@@ -259,7 +259,7 @@ describe('the guest of a single-file link sees the member\'s file view', () => {
     expect([scopeId, nodeId, blob.blobId, name]).toEqual([SCOPE, FILE, BLOB.blobId, 'Report.pdf'])
     expect(Array.from(key)).toEqual(Array.from(fileKey))
     await presign!(BLOB.blobId)
-    expect(shareChunkUrls).toHaveBeenCalledWith(SHARE, BLOB.blobId, PW)
+    expect(shareChunkUrls).toHaveBeenCalledWith(expect.objectContaining({ shareId: SHARE, apiBase: '' }), BLOB.blobId, PW) // the link where it lives (ADR 0121)
     expectNoMemberWorld()
   })
 

@@ -7,7 +7,7 @@
 // Two actors on one instance, serialized (the `folderShare.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`); a folder holding two subfolders, a Memory
 //                (with a photo and a chapter) in the first one.
-//   anonymous  = a guest with NO session: every call goes through `publicSharesApi()`, which carries no bearer.
+//   anonymous  = a guest with NO session: every call goes through `publicSharesApi('')`, which carries no bearer.
 //
 // What only this layer can prove: that the server stores what a guest seals under the keys of the chain — a folder
 // created under the root and one nested in it, named under their PARENT's key at the parent's scope epoch — so the member's
@@ -109,7 +109,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
       .toMatchObject({ epoch: 0, scopeEpoch: folderRow.scopeEpoch })
     expect(nodeContentKey(scopeId, epochs, afterCreate, nestedId), "the nested folder's key opens through the chain").not.toBeNull()
     // The raw resolve carries the new rows as ciphertext: no plaintext name of what the guest created.
-    const wireAfterCreate = (await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json()) as RawResolve
+    const wireAfterCreate = (await (await publicSharesApi('').resolveShareRaw({ shareId })).raw.json()) as RawResolve
     expect(wireAfterCreate.nodes.map((n) => n.id)).toEqual(expect.arrayContaining([createdId, nestedId]))
     expect(JSON.stringify(wireAfterCreate).includes(CREATED_NAME) || JSON.stringify(wireAfterCreate).includes(NESTED_NAME), 'no plaintext name on the wire').toBe(false)
 
@@ -155,7 +155,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     const rootKey = ctx.keys.get(folderId)!
     const rootAt = { scopeId, nodeId: folderId, scopeEpoch: folderRow.scopeEpoch, placementRevision: 1 }
     const rootRenamed = await failure(
-      publicSharesApi().updateShareNodeRaw({
+      publicSharesApi('').updateShareNodeRaw({
         shareId, nodeId: folderId, xContributorToken: identity.contributorToken,
         updateShareNodeRequest: {
           parentId: leftId, encryptedName: sealName(rootKey, rootAt, 'Umbenannt'), slugToken: slugTokenFor(rootKey, leftId, FOLDER_KIND, 'Umbenannt'),
@@ -169,7 +169,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     const leftKeyGuest = ctx.keys.get(leftId)!
     const staleAt = { scopeId, nodeId: memory.nodeId, scopeEpoch: ctx.nodes.get(memory.nodeId)!.scopeEpoch, placementRevision: 1 }
     const stale = await failure(
-      publicSharesApi().updateShareNodeRaw({
+      publicSharesApi('').updateShareNodeRaw({
         shareId, nodeId: memory.nodeId, xContributorToken: identity.contributorToken,
         updateShareNodeRequest: {
           parentId: leftId, encryptedName: sealName(leftKeyGuest, staleAt, MEMORY_NAME), slugToken: slugTokenFor(leftKeyGuest, leftId, MEMORY_KIND, MEMORY_NAME),

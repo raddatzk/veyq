@@ -22,7 +22,7 @@ import { favoriteHeaderActions, favoriteRowActions } from '../favorites/favorite
 import { copyHeaderActions, copyRowActions } from '../export/copyActions'
 import { downloadHeaderActions, downloadRowActions } from '../export/downloadActions'
 import { reportHeaderActions, reportNodes, reportRowActions } from '../report/reportActions'
-import { useReportOffered } from '../report/report'
+import { reportBaseOf, useReportOffered } from '../report/report'
 import { useToast } from '../../shared/state/useToast'
 import { targetOf } from '../access'
 import { SHARE_BOOKMARK_KIND } from './kind'
@@ -66,7 +66,7 @@ export function useCoreNodeActions(
   const { t } = useI18n()
   const toast = useToast()
   const cover = useNodeCover(access, tree, nodes)
-  const reportOn = useReportOffered()
+  const reportOn = useReportOffered(reportBaseOf(access()))
   const report = (node: TreeNode) => () => reportNodes(access(), tree(), [node], null)
   const bookmarkDoors = useBookmarkDoors()
   /** A bookmark's Report is its share's (ADR 0120 decision 6): handed to the share page where the share lives, as that

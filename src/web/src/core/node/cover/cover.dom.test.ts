@@ -420,7 +420,7 @@ describe('a share guest sees the cover through the link\'s own reads, and nothin
     const w = mountLevel(TRIPS, { access })
     await flushPromises()
     await vi.waitFor(() => expect(rowOf(w, 'Sub').find('.veyq-level-item-visual img').exists()).toBe(true))
-    expect(shareChunkUrls).toHaveBeenCalledWith(access.shareId, 'b-5', 'pw-1')
+    expect(shareChunkUrls).toHaveBeenCalledWith(expect.objectContaining({ shareId: access.shareId, apiBase: '' }), 'b-5', 'pw-1') // the link where it lives (ADR 0121)
     expect(openBlob).not.toHaveBeenCalled()
     expect(authenticatedCalls).toEqual([])
   })
