@@ -46,13 +46,13 @@ class TenantDeletionMail(private val mailer: InstanceNoticeMailer) {
         const val SUBJECT = "veyq: a space you belong to is being deleted / ein Bereich, dem du angehörst, wird gelöscht"
 
         fun body(name: String, dueAt: Instant): String = """
-            |The Server Owner of this veyq instance deleted the space "$name". It is offline from now on, and everything in
+            |The Server Owner of this veyq server deleted the space "$name". It is offline from now on, and everything in
             |it is erased on ${DATE.format(dueAt)}, unless the Server Owner stops the deletion before then. Your account
             |stays: you keep it, and your other spaces, until you erase it yourself.
             |
             |—
             |
-            |Die Person, die diese veyq-Instanz betreibt, hat den Bereich „$name“ gelöscht. Er ist ab jetzt offline, und
+            |Die Person, die diesen veyq-Server betreibt, hat den Bereich „$name“ gelöscht. Er ist ab jetzt offline, und
             |alles darin wird am ${DATE.format(dueAt)} gelöscht, wenn die Löschung nicht vorher gestoppt wird. Dein Konto
             |bleibt: Du behältst es und deine anderen Bereiche, bis du es selbst löschst.
         """.trimMargin()

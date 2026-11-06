@@ -156,10 +156,10 @@ object InstanceMailCopy {
     private val EXPIRY: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZone(ZoneOffset.UTC)
     private val DAY: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
-    fun codeSubject() = "Confirm your veyq instance mail / Instanz-E-Mail von veyq bestätigen"
+    fun codeSubject() = "Confirm your veyq server's mail / E-Mail deines veyq-Servers bestätigen"
 
     fun codeBody(code: String, expiresAt: Instant) = """
-        Your veyq instance can now send you its notices about new releases.
+        Your veyq server can now send you its notices about new releases.
 
         To confirm that this address reaches you, type this code into the admin console, Server → Mail:
 
@@ -169,7 +169,7 @@ object InstanceMailCopy {
 
         —
 
-        Deine veyq-Instanz kann dir jetzt ihre Hinweise auf neue Releases schicken.
+        Dein veyq-Server kann dir jetzt seine Hinweise auf neue Releases schicken.
 
         Um zu bestätigen, dass diese Adresse dich erreicht, gib diesen Code in der Admin-Konsole unter Server → E-Mail ein:
 
@@ -181,7 +181,7 @@ object InstanceMailCopy {
     fun moderatorCodeSubject() = "Confirm your address for moderating veyq / Deine Adresse für die Moderation bei veyq bestätigen"
 
     fun moderatorCodeBody(code: String, expiresAt: Instant) = """
-        You accepted to moderate this veyq instance. Its notices about new cases reach you only at a confirmed address.
+        You accepted to moderate this veyq server. Its notices about new cases reach you only at a confirmed address.
 
         To confirm that this address reaches you, type this code into the moderation surface:
 
@@ -191,7 +191,7 @@ object InstanceMailCopy {
 
         —
 
-        Du hast zugestimmt, diese veyq-Instanz zu moderieren. Ihre Hinweise auf neue Fälle erreichen dich nur an einer bestätigten Adresse.
+        Du hast zugestimmt, diesen veyq-Server zu moderieren. Seine Hinweise auf neue Fälle erreichen dich nur an einer bestätigten Adresse.
 
         Um zu bestätigen, dass diese Adresse dich erreicht, gib diesen Code in der Moderation ein:
 
@@ -200,10 +200,10 @@ object InstanceMailCopy {
         Er wird nach ${EXPIRY.format(expiresAt)} ungültig. In der Moderation kannst du einen neuen anfordern.
     """.trimIndent()
 
-    fun operatorCodeSubject() = "Confirm the notification address of a veyq instance / Benachrichtigungsadresse einer veyq-Instanz bestätigen"
+    fun operatorCodeSubject() = "Confirm the notification address of a veyq server / Benachrichtigungsadresse eines veyq-Servers bestätigen"
 
     fun operatorCodeBody(code: String, expiresAt: Instant) = """
-        This address was entered as the notification address of a veyq instance's contact. Notices about new
+        This address was entered as the notification address of a veyq server's contact. Notices about new
         moderation cases reach it only once it is confirmed.
 
         To confirm it, type this code into the admin console, Server → Operator:
@@ -214,7 +214,7 @@ object InstanceMailCopy {
 
         —
 
-        Diese Adresse wurde als Benachrichtigungsadresse der Kontaktstelle einer veyq-Instanz eingetragen. Hinweise auf
+        Diese Adresse wurde als Benachrichtigungsadresse der Kontaktstelle eines veyq-Servers eingetragen. Hinweise auf
         neue Moderationsfälle erreichen sie erst, wenn sie bestätigt ist.
 
         Um sie zu bestätigen, gib diesen Code in der Admin-Konsole unter Server → Betreiber ein:
@@ -238,18 +238,18 @@ object InstanceMailCopy {
                     "Ein neueres Release von veyq ist veröffentlicht: ${n.release}."
             NoticeKind.PLANNED_MAJOR ->
                 ("veyq ${n.release.major} is out, the planned new major (first release ${n.release}). The major your " +
-                    "instance runs stays in the apps' window until ${DAY.format(n.date)}; upgrade before then.") to
+                    "server runs stays in the apps' window until ${DAY.format(n.date)}; upgrade before then.") to
                     ("veyq ${n.release.major} ist erschienen, die geplante neue Hauptversion (erstes Release ${n.release}). " +
-                        "Die Hauptversion deiner Instanz bleibt bis zum ${DAY.format(n.date)} im Fenster der Apps; aktualisiere vorher.")
+                        "Die Hauptversion deines Servers bleibt bis zum ${DAY.format(n.date)} im Fenster der Apps; aktualisiere vorher.")
             NoticeKind.UNSCHEDULED_MAJOR ->
                 ("URGENT: veyq ${n.release.major} (release ${n.release}) is an unscheduled major — a security fix that " +
                     "could not be made without a removal. Upgrade now.") to
                     ("DRINGEND: veyq ${n.release.major} (Release ${n.release}) ist eine ungeplante Hauptversion — eine " +
                         "Sicherheitskorrektur, die nur mit einer Entfernung möglich war. Aktualisiere jetzt.")
             NoticeKind.WINDOW_REMINDER ->
-                ("The major your instance runs leaves the apps' window on ${DAY.format(n.date)}, in ${n.daysAhead} days. " +
+                ("The major your server runs leaves the apps' window on ${DAY.format(n.date)}, in ${n.daysAhead} days. " +
                     "Upgrade to veyq ${n.release.major} or later before then.") to
-                    ("Die Hauptversion deiner Instanz verlässt am ${DAY.format(n.date)} das Fenster der Apps, in ${n.daysAhead} Tagen. " +
+                    ("Die Hauptversion deines Servers verlässt am ${DAY.format(n.date)} das Fenster der Apps, in ${n.daysAhead} Tagen. " +
                         "Aktualisiere vorher auf veyq ${n.release.major} oder neuer.")
         }
         val dated = n.date != null

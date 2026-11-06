@@ -211,7 +211,7 @@ class ApplicationErasureSliceTest {
         QuarkusTransaction.requiringNew().run { switches.set(MEMORIES, true, t0) }
         purge.run(t0.plusSeconds(1))
         val notice = recorder.notices().first { it.to == a.ownerEmail }
-        assertTrue(notice.body.startsWith("The operator of this veyq instance switched Memories off"), notice.body)
+        assertTrue(notice.body.startsWith("The operator of this veyq server switched Memories off"), notice.body)
         assertTrue(notice.body.contains("Only the operator can switch it back on.") && notice.body.contains("Erinnerungen"))
     }
 
