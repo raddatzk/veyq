@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veyq.dev/contracts/platform/share-bookmark-meta.v1.schema.json",
+  "title": "Share bookmark, format v1",
+  "description": "The `bookmark` sub-object of a SHARE_BOOKMARK node's sealed `node-meta` (ADR 0120 decision 3). The node-meta envelope (`{ v, ... }`, the `node-meta` field seal under the bookmark's K_node, bound to (scope, node), contracts/crypto/vectors/v1.json) is core's and carries this object under the key `bookmark`; nothing of it is in the clear. A member writes it once, when the bookmark is created; no guest ever reads or writes it (a link of an enclosing folder does not serve the node). `pad` makes the sealed envelope's length a multiple of 512 characters before sealing, so its size says nothing of the link's host or of a password. Readers ignore unknown fields. A bookmark whose meta carries no readable `bookmark` object, or a `link` that is no share link, opens nothing: the client says so and offers only its removal.",
+  "type": "object",
+  "required": ["v", "link"],
+  "properties": {
+    "v": { "const": 1, "description": "The format version of this sub-object (ADR 0079 decision 7)." },
+    "link": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https?://[^/?#@]+/s/[A-Za-z0-9_-]{43}#k=[A-Za-z0-9_-]{43}$",
+      "description": "The share link, normalized when it was pasted: its origin, `/s/<shareId>` and the fragment `#k=<base64url K_share>` and nothing else (no query, no other fragment parameter). `http` only for a loopback or `*.localhost` host."
+    },
+    "password": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "The share's password as the member received it, where they gave one (ADR 0037: an access gate, never a key). Absent: none given."
+    },
+    "pad": { "type": "string", "pattern": "^ *$", "description": "Spaces that round the sealed envelope up (see the description)." }
+  }
+}

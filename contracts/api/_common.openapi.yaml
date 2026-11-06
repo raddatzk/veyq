@@ -801,9 +801,10 @@ components:
       type: string
       pattern: '^[A-Z][A-Z0-9_]{0,15}$'
       description: >
-        A node's kind: an open token, upper-case, at most 16 characters. Core names FOLDER only: it organizes and,
-        like every node, carries a content key of its own (ADR 0080). Every other kind belongs to an application, which brings its rules — where it lives
-        in the tree (`NodeKindRules`) and what its sealed payload means; today MEMORY and CHAPTER, both Memories'. A
+        A node's kind: an open token, upper-case, at most 16 characters. Core names two: FOLDER, which organizes and,
+        like every node, carries a content key of its own (ADR 0080), and SHARE_BOOKMARK, a public link a member
+        received, sealed in its meta (ADR 0120). Every other kind belongs to an application, which brings its rules — where it lives
+        in the tree (`NodeKindRules`) and what its sealed payload means (contracts/platform/kinds/). A
         kind no application claims is refused where a rule is asked (`illegal_structure` on create, `illegal_scope`
         on a share), never by decoding: a stored node of such a kind is served as it is. Every node carries a content
         key of its own (`wrappedContentKey`, ADR 0080).

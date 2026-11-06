@@ -103,7 +103,9 @@ paths:
         "422":
           description: >
             An item named twice — the same kind and id (`report_item_repeated`, nothing stored): a rule across the items
-            no schema states.
+            no schema states. Or a `NODE` item that is a `SHARE_BOOKMARK` (`report_target_kind`, ADR 0120 decision 6): its
+            key opens a link to a share another operator may host, so a bookmark is reported by its `NAME` here and its
+            share where the share lives.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: report_item_repeated } }
         "429":

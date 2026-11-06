@@ -1,7 +1,7 @@
 {
   "$schema": "./kinds.schema.json",
   "owner": "core",
-  "description": "Core's own kind (ADR 0079 decision 3): a FOLDER organizes only. It lives at the root or in another folder, carries a cover, roots a READ or READ_WRITE link (never WRITE_ONLY: a drop box is a node of its own, ADR 0080 decision 11), and is the one guest container (ADR 0080 decision 6).",
+  "description": "Core's own kinds (ADR 0079 decision 3). A FOLDER organizes only: it lives at the root or in another folder, carries a cover, roots a READ or READ_WRITE link (never WRITE_ONLY: a drop box is a node of its own, ADR 0080 decision 11), and is the one guest container (ADR 0080 decision 6). A SHARE_BOOKMARK keeps a public link a member received, sealed in its meta (ADR 0120, share-bookmark-meta.v1.schema.json): at the root or in a folder, no child, no cover, the root of no link, created by no guest.",
   "kinds": {
     "FOLDER": {
       "placement": { "root": true, "parents": ["FOLDER"] },
@@ -9,6 +9,13 @@
       "createNeeds": null,
       "shareRoles": ["READ", "READ_WRITE"],
       "guest": { "creatableInFolder": true, "container": true, "writeOnlyCreates": [] }
+    },
+    "SHARE_BOOKMARK": {
+      "placement": { "root": true, "parents": ["FOLDER"] },
+      "cover": false,
+      "createNeeds": null,
+      "shareRoles": [],
+      "guest": { "creatableInFolder": false, "container": false, "writeOnlyCreates": [] }
     }
   }
 }
