@@ -7,6 +7,16 @@ acceptanceCriteria:
   # P2 (backend)
   - id: share-api-answers-any-origin
     text: While core.public-shares.embeddable is effective, the public share API under /api/shares/{shareId}, /api/setup and /api/moderation/key answer a preflight 204 and carry Access-Control-Allow-Origin * and CORP cross-origin, never Access-Control-Allow-Credentials; switched off, and on every other path, they stay same-origin.
+    coverage:
+      backend:
+        integration:
+          - ShareCrossOriginSliceTest.everyPathClassAnswersAnyOriginWhileTheSwitchIsOn
+          - ShareCrossOriginSliceTest.theServerOwnersSwitchMakesEveryPathClassSameOriginAgain
+          - ShareCrossOriginSliceTest.theTenantsSwitchReachesItsServedLinksAndNothingElse
+          - ShareCrossOriginSliceTest.aLinkTheGateDoesNotServeGetsExactlyTheUnknownIdsAnswer
+          - ShareCrossOriginSliceTest.aCuratorsOperationOnALinkAndAMembersPathStaySameOrigin
+          - ShareCrossOriginSliceTest.anOptionsThatIsNoPreflightIsStillAnUndeclaredMethod
+          - ApiMethodIndexContractTest.theGuestShareOperationsOfferedCrossOriginAreTheContractsUnauthenticatedOnes
   # P3 (backend; the dev policy in web)
   - id: csp-widened-only-while-on
     text: The app shell's connect-src gains the https scheme exactly while core.share-embedding is effective for the tenant; switched off by the operator or the tenant, the policy is as before.
@@ -20,5 +30,4 @@ acceptanceCriteria:
   - id: gates-writes-report
     text: The password, terms, note and naming gates run inline in the share page's order; a READ_WRITE write and a WRITE_ONLY drop reach the share's instance; a report seals to its moderation key.
 gaps:
-  backend: not built yet (CR phases P2-P3)
-  web: not built yet (CR phases P3-P5)
+  web: "not built yet (CR phases P4-P5); the dev policy's https: and http://*.localhost:* are held by src/web/src/shared/security/csp.test.ts, cited once this file leaves planned"

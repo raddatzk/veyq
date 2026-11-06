@@ -21,9 +21,10 @@ import org.jboss.resteasy.reactive.server.spi.ResteasyReactiveContainerRequestCo
  * `404` where a literal path has a templated sibling that declares the method (`PUT /api/scopes/invitations` went to
  * `/api/scopes/{scopeId}` and failed its UUID), and `OPTIONS` with `200` and every method of the resource CLASS.
  *
- * **`OPTIONS` is not answered.** The API is same-origin and uses no CORS, so no preflight ever needs one, and no
- * operation declares it: it is one more undeclared method, refused with the same `Allow` — which is all an `OPTIONS`
- * answer would have said. The app shell does the same: Vert.x refuses a method its `GET`/`HEAD` routes do not take
+ * **`OPTIONS` is not answered here.** No operation declares it: it is one more undeclared method, refused with the same
+ * `Allow` — which is all an `OPTIONS` answer would have said. The one exception is a CORS preflight on the guest share
+ * API while `core.public-shares.embeddable` is on (ADR 0121 decision 3): `ShareCrossOrigin`, a pre-matching filter
+ * ahead of this one, answers it `204` and it never arrives here; switched off, or anywhere else, it does, and is `405`. The app shell does the same: Vert.x refuses a method its `GET`/`HEAD` routes do not take
  * with `405` and an `Allow`. `HEAD` stays answered wherever `GET` is declared (JAX-RS answers it from the `GET`, RFC 9110
  * § 9.3.2) and is not listed, since `Allow` lists the contract's methods; where `GET` is not declared it is refused.
  *

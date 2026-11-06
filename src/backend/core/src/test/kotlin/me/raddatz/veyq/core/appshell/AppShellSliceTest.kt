@@ -108,7 +108,9 @@ class AppShellSliceTest {
     fun thePlainHeadersGoOnTheShellAndOnTheApi() {
         val sw = given().`when`().get("/sw.js")
         val asset = given().`when`().get("/assets/app-fixture.js")
-        for (response in listOf(html("/recover"), sw, asset, given().`when`().get("/api/setup"), html("/api/no-such-endpoint"))) {
+        // `/api/scopes`, not `/api/setup`: the latter answers any origin (CORP `cross-origin`) while
+        // `core.public-shares.embeddable` is on, ADR 0121 — `ShareCrossOriginSliceTest`.
+        for (response in listOf(html("/recover"), sw, asset, given().`when`().get("/api/scopes"), html("/api/no-such-endpoint"))) {
             assertEquals("nosniff", response.header("X-Content-Type-Options"))
             assertEquals("strict-origin-when-cross-origin", response.header("Referrer-Policy"))
             assertEquals("same-origin", response.header("Cross-Origin-Opener-Policy"))

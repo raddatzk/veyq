@@ -20,7 +20,8 @@ The ADR holds every decision; this work order names the sites, the phases and wh
 
 ## Owner decisions this CR rests on (2026-11-06, in the bookmark's session)
 
-- **CSP:** `connect-src https:` while `core.share-embedding` is effective (chosen over an operator-kept partner list).
+- **CSP:** `connect-src https:` while `core.share-embedding` is effective (chosen over an operator-kept partner list);
+  `core.share-embedding` is on by default (owner 2026-11-06).
 - **Scope:** view **and** write in the first cut (a `READ_WRITE` link's create, upload, move; a `WRITE_ONLY` drop).
 - **Not merged for V1.** Each phase lands on this branch; the orchestrating session decides when.
 
@@ -88,3 +89,18 @@ one seam) and red; the P6 pass recorded; nothing merged.
   `uc.sharing.keep-a-received-link` (what it widens is for the kept link). **P5, in the commit that drops `status:
   planned`, adds `uc.sharing.browse-a-received-share-in-place` to both entries' `serves`.** The web pins neither id yet
   (`features/platform/capabilities.ts` pins ids it has UI for); P4 adds them with their first reader.
+- **P2 - the filter.** `ShareCrossOrigin` (sharing slice), a pre-matching `@ServerRequestFilter` at `Priorities.USER -
+  100`, ahead of `UndeclaredMethodFilter` and `TenantSuspensionFilter`; it answers a preflight (`OPTIONS` with
+  `Access-Control-Request-Method`) `204` and marks every other granted request on the routing context (`CrossOrigin`,
+  http kernel), and the app shell's headers-end handler writes `Access-Control-Allow-Origin: *`, `Expose-Headers: ETag`
+  and CORP `cross-origin` from the mark, so a refusal from any later JAX-RS stage carries them. Only the public methods
+  (`@PermitAll`) of a path are offered: the curator's operations under `/api/shares/{shareId}` stay same-origin (ADR 0121
+  decision 3 now says so). `ApiMethodIndexContractTest` holds those methods to the contract's operations without
+  `bearerAuth` and every header they read to the preflight's list.
+- **P2 - whose switch (no existence oracle).** The link's tenant only for a link the guest gate serves
+  (`ShareGuestGate.activeShare`); any other id - unknown, revoked, expired, blocked, role switched off - reads the instance
+  level, as an unknown id does. Not the `Host`: a link is reachable from another tenant's domain.
+- **P2 - `Access-Control-Max-Age: 600`.** The off switch acts on the actual answer (no `Allow-Origin`), so the cache only
+  bounds how long a method stays offered.
+- **P2 - residuals named in ADR 0121:** a Vert.x-level answer before JAX-RS (the body-limit `413`) carries no CORS header;
+  a preflight is not rate-limited and costs the gate's reads.

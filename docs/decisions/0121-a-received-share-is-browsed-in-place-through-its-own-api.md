@@ -36,7 +36,7 @@ proxy through this instance would make it learn what each member reads.
    only, so no node id of another instance enters this space's addresses.
 2. **This client may connect to any `https` origin while embedding is on** (owner, 2026-11-06). The app shell's
    `connect-src` gains `https:` for a tenant whose `core.share-embedding` is effective (ADR 0088: switched by the
-   operator `*` and the tenant owner `+`, on by default like every entry); off, the policy is as before and a bookmark
+   operator `*` and the tenant owner `+`; on by default, owner 2026-11-06); off, the policy is as before and a bookmark
    opens as in ADR 0120. In development the Vite policy also admits `http://*.localhost:*`. `img-src` and `media-src`
    are unchanged: a share's media are decrypted into `blob:` URLs as everywhere. **What it costs:** the CSP no longer
    stops an injected script from sending what it reads to a host of its choice; `script-src 'self'`, Trusted Types
@@ -52,7 +52,20 @@ proxy through this instance would make it learn what each member reads.
    endpoints take no cookie and no bearer, the whole link is their capability
    ([ADR 0076](0076-a-guest-write-proves-it-holds-the-links-key.md)), and any HTTP client already reaches them; CORS only
    lets a browser do what `curl` does. The two pre-auth reads a foreign client needs, `/api/setup` and
-   `/api/moderation/key`, answer the same way at instance level. Everything else stays same-origin. The bundled store
+   `/api/moderation/key`, answer the same way at instance level. Everything else stays same-origin. As built
+   (`ShareCrossOrigin`, a pre-matching filter ahead of `UndeclaredMethodFilter`; the app shell writes the headers):
+   - **Only a guest's operations.** On those paths only the methods whose operation takes no bearer (`@PermitAll`, held
+     to the contract's operations without `bearerAuth` by `ApiMethodIndexContractTest`) are offered; a curator's
+     operation on a link (revoke, reactivate, reissue, its sealed name, `PATCH`/`DELETE`) stays same-origin.
+   - **No existence oracle.** The switch is read for the tenant of a link the guest gate serves; for any other id —
+     unknown, revoked, expired, blocked, its role switched off — at the instance level, which is what an unknown id
+     gets. Only a served link, whose existence its own answer already shows, can differ by its tenant's switch.
+   - **`Access-Control-Max-Age: 600`.** A switch turned off acts on the actual answer, which then carries no
+     `Access-Control-Allow-Origin`, cached preflight or not; the age bounds only how long a method stays offered.
+   - **Not covered:** an answer Vert.x writes before JAX-RS (a body over the request limit) carries no CORS header, and
+     a preflight is not rate-limited (the limiters are post-matching); it costs the guest gate's reads.
+
+   The bundled store
    already answers any origin ([ADR 0013](0013-blob-storage-presigned-direct-to-store.md) § 4); an operator's own store
    must too, which the Run docs say.
 4. **Embedding is decided by what the share's instance says of itself** — the first use of capability discovery across
@@ -90,3 +103,9 @@ proxy through this instance would make it learn what each member reads.
   `connect-src` computed from each member's bookmarks (the server would learn the origins); an operator-kept partner
   list (it keeps the backstop; the owner chose against it); `Access-Control-Allow-Credentials` (no endpoint needs it, and
   it would invite cookie-bearing calls).
+
+## Related
+
+- On the docs site: [Storage and email](../../site/src/content/docs/run/storage-and-email.md) (an own store's CORS rule),
+  [Hardening](../../site/src/content/docs/run/hardening.md) (the CSP's widening and the CORP exception) and
+  [Known limitations](../../site/src/content/docs/security/known-limitations.md) (what the widening gives up).

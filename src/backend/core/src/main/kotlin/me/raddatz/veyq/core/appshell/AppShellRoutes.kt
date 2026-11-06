@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.appshell
 
 import me.raddatz.veyq.core.blobstore.BlobStore
 import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.http.CrossOrigin
 import io.quarkus.vertx.http.runtime.RouteConstants
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.http.HttpHeaders
@@ -113,9 +114,16 @@ class AppShellRoutes(
         // inert on the API's JSON, and an API path opened as a page is a document like any other (cc.security.csp.md).
         // COOP: a page opened from a mail or another site keeps no handle on the opener, nor it on us; nothing here opens
         // a cross-origin popup that must talk back (no OAuth, no payment window). CORP: no other origin embeds or reads
-        // a response of ours no-cors. Not COEP: it would refuse the cross-origin map tiles (ADR 0018).
+        // a response of ours no-cors — except the answers a cross-origin grant marked (the guest share API while
+        // `core.public-shares.embeddable` is on, ADR 0121 decision 3), which any origin may read, with CORS beside it.
+        // Not COEP: it would refuse the cross-origin map tiles (ADR 0018).
         headers.set(COOP_HEADER, "same-origin")
-        headers.set(CORP_HEADER, "same-origin")
+        if (CrossOrigin.isGranted(ctx)) {
+            CrossOrigin.writeTo(headers)
+            headers.set(CORP_HEADER, "cross-origin")
+        } else {
+            headers.set(CORP_HEADER, "same-origin")
+        }
         headers.set(PERMISSIONS_POLICY_HEADER, PERMISSIONS_POLICY)
 
         val shell = shell as? AppShell.Present ?: return
