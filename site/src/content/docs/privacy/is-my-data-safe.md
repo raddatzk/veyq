@@ -52,17 +52,17 @@ allowed in — the server sees a few **low-sensitivity, operational** facts:
 It's like seeing **labelled boxes on a shelf and who holds a key** — never the contents. Those few
 facts are what let the server be useful without ever decrypting.
 
-**What *your* instance keeps, and who runs it.** Every veyq instance is run by someone — a family member, a club, a
+**What *your* server keeps, and who runs it.** Every veyq server is run by someone — a family member, a club, a
 company — and each one has its own **privacy notice**: **Privacy**, at the bottom of every page, before you sign in too.
-It names who is responsible, what that instance keeps about your account, your sign-in and a report you make, for how
+It names who is responsible, what that server keeps about your account, your sign-in and a report you make, for how
 long, who else receives anything (the company hosting it, a mail service), and what you can ask for. veyq writes its
-text; the instance fills in its own details, so it says what *that* instance does. The invitation page, the report
+text; the server fills in its own details, so it says what *that* server does. The invitation page, the report
 form and a link you add something through point you to the part that concerns you.
 
 ## Two requests that leave your device by themselves
 
 Two things veyq does without asking you first, because what they send says nothing about your content. Your
-instance's privacy notice names both, and whoever runs your server can switch them off.
+server's privacy notice names both, and whoever runs it can switch them off.
 
 ### Checking a new password
 
@@ -206,7 +206,7 @@ from a hostile one, and we would rather say so than claim more:
 [Known limitations](/security/known-limitations/#the-operator-served-web-client-is-passive-operator-only).
 
 > **Self-hosting note:** if *you* run your own veyq server, *you* are the operator — so the "can the
-> operator be trusted" question doesn't apply to your own instance.
+> operator be trusted" question doesn't apply to your own server.
 
 ## For the technically curious
 

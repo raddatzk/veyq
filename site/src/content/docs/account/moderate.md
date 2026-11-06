@@ -1,5 +1,5 @@
 ---
-title: "Moderate an instance"
+title: "Moderate a server"
 sources:
   - docs/features/moderation/use-cases/uc.moderation.serve-as-moderator.md
   - docs/features/moderation/enablers/en.moderation.log.md
