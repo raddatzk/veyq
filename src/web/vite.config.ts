@@ -326,6 +326,11 @@ export default defineConfig(({ command }) => {
       port,
       // Allow browsing the dev server under `*.localhost` — one subdomain per local tenant. Add other suffixes here.
       allowedHosts: ['.localhost'],
+      // No CORS of Vite's own: its default answers a `*.localhost` origin's preflight itself and echoes the origin on a
+      // proxied answer, which made a dev embed of another tenant's share work where the backend refuses it (ADR 0121
+      // decision 3, `ShareCrossOrigin`: a switched-off `core.public-shares.embeddable` showed nothing in dev). The backend
+      // answers cross-origin itself, exactly where it should.
+      cors: false,
       proxy: {
         // The backend picks the tenant from the request Host. `changeOrigin: false` forwards the REAL browser Host,
         // so browsing `workspace-a.localhost` resolves tenant a, `workspace-b.localhost` tenant b. The port is
