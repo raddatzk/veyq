@@ -58,10 +58,11 @@ release's manifest, so `check` verifies too.
 **Nothing unverified is pulled or started** (ADR 0057). First the manifest: the publish signs it with `cosign
 sign-blob` into `manifest.json.bundle`, an asset beside it, and `fetch_manifest` — the one entry that reads a manifest
 from a source — runs the host's `cosign verify-blob` on the manifest's exact bytes against that bundle and the one
-identity that publishes veyq (GitHub's OIDC issuer and `ci.yml` of `raddatzk/veyq` on `main` or a `release/<major>.x`
-branch, the identity the Run area's *Verify a release* page documents, and `scripts/validate_release_identity.py`
+identity that releases veyq (GitHub's OIDC issuer and `release.yml` of `raddatzk/veyq` on `main` or a
+`release/<major>.x` branch — the promotion's workflow, never `ci.yml`, whose signature only says "snapshot" (ADR 0091
+decision 5) — the identity the Run area's *Verify a release* page documents, and `scripts/validate_release_identity.py`
 assertion 7 holds both to what signs) BEFORE a single field of it is read — so no sha256 and no digest in it is
-trusted unless veyq's publish signed it, whether it came from GitHub, a mirror or a directory. A missing bundle is
+trusted unless veyq's release signed it, whether it came from GitHub, a mirror or a directory. A missing bundle is
 refused, and so is a cosign older than `COSIGN_MIN_VERSION` (3.1.3: every cosign up to 3.1.2 accepts a forged
 legacy-format bundle without checking its identity, GHSA-fx35-mq7g-6g98). Then the images: the manifest names both by
 `tag@digest`, and each is checked with `cosign verify` against the same identity, before a single image is pulled.
@@ -200,10 +201,13 @@ DEFAULT_HOME = "/opt/veyq"
 GITHUB_API = f"https://api.github.com/repos/{UPSTREAM}/releases"
 GITHUB_DOWNLOAD = f"https://github.com/{UPSTREAM}/releases/download"
 
-# The identity that publishes veyq (ADR 0057 §3): the same two values the Run area's `verify-a-release.md` passes to
-# `cosign verify`, held to what signs by `scripts/validate_release_identity.py` assertion 7, which reads them here.
+# The identity that releases veyq (ADR 0057 §3): the same two values the Run area's `verify-a-release.md` passes to
+# `cosign verify`, held to what signs by `scripts/validate_release_identity.py` assertion 7, which reads them here. The
+# promotion's workflow (`release.yml`), not the pipeline that signs every snapshot (`ci.yml`): a snapshot and its
+# release are the same digest, so only the identity tells a release from a snapshot (ADR 0091 decision 5). The owner
+# and repository are the upstream the chart's `home:` names, which the guard derives them from.
 COSIGN_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
-COSIGN_IDENTITY_REGEXP = r"^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$"
+COSIGN_IDENTITY_REGEXP = r"^https://github\.com/raddatzk/veyq/\.github/workflows/release\.yml@refs/heads/(main|release/[0-9]+\.x)$"
 # The oldest cosign veyqctl verifies a manifest with. The publish signs it into a Sigstore bundle, which cosign 3 reads
 # by default (no format flag, so none a later cosign may drop); and every cosign up to 3.1.2 accepts a forged bundle in
 # the LEGACY format without checking its identity (GHSA-fx35-mq7g-6g98, fixed in 3.1.3) — a source that controls the

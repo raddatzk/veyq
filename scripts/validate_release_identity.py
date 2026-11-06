@@ -111,13 +111,15 @@ snapshot happens:
      that depends on an operator remembering a flag is one shell away from addressing the wrong stack. The two
      halves are one assertion, not two: dropping the flag is safe only *because* the file carries what the
      flag used to say, and re-introducing the flag beside the key is how the two start to disagree.
-  7. **The operator's documented signature check is exactly as narrow as what signs** (ADR 0057 §3). Every
-     `cosign verify` and `cosign verify-blob` (the one for `veyqctl` itself, ADR 0096 decision 3) on
-     `site/src/content/docs/run/verify-a-release.md` pins GitHub's OIDC issuer and one certificate identity; that identity
-     **accepts** the signing identity of every branch assertion 2's scenarios turn into a publish, and
-     **rejects** every other workflow in `.github/workflows/`, non-release branches (which the version step must
-     refuse as well), pull-request and tag refs, another owner, a repository whose name only starts with ours,
-     and the right identity quoted inside another URL. Every image the build matrix publishes is verified, by
+  7. **The operator's documented signature check is exactly as narrow as what signs a RELEASE** (ADR 0057 §3, ADR
+     0091 decision 5). Every `cosign verify` and `cosign verify-blob` (the one for `veyqctl` itself, ADR 0096
+     decision 3) on `site/src/content/docs/run/verify-a-release.md` pins GitHub's OIDC issuer and one certificate
+     identity; that identity **accepts** the release workflow (`RELEASE_WORKFLOW`, `.github/workflows/release.yml`)
+     on every branch assertion 2's scenarios turn into a publish, and **rejects** `ci.yml` — the snapshot identity —
+     on each of those branches (a snapshot and its release are one digest, so accepting it verifies every snapshot as
+     a release), every other workflow in `.github/workflows/`, non-release branches (which the version step must
+     refuse as well), pull-request and tag refs (a `snapshot-` tag's included), another owner, a repository whose name
+     only starts with ours, and the right identity quoted inside another URL. Every image the build matrix publishes is verified, by
      digest and never by tag, `veyqctl` itself is verified with `cosign verify-blob`, and so is the manifest — `cosign
      verify-blob --bundle <release_assets.MANIFEST_BUNDLE>` on `manifest.json`, before its digests are read (inbox
      #469) — and the workflow states no identity of its own. The upstream is the chart's
@@ -326,6 +328,11 @@ CHART_DIR = repo_layout.CHART_DIR
 # The operator's verification is a page of the docs site's Run area (ADR 0087), kept `.md` with its commands in
 # plain fenced blocks so this guard can read them; it moved there from infra/README.md, which keeps the dev stack.
 VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
+# The workflow whose keyless signature says "release": the promotion of a snapshot (ADR 0091 decision 5;
+# cr-release-promotes-a-tested-snapshot phase 3 builds it). Named once, here; the identity's owner and repository are
+# not — they are the chart's `home:` (assertion 7), so a move of the repository changes that one line and this guard
+# names every line that must follow it (`veyqctl`'s constant, the Run page's commands, the chart's image defaults).
+RELEASE_WORKFLOW = ".github/workflows/release.yml"
 
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
@@ -1586,25 +1593,37 @@ elif not VERIFY_PAGE.is_file():
     fail(f"{VERIFY_PAGE.relative_to(ROOT)} is missing — it is where an operator is told how to verify a release")
 else:
     owner, repo = upstream.group(1), upstream.group(2)
-    workflow_file = WORKFLOW.relative_to(ROOT).as_posix()
+    # The identity a verification pins is the RELEASE workflow's — the promotion (ADR 0091 decision 5) — never the
+    # pipeline's, which signs every snapshot: a snapshot and its release are one digest, so the identity is the only
+    # thing that tells them apart.
+    workflow_file = RELEASE_WORKFLOW
+    snapshot_file = WORKFLOW.relative_to(ROOT).as_posix()
 
     def san(ref: str, workflow: str = workflow_file, slug: str = f"{owner}/{repo}") -> str:
         """The certificate identity keyless signing from a GitHub workflow produces."""
         return f"https://github.com/{slug}/{workflow}@{ref}"
 
-    accepted = {f"a publish dispatched on `{b}`": san(f"refs/heads/{b}") for b in publishing_branches}
+    # The branches a release is promoted from are the ones a snapshot is published from (assertion 2's scenarios).
+    accepted = {f"a release promoted on `{b}`": san(f"refs/heads/{b}") for b in publishing_branches}
     rejected = {
         **{
             f"`{w.relative_to(ROOT).as_posix()}` (another workflow) on main": san(
                 "refs/heads/main", workflow=w.relative_to(ROOT).as_posix()
             )
             for w in sorted(WORKFLOW.parent.glob("*.y*ml"))
-            if w != WORKFLOW
+            if w.relative_to(ROOT).as_posix() != RELEASE_WORKFLOW
         },
+        # Named apart, whether or not the file glob above still finds it: the snapshot identity, on every branch a
+        # snapshot is signed on. Accepting it would make every snapshot verify as a release.
+        **{f"the snapshot identity (`{snapshot_file}`) on `{b}`": san(f"refs/heads/{b}", workflow=snapshot_file)
+           for b in publishing_branches},
         **{f"a push to `{b}`, not a release branch": san(f"refs/heads/{b}") for b in
            non_release_branches(version_match.group(1) if version_match else "1")},
         "a pull request ref": san("refs/pull/1/merge"),
         "a tag ref": san(f"refs/tags/v{version_value}.0"),
+        # A `release` event runs on the tag of the release it was saved on — here a snapshot's: not a branch a
+        # release is promoted from.
+        "a snapshot tag ref": san(f"refs/tags/snapshot-{version_value}.0"),
         "another owner's repository": san("refs/heads/main", slug=f"not-{owner}/{repo}"),
         "an owner whose name only starts with ours": san("refs/heads/main", slug=f"{owner}x/{repo}"),
         f"a repository whose name only starts with `{repo}`": san("refs/heads/main", slug=f"{owner}/{repo}-fork"),
@@ -1646,7 +1665,7 @@ else:
         sources.append((VEYQCTL.relative_to(ROOT), tool_argv))
     verify_summary = (
         f", and {len(commands)} documented `cosign verify`/`verify-blob` command(s) and `veyqctl`'s each accept the "
-        f"{len(accepted)} publishing branch identities and reject {len(rejected)} others"
+        f"{len(accepted)} release identities (`release.yml` on each publishing branch) and reject {len(rejected)} others"
     )
     for where, argv in sources:
         shown = " ".join(argv)[:120]
@@ -1680,7 +1699,7 @@ else:
             if not matches(subject):
                 fail(
                     f"{where}: `cosign {shown}` rejects {what} ({subject}) — the "
-                    f"workflow publishes and signs from that branch, so a genuine release fails to verify"
+                    f"release is promoted and signed on that branch, so a genuine release fails to verify"
                 )
         for what, subject in rejected.items():
             if matches(subject):
@@ -1754,7 +1773,7 @@ else:
             )
     if WORKFLOW.is_file() and "certificate-identity" in WORKFLOW.read_text():
         fail(
-            f"{workflow_file} states a verification identity of its own. The identity is stated once, in "
+            f"{snapshot_file} states a verification identity of its own. The identity is stated once, in "
             f"{VERIFY_PAGE.relative_to(ROOT)}, where this guard holds it to what signs — a second copy is one "
             f"nothing checks, and the one the workflow carried accepted any workflow on any ref."
         )
