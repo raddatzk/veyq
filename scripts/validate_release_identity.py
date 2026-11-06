@@ -2,7 +2,8 @@
 """Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
-**What it asserts.** Twelve things, in the order a release happens:
+**What it asserts.** Thirteen things (11 retired from this pipeline with the release kind, below), in the order a
+snapshot happens:
 
   1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
      identity (ADR 0057 §1): the minor is the number of commits since `VERSION` last changed, so a checkout
@@ -10,22 +11,27 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
   2. **The publish workflow derives the version from the tree, offline.** The `version` job's compute step is
      *executed* here, inside a throwaway git repository this guard builds — `VERSION` changed twice, then a
      known number of commits, plus a shallow clone of it — so the minor is asserted against a known count, never
-     against this repository's own history, which moves. Scenarios: a snapshot and a release dispatch on `main`,
-     both on `release/<major>.x`, a push and a pull request (kind `none`, the dry run), and — each must FAIL —
-     a dispatch of either kind on a branch that disagrees with the tree or is not a release branch, and a shallow
-     checkout. Executing it is the only honest way to assert what a publish *would* stamp; reading it would only
+     against this repository's own history, which moves. Scenarios: a push and a dispatch on `main` and on
+     `release/<major>.x` (kind `snapshot`), a pull request and a local run (`runner.environment` `local`, as
+     `scripts/run_pipeline.py` sets it) of a push to `main` and to a feature branch (kind `none`), every one stamping
+     `<major>.<minor>` and never `-SNAPSHOT` (ADR 0091 decision 5) — and, each must FAIL, a push or a dispatch on a
+     branch that disagrees with the tree or is not a release branch, and a shallow checkout. Executing it is the only
+     honest way to assert what a publish *would* stamp; reading it would only
      assert what it looks like. The step is also held to declaring no network tool at all (a `git` that talks to
      a remote included), because a version a registry decides is not an identity (ADR 0057 § Rejected), and to
      receiving each input the scenarios set from the expression a run sets it from. `scripts/release_assets.py`
      counts the release a second time, to name the release's assets, and is held to the step's count on the same
      history and to refusing the shallow clone.
-  3. **Only a dispatch writes to a registry; a release refuses to replace itself and leaves exactly one git ref.**
-     `workflow_dispatch` takes a boolean `release` input defaulting to false. Every registry write in the file —
-     found by what a step does (a login or build-push action, or a `run:` that pushes, logs in or signs), never
-     listed — is gated on `workflow_dispatch` by its step, its job or its push input, and the `publish` job as a
-     whole is. A `gh release` that writes counts: a GitHub Release is a write to the remote. The `publish` job carries a step that fails when an artifact's tag or `v<major>.<minor>` already
-     exists, and a step that creates that ref — both run for `kind == release` only, neither with `--force`, and
-     both keyed on the *tree-derived* version rather than on anything else. The `build` job stamps the same value
+  3. **Only a publishing run writes; a snapshot refuses to replace itself, and its one git ref is `snapshot-…`.**
+     Every write in the file — found by what a step does (a login or build-push action, or a `run:` that pushes, logs
+     in, signs or attests), never listed — is gated on `needs.version.outputs.kind == 'snapshot'` by its step, its
+     job or its push input, so a pull request (Dependabot's included) and a local run write nothing.
+     `workflow_dispatch` takes no input: a dispatch is a snapshot by hand, and a release is a promotion in a workflow
+     of its own. The `snapshot` job holds `packages: write` and `id-token: write` and never `contents: write`; the
+     `snapshot-tag` job needs it, is gated the same way and holds exactly `contents: write`; `git push` runs in that
+     job alone, as `snapshot-${VERSION}` and never a `v…` name, and no step writes a GitHub Release. The `snapshot` job's
+     refusal (`scripts/snapshot.py check-unpublished`) and the tag step are keyed on the *tree-derived* version, force
+     nothing, and the refusal comes before the job's first write. The `build` job stamps the same value
      into the image as `VEYQ_VERSION`, which is what the running instance later reports — and every build-arg it
      stamps is declared by the target stage each matrix entry publishes, and by **no other stage** of that entry's
      Dockerfile (nor before its first `FROM`) — per entry: a build step gated `if: matrix.image == '<x>'` (or `!=`)
@@ -42,41 +48,36 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      2026-10-24 on the admin image (round 2 of the heavy stage: every layer cached from 2026-10-23, `Created`
      2026-10-23, `revision` the commit built), and re-measured on demand by `scripts/image_identity_cache_proof.py`,
      which builds each target at two revisions on a warm cache and also refuses an OCI label the base image lends.
-  9. **The publish waits on every stage** (ADR 0091 decision 2). The workflow is the one pipeline per commit, and
+  9. **The snapshot waits on every stage** (ADR 0091 decision 2). The workflow is the one pipeline per commit, and
      its image build starts beside the tests instead of after them — which is sound only while nothing it builds is
-     published before every stage is green. So every other job of the file is in the `publish` job's `needs:`, found
-     by reading the file's jobs, never listed; and when the publish's `if:` calls a status function (`always()`,
-     `failure()`, `cancelled()`) — which lets it run past a failed or skipped need — the condition requires
-     `needs.<job>.result == 'success'` of every need, the one exception a job that is literally `if: false`, whose
-     `skipped` it may accept alongside `success` (the disabled upgrade proof).
- 10. **The snapshot waits on lane L1** (ADR 0090 decision 2). Assertion 9 holds the publish to the jobs the file
+     published before every stage is green. So every other job of the file is in the `snapshot` job's `needs:`, found
+     by reading the file's jobs, never listed — except the jobs that come after it (they need it: its git tag); and
+     when its `if:` calls a status function (`always()`, `failure()`, `cancelled()`) — which lets it run past a failed
+     or skipped need — the condition requires `needs.<job>.result == 'success'` of every need, the one exception a job
+     that is literally `if: false`, whose `skipped` it may accept alongside `success` (the disabled upgrade proof).
+ 10. **The snapshot waits on lane L1** (ADR 0090 decision 2). Assertion 9 holds the snapshot to the jobs the file
      has, and cannot see one that is gone; so the job that runs `scripts/run_stack_e2e.py` — found by what it runs,
      never by its name — must exist, need `build`, run on every architecture the build matrix publishes, and be in
-     the publish's `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms.
- 11. **A release is one immutable GitHub Release, created last, in one call** (ADR 0096 decision 3). Exactly one
-     step of the file runs `gh release create`, in the `publish` job, for `kind == release` only, after the step that
-     creates the ref and after every `cosign sign` of an image or the chart; it carries `--verify-tag` and neither
-     `--draft` nor `--prerelease`; it runs `scripts/release_assets.py` into a directory and uploads that directory's
-     `v$VERSION/*` whole, after exactly two `cosign sign-blob` lines, every one of the step collected (never the first
-     match alone): one of `v$VERSION/veyqctl` into `--bundle v$VERSION/<release_assets.VEYQCTL_BUNDLE>` and one of
-     `v$VERSION/manifest.json` into `--bundle v$VERSION/<release_assets.MANIFEST_BUNDLE>` — so the names the publish
-     writes are the producer's reserved ones, which assertion 4 holds `veyqctl` to — both after the producer line and
-     before `gh release create`, and no line between the manifest's signing and that upload runs the producer again or
-     names the manifest (the file uploaded must be the file signed); and
-     it hands the boolean dispatch input `unscheduled_major` (default false) to the producer as `--unscheduled`, which
-     an earlier step of the job also runs the producer with, before the job's first push, so its refusals come before
-     anything is published. No step anywhere uploads to, edits or deletes a GitHub Release (`gh release
-     upload|edit|delete`, `gh api …/releases`, `uploads.github.com`, an action whose name says `release`): an immutable
-     release takes no asset after it is published. **And the cosign that signs is the line operators verify with**
-     (inbox #474): exactly one `sigstore/cosign-installer` step in the file, in the `publish` job before every step
-     that runs `cosign`, with `cosign-release` an exact `v<major>.<minor>.<patch>` no older than `src/tools/veyqctl.py`'s
-     `COSIGN_MIN_VERSION` — never the installer's default, which lags — and no `cosign` line anywhere passes the
-     deprecated flag that chose the bundle format (cosign 3 writes the Sigstore bundle by default, and only its
-     `=false` spelling still writes the legacy one).
-  8. **The chart is the release's third artifact** (ADR 0064). The refuse step names every published image (the
-     build matrix) AND `charts/<name>` (`Chart.yaml`'s `name`), so a release with any of the three already out
-     is refused; the step that runs `helm package` sets `--version` and `--app-version` from the tree-derived
-     version and pushes to `oci://ghcr.io/<owner>/charts`; a `cosign sign` step names `charts/<name>`; and the
+     the snapshot's `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms.
+ 13. **Each lane's result is attested by the snapshot, never by the lane** (ADR 0091 decision 5). The lane's job
+     records each green leg (`scripts/snapshot.py lane-result`, gated like every write) and holds no `id-token`; the
+     `snapshot` job assembles the predicates once (`scripts/snapshot.py predicates`) with `--arch` and `--shard` equal
+     to the lane matrix's `arch` and `domain`, read from the file, and runs `cosign attest --type "$PREDICATE_TYPE"`
+     with that variable set to `scripts/snapshot.py`'s `PREDICATE_TYPE`, after the predicates and after every image
+     signature.
+ 11. **(Retired here.)** A release's one immutable GitHub Release, created last (ADR 0096 decision 3), left this
+     pipeline with the release kind: a release is a promotion of a snapshot in a workflow of its own
+     (cr-release-promotes-a-tested-snapshot phase 3, which re-homes the assertion there). What stays of it: **the
+     cosign that signs is the line operators verify with** (inbox #474): exactly one `sigstore/cosign-installer` step
+     in the file, in the `snapshot` job before every step that runs `cosign`, with `cosign-release` an exact
+     `v<major>.<minor>.<patch>` no older than `src/tools/veyqctl.py`'s `COSIGN_MIN_VERSION` — never the installer's
+     default, which lags — and no `cosign` line anywhere passes the deprecated flag that chose the bundle format
+     (cosign 3 writes the Sigstore bundle by default, and only its `=false` spelling still writes the legacy one).
+  8. **The chart is the snapshot's third artifact** (ADR 0064). The refuse step checks `--image` for every published
+     image (the build matrix) AND `--chart charts/<name>` (`Chart.yaml`'s `name`) under the workflow's own registry; the
+     step that runs `helm package` sets `--version` and `--app-version` to the tree-derived version's `-SNAPSHOT`
+     name (the chart's `appVersion` is the image tag its values default to) and pushes to `oci://ghcr.io/<owner>/charts`;
+     a `cosign sign` step names `charts/<name>`; and the
      chart's default image repositories are exactly the upstream images the Run area's verification page
      (`site/src/content/docs/run/verify-a-release.md`) verifies by digest — `image.repository` the chart's own
      name, `admin.image.repository` its `-admin` sibling, `backup.image.repository` its `-tools` one (ADR 0098). And that page verifies the chart itself by digest (assertion 7 collects `ghcr.io/<owner>/charts/<name>`
@@ -89,7 +90,8 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      on the tree, its refusals are this guard's reds, and the producer's carry step is run into a scratch directory,
      where every derived file must be, byte-identical to the tree (the `.env` template under its asset name,
      `env.example`). Every `*_ASSET` name `src/tools/veyqctl.py` fetches must be one a release has — the producer's
-     files, the manifest, or one of the two bundle names the producer reserves and the publish writes (assertion 11)
+     files, the manifest, or one of the two bundle names the producer reserves and a release's publish writes (the
+     promotion, cr-release-promotes-a-tested-snapshot phase 3)
      — and its `MANIFEST_BUNDLE_ASSET`, the file it verifies the manifest against, is the manifest's bundle by name.
      The derived list is printed on the OK line. Plus: every veyq image
      tag written down in a tracked deployment file (`TAG_SCAN_DIRS`: `infra/`, lane L1's overlay, the API fuzzer)
@@ -164,14 +166,21 @@ Assertions 2 and 3 were reshaped by a defect of the pipeline's own design (cr-re
 2026-10-14), found when the first push was planned rather than by a run: every push to `main` published the
 version in `VERSION`, so every push after the first would have been a red run at the refusal until someone
 committed a bump, and there was no way to try the publish path before it named something for good. Publishing
-moved behind a dispatch, and the minor into the history; this guard holds both.
+moved behind a dispatch, and the minor into the history. They were reshaped again by ADR 0091 decision 5
+(cr-release-promotes-a-tested-snapshot phase 1, 2026-11-06): a snapshot per commit can never be "a release whose name
+exists", so every green push publishes one again — and with that, the gate moved from the event to the `version`
+job's `kind`, because `scripts/run_pipeline.py` simulates a push and a local run on `main` would otherwise have
+reached the registry and pushed a tag to the remote. The tag job's permission line came with the owner's decision of
+that day: the job that writes to the repository holds that and nothing else.
 
 Assertion 9 came with folding `container.yml` into `ci.yml` (cr-one-pipeline-per-commit, 2026-10-16), no incident:
 the build stopped needing the tests, and from then on the publish's `needs:` is the only thing between a red stage
 and a published image — a stage added to the file and forgotten there would be one a release never waited for.
 Assertion 10 came with lane L1's job (cr-stack-e2e phase 4), no incident: assertion 9 reads the jobs the file has, so
 deleting the lane — or renaming its job and dropping it from the publish's `needs:` in the same edit — was green there.
-Its limit is assertion 9's: it reads the file, and proves no run ever waited.
+Its limit is assertion 9's: it reads the file, and proves no run ever waited. Assertion 13 came with the snapshot's
+attestations (cr-release-promotes-a-tested-snapshot phase 1), no incident: an attestation that misses an architecture
+the lane runs would leave that architecture's result unverifiable at the promotion.
 
 Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
 The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
@@ -185,14 +194,10 @@ Assertion 11 came with the GitHub Release (cr-veyqctl phase 5), and building it 
 the template was carried as `.env.example`, and GitHub renames a release asset whose name starts with a period (its
 REST docs, "Upload a release asset"), so every `veyqctl install` from GitHub would have fetched a name the release does
 not have. The producer now names it `env.example` and refuses a recipe file GitHub would rename, and assertion 4 holds
-`veyqctl`'s asset names to what the producer writes.
-
-Assertion 11's two signatures came with inbox #469 (cr-signed-release-manifest), no incident — no release exists —
-but a hole in the design that was there from the first release: the manifest was unsigned, so whoever controls the
-source (a mirror, a local directory) could serve a forged manifest with a forged compose file that matched it. The
-images stayed safe by their own signatures; the recipe, which can mount the host or add an unverified container, was
-exactly as trustworthy as its source. Collecting every `sign-blob` line came with it: the old check read the first
-match only, so a correct step that signed the manifest first read red.
+`veyqctl`'s asset names to what the producer writes. Its two signatures came with inbox #469 (cr-signed-release-manifest):
+the manifest was unsigned, so whoever controls the source could serve a forged manifest with a forged compose file that
+matched it. Its release half left this pipeline with the release kind (ADR 0091 decision 5) and is re-homed in the
+promotion's workflow by cr-release-promotes-a-tested-snapshot phase 3.
 
 Assertion 11's cosign half came with inbox #474, from a measured gap rather than an incident: the publish installed
 cosign through `sigstore/cosign-installer` v3.9.1, whose default is cosign v2.5.2, while `veyqctl` and the Run page
@@ -213,9 +218,10 @@ scan — puts a hole in exactly the place a future instruction would hide.
 
 **Its limit — what a green run does NOT prove.** It reads **files**, and executes exactly one of them (the
 version step's shell, against a history it built — so `fetch-depth: 0` on the real checkout is proven only by a
-run, where its absence is a loud red at the shallow refusal). It cannot prove a publish ever ran, that a tag was created, that a republish was
-refused, or that the registry holds what the workflow says it would push — this repository has **no remote**
-and no workflow has ever executed, so the publish path stays an explicitly stated ADR 0040 gap. It says nothing
+run, where its absence is a loud red at the shallow refusal). It cannot prove a snapshot was ever published, that a
+tag was created, that a second build of a commit was refused, or that the registry holds what the workflow says it
+would push — those are a run's on GitHub (the remote exists since 2026-11-05; the first-run list is inbox #471), and
+the publish path stays an explicitly stated ADR 0040 gap. It says nothing
 about the backup manifest's `app.version` (its observable is a capture run against a live instance, not a file),
 and its scan for written-down image tags covers `TAG_SCAN_DIRS` and the Run pages only: `docs/` quotes the *old, wrong*
 shapes on purpose, as the defect being described.
@@ -227,26 +233,21 @@ file is neither carried nor refused. It runs the carry step, never the whole pro
 full history, and this guard's checkout may be shallow), and never a published release: that a GitHub Release holds
 these assets is a publish's to prove.
 
-Assertion 11's limits. It reads the step's shell as lines, not as a program: the producer's output directory is the
-first positional argument after `scripts/release_assets.py`, and the upload must name `<that>/v$VERSION/*` literally
-(`${x}` and `$x` read alike) — an indirection through another variable is a false red, never a false green. That the
-glob expands to every file is the producer's to keep true: it refuses a name with a leading period, the one kind a
-`*` skips. A writer to a GitHub Release it does not recognise (another CLI, an action named otherwise) is not held.
-It cannot prove `gh release create` ran, that the repository's immutable-releases setting is on, or which name GitHub
-gave each asset — no remote exists, so the GitHub Release is a statement about a file like the rest of the publish.
-That a `sign-blob` line names the manifest is not that cosign signed it: the step's shell has run only locally, with
-stand-ins for `cosign` and `gh`, and that the bundle verifies is `veyqctl`'s self-test's, with a stand-in for cosign.
-The between-lines check knows two ways to touch the manifest — the producer, and a line naming `manifest.json` — and a
-rewrite through another variable or a script that writes it unnamed is not held. The cosign half reads the installer's
-`cosign-release` input, not the binary a run puts on the path: that the installer installs exactly that version is the
-action's (it verifies the download with a bootstrap cosign it pins by sha256), and a `cosign` fetched another way — a
-`curl`, another action — is not recognised. A `cosign` called through a variable or a script is not a line here.
+Assertion 11's limits (its cosign half). It reads the installer's `cosign-release` input, not the binary a run puts on
+the path: that the installer installs exactly that version is the action's (it verifies the download with a bootstrap
+cosign it pins by sha256), and a `cosign` fetched another way — a `curl`, another action — is not recognised. A
+`cosign` called through a variable or a script is not a line here.
+
+Assertion 13's limits. It reads the workflow, not the registry: that `cosign attest` stored the predicate where a
+promotion finds it is a run's to show. The predicates' own refusals (a missing, extra, failed or inconsistent leg) are
+`scripts/snapshot_selftest.py`'s, which `guards` runs; this assertion holds the arguments the workflow hands them.
 
 Assertion 3's gating is read as a conservative model of GitHub's expression language: an `if:` counts as gated
-only if it is a pure `&&` chain with the dispatch (or release) test as one term, so an equivalent condition
+only if it is a pure `&&` chain with the publishing test as one term, so an equivalent condition
 spelled any other way is a false red, never a false green. A registry write it does not recognise — a new tool,
 or an action other than the login and build-push ones — is not held; the recognised set is the regex and the two
-action names in the code.
+action names in the code. The write-once refusal's decisions are `scripts/snapshot.py`'s (its self-test); this
+assertion holds that the step runs it, on the tree's version, before the job's first write.
 
 **Assertion 5's own limit, and it is deliberate: it is scoped to the RELEASE RECIPE and says nothing about
 `infra/docker/docker-compose.yml`.** A chart deploys the recipe, not the dev stack, and a dev-only `build:` is a
@@ -312,12 +313,19 @@ RELEASE_VERSION = re.compile(r"^([0-9]+)\.([0-9]+)$")
 
 # Step ids this guard anchors on. A rename makes it say "step not found" rather than pass vacuously.
 VERSION_JOB, VERSION_STEP = "version", "veyq-version"
-PUBLISH_JOB = "publish"
-REFUSE_STEP, TAG_STEP = "assert-release-unpublished", "release-tag"
+# The job that publishes a snapshot, and the one job that writes to the repository: its git tag (ADR 0091 decision 5).
+PUBLISH_JOB = "snapshot"
+SNAPSHOT_TAG_JOB = "snapshot-tag"
+REFUSE_STEP, TAG_STEP = "assert-snapshot-unpublished", "snapshot-tag"
 BUILD_JOB = "build"
 # Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
+# The snapshot's decisions (assertion 13): a lane leg's record, the predicates, the write-once refusal.
+SNAPSHOT_SCRIPT = "scripts/snapshot.py"
 CHART_DIR = repo_layout.CHART_DIR
+# The operator's verification is a page of the docs site's Run area (ADR 0087), kept `.md` with its commands in
+# plain fenced blocks so this guard can read them; it moved there from infra/README.md, which keeps the dev stack.
+VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
 
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
@@ -338,34 +346,34 @@ NETWORK_TOOLS = re.compile(r"(?:^|[\s|(&;])(gh|curl|wget|nc|git\s+(?:fetch|pull|
 STEP_ENV = {
     "EVENT_NAME": "${{ github.event_name }}",
     "REF_NAME": "${{ github.ref_name }}",
-    "RELEASE": "${{ inputs.release }}",
+    "RUNNER_ENVIRONMENT": "${{ runner.environment }}",
 }
 
-# What a publish is gated on, and what a release-only step is gated on (ADR 0057 §1–2).
-DISPATCH = "github.event_name == 'workflow_dispatch'"
-RELEASE_KIND = "needs.version.outputs.kind == 'release'"
+# What every write of the pipeline is gated on: the `version` job's verdict that this run publishes a snapshot (a push
+# or a dispatch on a publishing branch, on GitHub's runners) — never a pull request, never a local run (ADR 0091 decision 5).
+PUBLISHES = "needs.version.outputs.kind == 'snapshot'"
 # A `run:` that writes to a registry or to the remote — a GitHub Release included. `uses:` writers are recognised by
-# action below. `cosign sign` matches `cosign sign-blob` too: it writes to the transparency log.
+# action below. `cosign sign` matches `cosign sign-blob` too, and `cosign attest` is a write as well: both write to the
+# transparency log, and an attestation to the registry.
 REGISTRY_WRITE_RUN = re.compile(
-    r"\b(?:helm\s+push|helm\s+registry\s+login|cosign\s+sign|imagetools\s+create|docker\s+push|docker\s+login|git\s+push|oras\s+push"
-    r"|gh\s+release\s+(?:create|upload|edit|delete|delete-asset))\b"
+    r"\b(?:helm\s+push|helm\s+registry\s+login|cosign\s+sign|cosign\s+attest|imagetools\s+create|docker\s+push|docker\s+login"
+    r"|git\s+push|oras\s+push|gh\s+release\s+(?:create|upload|edit|delete|delete-asset))\b"
 )
-# Assertion 11: the one GitHub Release, and anything else that would write to one.
-UNSCHEDULED_INPUT = "unscheduled_major"
+GIT_PUSH = re.compile(r"\bgit\s+push\b")
+# A GitHub Release, or anything else that writes to one: a snapshot gets none (ADR 0096 decision 3), and a release is a
+# promotion in a workflow of its own.
 GH_RELEASE_CREATE = re.compile(r"\bgh\s+release\s+create\b")
 RELEASE_ASSET_WRITE = re.compile(
     r"\bgh\s+release\s+(?:upload|edit|delete|delete-asset)\b|uploads\.github\.com|\bgh\s+api\b[^\n]*/releases"
 )
 RELEASE_ACTION = re.compile(r"release", re.IGNORECASE)  # an action's `owner/name`: softprops/action-gh-release, …
-IMAGE_SIGN = re.compile(r"\bcosign\s+sign\s")  # an image or the chart, not `sign-blob`
-SIGN_BLOB = re.compile(r"\bcosign\s+sign-blob\b")
-PRODUCER = re.compile(r"scripts/release_assets\.py\b")
 # Deprecated in cosign 3 (default true, `--help` hides it); only `=false` still changes anything — to the legacy format.
 NEW_BUNDLE_FORMAT = "--new-bundle-format"
 COSIGN_INSTALLER = "sigstore/cosign-installer"
 COSIGN_RUN = re.compile(r"(?:^|[\s;&|(])cosign\s")
 EXACT_VERSION = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$")
-FIRST_PUBLISH_WRITE = re.compile(r"\b(?:imagetools\s+create|cosign\s+sign|helm\s+push|git\s+push|gh\s+release)\b")
+FIRST_PUBLISH_WRITE = re.compile(r"\b(?:imagetools\s+create|cosign\s+sign|cosign\s+attest|helm\s+push|git\s+push|gh\s+release)\b")
+COSIGN_ATTEST = re.compile(r"\bcosign\s+attest\b")
 
 
 def non_release_branches(major: str) -> list[str]:
@@ -435,6 +443,16 @@ def veyqctl_constants(pattern: str) -> dict[str, str]:
 
 def step_by_id(doc: dict, job: str, step_id: str) -> dict | None:
     return next((s for s in job_steps(doc, job) if s.get("id") == step_id), None)
+
+
+def flag_values(argv: list[str], name: str) -> list[str]:
+    values = []
+    for index, token in enumerate(argv):
+        if token == name and index + 1 < len(argv):
+            values.append(argv[index + 1])
+        elif token.startswith(name + "="):
+            values.append(token.split("=", 1)[1])
+    return values
 
 
 def git(cwd: pathlib.Path, *args: str) -> str:
@@ -549,67 +567,67 @@ elif compute is not None and version_match:
     else:
         major = version_match.group(1)
         release = f"{major}.{EXPECTED_MINOR}"
-        snapshot = f"{release}-SNAPSHOT"
 
-        def dispatch(branch: str, release_input: bool) -> dict[str, str]:
-            return {"EVENT_NAME": "workflow_dispatch", "REF_NAME": branch, "RELEASE": str(release_input).lower()}
+        def event(name: str, branch: str, runner: str = "github-hosted") -> dict[str, str]:
+            return {"EVENT_NAME": name, "REF_NAME": branch, "RUNNER_ENVIRONMENT": runner}
 
-        quiet = {"publish_branch_tags": "false", "publish_latest": "false"}
+        # The stamp is `<major>.<minor>` on EVERY event (ADR 0091 decision 5: a release is the snapshot's bytes, so the
+        # two carry one name); only `kind` says whether the run publishes.
+        stamp = {"version": release, "major": major}
         # (label, shallow?, env, expected exit, expected outputs)
         scenarios = [
             (
-                "a snapshot dispatch on main",
-                False, dispatch("main", False), 0,
-                {"kind": "snapshot", "version": snapshot, "major": major, **quiet},
-            ),
-            (
-                "a release dispatch on main",
-                False, dispatch("main", True), 0,
-                {"kind": "release", "version": release, "major": major, "publish_branch_tags": "true",
-                 "publish_latest": "true"},
-            ),
-            (
-                f"a release dispatch on release/{major}.x",
-                False, dispatch(f"release/{major}.x", True), 0,
-                {"kind": "release", "version": release, "publish_branch_tags": "true", "publish_latest": "false"},
-            ),
-            (
-                f"a snapshot dispatch on release/{major}.x",
-                False, dispatch(f"release/{major}.x", False), 0,
-                {"kind": "snapshot", "version": snapshot, **quiet},
-            ),
-            (
-                # A push is the dry run: it builds and publishes nothing, whatever the branch.
                 "a push to main",
-                False, {"EVENT_NAME": "push", "REF_NAME": "main", "RELEASE": ""}, 0,
-                {"kind": "none", "version": snapshot, **quiet},
+                False, event("push", "main"), 0, {"kind": "snapshot", **stamp},
             ),
             (
+                f"a push to release/{major}.x",
+                False, event("push", f"release/{major}.x"), 0, {"kind": "snapshot", **stamp},
+            ),
+            (
+                "a dispatch on main",
+                False, event("workflow_dispatch", "main"), 0, {"kind": "snapshot", **stamp},
+            ),
+            (
+                f"a dispatch on release/{major}.x",
+                False, event("workflow_dispatch", f"release/{major}.x"), 0, {"kind": "snapshot", **stamp},
+            ),
+            (
+                # Dependabot's included: a pull request builds and tests, and publishes nothing.
                 "a pull request",
-                False, {"EVENT_NAME": "pull_request", "REF_NAME": "12/merge", "RELEASE": ""}, 0,
-                {"kind": "none", "version": snapshot, **quiet},
+                False, event("pull_request", "12/merge"), 0, {"kind": "none", **stamp},
+            ),
+            (
+                # scripts/run_pipeline.py simulates a push on `runner.environment` `local`: a local run on main must
+                # not reach a registry, a signature or the remote.
+                "a local run of a push to main",
+                False, event("push", "main", runner="local"), 0, {"kind": "none", **stamp},
+            ),
+            (
+                # ... nor turn red on a feature branch, which is where a local run usually is.
+                "a local run of a push to a feature branch",
+                False, event("push", "feature/x", runner="local"), 0, {"kind": "none", **stamp},
             ),
             (
                 # A shallow clone counts 1: the step must refuse it rather than stamp a wrong minor that looks right.
-                "a release dispatch on main from a shallow checkout",
-                True, dispatch("main", True), 1, {},
+                "a push to main from a shallow checkout",
+                True, event("push", "main"), 1, {},
             ),
             (
-                "a push to main from a shallow checkout",
-                True, {"EVENT_NAME": "push", "REF_NAME": "main", "RELEASE": ""}, 1, {},
+                "a pull request from a shallow checkout",
+                True, event("pull_request", "12/merge"), 1, {},
             ),
         ] + [
-            # A ref that disagrees with the tree, and branches that are not release branches, must publish nothing
-            # of EITHER kind: whatever publishes also signs, and assertion 7 holds the documented verify to
-            # rejecting exactly these (ADR 0057 §3: what signs and what verifies agree). `master` is the one a
-            # publish accepted until cr-image-provenance.
+            # A ref that disagrees with the tree, and branches that are not release branches, must publish nothing:
+            # whatever publishes also signs, and assertion 7 holds the documented verify to rejecting exactly these
+            # (ADR 0057 §3: what signs and what verifies agree). `master` is the one a publish accepted until
+            # cr-image-provenance. A push to such a branch is red, not a green run that left no snapshot.
             (
-                f"a {'release' if as_release else 'snapshot'} dispatch on {branch}, which is not a release branch "
-                f"of this tree",
-                False, dispatch(branch, as_release), 1, {},
+                f"a {name} on {branch}, which is not a release branch of this tree",
+                False, event(name, branch), 1, {},
             )
             for branch in [f"release/{int(major) + 7}.x", *non_release_branches(major)]
-            for as_release in (True, False)
+            for name in ("push", "workflow_dispatch")
         ]
         try:
             with tempfile.TemporaryDirectory(prefix="release_identity_") as tmp:
@@ -636,7 +654,7 @@ elif compute is not None and version_match:
                     except subprocess.TimeoutExpired:
                         fail(f"the `{VERSION_STEP}` step hung for {label} — a version derivation that waits is waiting on a network")
                         continue
-                    if env["EVENT_NAME"] == "workflow_dispatch" and rc == 0:
+                    if rc == 0 and written.get("kind") == "snapshot":
                         publishing_branches.append(env["REF_NAME"])
                     if expect_rc == 0 and rc != 0:
                         fail(f"the `{VERSION_STEP}` step fails for {label}: {message or f'exit {rc}'}")
@@ -645,10 +663,10 @@ elif compute is not None and version_match:
                         if rc == 0:
                             fail(
                                 f"the `{VERSION_STEP}` step accepts {label} and would stamp "
-                                f"`{written.get('version')}` (kind `{written.get('kind')}`) — a publish names "
-                                f"itself from the full history and runs only from main or release/<major>.x, so "
-                                f"a ref that disagrees with VERSION, any other branch, and a shallow checkout "
-                                f"must fail rather than publish a signed artifact under a wrong name"
+                                f"`{written.get('version')}` (kind `{written.get('kind')}`) — a snapshot names "
+                                f"itself from the full history and is published only from main or "
+                                f"release/<major>.x, so a ref that disagrees with VERSION, any other branch, and a "
+                                f"shallow checkout must fail rather than publish a signed artifact under a wrong name"
                             )
                         continue
                     for key, want in expect.items():
@@ -862,26 +880,22 @@ if workflow_doc:
     triggers = workflow_doc.get("on", workflow_doc.get(True)) or {}
     if (triggers.get("push") or {}).get("tags"):
         fail(
-            f"{WORKFLOW.relative_to(ROOT)} triggers on a pushed tag. The publish CREATES `v<major>.<minor>` "
-            f"(ADR 0057 §2), so a tag push can only ask for a version that is already published — which the "
-            f"`{REFUSE_STEP}` step refuses by design. Keeping both means every release is followed by a red run."
+            f"{WORKFLOW.relative_to(ROOT)} triggers on a pushed tag. The pipeline CREATES `snapshot-<major>.<minor>`, "
+            f"so a tag trigger could only re-run a commit whose snapshot exists — which the `{REFUSE_STEP}` step "
+            f"refuses by design."
         )
-
-    publish_perms = ((workflow_doc.get("jobs") or {}).get(PUBLISH_JOB) or {}).get("permissions") or {}
-    if publish_perms.get("contents") != "write":
+    # A dispatch is a snapshot by hand, exactly as a push makes one: an input would be a second kind of publish, and the
+    # release kind left this file for the promotion (ADR 0091 decision 5).
+    dispatch_inputs = (triggers.get("workflow_dispatch") or {}).get("inputs") if isinstance(
+        triggers.get("workflow_dispatch"), dict) else None
+    if "workflow_dispatch" not in triggers:
+        fail(f"{WORKFLOW.relative_to(ROOT)} has no `workflow_dispatch` — a commit whose run was superseded while pending "
+             f"has no other way to its snapshot")
+    elif dispatch_inputs:
         fail(
-            f"the `{PUBLISH_JOB}` job cannot create the `v<major>.<minor>` ref: it needs "
-            f"`permissions: contents: write` (ADR 0057 §2 — one release, one name, one tree)"
-        )
-
-    # The dispatch input that chooses the kind. A boolean that defaults to false is what makes a snapshot the
-    # default and a release something asked for — a string input, or a default of true, inverts that.
-    release_input = ((triggers.get("workflow_dispatch") or {}).get("inputs") or {}).get("release") or {}
-    if release_input.get("type") != "boolean" or release_input.get("default") is not False:
-        fail(
-            f"{WORKFLOW.relative_to(ROOT)}: `workflow_dispatch` must take a boolean input `release` that defaults "
-            f"to false (found {release_input or 'none'}) — a publish is a snapshot unless a release is asked for "
-            f"explicitly (ADR 0057 §1)"
+            f"{WORKFLOW.relative_to(ROOT)}: `workflow_dispatch` takes inputs ({', '.join(map(str, dispatch_inputs))}) — a "
+            f"dispatch publishes a snapshot exactly as a push does; a release is a promotion in a workflow of its own "
+            f"(ADR 0091 decision 5), never a kind this pipeline builds"
         )
 
     def gated_on(condition: object, conjunct: str) -> bool:
@@ -896,64 +910,107 @@ if workflow_doc:
             text = text[3:-2].strip()
         if not text or "||" in text or re.search(r"!(?!=)", text):
             return False
-        return any(term.strip() == conjunct for term in text.split("&&"))
+        return any(" ".join(term.split()) == conjunct for term in text.split("&&"))
 
-    for step_id, must_contain, why in (
+    jobs = workflow_doc.get("jobs") or {}
+    publish_job = jobs.get(PUBLISH_JOB) or {}
+    tag_job = jobs.get(SNAPSHOT_TAG_JOB) or {}
+    if not publish_job:
+        fail(f"{WORKFLOW.relative_to(ROOT)} has no `{PUBLISH_JOB}` job — nothing publishes the snapshot of a green push")
+    if not tag_job:
+        fail(f"{WORKFLOW.relative_to(ROOT)} has no `{SNAPSHOT_TAG_JOB}` job — no snapshot gets its git tag, so GitHub's "
+             f"release page offers nothing to promote (ADR 0091 decision 5)")
+
+    # The publish signs and writes the registry; the one write to the repository is the tag job's, which holds that
+    # permission and NOTHING else (owner 2026-11-06): a job that signs and pushes refs is the one a compromise of any
+    # step in it turns into both.
+    publish_perms = publish_job.get("permissions") or {}
+    if publish_perms.get("contents") == "write" or publish_perms.get("packages") != "write" \
+            or publish_perms.get("id-token") != "write":
+        fail(
+            f"the `{PUBLISH_JOB}` job's permissions are {publish_perms or 'the default'} — it needs `packages: write` and "
+            f"`id-token: write` (the registry, keyless signing) and must not hold `contents: write`, which is the "
+            f"`{SNAPSHOT_TAG_JOB}` job's alone"
+        )
+    tag_perms = tag_job.get("permissions")
+    if tag_job and tag_perms != {"contents": "write"}:
+        fail(
+            f"the `{SNAPSHOT_TAG_JOB}` job's permissions are {tag_perms or 'the default'}, not exactly "
+            f"`contents: write` — it writes the snapshot's git tag and holds nothing else (ADR 0091 decision 5)"
+        )
+    raw_tag_needs = tag_job.get("needs") or []
+    tag_needs = [raw_tag_needs] if isinstance(raw_tag_needs, str) else [str(n) for n in raw_tag_needs]
+    if tag_job and PUBLISH_JOB not in tag_needs:
+        fail(f"the `{SNAPSHOT_TAG_JOB}` job does not need `{PUBLISH_JOB}` — a tag would offer a snapshot that was never "
+             f"published for promotion")
+    if tag_job and (not gated_on(tag_job.get("if"), PUBLISHES)
+                    or re.search(r"\b(?:always|failure|cancelled)\s*\(", str(tag_job.get("if")))):
+        fail(f"the `{SNAPSHOT_TAG_JOB}` job runs when `{PUBLISHES}` is not true, or past a failed `{PUBLISH_JOB}` "
+             f"(if: `{tag_job.get('if')}`)")
+
+    for job_name, step_id, must_contain, why in (
         (
-            REFUSE_STEP,
-            ("exit 1",),
-            "a release whose tag already exists must FAIL rather than replace it: a transient registry error "
-            "would otherwise be indistinguishable from `nothing published yet`, and an operator who pinned "
-            "that tag receives different bits with no signal (ADR 0057 §1)",
+            PUBLISH_JOB, REFUSE_STEP,
+            (f"{SNAPSHOT_SCRIPT} check-unpublished", '--version "$VERSION"', '--commit "$GITHUB_SHA"'),
+            "a snapshot is written once per commit and never replaced: a name that holds another build must FAIL the "
+            "publish, and a registry error must not read as `nothing published yet` (ADR 0091 decision 5, ADR 0057 §1)",
         ),
         (
-            TAG_STEP,
-            ("refs/tags/v${VERSION}", "git push"),
-            "a published image has exactly one git ref, `v<major>.<minor>`, created by the publish — without "
-            "it the deployment files belonging to a version cannot be found (ADR 0057 §2)",
+            SNAPSHOT_TAG_JOB, TAG_STEP,
+            ('tag="snapshot-${VERSION}"', 'refs/tags/${tag}', "git push"),
+            "every snapshot gets the git tag `snapshot-<major>.<minor>` on its commit, from the tree-derived version "
+            "(ADR 0091 decision 5)",
         ),
     ):
-        step = step_by_id(workflow_doc, PUBLISH_JOB, step_id)
+        step = step_by_id(workflow_doc, job_name, step_id)
         if step is None:
-            fail(f"{WORKFLOW.relative_to(ROOT)}: no step `id: {step_id}` in job `{PUBLISH_JOB}` — {why}")
+            fail(f"{WORKFLOW.relative_to(ROOT)}: no step `id: {step_id}` in job `{job_name}` — {why}")
             continue
         body = str(step.get("run") or "")
-        if VERSION_EXPR not in str(step.get("env") or {}):
+        if (step.get("env") or {}).get("VERSION") != VERSION_EXPR:
             fail(
-                f"the `{step_id}` step does not read `{VERSION_EXPR}` — it must key on the version the tree "
+                f"the `{step_id}` step's `VERSION` is not `{VERSION_EXPR}` — it must key on the version the tree "
                 f"derived, never on a registry query or a hand-typed literal"
             )
         for needle in must_contain:
             if needle not in body:
                 fail(f"the `{step_id}` step does not contain `{needle}` — {why}")
-        if "--force" in body or " -f " in body:
-            fail(
-                f"the `{step_id}` step forces: a release that can be overwritten names a moving artifact, and "
-                f"reporting it accurately would still mislead (uc.admin.identify-instance-release § Quality)"
-            )
-        if not gated_on(step.get("if"), RELEASE_KIND):
-            fail(
-                f"the `{step_id}` step runs when `{RELEASE_KIND}` is not true (if: `{step.get('if')}`) — only a "
-                f"release refuses a republish and gets a git ref; a snapshot is the one name that moves and names "
-                f"a build, not a release (ADR 0057 §1–2)"
-            )
+        if "--force" in body or re.search(r"\s-f\s", body):
+            fail(f"the `{step_id}` step forces: a snapshot that can be overwritten names a moving artifact (ADR 0091 "
+                 f"decision 5)")
+    # The refusal runs before anything this job writes, or it refuses after the names have moved.
+    publish_steps = job_steps(workflow_doc, PUBLISH_JOB)
+    refuse_at = next((i for i, s in enumerate(publish_steps) if s.get("id") == REFUSE_STEP), None)
+    first_write = next((i for i, s in enumerate(publish_steps)
+                        if FIRST_PUBLISH_WRITE.search(str(s.get("run") or ""))), None)
+    if refuse_at is not None and first_write is not None and first_write < refuse_at:
+        fail(f"the `{PUBLISH_JOB}` job writes (step `{publish_steps[first_write].get('name')}`) before its `{REFUSE_STEP}` "
+             f"step — the refusal would come after a published name already moved")
 
-    # Every registry write is reachable only from a dispatch (ADR 0057 §1: nothing is published by a push). The
-    # set is derived from what the steps DO — a login or build-push action, or a `run:` that pushes, logs in or
-    # signs — never listed, so a write added to any job is held without anyone remembering to add it here.
-    jobs = workflow_doc.get("jobs") or {}
-    publish_job = jobs.get(PUBLISH_JOB) or {}
-    if not gated_on(publish_job.get("if"), DISPATCH):
-        fail(
-            f"the `{PUBLISH_JOB}` job runs when `{DISPATCH}` is not true (if: `{publish_job.get('if')}`) — a push "
-            f"or a pull request would then publish, which is the red run on every commit this pipeline exists to "
-            f"end (ADR 0057 §1)"
-        )
+    # The only push to the repository is the tag job's, and it never pushes a release's name: `v…` says "released"
+    # (ADR 0057 §2), and every tag watcher reads a `v` tag as a release.
+    text = WORKFLOW.read_text()
+    if re.search(r"refs/tags/v|\bgit\s+tag\s+\"?v", text):
+        fail(f"{WORKFLOW.relative_to(ROOT)} names a `v…` tag — a snapshot's tag is never `v…`; that name is a promotion's "
+             f"(ADR 0091 decision 5)")
+    for job_name in sorted(jobs):
+        for step in job_steps(workflow_doc, job_name):
+            if GIT_PUSH.search(str(step.get("run") or "")) and job_name != SNAPSHOT_TAG_JOB:
+                fail(f"job `{job_name}`, step `{step.get('name') or step.get('id')}` runs `git push` — the one write to "
+                     f"the repository is the `{SNAPSHOT_TAG_JOB}` job's, which holds `contents: write` and nothing else")
+            if GH_RELEASE_CREATE.search(str(step.get("run") or "")) or RELEASE_ASSET_WRITE.search(str(step.get("run") or "")) \
+                    or RELEASE_ACTION.search(str(step.get("uses") or "").split("@", 1)[0]):
+                fail(f"job `{job_name}`, step `{step.get('name') or step.get('id')}` writes a GitHub Release — a "
+                     f"snapshot gets none (ADR 0096 decision 3); a release is a promotion, in a workflow of its own")
+
+    # Every write is reachable only from a publishing run — never a pull request, never a local run. The set is derived
+    # from what the steps DO — a login or build-push action, or a `run:` that pushes, logs in, signs or attests — never
+    # listed, so a write added to any job is held without anyone remembering to add it here.
     registry_writes = 0
     for job_name, job in sorted(jobs.items()):
         if not isinstance(job, dict):
             continue
-        job_gated = gated_on(job.get("if"), DISPATCH)
+        job_gated = gated_on(job.get("if"), PUBLISHES)
         for step in job_steps(workflow_doc, job_name):
             uses = str(step.get("uses") or "")
             writes = []
@@ -963,18 +1020,18 @@ if workflow_doc:
                 push = (step.get("with") or {}).get("push")
                 if push is not False and str(push).lower() != "false":
                     writes.append("pushes an image")
-                    if gated_on(push, DISPATCH):
+                    if gated_on(push, PUBLISHES):
                         registry_writes += 1
                         writes.pop()
             match = REGISTRY_WRITE_RUN.search(str(step.get("run") or ""))
             if match:
                 writes.append(f"runs `{match.group(0)}`")
             registry_writes += len(writes)
-            if writes and not (job_gated or gated_on(step.get("if"), DISPATCH)):
+            if writes and not (job_gated or gated_on(step.get("if"), PUBLISHES)):
                 fail(
-                    f"job `{job_name}`, step `{step.get('name') or step.get('id')}` {' and '.join(writes)} on an "
-                    f"event other than `workflow_dispatch` — a push and a pull request are dry runs that write to "
-                    f"no registry (ADR 0057 §1). Gate the step, its job, or the push input on `{DISPATCH}`."
+                    f"job `{job_name}`, step `{step.get('name') or step.get('id')}` {' and '.join(writes)} when "
+                    f"`{PUBLISHES}` is not true — a pull request (Dependabot's included) and a local run write to no "
+                    f"registry and no remote. Gate the step, its job, or the push input on `{PUBLISHES}`."
                 )
     if registry_writes == 0:
         fail(
@@ -987,7 +1044,22 @@ if workflow_doc:
     # added later is held without anyone remembering this guard.
     raw_needs = publish_job.get("needs") or []
     publish_needs = [raw_needs] if isinstance(raw_needs, str) else [str(n) for n in raw_needs]
-    stage_jobs = sorted(str(j) for j, v in jobs.items() if j != PUBLISH_JOB and isinstance(v, dict))
+
+    def needs_of(name: str) -> set[str]:
+        raw = (jobs.get(name) or {}).get("needs") or []
+        return {raw} if isinstance(raw, str) else {str(n) for n in raw}
+
+    # The jobs after the publish (the snapshot's tag) are not stages it waits on: found by needing it, never listed.
+    downstream: set[str] = set()
+    grew = True
+    while grew:
+        grew = False
+        for name in jobs:
+            if name not in downstream and name != PUBLISH_JOB and needs_of(name) & (downstream | {PUBLISH_JOB}):
+                downstream.add(name)
+                grew = True
+    stage_jobs = sorted(str(j) for j, v in jobs.items()
+                        if j != PUBLISH_JOB and j not in downstream and isinstance(v, dict))
     if publish_job and not stage_jobs:
         fail(f"{WORKFLOW.relative_to(ROOT)} has no job besides `{PUBLISH_JOB}` — assertion 9 checked NOTHING")
     for stage in stage_jobs:
@@ -1037,8 +1109,8 @@ if workflow_doc:
         raw = lane_job.get("needs") or []
         lane_needs = [raw] if isinstance(raw, str) else [str(n) for n in raw]
         if BUILD_JOB not in lane_needs:
-            fail(f"lane L1's job `{lane}` does not need `{BUILD_JOB}` — on a dispatch it installs the images that job "
-                 f"pushed, so it must run after it (ADR 0090 decision 2)")
+            fail(f"lane L1's job `{lane}` does not need `{BUILD_JOB}` — on a publishing run it installs the images that "
+                 f"job pushed, so it must run after it (ADR 0090 decision 2)")
         if lane not in publish_needs or f"needs.{lane}.result == 'success'" not in {
                 " ".join(t.split()) for t in publish_if.split("&&")}:
             fail(f"the `{PUBLISH_JOB}` job does not wait on lane L1 (`{lane}`) with `needs.{lane}.result == 'success'` "
@@ -1050,175 +1122,69 @@ if workflow_doc:
             fail(f"lane L1's job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes {sorted(build_archs)} "
                  f"— what is published for an architecture must have passed on it (ADR 0091 decision 4)")
 
-    # ---- 11. a release is one immutable GitHub Release, created last, in one call --------------------------------
-    # ADR 0096 decision 3: the recipe, `veyqctl` (signed) and the manifest are the assets of a GitHub Release on the
-    # ref. An immutable release takes no asset after it is published, so the one `gh release create` carries the
-    # producer's whole output; it runs for a release only, after every signature and the ref; and nothing uploads later.
-    unscheduled_input = ((triggers.get("workflow_dispatch") or {}).get("inputs") or {}).get(UNSCHEDULED_INPUT) or {}
-    if unscheduled_input.get("type") != "boolean" or unscheduled_input.get("default") is not False:
-        fail(
-            f"{WORKFLOW.relative_to(ROOT)}: `workflow_dispatch` must take a boolean input `{UNSCHEDULED_INPUT}` that "
-            f"defaults to false (found {unscheduled_input or 'none'}) — an unscheduled major is marked only when asked "
-            f"for, and the producer refuses it on a release that does not change the major"
-        )
-    release_steps = [
-        (job_name, index, step)
-        for job_name in sorted(jobs)
-        for index, step in enumerate(job_steps(workflow_doc, job_name))
-        if GH_RELEASE_CREATE.search(str(step.get("run") or ""))
-    ]
-    late_uploads = [
-        f"job `{job_name}`, step `{step.get('name') or step.get('id')}`"
-        for job_name in sorted(jobs)
-        for step in job_steps(workflow_doc, job_name)
-        if RELEASE_ASSET_WRITE.search(str(step.get("run") or ""))
-        or RELEASE_ACTION.search(str(step.get("uses") or "").split("@", 1)[0])
-    ]
-    for where in late_uploads:
-        fail(
-            f"{where} writes to a GitHub Release other than by the one `gh release create` — an immutable release "
-            f"takes no asset after it is published, so a later upload fails on GitHub, and before the setting is on it "
-            f"changes a release after its files were the ones published (ADR 0096 decision 3)"
-        )
-    if len(release_steps) != 1 or release_steps[0][0] != PUBLISH_JOB:
-        fail(
-            f"{WORKFLOW.relative_to(ROOT)} runs `gh release create` in {len(release_steps)} step(s) "
-            f"({', '.join(f'{j}' for j, _, _ in release_steps) or 'none'}) — a release is exactly one GitHub Release, "
-            f"created by the `{PUBLISH_JOB}` job (ADR 0096 decision 3)"
-        )
-    else:
-        _, release_index, release_step = release_steps[0]
-        publish_steps = job_steps(workflow_doc, PUBLISH_JOB)
-        body = str(release_step.get("run") or "")
-        lines = [line.strip() for line in body.replace("\\\n", " ").splitlines()]
-        named = f"the `{release_step.get('id') or release_step.get('name')}` step"
-        if not gated_on(release_step.get("if"), RELEASE_KIND):
-            fail(
-                f"{named} creates a GitHub Release when `{RELEASE_KIND}` is not true (if: `{release_step.get('if')}`) — "
-                f"a snapshot gets no GitHub Release (ADR 0096 decision 3), and `veyqctl` would install it as a release"
-            )
-        tag_index = next((i for i, s in enumerate(publish_steps) if s.get("id") == TAG_STEP), None)
-        signing = [i for i, s in enumerate(publish_steps)
-                   if i != release_index and IMAGE_SIGN.search(str(s.get("run") or ""))]
-        if tag_index is None or release_index < tag_index:
-            fail(
-                f"{named} does not follow the `{TAG_STEP}` step — `gh release create --verify-tag` needs the ref to "
-                f"exist, and a GitHub Release on a ref the publish has not created names a release that has no tree"
-            )
-        if not signing:
-            fail(f"the `{PUBLISH_JOB}` job has no `cosign sign` step, so {named}'s place after the signatures checked NOTHING")
-        elif release_index < max(signing):
-            fail(
-                f"{named} comes before a signing step of the `{PUBLISH_JOB}` job — a GitHub Release is published last, "
-                f"so a release whose files an operator can fetch is one whose images and chart are signed"
-            )
+    # ---- 13. each lane's result is attested, per architecture, by the publish and never by the lane --------------
+    # ADR 0091 decision 5: every green push publishes its snapshot with each lane's result as a signed attestation
+    # (lane, architecture, outcome, inputs). A leg records what it ran; the publish assembles one predicate per
+    # architecture from every leg the lane's matrix runs — the `--arch` and `--shard` it passes are that matrix, read
+    # here, never listed — and attests it with the type `scripts/snapshot.py` names, after the signatures. The leg runs
+    # the commit's test code, so it holds no `id-token`.
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import snapshot as snapshot_script  # noqa: E402 — the predicate type the promotion verifies by
 
-        def argv_of(pattern: re.Pattern) -> list[str] | None:
-            for line in lines:
-                if pattern.search(line):
+    def argv_lines(job_name: str, needle: str) -> list[tuple[int, dict, list[str]]]:
+        found = []
+        for index, step in enumerate(job_steps(workflow_doc, job_name)):
+            body = str(step.get("run") or "").replace("\\\n", " ")
+            for line in body.splitlines():
+                if needle in line:
                     try:
-                        return shlex.split(line.split(" #", 1)[0])
+                        found.append((index, step, shlex.split(line.split(" #", 1)[0])))
                     except ValueError as e:
-                        fail(f"{named}: cannot parse `{line[:80]}`: {e}")
-                        return None
-            return None
+                        fail(f"job `{job_name}`: cannot parse `{line.strip()[:80]}`: {e}")
+        return found
 
-        def norm(token: str) -> str:
-            return re.sub(r"\$\{(\w+)\}", r"$\1", token)
-
-        create = argv_of(GH_RELEASE_CREATE) or []
-        producer = argv_of(PRODUCER) or []
-        if "--verify-tag" not in create:
+    for lane in lane_jobs:
+        matrix = ((jobs[lane].get("strategy") or {}).get("matrix") or {})
+        lane_archs = sorted(str(a) for a in matrix.get("arch") or [])
+        lane_shards = sorted(str(d) for d in matrix.get("domain") or [])
+        if "id-token" in (jobs[lane].get("permissions") or {}):
+            fail(f"lane L1's job `{lane}` holds `id-token` — a leg runs the commit's test code and signs nothing; the "
+                 f"`{PUBLISH_JOB}` job attests its result")
+        records = [(i, s) for i, s, argv in argv_lines(lane, f"{SNAPSHOT_SCRIPT} lane-result")]
+        if not records:
+            fail(f"lane L1's job `{lane}` records no result (`{SNAPSHOT_SCRIPT} lane-result`) — the snapshot would carry "
+                 f"no attestation of what the lane ran (ADR 0091 decision 5)")
+        for _, step in records:
+            if not gated_on(step.get("if"), PUBLISHES):
+                fail(f"lane L1's job `{lane}` records its result when `{PUBLISHES}` is not true — a pull request pulled "
+                     f"no digest to record")
+        assembled = argv_lines(PUBLISH_JOB, f"{SNAPSHOT_SCRIPT} predicates")
+        if len(assembled) != 1:
+            fail(f"the `{PUBLISH_JOB}` job runs `{SNAPSHOT_SCRIPT} predicates` {len(assembled)} time(s), not once")
+            continue
+        assembled_at, _, argv = assembled[0]
+        if sorted(flag_values(argv, "--arch")) != lane_archs or sorted(flag_values(argv, "--shard")) != lane_shards:
             fail(
-                f"{named}'s `gh release create` does not carry `--verify-tag` — without it a missing ref is CREATED by "
-                f"GitHub from the default branch's tip, a GitHub Release on a tree no publish named (ADR 0057 §2)"
+                f"the `{PUBLISH_JOB}` job assembles the attestations for architectures {sorted(flag_values(argv, '--arch'))} "
+                f"and shards {sorted(flag_values(argv, '--shard'))}, while lane `{lane}` runs {lane_archs} and "
+                f"{lane_shards} — a leg the attestation does not expect is unattested, and an expected leg that never runs "
+                f"refuses every snapshot"
             )
-        for flag in create:
-            if flag.split("=", 1)[0] in ("--draft", "-d", "--prerelease", "-p"):
-                fail(
-                    f"{named}'s `gh release create` passes `{flag}` — a draft is no release `veyqctl` lists and a "
-                    f"prerelease is one it never installs (ADR 0096 decision 4)"
-                )
-        out = None
-        if producer:
-            script_at = next(i for i, t in enumerate(producer) if t.endswith("scripts/release_assets.py"))
-            out = next((norm(t) for t in producer[script_at + 1:] if not t.startswith("-")), None)
-        if out is None:
-            fail(f"{named} does not run `scripts/release_assets.py` with an output directory — the release's files "
-                 f"are the producer's, never assembled by hand")
-        else:
-            whole = f"{out}/v$VERSION/*"
-            if whole not in [norm(t) for t in create]:
-                fail(
-                    f"{named}'s `gh release create` does not upload `{whole}`, the producer's whole output for the "
-                    f"release — every asset goes in the one call, because an immutable release takes none later"
-                )
-            # Every `sign-blob` of the step, not the first one: the release signs two files, and a lookup that stops
-            # at the first match reads a correct step red as soon as the two lines trade places.
-            create_at = next((i for i, line in enumerate(lines) if GH_RELEASE_CREATE.search(line)), len(lines))
-            producer_at = [i for i, line in enumerate(lines) if PRODUCER.search(line)]
-            blobs: dict[str, list[tuple[int, list[str]]]] = {}
-            for at, line in enumerate(lines):
-                if not SIGN_BLOB.search(line):
-                    continue
-                try:
-                    argv = shlex.split(line.split(" #", 1)[0])
-                except ValueError as e:
-                    fail(f"{named}: cannot parse `{line[:80]}`: {e}")
-                    continue
-                blobs.setdefault(norm(argv[-1]), []).append((at, argv))
-            for blob, bundle_name, why in (
-                (f"{out}/v$VERSION/veyqctl", release_assets.VEYQCTL_BUNDLE,
-                 "`veyqctl` is signed with the images' identity for the copy an operator fetches by hand, and the bundle "
-                 "is an asset (ADR 0096 decision 3)"),
-                (f"{out}/v$VERSION/{release_assets.MANIFEST}", release_assets.MANIFEST_BUNDLE,
-                 "`veyqctl` verifies the manifest's bundle before it trusts any sha256 or digest in it, so an unsigned "
-                 "manifest is a recipe exactly as trustworthy as its source (inbox #469, ADR 0057 §3)"),
-            ):
-                signed = blobs.get(blob, [])
-                want = f"{out}/v$VERSION/{bundle_name}"
-                if len(signed) != 1:
-                    fail(f"{named} runs {len(signed)} `cosign sign-blob` of `{blob}`, not one — {why}")
-                    continue
-                at, argv = signed[0]
-                bundles = [norm(argv[i + 1]) for i, t in enumerate(argv[:-1]) if t == "--bundle"]
-                if bundles != [want]:
-                    fail(f"{named} signs `{blob}` with `--bundle` {bundles or 'missing'}, not `{want}` — the bundle is "
-                         f"an asset of the one upload, under the name `veyqctl` and the Run page fetch; {why}")
-                if not producer_at or at < max(producer_at):
-                    fail(f"{named} signs `{blob}` before the producer writes it — the signature would be of another file")
-                if at > create_at:
-                    fail(f"{named} signs `{blob}` after `gh release create` — the bundle would miss the one call")
-                if bundle_name == release_assets.MANIFEST_BUNDLE:
-                    rewrite = [lines[i] for i in range(at + 1, create_at)
-                               if PRODUCER.search(lines[i])
-                               or (release_assets.MANIFEST in lines[i] and not SIGN_BLOB.search(lines[i]))]
-                    if rewrite:
-                        fail(f"{named} touches the manifest between its `cosign sign-blob` and `gh release create` "
-                             f"(`{rewrite[0][:80]}`) — the manifest uploaded must be the one signed, or every "
-                             f"`veyqctl install` refuses the release")
-            for blob in sorted(set(blobs) - {f"{out}/v$VERSION/veyqctl", f"{out}/v$VERSION/{release_assets.MANIFEST}"}):
-                fail(f"{named} runs `cosign sign-blob` on `{blob}`, which is neither `veyqctl` nor the manifest — this "
-                     f"guard holds exactly those two signatures")
-        unscheduled_env = str(release_step.get("env") or {})
-        if f"inputs.{UNSCHEDULED_INPUT}" not in unscheduled_env or "--unscheduled" not in body:
-            fail(f"{named} does not hand `inputs.{UNSCHEDULED_INPUT}` to the producer as `--unscheduled` — the manifest "
-                 f"would never mark an unscheduled major (ADR 0097)")
-        # The producer's refusals come before anything is published: a refusal at the GitHub Release step would leave
-        # images, a chart and a ref with no GitHub Release.
-        first_write = next((i for i, s in enumerate(publish_steps)
-                            if FIRST_PUBLISH_WRITE.search(str(s.get("run") or ""))), None)
-        prechecked = any(
-            "scripts/release_assets.py" in str(s.get("run") or "")
-            and f"inputs.{UNSCHEDULED_INPUT}" in str(s.get("env") or {})
-            for s in publish_steps[: first_write if first_write is not None else 0]
-        )
-        if not prechecked:
-            fail(
-                f"no step of the `{PUBLISH_JOB}` job runs `scripts/release_assets.py` with `inputs.{UNSCHEDULED_INPUT}` "
-                f"before its first push — a producer refusal (an unscheduled major that is none) would then come after "
-                f"the images, the chart and the ref are out, leaving a release with no GitHub Release"
-            )
+        attests = [(i, s) for i, s in enumerate(job_steps(workflow_doc, PUBLISH_JOB))
+                   if COSIGN_ATTEST.search(str(s.get("run") or ""))]
+        signs = [i for i, s in enumerate(job_steps(workflow_doc, PUBLISH_JOB))
+                 if re.search(r"\bcosign\s+sign\s", str(s.get("run") or ""))]
+        if not attests:
+            fail(f"the `{PUBLISH_JOB}` job runs no `cosign attest` — the lanes' results are assembled and never attested")
+        for index, step in attests:
+            env = {str(k): str(v) for k, v in (step.get("env") or {}).items()}
+            if env.get("PREDICATE_TYPE") != snapshot_script.PREDICATE_TYPE or '--type "$PREDICATE_TYPE"' not in str(step.get("run")):
+                fail(f"the `{PUBLISH_JOB}` job's attest step does not attest with `--type \"$PREDICATE_TYPE\"` set to "
+                     f"`{snapshot_script.PREDICATE_TYPE}` (found `{env.get('PREDICATE_TYPE')}`) — the type is what a "
+                     f"promotion verifies by")
+            if index < assembled_at or not signs or index < max(signs):
+                fail(f"the `{PUBLISH_JOB}` job attests before it assembles the predicates or before it signs the images "
+                     f"— the attestation's subject is the signed index digest")
 
     # The cosign that signs is the line operators verify with (inbox #474): one installer, before every `cosign`, at an
     # exact version no older than the floor `veyqctl` refuses below — the installer's default lags (v4.1.2: v3.0.6).
@@ -1316,7 +1282,7 @@ if not refusals:
             # `veyqctl` fetches the assets it names, by name: each must be one the producer writes, or an install
             # from a real release misses it (the template's name moved once, to `env.example`, for GitHub's sake).
             # The manifest and the two bundles are written beside the carried files (the bundles by the publish's
-            # `cosign sign-blob`, which assertion 11 holds to these names), so they are names a release has too.
+            # `cosign sign-blob`, whose names the producer reserves), so they are names a release has too.
             produced = {p.name for p in carried.iterdir()} | {
                 release_assets.MANIFEST, release_assets.VEYQCTL_BUNDLE, release_assets.MANIFEST_BUNDLE}
             # Underscores in the prefix too: `[A-Z]+_ASSET` never saw `MANIFEST_BUNDLE_ASSET`, and an anchor set
@@ -1440,34 +1406,34 @@ else:
 
 
 if workflow_doc:
-    # ---- 8. the chart is the release's third artifact ---------------------------------------------------------
+    # ---- 8. the chart is the snapshot's third artifact ----------------------------------------------------------
     chart_meta = yaml.safe_load((CHART_DIR / "Chart.yaml").read_text()) if (CHART_DIR / "Chart.yaml").is_file() else {}
     chart_name = str((chart_meta or {}).get("name") or "")
     owner_expr = "ghcr.io/${{ github.repository_owner }}"
     refuse = step_by_id(workflow_doc, PUBLISH_JOB, REFUSE_STEP) or {}
-    # Whole words of the step's env, with the owner expression kept as one word (it contains spaces), so
-    # `…/veyq` is not satisfied by `…/veyq-admin` or by `…/charts/veyq`.
-    refuse_env = (
-        " ".join(str(v) for v in (refuse.get("env") or {}).values())
-        .replace("${{ github.repository_owner }}", "\0OWNER\0")
-        .split()
-    )
-    refuse_env = [word.replace("\0OWNER\0", "${{ github.repository_owner }}") for word in refuse_env]
+    try:
+        refuse_argv = shlex.split(str(refuse.get("run") or "").replace("\\\n", " "))
+    except ValueError:
+        refuse_argv = []
     matrix_images = sorted(published_images(WORKFLOW.read_text())) if WORKFLOW.is_file() else []
     if not chart_name:
-        fail(f"{(CHART_DIR / 'Chart.yaml').relative_to(ROOT)} names no chart, so the chart's release cannot be held")
-    for artifact in [*matrix_images, f"charts/{chart_name}"]:
-        if f"{owner_expr}/{artifact}" not in refuse_env:
+        fail(f"{(CHART_DIR / 'Chart.yaml').relative_to(ROOT)} names no chart, so the chart's snapshot cannot be held")
+    if (refuse.get("env") or {}).get("REGISTRY") != owner_expr:
+        fail(f"the `{REFUSE_STEP}` step's `REGISTRY` is not `{owner_expr}` — it would check another registry's names")
+    for image in matrix_images:
+        if image not in flag_values(refuse_argv, "--image"):
             fail(
-                f"the `{REFUSE_STEP}` step does not check `{owner_expr}/{artifact}` — a release with that artifact "
-                f"already out would be published again around it, and a release whose images and chart disagree "
-                f"is a partial one (ADR 0064, ADR 0065)"
+                f"the `{REFUSE_STEP}` step does not check `--image {image}` — a snapshot with that image's names already "
+                f"taken would be published around it, and a snapshot whose images disagree is a partial one (ADR 0065)"
             )
+    if f"charts/{chart_name}" not in flag_values(refuse_argv, "--chart"):
+        fail(f"the `{REFUSE_STEP}` step does not check `--chart charts/{chart_name}` — the chart's snapshot name would be "
+             f"written over (ADR 0064)")
     package_steps = [s for s in job_steps(workflow_doc, PUBLISH_JOB) if "helm package" in str(s.get("run") or "")]
     if len(package_steps) != 1:
         fail(
             f"the `{PUBLISH_JOB}` job has {len(package_steps)} step(s) running `helm package`; the chart ships "
-            f"with every publish, packaged exactly once (ADR 0064)"
+            f"with every snapshot, packaged exactly once (ADR 0064)"
         )
     for step in package_steps:
         body = str(step.get("run") or "")
@@ -1475,14 +1441,16 @@ if workflow_doc:
         if env.get("VERSION") != VERSION_EXPR:
             fail(
                 f"the chart packaging step's `VERSION` is `{env.get('VERSION')}`, not `{VERSION_EXPR}` — the "
-                f"chart's version must be the release's, never the in-tree placeholder or a literal"
+                f"chart's version must be the tree's, never the in-tree placeholder or a literal"
             )
-        for flag in ('--version "$VERSION"', '--app-version "$VERSION"'):
+        # `-SNAPSHOT` on both: `appVersion` is the image tag the values default to, and the snapshot's images are
+        # tagged `<version>-SNAPSHOT` — the release's chart, packaged by the promotion, names `<version>`.
+        for flag in ('--version "${VERSION}-SNAPSHOT"', '--app-version "${VERSION}-SNAPSHOT"'):
             if flag not in body:
                 fail(
-                    f"the chart packaging step does not pass `{flag}` — the chart's `version` and `appVersion` "
-                    f"are both the release version, set at packaging (ADR 0064); `appVersion` is the image tag "
-                    f"the values default to, so a chart packaged without it deploys the placeholder"
+                    f"the chart packaging step does not pass `{flag}` — the snapshot chart's `version` and `appVersion` "
+                    f"are both the snapshot's name (ADR 0064); `appVersion` is the image tag the values default to, so "
+                    f"a chart packaged otherwise deploys images this snapshot does not name"
                 )
         if not re.search(r"helm\s+push\b", body) or f"oci://{owner_expr}/charts" not in str(step.get("env") or {}) + body:
             fail(
@@ -1559,9 +1527,6 @@ if prod_project:
 
 # ---- 7. the documented verification pins exactly the identity that signs -------------------------------------
 
-# The operator's verification is a page of the docs site's Run area (ADR 0087), kept `.md` with its commands in
-# plain fenced blocks so this guard can read them; it moved there from infra/README.md, which keeps the dev stack.
-VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
 CHART = CHART_DIR / "Chart.yaml"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 # The registry the publish pushes to. The owner is not taken from the workflow — there it is
@@ -1606,16 +1571,6 @@ def verify_commands(markdown: str) -> list[list[str]]:
             if argv[:2] in (["cosign", "verify"], ["cosign", "verify-blob"]):
                 commands.append(argv[1:])
     return commands
-
-
-def flag_values(argv: list[str], name: str) -> list[str]:
-    values = []
-    for index, token in enumerate(argv):
-        if token == name and index + 1 < len(argv):
-            values.append(argv[index + 1])
-        elif token.startswith(name + "="):
-            values.append(token.split("=", 1)[1])
-    return values
 
 
 verify_summary = ""
@@ -1820,11 +1775,13 @@ if errors:
 
 print(
     f"release identity OK: VERSION {version_value} is the major, the minor is counted offline from the history "
-    f"({len(publishing_branches)} publishing branch(es), a shallow checkout refused), every registry write waits for "
-    f"a dispatch, the stamp is declared by the {stamped_targets} published target stage(s) and no other, which label "
-    f"their version and revision from it with no build step overriding a label, a release "
-    f"refuses a republish, creates its v{version_value}.<minor> ref and last its one GitHub Release in one call, signed by the pinned cosign {signing_cosign or '?'}, the publish waits on every one of the "
-    f"{len([j for j in (workflow_doc.get('jobs') or {}) if j != PUBLISH_JOB])} other jobs as a green stage, the producer carries "
+    f"({len(publishing_branches)} publishing branch(es), a shallow checkout refused, a pull request and a local run "
+    f"publishing nothing), every write waits for `{PUBLISHES}`, the stamp is declared by the {stamped_targets} published "
+    f"target stage(s) and no other, which label their version and revision from it with no build step overriding a "
+    f"label, a snapshot refuses to replace one, is signed by the pinned cosign {signing_cosign or '?'} and attested per "
+    f"lane and architecture, gets its `snapshot-` tag from a job holding `contents: write` alone and no GitHub Release, "
+    f"the snapshot waits on every one of the "
+    f"{len(stage_jobs) if workflow_doc else 0} stages as green, the producer carries "
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
