@@ -108,6 +108,6 @@ describe('OrderPanel (uc.moderation.authority-order, admin-web)', () => {
     expect(w.find('.order-error').text()).toContain('already recorded')
     vi.mocked(enterOrder).mockRejectedValueOnce(new OrderInvalid('share'))
     await fillAndSubmit(w)
-    expect(w.find('.order-error').text()).toContain('neither a link of this instance nor a link id')
+    expect(w.find('.order-error').text()).toContain('neither a link of this server nor a link id')
   })
 })

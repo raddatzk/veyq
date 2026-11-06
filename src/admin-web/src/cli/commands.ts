@@ -283,9 +283,9 @@ function stepsDocument(s: ModerationSteps) {
 export function statementWarning(delivery: StatementDelivery | undefined): string | null {
   switch (delivery?.outcome) {
     case StatementOutcome.NotAllReached:
-      return `the statement of reasons could not be mailed to ${delivery.notReached.join(', ')} and is not sent again — tell them through the instance contact`
+      return `the statement of reasons could not be mailed to ${delivery.notReached.join(', ')} and is not sent again — tell them through the server contact`
     case StatementOutcome.Unknown:
-      return 'the server could not tell whom the statement of reasons reached — tell the people it affects through the instance contact'
+      return 'the server could not tell whom the statement of reasons reached — tell the people it affects through the server contact'
     case StatementOutcome.NobodyToTell:
       return 'the statement of reasons went to nobody: the tenant has no owner, or the account no longer exists'
     default:
@@ -391,7 +391,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant suspend': {
     usage: 'tenant suspend --tenant-id <id> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on an instance run by a club, an organisation or a company. Prints whom the mail reached (statementDelivery) and warns on stderr when it did not reach everyone.',
+    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on a server run by a club, an organisation or a company. Prints whom the mail reached (statementDelivery) and warns on stderr when it did not reach everyone.',
     flags: { 'tenant-id': tenantId, ...STATEMENT_FLAGS },
     run: async (f) => suspendTenant(f['tenant-id'], await statementOf(f)),
     // `ok` as before, and over content whom the statement's mail reached.
@@ -421,7 +421,7 @@ export const COMMANDS: Record<string, Command> = {
   'tenant invite-owner': {
     usage: 'tenant invite-owner --tenant-id <id> --email <address>',
     summary:
-      'Invite one of an ACTIVE tenant’s members to own it — the way out of an ownerless tenant. Mailed where instance mail is set up (delivery SENT); otherwise hand over the copy-link from bootstrapSecret.',
+      'Invite one of an ACTIVE tenant’s members to own it — the way out of an ownerless tenant. Mailed where the server’s mail is set up (delivery SENT); otherwise hand over the copy-link from bootstrapSecret.',
     flags: { 'tenant-id': tenantId, email: { describe: 'the address of one of the tenant’s members', required: true } },
     run: (f) => inviteTenantOwner(f['tenant-id'], f.email),
   },
@@ -438,7 +438,7 @@ export const COMMANDS: Record<string, Command> = {
   release: {
     usage: 'release',
     summary:
-      'Print the release version the running instance was published under, the daily release check (on or off, its source, its last success), every newer release it found — an UNSCHEDULED_MAJOR means upgrade now — and noticesMailedTo: the address a new find is also mailed to, or null while instance mail is not set up and confirmed (then finds are only shown).',
+      'Print the release version the running server was published under, the daily release check (on or off, its source, its last success), every newer release it found — an UNSCHEDULED_MAJOR means upgrade now — and noticesMailedTo: the address a new find is also mailed to, or null while the server’s mail is not set up and confirmed (then finds are only shown).',
     flags: {},
     // `release` stays the document's first key, so a script that read it before still reads it.
     run: async () => ({
@@ -449,7 +449,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'release check': {
     usage: 'release check <on|off>',
-    summary: 'Switch the daily release check on or off. Off, the instance makes no request at all; the source is kept.',
+    summary: 'Switch the daily release check on or off. Off, the server makes no request at all; the source is kept.',
     flags: {},
     operand: { name: 'state', describe: 'on or off' },
     run: async (f) => {
@@ -577,7 +577,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'capabilities require': {
     usage: 'capabilities require <id> --requirement <name> --value <n|off> [--lang en|de]',
-    summary: 'Set a requirement on an entry for the instance (1 for a flag, else days 1-3650), or clear it with off, and print what it does to new and to existing data.',
+    summary: 'Set a requirement on an entry for the server (1 for a flag, else days 1-3650), or clear it with off, and print what it does to new and to existing data.',
     flags: {
       requirement: { describe: 'the requirement name, as `capabilities list` prints it', required: true },
       value: { describe: '1 for a flag, a number of days (1-3650), or off to clear', required: true },
@@ -709,14 +709,14 @@ export const COMMANDS: Record<string, Command> = {
   },
   'operator show': {
     usage: 'operator show',
-    summary: 'Print the instance contact, the provider identification, the supervisory authority, the privacy notice’s values and the notification address with its confirmation; a value not set is null, published as “not stated by this operator”.',
+    summary: 'Print the server contact, the provider identification, the supervisory authority, the privacy notice’s values and the notification address with its confirmation; a value not set is null, published as “not stated by this operator”.',
     flags: {},
     run: () => getOperator(),
     render: (r) => renderOperator(r as InstanceOperator),
   },
   'operator set': {
     usage: 'operator set [--contact-email <a>] [--contact-languages <de,en>] [--statement-email <a>] [--notification-email <a>] [--provider-name <n>] [--provider-address <a>] [--provider-email <a>] [--provider-representative <n>] [--supervisory-authority <n>] [--recipients \'<name>|<hosting|object-storage|mail-relay|backup|other:<what they do>>|<country code, e.g. DE>; …\'] [--data-protection-officer <n>]',
-    summary: 'Change the given values (none clears one) and keep the rest; --recipients replaces the privacy notice’s whole list. A new notification address gets a code by instance mail, typed into the console’s Server → Operator.',
+    summary: 'Change the given values (none clears one) and keep the rest; --recipients replaces the privacy notice’s whole list. A new notification address gets a code by the server’s mail, typed into the console’s Server → Operator.',
     flags: Object.fromEntries(
       Object.keys(OPERATOR_FLAGS).map((k) => [k, { describe: `${k.replace(/-/g, ' ')}, or none to clear it`, required: false }]),
     ),
@@ -762,7 +762,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'account block': {
     usage: 'account block --address <address> [--case <caseId>] [--over-content] [--ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on an instance run by a club, an organisation or a company. Prints the steps and whom the mail reached (statementDelivery), and warns on stderr when it did not reach the member.',
+    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on a server run by a club, an organisation or a company. Prints the steps and whom the mail reached (statementDelivery), and warns on stderr when it did not reach the member.',
     flags: {
       address: { describe: 'the account’s address', required: true },
       case: { describe: 'the case the block answers, as `moderation proposals` prints it', required: false },
@@ -886,7 +886,7 @@ async function order(kind: OrderKind, f: Record<string, string>): Promise<Author
   } catch (e) {
     if (e instanceof OrderInvalid) {
       throw new CliError(
-        e.reason === 'share' ? '--share is neither a link of this instance nor a link id'
+        e.reason === 'share' ? '--share is neither a link of this server nor a link id'
         : e.reason === 'reference' ? '--reference is empty'
         : 'moderation is off, so nothing can be sealed to its key — turn it on first',
       )
@@ -899,7 +899,7 @@ async function order(kind: OrderKind, f: Record<string, string>): Promise<Author
  *  link is not on this instance) with the reference as typed — the server holds it sealed. */
 function renderOrder(r: unknown, flags: Record<string, string>, env: Record<string, string | undefined>): string {
   const o = r as AuthorityOrder
-  const lines = [`order ${o.id}  ${o.kind}  ${o.found ? 'found' : 'not found on this instance'}`]
+  const lines = [`order ${o.id}  ${o.kind}  ${o.found ? 'found' : 'not found on this server'}`]
   if (o.blockedAt) lines.push(`blocked at ${formTime(o.blockedAt)}`)
   if (o.holdUntil) lines.push(`kept until ${formTime(o.holdUntil)}`)
   if (o.statementDeferredUntil) lines.push(`the affected are told on ${formTime(o.statementDeferredUntil)}, unless renewed`)
