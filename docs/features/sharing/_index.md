@@ -51,6 +51,11 @@ do there is each application's role matrix ([Memories](../../apps/memories.md#wh
   of this or another instance, kept as a bookmark node with its password, sealed; it opens and is reported where the
   share lives; [ADR 0120](../../decisions/0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md))
 
+- [uc.sharing.browse-a-received-share-in-place](use-cases/uc.sharing.browse-a-received-share-in-place.md) — **planned**
+  (a bookmarked share of any instance browsed and written in place;
+  [ADR 0121](../../decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md),
+  `changes/cr-browse-a-received-share-in-place.md`)
+
 ## Deferred
 
 - **Buckets** are built, as Memories' per-uploader grouping: [uc.memory.buckets](../memory/use-cases/uc.memory.buckets.md),
