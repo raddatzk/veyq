@@ -33,7 +33,7 @@ class GuestWriteRecords {
 
     /**
      * Record one guest write of [identityId] on [objectId]. Nothing when [seen] is null (the resolver yielded no address,
-     * ADR 0094). The port is recorded where [seen] holds one, else the address alone.
+     * ADR 0094). The port and the request's origin are recorded where [seen] holds them, else the address alone.
      */
     @Transactional(Transactional.TxType.MANDATORY)
     fun record(seen: ClientSeen?, identityId: String, kind: GuestWriteObject, objectId: String, fieldGroup: String?) {
@@ -46,6 +46,7 @@ class GuestWriteRecords {
             this.fieldGroup = fieldGroup
             clientIp = seen.ip
             clientPort = seen.port
+            requestOrigin = seen.origin
             observedAt = seen.at
             // N as it stands at the write: a later lengthening never extends this row (ADR 0092 § 2).
             expiresAt = seen.at.plus(Duration.ofDays(retentionDays().toLong()))

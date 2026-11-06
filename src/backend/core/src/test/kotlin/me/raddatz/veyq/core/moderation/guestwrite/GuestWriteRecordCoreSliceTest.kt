@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.http.ClientAddress
 import me.raddatz.veyq.core.http.ClientPortSetting
+import me.raddatz.veyq.core.http.RequestOrigin
 import me.raddatz.veyq.core.moderation.hold.HoldEntity
 import me.raddatz.veyq.core.moderation.hold.HoldPinEntity
 import me.raddatz.veyq.core.moderation.hold.HoldRowEntity
@@ -146,6 +147,47 @@ class GuestWriteRecordCoreSliceTest {
         assertTrue(QuarkusTransaction.requiringNew().call { NodeEntity.findById(id) } != null, "the write itself stood")
         val control = guestCreate(t, xff = "203.0.113.77")
         assertEquals(1, seen(control).size, "control: the same write with an address records one")
+    }
+
+    // --- the origin: what the browser stated, in the shapes RequestOrigin keeps (ADR 0093 § 10, ADR 0121) -------------
+
+    /** A foreign page's write through a visitor's browser carries that page's origin — the record keeps it beside the
+     *  address, so the address reads as the visitor's; control: the same write with no `Origin` keeps none. */
+    @Test
+    fun aCrossOriginWriteKeepsItsOriginAndAHeaderlessOneNone() {
+        val t = tree()
+        assertEquals(listOf("https://pages.attacker.example"), origins(guestCreate(t, xff = "203.0.113.20", origins = listOf("https://pages.attacker.example"))))
+        assertEquals(listOf(null), origins(guestCreate(t, xff = "203.0.113.20")), "control: no Origin sent, none kept")
+    }
+
+    /** The instance's own page, a port, an IPv6 host and an opaque origin are kept as sent. */
+    @Test
+    fun aSameOriginAPortedAnIpv6AndAnOpaqueOriginAreKeptAsSent() {
+        val t = tree()
+        for (origin in listOf("http://veyq.localhost:8081", "https://[2001:db8::1]:8443", "http://192.0.2.7", RequestOrigin.OPAQUE)) {
+            assertEquals(listOf(origin), origins(guestCreate(t, xff = "203.0.113.21", origins = listOf(origin))), origin)
+        }
+    }
+
+    /** Anything no browser sends is kept as the marker, never as sent — each beside a well-formed control. */
+    @Test
+    fun aMalformedOrOversizedOrRepeatedOriginIsKeptAsTheMarker() {
+        val t = tree()
+        val longest = "https://" + "a".repeat(RequestOrigin.MAX - "https://".length)
+        assertEquals(RequestOrigin.MAX, longest.length)
+        val cases = listOf(
+            listOf("https://evil.example/path") to listOf("https://evil.example"),
+            listOf("HTTPS://EVIL.EXAMPLE") to listOf("https://evil.example"),
+            listOf("https://user@evil.example") to listOf("https://evil.example"),
+            listOf("free text in the evidence") to listOf("https://evil.example"),
+            listOf(longest + "a") to listOf(longest),
+            listOf("https://a.example", "https://b.example") to listOf("https://a.example"),
+        )
+        for ((bad, good) in cases) {
+            assertEquals(listOf(RequestOrigin.INVALID), origins(guestCreate(t, xff = "203.0.113.22", origins = bad)), "$bad")
+            assertEquals(good, origins(guestCreate(t, xff = "203.0.113.22", origins = good)), "control: $good")
+        }
+        assertEquals(0L, count("requestOrigin = ?1", "free text in the evidence"), "the free text is in no record")
     }
 
     // --- which writes record ------------------------------------------------------------------------------------------
@@ -422,10 +464,11 @@ class GuestWriteRecordCoreSliceTest {
 
     // --- helpers ----------------------------------------------------------------------------------------------------
 
-    private fun guestCreate(t: Tree, xff: String, portHeader: String? = null): String {
+    private fun guestCreate(t: Tree, xff: String, portHeader: String? = null, origins: List<String> = emptyList()): String {
         val id = UUID.randomUUID().toString()
         var spec = given().contentType(ContentType.JSON).header("X-Contributor-Token", t.link.token).header("X-Forwarded-For", xff)
         if (portHeader != null) spec = spec.header(ClientAddress.PORT_HEADER, portHeader)
+        for (origin in origins) spec = spec.header("Origin", origin)
         spec.body(
             """{"nodeId":"$id","parentId":"${t.a}","parentEpoch":0,"kind":"FOLDER","encryptedName":"bmFtZQ==",""" +
                 """"slugToken":"${GuestTreeShare.slug()}","scopeEpoch":0,"wrappedContentKey":"d3JhcA=="}""",
@@ -447,6 +490,8 @@ class GuestWriteRecordCoreSliceTest {
         QuarkusTransaction.requiringNew().call { GuestWriteRecordEntity.list("objectId", objectId) }
 
     private fun seen(objectId: String): List<Pair<String, Int?>> = rows(objectId).map { it.clientIp to it.clientPort }
+
+    private fun origins(objectId: String): List<String?> = rows(objectId).map { it.requestOrigin }
 
     private fun count(query: String, value: Any): Long = QuarkusTransaction.requiringNew().call { GuestWriteRecordEntity.count(query, value) }
 

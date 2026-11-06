@@ -15,7 +15,9 @@ enum class GuestWriteObject { IDENTITY, NODE, ITEM }
 /**
  * One guest write (`veyq_guest_write_record`, en.moderation.guest-write-record): the identity that wrote, the object,
  * and what the server saw of the client — the resolver's address in text form, its source port where known — and when,
- * in milliseconds UTC. Never a field the client could choose, never content.
+ * in milliseconds UTC, with the `Origin` header the request carried ([me.raddatz.veyq.core.http.RequestOrigin]: a
+ * serialized origin, `null`, `invalid`, or no value when none was sent). The origin is the one field a client states — a
+ * browser truthfully, any other client freely — and it is kept only in those shapes. Never content.
  */
 @Entity
 @Table(name = "veyq_guest_write_record")
@@ -42,6 +44,9 @@ class GuestWriteRecordEntity : PanacheEntityBase {
 
     @Column(name = "client_port")
     var clientPort: Int? = null
+
+    @Column(name = "request_origin", length = 255)
+    var requestOrigin: String? = null
 
     @Column(name = "observed_at", nullable = false)
     lateinit var observedAt: Instant
