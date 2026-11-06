@@ -111,6 +111,7 @@ export const memberAccessOf = (o: Partial<Omit<MemberAccess, 'mode'>> = {}): Mem
 export const guestAccessOf = (role: string, o: Partial<Omit<GuestAccess, 'mode' | 'role'>> = {}): GuestAccess => ({
   mode: 'guest',
   shareId: 's1',
+  apiBase: '',
   role: role as ShareRole,
   head: {} as PublicShareHead,
   fragmentKey: 'frag',

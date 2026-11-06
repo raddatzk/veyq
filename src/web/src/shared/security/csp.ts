@@ -73,6 +73,11 @@ export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, ratesOrigin
   if (breachOrigin) connectSrc.push(breachOrigin)
   if (ratesOrigin) connectSrc.push(ratesOrigin)
   if (dev) connectSrc.push('ws:') // Vite HMR socket — dev server only, never in a production build
+  // A received share browsed in place reads its own instance's API (ADR 0121 decision 2): the backend appends `https:`
+  // per tenant while `core.share-embedding` is effective, so the BUILT policy names neither source (`verify:csp`
+  // refuses one). The dev server cannot read a switch and serves as if it were on, plus the plain-http
+  // `*.localhost` hosts a second local tenant lives on.
+  if (dev) connectSrc.push('https:', 'http://*.localhost:*')
 
   const trustedTypes: Record<string, string[]> = dev
     ? {}

@@ -21,11 +21,11 @@ import java.util.UUID
 
 /**
  * The clear fields an Art. 18 report asks for (ADR 0093 § 13, uc.moderation.report-to-an-authority): the case, its
- * category, every time in UTC, its measures, the uploaders the held rows name and every held guest-write record — what
- * the server already holds in the clear, read from the case's rows and its hold, **never content and nothing opened**
- * (operator-blind: whatever needs plaintext stays in the moderator's browser). A hold copied each record's columns as
- * the database returned them, its times as the instants they are (`HoldSnapshot`), which is how they are
- * read back here.
+ * category, every time in UTC, its measures, the uploaders the held rows name and every held guest-write record (its
+ * address, port, time and the `Origin` its request carried) — what the server already holds in the clear, read from
+ * the case's rows and its hold, **never content and nothing opened** (operator-blind: whatever needs plaintext stays in
+ * the moderator's browser). A hold copied each record's columns as the database returned them, its times as the
+ * instants they are (`HoldSnapshot`), which is how they are read back here.
  */
 @ApplicationScoped
 class CaseExports(private val snapshots: CaseSnapshots, private val targets: CaseTargets) {
@@ -75,6 +75,8 @@ class CaseExports(private val snapshots: CaseSnapshots, private val targets: Cas
             objectId = UUID.fromString(objectId),
             address = address,
             port = row["client_port"]?.toIntOrNull(),
+            // A copy taken before the column existed has no key for it, as a write that carried no Origin has a null.
+            origin = row["request_origin"],
             observedAt = observed,
         )
     }

@@ -149,7 +149,7 @@ export function usePotSession(input: PotSessionInput): PotSession {
         access.mode === 'member'
           ? await readMemberReceipts(input.scopeId(), nodeId(), ifNoneMatch)
           : access.mode === 'guest'
-            ? await readGuestReceipts(access.shareId, nodeId(), { pwToken: access.pwToken, ifNoneMatch })
+            ? await readGuestReceipts(access, nodeId(), { pwToken: access.pwToken, ifNoneMatch })
             : null
       if (mine !== generation) return
       if (read) {
@@ -187,7 +187,7 @@ export function usePotSession(input: PotSessionInput): PotSession {
     const access = input.access()
     if (access.mode !== 'guest') return
     const mine = generation
-    const read = await readGuestPot(access.shareId, nodeId(), { pwToken: access.pwToken, ifNoneMatch: guestTag ?? undefined })
+    const read = await readGuestPot(access, nodeId(), { pwToken: access.pwToken, ifNoneMatch: guestTag ?? undefined })
     if (mine !== generation) return
     if (read === null) {
       if (receiptsDue) await readReceipts()
@@ -255,7 +255,7 @@ export function usePotSession(input: PotSessionInput): PotSession {
     const guest = await access.requestGuest()
     if (!guest) throw new GuestDeclinedError()
     return {
-      target: { kind: 'guest', scopeId, nodeId: nodeId(), shareId: access.shareId, contributorToken: guest.contributorToken, pwToken: access.pwToken },
+      target: { kind: 'guest', scopeId, nodeId: nodeId(), shareId: access.shareId, apiBase: access.apiBase, contributorToken: guest.contributorToken, pwToken: access.pwToken },
       key: async (reread) => {
         if (reread) await access.reload()
         const key = input.potKey()

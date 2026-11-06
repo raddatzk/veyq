@@ -8,10 +8,37 @@ import java.time.temporal.ChronoUnit
 
 /**
  * What the server saw of a request's client: the address of core's one resolver (ADR 0094) in text form, its source
- * port where one is known (null: no hop wrote one and no configured source stated it), and the server time it was
- * seen, in milliseconds UTC. The evidence a guest write records (ADR 0093 § 10) — nothing a client can choose.
+ * port where one is known (null: no hop wrote one and no configured source stated it), the server time it was seen, in
+ * milliseconds UTC, and the request's `Origin` header as [RequestOrigin] keeps it (null: none sent). The evidence a
+ * guest write records (ADR 0093 § 10). The address, port and time are nothing a client can choose; the origin is what
+ * a browser stated and no page's script can change — and what any other client chooses freely, so it tells apart a
+ * write a foreign page made a visitor's browser send (ADR 0121), and never proves a write came from no such page.
  */
-data class ClientSeen(val ip: String, val port: Int?, val at: Instant)
+data class ClientSeen(val ip: String, val port: Int?, val at: Instant, val origin: String?)
+
+/**
+ * The `Origin` header as the guest-write record keeps it (ADR 0093 § 10): a serialized origin — `scheme://host[:port]`,
+ * lowercase, as a browser writes it (RFC 6454 § 6.1) — or the literal `null` an opaque origin (a sandboxed frame, a
+ * `data:` page) sends, verbatim; no header, null. Anything else — a second `Origin` header, a path, an uppercase
+ * letter, a userinfo, more than [MAX] characters — is no browser's and is kept as [INVALID], never as sent: the column
+ * holds only the two shapes and the marker, so a client cannot write free text into the evidence.
+ */
+object RequestOrigin {
+    const val MAX = 255
+    const val INVALID = "invalid"
+    const val OPAQUE = "null"
+
+    /** Scheme per RFC 3986 § 3.1; host a DNS name (IDNs arrive as punycode), an IPv4 or a bracketed IPv6; port 1–5 digits. */
+    private val SERIALIZED = Regex("^[a-z][a-z0-9+.-]*://(?:[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.?|\\[[0-9a-f:.]+])(?::[0-9]{1,5})?$")
+
+    /** [values] are every `Origin` header the request carried, in order. */
+    fun kept(values: List<String>): String? {
+        if (values.isEmpty()) return null
+        val value = values.singleOrNull() ?: return INVALID
+        if (value.length > MAX) return INVALID
+        return if (value == OPAQUE || SERIALIZED.matches(value)) value else INVALID
+    }
+}
 
 /**
  * The current request's client, resolved once per call by [ClientAddress] through [clientAddress] with the configured
@@ -37,7 +64,11 @@ class RequestClient(
         val resolved = req.clientAddress(http.trustedProxies().orElse(null), ports.current()) ?: return null
         // A zone (`%eth0`) is the server's own interface, no part of the client's address — and no part of the record.
         val ip = resolved.ip.hostAddress?.substringBefore('%') ?: return null
-        return ClientSeen(ip, resolved.port, Instant.now().truncatedTo(ChronoUnit.MILLIS))
+        return ClientSeen(ip, resolved.port, Instant.now().truncatedTo(ChronoUnit.MILLIS), RequestOrigin.kept(req.headers().getAll(ORIGIN)))
+    }
+
+    private companion object {
+        const val ORIGIN = "Origin"
     }
 }
 

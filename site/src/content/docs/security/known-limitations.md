@@ -11,6 +11,8 @@ sources:
   - docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md
   - docs/features/sharing/enablers/en.sharing.public-link.md
   - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
+  - docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md
+  - docs/crosscutting/cc.security.csp.md
 ---
 
 This page collects what veyq does **not** protect against today, in one place. Each entry says why it remains, where
@@ -436,6 +438,60 @@ in its concept doc.
 **Decided in:** [security-model § Applications are compiled in](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#applications-are-compiled-in--never-loaded).
 
 **Closed by:** per application, a sequence number or hash chain in each entry's associated data.
+
+## Browsing a received link in place lets the page reach any HTTPS server
+
+The web client's Content Security Policy normally limits where the page may connect: the instance, its store and the
+outside services the Server Owner set. That is the backstop against injected code sending keys or plaintext elsewhere.
+While **Received links opened in place** (`core.share-embedding`, on by default) is on for a tenant, the page served on
+that tenant's domain may connect to **any `https` origin**, because a kept link's share lives on whichever veyq
+instance made it, and a list of those instances would tell this server which links its members keep. Script still
+runs only from the instance itself, inline script and `eval` stay refused, and Trusted Types still refuse markup the
+client did not sanitize; what is given up is the last line behind those, should one of them fail. That line was never
+tight: a top-level navigation to a URL carrying the data passes any `connect-src` (CSP has no `navigate-to`), and in
+Chromium so do WebRTC and DNS prefetch. What the widening adds is the silent, repeated, bulk `fetch`.
+
+**Decided in:** [ADR 0121](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
+decision 2 and Consequences, [cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md).
+
+**Closed by:** switching the entry off, for the instance or for one tenant; kept links then open on their own page.
+A list of partner instances the operator keeps would close it while still embedding those instances; it was not
+chosen. Showing the share in an isolated, sandboxed frame with its own policy would keep script injected through a
+foreign share away from the member's keys; it is deferred (ADR 0121 Consequences).
+
+## A kept link may point at a hostile server
+
+Whoever makes a link chooses the server it names, and a server that describes itself as a veyq of the same major
+version is shown in place. Its answers are then shaped by it: the client draws what it serves under the rules every
+other person's content meets (the decrypted bytes decide the kind, text stays text, PDFs and images within their
+parsers' bounds), but no size cap of the client's own bounds an answer or a chunk, so such a server can exhaust the
+tab's memory. The client also follows the download addresses it hands out to any `https` host, without credentials:
+that tells the host the member's address and time, and carries nothing of this instance. And the server learns the
+member's address and the time **each time the kept link's page is opened**, not only when the member chooses to open
+the link.
+
+**Decided in:** [ADR 0121](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
+Consequences.
+
+**Closed by:** switching **Received links opened in place** off; kept links then open on their own page, as before.
+
+## A foreign page can make a visitor's browser write through a link
+
+Where **Links shown on other servers** is on (`core.public-shares.embeddable`, on by default), the share API answers
+every origin, its guest writes included. A page that knows a link which lets its guests add things can make the
+browser of anyone who visits that page add something through it, with no credential: the link is the whole
+capability. The guest-write record then holds the visitor's IP address. So the record also keeps the `Origin` header
+the request carried: a browser states the page a cross-origin request comes from and no page can change it, so a write
+through an unrelated site tells itself apart from one through the share's own page or a veyq page showing it, and its
+address reads as possibly a bystander's. It proves nothing the other way: a client that is no browser sends any
+`Origin` it likes, and the write itself still happens.
+
+**Decided in:** [ADR 0121](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
+Consequences, [ADR 0093](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+§ 10.
+
+**Closed by:** switching **Links shown on other servers** off for the instance or a tenant; a cross-origin write then
+gets no CORS answer and the browser does not send it.
 
 ## Rate limiting is per instance
 

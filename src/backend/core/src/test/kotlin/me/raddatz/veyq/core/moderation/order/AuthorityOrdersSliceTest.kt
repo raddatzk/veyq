@@ -381,7 +381,18 @@ class AuthorityOrdersSliceTest {
                 objectId = w.sub
                 clientIp = "203.0.113.77"
                 clientPort = 51234
+                requestOrigin = "https://pages.attacker.example"
                 observedAt = observed
+                expiresAt = observed.plus(7, ChronoUnit.DAYS)
+            }.persist()
+            // Control: a later write whose request carried no Origin.
+            GuestWriteRecordEntity().apply {
+                id = UUID.randomUUID().toString()
+                shareIdentityId = w.guestIdentity
+                objectKind = "NODE"
+                objectId = w.sub
+                clientIp = "203.0.113.78"
+                observedAt = observed.plusSeconds(1)
                 expiresAt = observed.plus(7, ChronoUnit.DAYS)
             }.persist()
         }
@@ -394,9 +405,12 @@ class AuthorityOrdersSliceTest {
             .body("measures.size()", equalTo(2))
             .body("uploaders.find { it.kind == 'GUEST' }.id", equalTo(w.guestIdentity))
             .body("uploaders.find { it.kind == 'GUEST' }.shareId", equalTo(w.ordered))
-            .body("guestWrites.size()", equalTo(1))
+            .body("guestWrites.size()", equalTo(2))
             .body("guestWrites[0].address", equalTo("203.0.113.77"))
             .body("guestWrites[0].port", equalTo(51234))
+            .body("guestWrites[0].origin", equalTo("https://pages.attacker.example"))
+            .body("guestWrites[1].address", equalTo("203.0.113.78"))
+            .body("guestWrites[1].origin", nullValue())
             .body("guestWrites[0].identityId", equalTo(w.guestIdentity))
             .body("guestWrites[0].objectId", equalTo(w.sub))
             .extract().response()

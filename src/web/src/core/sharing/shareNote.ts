@@ -16,6 +16,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64url } from '@veyq/crypto/base64'
 import type { LocaleMap } from '../../shared/ui/localeMap'
+import { deviceKey, type ShareAt } from './shareAt'
 
 /** A curator note: its per-locale markdown and whether a visitor must accept it before the share opens. */
 export type ShareNote = { texts: LocaleMap; mustAccept: boolean }
@@ -65,14 +66,15 @@ export function noteDigest(plaintext: Uint8Array): string {
   return b64url(v1.sha256Digest(plaintext))
 }
 
-const NOTE_ACCEPTED_KEY_PREFIX = 'veyq:share-note-accepted:'
-const acceptedKey = (shareId: string, digest: string) => `${NOTE_ACCEPTED_KEY_PREFIX}${shareId}:${digest}`
+// Keyed by the share - and, for another instance's link, its origin (`./shareAt.ts`): this origin's key is unchanged.
+const NOTE_ACCEPTED_KEY_PREFIX = 'veyq:share-note-accepted'
+const acceptedKey = (at: ShareAt, digest: string) => `${deviceKey(NOTE_ACCEPTED_KEY_PREFIX, at)}:${digest}`
 
 /** Whether this device accepted this share's note in exactly this text. False when storage is unreadable or throws:
  *  a device that cannot remember asks again, it never skips the gate. */
-export function isNoteAccepted(shareId: string, digest: string): boolean {
+export function isNoteAccepted(at: ShareAt, digest: string): boolean {
   try {
-    return localStorage.getItem(acceptedKey(shareId, digest)) === '1'
+    return localStorage.getItem(acceptedKey(at, digest)) === '1'
   } catch {
     return false
   }
@@ -80,9 +82,9 @@ export function isNoteAccepted(shareId: string, digest: string): boolean {
 
 /** Remember on this device that this share's note was accepted in this text. Nothing else is stored — no account, no
  *  text. A storage failure is swallowed: the page clears its gate for this visit, and the next load asks again. */
-export function recordNoteAccepted(shareId: string, digest: string): void {
+export function recordNoteAccepted(at: ShareAt, digest: string): void {
   try {
-    localStorage.setItem(acceptedKey(shareId, digest), '1')
+    localStorage.setItem(acceptedKey(at, digest), '1')
   } catch {
     /* private mode / quota / blocked storage — nothing is remembered, so the next load asks again */
   }

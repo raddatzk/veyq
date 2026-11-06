@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirementStore
 import me.raddatz.veyq.core.platform.capabilities.ExternalServiceAddresses
 import me.raddatz.veyq.core.platform.capabilities.ExternalServiceOrigins
+import me.raddatz.veyq.core.platform.capabilities.ShareEmbeddingHosts
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirements
 import me.raddatz.veyq.core.platform.capabilities.RequirementState
 import me.raddatz.veyq.core.platform.capabilities.StoredCapabilityRequirementValues
@@ -54,6 +55,7 @@ class CapabilitySwitchHandler(
     private val requirementStore: CapabilityRequirementStore,
     private val requirementValues: StoredCapabilityRequirementValues,
     private val origins: ExternalServiceOrigins,
+    private val embeddingHosts: ShareEmbeddingHosts,
     private val services: ExternalServiceAddresses,
 ) {
     fun list(): List<CapabilityView> = registry.register().map { it.view() }
@@ -63,6 +65,7 @@ class CapabilitySwitchHandler(
         QuarkusTransaction.requiringNew().run { store.set(id, off) }
         switches.invalidate()
         origins.refresh() // an external service's switch changes what the served policy may name
+        embeddingHosts.refresh() // so does core.share-embedding's (ADR 0121 decision 2)
         return CapabilitySetOutcome.Stored(registry.register().single { it.id == id }.view())
     }
 

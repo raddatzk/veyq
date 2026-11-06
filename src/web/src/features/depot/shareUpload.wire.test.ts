@@ -54,7 +54,7 @@ function context(): GuestTreeContext {
     keys: new Map([[ROOT, rootKey], [EXISTING, existingKey]]),
     names: new Map([[EXISTING, 'Alt.txt']]),
     nodes: new Map([[ROOT, root], [EXISTING, existing()]]),
-    shareId: SHARE, scopeId: SCOPE, pwToken: PW, contributorToken: TOKEN,
+    shareId: SHARE, apiBase: '', scopeId: SCOPE, pwToken: PW, contributorToken: TOKEN,
     reresolve: async () => { throw new Error('not in this test') },
   }
 }

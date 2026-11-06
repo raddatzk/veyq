@@ -326,16 +326,16 @@
           "de": "## Deine IP-Adresse, wenn du als Gast etwas hinzufügst"
         },
         {
-          "en": "When you add something through a link as a guest (upload a file, name yourself, create or rename a folder, change its details), the server records that write: your IP address, the source port where it is known, the exact time, which guest identity wrote, and which item it wrote to — never what you wrote or uploaded. Nothing is recorded while you only look.",
-          "de": "Wenn du als Gast über einen Link etwas hinzufügst (eine Datei hochlädst, dir einen Namen gibst, einen Ordner anlegst oder umbenennst, seine Angaben änderst), zeichnet der Server diesen Schreibvorgang auf: deine IP-Adresse, den Quellport, wo er bekannt ist, die genaue Uhrzeit, welche Gast-Identität geschrieben hat und in welches Element — nie, was du geschrieben oder hochgeladen hast. Solange du nur ansiehst, wird nichts aufgezeichnet."
+          "en": "When you add something through a link as a guest (upload a file, name yourself, create or rename a folder, change its details), the server records that write: your IP address, the source port where it is known, the exact time, the website your browser says the write came from (its origin — scheme, host and port, never a page's path), which guest identity wrote, and which item it wrote to — never what you wrote or uploaded. Nothing is recorded while you only look.",
+          "de": "Wenn du als Gast über einen Link etwas hinzufügst (eine Datei hochlädst, dir einen Namen gibst, einen Ordner anlegst oder umbenennst, seine Angaben änderst), zeichnet der Server diesen Schreibvorgang auf: deine IP-Adresse, den Quellport, wo er bekannt ist, die genaue Uhrzeit, die Website, von der der Schreibvorgang laut deinem Browser kam (ihr Origin — Schema, Host und Port, nie der Pfad einer Seite), welche Gast-Identität geschrieben hat und in welches Element — nie, was du geschrieben oder hochgeladen hast. Solange du nur ansiehst, wird nichts aufgezeichnet."
         },
         {
           "en": "",
           "de": ""
         },
         {
-          "en": "Purpose: tracing the misuse of a guest link once it is reported. Legal basis: Art. 6(1)(f) GDPR, the operator's legitimate interest in tracing such misuse and in answering authorities. Responsible is the operator named above.",
-          "de": "Zweck: den Missbrauch eines Gast-Links nachverfolgen zu können, wenn er gemeldet wird. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, das berechtigte Interesse der Betreiberseite, einen solchen Missbrauch nachzuverfolgen und Behörden Auskunft geben zu können. Verantwortlich ist die oben genannte Betreiberseite."
+          "en": "Purpose: tracing the misuse of a guest link once it is reported. The website tells a write you made apart from one another website made your browser send without your knowing, so that your address is not taken for the sender's. Legal basis: Art. 6(1)(f) GDPR, the operator's legitimate interest in tracing such misuse and in answering authorities. Responsible is the operator named above.",
+          "de": "Zweck: den Missbrauch eines Gast-Links nachverfolgen zu können, wenn er gemeldet wird. Die Website unterscheidet einen Schreibvorgang von dir von einem, den eine andere Website deinen Browser ohne dein Wissen schicken ließ, damit deine Adresse nicht für die der absendenden Person gehalten wird. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, das berechtigte Interesse der Betreiberseite, einen solchen Missbrauch nachzuverfolgen und Behörden Auskunft geben zu können. Verantwortlich ist die oben genannte Betreiberseite."
         },
         {
           "en": "",

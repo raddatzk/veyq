@@ -22,6 +22,7 @@ object CapabilitySwitchFixtures {
         check(left.isEmpty()) { "a previous test left $left switched off" }
         ids.forEach { id -> QuarkusTransaction.requiringNew().run { store().set(id, off = true) } }
         switches().invalidate()
+        embeddingHosts().refresh()
         try {
             return block()
         } finally {
@@ -36,11 +37,16 @@ object CapabilitySwitchFixtures {
             dropUnimpliedErasures()
         }
         switches().invalidate()
+        embeddingHosts().refresh()
     }
 
     private fun store(): CapabilitySwitchStore = Arc.container().instance(CapabilitySwitchStore::class.java).get()
     private fun switches(): StoredCapabilitySwitches = Arc.container().instance(StoredCapabilitySwitches::class.java).get()
 }
+
+/** The app shell's per-domain `https:` snapshot ([ShareEmbeddingHosts]), which a switch handler refreshes after its write:
+ *  a fixture that writes the rows directly refreshes it too, or a test's switch left the next class's policy narrowed. */
+internal fun embeddingHosts(): ShareEmbeddingHosts = Arc.container().instance(ShareEmbeddingHosts::class.java).get()
 
 /**
  * The tenant level's [CapabilitySwitchFixtures]: rows in `veyq_tenant_capability_switch` written through
@@ -56,6 +62,7 @@ object TenantCapabilitySwitchFixtures {
         check(left == 0L) { "a previous test left $left tenant switch row(s)" }
         ids.forEach { id -> QuarkusTransaction.requiringNew().run { store().set(tenantId, id, off = true) } }
         switches().invalidate()
+        embeddingHosts().refresh()
         try {
             return block()
         } finally {
@@ -70,6 +77,7 @@ object TenantCapabilitySwitchFixtures {
             dropUnimpliedErasures()
         }
         switches().invalidate()
+        embeddingHosts().refresh()
     }
 
     private fun store(): TenantCapabilitySwitchStore = Arc.container().instance(TenantCapabilitySwitchStore::class.java).get()

@@ -275,16 +275,16 @@ export function guestDepotSource(access: () => GuestAccess, host: { move?: (node
       const review = activeReview()
       const page = review
         ? await caseFilesApi().listCaseFiles({ caseId: review.caseId, ...(await review.proof('listCaseFiles')) })
-        : await publicShareFilesApi().listShareFiles({ shareId: a.shareId, xSharePassword: a.pwToken })
+        : await publicShareFilesApi(a.apiBase).listShareFiles({ shareId: a.shareId, xSharePassword: a.pwToken })
       return new Map(page.items.map((i) => [i.nodeId, i.fileBlob ?? null]))
     },
     download(key, nodeId, blob, name) {
       const a = access()
-      return downloadFile(a.head.scopeId, key, nodeId, blob, name, (blobId) => shareChunkUrls(a.shareId, blobId, a.pwToken))
+      return downloadFile(a.head.scopeId, key, nodeId, blob, name, (blobId) => shareChunkUrls(a, blobId, a.pwToken))
     },
     chunks(key, nodeId, blob) {
       const a = access()
-      return fileChunkProvider(a.head.scopeId, key, nodeId, blob, (blobId) => shareChunkUrls(a.shareId, blobId, a.pwToken))
+      return fileChunkProvider(a.head.scopeId, key, nodeId, blob, (blobId) => shareChunkUrls(a, blobId, a.pwToken))
     },
     batchKey: (folderId) => `files-share:${access().shareId}:${folderId ?? ''}`,
     refresh() {

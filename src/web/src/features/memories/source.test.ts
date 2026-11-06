@@ -132,7 +132,7 @@ describe("the guest's source reads the link, and only the link", () => {
       expect(atChapter.items.map((i) => i.mediaId)).toEqual(['m-ch'])
       expect(atRoot.revision, "the listing's tag, verbatim; no delete revision, no cursor").toEqual({ tag: TAG, delete: 0 })
       expect(atRoot.cursor).toBeNull()
-      expect(vi.mocked(publicShareMediaApi().listShareMediaRaw).mock.calls.map(([r]) => r), 'its open node, a page each').toEqual([
+      expect(vi.mocked(publicShareMediaApi('').listShareMediaRaw).mock.calls.map(([r]) => r), 'its open node, a page each').toEqual([
         { shareId: SHARE, xSharePassword: PW, nodeId: MEMORY, limit: media.MEDIA_PAGE_LIMIT, ifNoneMatch: undefined },
         { shareId: SHARE, xSharePassword: PW, nodeId: CHAPTER, limit: media.MEDIA_PAGE_LIMIT, ifNoneMatch: undefined },
       ])
@@ -141,7 +141,7 @@ describe("the guest's source reads the link, and only the link", () => {
 
     it(`${role}: polls its open node conditionally on the tag it holds — a 304 is nothing, a change is the whole listing`, async () => {
       const { source } = guest(role)
-      const raw = vi.mocked(publicShareMediaApi().listShareMediaRaw)
+      const raw = vi.mocked(publicShareMediaApi('').listShareMediaRaw)
       raw.mockRejectedValueOnce(httpError(304))
       expect(await source.poll!(CHAPTER, { tag: TAG, deleteRevision: 0 })).toEqual({ notModified: true })
       expect(raw.mock.calls.at(-1)![0], 'the tag echoed verbatim, for the node on screen').toEqual({
@@ -183,10 +183,10 @@ describe("the guest's source reads the link, and only the link", () => {
     expect(source.loaders.chunk(item, keys.chapter)).toBe(CHUNKS)
     for (const fn of [share.openShareGrid, share.openShareLightbox, share.openShareOriginal]) {
       const [shareId, si, pw] = vi.mocked(fn).mock.calls[0]
-      expect([shareId, si.item, si.memoryKey, si.scopeId, pw]).toEqual([SHARE, item, keys.chapter, SCOPE, PW])
+      expect([shareId, si.item, si.memoryKey, si.scopeId, pw]).toEqual([{ shareId: SHARE, apiBase: '' }, item, keys.chapter, SCOPE, PW])
     }
     const [shareId, si, ref, pw] = vi.mocked(share.shareChunkProvider).mock.calls[0]
-    expect([shareId, si.memoryKey, ref, pw]).toEqual([SHARE, keys.chapter, item.original, PW])
+    expect([shareId, si.memoryKey, ref, pw]).toEqual([{ shareId: SHARE, apiBase: '' }, keys.chapter, item.original, PW]) // the link where it lives (ADR 0121)
     // the listed seals open on the device, no fetch: a tier that is not there is null, never a throw
     expect(source.loaders.meta(item, keys.chapter)).toBeNull()
     expect(source.loaders.blobMeta(item, keys.chapter)).toBeNull()
@@ -197,7 +197,7 @@ describe("the guest's source reads the link, and only the link", () => {
     const { source } = guest(ShareRole.Read)
     const ref = { blobId: 'b-cover', chunkCount: 1, byteSize: 3, wrappedBlobKey: 'eA==', ownerId: MEMORY, role: 'COVER' as const }
     expect(await source.loaders.coverBlob(ref, keys.memory)).toEqual(new Uint8Array([9]))
-    expect(shareChunkUrls).toHaveBeenCalledWith(SHARE, 'b-cover', PW)
+    expect(shareChunkUrls).toHaveBeenCalledWith({ shareId: SHARE, apiBase: '' }, 'b-cover', PW) // the link where it lives (ADR 0121)
     expect(openBlobVia).toHaveBeenCalledWith(SCOPE, keys.memory, ref, expect.any(Function))
   })
 
@@ -230,7 +230,7 @@ describe("a contributor's upload and delete (READ_WRITE)", () => {
     const file = { blob: new Blob([new Uint8Array(3)]), mediaType: 'image/jpeg' }
     await target.upload!(file, {})
     const [session, sent] = vi.mocked(share.addSharePhoto).mock.calls[0]
-    expect(session).toEqual({ ...GUEST, shareId: SHARE, scopeId: SCOPE, sealKey: keys.chapter, nodeEpoch: 3, pwToken: PW, nodeId: CHAPTER })
+    expect(session).toEqual({ ...GUEST, shareId: SHARE, apiBase: '', scopeId: SCOPE, sealKey: keys.chapter, nodeEpoch: 3, pwToken: PW, nodeId: CHAPTER })
     expect(sent).toBe(file)
     expect(loadOwnShareMedia(SHARE, GUEST.identityId), 'the device remembers what it sent (#361)').toEqual(new Set(['m-new']))
     expect(source.deleteMedia!.reach).toBe('own')
@@ -254,7 +254,7 @@ describe("a contributor's upload and delete (READ_WRITE)", () => {
     if (del.reach !== 'own') throw new Error('a guest purges its own')
     expect(del.isOwn('m-other'), "another's media is not this guest's").toBe(false)
     await del.purge('m-new')
-    expect(share.deleteSharePhoto).toHaveBeenCalledWith(SHARE, GUEST.contributorToken, 'm-new', PW)
+    expect(share.deleteSharePhoto).toHaveBeenCalledWith({ shareId: SHARE, apiBase: '' }, GUEST.contributorToken, 'm-new', PW)
     expect(del.isOwn('m-new')).toBe(false)
   })
 

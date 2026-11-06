@@ -3,8 +3,8 @@
 //
 // Two actors on one instance, serialized (the `scopeRotation.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`), mints the share, reads it back.
-//   anonymous  = a contributor with NO session — every call goes through `publicSharesApi()` (core's link) or
-//                `publicShareMediaApi()` (Memories' guest media, `features/memories/api.ts`), which carry no bearer
+//   anonymous  = a contributor with NO session — every call goes through `publicSharesApi('')` (core's link) or
+//                `publicShareMediaApi('')` (Memories' guest media, `features/memories/api.ts`), which carry no bearer
 //                token by construction (both built on `publicParams()`), so the anonymous path stays anonymous even
 //                while A's `session.accessToken` is still set process-wide.
 //
@@ -145,7 +145,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     // …and the link was told nothing about who added them, not even that one person did: Memories' raw media read
     // (read past the generated client, which drops a field it does not know) carries no identity — not even this
     // link's own guest — and neither contribution names one (ADR 0030 point 8). The curator recovers the name below.
-    const wire = (await (await publicShareMediaApi().listShareMediaRaw({ shareId })).raw.json()) as {
+    const wire = (await (await publicShareMediaApi('').listShareMediaRaw({ shareId })).raw.json()) as {
       identities?: unknown[]
       media: { mediaId: string; identityId?: string | null }[]
     }
@@ -155,7 +155,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     expect(wire.media.map((m) => m.identityId ?? null), 'and no contribution names its identity').toEqual([null, null])
     // core's raw resolve carries no application data at all: no media key, no identities key — its nodes are the
     // control that this is the resolved subtree and not an empty answer (cr-platform-contract-split slice 6.3)
-    const resolveWire = (await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json()) as Record<string, unknown>
+    const resolveWire = (await (await publicSharesApi('').resolveShareRaw({ shareId })).raw.json()) as Record<string, unknown>
     expect((resolveWire.nodes as { id: string }[]).map((n) => n.id), 'the raw resolve serves the shared node').toContain(nodeId)
     expect('media' in resolveWire, 'the raw resolve serves no media key').toBe(false)
     expect('identities' in resolveWire, 'the raw resolve serves no identities key').toBe(false)

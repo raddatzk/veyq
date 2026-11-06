@@ -199,7 +199,8 @@ rates' date.
   wherever a link lets its guest write (no switch of its own: `contribute` and `drop-box` decide), the **guest-write
   record**: per write a link's guest makes that enters it as a last editor, the client address of core's one resolver
   (never one the client chose, [ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)),
-  its source port where known and the time to the millisecond, with the guest identity and the object — kept N days
+  its source port where known, the time to the millisecond and the request's `Origin` (as a browser writes it, else the
+  marker `invalid`; none when not sent), with the guest identity and the object — kept N days
   (1 to 30, default 7), copied by a hold, left out of the instance backup's rows; never a member's write, a read, a
   User-Agent or content ([ADR 0093](../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
   § 10, [en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md));
@@ -486,13 +487,18 @@ server-blind token makes this work without the server ever seeing a name:
 - **A guest's write keeps where it came from, briefly** ([en.moderation.guest-write-record](../features/moderation/enablers/en.moderation.guest-write-record.md)).
   A link guest has no account, so the evidence a report about its upload can carry is the connection: wherever a link
   lets its guest write, each write that enters a guest as last editor stores the client address the
-  network vouches for, its source port and a millisecond time, for N days (1 to 30, default 7); a report's hold copies
+  network vouches for, its source port, a millisecond time and the `Origin` the request carried, for N days (1 to 30,
+  default 7); a report's hold copies
   the rows of what it concerns. Guests are told before their first write, with N and the right to object, and linked
   to the full Art. 13 text in the instance privacy notice, which the operator section of the terms points to. The record
   adds operator-visible metadata about guests, never content, and nothing about members or readers; an address
   without a port may name no single subscriber behind carrier-grade NAT, and on Helm the address is only as strong as
   an enforced NetworkPolicy ([ADR 0094](../decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md)
-  decision 6).
+  decision 6). Since the guest API answers every origin
+  ([ADR 0121](../decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)), a foreign page that knows
+  a writing link can make a visitor's browser write through it; the kept `Origin` — which a browser states and no page
+  can change, and any other client chooses freely — tells such a write apart, so its address reads as possibly a
+  bystander's rather than the sender's.
 - **A link's id alone opens no write.** The share id is stored raw (members rebuild links from it, seals bind it,
   every guest request path carries it), so a database copy or an access log holds every id. Naming yourself as a
   guest — the one write the id used to open — presents a token derived from `K_share`, of which the share keeps only

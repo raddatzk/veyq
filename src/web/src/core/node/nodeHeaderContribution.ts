@@ -31,7 +31,13 @@ export interface NodeHeaderContribution {
 type Builder = () => NodeHeaderContribution
 
 /** The page's sink; exported for a test harness that stands in for core's page (`src/test/nodeHeader.ts`). */
-export const nodeHeaderContributionKey: InjectionKey<ShallowRef<Builder | null>> = Symbol('veyq.nodeHeaderContribution')
+export const nodeHeaderContributionKey: InjectionKey<ShallowRef<Builder | null> | null> = Symbol('veyq.nodeHeaderContribution')
+
+/** A region below a node page that contributes to no header above it (ADR 0121 decision 5): a bookmark's page shows its
+ *  link in place, and nothing of the guest's views may reach the bookmark's — the member's — header. */
+export function provideNoNodeHeader(): void {
+  provide(nodeHeaderContributionKey, null)
+}
 
 /** Core's node page: receive what the detail below contributes. The answer is the current contribution (empty without one). */
 export function provideNodeHeader(): ComputedRef<NodeHeaderContribution> {

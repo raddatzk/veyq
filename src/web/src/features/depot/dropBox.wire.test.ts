@@ -21,6 +21,9 @@ import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { fileNameSlug } from '../../shared/naming'
 import { dropGuestContext, dropGuestJob, ensureDropFolder, forgetDropGuest, loadDropGuest, nameDropGuest, saveDropGuest } from './dropBox'
 import { guestFileUploadJob } from './shareUpload'
+import { guestDepotSource } from './source'
+import { guestAccessOf } from '../../test/models'
+import { ShareRole } from '../../api/generated/sharing'
 import { FILE_KIND } from './kinds'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 import { testKind } from '../../test/testApplication'
@@ -148,6 +151,31 @@ describe('a drop-box guest on the wire', () => {
     expect(requests.map((r) => JSON.stringify(r.json ?? {})).join('')).not.toContain('Bericht.pdf')
     // control: a seal under the drop box key is what the member's own nodes use, and it is not what the guest sent
     expect(sealName(boxKey, at(STORED), 'x')).not.toBe(String(sent.encryptedName))
+  })
+
+  it('of another instance\'s link (a bookmark\'s page, ADR 0121): names itself, opens its folder and uploads at that origin', async () => {
+    const away = 'https://photos.example.org'
+    const foreign = { ...head, apiBase: away } as PublicShareHead
+    fakeServer()
+    const session = await nameDropGuest(foreign, { name: 'Adelgunde' })
+    const folder = await ensureDropFolder(foreign, session, 'Adelgunde')
+    const file = new File([new Uint8Array(30)], 'Bericht.pdf', { type: 'application/pdf' })
+    await guestFileUploadJob({ ctx: dropGuestContext(foreign, session, folder), parentId: folder.nodeId }, file)
+      .run({ onProgress: () => {}, signal: new AbortController().signal })
+    // and the share's guest source reads its files there too
+    const access = guestAccessOf(ShareRole.Read, { shareId: SHARE, apiBase: away, head: foreign })
+    await guestDepotSource(() => access).listBlobs(null).catch(() => undefined)
+    const api = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((u) => !u.startsWith('https://store.test'))
+    expect(api.map((u) => new URL(u).pathname)).toEqual([
+      `/api/shares/${SHARE}/identities`, `/api/shares/${SHARE}/files/drop-folder`, `/api/shares/${SHARE}/nodes`,
+      `/api/shares/${SHARE}/blob-uploads`, expect.stringMatching(/\/files\/[^/]+\/content$/), `/api/shares/${SHARE}/files`,
+    ])
+    for (const u of api) expect(u.startsWith(`${away}/api/shares/${SHARE}/`), u).toBe(true)
+    // what the device keeps of it is that link's: this origin's link of the same id holds nothing
+    saveDropGuest({ shareId: SHARE, apiBase: away }, session)
+    expect(loadDropGuest(SHARE)).toBeNull()
+    expect(loadDropGuest({ shareId: SHARE, apiBase: away })?.identityKey).toBe(session.identityKey)
+    forgetDropGuest({ shareId: SHARE, apiBase: away })
   })
 
   // A refused upload into a full drop box leaves nothing behind either: the page's wrapper keeps the job's take-back, so

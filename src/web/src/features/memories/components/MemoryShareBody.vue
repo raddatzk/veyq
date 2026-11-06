@@ -22,7 +22,8 @@ import {
   type ShareAccess,
   type ContributorSession,
 } from '../share'
-import { pickLocaleText, shareRootEpoch, type PublicShareHead } from '../../../core/sharing/resolvePublicShare'
+import { pickLocaleText, shareAtOf, shareRootEpoch, type PublicShareHead } from '../../../core/sharing/resolvePublicShare'
+import { apiBaseOf } from '../../../core/sharing/shareAt'
 import { forgetGuestSession, saveGuestSession, useGuestSession } from '../../../core/sharing/guestIdentity'
 import type { GuestAccess } from '../../../core/access'
 import GuestNaming from '../../../core/sharing/GuestNaming.vue'
@@ -50,8 +51,10 @@ const emit = defineEmits<{ unavailable: [] }>()
 
 const { t, locale } = useI18n()
 
-// A share's id never changes under a mounted page (the shell re-mounts per route).
+// A share's id never changes under a mounted page (the shell re-mounts per route). `at`: the link as every guest call and
+// what this device keeps of it address it - its id and the instance that serves it (ADR 0121, a bookmark's page).
 const shareId = props.shareId
+const at = shareAtOf(props.head)
 // cr-0115: the curator's note — on a drop page the instruction ("please upload here") — for the viewer's locale
 // (cr-0116), as markdown (the safe escape-first subset, `markdownHtml` + `v-safe-html`).
 const renderedNote = computed(() => {
@@ -78,7 +81,7 @@ watch(
 // The named session, persisted per link so a reload keeps the name (it never leaves the device): the platform's
 // (`core/sharing/guestIdentity.ts`), reactive — read before the first render (no name-gate flash) and gone at once when
 // "Not you?" forgets it.
-const session = useGuestSession<ContributorSession>(shareId)
+const session = useGuestSession<ContributorSession>(at)
 // The key this session's uploads seal under — the uploader's own identity key.
 const sealKey = computed(() => (session.value && keyAccess.value ? sessionSealKey(session.value, keyAccess.value) : null))
 // The name pre-screen until the visitor has named itself — and again for a session saved without its own key, which
@@ -87,13 +90,13 @@ const needsName = computed(() => !!keyAccess.value && !sealKey.value)
 /** The pre-screen's naming (core's `GuestNaming` renders the form): the identity, its name kept on the device. */
 async function submitName(name: string) {
   if (!keyAccess.value) throw new Error('share_not_open')
-  const created = await createContributorIdentity(shareId, props.head.scopeId, keyAccess.value, name, props.fragmentKey, props.pwToken)
-  saveGuestSession(shareId, { ...created, displayName: name })
+  const created = await createContributorIdentity(at, props.head.scopeId, keyAccess.value, name, props.fragmentKey, props.pwToken)
+  saveGuestSession(at, { ...created, displayName: name })
 }
 /** "Not you?" (the drop page's own line): forget this device's session — the next visitor names itself afresh. What
  *  was sent stays with the owner. */
 function forgetUploader() {
-  forgetGuestSession(shareId)
+  forgetGuestSession(at)
 }
 
 // The session's own tiles (cr-0074): the member gallery's composable, grouped by this link. Nothing is ever listed for
@@ -127,7 +130,7 @@ function enqueueBatch(picked: File[]) {
       // The root's epoch as read: a WRITE_ONLY guest's wraps are under its own `K_up`, sealed to the root's drop key.
       upload: (source, opts) =>
         addSharePhoto(
-          { shareId, scopeId: props.head.scopeId, sealKey: key, nodeEpoch: shareRootEpoch(props.head.share), ...s, pwToken: props.pwToken },
+          { shareId, apiBase: apiBaseOf(at), scopeId: props.head.scopeId, sealKey: key, nodeEpoch: shareRootEpoch(props.head.share), ...s, pwToken: props.pwToken },
           source, undefined, opts,
         ),
     },
@@ -151,7 +154,7 @@ async function onDeleteUpload(fileId: string) {
   }
   deletingIds.value = new Set(deletingIds.value).add(fileId)
   try {
-    await deleteSharePhoto(shareId, s.contributorToken, mediaId, props.pwToken)
+    await deleteSharePhoto(at, s.contributorToken, mediaId, props.pwToken)
     removeFile(fileId)
   } catch {
     deleteError.value = true // keep the tile so the visitor can retry the delete this session

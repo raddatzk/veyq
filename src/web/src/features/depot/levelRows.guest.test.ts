@@ -271,7 +271,7 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     expect([scopeId, nodeId, blob.blobId, name]).toEqual([SCOPE, R, REPORT_BLOB.blobId, 'Report.pdf'])
     expect(Array.from(key)).toEqual(Array.from(keys.report))
     await presign!(REPORT_BLOB.blobId)
-    expect(shareChunkUrls).toHaveBeenCalledWith(SHARE, REPORT_BLOB.blobId, PW)
+    expect(shareChunkUrls).toHaveBeenCalledWith(expect.objectContaining({ shareId: SHARE, apiBase: '' }), REPORT_BLOB.blobId, PW) // the link where it lives (ADR 0121)
     expectNoMemberWorld()
   })
 

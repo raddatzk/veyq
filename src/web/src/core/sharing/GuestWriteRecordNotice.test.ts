@@ -18,6 +18,7 @@ describe('GuestWriteRecordNotice', () => {
     expect(w.find('.guest-write-record-kept').text()).toBe(t('share.guest.recordKept', { days: 7 }, 7))
     expect(w.find('.guest-write-record-kept').text()).toContain('7 days')
     expect(w.find('.guest-write-record-kept').text()).toContain('source port')
+    expect(w.find('.guest-write-record-kept').text()).toContain('the website it came from')
     expect(w.find('.guest-write-record-objection').text()).toBe(t('share.guest.recordObjection'))
   })
 

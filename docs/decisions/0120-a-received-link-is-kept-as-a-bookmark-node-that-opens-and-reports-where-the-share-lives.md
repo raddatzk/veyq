@@ -52,7 +52,10 @@ or the key to it, at this instance's moderators.
    page in memory and entered there once; a wrong one leaves the page's own password form. A link of any other origin
    opens in a new tab (`noopener`, `noreferrer`); its password never travels in a URL, so before the tab opens the
    member is shown it with a copy button. A link revoked, expired or re-keyed away opens the share page's *unavailable*
-   state; nothing in the space changes, and the member removes the bookmark like any node.
+   state; nothing in the space changes, and the member removes the bookmark like any node. *Amended by
+   [ADR 0121](0121-a-received-share-is-browsed-in-place-through-its-own-api.md) decision 1:* while `core.share-embedding`
+   is effective a row's plain click opens the bookmark's page, which shows the share in place; this open is that page's
+   **Open on its own page**, and its row's click again where the switch is off.
 6. **Reporting a bookmark reports the share, to the share's own operator.** The bookmark's *Report* opens the link with
    one more fragment parameter, `&report`, and the share page — of this instance or another — opens its own report dialog
    for what the link shows, as that link's guest would ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)

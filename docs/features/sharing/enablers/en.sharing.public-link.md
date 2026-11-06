@@ -219,7 +219,7 @@ the blob read and the terms read are not.
   upload placeholder ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
   decision 6).
 - **The guest-write record.** Each guest write (an identity, a node, an item) records the guest's client address,
-  source port and time, kept N days (1–30, default 7) as evidence, never content; the resolve tells a writing guest N.
+  source port, time and request `Origin`, kept N days (1–30, default 7) as evidence, never content; the resolve tells a writing guest N.
   The record, its retention and its readers are moderation's
   ([en.moderation.guest-write-record](../../moderation/enablers/en.moderation.guest-write-record.md)).
 - **When an identity goes.** It stays while its link is not deleted or anything (a medium, a bucket, a node) names it;

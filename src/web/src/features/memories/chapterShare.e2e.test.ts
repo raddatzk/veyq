@@ -4,8 +4,8 @@
 // Two actors on one instance, serialized (the `shareContributor.e2e` / `shareUploader.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`); one Memory with two chapters — the
 //                shared one holding A's photo, a sibling — and a photo on the Memory itself.
-//   anonymous  = a guest with NO session — every call goes through `publicSharesApi()` (core's link) or
-//                `publicShareMediaApi()` (Memories' guest media), which carry no bearer.
+//   anonymous  = a guest with NO session — every call goes through `publicSharesApi('')` (core's link) or
+//                `publicShareMediaApi('')` (Memories' guest media), which carry no bearer.
 //
 // What only this layer can prove: that the server roots what it serves a chapter link at the chapter — the resolve's
 // nodes, the media read, the uploads (the server sets `nodeId = rootNodeId`) and the drop key — and that what a guest
@@ -94,7 +94,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('chapter share e2e (live, real crypto, th
       .toEqual(Array.from(bytes(2)))
 
     // --- the raw wire: rooted at the chapter, nothing of its Memory or its sibling ---------------------------------
-    const wire = (await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json()) as RawResolve
+    const wire = (await (await publicSharesApi('').resolveShareRaw({ shareId })).raw.json()) as RawResolve
     expect(wire.rootKind, 'the server names the chapter as the root kind').toBe('CHAPTER')
     expect(wire.nodes.map((n) => n.id), 'the resolved subtree is the chapter alone').toEqual([chapterId])
     expect(wire.nodes[0].parentId ?? null, "the root's parent id is not served").toBeNull()
@@ -103,7 +103,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('chapter share e2e (live, real crypto, th
     const wireText = JSON.stringify(wire)
     expect(wireText.includes(memoryId), "the Memory's id appears nowhere in the resolve").toBe(false)
     expect(wireText.includes(siblingId), "the sibling chapter's id appears nowhere in the resolve").toBe(false)
-    const mediaWire = (await (await publicShareMediaApi().listShareMediaRaw({ shareId })).raw.json()) as { media: { mediaId: string; nodeId: string }[] }
+    const mediaWire = (await (await publicShareMediaApi('').listShareMediaRaw({ shareId })).raw.json()) as { media: { mediaId: string; nodeId: string }[] }
     expect(mediaWire.media.map((m) => m.mediaId), "the raw media read serves the chapter's photo only").toEqual([inChapter.mediaId])
     expect(mediaWire.media.some((m) => m.mediaId === onMemory.mediaId), "never the Memory's own photo").toBe(false)
 
@@ -138,7 +138,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('chapter share e2e (live, real crypto, th
     const shareId = minted.shareId
     const fragmentKey = b64url(minted.kShare)
 
-    const wire = (await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json()) as RawResolve
+    const wire = (await (await publicSharesApi('').resolveShareRaw({ shareId })).raw.json()) as RawResolve
     expect(wire.rootKind).toBe('CHAPTER')
     expect(wire.nodeId, "the drop key the guest seals to is the chapter's").toBe(chapterId)
     expect(wire.wrap ?? null, 'an uploader link carries no K_node wrap').toBeNull()

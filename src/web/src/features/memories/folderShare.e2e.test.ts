@@ -5,7 +5,7 @@
 // Two actors on one instance, serialized (the `chapterShare.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`); a folder holding a Memory (with a photo)
 //                and a subfolder, and a Memory beside the folder that the link must not reach.
-//   anonymous  = a guest with NO session — the resolve goes through `publicSharesApi()` (core's link), which carries
+//   anonymous  = a guest with NO session — the resolve goes through `publicSharesApi('')` (core's link), which carries
 //                no bearer.
 //
 // What only this layer can prove: that the server accepts a FOLDER as the root of a READ link minted by core's own
@@ -90,7 +90,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
     expect(walked.names.has(folderId), 'the root has no entry: its title is the share name').toBe(false)
 
     // --- the raw wire: rooted at the folder, nothing of its parent or of the Memory beside it --------------------
-    const wire = (await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json()) as RawResolve
+    const wire = (await (await publicSharesApi('').resolveShareRaw({ shareId })).raw.json()) as RawResolve
     expect(wire.rootKind).toBe('FOLDER')
     expect(wire.nodes.map((n) => n.id).sort(), 'the resolved subtree is the folder and what is in it').toEqual([folderId, memory.nodeId, subId].sort())
     const rootRow = wire.nodes.find((n) => n.id === folderId)!
@@ -99,7 +99,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
     expect(rootRow.encryptedName ?? null, "nor its name under K_SC (its entry)").toBeNull()
     expect(JSON.stringify(wire).includes(outside.nodeId), 'the Memory beside the folder appears nowhere').toBe(false)
     // The role matrix (docs/apps/memories.md): a READ folder link reads the Memories below it with their media.
-    const mediaWire = (await (await publicShareMediaApi().listShareMediaRaw({ shareId })).raw.json()) as { media: { mediaId: string }[] }
+    const mediaWire = (await (await publicShareMediaApi('').listShareMediaRaw({ shareId })).raw.json()) as { media: { mediaId: string }[] }
     expect(mediaWire.media.map((m) => m.mediaId), "the Memory's photo below the folder is served").toContain(inMemory.mediaId)
 
     // --- A: a WRITE_ONLY link on a folder is refused by the server (no application writes under a folder) --------
@@ -127,7 +127,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share e2e (live, real crypto, the
     const gated = await resolvePublicShare(asked.shareId, b64url(asked.kShare))
     expect(gated.noteByLocale, 'the guest opens the note with the fragment key').toEqual({ en: GATED_NOTE })
     expect(gated.noteAcceptance?.digest, 'and learns from inside the seal that it asks to be accepted').toMatch(/^[A-Za-z0-9_-]{43}$/)
-    const gatedWire = await (await publicSharesApi().resolveShareRaw({ shareId: asked.shareId })).raw.json()
+    const gatedWire = await (await publicSharesApi('').resolveShareRaw({ shareId: asked.shareId })).raw.json()
     expect(JSON.stringify(gatedWire), 'the switch is no field of its own on the wire').not.toMatch(/mustAccept/)
 
     // Every value recovered by UNSEALING what the server returned (ADR 0053).

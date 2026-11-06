@@ -19,7 +19,11 @@ dependency, and turns into executing script. Without a CSP, such a script could 
 host.
 
 The CSP is the browser-enforced backstop. Even if injection happened, `script-src 'self'` stops a foreign script
-from running, and `connect-src` stops it from phoning home. Markup itself comes only from the escape-first renderer
+from running, and `connect-src` stops it from phoning home — except while `core.share-embedding` is on, which admits every
+`https` origin (§ *Mechanism*, `https:`) and leaves that half to `script-src` and Trusted Types. `connect-src 'self'` was
+never a tight half, either: a top-level navigation (`location`, `window.open` to a URL that carries the data; CSP has no
+`navigate-to`) passes it, and so, in Chromium, do WebRTC and DNS prefetch. What it stops is the silent, repeated, bulk
+`fetch`, and that is what `https:` gives back. Markup itself comes only from the escape-first renderer
 ([`renderMarkdown`](../../src/web/src/shared/markdown.ts)), and the policy makes the browser enforce that: under
 Trusted Types no string reaches an HTML sink or a script URL unless one of the client's two policies made it
 (§ *Trusted Types*, [ADR 0117](../decisions/0117-the-web-client-enforces-trusted-types.md)).
@@ -53,11 +57,12 @@ The policy:
 default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none';
 script-src 'self'; worker-src 'self'; style-src 'self' <reka-style-hashes>;
 img-src 'self' data: blob: [<tile-origin>]; media-src 'self' blob:; font-src 'self';
-connect-src 'self' [<store-origin>] [<geocoder-origin>] [<breach-check-origin>] [<rates-origin>]; form-action 'self';
+connect-src 'self' [<store-origin>] [<geocoder-origin>] [<breach-check-origin>] [<rates-origin>] [https:]; form-action 'self';
 require-trusted-types-for 'script'; trusted-types veyq default
 ```
 
-The bracketed origins are appended by the backend on every response; the built policy names none of them.
+The bracketed sources are appended by the backend on every response; the built policy names none of them
+(`verify:csp` refuses a scheme or a wildcard in its `connect-src`).
 `<reka-style-hashes>` is one `'sha256-…'` per fixed `<style>` text a reka-ui component the client uses renders
 (below).
 
@@ -98,6 +103,20 @@ Why each non-obvious source is there:
   A tenant owner's own switch acts through the tenant's set, not through the policy. A new instance is seeded with
   OSM tiles, Nominatim, the HIBP range API and Frankfurter's ECB rates; the dev server's header allows those four
   ([`mapDefaults.ts`](../../src/web/src/shared/state/mapDefaults.ts)).
+- **`https:` (connect-src), while `core.share-embedding` is effective** ([ADR 0121](../decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
+  decision 2; on by default, owner 2026-11-06). A kept link's page browses its share in place, reading the share's own
+  instance's API directly, and that instance can be any `https` origin; the server must not learn which ones (a list
+  computed from the members' bookmarks would tell it). **What it costs:** an injected script may send what it reads to a
+  host of its choice by a silent, repeatable `fetch` — the one way out `'self'` closed, since a navigation, and in Chromium
+  WebRTC and DNS prefetch, pass it anyway; `script-src 'self'`, Trusted Types and the absence of inline script remain in
+  front of it. The
+  switch is per tenant (operator `*`, tenant owner `+`): the backend appends `https:` for the tenant whose domain serves
+  the page, and for a host that claims no tenant at the instance level. Like the origins above it is read from a
+  snapshot (`ShareEmbeddingHosts`, by domain), recomputed after every switch write and every tenant write that moves a
+  domain, because the header is written on the event loop; a snapshot that is stale only ever names a domain it no longer
+  knows, which then follows the instance level, at most as wide as the tenant it was. Off, the policy is as before. In
+  development the Vite policy serves as if it were on and also admits `http://*.localhost:*`, the plain-http hosts a
+  second local tenant lives on. `img-src` and `media-src` are unchanged: a share's media are decrypted into `blob:` URLs.
 - **`<store-origin>`** is appended by the backend at runtime. Every client `fetch`es store objects and decrypts
   them; no store response is ever rendered ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md)
   §2). So `connect-src` is the only directive that needs the store. The origin comes from the signer's own
@@ -194,7 +213,12 @@ The app shell sends these on the app origin alongside the policy
   keeps no handle on its opener, nor the opener on it. Nothing in the client opens a cross-origin window that must
   talk back (no OAuth or payment popup, no `window.open`; measured 2026-11-05 by `grep`).
 - **`Cross-Origin-Resource-Policy: same-origin`.** No other origin embeds or reads a response of the instance
-  no-cors: the client loads everything from its own origin, and no mail embeds an image from it.
+  no-cors: the client loads everything from its own origin, and no mail embeds an image from it. **One exception:** while
+  `core.public-shares.embeddable` is effective, a guest's operation under `/api/shares/{shareId}`, `/api/setup` and
+  `/api/moderation/key` answer any origin — `Cross-Origin-Resource-Policy: cross-origin` with `Access-Control-Allow-Origin:
+  *`, never `Access-Control-Allow-Credentials` — so a member of another instance browses a link in place
+  ([ADR 0121](../decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md) decision 3, `ShareCrossOrigin`;
+  `sharing.openapi.yaml` § Cross-origin has the headers and whose switch an id reads).
 - **`Permissions-Policy`.** The features the client calls, for its own origin: `camera` (the Emergency Kit scanner),
   `clipboard-write` (copying a link, a guest id, a text), `fullscreen` (the file viewer, a video's control),
   `autoplay` (the lightbox's and the banner's video, the media deriver's muted `play()`) and `picture-in-picture` (a
@@ -260,6 +284,7 @@ every header of the admin origin.
   - `object-src 'none'`;
   - no third-party origin baked in when providers are unset;
   - `ws:` and the style nonce in dev only;
+  - `https:` and `http://*.localhost:*` in dev only, no scheme or wildcard in the built `connect-src` (ADR 0121);
   - `style-src` exactly `'self'` plus the reka hashes, no `'unsafe-inline'` in dev or production;
   - the hashes equal exactly those of the fixed `<style>` texts the reka-ui components the client imports render,
     recomputed from the installed reka-ui by following its own imports, so an upgrade that changes a text or a new
@@ -282,7 +307,8 @@ every header of the admin origin.
 - [`src/web/scripts/assert-csp-policy-in-dist.mjs`](../../src/web/scripts/assert-csp-policy-in-dist.mjs)
   (`pnpm run verify:csp`, run by `pnpm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
   has no emitted policy or whose `index.html` carries a CSP `<meta>`, whose policy lacks the two Trusted Types
-  directives, or whose scripts still create Vue's `vue` policy or a static vnode. Bitten 2026-11-05: without the build
+  directives or carries a scheme or wildcard in `connect-src` (the backend's `https:` is per tenant; bitten 2026-11-06:
+  with the dev-only `https:` made unconditional it is red, naming `connect-src carries https:`), or whose scripts still create Vue's `vue` policy or a static vnode. Bitten 2026-11-05: without the build
   plugin that removes Vue's policy it is red (`a bundled script still creates Vue's \`vue\` policy`).
 - The backend's app shell (`src/backend/core/src/main/kotlin/me/raddatz/veyq/core/appshell/`):
   - `AppShellTest` compares the appended store origin, per signing mode, with the origin of a URL the signer
@@ -292,6 +318,12 @@ every header of the admin origin.
     shell responses and `sw.js` but not on `/api`, and the plain headers — COOP, CORP and the Permissions-Policy among
     them — on the shell, `sw.js`, an asset and `/api`, no COEP, and each feature granted to `'self'` at most;
   - `AppShellStoreOriginSliceTest` shows the store origin reaching a real response in `store-origin` mode;
+  - `AppShellShareEmbeddingSliceTest` holds `https:` in `connect-src` while `core.share-embedding` is on (a tenant's
+    domain and a host claiming none), gone everywhere while the Server Owner has it off, gone on one tenant's domain
+    while that tenant has it off and kept on another's, and following a tenant whose domain moved;
+  - `ShareCrossOriginSliceTest` holds the guest share API's CORS answer per path class (the switch on, off by the
+    operator, off by the link's tenant), the curator's operations and a member's path as same-origin controls, no
+    `Access-Control-Allow-Credentials` anywhere, and an id the gate does not serve answered exactly as an unknown one;
     `AppShellHstsOffSliceTest` the HSTS switch; `AppShellAbsentSliceTest` the no-shell branch.
 - Live-verified on 2026-09-24 (cr-app-shell-served-by-backend), against a fast-jar built with `dist` in
   `META-INF/resources` and run in `store-origin` mode with the store on another origin:
@@ -370,4 +402,5 @@ every header of the admin origin.
 - **Not verified:** that a browser records the admin host as an HSTS host. That needs a trusted certificate on
   a real admin domain, and a browser ignores STS on a certificate error.
 
-For Server Owners, on the docs site: [Hardening](../../site/src/content/docs/run/hardening.md).
+For Server Owners, on the docs site: [Hardening](../../site/src/content/docs/run/hardening.md); for researchers,
+[Known limitations](../../site/src/content/docs/security/known-limitations.md) (the `https:` widening).

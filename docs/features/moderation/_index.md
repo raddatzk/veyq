@@ -59,7 +59,7 @@ serves the full fixed texts, and a value the Server Owner leaves empty shows as 
   a case opened with a hold that ends where the order says. An Art. 18 report goes to the BKA as an export of clear
   fields, never a content file; child sexual abuse material has its own warning, a proposed content block, and a hold
   that ends at the handover (ADR 0093 §§ 12–13).
-- **The evidence.** A guest's write keeps its client address, source port and time for N days
+- **The evidence.** A guest's write keeps its client address, source port, time and request `Origin` for N days
   ([en.moderation.guest-write-record](enablers/en.moderation.guest-write-record.md)); every report, decision and
   key event is in an append-only log whose free text is sealed, kept to 31 December of the third year after its case
   closes ([en.moderation.log](enablers/en.moderation.log.md)). No log line is evidence (ADR 0092).

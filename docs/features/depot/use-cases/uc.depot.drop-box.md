@@ -54,7 +54,7 @@
   name again — a new identity and, with its first file, a new folder; the earlier one's folder stays as it was.
 - **A4b — the instance records guest writes** ([en.moderation.guest-write-record](../../moderation/enablers/en.moderation.guest-write-record.md),
   ADR 0093 § 10): the drop page says, before the first file, that
-  the guest's IP address, source port and the time are kept for N days (the N the resolve serves), with the right to
+  the guest's IP address, source port, the time and the website it came from are kept for N days (the N the resolve serves), with the right to
   object as a sentence of its own, both linking the operator section of the terms; naming itself, its folder's
   creation, each file's creation and each file's content then record that address, port and time. The record has no
   switch: it is kept wherever a guest may write (with `drop-box` off, no guest writes and nothing is recorded).

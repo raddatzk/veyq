@@ -108,7 +108,9 @@ class AppShellSliceTest {
     fun thePlainHeadersGoOnTheShellAndOnTheApi() {
         val sw = given().`when`().get("/sw.js")
         val asset = given().`when`().get("/assets/app-fixture.js")
-        for (response in listOf(html("/recover"), sw, asset, given().`when`().get("/api/setup"), html("/api/no-such-endpoint"))) {
+        // `/api/scopes`, not `/api/setup`: the latter answers any origin (CORP `cross-origin`) while
+        // `core.public-shares.embeddable` is on, ADR 0121 — `ShareCrossOriginSliceTest`.
+        for (response in listOf(html("/recover"), sw, asset, given().`when`().get("/api/scopes"), html("/api/no-such-endpoint"))) {
             assertEquals("nosniff", response.header("X-Content-Type-Options"))
             assertEquals("strict-origin-when-cross-origin", response.header("Referrer-Policy"))
             assertEquals("same-origin", response.header("Cross-Origin-Opener-Policy"))
@@ -186,10 +188,11 @@ class AppShellSliceTest {
 
         /** The fixture's policy as served on a new instance: the seeded external services (ADR 0088 decision 7), the map
          *  tiles in `img-src`, the geocoder, the breach check and the exchange rates in `connect-src`
-         *  (`ExternalServicesSliceTest` moves them). */
+         *  (`ExternalServicesSliceTest` moves them), and `https:` last, `core.share-embedding` being on by default (ADR 0121,
+         *  `AppShellShareEmbeddingSliceTest` moves it). */
         const val SERVED_POLICY =
             "default-src 'self'; frame-ancestors 'none'; img-src 'self' https://tile.openstreetmap.org; " +
-                "connect-src 'self' https://nominatim.openstreetmap.org https://api.pwnedpasswords.com https://api.frankfurter.dev; " +
+                "connect-src 'self' https://nominatim.openstreetmap.org https://api.pwnedpasswords.com https://api.frankfurter.dev https:; " +
                 "form-action 'self'"
     }
 }

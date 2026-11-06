@@ -73,7 +73,7 @@ path and the gates as built are the model, [en.sharing.public-link](../features/
 
 - **The most operator-blind sharing surface.** The server serves the uploader no gallery and no byte; it holds the
   same opaque state as a contributor link, needed for the members' view and the delete check, and, as for every
-  writing guest, the client's address, source port and time of each write for N days
+  writing guest, the client's address, source port, time and request `Origin` of each write for N days
   ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 10).
 - **The ephemeral own-view is a real UX limitation.** An uploader who adds 20 photos and reloads finds an intentional
   empty state; point 5 is the mitigation, which is why this is a decision and not a UI detail. Persisting the id list

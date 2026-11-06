@@ -111,7 +111,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
     const readParts = openGuestTreeParts(readHead)
     expect([...readParts.nodes.keys()]).toEqual([target])
     expect(Array.from(readParts.keys.get(target)!)).toEqual(Array.from(targetKey))
-    const readListing = (await publicShareFilesApi().listShareFiles({ shareId: read.shareId })).items
+    const readListing = (await publicShareFilesApi('').listShareFiles({ shareId: read.shareId })).items
     expect(readListing.map((i) => i.nodeId)).toEqual([target])
     expect(fileFacts(readHead.scopeId, readParts.keys.get(target)!, target, readListing[0].fileBlob!).meta)
       .toEqual({ v: 1, type: MIME, name: TARGET_FILE, modifiedAt: 1_700_000_000_000 })
@@ -120,7 +120,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
     // …and nothing beside it: the sibling's blob is not this link's
     expect(httpStatus(await failure(shareChunkUrls(read.shareId, siblingBlob.blobId)))).toBe(404)
     // a READ link takes no write
-    const readWrite = await failure(publicShareFilesApi().completeShareFile({
+    const readWrite = await failure(publicShareFilesApi('').completeShareFile({
       shareId: read.shareId, nodeId: target, shareFileCompleteRequest: { contributorToken: 'x'.repeat(43), uploadId: crypto.randomUUID(), nodeEpoch: targetEpoch },
     }))
     expect(httpStatus(readWrite)).toBe(403)
@@ -162,7 +162,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
 
     // --- the member trashes the file: for the guest it is gone ------------------------------------------------------------
     await deleteNode(scopeId, target)
-    expect((await publicShareFilesApi().listShareFiles({ shareId: rw.shareId })).items).toEqual([])
+    expect((await publicShareFilesApi('').listShareFiles({ shareId: rw.shareId })).items).toEqual([])
     expect(httpStatus(await failure(shareChunkUrls(rw.shareId, replacedBlob.blobId)))).toBe(404)
     const intoTrash = await failure(guestFileUploadJob({
       ctx: guestCtx(), parentId: target,

@@ -123,6 +123,13 @@ paths:
         reporter is mostly a guest with nothing pinned and seals once to this one key. `404 moderation_off` while no
         epoch exists (first-run setup mints epoch 1) — then there is nothing to report to, and the report action is off.
         Unauthenticated; rate-limited per client address.
+
+        **Cross-origin** ([ADR 0121](../../docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
+        decision 3): while `core.public-shares.embeddable` is effective at the instance level it answers any origin, so a
+        guest browsing one of this instance's links from another instance seals its report to this key. A CORS preflight
+        is answered `204`, every answer carries `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy:
+        cross-origin` (`sharing.openapi.yaml` § Cross-origin), never `Access-Control-Allow-Credentials`; every other
+        moderation operation stays same-origin. A preflight is HTTP, not an operation.
       security: []
       responses:
         "200":
@@ -1257,7 +1264,7 @@ paths:
         ADR 0093 § 13 (uc.moderation.report-to-an-authority): what the server holds in the clear and nothing it would
         have to open — the case id and category, every time in UTC, the measures, the uploaders the held rows name (a
         member's account id, a guest's share identity id), and every held guest-write record (address, source port where
-        one was recorded, the time it was observed). The surface renders a text block to copy; it never downloads
+        one was recorded, the `Origin` its request carried where it carried one, the time it was observed). The surface renders a text block to copy; it never downloads
         content. Key-proved over this case.
       security:
         - bearerAuth: []
@@ -2830,6 +2837,21 @@ components:
           format: int32
           description: The client's source port, as the record kept it; null where none was recorded.
           example: 51234
+        origin:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >
+            The `Origin` header the write's request carried, which the guest-write record keeps beside the address (ADR
+            0093 § 10) so a write a foreign page made a visitor's browser send — whose address is the visitor's, not the
+            sender's (ADR 0121) — can be told apart; served only from a hold behind the moderation role and key proof,
+            for the Art. 18 report ADR 0093 § 13 asks for.
+          type: string
+          description: >
+            The `Origin` header the write's request carried, as the record kept it: a serialized origin
+            (`scheme://host[:port]`), the text `null` an opaque origin sends, `invalid` for a header of any other shape
+            or longer than 255 characters; absent where the request carried none. A browser sets it and a page cannot; any
+            other client chooses it.
+          maxLength: 255
+          example: https://veyq.example.org
         observedAt:
           x-veyq-visibility: time
           type: string

@@ -67,6 +67,11 @@ export interface MemberAccess {
 export interface GuestAccess {
   readonly mode: 'guest'
   readonly shareId: string
+  /** The API base of the instance that serves the link (ADR 0121 decision 5): `''` for this origin's — the share page's —,
+   *  another instance's origin for a link a bookmark's page shows in place. Every guest read and write takes it, and what
+   *  the guest keeps on this device is keyed by it too, so a guest access is itself the share's address
+   *  (`core/sharing/shareAt.ts` `ShareAt`). */
+  readonly apiBase: string
   /** The link's access mode — the wire's `ShareRole` (ADR 0079 Consequences, three access modes). */
   readonly role: ShareRole
   /** The guest password token, when the link is password-protected and unlocked. */

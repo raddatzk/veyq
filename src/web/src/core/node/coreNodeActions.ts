@@ -22,7 +22,7 @@ import { favoriteHeaderActions, favoriteRowActions } from '../favorites/favorite
 import { copyHeaderActions, copyRowActions } from '../export/copyActions'
 import { downloadHeaderActions, downloadRowActions } from '../export/downloadActions'
 import { reportHeaderActions, reportNodes, reportRowActions } from '../report/reportActions'
-import { useReportOffered } from '../report/report'
+import { reportBaseOf, useReportOffered } from '../report/report'
 import { useToast } from '../../shared/state/useToast'
 import { targetOf } from '../access'
 import { SHARE_BOOKMARK_KIND } from './kind'
@@ -48,7 +48,7 @@ export interface CoreNodeActions {
 }
 
 /** The injection key of {@link provideCoreNodeActions}; exported for a test that mounts a `NodeHeader` with a stand-in. */
-export const coreNodeActionsKey: InjectionKey<CoreNodeActions> = Symbol('veyq.coreNodeActions')
+export const coreNodeActionsKey: InjectionKey<CoreNodeActions | null> = Symbol('veyq.coreNodeActions')
 
 /**
  * Core's actions for the nodes a view draws, for whoever looks. Called in a view's setup (it uses the i18n, toast and
@@ -66,7 +66,7 @@ export function useCoreNodeActions(
   const { t } = useI18n()
   const toast = useToast()
   const cover = useNodeCover(access, tree, nodes)
-  const reportOn = useReportOffered()
+  const reportOn = useReportOffered(reportBaseOf(access()))
   const report = (node: TreeNode) => () => reportNodes(access(), tree(), [node], null)
   const bookmarkDoors = useBookmarkDoors()
   /** A bookmark's Report is its share's (ADR 0120 decision 6): handed to the share page where the share lives, as that
@@ -117,6 +117,13 @@ export function useCoreNodeActions(
 /** Hand `actions` to every `NodeHeader` below the calling view. */
 export function provideCoreNodeActions(actions: CoreNodeActions): void {
   provide(coreNodeActionsKey, actions)
+}
+
+/** A region that hands no core action of the view around it on (ADR 0121 decision 5): a bookmark's page shows its link
+ *  in place below the member's page, and nothing below it may reach the member's actions — its own views provide their
+ *  own, the guest's. */
+export function provideNoCoreNodeActions(): void {
+  provide(coreNodeActionsKey, null)
 }
 
 /** The core actions of the view around the caller (its cover above all: a page's own cover control opens the same dialog

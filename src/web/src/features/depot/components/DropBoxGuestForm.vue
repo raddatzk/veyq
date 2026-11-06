@@ -30,13 +30,16 @@ import {
 import { guestFileUploadJob } from '../shareUpload'
 import GuestNaming from '../../../core/sharing/GuestNaming.vue'
 import OrderNotice from '../../../core/sharing/OrderNotice.vue'
+import { shareAtOf } from '../../../core/sharing/resolvePublicShare'
 import StatementNotice from '../../moderation/statement/StatementNotice.vue'
 import { FileUploadError } from '../uploadFile'
 
 const props = defineProps<ShareBodyProps>()
 const { t, locale } = useI18n()
 
-const session = ref<DropGuestSession | null>(loadDropGuest(props.shareId))
+// The link as what this device keeps of it is keyed: its id and the instance that serves it (ADR 0121).
+const at = shareAtOf(props.head)
+const session = ref<DropGuestSession | null>(loadDropGuest(at))
 /** The name given before the first file: no identity exists yet (see the header). */
 const pendingName = ref<string | null>(null)
 /** Whose page this is, as the line says it: the saved session, or the name given before anything was sent. */
@@ -118,7 +121,7 @@ function identity(): Promise<DropGuestSession> {
   if (name === null) return Promise.reject(new Error('no name given'))
   naming ??= nameDropGuest(props.head, { name, pwToken: props.pwToken })
     .then((named) => {
-      saveDropGuest(props.shareId, named)
+      saveDropGuest(at, named)
       session.value = named
       pendingName.value = null
       return named
@@ -170,7 +173,7 @@ async function notYou() {
       restarting.value = false
     }
   }
-  forgetDropGuest(props.shareId)
+  forgetDropGuest(at)
   session.value = null
   pendingName.value = null
   folder = null
@@ -211,7 +214,7 @@ async function notYou() {
            guest's uploads — or on the guest, or the link — gave it is shown here, whether or not the link still lives. -->
       <StatementNotice v-if="session" every-guest-statement />
       <!-- TCO Art. 11: when the link went away under an upload, an authority's removal order may be why. -->
-      <OrderNotice v-if="linkGone" :share-id="shareId" />
+      <OrderNotice v-if="linkGone" :share-id="shareId" :api-base="head.apiBase" />
       <template v-else>
         <input ref="picker" class="dropbox-picker" type="file" multiple hidden @change="onPicked" />
         <div>

@@ -6,7 +6,7 @@
 // and the address apart (`v1.sealReportContact`), so the server can drop it alone six months after the decision was
 // told (ADR 0093 § 11). In the clear go only the category, the epoch and the items' kinds and ids — and the address
 // once, for the receipt (owner decision Q6), which the server mails and does not keep.
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, type Ref } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi, reportsApi } from '../../api/client'
@@ -66,32 +66,44 @@ export function closeReport(): void {
 export type PublishedKey = { epoch: number; kem: Uint8Array }
 
 let published: Promise<PublishedKey | null> | null = null
+/** Another instance's published key, by its API base: a guest of its link shown in a bookmark's page reports THERE, sealed
+ *  to that instance's key (ADR 0121 decision 8) — never to this one's, whose moderators may not read that content. */
+const publishedAway = new Map<string, Promise<PublishedKey | null>>()
 
 /**
- * The published moderation key (`getModerationKey`, unauthenticated), read once per page and afresh on demand: null while
- * no epoch exists (`404 moderation_off`) — then nothing can be reported, and the action is not shown (ADR 0099 § 3).
+ * The published moderation key (`getModerationKey`, unauthenticated) of the instance at `apiBase` (`''`: this one), read
+ * once per page and afresh on demand: null while no epoch exists (`404 moderation_off`) — then nothing can be reported,
+ * and the action is not shown (ADR 0099 § 3).
  */
-export function publishedKey(fresh = false): Promise<PublishedKey | null> {
-  if (!published || fresh) {
-    // Through a resolved promise, so a client that throws as it is built is a rejection like any other failure.
-    published = Promise.resolve()
-      .then(() => readModerationKey())
-      .then((k) => ({ epoch: k.epoch, kem: fromB64std(k.kemPublicKey) }))
-      .catch((e: unknown) => {
-        published = null
-        if (e instanceof ResponseError && e.response.status === 404) return null
-        throw e
-      })
-  }
-  return published
+export function publishedKey(fresh = false, apiBase = ''): Promise<PublishedKey | null> {
+  const held = apiBase === '' ? published : publishedAway.get(apiBase) ?? null
+  if (held && !fresh) return held
+  const forget = () => (apiBase === '' ? (published = null) : publishedAway.delete(apiBase))
+  // Through a resolved promise, so a client that throws as it is built is a rejection like any other failure.
+  const read = Promise.resolve()
+    .then(() => readModerationKey(apiBase))
+    .then((k) => ({ epoch: k.epoch, kem: fromB64std(k.kemPublicKey) }))
+    .catch((e: unknown) => {
+      forget()
+      if (e instanceof ResponseError && e.response.status === 404) return null
+      throw e
+    })
+  if (apiBase === '') published = read
+  else publishedAway.set(apiBase, read)
+  return read
 }
 
 /** Whether the report action is shown: a published epoch exists. False until the key was read. */
 export const reportOffered = ref(false)
 let asked = false
+/** The same for another instance, by its API base (a bookmark's page that shows its link, ADR 0121). */
+const offeredAway = new Map<string, Ref<boolean>>()
 
-/** Read the published key once, so {@link reportOffered} says whether to show the action. A failure shows none. */
-export function useReportOffered() {
+/** Read the published key once, so {@link reportOffered} says whether to show the action. A failure shows none.
+ *  `apiBase`: the instance a report from this view goes to — another's for a guest of its link (see
+ *  {@link reportBaseOf}); omitted, this one. */
+export function useReportOffered(apiBase = ''): Ref<boolean> {
+  if (apiBase !== '') return offeredAt(apiBase)
   if (!asked) {
     asked = true
     publishedKey().then(
@@ -105,9 +117,31 @@ export function useReportOffered() {
   return reportOffered
 }
 
+function offeredAt(apiBase: string): Ref<boolean> {
+  const offered = offeredAway.get(apiBase)
+  if (offered) return offered
+  const made = ref(false)
+  offeredAway.set(apiBase, made)
+  publishedKey(false, apiBase).then(
+    (k) => { made.value = k !== null },
+    () => {
+      made.value = false
+      offeredAway.delete(apiBase) // asked again by the next view
+    },
+  )
+  return made
+}
+
+/** The instance a report made through [access] goes to: a guest's link's (`''` for this origin's), a member's this one. */
+export function reportBaseOf(access: Access): string {
+  return access.mode === 'guest' ? access.apiBase : ''
+}
+
 /** For a test: forget the published key, whether it was asked, and any open request. */
 export function resetReporting(): void {
   published = null
+  publishedAway.clear()
+  offeredAway.clear()
   asked = false
   reportOffered.value = false
   reportRequest.value = null
@@ -132,7 +166,7 @@ export class ReportRefused extends Error {
 /** Build the report for `targets` and send it; resolves the receipt. A key changed in between is read again once. */
 export async function submitReport(request: ReportRequest, targets: readonly ReportTarget[], form: ReportForm): Promise<ReportReceipt> {
   for (let attempt = 0; ; attempt++) {
-    const key = await publishedKey(attempt > 0)
+    const key = await publishedKey(attempt > 0, reportBaseOf(request.access))
     if (!key) throw new ReportRefused('moderation_off')
     const submission = await buildSubmission(request.access, key, targets, form)
     try {
@@ -181,7 +215,7 @@ async function send(access: Access, scopeId: string, reportSubmission: ReportSub
   if (access.mode === 'member') {
     return withRefresh(() => reportsApi().reportInScope({ scopeId, reportSubmission }))
   }
-  return publicSharesApi().reportInShare({
+  return publicSharesApi(access.apiBase).reportInShare({
     shareId: access.shareId,
     xSharePassword: access.pwToken,
     xShareWrite: b64std(v1.shareWriteToken(fromB64url(access.fragmentKey), access.shareId)),

@@ -21,7 +21,7 @@ import { hostHandlers, hostRights, injectNodeHost, shareOfferOf } from '../../..
 import { standardNodeActions, standardNodeRename } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { canReport, nodeTarget } from '../../../core/report/reportActions'
-import { useReportOffered } from '../../../core/report/report'
+import { reportBaseOf, useReportOffered } from '../../../core/report/report'
 import { loadScopePeople, loadTenantPeople, type Person } from '../../../core/people/directory'
 import { targetOf } from '../../../core/access'
 import { expensesRights } from '../rights'
@@ -68,7 +68,7 @@ onMounted(() => {
 
 // Core's own actions of the Pot (the heart, "Copy to…", the download, Report) come with core's header for this node; this
 // page offers Report for an entry and a receipt on its own, by the same rule.
-const reportOn = useReportOffered()
+const reportOn = useReportOffered(reportBaseOf(props.access))
 const handlers = hostHandlers(host, () => props.node, () => shareOfferOf(rights.value))
 const headerActions = computed(() => standardNodeActions(t, { ...hostRights(rights.value, host), deleteLabel: t('expenses.delete') }, handlers))
 // The Pot's name, renamed in place in the header where core's rename right and the page's door allow it.

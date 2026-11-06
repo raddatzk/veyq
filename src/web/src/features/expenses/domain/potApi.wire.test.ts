@@ -20,7 +20,7 @@ const BEN = '0e000000-0000-4000-8000-000000000002'
 const DINNER = '0e000000-0000-4000-9000-000000000001'
 const potKey = v1.randomBytes(32)
 const MEMBER: PotTarget = { kind: 'member', scopeId: SCOPE, nodeId: POT }
-const GUEST: PotTarget = { kind: 'guest', scopeId: SCOPE, nodeId: POT, shareId: SHARE, contributorToken: 'Y29udHJpYnV0b3I=', pwToken: 'cHc=' }
+const GUEST: PotTarget = { kind: 'guest', scopeId: SCOPE, nodeId: POT, shareId: SHARE, apiBase: '', contributorToken: 'Y29udHJpYnV0b3I=', pwToken: 'cHc=' }
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -141,6 +141,17 @@ describe("a guest's read", () => {
   it('an unchanged listing (304 on its tag) is null', async () => {
     stubFetch(() => new Response(null, { status: 304 }))
     expect(await readGuestPot(SHARE, POT, { ifNoneMatch: '"2a9b"' })).toBeNull()
+  })
+
+  it('another instance\'s link (a bookmark\'s page, ADR 0121): the read and the append go to its origin, no bearer', async () => {
+    const away = 'https://photos.example.org'
+    const calls = stubFetch((c) => (c.method === 'GET' ? json({ revisions: [], more: false, cursor: null }) : new Response(null, { status: 204 })))
+    await readGuestPot({ shareId: SHARE, apiBase: away }, POT)
+    await appendPotWrites({ ...GUEST, apiBase: away }, { key: potKey, epoch: 0 }, heldPot(), [{ entryId: DINNER, content: { kind: 'deleted' } }], BASE)
+    expect(calls.map((c) => `${c.method} ${c.url.origin}${c.url.pathname}`)).toEqual([
+      `GET ${away}/api/shares/${SHARE}/pots/${POT}/revisions`, `POST ${away}/api/shares/${SHARE}/pots/${POT}/revisions`,
+    ])
+    for (const c of calls) expect(c.headers.get('Authorization')).toBeNull()
   })
 })
 

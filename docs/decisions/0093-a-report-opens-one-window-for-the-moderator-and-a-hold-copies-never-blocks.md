@@ -339,16 +339,32 @@ The retention setting's form and its no-extension rule are [ADR 0092](0092-logs-
 
 - **One core table, one row per guest write that enters a guest as last editor (§ 8)** — upload commit, identity
   creation, folder creation, rename, meta: the client's address, its source port where known, the server time in
-  milliseconds UTC, the share identity and the object. No User-Agent; nothing a member writes or anyone reads. The port
-  and the exact time are kept because behind carrier-grade NAT only address, port and time together name a subscriber
+  milliseconds UTC, the `Origin` header the request carried, the share identity and the object. No User-Agent; nothing
+  a member writes or anyone reads. The port and the exact time are kept because behind carrier-grade NAT only address,
+  port and time together name a subscriber
   ([ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md)).
+- **The origin is kept because the address alone stopped being enough evidence** once the guest API answers every
+  origin ([ADR 0121](0121-a-received-share-is-browsed-in-place-through-its-own-api.md) decision 3): a hostile page that
+  knows a writing link can make any visitor's browser write through it, and the record would then name that bystander's
+  address as the writer's. A browser states the page a cross-origin write comes from and no script can change it, so
+  the origin tells a write through the share's own page (or a veyq page embedding it, ADR 0121) from one through an
+  unrelated page, whose address is then read as possibly laundered. It proves nothing the other way: any client that is
+  no browser chooses the header, our own origin included. It is kept only as a browser writes it — a serialized origin
+  (`scheme://host[:port]`, at most 255 characters) or the `null` of an opaque origin — and anything else as the marker
+  `invalid`, so no client writes free text into the evidence; no header, no value (`RequestOrigin`). It is the same
+  row: the same basis, the same N ≤ 30 days, the same purge, objection and erasure, the same hold copy, and the same
+  access — the moderation role behind the key proof, in the Art. 18 export beside the address (§ 13).
 - **The record never takes an address a client can choose**: a forged address in evidence names an innocent third
   party. It takes the address of veyq's one core resolver (ADR 0094 decision 3), and records nothing where that yields
   none. On Compose the address is strong by construction; on Helm only as strong as an enforced NetworkPolicy (0094
   decision 6), and the disclosure and the Run docs say so.
 - **Its basis is Art. 6(1)(f) GDPR**: a host has no duty to keep addresses and may keep them briefly, for a stated
   purpose, disclosed — the legitimate interest in tracing the misuse of a guest link once it is reported (§ Legal
-  basis, 4). The Server Owner is the controller; the information duty is theirs, not the tenant owner's.
+  basis, 4). The Server Owner is the controller; the information duty is theirs, not the tenant owner's. **The origin
+  rides the same basis, on our reading** (not a reviewed answer, § Legal basis, Still open 15): it serves the same
+  purpose — without it the address may name an innocent visitor — and is needed to judge the address, which is what
+  data minimisation (Art. 5(1)(c)) asks; it names a site, never a page's path, and the privacy notice and the guest's
+  first-layer sentence name it.
 - **No switch: the record is kept wherever a guest may write.** A row exists only where a link lets a guest write, so
   the guest-write switches (`core.public-shares.contribute` and `.drop-box`, at the instance and in each tenant) already
   decide where it is kept, and a Server Owner who wants no guest address kept switches guest writes off. A switch of its
@@ -604,3 +620,5 @@ differs, should one come, is a legal duty that wins over what is built (`CLAUDE.
 12. Whether erasing a switched-off application's content needs a basis in the terms.
 13. Whether the notice of that erasure is adequate.
 14. Whether switching an application off is a moderation decision.
+15. Whether keeping a guest write's `Origin` beside its address stays within § 10's purpose and data minimisation
+    (our reading: yes, the same evidence purpose and retention, § 10).

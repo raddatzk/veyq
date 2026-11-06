@@ -126,6 +126,13 @@ describe('buildCsp', () => {
     expect(directive(buildCsp(DEV), 'trusted-types')).toBeUndefined()
   })
 
+  it('lets the dev server reach another instance, and leaves that to the backend in the build (ADR 0121)', () => {
+    expect(directive(buildCsp(DEV), 'connect-src')).toEqual(expect.arrayContaining(['https:', 'http://*.localhost:*']))
+    // The built policy: the backend appends `https:` per tenant while `core.share-embedding` is on (AppShellRoutes).
+    expect(directive(csp, 'connect-src')).not.toContain('https:')
+    expect((directive(csp, 'connect-src') ?? []).some((source) => source.includes('*'))).toBe(false)
+  })
+
   it('adds the Vite HMR websocket only in dev', () => {
     expect(buildCsp(DEV)).toMatch(/connect-src[^;]*\bws:/)
     expect(csp).not.toMatch(/connect-src[^;]*\bws:/)

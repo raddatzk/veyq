@@ -5,11 +5,13 @@
 import { publicSharesApi } from '../../api/client'
 import type { ShareGuestNotice } from '../../api/generated/sharing'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
+import { apiBaseOf, shareIdOf, type ShareAt } from './shareAt'
 
-/** What the server tells the identity whose client holds [contributorToken] on [shareId]; null for its unknown answer. */
-export async function readGuestNotice(shareId: string, contributorToken: string): Promise<ShareGuestNotice | null> {
+/** What the server tells the identity whose client holds [contributorToken] on the share [at] (asked of the instance that
+ *  serves it, ADR 0121); null for its unknown answer. */
+export async function readGuestNotice(at: ShareAt, contributorToken: string): Promise<ShareGuestNotice | null> {
   try {
-    return await publicSharesApi().getShareGuestNotice({ shareId, xContributorToken: contributorToken })
+    return await publicSharesApi(apiBaseOf(at)).getShareGuestNotice({ shareId: shareIdOf(at), xContributorToken: contributorToken })
   } catch (e) {
     if (isHttpStatus(e, HttpStatus.notFound)) return null
     throw e

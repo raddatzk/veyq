@@ -119,7 +119,7 @@ sequenceDiagram
   guest gets at its first write (a Memory link's as a folder link's), and the two drop pages of a WRITE_ONLY link.
 - **A5 — the instance records guest writes** ([en.moderation.guest-write-record](../../moderation/enablers/en.moderation.guest-write-record.md),
   ADR 0093 § 10): the naming dialog says, before the first write,
-  that the guest's IP address, source port and the time are kept for N days (the N the resolve serves), with the right
+  that the guest's IP address, source port, the time and the website it came from are kept for N days (the N the resolve serves), with the right
   to object as a sentence of its own, both linking the operator section of the terms. Each write that enters the guest
   as last editor — naming itself, a node it creates, renames or moves, a photo or file it adds — then records that
   address, port and time. A viewer is told nothing, since nothing is recorded. The record has no switch: it is kept

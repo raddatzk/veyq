@@ -14,12 +14,13 @@ import * as v1 from '@veyq/crypto/v1'
 import { sharesPwTokenAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
-import { isHttpStatus, HttpStatus } from '../../shared/httpError'
+import { httpStatus, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import type { LocaleMap } from '../../shared/ui/localeMap'
 import { decodeShareNote, hasLocaleText, noteDigest, type ShareNote } from './shareNote'
 import type { NodeKind } from '../node/kind'
 import type { ShareRole, PublicShare, ShareTerms } from '../../api/generated/sharing'
 import { pairKey, type TermsPair } from '../terms/operatorSection'
+import { apiBaseOf, originKey, shareIdOf, type ShareAt } from './shareAt'
 
 // The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the
 // key is the binding. These two are the ones the platform half opens (and the application's curator side seals).
@@ -63,8 +64,19 @@ export async function derivePasswordToken(password: string, pwSalt: string): Pro
   return b64std(await sharesPwTokenAsync(password, fromB64std(pwSalt)))
 }
 
-/** The fragment key is missing/malformed, or the share is unknown/revoked/expired (a non-enumerable 404). */
+/** The fragment key is missing/malformed, or the share is unknown/revoked/expired (a non-enumerable 404). Its message is
+ *  `unreachable` where no answer arrived at all (the network, or another instance that does not answer this origin —
+ *  ADR 0121: a bookmark's page then falls back to opening the link), else the refusal's. */
 export class ShareUnavailableError extends Error {}
+
+/** The share's instance gave no answer: a network error, or a browser that refused another origin's answer (no CORS). */
+export const SHARE_UNREACHABLE = 'unreachable'
+
+/** The unavailable error a failed guest read means: `unreachable` for no answer, else `not_found` (one answer for every
+ *  refusal - unknown, revoked, expired, as the server's non-enumerable 404). */
+function unavailableOf(e: unknown): ShareUnavailableError {
+  return new ShareUnavailableError(httpStatus(e) === 0 ? SHARE_UNREACHABLE : 'not_found')
+}
 
 /** cr-0118: the share is password-protected and no (valid) token was given — the caller prompts with `pwSalt`. */
 export class SharePasswordRequiredError extends Error {
@@ -113,6 +125,15 @@ export type PublicShareHead = {
   /** A moderator's review only (`core/sharing/review.ts`): the root's key, handed over by a report share, in place of
    *  the `wrap` a link opens with `K_share` — the review holds no `K_share` and its share carries no wrap. Key material. */
   rootKey?: Uint8Array
+  /** Where the link was resolved: the origin of the instance that serves it, for a link a bookmark's page shows in place
+   *  (ADR 0121 decision 5); absent for this origin's — the head of every share page, exactly as before. Every guest
+   *  read and write that starts from a head goes there ({@link shareAtOf}). */
+  apiBase?: string
+}
+
+/** The share a head was resolved from, as the guest calls address it (`./shareAt.ts`). */
+export function shareAtOf(head: Pick<PublicShareHead, 'shareId' | 'apiBase'>): ShareAt {
+  return { shareId: head.shareId, apiBase: head.apiBase ?? '' }
 }
 
 /** `K_share` out of the URL fragment; [ShareUnavailableError] when it is missing or malformed. */
@@ -128,7 +149,9 @@ function shareKeyOf(fragmentKey: string): Uint8Array {
 }
 
 /** The head of an unlocked response, or the error its shape means (locked shell, no scope or name, a key that opens nothing). */
-function headOf(shareId: string, kShare: Uint8Array, share: PublicShare): PublicShareHead {
+function headOf(at: ShareAt, kShare: Uint8Array, share: PublicShare): PublicShareHead {
+  const shareId = shareIdOf(at)
+  const apiBase = apiBaseOf(at)
   // cr-0118: a locked share (password required, no/valid-less token) serves only the challenge — prompt the viewer.
   // Locked is "no sealed name", never "no wrap": an unlocked WRITE_ONLY share carries no wrap either.
   if (share.passwordRequired && !share.sealedName) throw new SharePasswordRequiredError(share.pwSalt ?? '')
@@ -147,7 +170,7 @@ function headOf(shareId: string, kShare: Uint8Array, share: PublicShare): Public
   const noteAcceptance = opened?.note.mustAccept && hasLocaleText(opened.note.texts) ? { digest: opened.digest } : undefined
   return {
     shareId, share, kShare, scopeId: share.scopeId, name, noteByLocale, ...(noteAcceptance ? { noteAcceptance } : {}),
-    role: share.role, rootKind: share.rootKind ?? null,
+    role: share.role, rootKind: share.rootKind ?? null, ...(apiBase ? { apiBase } : {}),
   }
 }
 
@@ -156,16 +179,17 @@ function headOf(shareId: string, kShare: Uint8Array, share: PublicShare): Public
  * missing/bad fragment key or a 404 (unknown/revoked/expired — indistinguishable), [SharePasswordRequiredError] on
  * the locked shell, [SharePasswordIncorrectError] on a wrong guest token.
  */
-export async function resolvePublicShare(shareId: string, fragmentKey: string, pwToken?: string): Promise<PublicShareHead> {
+export async function resolvePublicShare(at: ShareAt, fragmentKey: string, pwToken?: string): Promise<PublicShareHead> {
   const kShare = shareKeyOf(fragmentKey)
   let share: PublicShare
   try {
-    share = await publicSharesApi().resolveShare({ shareId, xSharePassword: pwToken }) // cr-0118: the guest token gates it
+    // cr-0118: the guest token gates it; `at` names the instance that serves the link (ADR 0121, `./shareAt.ts`)
+    share = await publicSharesApi(apiBaseOf(at)).resolveShare({ shareId: shareIdOf(at), xSharePassword: pwToken })
   } catch (e) {
     if (isHttpStatus(e, HttpStatus.forbidden)) throw new SharePasswordIncorrectError() // wrong password
-    throw new ShareUnavailableError('not_found') // 404 (revoked/expired/unknown) or a network error
+    throw unavailableOf(e) // 404 (revoked/expired/unknown), or no answer at all
   }
-  return headOf(shareId, kShare, share)
+  return headOf(at, kShare, share)
 }
 
 /** What a polling resolve yields: the head again and the tag its response carried (`null`: the server sent none). */
@@ -183,13 +207,13 @@ export type PolledShare = { head: PublicShareHead; etag: string | null }
  * reach the server knows nothing about the link and must not take the page down.
  */
 export async function pollPublicShare(
-  shareId: string, fragmentKey: string, pwToken: string | undefined, ifNoneMatch: string | null,
+  at: ShareAt, fragmentKey: string, pwToken: string | undefined, ifNoneMatch: string | null,
 ): Promise<PolledShare | null> {
   const kShare = shareKeyOf(fragmentKey)
   let share: PublicShare
   let etag: string | null
   try {
-    const res = await publicSharesApi().resolveShareRaw({ shareId, xSharePassword: pwToken, ifNoneMatch: ifNoneMatch ?? undefined })
+    const res = await publicSharesApi(apiBaseOf(at)).resolveShareRaw({ shareId: shareIdOf(at), xSharePassword: pwToken, ifNoneMatch: ifNoneMatch ?? undefined })
     share = await res.value()
     etag = res.raw.headers.get('ETag')
   } catch (e) {
@@ -198,7 +222,7 @@ export async function pollPublicShare(
     if (isHttpStatus(e, HttpStatus.notFound)) throw new ShareUnavailableError('not_found')
     throw e
   }
-  return { head: headOf(shareId, kShare, share), etag }
+  return { head: headOf(at, kShare, share), etag }
 }
 
 // --- accountless terms gate (uc.sharing.share-accept, ADR 0035 §3) ----------
@@ -208,6 +232,8 @@ export async function pollPublicShare(
 // not enforcement**: a localStorage flag is bypassable by an accountless visitor (devtools / a fresh profile /
 // resolving the share directly), so it records + surfaces consent — it does not *prevent* access. The
 // legally-meaningful protection is the terms' content + the decryptable-on-report path, not this prompt.
+// Another instance's tenant is kept apart (`./shareAt.ts` `originKey`): its id is that instance's, and this origin's key for
+// a tenant stays byte-identical, so an acceptance recorded on this origin's share page still reads.
 // What is stored per tenant is every accepted PAIR (ADR 0035 decision 6): the space's revision and the operator
 // section's revision, each as `pairKey` spells it, space-separated, the latest last. The gate asks whether the current
 // pair is among them — as a member's gate asks whether a row exists for it.
@@ -217,7 +243,7 @@ export async function pollPublicShare(
 // Migration needs no rewrite: a value an older client stored (a triple with the retired variant, or a bare revision)
 // equals no pair, so that visitor is asked once more — the section's revision moved with its one form anyway — and the
 // next record drops it, keeping only pair-shaped entries.
-const TERMS_ACCEPTED_KEY_PREFIX = 'veyq:terms-accepted:'
+const TERMS_ACCEPTED_KEY_PREFIX = 'veyq:terms-accepted'
 const TERMS_ACCEPTED_KEEP = 2
 const PAIR_SHAPE = /^\d+:\d+$/
 
@@ -227,8 +253,8 @@ const PAIR_SHAPE = /^\d+:\d+$/
  * `{ tenantId, termsRevision, terms }`; `termsRevision` 0 means the space owner published no terms (the client never
  * gates). No auth, no password — terms are public.
  */
-export async function fetchShareTerms(shareId: string): Promise<ShareTerms> {
-  return publicSharesApi().getShareTerms({ shareId })
+export async function fetchShareTerms(at: ShareAt): Promise<ShareTerms> {
+  return publicSharesApi(apiBaseOf(at)).getShareTerms({ shareId: shareIdOf(at) })
 }
 
 /** Pick the viewer's-locale terms markdown out of a [ShareTerms] (exact → base → en → first), '' when none. */
@@ -239,11 +265,11 @@ export function pickShareTerms(terms: ShareTerms, locale: string): string {
   return pickLocaleText(map, locale)
 }
 
-/** Every pair this device accepted for a tenant, as `pairKey` spells each, the latest last ([] if never accepted or
- *  the store is unreadable). */
-export function acceptedTermsKeys(tenantId: string): string[] {
+/** Every pair this device accepted for a tenant (of the instance at `apiBase`, `''` this origin), as `pairKey` spells
+ *  each, the latest last ([] if never accepted or the store is unreadable). */
+export function acceptedTermsKeys(tenantId: string, apiBase = ''): string[] {
   try {
-    const stored = localStorage.getItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`) ?? ''
+    const stored = localStorage.getItem(originKey(TERMS_ACCEPTED_KEY_PREFIX, apiBase, tenantId)) ?? ''
     return stored.split(' ').filter((key) => key !== '')
   } catch {
     return []
@@ -254,11 +280,11 @@ export function acceptedTermsKeys(tenantId: string): string[] {
  *  share of a tenant clears the gate on **every** share of that tenant. The pair joins those accepted before (moved
  *  to the end if it was among them), the oldest beyond TERMS_ACCEPTED_KEEP dropped. A storage failure is swallowed:
  *  the gate is operational, not enforcement, so it must never throw and block a visitor from viewing. */
-export function recordTermsAccepted(tenantId: string, pair: TermsPair): void {
+export function recordTermsAccepted(tenantId: string, pair: TermsPair, apiBase = ''): void {
   const key = pairKey(pair)
-  const kept = acceptedTermsKeys(tenantId).filter((k) => k !== key && PAIR_SHAPE.test(k))
+  const kept = acceptedTermsKeys(tenantId, apiBase).filter((k) => k !== key && PAIR_SHAPE.test(k))
   try {
-    localStorage.setItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`, [...kept, key].slice(-TERMS_ACCEPTED_KEEP).join(' '))
+    localStorage.setItem(originKey(TERMS_ACCEPTED_KEY_PREFIX, apiBase, tenantId), [...kept, key].slice(-TERMS_ACCEPTED_KEEP).join(' '))
   } catch {
     /* private-mode / quota — an unrecordable acceptance still clears the in-memory gate for this session */
   }

@@ -17,8 +17,9 @@ const NEW_BOOKMARK_ORDER = 50
 
 export const shareBookmarkKind: KindRegistration = {
   icon: 'link',
-  // The header's priority (ADR 0110): the heart, then editing and moving it; Report (the share's) stays the menu's last group.
-  header: { order: ['favorite', 'move'] },
+  // The header's priority (ADR 0110): the link's own page (ADR 0121), the heart, then moving it; Report (the share's) stays the
+  // menu's last group.
+  header: { order: ['open-own-page', 'favorite', 'move'] },
   detail: BookmarkDetail,
   deleteTitle: 'node.bookmark.delete',
   nounWithArticle: 'node.aBookmark',

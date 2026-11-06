@@ -57,10 +57,10 @@ export function memoryBannerApi(): MemoryBannerApi {
  * A guest's media on a share link (the `share-media` tag: list them, complete an upload, delete one's own) with **no**
  * credential, as core's `publicSharesApi()` sits beside `sharesApi()`: the anonymous /s/ page has no session, so no
  * Authorization header is ever sent from it. The link's password and the guest's token travel as the operations'
- * own headers and body fields.
+ * own headers and body fields. `apiBase`: the instance that serves the link (`''` this origin, ADR 0121).
  */
-export function publicShareMediaApi(): ShareMediaApi {
-  return new ShareMediaApi(new ShareMediaConfiguration(publicParams()))
+export function publicShareMediaApi(apiBase: string): ShareMediaApi {
+  return new ShareMediaApi(new ShareMediaConfiguration(publicParams(apiBase)))
 }
 
 /** A moderator's read of a case's held media (`listCaseMedia`, uc.moderation.review-a-case) — the review's stand-in for

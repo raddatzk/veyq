@@ -33,7 +33,9 @@ export type Resolved<M> = M extends (...args: never[]) => infer R ? Awaited<R> :
 /** The methods a mock was given, each as a `Mock` typed by the generated method. */
 export type ApiMocks<A, K extends keyof Methods<A>> = { [P in K]: Mock<Extract<Methods<A>[P], AnyFn>> }
 
-type ApiFactory = () => object
+// A factory may take where it calls (a guest's API base, ADR 0121): the stub answers whatever it is called with — a test
+// of where a call goes asserts the factory's arguments, or the URL at `fetch` (`*.wire.test.ts`).
+type ApiFactory = (apiBase: string) => object
 
 /** Make `factory()` return an object whose methods resolve the given payloads. */
 export function stubApi<F extends ApiFactory, K extends keyof Methods<ReturnType<F>>>(

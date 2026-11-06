@@ -16,6 +16,16 @@ export const CORE_PUBLIC_SHARES_CONTRIBUTE = 'core.public-shares.contribute'
  *  (uc.sharing.share-uploader). */
 export const CORE_PUBLIC_SHARES_DROP_BOX = 'core.public-shares.drop-box'
 
+/** Another veyq instance's member may show this instance's links inside their own space (ADR 0121 decision 3): the share
+ *  API answers their origin. Read of ANOTHER instance's manifest (its `/api/setup`) before a bookmark's page embeds one of
+ *  its links (`core/sharing/shareInstance.ts`); a child of {@link CORE_PUBLIC_SHARES}. */
+export const CORE_PUBLIC_SHARES_EMBEDDABLE = 'core.public-shares.embeddable'
+
+/** A received link kept as a bookmark shows its share in place, from this or any veyq instance (ADR 0121 decisions 1-2):
+ *  while it is effective for the open tenant the app shell's `connect-src` admits `https:`. Off, a bookmark opens its
+ *  link as before (ADR 0120). */
+export const CORE_SHARE_EMBEDDING = 'core.share-embedding'
+
 /** Shared group spaces — creating a group (uc.spaces.* group use-cases; an existing group stays usable when off). */
 export const CORE_GROUP_SPACE = 'core.group-space'
 

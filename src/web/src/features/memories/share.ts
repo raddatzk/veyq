@@ -38,6 +38,7 @@ import {
 import { openShareRoot, walkSubtree } from '../../core/sharing/shareTree'
 import { createGuestIdentity, identityNameContext, type GuestIdentity } from '../../core/sharing/guestIdentity'
 import { guestReserve, guestWindow, shareChunkUrls, type GuestUploadTarget } from '../../core/sharing/guestBlob'
+import { apiBaseOf, shareIdOf, type ShareAt } from '../../core/sharing/shareAt'
 import type { FrameOpener, OpenOpts } from '../../core/blob/transport'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
 import type { ScopeKey } from '../spaces/epochs'
@@ -184,21 +185,24 @@ export type ContributorSession = GuestIdentity & { uploaderKey?: string }
  * derived from [fragmentKey] (the link's `#k=`), whose hash the share stores.
  */
 export async function createContributorIdentity(
-  shareId: string,
+  at: ShareAt,
   scopeId: string,
   access: ShareAccess,
   displayName: string,
   fragmentKey: string,
   pwToken?: string,
 ): Promise<ContributorSession> {
+  // `at`: the link and the instance that serves it (ADR 0121; a bare id is this origin's).
+  const shareId = shareIdOf(at)
+  const apiBase = apiBaseOf(at)
   // A READ_WRITE guest names itself as on any link: the platform's identity, the name under the root's key (`K_node`).
   if (access.kind === 'read') {
-    return createGuestIdentity({ shareId, scopeId }, access.memoryKey, { name: displayName, fragmentKey, pwToken, rootEpoch: access.rootEpoch })
+    return createGuestIdentity({ shareId, scopeId, apiBase }, access.memoryKey, { name: displayName, fragmentKey, pwToken, rootEpoch: access.rootEpoch })
   }
   const identityId = crypto.randomUUID() // client-minted: the name and the key wrap are sealed bound to it (ADR 0072)
   const minted = mintUploaderKey(scopeId, access.nodeId, identityId, access.dropPublicKey)
   const sealedDisplayName = b64std(v1.sealField(identityNameContext(scopeId, shareId, identityId), minted.uploaderKey, v1.utf8(displayName)))
-  const { contributorToken } = await publicSharesApi().createShareIdentity({
+  const { contributorToken } = await publicSharesApi(apiBase).createShareIdentity({
     shareId,
     // `K_up` is sealed to the root's drop key, which a re-key replaces: the root's epoch as read (ADR 0109 point 6)
     createShareIdentityRequest: { nodeEpoch: access.rootEpoch, identityId, sealedDisplayName, wrappedIdentityKey: minted.wrappedIdentityKey },
@@ -222,7 +226,7 @@ export function sessionSealKey(session: ContributorSession, access: ShareAccess)
  *  (`core/sharing/guestBlob.ts`: `startShareBlobUploads`, then `presignShareBlobUploadWindows`, the link's gate again, so
  *  a revoked link stops the upload there), complete via `completeShareMedia`. */
 function shareUploadTransport(
-  shareId: string, contributorToken: string, nodeEpoch: number, pwToken?: string, nodeId?: string,
+  shareId: string, apiBase: string, contributorToken: string, nodeEpoch: number, pwToken?: string, nodeId?: string,
 ): MediaUploadTransport {
   // The target (ADR 0080 decision 6): a Memory or chapter below the share root, named on every start, window and
   // completion — one target per request. Absent for the root itself, so a root-level upload sends exactly what it
@@ -230,12 +234,12 @@ function shareUploadTransport(
   const target = nodeId === undefined ? {} : { nodeId }
   // A contributor uploads media only — never a cover: ORIGINAL/THUMBNAIL/PREVIEW is the whole role set, and the server
   // refuses any other role from a guest (`400 invalid_request`, Memories' `admitsGuestRole`).
-  const to: GuestUploadTarget = { shareId, contributorToken, pwToken, ...target } // pwToken: cr-0164
+  const to: GuestUploadTarget = { shareId, apiBase, contributorToken, pwToken, ...target } // pwToken: cr-0164
   return {
     reserve: (declares) => guestReserve(to, declares),
     window: guestWindow(to),
     async complete(media) {
-      const done = await publicShareMediaApi().completeShareMedia({
+      const done = await publicShareMediaApi(apiBase).completeShareMedia({
         shareId,
         shareMediaBatchRequest: {
           // the target node's epoch as read (`ShareNode.epoch`, the root's `rootEpoch`): every wrap of the batch is under
@@ -274,6 +278,8 @@ function shareUploadTransport(
 export async function addSharePhoto(
   session: ContributorSession & {
     shareId: string; scopeId: string; sealKey: Uint8Array; nodeEpoch: number; pwToken?: string; nodeId?: string
+    /** The instance that serves the link (ADR 0121); absent, this origin. */
+    apiBase?: string
   },
   source: AddMediaSource,
   deriver: MediaDeriver = createBrowserDeriver(),
@@ -281,7 +287,7 @@ export async function addSharePhoto(
 ): Promise<{ blobId: string; mediaId: string }> {
   return uploadMediaVia(
     session.scopeId, session.sealKey, source, deriver,
-    shareUploadTransport(session.shareId, session.contributorToken, session.nodeEpoch, session.pwToken, session.nodeId), opts,
+    shareUploadTransport(session.shareId, session.apiBase ?? '', session.contributorToken, session.nodeEpoch, session.pwToken, session.nodeId), opts,
   )
 }
 
@@ -290,8 +296,8 @@ export async function addSharePhoto(
  * authorizes it by a single-row ownership check (the media's `share_identity_id` equals the token's identity) and
  * reclaims its blobs — a foreign/unknown media is a 404. Used by the uploader drop-box's session-only delete-own.
  */
-export async function deleteSharePhoto(shareId: string, contributorToken: string, mediaId: string, pwToken?: string): Promise<void> {
-  await publicShareMediaApi().deleteShareMedia({ shareId, mediaId, xContributorToken: contributorToken, xSharePassword: pwToken }) // cr-0164
+export async function deleteSharePhoto(at: ShareAt, contributorToken: string, mediaId: string, pwToken?: string): Promise<void> {
+  await publicShareMediaApi(apiBaseOf(at)).deleteShareMedia({ shareId: shareIdOf(at), mediaId, xContributorToken: contributorToken, xSharePassword: pwToken }) // cr-0164
 }
 
 // --- viewer (anonymous, no session) ----------------------------------------
@@ -365,7 +371,7 @@ export const NO_SHARE_MEDIA: ShareMediaListing = { media: [], identities: [], mo
  * not asked. Throws [ShareUnavailableError] when a read is refused (a link revoked since its resolve answers 404 here too,
  * and so does a node the link does not serve).
  */
-export async function listShareMedia(shareId: string, role: ShareRole, pwToken?: string, nodeId?: string): Promise<ShareMediaListing> {
+export async function listShareMedia(at: ShareAt, role: ShareRole, pwToken?: string, nodeId?: string): Promise<ShareMediaListing> {
   if (role === ShareRole.WriteOnly) return NO_SHARE_MEDIA
   // A moderator's review lists the media its case's hold copied — never the link's own read (core/sharing/review.ts).
   const review = activeReview()
@@ -376,11 +382,11 @@ export async function listShareMedia(shareId: string, role: ShareRole, pwToken?:
   }
   let first: ShareMediaListing
   try {
-    first = await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken, nodeId, limit: MEDIA_PAGE_LIMIT })
+    first = await publicShareMediaApi(apiBaseOf(at)).listShareMedia({ shareId: shareIdOf(at), xSharePassword: pwToken, nodeId, limit: MEDIA_PAGE_LIMIT })
   } catch {
     throw new ShareUnavailableError('not_found')
   }
-  return restOfShareMedia(shareId, pwToken, nodeId, first)
+  return restOfShareMedia(at, pwToken, nodeId, first)
 }
 
 /** A read of the guest listing with its tag: the listing in full and the `ETag` its first page carried (`null`: none —
@@ -396,25 +402,25 @@ export type TaggedShareMedia = { listing: ShareMediaListing; etag: string | null
  * the server's tag past it and the next poll re-reads. Throws [ShareUnavailableError] as [listShareMedia] does.
  */
 export async function readShareMedia(
-  shareId: string, role: ShareRole, pwToken: string | undefined, nodeId: string, ifNoneMatch?: string,
+  at: ShareAt, role: ShareRole, pwToken: string | undefined, nodeId: string, ifNoneMatch?: string,
 ): Promise<TaggedShareMedia | null> {
-  if (role === ShareRole.WriteOnly || activeReview()) return { listing: await listShareMedia(shareId, role, pwToken, nodeId), etag: null }
+  if (role === ShareRole.WriteOnly || activeReview()) return { listing: await listShareMedia(at, role, pwToken, nodeId), etag: null }
   let first: ShareMediaListing
   let etag: string | null
   try {
-    const res = await publicShareMediaApi().listShareMediaRaw({ shareId, xSharePassword: pwToken, nodeId, limit: MEDIA_PAGE_LIMIT, ifNoneMatch })
+    const res = await publicShareMediaApi(apiBaseOf(at)).listShareMediaRaw({ shareId: shareIdOf(at), xSharePassword: pwToken, nodeId, limit: MEDIA_PAGE_LIMIT, ifNoneMatch })
     first = await res.value()
     etag = res.raw.headers.get('ETag')
   } catch (e) {
     if (ifNoneMatch && isHttpStatus(e, HttpStatus.notModified)) return null // idle: what the link serves is unchanged
     throw new ShareUnavailableError('not_found')
   }
-  return { listing: await restOfShareMedia(shareId, pwToken, nodeId, first), etag }
+  return { listing: await restOfShareMedia(at, pwToken, nodeId, first), etag }
 }
 
 /** Every page after [first], each asked after the last id the page before gave, until the server says no more remain —
  *  merged into one listing (the identities once each). */
-async function restOfShareMedia(shareId: string, pwToken: string | undefined, nodeId: string | undefined, first: ShareMediaListing): Promise<ShareMediaListing> {
+async function restOfShareMedia(at: ShareAt, pwToken: string | undefined, nodeId: string | undefined, first: ShareMediaListing): Promise<ShareMediaListing> {
   const media: ShareMediaListing['media'] = []
   const identities = new Map<string, ShareMediaListing['identities'][number]>()
   let page = first
@@ -427,7 +433,7 @@ async function restOfShareMedia(shareId: string, pwToken: string | undefined, no
     if (!last || last === after) throw new Error('share_media_page_did_not_advance') // a page that says more must move on
     after = last
     try {
-      page = await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken, nodeId, after, limit: MEDIA_PAGE_LIMIT })
+      page = await publicShareMediaApi(apiBaseOf(at)).listShareMedia({ shareId: shareIdOf(at), xSharePassword: pwToken, nodeId, after, limit: MEDIA_PAGE_LIMIT })
     } catch {
       throw new ShareUnavailableError('not_found')
     }
@@ -493,8 +499,8 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
 /** Open a shared blob via the gated, share-scoped presign endpoint (no auth), then decrypt it under its `K_node`.
  *  A password-protected share needs the same guest token (cr-0118) as the resolve. A moderator's review presigns the
  *  held object instead (`core/sharing/review.ts`). */
-async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string, opts: OpenOpts = {}): Promise<Uint8Array> {
-  return openBlobVia(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, (o) => shareChunkUrls(shareId, ref.blobId, pwToken, o), opts)
+async function openShareBlob(at: ShareAt, si: ShareItem, ref: BlobRef, pwToken?: string, opts: OpenOpts = {}): Promise<Uint8Array> {
+  return openBlobVia(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, (o) => shareChunkUrls(at, ref.blobId, pwToken, o), opts)
 }
 
 /**
@@ -502,15 +508,15 @@ async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwTok
  * presign (`resolveShareBlob`: `shareId` + guest `pwToken`, whole-blob only). Same `openFrame` core as the authed
  * `chunkProvider`; only the presign differs, so the SW never learns which route served the bytes (ADR 0047).
  */
-export function shareChunkProvider(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string): ChunkProvider {
-  return makeChunkProvider(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, () => shareChunkUrls(shareId, ref.blobId, pwToken))
+export function shareChunkProvider(at: ShareAt, si: ShareItem, ref: BlobRef, pwToken?: string): ChunkProvider {
+  return makeChunkProvider(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, () => shareChunkUrls(at, ref.blobId, pwToken))
 }
 
 /** Open a shared media's grid (thumbnail) tier — a grid's bulk read (`readScheduler.ts`), dropped while it waits once
  *  `signal` aborts. */
-export const openShareGrid = (shareId: string, si: ShareItem, pwToken?: string, signal?: AbortSignal, openFrames?: FrameOpener) =>
-  openShareBlob(shareId, si, gridRef(si.item), pwToken, { lane: 'bulk', signal, openFrames })
+export const openShareGrid = (at: ShareAt, si: ShareItem, pwToken?: string, signal?: AbortSignal, openFrames?: FrameOpener) =>
+  openShareBlob(at, si, gridRef(si.item), pwToken, { lane: 'bulk', signal, openFrames })
 /** Open a shared media's lightbox (preview) tier. */
-export const openShareLightbox = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si, lightboxRef(si.item), pwToken)
+export const openShareLightbox = (at: ShareAt, si: ShareItem, pwToken?: string) => openShareBlob(at, si, lightboxRef(si.item), pwToken)
 /** Open a shared media's pristine original (download). */
-export const openShareOriginal = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si, downloadRef(si.item), pwToken)
+export const openShareOriginal = (at: ShareAt, si: ShareItem, pwToken?: string) => openShareBlob(at, si, downloadRef(si.item), pwToken)

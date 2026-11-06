@@ -40,6 +40,15 @@ if (policy !== null) {
   if (!/(^|;)\s*require-trusted-types-for 'script'\s*(;|$)/.test(policy)) failures.push(`dist/${POLICY_FILE} does not carry "require-trusted-types-for 'script'"`)
   if (!/(^|;)\s*trusted-types veyq default\s*(;|$)/.test(policy)) failures.push(`dist/${POLICY_FILE} does not carry exactly "trusted-types veyq default"`)
 }
+// `connect-src` names this origin and hosts, never a scheme or a wildcard (ADR 0121 decision 2): the backend appends
+// `https:` per tenant only while `core.share-embedding` is effective, so a built policy that carried it would widen every
+// tenant, the switched-off ones included; `http://*.localhost:*` is the dev server's alone.
+// Bite: make `if (dev)` before the `https:` push in csp.ts unconditional, `pnpm run build` - RED.
+if (policy !== null) {
+  const connect = (policy.split(';').map((d) => d.trim().split(/\s+/)).find((d) => d[0] === 'connect-src') ?? []).slice(1)
+  const wide = connect.filter((source) => /^[a-z][a-z0-9+.-]*:$/i.test(source) || source.includes('*'))
+  if (wide.length) failures.push(`dist/${POLICY_FILE} connect-src carries ${wide.join(' ')}: a scheme or wildcard only the backend may append`)
+}
 // The two ways a bundled Vue would put a string past that enforcement, read in the emitted JavaScript itself:
 // - its pass-through `vue` policy, which vite.config.ts compiles out (bite: drop the plugin from `plugins`, build - RED);
 // - stringified static content (`createStaticVNode`, whose vnode is the one that sets `staticCount`): Vue writes it with
@@ -56,6 +65,7 @@ if (failures.length) {
 }
 
 console.log(
-  `verify:csp: dist/${POLICY_FILE} present with worker-src 'self' and Trusted Types enforced (veyq, default), no Vue pass-through ` +
+  `verify:csp: dist/${POLICY_FILE} present with worker-src 'self', Trusted Types enforced (veyq, default) and no scheme or ` +
+    `wildcard in connect-src, no Vue pass-through ` +
     'policy or static vnode in the bundle, dist/index.html carries no CSP <meta>.',
 )

@@ -19,7 +19,10 @@
    and names the bookmark after the link's host until the member names it; nothing is fetched.
 3. The client creates the node: a fresh `K_node` wrapped under the parent's key, the name sealed like every node's, and
    the meta `bookmark: { link, password? }` sealed under `K_node`, padded to a multiple of 512 bytes.
-4. The member opens the bookmark from its row (or its page): a link of this origin opens in this tab, its password
+4. The member opens the link from the bookmark's page (**Open on its own page**, or **Open link** where the share is
+   not shown in place — [uc.sharing.browse-a-received-share-in-place](uc.sharing.browse-a-received-share-in-place.md)),
+   or from its row while showing a share in place is switched off (`core.share-embedding`, ADR 0121; while it is on, a
+   row opens the bookmark's page): a link of this origin opens in this tab, its password
    handed to the share page in memory and entered there once; a link of another origin opens in a new tab with no
    opener and no referrer, after the member is shown its password to copy where there is one.
 5. The share page opens as the link would — or says the link is unavailable when it was revoked, expired or re-keyed
@@ -66,5 +69,7 @@ was shared — without this server learning anything about it.
   [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) (reporting),
   [ADR 0109](../../../decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md) (the re-key it survives),
   [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) (a core kind).
-- **Planned:** browsing a foreign share in place (inbox #829); a received link kept in the account (inbox #435).
+- **Built since:** browsing the share in place, of this or another instance —
+  [uc.sharing.browse-a-received-share-in-place](uc.sharing.browse-a-received-share-in-place.md) (ADR 0121).
+- **Planned:** a received link kept in the account (inbox #435).
 - End-user view (docs site): [Keep a link someone sent you](../../../../site/src/content/docs/sharing/keep-a-link.mdx)

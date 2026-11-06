@@ -61,6 +61,15 @@ describe('addSharePhoto names its target on the wire', () => {
     for (const s of sent) expect(s.json, s.url).toMatchObject({ contributorToken: 'tok-1', nodeId: MEMORY })
   })
 
+  it('another instance\'s link (a bookmark\'s page, ADR 0121): the start, the window and the completion go to its origin', async () => {
+    const away = 'https://photos.example.org'
+    const sent = recordFetch()
+    await addSharePhoto({ ...session, apiBase: away, nodeId: MEMORY }, threeChunks(), noTiers)
+    expect(sent.map((s) => s.url)).toEqual([
+      `${away}/api/shares/${SHARE_ID}/blob-uploads`, `${away}/api/shares/${SHARE_ID}/blob-upload-windows`, `${away}/api/shares/${SHARE_ID}/media`,
+    ])
+  })
+
   it('no target: the bodies a root-level upload always sent, without a `nodeId` key', async () => {
     const sent = recordFetch()
     await addSharePhoto(session, threeChunks(), noTiers)

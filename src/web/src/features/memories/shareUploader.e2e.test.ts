@@ -3,8 +3,8 @@
 //
 // Two actors on one instance, serialized (the `shareContributor.e2e` shape):
 //   A          = curator: Server Owner + tenant owner (from `birthInstance`), mints the shares, reads them back.
-//   anonymous  = an uploader with NO session — every call goes through `publicSharesApi()` (core's link) or
-//                `publicShareMediaApi()` (Memories' guest media), which carry no bearer.
+//   anonymous  = an uploader with NO session — every call goes through `publicSharesApi('')` (core's link) or
+//                `publicShareMediaApi('')` (Memories' guest media), which carry no bearer.
 //
 // What only this layer can prove: that the resolve the SERVER actually sends an uploader carries no wrap, and that
 // what a guest sealed through the real share transport — under its own key, wrapped to the Memory's drop key — is
@@ -74,7 +74,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     const fragmentKey = b64url(minted.kShare)
 
     // --- anonymous: what the server sends the guest carries no wrap, only the sealed drop public key ----------
-    const raw = await publicSharesApi().resolveShare({ shareId: minted.shareId })
+    const raw = await publicSharesApi('').resolveShare({ shareId: minted.shareId })
     expect(raw.role, 'the share resolves as WRITE_ONLY').toBe(ShareRole.WriteOnly)
     expect(raw.wrap ?? null, 'the resolve the guest received carries no K_node wrap').toBeNull()
     expect(raw.sealedDropPublicKey, 'it carries the sealed drop public key instead').toBeTruthy()
@@ -123,7 +123,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
       .toEqual(Array.from(photo))
     // …through that key and nothing more: Memories' raw media read (read past the generated client, which drops a
     // field it does not know) serves exactly the uploader's identity, with its key and no name (ADR 0030 point 8)
-    const viewerWire = (await (await publicShareMediaApi().listShareMediaRaw({ shareId: viewer.shareId })).raw.json()) as {
+    const viewerWire = (await (await publicShareMediaApi('').listShareMediaRaw({ shareId: viewer.shareId })).raw.json()) as {
       identities: Record<string, unknown>[]
       media: { mediaId: string; identityId?: string | null }[]
     }
@@ -135,7 +135,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
       .toBe(session.identityId)
     // …and core's raw resolve of the same link carries neither: no media, no identities — its nodes are the control
     // that the body read is the resolved subtree and not an empty answer (cr-platform-contract-split slice 6.3)
-    const viewerResolveWire = (await (await publicSharesApi().resolveShareRaw({ shareId: viewer.shareId })).raw.json()) as Record<string, unknown>
+    const viewerResolveWire = (await (await publicSharesApi('').resolveShareRaw({ shareId: viewer.shareId })).raw.json()) as Record<string, unknown>
     expect((viewerResolveWire.nodes as { id: string }[]).map((n) => n.id), 'the raw resolve serves the shared node').toContain(nodeId)
     expect('media' in viewerResolveWire, 'the raw resolve serves no media key').toBe(false)
     expect('identities' in viewerResolveWire, 'the raw resolve serves no identities key').toBe(false)

@@ -11,9 +11,10 @@ export function filesApi(): FilesApi {
 }
 
 /** A guest's file operations on a share link (the `share-files` tag, no auth): list the file blobs under the shared
- *  subtree, complete a guest's upload into a file below the root. */
-export function publicShareFilesApi(): ShareFilesApi {
-  return new ShareFilesApi(new FilesConfiguration(publicParams()))
+ *  subtree, complete a guest's upload into a file below the root. `apiBase`: the instance that serves the link (`''` this
+ *  origin, ADR 0121). */
+export function publicShareFilesApi(apiBase: string): ShareFilesApi {
+  return new ShareFilesApi(new FilesConfiguration(publicParams(apiBase)))
 }
 
 /** A moderator's read of a case's held files (`listCaseFiles`, uc.moderation.review-a-case) — the review's stand-in for

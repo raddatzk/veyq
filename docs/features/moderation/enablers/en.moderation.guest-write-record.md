@@ -17,7 +17,7 @@
   leaves open is not pursued (ADR 0093 § Legal basis, Still open 4).
 - **Provides:** for every write a link's guest makes that enters it as the last editor of something
   ([en.platform.field-editor](../../platform/enablers/en.platform.field-editor.md)), the client address and source port
-  the server saw and the time, kept for N days, so a hold can copy them as evidence when the written item is reported.
+  the server saw, the time and the `Origin` the request carried, kept for N days, so a hold can copy them as evidence when the written item is reported.
 - **Serves (use-cases):** [uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md),
   [uc.sharing.share-uploader](../../sharing/use-cases/uc.sharing.share-uploader.md),
   [uc.depot.drop-box](../../depot/use-cases/uc.depot.drop-box.md) (their alternate flow on the record); the hold
@@ -52,10 +52,21 @@ the server's clock on NTP: a clock minutes off makes the port worthless, because
 
 Each row holds the share identity (the authenticated writer, from its contributor token — or, for its own creation,
 the identity created), the object, the client address of the one resolver (text form), its source port where the
-resolver knows one (else none), `observed_at` (server time in milliseconds UTC) and `expires_at`. Nothing else: no
-User-Agent, no content, no header. **Not recorded:** a member's write, any read, a guest's take-back or delete of its
+resolver knows one (else none), `request_origin` (below), `observed_at` (server time in milliseconds UTC) and
+`expires_at`. Nothing else: no User-Agent, no content, no other header. **Not recorded:** a member's write, any read, a guest's take-back or delete of its
 own (`abandonShareNode`, `deleteShareMedia`: they remove, they enter no editor), the upload start and its windows (no
 object exists yet; the commit records), a report (its own path, ADR 0093 § 1).
+
+**Why the origin** (ADR 0093 § 10). The guest API answers every origin
+([ADR 0121](../../../decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md) decision 3), so a page
+that knows a writing link can make a visitor's browser write through it, and the row would name that visitor's address.
+`request_origin` keeps the request's `Origin` header — which a browser states and no page's script can change — so a
+moderator tells a write through the share's own page or a veyq page embedding it from one through an unrelated page.
+`core/http/RequestClient.kt`'s `RequestOrigin` keeps it only in a browser's shapes: a serialized origin (lowercase
+`scheme://host[:port]`, at most 255 characters) or `null` (an opaque origin) as sent; a second `Origin` header, a path,
+a userinfo, an uppercase letter or anything longer as `invalid`; no header as no value. A client that is no browser
+chooses it, so it marks a possibly laundered address and never clears one. The Art. 18 export shows it beside the
+address (`ModerationExportGuestWrite.origin`); `GuestWriteRecordCoreSliceTest` holds the shapes.
 
 **The address is the resolver's, never a client's choice** (ADR 0094 decision 3: the rightmost `X-Forwarded-For` entry
 no trusted proxy wrote, with the port that entry carries or the one configured source's). When the resolver yields no

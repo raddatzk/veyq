@@ -22,6 +22,7 @@ import { computed, inject, provide, ref, type ComputedRef, type InjectionKey } f
 import type { GuestAccess } from '../../core/access'
 import { makeChunkProvider, openBlobVia, presignAllChunks } from '../../core/blob/transport'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
+import type { ShareAt } from '../../core/sharing/shareAt'
 import { contentKeyChain, type TreeNode } from '../../core/node/tree'
 import { treeStore } from '../../core/node/treeStore'
 import { useGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
@@ -413,6 +414,8 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
 export function guestMemorySource(access: () => GuestAccess, tree: { readonly rootId: string | null }): MemorySource {
   const a0 = access()
   const shareId = a0.shareId
+  // The link as every guest read and write addresses it: its id and the instance that serves it (ADR 0121).
+  const at: ShareAt = { shareId, apiBase: a0.apiBase }
   const contributes = a0.role === ShareRole.ReadWrite
   const scope = () => access().head.scopeId
   // A served media as the share helpers take it: opened under `key` (the node's, from the chain), its origin on the item.
@@ -430,7 +433,7 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
       if (a.role === ShareRole.WriteOnly) return { items: [], revision: null, cursor: null } // served nothing, holds no key (ADR 0031)
       // The guest lists the node it has open, every page of it, as a member does (`listShareMedia` with its node, ADR
       // 0033 decision 6), and keeps the listing's tag for the live poll — none for a moderator's review, a snapshot.
-      const read = await readShareMedia(a.shareId, a.role, a.pwToken, nodeId)
+      const read = await readShareMedia(at, a.role, a.pwToken, nodeId)
       const items = read ? openedIn(a, nodeId, read.listing) : []
       return { items, revision: read?.etag ? { tag: read.etag, delete: 0 } : null, cursor: null }
     },
@@ -439,24 +442,24 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
     // merge a member's poll goes through. No keyset: a guest pages by id and is told no order of the Memory's changes.
     async poll(nodeId, c) {
       const a = access()
-      const read = await readShareMedia(a.shareId, a.role, a.pwToken, nodeId, c.tag)
+      const read = await readShareMedia(at, a.role, a.pwToken, nodeId, c.tag)
       if (!read) return { notModified: true }
       const items = openedIn(a, nodeId, read.listing)
       return { notModified: false, items, tag: read.etag ?? c.tag, deleteRevision: 0, mediaIds: items.map((m) => m.mediaId), cursor: null }
     },
     loaders: {
-      grid: (item, key, signal) => openShareGrid(shareId, shareItem(item, key), access().pwToken, signal, gridFrameOpener(scope(), key)),
-      preview: (item, key) => openShareLightbox(shareId, shareItem(item, key), access().pwToken),
-      original: (item, key) => openShareOriginal(shareId, shareItem(item, key), access().pwToken),
-      chunk: (item, key) => shareChunkProvider(shareId, shareItem(item, key), downloadRef(item), access().pwToken),
+      grid: (item, key, signal) => openShareGrid(at, shareItem(item, key), access().pwToken, signal, gridFrameOpener(scope(), key)),
+      preview: (item, key) => openShareLightbox(at, shareItem(item, key), access().pwToken),
+      original: (item, key) => openShareOriginal(at, shareItem(item, key), access().pwToken),
+      chunk: (item, key) => shareChunkProvider(at, shareItem(item, key), downloadRef(item), access().pwToken),
       meta: (item, key) => openedMeta(scope(), key, item),
       blobMeta: (item, key) => openedBlobMeta(scope(), key, item),
       // The node's uploaded cover through the gated share presign, which serves a cover blob below the share.
-      coverBlob: (ref, key) => openBlobVia(scope(), key, ref, () => shareChunkUrls(shareId, ref.blobId, access().pwToken)),
+      coverBlob: (ref, key) => openBlobVia(scope(), key, ref, () => shareChunkUrls(at, ref.blobId, access().pwToken)),
       // A video banner's chunks through the same gated presign: the share serves every attachment below its root.
-      attachmentChunks: (ref, key) => makeChunkProvider(scope(), key, ref, () => shareChunkUrls(shareId, ref.blobId, access().pwToken)),
+      attachmentChunks: (ref, key) => makeChunkProvider(scope(), key, ref, () => shareChunkUrls(at, ref.blobId, access().pwToken)),
     },
-    ...(contributes ? guestWrites(access, tree, shareId, scope) : {}),
+    ...(contributes ? guestWrites(access, tree, at, scope) : {}),
   }
 }
 
@@ -464,17 +467,18 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
 function guestWrites(
   access: () => GuestAccess,
   tree: { readonly rootId: string | null },
-  shareId: string,
+  at: { readonly shareId: string; readonly apiBase: string },
   scope: () => string,
 ): Pick<MemorySource, 'upload' | 'deleteMedia'> {
+  const { shareId, apiBase } = at
   // The page's one session (named or forgotten anywhere on it), and the device's record of which listed media it added
   // under that identity (#361) — the server tells no guest whose an upload is (ADR 0030 point 8).
-  const session = useGuestSession<GuestIdentity>(shareId)
+  const session = useGuestSession<GuestIdentity>(at)
   const recorded = ref(0) // bumped on every remember/forget, so `own` re-reads the record
   const own = computed(() => {
     void recorded.value
     const s = session.value
-    return s ? loadOwnShareMedia(shareId, s.identityId) : new Set<string>()
+    return s ? loadOwnShareMedia(at, s.identityId) : new Set<string>()
   })
   return {
     upload: {
@@ -492,6 +496,7 @@ function guestWrites(
               {
                 ...s,
                 shareId,
+                apiBase,
                 scopeId: scope(),
                 sealKey: key,
                 nodeEpoch,
@@ -502,7 +507,7 @@ function guestWrites(
               undefined,
               opts,
             )
-            rememberOwnShareMedia(shareId, s.identityId, added.mediaId)
+            rememberOwnShareMedia(at, s.identityId, added.mediaId)
             recorded.value++
             return added
           },
@@ -515,8 +520,8 @@ function guestWrites(
       async purge(mediaId) {
         const s = session.value
         if (!s) throw new Error('no_guest_session')
-        await deleteSharePhoto(shareId, s.contributorToken, mediaId, access().pwToken)
-        forgetOwnShareMedia(shareId, s.identityId, mediaId)
+        await deleteSharePhoto(at, s.contributorToken, mediaId, access().pwToken)
+        forgetOwnShareMedia(at, s.identityId, mediaId)
         recorded.value++
       },
     },

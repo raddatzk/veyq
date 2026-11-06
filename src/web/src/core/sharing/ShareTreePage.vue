@@ -37,11 +37,18 @@
 // delete of a selection (it deletes no node). A `READ` link has no door, so nothing it renders can move anything. A DOWNLOAD (ADR 0082 decision 5) is core's `ExportSubtreeDialog` over the
 // guest's tree and the applications' guest reads, for a folder, a Memory or a chapter of a `READ` / `READ_WRITE` link.
 //
+// **Embedded** (`embedded`, ADR 0121 decision 1): a bookmark's page shows the link in place, under the bookmark's header and
+// inside the member's space. The node on screen is then this page's own state, never the route's: the space's URL names
+// the bookmark only, so no node id of another instance enters this space's addresses, and a crumb's real link is the
+// bookmark's own page (a modified click opens that page elsewhere, at the link's root). Everything else is the share
+// page's: the same views, doors and dialogs, handed the guest's access, whose `apiBase` sends every read and write to the
+// instance that serves the link.
+//
 // **The page's doors** (`core/node/nodeHost.ts`): this page provides the guest's host - open a node, the move (where the link
 // moves anything), the download and the create - and mounts core's one set of dialogs behind them
 // (`core/node/components/NodeDialogs.vue`), the member's page's too. Every other door is absent, so no view it renders
 // offers a rename, a delete, a share, a copy, an import or the trash, whatever a rights function says.
-import { computed, shallowRef, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import VeyqBreadcrumb from '../../shared/ui/VeyqBreadcrumb.vue'
@@ -77,6 +84,8 @@ const props = defineProps<{
   head: PublicShareHead
   reload: () => Promise<void>
   access: GuestAccess
+  /** Shown in place on a bookmark's page (see the header): navigation is this page's own, never the route's. */
+  embedded?: boolean
 }>()
 const emit = defineEmits<{ unavailable: [] }>()
 
@@ -101,11 +110,13 @@ watch(
 const note = computed(() => pickLocaleText(props.head.noteByLocale, locale.value))
 const renderedNote = computed(() => (note.value ? markdownHtml(note.value) : null))
 
-/** The node on screen: `?node=` when the walk opened it, else the root. */
+/** Where an embedded page is (null: the link's root); the share page's is the route's `?node=`. */
+const embeddedAt = ref<string | null>(null)
+/** The node on screen: `?node=` (embedded: this page's own state) when the walk opened it, else the root. */
 const currentId = computed<string | null>(() => {
   const tr = tree.value
   if (!tr) return null
-  const q = route.query.node
+  const q = props.embedded ? embeddedAt.value : route.query.node
   return typeof q === 'string' && tr.node(q) ? q : tr.rootId
 })
 const current = computed(() => (tree.value && currentId.value ? tree.value.node(currentId.value) : null))
@@ -127,7 +138,8 @@ const trail = computed<string[]>(() => {
 })
 
 function go(id: string) {
-  if (tree.value) void router.push(tree.value.linkTo(id))
+  if (props.embedded) embeddedAt.value = id
+  else if (tree.value) void router.push(tree.value.linkTo(id))
 }
 /** Each crumb's node: an ancestor takes nodes dragged from the level where the move dialog would (inbox #421,
  *  `../node/nodeDrag.ts`) - for a `READ_WRITE` guest, whose level alone has anything to drag. */
@@ -140,7 +152,7 @@ const crumbTarget = crumbDropTarget((item) => places.get(item))
 function crumb(tr: GuestTreeSource, id: string): VeyqMenuItem {
   const item: VeyqMenuItem = {
     label: tr.nameOf(id),
-    url: router.resolve(tr.linkTo(id)).href,
+    url: props.embedded ? router.resolve(route.fullPath).href : router.resolve(tr.linkTo(id)).href,
     command: (e) => {
       if (e instanceof MouseEvent && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) return // the browser opens the href
       e.preventDefault()
@@ -179,7 +191,7 @@ const badge = computed(() => {
 // (`access.requestGuest`); a move through the guest's door (`nodeMover`, READ_WRITE only); a download as a ZIP (READ /
 // READ_WRITE, ADR 0082 decision 5) over the guest's own tree and reads. The page follows nothing after a write: the shell
 // re-reads the share, and the node on screen is `?node=`.
-const session = useGuestSession(props.shareId)
+const session = useGuestSession(props.access) // the link where it lives (`./shareAt.ts`): its id and its instance
 const dialogs = useNodeDialogs({
   access: () => props.access,
   tree: () => tree.value,
@@ -241,7 +253,7 @@ function createError(e: unknown): string {
       <p class="veyq-empty node-blocked">{{ t('node.blockedByOperator') }}</p>
       <StatementNotice :target-id="current.id" />
       <!-- A guest whose upload an authority's removal order blocked through another link learns it here (TCO Art. 11). -->
-      <OrderNotice :share-id="shareId" />
+      <OrderNotice :share-id="shareId" :api-base="access.apiBase || undefined" />
     </template>
     <LevelView
       v-else-if="atFolder && current"

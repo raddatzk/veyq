@@ -14,7 +14,7 @@ import { session } from '../../app/session'
 import type { Access, GuestAccess, MemberAccess } from '../access'
 import { ShareRole } from '../../api/generated/sharing'
 import { ReportCategory } from '../../api/generated/moderation'
-import { resetReporting, submitReport, type ReportRequest, type ReportTarget } from './report'
+import { resetReporting, submitReport, useReportOffered, type ReportRequest, type ReportTarget } from './report'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000f3'
 const NODE = '5c09e000-0000-4000-8000-0000000000a0'
@@ -63,7 +63,7 @@ afterEach(() => {
 
 const member = { mode: 'member', scopeId: SCOPE } as unknown as MemberAccess
 const guest = (role: ShareRole): GuestAccess => ({
-  mode: 'guest', shareId: SHARE_ID, role, pwToken: 'cHctdG9rZW4=', fragmentKey: b64url(K_SHARE),
+  mode: 'guest', shareId: SHARE_ID, apiBase: '', role, pwToken: 'cHctdG9rZW4=', fragmentKey: b64url(K_SHARE),
   head: { scopeId: SCOPE, kShare: K_SHARE } as unknown as GuestAccess['head'],
   requestGuest: async () => null, reload: async () => {},
 })
@@ -125,6 +125,42 @@ describe('a report on the wire', () => {
     expect('id' in body.items[0]).toBe(false)
     const opened = v1.openReport(1, v1.moderationKemSecret(M), fromB64std(body.sealedReport))
     expect(v1.openReportShare(opened.reportKey, { kind: 'LINK', shareId: SHARE_ID }, fromB64std(body.items[0].sealedShare))[0].key).toEqual(K_SHARE)
+  })
+
+  it('a guest of another instance\'s link reports THERE, sealed to that instance\'s key, never this one\'s (ADR 0121 decision 8)', async () => {
+    const away = 'https://photos.example.org'
+    const theirs = v1.generateModerationKey()
+    const answer = (fetch as unknown as { getMockImplementation(): (i: RequestInfo | URL, init?: RequestInit) => Promise<Response> }).getMockImplementation()
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === `${away}/api/moderation/key`) {
+        calls.push({ url: String(input), method: 'GET', body: null, headers: new Headers(init?.headers) })
+        const bundle = v1.moderationBundle(theirs)
+        return new Response(JSON.stringify({ epoch: 7, kemPublicKey: b64std(bundle.kem), signPublicKey: b64std(bundle.sign) }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return answer(input, init)
+    }))
+    const g = { ...guest(ShareRole.Read), apiBase: away }
+    session.accessToken = null
+    await submitReport(request(g), [nodeTarget], { category: ReportCategory.IllegalContent, reason: REASON, contact: '' })
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([`GET ${away}/api/moderation/key`, `POST ${away}/api/shares/${SHARE_ID}/reports`])
+    expect(calls.every((c) => c.headers.get('authorization') === null)).toBe(true)
+    const body = JSON.parse(posts()[0].body!) as { epoch: number; sealedReport: string }
+    expect(body.epoch).toBe(7)
+    expect(v1.openReport(7, v1.moderationKemSecret(theirs), fromB64std(body.sealedReport)).reason).toBe(REASON)
+    expect(() => v1.openReport(1, v1.moderationKemSecret(M), fromB64std(body.sealedReport)), 'not this instance\'s key').toThrow()
+  })
+
+  it('whether Report is offered is asked of the instance a report goes to', async () => {
+    const away = 'https://photos.example.org'
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
+      String(input) === `${away}/api/moderation/key`
+        ? new Response(JSON.stringify(keyJson()), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : new Response(JSON.stringify({ code: 'moderation_off' }), { status: 404, headers: { 'Content-Type': 'application/json' } })))
+    const here = useReportOffered()
+    const there = useReportOffered(away)
+    await vi.waitFor(() => expect(there.value).toBe(true))
+    expect(here.value, 'this instance publishes no key: no Report here').toBe(false)
+    expect(useReportOffered(away), 'one answer per instance').toBe(there)
   })
 
   it('a name reported on its own goes as NAME of its node, its share holding that name\'s key alone', async () => {

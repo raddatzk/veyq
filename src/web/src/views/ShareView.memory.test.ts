@@ -337,8 +337,8 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     expect(w.find('[data-testid="memory-participants"]').exists(), 'no participants on a drop page').toBe(false)
     expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)
     expect(w.find('[data-testid="guest-write-record-notice"]').exists(), 'no N served: nothing said').toBe(false)
-    expect(publicShareMediaApi().listShareMedia, 'an uploader is served no media').not.toHaveBeenCalled()
-    expect(publicShareMediaApi().listShareMediaRaw, 'nor polls any').not.toHaveBeenCalled()
+    expect(publicShareMediaApi('').listShareMedia, 'an uploader is served no media').not.toHaveBeenCalled()
+    expect(publicShareMediaApi('').listShareMediaRaw, 'nor polls any').not.toHaveBeenCalled()
     expect(authenticatedCalls).toEqual([])
     expect(touched).toEqual([])
     w.unmount()
@@ -368,8 +368,8 @@ describe('a note that asks to be accepted before the share opens', () => {
     expect(w.find('.memory-detail').exists(), "the member's detail").toBe(false)
     expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)
     expect(w.text(), 'the drop page').not.toContain(t('share.uploaderIntro'))
-    expect(publicShareMediaApi().listShareMedia, 'no media read').not.toHaveBeenCalled()
-    expect(publicShareMediaApi().listShareMediaRaw, 'no media read').not.toHaveBeenCalled()
+    expect(publicShareMediaApi('').listShareMedia, 'no media read').not.toHaveBeenCalled()
+    expect(publicShareMediaApi('').listShareMediaRaw, 'no media read').not.toHaveBeenCalled()
   }
 
   for (const role of [ShareRole.Read, ShareRole.ReadWrite, ShareRole.WriteOnly]) {

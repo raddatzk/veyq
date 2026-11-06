@@ -177,7 +177,7 @@ describe('a share guest\'s covers', () => {
     const store = createCoverStore(access)
     store.ensure(SCOPE, [node(withCover('b-1'))], keyOf)
     await settle()
-    expect(shareChunkUrls).toHaveBeenCalledWith(access.shareId, 'b-1', 'pw-1')
+    expect(shareChunkUrls).toHaveBeenCalledWith(expect.objectContaining({ shareId: access.shareId, apiBase: '' }), 'b-1', 'pw-1') // the link where it lives (ADR 0121)
     expect(openBlob, 'no authenticated presign').not.toHaveBeenCalled()
     const [scope, openedWith, ref, presign] = vi.mocked(openBlobVia).mock.calls[0]
     expect(scope).toBe(SCOPE)

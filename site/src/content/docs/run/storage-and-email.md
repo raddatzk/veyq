@@ -12,6 +12,7 @@ sources:
   - docs/crosscutting/cc.storage.object-lifecycle.md
   - docs/crosscutting/cc.mail.md
   - docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md
+  - docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md
 ---
 
 ## The object store
@@ -46,7 +47,11 @@ store in use or a saved setting waiting for its check, whose test upload travels
   Give it a **Public endpoint** when browsers reach the store at another address than the server does. The bucket's
   CORS rule must allow `PUT` and `GET` from the instance's origin with the `Content-Type` header, and expose `ETag`.
   The check tests the instance's own domain only; a tenant on a domain of its own is a further origin the rule must
-  allow, which the check does not see. The access key must also be allowed to **list** the bucket: the application
+  allow, which the check does not see. While links made here may be shown on other servers (**Links shown on other
+  servers**, `core.public-shares.embeddable`, on by default, [Capabilities](/run/capabilities/)), a member of another
+  instance reads and adds to a link from that instance's origin, so the rule must allow **any origin** (`*`) for `GET`
+  and `PUT`; without it their browsers cannot read or add the link's files. No
+  credentials are involved: the store's URLs are presigned. The access key must also be allowed to **list** the bucket: the application
   compares the store with its database in the background, and without the list right the console reports that the
   store refused it and counts nothing ([Operations](/run/operations/#objects-no-record-claims)). Give veyq a
   bucket of its own — another server or tool writing into the same bucket is why the reconcile deletes nothing until

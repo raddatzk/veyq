@@ -3,9 +3,14 @@ package me.raddatz.veyq.core.http
 import io.quarkus.runtime.StartupEvent
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
+import io.quarkus.security.Authenticated
+import jakarta.annotation.security.DenyAll
+import jakarta.annotation.security.PermitAll
+import jakarta.annotation.security.RolesAllowed
 import jakarta.enterprise.inject.spi.BeanManager
 import jakarta.ws.rs.HttpMethod
 import jakarta.ws.rs.Path
+import java.lang.reflect.Method
 
 /**
  * **Which methods each API path declares** (inbox #494): the per-path method index Quarkus REST builds for its own
@@ -22,8 +27,13 @@ import jakarta.ws.rs.Path
  */
 class ApiMethodIndex private constructor(private val paths: List<DeclaredPath>) {
 
-    /** One path's shape — a literal segment, or `null` for a template — and its methods, each with its operationId. */
-    class DeclaredPath(val shape: List<String?>, val methods: Map<String, String>)
+    /**
+     * One path's shape — a literal segment, or `null` for a template — and its methods, each with its operationId.
+     * [publicMethods] are those whose operation takes no authentication: `@PermitAll` on the resource's method, or on its
+     * class with no `@Authenticated`/`@RolesAllowed`/`@DenyAll` on the method (Quarkus' own precedence). They are the
+     * only methods a cross-origin caller may be offered (ADR 0121 decision 3, `ShareCrossOrigin`).
+     */
+    class DeclaredPath(val shape: List<String?>, val methods: Map<String, String>, val publicMethods: Set<String> = emptySet())
 
     /** The declared path [path] names, or `null` when it names none. [path] is the normalised path routing matches. */
     fun match(path: String): DeclaredPath? {
@@ -51,8 +61,9 @@ class ApiMethodIndex private constructor(private val paths: List<DeclaredPath>) 
         /** The index of [resources] — JAX-RS resource classes, whose `@Path` sits on the class or on an interface it implements. */
         fun of(resources: Collection<Class<*>>): ApiMethodIndex {
             val byShape = linkedMapOf<List<String?>, MutableMap<String, String>>()
+            val publicByShape = mutableMapOf<List<String?>, MutableSet<String>>()
             for (cls in resources) {
-                for ((template, verb, operationId) in endpoints(cls)) {
+                for ((template, verb, operationId, public) in endpoints(cls)) {
                     val shape = segmentsOf(template).map { segment ->
                         when {
                             TEMPLATE.matches(segment) -> null
@@ -63,15 +74,18 @@ class ApiMethodIndex private constructor(private val paths: List<DeclaredPath>) 
                     val methods = byShape.getOrPut(shape) { sortedMapOf() }
                     val previous = methods.put(verb, operationId)
                     check(previous == null || previous == operationId) { "$verb $template is declared twice: $previous and $operationId" }
+                    if (public) publicByShape.getOrPut(shape) { sortedSetOf() } += verb
                 }
             }
-            return ApiMethodIndex(byShape.map { (shape, methods) -> DeclaredPath(shape, methods.toMap()) })
+            return ApiMethodIndex(
+                byShape.map { (shape, methods) -> DeclaredPath(shape, methods.toMap(), publicByShape[shape].orEmpty().toSet()) },
+            )
         }
 
         fun isResource(cls: Class<*>): Boolean =
             !cls.isInterface && !cls.isAnnotation && holders(cls).any { it.isAnnotationPresent(Path::class.java) }
 
-        private data class Endpoint(val template: String, val verb: String, val operationId: String)
+        private data class Endpoint(val template: String, val verb: String, val operationId: String, val public: Boolean)
 
         /** The class and every interface above it: a generated `…Api` carries the annotations, not the implementation. */
         private fun holders(cls: Class<*>): List<Class<*>> {
@@ -92,9 +106,18 @@ class ApiMethodIndex private constructor(private val paths: List<DeclaredPath>) 
                 holder.declaredMethods.filter { !it.isBridge && !it.isSynthetic }.mapNotNull { m ->
                     val verb = m.annotations.firstNotNullOfOrNull { it.annotationClass.java.getAnnotation(HttpMethod::class.java)?.value }
                         ?: return@mapNotNull null
-                    Endpoint("$root/${m.getAnnotation(Path::class.java)?.value.orEmpty()}", verb, m.name)
+                    Endpoint("$root/${m.getAnnotation(Path::class.java)?.value.orEmpty()}", verb, m.name, isPublic(cls, m))
                 }
             }.distinct()
+        }
+
+        /** Whether [declared]'s operation takes no authentication on [cls]: the annotations sit on the implementing method
+         *  (the generated interface carries none), and a method's own beats its class's. */
+        private fun isPublic(cls: Class<*>, declared: Method): Boolean {
+            val impl = runCatching { cls.getMethod(declared.name, *declared.parameterTypes) }.getOrNull() ?: return false
+            if (impl.isAnnotationPresent(PermitAll::class.java)) return true
+            val guarded = listOf(Authenticated::class.java, RolesAllowed::class.java, DenyAll::class.java)
+            return guarded.none { impl.isAnnotationPresent(it) } && cls.isAnnotationPresent(PermitAll::class.java)
         }
     }
 }

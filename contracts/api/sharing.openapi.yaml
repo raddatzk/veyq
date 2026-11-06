@@ -26,6 +26,22 @@ info:
 
     Authorization is enforced by code (ADR 0008); field validation via `x-field-extra-annotation`. `K_share`
     never appears in this spec — it lives only in the URL fragment (base64url, client-side).
+
+    **Cross-origin** ([ADR 0121](../../docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
+    decision 3). Every **guest** operation under `/api/shares/{shareId}` — each one that takes no bearer, in this spec
+    and in every application's — answers any origin while `core.public-shares.embeddable` is effective for the link's
+    tenant, so a member of another instance browses the link in place. A CORS preflight (`OPTIONS` with
+    `Access-Control-Request-Method`) is answered `204` with `Access-Control-Allow-Origin: *`, the path's guest methods
+    in `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers: X-Share-Password, X-Contributor-Token,
+    X-Share-Write, If-None-Match, Content-Type` and `Access-Control-Max-Age: 600`; every answer of such an operation,
+    a refusal included, carries `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: ETag` and
+    `Cross-Origin-Resource-Policy: cross-origin`. `Access-Control-Allow-Credentials` is never sent and `Authorization`
+    is never an allowed header: these operations take no cookie and no bearer, the link is their whole capability. The
+    switch is read for the tenant of a link the guest gate serves; for any other id — unknown, revoked, expired,
+    switched off — at the instance level, so the headers say nothing the `404` does not. Switched off, a preflight is
+    `405` like any undeclared method and no answer carries a CORS header. A curator's operation on a link (`revoke`,
+    `reactivate`, `reissue`, `sealed-name`, `PATCH`/`DELETE`) stays same-origin. A preflight is HTTP, not an
+    operation, so no `options` is declared here.
 tags:
   - name: sharing
     description: >
@@ -2244,10 +2260,10 @@ components:
           x-veyq-visibility: measure
           type: [integer, "null"]
           description: >
-            N, the days a guest's write keeps its client address, source port and time (ADR 0093 § 10; the record is
-            kept wherever a guest may write) — set on an unlocked response whose role lets its guest write (READ_WRITE,
-            WRITE_ONLY), so the page tells the guest before its first write, with the N current then. Null for a READ
-            link (nothing is recorded) and in a locked response.
+            N, the days a guest's write keeps its client address, source port, time and the `Origin` its request
+            carried (ADR 0093 § 10; the record is kept wherever a guest may write) — set on an unlocked response whose
+            role lets its guest write (READ_WRITE, WRITE_ONLY), so the page tells the guest before its first write,
+            with the N current then. Null for a READ link (nothing is recorded) and in a locked response.
           example: 7
         nodeId:
           x-veyq-visibility: id

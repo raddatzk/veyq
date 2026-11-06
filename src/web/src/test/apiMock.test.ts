@@ -14,7 +14,7 @@ const SHARE: PublicShare = { role: 'READ', passwordRequired: false, nodes: [] }
 describe('stubApi', () => {
   it('serves each payload from the factory', async () => {
     const api = stubApi(publicSharesApi, { resolveShare: SHARE })
-    expect(await publicSharesApi().resolveShare({ shareId: 't' })).toBe(SHARE)
+    expect(await publicSharesApi('').resolveShare({ shareId: 't' })).toBe(SHARE)
     expect(api.resolveShare).toHaveBeenCalledWith({ shareId: 't' })
   })
 
@@ -42,7 +42,7 @@ describe('fakeApi', () => {
       resolveShare: async ({ shareId }) => ({ ...SHARE, nodeId: shareId }),
       getShareTerms: terms,
     })
-    expect((await publicSharesApi().resolveShare({ shareId: 'n1' })).nodeId).toBe('n1')
+    expect((await publicSharesApi('').resolveShare({ shareId: 'n1' })).nodeId).toBe('n1')
     expect(api.getShareTerms).toBe(terms)
   })
 
