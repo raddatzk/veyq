@@ -655,7 +655,7 @@ export const COMMANDS: Record<string, Command> = {
   'guest-write-record show': {
     usage: 'guest-write-record show',
     summary:
-      'Print how many days a guest’s write keeps its IP address, source port and time (default 7, whether you set it). The record has no switch: it is kept wherever a guest may write, which the capabilities core.public-shares.contribute and .drop-box decide.',
+      'Print how many days a guest’s write keeps its IP address, source port, time and the Origin its request carried (default 7, whether you set it). The record has no switch: it is kept wherever a guest may write, which the capabilities core.public-shares.contribute and .drop-box decide.',
     flags: {},
     run: () => getGuestWriteRecord(),
     render: (r) => renderGuestWriteRecord(r as InstanceGuestWriteRecord),
@@ -676,7 +676,7 @@ export const COMMANDS: Record<string, Command> = {
   'guest-write-record forget': {
     usage: 'guest-write-record forget <identity-id>',
     summary:
-      'A guest objects to the record (GDPR Art. 21): delete every kept write of one share identity — its IP address, source port and time. What a hold copied for a report or an authority’s order stays until the hold ends; the output says how much.',
+      'A guest objects to the record (GDPR Art. 21): delete every kept write of one share identity — its IP address, source port, time and Origin. What a hold copied for a report or an authority’s order stays until the hold ends; the output says how much.',
     flags: {},
     operand: { name: 'identity-id', describe: 'the share identity’s id, as a moderation case names it' },
     run: (f) => {

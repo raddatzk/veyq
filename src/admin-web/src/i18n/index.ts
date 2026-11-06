@@ -179,7 +179,7 @@ const en = {
   },
   "guestWriteRecord": {
     "title": "Guests' writes",
-    "sub": "When a guest of a link adds or names something, its IP address, source port and the time are kept for this many days, so that a moderator can hand them on if what it added is reported. Guests are told before they add anything.",
+    "sub": "When a guest of a link adds or names something, its IP address, source port, the time and the origin of the page it came from are kept for this many days, so that a moderator can hand them on if what it added is reported. Guests are told before they add anything.",
     "loading": "Reading the guest-write record…",
     "loadFailed": "Couldn’t read the guest-write record.",
     "saveFailed": "Couldn’t save the number of days.",
@@ -876,7 +876,7 @@ const de: typeof en = {
   },
   "guestWriteRecord": {
     "title": "Schreibvorgänge von Gästen",
-    "sub": "Wenn ein Gast eines Links etwas hinzufügt oder benennt, werden seine IP-Adresse, sein Quellport und die Uhrzeit so viele Tage aufbewahrt – damit eine Moderatorin oder ein Moderator sie weitergeben kann, falls das Hinzugefügte gemeldet wird. Gäste werden informiert, bevor sie etwas hinzufügen.",
+    "sub": "Wenn ein Gast eines Links etwas hinzufügt oder benennt, werden seine IP-Adresse, sein Quellport, die Uhrzeit und der Origin der Seite, von der es kam, so viele Tage aufbewahrt – damit eine Moderatorin oder ein Moderator sie weitergeben kann, falls das Hinzugefügte gemeldet wird. Gäste werden informiert, bevor sie etwas hinzufügen.",
     "loading": "Aufbewahrung wird gelesen…",
     "loadFailed": "Die Aufbewahrung konnte nicht gelesen werden.",
     "saveFailed": "Die Zahl der Tage konnte nicht gespeichert werden.",
