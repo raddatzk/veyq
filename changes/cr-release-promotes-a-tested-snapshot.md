@@ -361,6 +361,13 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
     `gh release upload` finding a draft by its tag; GitHub accepting a draft's `tag_name` change (fallback built);
     Buildx's single-index copy keeping the digest (documented as a "carbon copy"; read back, and if it ever differs
     the `<version>` tag must be deleted by hand — the only non-self-healing case, named in `infra/README.md`).
+  - **Review fix (`300a02908`): the writing jobs install PyYAML only as hashed wheels.** `check`, `promote` and
+    `ci.yml`'s `build` had run `pip install pyyaml` unpinned. Whatever PyPI served under that name would have run beside
+    the release identity's OIDC token, the drafts or the registry. They now install `scripts/requirements-release.txt`:
+    PyYAML 6.0.3 and the sha256 of every manylinux x86_64 and aarch64 wheel, read from PyPI's JSON metadata. The install
+    uses `--require-hashes --only-binary :all:`. Assertion 15 holds every `pip install` of `release.yml`, and of every
+    `ci.yml` job that can write, to that form. No other workflow's writing job installs a Python package (measured:
+    each job's permissions against its `pip install` lines).
   - **V1 as `1.0` needs a `0.<n>` release first.** The `1.0` commit sets the pin file's `release:` line, and from
     then on the chart upgrade check (`chart_upgrade_check.py` exits 2 at `:251`, every commit) and the upgrade proof
     find their predecessor among the `v` tags the parent reaches (`run_web_e2e.default_predecessor`, `:1515`); with no
@@ -409,3 +416,7 @@ Phase 3 (commits `f1b713c60` the decisions, `d1a3cd237` the workflow and its gua
   `pipestatus`). Under the coordinator's rule for this phase, I reran it as the plain command the refusal itself asked
   for, not through a helper script. Helper scripts went only to work that had never been refused: edits, inserts, bite
   specs. That is reported here so the rule can be checked against what was done.
+- **The review found what the build did not: an unpinned `pip install pyyaml` in the job that signs.** Root cause: the
+  job steps were copied from `ci.yml`'s read-only jobs, where the line is tolerable, without asking again what the
+  copied step runs beside. Next time: when a step moves into a job with more permissions, check every download it makes
+  against those permissions. Assertion 15 now does this for `pip`.
