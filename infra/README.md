@@ -235,17 +235,46 @@ gh workflow run ci.yml --ref main                    # the tip's snapshot, exact
 - **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
   at the top of `ci.yml`, checked against the published `.sha256sum` and the GitHub release notes.
 
-**A release promotes a snapshot — not built yet.** The owner saves a **draft** release in GitHub's release page on a
-`snapshot-<major>.<minor>` tag, with the notes, then starts `release.yml` (*Run workflow*, on the branch the snapshot
-came from); it verifies the snapshot's signature and attestations, gives the same digests `<major>.<minor>`, `<major>`
-and, from `main`, `latest`, signs them as a release, attaches the asset set and publishes the draft last, as
-`v<major>.<minor>` (ADR 0091 decision 5). Until it is built there is **no way to cut a release**: the release kind left
-`ci.yml` with the snapshot. The procedures below name a release as "promote", which is that step.
+**A release promotes a snapshot** (ADR 0091 decision 5, `.github/workflows/release.yml`). Nothing is built: the
+images every lane tested get the release's names and a second signature, from `release.yml` — the identity Verify a
+release and `veyqctl` accept. Once, before the first release: switch on **immutable releases** in the repository's
+settings (ADR 0096 decision 3). Then, per release:
+
+1. **GitHub → Releases → Draft a new release.** *Choose a tag*: the snapshot's, `snapshot-<major>.<minor>` — the list
+   offers exactly the snapshots that are still promotable. The title is overwritten (`veyq <major>.<minor>`); write the
+   **notes** in your words — whatever an operator must act on goes here. **Save draft** (never *Publish*). Leave no
+   other draft lying around: the promotion releases exactly one draft and refuses when there are several.
+2. **GitHub → Actions → Release → Run workflow**, on the branch the snapshot came from: `main`, or `release/<major>.x`
+   for a fix of a previous major. Tick `unscheduled_major` only for an unscheduled major (ADR 0085 decision 4).
+3. **Watch the run.** `check` decides — every refusal names what it saw, and the `refused` job writes it into the
+   draft's notes under *Promotion refused*, so the draft page says why. `promote` gives the images `<major>.<minor>`,
+   signs them, packages and signs the chart, produces and signs the files. `publish` verifies the files as `veyqctl`
+   will, sets the git tag `v<major>.<minor>`, moves the draft onto it with every file and publishes it **last**, then
+   removes `snapshot-<major>.<minor>`. `channels` moves `<major>` and, from `main`, `latest`.
+
+```sh
+gh workflow run release.yml --ref main                  # step 2 from a terminal, after the draft is saved
+gh run watch                                            # step 3
+```
+
+**A refused or failed promotion publishes nothing.** The draft stays a draft, back on its snapshot tag, with the
+reason in its notes; a `v<major>.<minor>` tag the run had set is removed. Fix the cause (or delete the draft and save
+one on another snapshot), delete the *Promotion refused* lines if you like, and run the workflow again: names the run
+had already given in the registry (`<major>.<minor>` on the tested digests, the chart, signatures) are this snapshot's,
+and the next run accepts and completes them. A `<major>.<minor>` tag that names *another* digest is refused for good —
+a release name is never replaced. One case needs your hand: should `promote` report that a release name it just set is
+not the tested digest (Buildx copying an index differently from its documentation), delete that `<major>.<minor>` tag
+of that package in GHCR before running again.
+
+**Which version is V1** — `0.<n>` or `1.0` — is the owner's call, and the workflow promotes either. `1.0` is not a
+snapshot you can pick until a `0.<n>` release exists: the `1.0` commit sets the `release:` line (below), and from then
+on the upgrade proof and the chart upgrade check prove from the newest `v` tag the commit's parent reaches — with no
+`v` tag they refuse, and that commit's pipeline is red.
 
 - **The first `1.x` release is one commit, then its promotion:** `VERSION` set to `1` **and** the `release:`
-  line of `scripts/applied_migrations.sha256` set to the highest migration that release ships, together. From then
+  line of `scripts/applied_migrations.sha256` set to the highest migration that release ships, together — the same
+  commit deletes `upgrade-proof`'s `if: false` and the `"skipped"` the `snapshot` job tolerates for it. From then
   on a released migration is never edited ([src/backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
-
 **The 1 May train** ([ADR 0085](../docs/decisions/0085-one-major-moved-on-a-yearly-train.md) decisions 2, 3 and 10)
 leaves only when a removal is pending. A year without one has no major, and an unscheduled major (decision 4) follows
 the same steps on its own date:
