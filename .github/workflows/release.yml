@@ -70,10 +70,12 @@ jobs:
           # The snapshot's commit, every release tag and the count of the minor need the whole history.
           fetch-depth: 0
 
+      # PyYAML as exact, hashed wheels only (scripts/requirements-release.txt): this job can rewrite drafts, and code
+      # PyPI served unpinned would run with that token (validate_release_identity.py assertion 15).
       - name: Set up the scripts' Python
         run: |
           python3 -m venv "${RUNNER_TEMP}/venv"
-          "${RUNNER_TEMP}/venv/bin/pip" install --quiet pyyaml
+          "${RUNNER_TEMP}/venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
 
       # The decisions are proven before they decide: every refusal of scripts/promote.py, against a fake registry.
       - name: Promotion self-test
@@ -145,10 +147,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # PyYAML as exact, hashed wheels only: this job holds the release identity's OIDC token, and code PyPI served
+      # unpinned would sign whatever it liked (validate_release_identity.py assertion 15).
       - name: Set up the scripts' Python
         run: |
           python3 -m venv "${RUNNER_TEMP}/venv"
-          "${RUNNER_TEMP}/venv/bin/pip" install --quiet pyyaml
+          "${RUNNER_TEMP}/venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
 
       - name: Fetch the decision
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

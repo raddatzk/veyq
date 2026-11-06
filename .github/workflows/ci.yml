@@ -565,7 +565,9 @@ jobs:
       # proof and chart check ran from (ADR 0098) — the newest release of the previous major among every tag (ADR 0085
       # decision 10), the ONE derivation `upgrade-proof` and `chart` prove from too, read here and baked in as
       # VEYQ_MAJOR_ENTRY; empty when the previous major has no release. Planned to be replaced by the L2 lane's
-      # attestation (ADR 0091 decision 5, not built).
+      # attestation (ADR 0091 decision 5, not built). PyYAML as exact, hashed wheels only
+      # (scripts/requirements-release.txt): this job pushes images, and code PyPI served unpinned would run beside
+      # that access (validate_release_identity.py assertion 15).
       - name: Find the release a new major is entered from (tools)
         id: major-entry
         if: matrix.image == 'veyq-tools'
@@ -574,7 +576,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m venv "${RUNNER_TEMP}/entry-venv"
-          "${RUNNER_TEMP}/entry-venv/bin/pip" install --quiet pyyaml
+          "${RUNNER_TEMP}/entry-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
           entry="$("${RUNNER_TEMP}/entry-venv/bin/python" scripts/release_assets.py --major-entry "$VERSION")"
           echo "release ${VERSION} enters its major from: ${entry:-no release}"
           echo "value=${entry}" >> "$GITHUB_OUTPUT"

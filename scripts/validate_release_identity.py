@@ -90,6 +90,12 @@ snapshot happens:
      the file states no certificate identity of its own, and no other workflow writes a GitHub Release. What
      `scripts/promote.py` decides — every refusal — is `scripts/promote_selftest.py`'s, which `check` and `ci.yml`'s
      `guards` run.
+ 15. **A job that can write installs only hashed wheels.** Every `pip install` (also `python -m pip install`) of every
+     `release.yml` job, and of every `ci.yml` job whose permissions hold a `write` (`id-token`, `packages`, `contents`,
+     or `write-all`), carries `--require-hashes`, `--only-binary :all:` and `-r <file>`; each such file exists and every
+     requirement in it is `<name>==<version>` followed by its `--hash=sha256:` values (`scripts/requirements-release.txt`).
+     What PyPI serves unpinned at install time runs with the job's token — in `promote` the release identity's.
+     `ci.yml`'s read-only jobs are out of scope: they reach only their own runner.
   8. **The chart is the snapshot's third artifact** (ADR 0064). The refuse step checks `--image` for every published
      image (the build matrix) AND `--chart charts/<name>` (`Chart.yaml`'s `name`) under the workflow's own registry; the
      step that runs `helm package` sets `--version` and `--app-version` to the tree-derived version's `-SNAPSHOT`
@@ -202,7 +208,10 @@ attestations (cr-release-promotes-a-tested-snapshot phase 1), no incident: an at
 the lane runs would leave that architecture's result unverifiable at the promotion. Assertion 14 came with the
 promotion itself (the same CR, phase 3, 2026-11-06), no incident: it re-homes what assertion 11 held of a release, and
 adds what a workflow that holds a release's write permissions must never do — build, write from the wrong job, move a
-channel before the release exists, or publish before its files are on it.
+channel before the release exists, or publish before its files are on it. Assertion 15 came with the review of that
+phase (2026-11-06): `release.yml`'s `check` and `promote` and `ci.yml`'s `build` installed PyYAML unpinned from PyPI,
+so whatever PyPI served under that name would have run beside the release identity's OIDC token, the drafts and the
+registry. Its first run against the untouched `build` job was red, as the bite that restores that line shows.
 
 Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
 The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
@@ -1985,6 +1994,71 @@ for other in sorted(WORKFLOW.parent.glob("*.y*ml")):
             fail(f"{other.relative_to(ROOT)}:{number} writes a GitHub Release — only {RELEASE_WORKFLOW}, the release "
                  f"identity, does")
 
+# ---- 15. a job that can write installs no Python package it has not pinned by hash ---------------------------------
+# Code PyPI serves at install time runs with the job's token: in `release.yml`'s `promote` the release identity's OIDC
+# token, in `check` the drafts, in `ci.yml`'s `build` the registry. So every `pip install` of every `release.yml` job,
+# and of every `ci.yml` job that holds a write permission (`id-token`, `packages`, `contents` …), installs exact
+# versions by hash and wheels only, from a requirements file whose every requirement carries its hashes. A read-only
+# job of `ci.yml` is out of scope: what it could reach is the runner it runs on.
+PIP_INSTALL = re.compile(r"\bpip3?\"?\s+install\b|\bpython3?\s+-m\s+pip\s+install\b")
+HASHED_REQUIREMENT = re.compile(r"^[A-Za-z0-9_.-]+==[0-9][^\s]*(?:\s+--hash=sha256:[0-9a-f]{64})+$")
+pip_summary = ""
+
+
+def can_write(permissions: object) -> bool:
+    if isinstance(permissions, str):
+        return permissions == "write-all"
+    return isinstance(permissions, dict) and any(str(v) == "write" for v in permissions.values())
+
+
+held_installs = 0
+requirement_files: set[str] = set()
+for wf_path, every_job in ((WORKFLOW, False), (ROOT / RELEASE_WORKFLOW, True)):
+    if not wf_path.is_file():
+        continue
+    wf_doc = yaml.safe_load(wf_path.read_text()) or {}
+    default_permissions = wf_doc.get("permissions")
+    for job_name, job in (wf_doc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        permissions = job.get("permissions", default_permissions)
+        if not (every_job or can_write(permissions)):
+            continue
+        for step in job.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            for line in str(step.get("run") or "").replace("\\\n", " ").splitlines():
+                if not PIP_INSTALL.search(line):
+                    continue
+                held_installs += 1
+                files = re.findall(r"(?:^|\s)(?:-r|--requirement)\s+(\S+)", line)
+                if "--require-hashes" not in line or "--only-binary :all:" not in line or not files:
+                    fail(
+                        f"{wf_path.relative_to(ROOT)}: job `{job_name}` (permissions {permissions}) runs "
+                        f"`{line.strip()[:100]}` — a job that can write installs only exact, hashed wheels: "
+                        f"`pip install --require-hashes --only-binary :all: -r <requirements>`, or what PyPI serves at "
+                        f"that moment runs with its token"
+                    )
+                requirement_files.update(files)
+for rel in sorted(requirement_files):
+    path = ROOT / rel
+    if not path.is_file():
+        fail(f"`{rel}`, which a writing job installs from, does not exist")
+        continue
+    requirements = [" ".join(line.split()) for line in path.read_text().replace("\\\n", " ").splitlines()
+                    if line.strip() and not line.lstrip().startswith("#")]
+    if not requirements:
+        fail(f"`{rel}` names no requirement, so the hashed install proves nothing")
+    for requirement in requirements:
+        if not HASHED_REQUIREMENT.match(requirement):
+            fail(f"`{rel}`: `{requirement[:80]}` is not `<name>==<version>` followed by its `--hash=sha256:` lines — "
+                 f"every requirement of a writing job is exact and hashed")
+if held_installs == 0:
+    fail("no `pip install` found in release.yml or in a writing job of ci.yml — assertion 15 checked NOTHING; re-anchor "
+         "it if the jobs no longer install Python packages")
+pip_summary = (f"; every one of the {held_installs} `pip install`(s) of a job that can write takes exact, hashed wheels "
+               f"({', '.join(sorted(requirement_files))})")
+
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
     fail(
@@ -2011,5 +2085,5 @@ print(
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
-    f"{release_summary}"
+    f"{release_summary}{pip_summary}"
 )
