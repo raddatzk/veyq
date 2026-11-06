@@ -50,12 +50,11 @@ describe('emergencyKit', () => {
       const bytes = await renderKitPdf(data, strictKitLanguage(locale), { createdOn: 'familie.example.org', now: new Date('2026-11-06T12:00:00Z') })
       expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe('%PDF-')
       expect(await importKitFromFile(new File([bytes as BlobPart], 'kit.pdf'))).toEqual(data)
-      // jsPDF writes its text uncompressed, so the printed strings are in the bytes: the key's two lines (five groups
-      // over four, hyphens kept), the address the kit was made on, and the three form fields for the others.
+      // jsPDF writes its text uncompressed, so the printed strings are in the bytes: the key's three lines (three
+      // groups each, hyphens kept), the address the kit was made on, and the three form fields for the others.
       const text = latin1(bytes)
       const groups = data.secretKey.split('-')
-      expect(text).toContain(`(${groups.slice(0, 5).join('-')})`)
-      expect(text).toContain(`(${groups.slice(5).join('-')})`)
+      for (const line of [0, 1, 2]) expect(text).toContain(`(${groups.slice(line * 3, line * 3 + 3).join('-')})`)
       expect(text).toContain('(familie.example.org)')
       for (const n of [1, 2, 3]) expect(text).toContain(`/T (address${n})`)
       expect(text).toContain(`/URI (${i18n.global.t('kit.pdfHelpUrl', {}, { locale })})`)

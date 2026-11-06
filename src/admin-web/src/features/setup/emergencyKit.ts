@@ -123,26 +123,25 @@ export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { 
     doc.text(title, M + 26, top)
   }
 
-  // 1 — the account: the email and the Secret Key, five groups over four.
+  // 1 — the account: the email and the Secret Key, three lines of three groups.
   y = 232
   section(1, t('kit.pdfAccount'), y)
   y += 16
   fill(C.tint)
   draw(C.line)
-  doc.roundedRect(M, y, CW, 118, 8, 8, 'FD')
+  doc.roundedRect(M, y, CW, 138, 8, 8, 'FD')
   font('bold', 8.5, C.muted)
   doc.text(t('kit.pdfEmail').toUpperCase(), M + 18, y + 24)
   font('normal', 13, C.ink)
   doc.text(data.email, M + 18, y + 42)
   font('bold', 8.5, C.muted)
   doc.text(t('kit.pdfSecretKey').toUpperCase(), M + 18, y + 68)
-  font('bold', 15, C.brandDeep, 'courier')
-  doc.text(groups.slice(0, 5).join('-'), M + 18, y + 88)
-  doc.text(groups.slice(5).join('-'), M + 18, y + 106)
+  font('bold', 16, C.brandDeep, 'courier')
+  for (let line = 0; line < 3; line++) doc.text(groups.slice(line * 3, line * 3 + 3).join('-'), M + 18, y + 90 + line * 20)
 
   // 2 — where you sign in: three lines (form fields) for the addresses. The member's kit names the one it was made on
   // first; this one cannot (KitContext), so its lines move up by that row.
-  y += 142
+  y += 162
   section(2, t('kit.pdfWhere'), y)
   y += 20
   font('normal', 9, C.muted)
@@ -164,7 +163,7 @@ export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { 
   }
 
   // 3 — quick restore: the QR in its frame, and the three steps (the password is not on this sheet).
-  y += 112
+  y += 104
   section(3, t('kit.pdfRestore'), y)
   y += 16
   const box = 118
@@ -185,7 +184,7 @@ export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { 
   })
 
   // 4 — how to keep it.
-  y += box + 34
+  y += box + 30
   section(4, t('kit.pdfKeep'), y)
   y += 20
   font('normal', 10.5, C.ink)

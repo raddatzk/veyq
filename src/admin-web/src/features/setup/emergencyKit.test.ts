@@ -31,8 +31,7 @@ describe.each(SUPPORTED_LOCALES)('the kit PDF (%s)', (locale) => {
     expect(parseKit(await new File([bytes as BlobPart], 'kit.pdf').text())).toEqual(data)
     const text = latin1(bytes)
     const groups = data.secretKey.split('-')
-    expect(text).toContain(`(${groups.slice(0, 5).join('-')})`)
-    expect(text).toContain(`(${groups.slice(5).join('-')})`)
+    for (const line of [0, 1, 2]) expect(text).toContain(`(${groups.slice(line * 3, line * 3 + 3).join('-')})`)
     for (const n of [1, 2, 3]) expect(text).toContain(`/T (address${n})`)
     // The one row web's kit has and this one does not: the address it was made on (localhost means nothing elsewhere).
     expect(text).not.toContain('localhost')

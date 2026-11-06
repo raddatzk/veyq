@@ -319,7 +319,7 @@ How a Secret Key is printed, typed, carried in the token and compared — the on
 pinned by `contracts/crypto/vectors/v1.json` § `secret_key_text`. The 32 key bytes are written as 52 Crockford base32
 symbols (`0-9`, `A-Z` without `I`, `L`, `O`, `U`; the bytes as one big-endian bit string, four zero bits appended),
 then **2 check symbols**: the first 10 bits of SHA-256 over the 32 bytes. The 54 symbols are shown as 9 groups of 6
-joined by `-` (on the kit, five groups over four). A reader folds case, drops spaces and hyphens, and reads `O` as
+joined by `-` (on the kit, three lines of three groups). A reader folds case, drops spaces and hyphens, and reads `O` as
 `0` and `I`, `L` as `1`, as the invite code does. What then is not 54 symbols of the alphabet is **malformed**; 54
 symbols that are not exactly the form of the bytes they decode to — a check that disagrees, or padding bits set in
 the 52nd symbol — are a **typo**, and the Secret-Key field says so before anything is derived (one misread symbol
