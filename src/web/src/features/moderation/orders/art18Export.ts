@@ -52,7 +52,9 @@ export function renderExport(
     `${l.category}: ${categoryLabel}`,
     `${l.origin}: ${originLabel}`,
     `${l.timeZone}: ${e.timeZone}`,
-    ...e.reportedAt.map((d) => `${l.reported}: ${utc(d)}`),
+    // `new Date(…)`: the generated client types `reportedAt` as `Date[]` but passes the wire's strings through (its
+    // FromJSON converts a single date-time, never an array of them), so every reported case's export threw here.
+    ...e.reportedAt.map((d) => `${l.reported}: ${utc(new Date(d))}`),
     ...e.measures.map((m) => `${l.measure}: ${measureLabel(m.kind)} ${m.targetId} — ${utc(m.takenAt)}${m.liftedAt ? ` (${m.endedWithTarget ? l.endedWithTarget : l.lifted} ${utc(m.liftedAt)})` : ''}`),
     ...e.uploaders.map((u) =>
       u.kind === 'ACCOUNT' ? `${l.uploaderAccount}: ${u.id}` : `${l.uploaderGuest}: ${u.id}${u.shareId ? ` (${l.viaLink} ${u.shareId})` : ''}`,

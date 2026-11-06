@@ -3,7 +3,7 @@
 // the request's Origin beside the address, a missing port or origin leaves its field out, and a case with nothing held
 // says so.
 import { describe, expect, it } from 'vitest'
-import type { ModerationCaseExport } from '../../../api/generated/moderation'
+import { ModerationCaseExportFromJSON, type ModerationCaseExport } from '../../../api/generated/moderation'
 import { renderExport, utc, type ExportLabels } from './art18Export'
 
 const labels: ExportLabels = {
@@ -49,6 +49,20 @@ describe('the Art. 18 export block', () => {
     expect(text).toContain('Uploaded by guest identity: 6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f (via link 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i)')
     expect(text).toContain('address 203.0.113.77, source port 51234, Origin header https://pages.attacker.example, at 2026-10-17 08:59:12.345')
     expect(text).not.toContain('Nothing held.')
+  })
+
+  it('renders an export as the generated client reads it off the wire: a report time arrives as a string', () => {
+    // The generated FromJSON leaves an array of date-times as strings (a single one it converts): read the raw JSON the
+    // server answers, as `getExport` does, never a hand-built model with real Dates.
+    const wire = ModerationCaseExportFromJSON({
+      caseId: '1c2d3e4f-5a6b-4f2c-9a1e-7b3d4e5f9a8b', category: 'TERMS_BREACH', origin: 'REPORT', timeZone: 'UTC',
+      reportedAt: ['2026-11-06T23:10:00Z'], measures: [], uploaders: [], held: true,
+      guestWrites: [{ identityId: '6c7d8e9f-0a1b-4c2d-8e3f-4a5b6c7d8e9f', objectKind: 'NODE', objectId: '4f2c9a1e-7b3d-4e5f-9a8b-1c2d3e4f5a6b', address: '127.0.0.1', port: 50000, origin: 'http://veyq.localhost:8091', observedAt: '2026-11-06T23:09:59.123Z' }],
+    })
+    expect(typeof (wire.reportedAt[0] as unknown), 'the generated client\'s behaviour this test pins').toBe('string')
+    const text = renderExport(wire, labels, 'Terms', 'Report', (k) => k)
+    expect(text).toContain('Reported: 2026-11-06 23:10:00')
+    expect(text).toContain('Origin header http://veyq.localhost:8091')
   })
 
   it('leaves out a port and an origin that were not recorded, and says when nothing is held', () => {
