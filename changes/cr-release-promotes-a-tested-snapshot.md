@@ -368,6 +368,12 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
     uses `--require-hashes --only-binary :all:`. Assertion 15 holds every `pip install` of `release.yml`, and of every
     `ci.yml` job that can write, to that form. No other workflow's writing job installs a Python package (measured:
     each job's permissions against its `pip install` lines).
+  - **First-run fix (`1a1fdae2e`): `snapshot-tag` was skipped on phase 1's first real run** (42274582708). Its
+    `if:` stated no status function, so GitHub's implicit `success()` saw the switched-off `upgrade-proof` skipped
+    upstream of `snapshot`. It now gates on `!cancelled() && needs.snapshot.result == 'success'`. Assertion 16 holds
+    every job of `ci.yml` and `release.yml` whose needs reach a skippable job to that form. Audited for `release.yml`:
+    no job there has a skippable need today (`check`, `promote` and `publish` carry no `if:`), and `channels` and
+    `refused` state `always()` and their own result conditions.
   - **V1 as `1.0` needs a `0.<n>` release first.** The `1.0` commit sets the pin file's `release:` line, and from
     then on the chart upgrade check (`chart_upgrade_check.py` exits 2 at `:251`, every commit) and the upgrade proof
     find their predecessor among the `v` tags the parent reaches (`run_web_e2e.default_predecessor`, `:1515`); with no
@@ -420,3 +426,8 @@ Phase 3 (commits `f1b713c60` the decisions, `d1a3cd237` the workflow and its gua
   job steps were copied from `ci.yml`'s read-only jobs, where the line is tolerable, without asking again what the
   copied step runs beside. Next time: when a step moves into a job with more permissions, check every download it makes
   against those permissions. Assertion 15 now does this for `pip`.
+- **Phase 1's first real run skipped the tag job, which no guard and no local run could have shown.** Root cause:
+  GitHub's implicit `success()` checks the whole chain of needs, not only the direct ones. Phase 1's design reasoned
+  only about `snapshot-tag`'s direct need, and `scripts/run_pipeline.py` cannot evaluate needs across a skipped job
+  the way GitHub does. Next time: every job after one that can be skipped states its own gate. Assertion 16 holds
+  that now.
