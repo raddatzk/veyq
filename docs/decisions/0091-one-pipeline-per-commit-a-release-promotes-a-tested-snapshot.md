@@ -99,6 +99,16 @@ Three structural costs sat on top of what a run took:
    are verified, and the same digests get `<major>.<minor>`, `<major>`, `latest` (from `main`), a release signature
    and the git ref `v<major>.<minor>`; then the **immutable GitHub Release** is created from the asset set
    ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §3). Nothing is rebuilt.
+   - **A release is started from GitHub's release page, not by a dispatch** (owner 2026-11-06). Every green push also
+     sets the git tag `snapshot-<major>.<minor>` on its commit, from a job of its own that holds `contents: write` and
+     does nothing else; the retention job below deletes a snapshot's tag with its images, so the release page's tag
+     list offers exactly the snapshots that can still be promoted. The owner saves a **draft** release on one of them,
+     with the notes in their words, and the draft (`release: created`) starts the promotion: it refuses unless the tag
+     is a `snapshot-` tag whose version is its commit's, verifies and completes the attestations as below, then moves
+     the draft to `v<major>.<minor>`, attaches the asset set and publishes it — publishing last, because an immutable
+     release takes no asset once it is published. A refused promotion leaves the draft unpublished and writes why
+     into its notes. A snapshot's tag is never `v…`: that name says "released" (ADR 0057 §2), and every tag watcher —
+     a Renovate `github-tags` lookup included — would read each snapshot as a release.
    - **The asset set is the candidate's, too.** The pipeline produces it from the commit and the tested digests
      before the lanes run, and the lanes install exactly it. A snapshot
      gets no GitHub Release (ADR 0096 §3); the promotion produces the set again from the same commit and digests, and
