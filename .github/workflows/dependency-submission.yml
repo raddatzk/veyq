@@ -38,16 +38,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Java
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "25"
 
       - name: Validate the Gradle wrapper JAR
-        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Resolve the graph and keep it as an artifact
-        uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/dependency-submission@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         # Which resolutions are `runtime` and which `development`, so an alert says whether its dependency ships. The
         # action has no input for it at this pin, but the graph plugin it applies (github-dependency-graph-gradle-plugin
         # 1.5.0, the action's default) reads these two from the environment: a resolution is `runtime` when its project
@@ -76,7 +76,7 @@ jobs:
       contents: write
     steps:
       - name: Submit the graph the first job resolved
-        uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/dependency-submission@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           dependency-graph: download-and-submit
           # This job runs no Gradle, so it has nothing to cache - and so never reaches the commercial default above.
