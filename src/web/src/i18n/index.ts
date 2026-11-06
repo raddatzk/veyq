@@ -1146,6 +1146,7 @@ const en = {
         guestWrite: 'Guest write',
         address: 'address',
         port: 'source port',
+        requestOrigin: 'Origin header',
         observed: 'at',
         object: 'object',
         noHeld: 'Nothing is held for this case (any more): no uploader or address can be given from it.',
@@ -2079,7 +2080,7 @@ const en = {
       nameHint: 'Before you add something, tell us your name. Only the people this belongs to see it.',
       // the guest-write record's first-layer notice (core/sharing/GuestWriteRecordNotice.vue, ADR 0093 § 10): N as the
       // resolve served it, and the right to object (GDPR Art. 21) as a sentence of its own.
-      recordKept: 'When you add something here, your IP address, your source port and the time are kept for one day, longer only if a report or an authority’s order concerns what you added. | When you add something here, your IP address, your source port and the time are kept for {days} days, longer only if a report or an authority’s order concerns what you added.',
+      recordKept: 'When you add something here, your IP address, your source port, the time and the website it came from are kept for one day, longer only if a report or an authority’s order concerns what you added. | When you add something here, your IP address, your source port, the time and the website it came from are kept for {days} days, longer only if a report or an authority’s order concerns what you added.',
       recordObjection: 'You can object to this at any time on grounds relating to your particular situation; if you do not want it, you can still look without adding anything.',
       recordMore: 'Who keeps it, why, and your rights',
       // the guest id, to name in an objection to the record (GDPR Art. 21(1) with 12(2)): a guest has no account, so this
@@ -3254,6 +3255,7 @@ const de: typeof en = {
         guestWrite: 'Schreibvorgang eines Gasts',
         address: 'Adresse',
         port: 'Quellport',
+        requestOrigin: 'Origin-Header',
         observed: 'um',
         object: 'Objekt',
         noHeld: 'Für diesen Fall ist nichts (mehr) gesichert: Weder hochladende Person noch Adresse lassen sich daraus angeben.',
@@ -4102,7 +4104,7 @@ const de: typeof en = {
       notYouAccept: 'Neu beginnen',
       nameTitle: 'Wie heißt du?',
       nameHint: 'Bevor du etwas hinzufügst, sag uns deinen Namen. Ihn sehen nur die Personen, denen das hier gehört.',
-      recordKept: 'Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport und die Uhrzeit einen Tag aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast. | Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport und die Uhrzeit {days} Tage aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast.',
+      recordKept: 'Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport, die Uhrzeit und die Website, von der es kam, einen Tag aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast. | Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport, die Uhrzeit und die Website, von der es kam, {days} Tage aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast.',
       recordObjection: 'Du kannst dem jederzeit aus Gründen widersprechen, die sich aus deiner besonderen Situation ergeben; wenn du das nicht möchtest, kannst du weiterhin ansehen, ohne etwas hinzuzufügen.',
       recordMore: 'Wer es aufbewahrt, warum, und deine Rechte',
       guestId: 'Deine Gast-Kennung, falls du widersprichst:',
