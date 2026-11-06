@@ -16,6 +16,7 @@
 import { expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
+import { secretKeyBytes } from '@veyq/crypto/secretKey'
 import { session } from '../app/session'
 import { setUnlocked } from '../app/vault'
 import { login } from '../features/account/login/login'
@@ -139,7 +140,7 @@ export async function become(a: Actor): Promise<void> {
   await login(a.email, a.password)
   const wrap = a.built.material.masterKeyWraps.find((w) => w.method === 'PASSWORD')!
   const { params, salt } = v1.decodeKdfParams(fromB64std(wrap.kdfParams))
-  const kek = v1.kekPasswordSecret(fromB64std(a.built.emergencyKit.secretKey), a.password, salt, params)
+  const kek = v1.kekPasswordSecret(secretKeyBytes(a.built.emergencyKit.secretKey), a.password, salt, params)
   const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(wrap.wrappedKey))
   // It opened the PASSWORD wrap with password + Secret Key, so `cold` is what actually happened here. The vault
   // takes ownership of what it is handed and zeroes it on `clearVault()` — so it gets a COPY of the actor's

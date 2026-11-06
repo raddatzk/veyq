@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as v1 from './v1'
 import { b64std, fromB64std } from './base64'
 import { buildAccount } from './accountBirth'
+import { formatSecretKey } from './secretKey'
 import * as raw from './primitives'
 
 // The two seal contexts as HARDCODED bytes — `lp(utf8(purpose))`, the canonical encoding of a purpose-only seal
@@ -88,7 +89,7 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
       // Derived from the kit's Secret Key and nothing else — the Master Key would be one a linked device holds.
       secretKeyProofPublicKey: b64std(v1.deriveSecretKeyProofKeypair(secretKey).publicKey),
     })
-    expect(built.emergencyKit).toEqual({ secretKey: b64std(secretKey) })
+    expect(built.emergencyKit).toEqual({ secretKey: formatSecretKey(secretKey) })
     expect(built.identity).toBe(FIXED_IDENTITY)
   })
 
@@ -123,7 +124,7 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
     it('uses the supplied Secret Key for the kit and for BOTH KEK derivations', async () => {
       const built = await buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE })
 
-      expect(built.emergencyKit).toEqual({ secretKey: b64std(MINE) })
+      expect(built.emergencyKit).toEqual({ secretKey: formatSecretKey(MINE) })
       // One fewer randomBytes call than the default path, so the salts shift down by one: #2 pw salt, #4 rec salt.
       expect(v1.kekPasswordSecret).toHaveBeenCalledWith(MINE, 'pw', seededBytes(2, 16), v1.ARGON)
       expect(v1.kekRecovery).toHaveBeenCalledWith(MINE, seededBytes(4, 16), v1.ARGON)
@@ -143,7 +144,7 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
       await expect(buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE.slice(0, 31) })).rejects.toThrow(
         'buildAccount: secretKey must be 32 bytes',
       )
-      expect((await buildAccount('a@b.test', 'pw', new Uint8Array(16))).emergencyKit.secretKey).toBe(b64std(seededBytes(2, 32)))
+      expect((await buildAccount('a@b.test', 'pw', new Uint8Array(16))).emergencyKit.secretKey).toBe(formatSecretKey(seededBytes(2, 32)))
     })
   })
 

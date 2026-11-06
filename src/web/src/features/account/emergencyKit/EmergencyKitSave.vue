@@ -13,7 +13,7 @@ import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const props = defineProps<{ email: string; secretKey: string }>()
 const ready = defineModel<boolean>({ default: false })
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const downloaded = ref(false)
 const confirmed = ref(false)
@@ -27,7 +27,12 @@ watchEffect(() => {
 async function download() {
   failed.value = false
   try {
-    const bytes = await renderKitPdf({ email: props.email, secretKey: props.secretKey }, (key) => t(key))
+    // The address the kit is made on is the one this page was served from: the member's way back in.
+    const bytes = await renderKitPdf(
+      { email: props.email, secretKey: props.secretKey },
+      { t: (key, named) => t(key, named ?? {}), locale: locale.value },
+      { createdOn: location.host },
+    )
     saveKitPdf(bytes, props.email)
     downloaded.value = true
   } catch {

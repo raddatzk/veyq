@@ -8,6 +8,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { unlockKekAsync } from '@veyq/crypto/argonWorker'
 import { fromB64std } from '@veyq/crypto/base64'
+import { readSecretKey } from '@veyq/crypto/secretKey'
 import { accountApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { masterKey } from '../../app/vault'
@@ -54,12 +55,12 @@ export class ColdCredentialRefused extends Error {
  *
  * Neither refusal writes anything. Returns the current Master Key (a fresh copy the caller owns) once it passes.
  */
-export async function proveColdCredential(password: string, secretKeyB64: string): Promise<Uint8Array> {
+export async function proveColdCredential(password: string, secretKeyText: string): Promise<Uint8Array> {
   const held = masterKey()
   if (!held) throw new ColdCredentialRefused('vaultLocked')
   let floor: OpenedFloor
   try {
-    floor = await openFloor(password, secretKeyB64)
+    floor = await openFloor(password, secretKeyText)
   } catch (e) {
     held.fill(0)
     throw e
@@ -101,12 +102,12 @@ function opensIdentity(mk: Uint8Array, wrappedIdentityPrivateKey: string): boole
  * It returns nothing: its use is to refuse a Secret Key before anything is built from it (a new Emergency Kit printed
  * from a mistyped key fails exactly on the day it is needed).
  */
-export async function checkColdCredential(password: string, secretKeyB64: string): Promise<void> {
+export async function checkColdCredential(password: string, secretKeyText: string): Promise<void> {
   if (masterKey()) {
-    ;(await proveColdCredential(password, secretKeyB64).catch(staleAsRejected)).fill(0)
+    ;(await proveColdCredential(password, secretKeyText).catch(staleAsRejected)).fill(0)
     return
   }
-  ;(await openFloor(password, secretKeyB64)).masterKey.fill(0)
+  ;(await openFloor(password, secretKeyText)).masterKey.fill(0)
 }
 
 /**
@@ -123,13 +124,16 @@ export function staleAsRejected(e: unknown): never {
 type OpenedFloor = { masterKey: Uint8Array; wrappedIdentityPrivateKey: string }
 
 /** Open the stored `PASSWORD` floor with the offered password and Secret Key: the Master Key it holds, or a refusal. */
-async function openFloor(password: string, secretKeyB64: string): Promise<OpenedFloor> {
-  const material = await withRefresh(() => accountApi().getAccountKeyMaterial())
-  const floor = material.wraps.find((w) => w.method === MasterKeyWrapMethodEnum.Password)
-  if (!floor?.kdfParams) throw new ColdCredentialRefused('noFloorWrap')
-
-  const secretKey = fromB64std(secretKeyB64.trim())
+async function openFloor(password: string, secretKeyText: string): Promise<OpenedFloor> {
+  // A typed key that does not read as one (`readSecretKey`: a typo or not a key at all) is a credential that does not
+  // match, refused before anything is fetched; the field has already said which of the two it is.
+  const typed = readSecretKey(secretKeyText)
+  if (!typed.ok) throw new ColdCredentialRefused('credentialRejected')
+  const secretKey = typed.key
   try {
+    const material = await withRefresh(() => accountApi().getAccountKeyMaterial())
+    const floor = material.wraps.find((w) => w.method === MasterKeyWrapMethodEnum.Password)
+    if (!floor?.kdfParams) throw new ColdCredentialRefused('noFloorWrap')
     // A served profile this client does not write throws `v1.KdfProfileRefused` here (ADR 0017 rule 5). It is the
     // server's fault, not the credential's, so it stays OUTSIDE the refusals: the screens then say "nothing was
     // changed, try again", never "that password or Secret Key didn't match".

@@ -140,7 +140,7 @@ describe.skipIf(!process.env.VEYQ_E2E || process.env.VEYQ_E2E_MEASURE !== '1')('
       const watch = watchRotation()
       const started = performance.now()
       const next = mintSecretKey()
-      const outcome = await rotateKeys(owner.password, secretKey, { secretKeyB64: next }).then(() => {
+      const outcome = await rotateKeys(owner.password, secretKey, { secretKeyText: next }).then(() => {
         secretKey = next
         return 'ok'
       }, (e: unknown) => String(e))

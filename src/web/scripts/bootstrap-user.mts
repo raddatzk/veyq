@@ -25,6 +25,7 @@ import './clientPrelude.mts'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { fromB64std } from '@veyq/crypto/base64'
+import { readSecretKey } from '@veyq/crypto/secretKey'
 import { keyChainGenesisStatement, keyChainHead, serializeIdentityPublic } from '@veyq/crypto/v1'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { generateInviteCode, parseInviteFragment } from '@veyq/crypto/invite'
@@ -91,14 +92,16 @@ if (/^[0-9.]+$/.test(domain)) {
 
 /**
  * The Emergency Kit already in .run/.env, when there is a usable one — so a re-seed after `down -v` keeps the
- * Secret Key the human has already copied somewhere. Anything unusable (blank, not base64, wrong length) falls
- * back to a fresh mint rather than failing the run; a dev kit is not worth a blocked bootstrap.
+ * Secret Key the human has already copied somewhere. Anything unusable (blank, not a Secret Key in its printed form —
+ * `@veyq/crypto/secretKey`) falls back to a fresh mint rather than failing the run; a dev kit is not worth a blocked
+ * bootstrap.
  */
 function reusableSecretKey(raw: string | undefined, who: string): Uint8Array | undefined {
   const s = (raw ?? '').trim()
   if (!s) return undefined
-  const bytes = (() => { try { return fromB64std(s) } catch { return undefined } })()
-  if (!bytes || bytes.length !== 32) {
+  const read = readSecretKey(s)
+  const bytes = read.ok ? read.key : undefined
+  if (!bytes) {
     console.warn(`bootstrap-user: ${who} secret key in .run/.env is unusable — minting a fresh one`)
     return undefined
   }

@@ -203,3 +203,73 @@ export async function openPdf(bytes: Uint8Array, signal?: AbortSignal, onPasswor
 
 /** The class of the element closing a text layer, styled in `pdf.css` with the `.pdf-text-layer` the page template puts on the host. */
 export const PDF_TEXT_END_CLASS = 'pdf-text-end'
+
+/** A page drawn into pixels: RGBA, `width * height * 4` bytes. */
+export type PdfPixels = { data: Uint8ClampedArray; width: number; height: number }
+
+/**
+ * A PDF opened to be READ rather than shown: what its document information says, and how a page looks. The Emergency Kit
+ * import is its reader (`features/account/emergencyKit/emergencyKit.ts`, the fallback chain of en.account.key-model § The
+ * Emergency Kit): a kit that was re-saved or printed to PDF no longer carries its token raw in the file's bytes.
+ */
+export interface PdfReading {
+  readonly numPages: number
+  /** The document information's `Keywords` as pdf.js decodes it (a hex, UTF-16 or compressed string included), '' when none. */
+  keywords(): Promise<string>
+  /** Page `page` (1-based) drawn `width` pixels wide whatever its size in points (at most {@link PDF_MAX_CANVAS_PIXELS}
+   *  in all, so a huge page is drawn smaller), on a canvas pdf.js makes itself (a DOM canvas in a page, its
+   *  `@napi-rs/canvas` in node) — so nothing here needs a document, and the real-library test can draw. */
+  pixels(page: number, width: number): Promise<PdfPixels>
+  /** Free the document and its worker. */
+  destroy(): Promise<void>
+}
+
+/**
+ * Open `bytes` (taken over, as {@link openPdf} does) for reading, with the same options, so the same safety holds: no
+ * network, no scripting, no annotation layer. Throws {@link PdfOpenError} for a protected or unreadable document.
+ */
+export async function readPdf(bytes: Uint8Array): Promise<PdfReading> {
+  const { getDocument } = await import('./pdfjsRuntime')
+  const task = getDocument(bytes)
+  let doc
+  try {
+    doc = await task.promise
+  } catch (e) {
+    await task.destroy().catch(() => {})
+    if (PASSWORD.has(nameOf(e))) throw new PdfOpenError('password')
+    if (BROKEN.has(nameOf(e))) throw new PdfOpenError('broken')
+    throw e
+  }
+  // Typed `Object` upstream; it is pdf.js' BaseCanvasFactory, whose `create` hands back a canvas and its 2D context.
+  type Canvas2D = { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D }
+  const canvases = doc.canvasFactory as { create(w: number, h: number): Canvas2D; destroy(c: Canvas2D): void }
+  return {
+    numPages: doc.numPages,
+    async keywords() {
+      const { info } = await doc.getMetadata()
+      const keywords = (info as { Keywords?: unknown }).Keywords
+      return typeof keywords === 'string' ? keywords : ''
+    },
+    async pixels(n, width) {
+      const page = await doc.getPage(n)
+      try {
+        const base = page.getViewport({ scale: 1 })
+        let scale = width / base.width
+        const pixels = base.width * base.height * scale * scale
+        if (pixels > PDF_MAX_CANVAS_PIXELS) scale *= Math.sqrt(PDF_MAX_CANVAS_PIXELS / pixels)
+        const viewport = page.getViewport({ scale })
+        const target = canvases.create(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)))
+        try {
+          await page.render({ canvas: target.canvas, viewport }).promise
+          const { data, width: w, height: h } = target.context.getImageData(0, 0, target.canvas.width, target.canvas.height)
+          return { data, width: w, height: h }
+        } finally {
+          canvases.destroy(target)
+        }
+      } finally {
+        page.cleanup()
+      }
+    },
+    destroy: () => task.destroy().catch(() => {}),
+  }
+}

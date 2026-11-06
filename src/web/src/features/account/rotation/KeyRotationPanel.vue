@@ -166,7 +166,7 @@ const { run: proveGate, pending: proving } = useAsyncAction(
 const { run: publish, pending: busy } = useAsyncAction(
   async () => {
     const outcome = await rotateKeys(password.value, secretKey.value.trim(), {
-      secretKeyB64: newSecretKey.value,
+      secretKeyText: newSecretKey.value,
       password: choosePassword.value ? newPassword.value : undefined,
     })
     // Spent: the secrets leave this component now. The screen stays mounted to render the result.

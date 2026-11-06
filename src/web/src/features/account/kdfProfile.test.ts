@@ -42,6 +42,7 @@ vi.mock('./trustDevice/deviceKey', () => ({
 
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
+import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { accountApi } from '../../api/client'
 import * as device from './trustDevice/deviceKey'
 import { clearVault, isUnlocked, masterKey, setUnlocked } from '../../app/vault'
@@ -79,7 +80,7 @@ function account(profile: v1.ArgonParams, salt = v1.randomBytes(16)) {
   const recovery: RecoveryMaterial = { email: 'a@example.com', suiteId: 'v1', ...wrap, wrappedIdentityPrivateKey: material.wrappedIdentityPrivateKey }
   for (const spy of [unlockKekAsync, deviceKekAsync, recoveryKekAsync]) spy.mockResolvedValue(kek)
   stubApi(accountApi, { getAccountKeyMaterial: material })
-  return { id, mk, secretKey: b64std(secretKey), recovery }
+  return { id, mk, secretKey: formatSecretKey(secretKey), recovery }
 }
 
 /** Settle a promise into its outcome, so the spy assertion can run FIRST — its failure names the served profile

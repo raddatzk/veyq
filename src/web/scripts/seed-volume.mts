@@ -33,6 +33,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { fromB64std } from '@veyq/crypto/base64'
+import { secretKeyBytes } from '@veyq/crypto/secretKey'
 import { DIR, accounts, die, manifest, need, signIn, tenantScope, writeJson, type Accounts, type Manifest, type Member } from './volumeHarness.mts'
 import { birthInstance, HOST, mkActor } from '../src/test/e2eBootstrap'
 import { mailCursor, waitForMail } from '../src/test/mailpit'
@@ -342,7 +343,7 @@ async function members(target: number): Promise<void> {
     if (known && inTenant.has(known.username)) continue
     // A cold birth, as the invitee's browser does at the accept page. A record from a stopped run keeps its Secret Key:
     // the rest of the account is born again, which is sound because that account never reached the server.
-    const built = await buildAccount(actor.email, actor.password, salt, known ? { secretKey: fromB64std(known.secretKey) } : {})
+    const built = await buildAccount(actor.email, actor.password, salt, known ? { secretKey: secretKeyBytes(known.secretKey) } : {})
     const member: Member = { email: actor.email, password: actor.password, username: actor.username, secretKey: built.emergencyKit.secretKey, stage: 'built' }
     saveMember(member) // the Secret Key exists nowhere else: written before anything can fail
     const cursor = await mailCursor(member.email)

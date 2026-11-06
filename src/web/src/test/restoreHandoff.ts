@@ -16,7 +16,7 @@ export type Handoff = {
   /** What the person still has. */
   email: string
   password: string
-  /** The Emergency Kit's Secret Key, base64 — the second factor of the PASSWORD floor unlock. */
+  /** The Emergency Kit's Secret Key, in its printed form — the second factor of the PASSWORD floor unlock. */
   secretKey: string
   /** Which tenant to read the config-secret state of (leg 3). */
   tenantId: string

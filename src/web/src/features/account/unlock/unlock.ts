@@ -5,6 +5,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { unlockKekAsync, deviceKekAsync } from '@veyq/crypto/argonWorker'
 import { fromB64std } from '@veyq/crypto/base64'
+import { secretKeyBytes } from '@veyq/crypto/secretKey'
 import { accountApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { setUnlocked, type UnlockOrigin } from '../../../app/vault'
@@ -107,13 +108,13 @@ function noteThisDevice(label?: string): void {
  */
 export async function unlockMasterKey(
   password: string,
-  secretKeyB64: string,
+  secretKeyText: string,
   { noteDevice = true }: { noteDevice?: boolean } = {},
 ): Promise<void> {
   const material = await fetchKeyMaterial()
   const passwordWrap = material.wraps.find((w) => w.method === MasterKeyWrapMethodEnum.Password)
   if (!passwordWrap?.kdfParams) throw new Error('unlock_unavailable') // E2 — no floor wrap
-  const secretKey = fromB64std(secretKeyB64.trim())
+  const secretKey = secretKeyBytes(secretKeyText)
   const { params, salt } = v1.decodeKdfParams(fromB64std(passwordWrap.kdfParams))
   const kek = await unlockKekAsync(secretKey, password, salt, params)
   const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(passwordWrap.wrappedKey))

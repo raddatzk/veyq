@@ -25,10 +25,11 @@ import VeyqInput from './VeyqInput.vue'
 import VeyqMessage from './VeyqMessage.vue'
 import VeyqIcon from './VeyqIcon.vue'
 import { parseKit, type KitData } from '@veyq/crypto/emergencyKit'
+import { readSecretKey } from '@veyq/crypto/secretKey'
 import { importKitFromFile } from '../../features/account/emergencyKit/emergencyKit'
 import KitScanner from '../../features/account/emergencyKit/KitScanner.vue'
 
-// Multi-root (the field, its two messages, the hidden file input, the teleported scanner) — there is no single
+// Multi-root (the field, its three messages, the hidden file input, the teleported scanner) — there is no single
 // element an inherited class could land on, and the hosts style the <label> around it instead.
 //
 // **Trap for host tests:** this adds a hidden `<input type="file">` to every form that uses it, so a host test
@@ -67,6 +68,15 @@ const showSecret = ref(false)
 const scanOpen = ref(false)
 const unreadable = ref(false)
 const mismatchedEmail = ref('')
+
+// A key of the full length whose check symbols disagree was misread or mistyped, and saying so here beats the generic
+// "password or Secret Key didn't match" after a slow derivation. Anything shorter, or outside the alphabet, says
+// nothing while it is being typed; the host's submit refuses it as it refuses any key that does not open the account.
+const typo = computed(() => {
+  const read = readSecretKey(model.value ?? '')
+  if (read.ok) read.key.fill(0)
+  return !read.ok && read.problem === 'typo'
+})
 
 // Offered only where a camera can exist at all; a camera-less device falls back to upload or paste.
 const scanSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
@@ -167,6 +177,7 @@ watch(model, (value) => {
       </button>
     </span>
   </div>
+  <VeyqMessage v-if="typo" tone="error">{{ t('unlock.secretKeyTypo') }}</VeyqMessage>
   <VeyqMessage v-if="unreadable" tone="error">{{ t('unlock.kitUnreadable') }}</VeyqMessage>
   <VeyqMessage v-if="mismatchedEmail" tone="warn">
     {{ t('unlock.kitEmailMismatch', { kitEmail: mismatchedEmail, expected: expectedEmail }) }}

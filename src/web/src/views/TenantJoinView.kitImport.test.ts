@@ -50,13 +50,14 @@ import { unlockMasterKey } from '../features/account/unlock/unlock'
 import { sealName } from '../features/account/profile/profile'
 import { TenantStatus } from '../api/generated/tenants'
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
+import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { importKitFromFile } from '../features/account/emergencyKit/emergencyKit'
 import { realI18n, t } from '../test/i18n'
 import { invitePreview, setupStatus } from '../test/models'
 
 const OWNER_EMAIL = 'owner@acme.example'
 // 32 bytes, as a real kit carries — the parser rejects a Secret Key of any other length.
-const OWNERS_KIT: KitData = { email: OWNER_EMAIL, secretKey: 'IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=' }
+const OWNERS_KIT: KitData = { email: OWNER_EMAIL, secretKey: formatSecretKey(new Uint8Array(32).fill(0x22)) }
 
 const stubs = {
   VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
@@ -150,7 +151,8 @@ describe('TenantJoinView — importing the Emergency Kit on the invite-accept sc
   it('checks an imported kit against the INVITED owner, and accepting it stays possible', async () => {
     const w = await mountSignInBranch()
 
-    await pickKit(w, { email: 'someone.else@example.com', secretKey: 'dGhlLXdyb25nLW9uZQ==' })
+    const othersKey = formatSecretKey(new Uint8Array(32).fill(0x33))
+    await pickKit(w, { email: 'someone.else@example.com', secretKey: othersKey })
 
     const warned = warnings(w)
     expect(warned).toHaveLength(1)
@@ -159,7 +161,7 @@ describe('TenantJoinView — importing the Emergency Kit on the invite-accept sc
     // Warn, not block — the submit still goes through, because only the wrap can judge a key and the e-mail in
     // a kit is metadata (this owner may have changed address since they saved it).
     await acceptWith(w)
-    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', 'dGhlLXdyb25nLW9uZQ==')
+    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', othersKey)
 
     // The control on the same predicate: the invited owner's own kit draws no warning, so the assertion above
     // is about the address and not about "a kit was imported".
@@ -172,7 +174,7 @@ describe('TenantJoinView — importing the Emergency Kit on the invite-accept sc
     const w = await mountSignInBranch()
 
     // Before the shared control, only the recovery screen decoded a pasted token; here the whole string went
-    // to `fromB64std` and failed as a generic unlock error.
+    // to the key decode and failed as a generic unlock error.
     await secretField(w).setValue(kitPayload(OWNERS_KIT))
     await flushPromises()
     await acceptWith(w)

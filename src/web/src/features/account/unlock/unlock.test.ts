@@ -15,6 +15,7 @@ import { isUnlocked, masterKey, identityPrivate, clearVault } from '../../../app
 import { session } from '../../../app/session'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
+import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 
 const PASSWORD = 'correct horse battery'
@@ -69,7 +70,7 @@ describe('unlockMasterKey (uc.account.unlock)', () => {
     const { material, id, masterKey: expectedMaster, secretKey } = built
     mockMaterial(material)
 
-    await unlockMasterKey(PASSWORD, b64std(secretKey))
+    await unlockMasterKey(PASSWORD, formatSecretKey(secretKey))
 
     expect(isUnlocked()).toBe(true)
     // the unwrapped Master Key matches the one the wrap was built from
@@ -81,7 +82,7 @@ describe('unlockMasterKey (uc.account.unlock)', () => {
   it('hands out key copies so clearVault cannot corrupt a held reference (use-after-clear safety)', async () => {
     const { material, masterKey: expectedMaster, secretKey } = built
     mockMaterial(material)
-    await unlockMasterKey(PASSWORD, b64std(secretKey))
+    await unlockMasterKey(PASSWORD, formatSecretKey(secretKey))
 
     const held = masterKey()!
     clearVault() // zero-fills the vault's OWN buffer in place
@@ -94,7 +95,7 @@ describe('unlockMasterKey (uc.account.unlock)', () => {
     const { material, secretKey } = built
     mockMaterial(material)
 
-    await expect(unlockMasterKey('wrong password', b64std(secretKey))).rejects.toThrow()
+    await expect(unlockMasterKey('wrong password', formatSecretKey(secretKey))).rejects.toThrow()
     expect(isUnlocked()).toBe(false)
     expect(masterKey()).toBeNull()
   }, PRODUCTION_ARGON_TIMEOUT_MS)
@@ -103,7 +104,7 @@ describe('unlockMasterKey (uc.account.unlock)', () => {
     const { material } = built
     mockMaterial(material)
 
-    await expect(unlockMasterKey(PASSWORD, b64std(v1.randomBytes(32)))).rejects.toThrow()
+    await expect(unlockMasterKey(PASSWORD, formatSecretKey(v1.randomBytes(32)))).rejects.toThrow()
     expect(isUnlocked()).toBe(false)
     expect(masterKey()).toBeNull()
   }, PRODUCTION_ARGON_TIMEOUT_MS)
@@ -125,7 +126,7 @@ describe('unlockMasterKey (uc.account.unlock)', () => {
     })
     stubApi(tokenApi, { refreshSession: { accessToken: 'a2', refreshToken: 'r2' } })
 
-    await unlockMasterKey(PASSWORD, b64std(secretKey))
+    await unlockMasterKey(PASSWORD, formatSecretKey(secretKey))
 
     expect(calls).toBe(2) // first 401 → refresh → retry succeeded
     expect(session.accessToken).toBe('a2') // tokens rotated by the refresh
@@ -138,7 +139,7 @@ describe('unlockMasterKey (uc.account.unlock)', () => {
     const noPassword = { ...material, wraps: material.wraps.filter((w) => w.method !== 'PASSWORD') }
     mockMaterial(noPassword)
 
-    await expect(unlockMasterKey(PASSWORD, b64std(secretKey))).rejects.toThrow()
+    await expect(unlockMasterKey(PASSWORD, formatSecretKey(secretKey))).rejects.toThrow()
     expect(isUnlocked()).toBe(false)
   })
 })
