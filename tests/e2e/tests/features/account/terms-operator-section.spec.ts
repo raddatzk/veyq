@@ -1,7 +1,7 @@
 // The operator section of the terms in a browser (ADR 0035 decision 6, cr-operator-section-of-the-terms), in its one
 // form on every instance (ADR 0093 § 14), with the pointer to the guest-write record's information:
 //
-//   1. Anyone, without an account, opens **Terms of this instance** from the sign-in page and reads the section and,
+//   1. Anyone, without an account, opens **Terms of this server** from the sign-in page and reads the section and,
 //      at the record's anchor, its pointer to the privacy notice, which holds the record's
 //      information and its right to object (DSA Art. 14(1); ADR 0035 decision 8).
 //   2. The space's owner publishes terms of their own: the Terms panel shows the section read-only below them, and the

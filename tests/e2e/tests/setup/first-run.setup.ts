@@ -47,7 +47,7 @@ test(
     // What a Server Owner sees first: their domain, through Traefik. A certificate that does not chain to the run's
     // Pebble — Traefik's default one when it could not write /acme — fails this navigation outright.
     await page.goto(stack().appOrigin)
-    await expect(page.getByText('This instance isn’t set up yet', { exact: true })).toBeVisible()
+    await expect(page.getByText('This server isn’t set up yet', { exact: true })).toBeVisible()
   },
 )
 
