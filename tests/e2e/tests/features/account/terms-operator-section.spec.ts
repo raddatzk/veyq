@@ -68,13 +68,13 @@ test(
     await page.goto(tenantOrigin())
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible({ timeout: 60_000 })
     const opened = context.waitForEvent('page')
-    await page.getByRole('link', { name: 'Terms of this instance' }).click()
+    await page.getByRole('link', { name: 'Terms of this server' }).click()
     const terms = await opened
-    await expect(terms.getByText('Terms of this instance').first()).toBeVisible({ timeout: 60_000 })
+    await expect(terms.getByText('Terms of this server').first()).toBeVisible({ timeout: 60_000 })
     const section = terms.getByTestId('operator-section')
-    await expect(section.getByRole('heading', { name: 'On this instance: reports, measures and what is kept' })).toBeVisible()
+    await expect(section.getByRole('heading', { name: 'On this server: reports, measures and what is kept' })).toBeVisible()
     await expect(section.getByRole('heading', { name: 'Authorities and contact' })).toBeVisible() // the one form
-    await expect(terms.locator('#guest-write-record')).toContainText('privacy notice of this instance')
+    await expect(terms.locator('#guest-write-record')).toContainText('privacy notice of this server')
     await expect(terms.getByRole('link', { name: 'Read it in the privacy notice' })).toHaveAttribute('href', '/privacy#guest-write-record')
     await expect(terms.locator('aside')).toHaveCount(0) // the right to object is the notice's now
     await terms.close()
@@ -110,7 +110,7 @@ test(
 
     await openSettings(page, 'Terms', tenantOrigin())
     const panel = page.getByTestId('terms-operator-section')
-    await expect(panel.getByTestId('operator-section')).toContainText('On this instance: reports, measures and what is kept')
+    await expect(panel.getByTestId('operator-section')).toContainText('On this server: reports, measures and what is kept')
     await expect(panel.getByRole('button')).toHaveCount(0) // nothing edits or removes it
 
     await addLanguage(page, page, 'English', `## Our rules\n${spaceRule}`)
@@ -122,7 +122,7 @@ test(
     await expect(page.getByText('Please review the terms')).toBeVisible({ timeout: 60_000 })
     const body = page.locator('.terms-body')
     await expect(body).toContainText(spaceRule)
-    await expect(body.getByTestId('operator-section')).toContainText('On this instance: reports, measures and what is kept')
+    await expect(body.getByTestId('operator-section')).toContainText('On this server: reports, measures and what is kept')
     await page.getByRole('button', { name: 'I agree' }).click()
     await expect(page.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 60_000 })
   },
@@ -137,7 +137,7 @@ test(
     await expect(page.getByText('Please accept the terms of use')).toBeVisible({ timeout: 60_000 })
     const body = page.locator('.share-terms-body')
     await expect(body).toContainText(spaceRule)
-    await expect(body.getByTestId('operator-section')).toContainText('On this instance: reports, measures and what is kept')
+    await expect(body.getByTestId('operator-section')).toContainText('On this server: reports, measures and what is kept')
     await page.getByRole('button', { name: 'Accept and continue' }).click()
     await expect(page.getByText('Please accept the terms of use')).toBeHidden()
     await expect(page.getByText(sharedFolder).first()).toBeVisible({ timeout: 60_000 })
@@ -163,10 +163,10 @@ test(
       const german = await context.newPage()
       await german.goto(`${tenantOrigin()}/operator-terms`)
       const section = german.getByTestId('operator-section')
-      await expect(section.getByRole('heading', { name: 'Auf dieser Instanz: Meldungen, Maßnahmen und Aufbewahrung' })).toBeVisible({ timeout: 60_000 })
+      await expect(section.getByRole('heading', { name: 'Auf diesem Server: Meldungen, Maßnahmen und Aufbewahrung' })).toBeVisible({ timeout: 60_000 })
       await expect(section.getByRole('heading', { name: 'Inhalte melden' })).toBeVisible()
       await expect(section.getByRole('heading', { name: 'Behörden und Kontakt' })).toBeVisible()
-      await expect(german.locator('#guest-write-record')).toContainText('Datenschutzerklärung dieser Instanz')
+      await expect(german.locator('#guest-write-record')).toContainText('Datenschutzerklärung dieses Servers')
 
       // The privacy notice: the record's passage on every instance, and the recipient's open country a visible gap.
       await german.goto(`${tenantOrigin()}/privacy`)

@@ -90,9 +90,9 @@ class OperatorSectionRendererTest {
         // The record's Art. 13 information is the privacy notice's (ADR 0035 decision 8): the section keeps
         // a pointer, always (the record is kept wherever a guest may write, ADR 0093 § 10), and never inside the text.
         val r = render()
-        assertTrue(r.record.en.contains("privacy notice of this instance") && r.record.de.contains("Datenschutzerklärung dieser Instanz"))
+        assertTrue(r.record.en.contains("privacy notice of this server") && r.record.de.contains("Datenschutzerklärung dieses Servers"))
         assertFalse(r.record.en.contains("Art. 6(1)(f)"), "the information itself is the notice's, not repeated here")
-        assertFalse(r.text.en.contains("privacy notice of this instance"), "set apart: never inside the text")
+        assertFalse(r.text.en.contains("privacy notice of this server"), "set apart: never inside the text")
     }
 
     @Test
@@ -102,7 +102,7 @@ class OperatorSectionRendererTest {
         val withSeparate = ObjectMapper().readTree(file).deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()
         (withSeparate.get("passages").get(0) as com.fasterxml.jackson.databind.node.ObjectNode).put("separate", true)
         assertThrows<IllegalArgumentException> { OperatorSectionText.parse(withSeparate) }
-        assertEquals(3, text.revision, "Q27's move bumped it to 2, the one form (cr-operating-mode-retires) to 3")
+        assertEquals(4, text.revision, "Q27's move bumped it to 2, the one form (cr-operating-mode-retires) to 3, instance -> server to 4")
     }
 
     @Test

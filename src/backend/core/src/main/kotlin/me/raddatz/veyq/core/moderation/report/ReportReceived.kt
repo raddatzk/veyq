@@ -53,14 +53,14 @@ class ReportReceived(
         fun reference(reportId: String) = reportId.take(8)
 
         fun receiptBody(reportId: String, receivedAt: Instant): String = """
-            |Your report to the people who run this veyq instance was received on ${TIME.format(receivedAt)}.
+            |Your report to the people who run this veyq server was received on ${TIME.format(receivedAt)}.
             |Reference: ${reference(reportId)}
             |
             |Only its moderators can read it. They decide what happens with it, and tell you their decision at this address.
             |
             |—
             |
-            |Deine Meldung an die Betreiber dieser veyq-Instanz ist am ${TIME.format(receivedAt)} eingegangen.
+            |Deine Meldung an die Betreiber dieses veyq-Servers ist am ${TIME.format(receivedAt)} eingegangen.
             |Aktenzeichen: ${reference(reportId)}
             |
             |Nur die Moderation kann sie lesen. Sie entscheidet, was damit geschieht, und teilt dir die Entscheidung an diese Adresse mit.

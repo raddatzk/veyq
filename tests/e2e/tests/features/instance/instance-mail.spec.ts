@@ -30,7 +30,7 @@ test.describe.configure({ mode: 'serial' })
 const RELAY = { host: 'mail.relay.test', port: '1025' }
 const FROM = 'veyq-notices@e2e.veyq.test'
 const MIRROR = 'https://releases.mirror.example/veyq'
-const CODE_MAIL = /^Confirm your veyq instance mail/
+const CODE_MAIL = /^Confirm your veyq server's mail/
 
 let admin: Device
 

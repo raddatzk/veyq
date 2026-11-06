@@ -31,11 +31,11 @@ describe('the statement template', () => {
     expect(full.map((p) => p.id)).toEqual(['measure', 'roles', 'facts', 'basis', 'automation', 'ground', 'provision', 'scope', 'objection', 'contact', 'courts'])
     // The provision follows the ground, then the territorial sentence (DSA Art. 17(3)(a)).
     expect(full.find((p) => p.id === 'provision')!.text).toBe('It relies on § 86a StGB.')
-    expect(full.find((p) => p.id === 'scope')!.text).toBe('It applies wherever this veyq instance is reached, and lasts until it is lifted.')
+    expect(full.find((p) => p.id === 'scope')!.text).toBe('It applies wherever this veyq server is reached, and lasts until it is lifted.')
     // A moderator's measure is objected to in veyq; the contact objection is a Server Owner's step's, by mail alone.
     expect(full.map((p) => p.id)).not.toContain('objectionByContact')
     expect(full[0].text).toBe(
-      'On 18 October 2026, the people who run this veyq instance took a measure: content was blocked. ' +
+      'On 18 October 2026, the people who run this veyq server took a measure: content was blocked. ' +
         TEMPLATE.measures.CONTENT.en.reach,
     )
     expect(full[1].text).toBe('You are told as the person who uploaded it and an owner of the space it lies in.')
@@ -56,15 +56,15 @@ describe('the statement template', () => {
     const measureOf = (lang: 'en' | 'de', roles: StatementFields['roles']) =>
       renderStatement(lang, { ...fields, measureKind: 'SHARE', roles })[0].text
     expect(measureOf('en', ['SHARE_CREATOR'])).toBe(
-      'On 18 October 2026, the people who run this veyq instance took a measure: a link you created was blocked. ' +
+      'On 18 October 2026, the people who run this veyq server took a measure: a link you created was blocked. ' +
         'Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.',
     )
     expect(measureOf('en', ['UPLOADER'])).toBe(
-      'On 18 October 2026, the people who run this veyq instance took a measure: a link to something you uploaded was blocked. ' +
+      'On 18 October 2026, the people who run this veyq server took a measure: a link to something you uploaded was blocked. ' +
         'Everyone who opens it is told the link does not exist; nothing was deleted.',
     )
     expect(measureOf('de', ['UPLOADER'])).toBe(
-      'Am 18 October 2026 wurde auf dieser veyq-Instanz eine Maßnahme ergriffen: ein Link zu etwas, das du hochgeladen hast, wurde gesperrt. ' +
+      'Am 18 October 2026 wurde auf diesem veyq-Server eine Maßnahme ergriffen: ein Link zu etwas, das du hochgeladen hast, wurde gesperrt. ' +
         'Wer ihn öffnet, erfährt, dass es den Link nicht gibt; gelöscht wurde nichts.',
     )
     expect(measureOf('de', ['SHARE_CREATOR'])).toContain('ein von dir erstellter Link wurde gesperrt.')
@@ -75,7 +75,7 @@ describe('the statement template', () => {
     expect(measureOf('de', [])).toContain('ergriffen: ein Link wurde gesperrt. ')
     // A guest keeps its own words, and a kind without per-relation words reads the same for every reader.
     expect(renderStatement('en', { ...fields, measureKind: 'SHARE', roles: ['UPLOADER'], reader: 'guest' })[0].text).toBe(
-      'On 18 October 2026, the people who run this veyq instance took a measure: a link to something you uploaded was blocked. ' +
+      'On 18 October 2026, the people who run this veyq server took a measure: a link to something you uploaded was blocked. ' +
         TEMPLATE.guest.measures.SHARE.en.reach,
     )
     expect(renderStatement('en', { ...fields, roles: ['UPLOADER'] })[0].text).toBe(renderStatement('en', { ...fields, roles: ['SCOPE_OWNER'] })[0].text)
@@ -127,7 +127,7 @@ describe('the statement template', () => {
 
   it('the reporter’s coordinator sentence says where the DSA applies, in both languages (ADR 0093 § 7)', () => {
     const coordinator = TEMPLATE.reporterDecision.passages.find((p) => p.id === 'coordinator')!
-    expect(coordinator.en.startsWith('Where the Digital Services Act (DSA) applies to this instance')).toBe(true)
-    expect(coordinator.de.startsWith('Soweit das Gesetz über digitale Dienste (DSA) für diese Instanz gilt')).toBe(true)
+    expect(coordinator.en.startsWith('Where the Digital Services Act (DSA) applies to this server')).toBe(true)
+    expect(coordinator.de.startsWith('Soweit das Gesetz über digitale Dienste (DSA) für diesen Server gilt')).toBe(true)
   })
 })

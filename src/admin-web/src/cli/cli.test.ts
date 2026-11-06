@@ -817,14 +817,14 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
     expect(r.code).toBe(0)
     expect(JSON.parse(r.out)).toEqual({ ok: true, statementDelivery: delivery })
     expect(r.err).toBe(
-      'veyq-admin: warning: the statement of reasons could not be mailed to a@club.example.org, b@club.example.org and is not sent again — tell them through the instance contact',
+      'veyq-admin: warning: the statement of reasons could not be mailed to a@club.example.org, b@club.example.org and is not sent again — tell them through the server contact',
     )
   })
 
   it('tenant delete whose statement went to nobody, or to an unknown few, exits 0 and warns', async () => {
     for (const [outcome, line] of [
       ['NOBODY_TO_TELL', 'veyq-admin: warning: the statement of reasons went to nobody: the tenant has no owner, or the account no longer exists'],
-      ['UNKNOWN', 'veyq-admin: warning: the server could not tell whom the statement of reasons reached — tell the people it affects through the instance contact'],
+      ['UNKNOWN', 'veyq-admin: warning: the server could not tell whom the statement of reasons reached — tell the people it affects through the server contact'],
     ] as const) {
       vi.mocked(stepStatement).mockResolvedValueOnce({ statementId: 's-2', ground: 'TERMS_BREACH', provision: null, facts: null, factsForLog: null })
       vi.mocked(tenants.deleteTenant).mockResolvedValueOnce({ dueAt: EXPIRES, statementDelivery: { outcome, notReached: [] } })
@@ -850,7 +850,7 @@ describe('veyq-admin — the Server Owner’s moderation steps (uc.moderation.ta
       { address: 'ordered@example.com', caseId: null, blockedAt: EXPIRES.toISOString() },
     ])
     expect(r.err).toBe(
-      'veyq-admin: warning: the statement of reasons could not be mailed to member@example.com and is not sent again — tell them through the instance contact',
+      'veyq-admin: warning: the statement of reasons could not be mailed to member@example.com and is not sent again — tell them through the server contact',
     )
     // Without a statement there is no delivery to print and nothing to warn of.
     vi.mocked(blockSignIn).mockResolvedValueOnce({ steps: steps() })
@@ -1033,7 +1033,7 @@ describe('veyq-admin — an authority’s order (uc.moderation.authority-order)'
     expect(enterOrder).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'INFORMATION', holdDays: 30 }))
     vi.mocked(enterOrder).mockResolvedValueOnce(recorded({ kind: 'PRESERVATION', found: false, blockedAt: undefined, caseId: undefined, holdUntil: undefined }))
     const r = await invoke(['order', 'preserve', '--share', SHARE, '--reference', 'r', '--lang', 'en'])
-    expect(r.out).toContain('not found on this instance')
+    expect(r.out).toContain('not found on this server')
     expect(r.out).toContain('no shared link with this identifier exists')
   })
 
@@ -1042,7 +1042,7 @@ describe('veyq-admin — an authority’s order (uc.moderation.authority-order)'
     expect((await invoke(['order', 'remove', '--share', SHARE, '--reference', 'r', '--received-at', 'yesterday'])).err)
       .toContain('--received-at must be an ISO 8601 time')
     vi.mocked(enterOrder).mockRejectedValueOnce(new OrderInvalid('share'))
-    expect((await invoke(['order', 'remove', '--share', 'nope', '--reference', 'r'])).err).toContain('neither a link of this instance nor a link id')
+    expect((await invoke(['order', 'remove', '--share', 'nope', '--reference', 'r'])).err).toContain('neither a link of this server nor a link id')
     vi.mocked(enterOrder).mockRejectedValueOnce(httpError(409, 'order_exists'))
     const refused = await invoke(['order', 'remove', '--share', SHARE, '--reference', 'r'])
     expect(refused.code).toBe(1)

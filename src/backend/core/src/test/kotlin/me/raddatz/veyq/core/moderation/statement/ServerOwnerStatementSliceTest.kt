@@ -221,7 +221,7 @@ class ServerOwnerStatementSliceTest {
         assertTrue(text.contains("What they found: $FACTS"), text)
         assertTrue(text.contains("The measure was taken after their own finding."), text)
         assertTrue(text.contains("It relies on Space terms, clause 4."), text)
-        assertTrue(text.contains("It applies wherever this veyq instance is reached"), text)
+        assertTrue(text.contains("It applies wherever this veyq server is reached"), text)
         assertTrue(text.contains("If you disagree, write to $CONTACT"), text)
         assertFalse(text.contains("you can object once, in veyq"), "a blocked member cannot object in veyq:\n$text")
         assertTrue(text.contains("Was sie festgestellt haben: $FACTS"), text)

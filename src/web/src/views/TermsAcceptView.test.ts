@@ -49,7 +49,7 @@ describe('TermsAcceptView — declining signs out (uc.account.sign-out)', () => 
       terms: { en: 'Be kind.', de: 'Sei nett.' },
       operatorSection: {
         revision: 2,
-        text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz\nMeldungen prüft ein Mensch.' },
+        text: { en: '## On this server\nReports go to a person.', de: '## Auf diesem Server\nMeldungen prüft ein Mensch.' },
         record: { en: '### Your IP address\nIn the privacy notice.', de: '### Deine IP-Adresse\nIn der Datenschutzerklärung.' },
       },
     } as Awaited<ReturnType<typeof getTenantTerms>>)
@@ -94,7 +94,7 @@ describe('TermsAcceptView — the operator section after the space’s terms (AD
       terms: { en: 'Be kind.', de: 'Sei nett.' },
       operatorSection: {
         revision: 1,
-        text: { en: '## On this instance\nReports go to a person.', de: '## Auf dieser Instanz' },
+        text: { en: '## On this server\nReports go to a person.', de: '## Auf diesem Server' },
         record: { en: '### Your IP address\nIn the privacy notice.', de: '### Deine IP-Adresse' },
       },
     } as Awaited<ReturnType<typeof getTenantTerms>>)
@@ -105,7 +105,7 @@ describe('TermsAcceptView — the operator section after the space’s terms (AD
     const w = await mountReady()
     const body = w.find('.terms-body').text()
     expect(body.indexOf('Be kind.')).toBeGreaterThanOrEqual(0)
-    expect(body.indexOf('On this instance')).toBeGreaterThan(body.indexOf('Be kind.'))
+    expect(body.indexOf('On this server')).toBeGreaterThan(body.indexOf('Be kind.'))
     expect(w.find('#guest-write-record').text()).toContain('In the privacy notice.')
     // The record's Art. 13 information is the privacy notice's (ADR 0035 decision 8): linked, not repeated.
     expect(w.find('#guest-write-record a').attributes('href')).toBe('/privacy#guest-write-record')

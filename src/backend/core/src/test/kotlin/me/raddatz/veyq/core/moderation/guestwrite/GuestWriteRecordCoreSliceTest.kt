@@ -300,7 +300,7 @@ class GuestWriteRecordCoreSliceTest {
         assertTrue(text.contains("### Authorities and contact"), "the whole section: the authorities")
         assertTrue(text.contains("Only an authority can ask"), "…the deferral")
         assertTrue(text.contains("Operator: not stated by this operator"), "an empty provider name shows as the gap")
-        assertTrue(section.getString("record.en").contains("privacy notice of this instance"), "the record's pointer")
+        assertTrue(section.getString("record.en").contains("privacy notice of this server"), "the record's pointer")
 
         val notice = given().`when`().get("/api/operator/privacy-notice").then().statusCode(200).extract().jsonPath()
         val ids = notice.getList<String>("passages.id")

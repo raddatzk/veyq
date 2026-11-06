@@ -86,7 +86,7 @@ test(
     await expect(notice.locator('#exchange-rates')).toContainText(
       "fetches the day's euro reference rates of the European Central Bank (ECB) from Frankfurter (api.frankfurter.dev), at most once a day.",
     )
-    await expect(notice.locator('#storage')).toContainText("on this instance's own server")
+    await expect(notice.locator('#storage')).toContainText("on this server itself")
     await notice.close()
   },
 )

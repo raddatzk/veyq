@@ -85,14 +85,14 @@ class CaseReminders(private val notices: ModeratorNotices) {
             val en = ordered.joinToString("\n") { (c, d) -> "  ${EN.getValue(c)}, reported $d days ago" }
             val de = ordered.joinToString("\n") { (c, d) -> "  ${DE.getValue(c)}, gemeldet vor $d Tagen" }
             return """
-                |These moderation cases on this veyq instance still wait for a decision:
+                |These moderation cases on this veyq server still wait for a decision:
                 |$en
                 |
                 |Open the moderation page to decide them: ${ModeratorNotices.PAGE_EN}. A case is never closed on its own.
                 |
                 |—
                 |
-                |Diese Moderationsfälle auf dieser veyq-Instanz warten noch auf eine Entscheidung:
+                |Diese Moderationsfälle auf diesem veyq-Server warten noch auf eine Entscheidung:
                 |$de
                 |
                 |Öffne die Moderationsseite, um sie zu entscheiden: ${ModeratorNotices.PAGE_DE}.

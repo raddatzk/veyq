@@ -56,10 +56,10 @@ class AccountErasureMail(private val mailer: InstanceNoticeMailer) {
 
         fun body(requestedBy: String, dueAt: Instant): String {
             val byOwner = requestedBy == AccountErasureEntity.SERVER_OWNER
-            val en = if (byOwner) "The Server Owner of this veyq instance erased your account at a request that reached them."
-            else "Your account on this veyq instance was erased in its settings."
-            val de = if (byOwner) "Die Person, die diese veyq-Instanz betreibt, hat dein Konto auf eine Anfrage hin gelöscht."
-            else "Dein Konto auf dieser veyq-Instanz wurde in seinen Einstellungen gelöscht."
+            val en = if (byOwner) "The Server Owner of this veyq server erased your account at a request that reached them."
+            else "Your account on this veyq server was erased in its settings."
+            val de = if (byOwner) "Die Person, die diesen veyq-Server betreibt, hat dein Konto auf eine Anfrage hin gelöscht."
+            else "Dein Konto auf diesem veyq-Server wurde in seinen Einstellungen gelöscht."
             val date = DATE.format(dueAt)
             return """
                 |$en You can no longer sign in. On $date the account and what is kept about it are erased for good. Until
@@ -67,17 +67,17 @@ class AccountErasureMail(private val mailer: InstanceNoticeMailer) {
                 |
                 |What stays: what you put into spaces you did not own alone belongs to those spaces and shows as a former
                 |member's. Moderation records and holds that name your account stay to their own legal ends. Copies in the
-                |instance's backups stay until those backups expire.
+                |server's backups stay until those backups expire.
                 |
                 |—
                 |
                 |$de Du kannst dich nicht mehr anmelden. Am $date werden das Konto und was über dich gespeichert ist endgültig
-                |gelöscht. Bis dahin kann nur die Person, die die Instanz betreibt, die Löschung stoppen — wenn du sie nicht
+                |gelöscht. Bis dahin kann nur die Person, die den Server betreibt, die Löschung stoppen — wenn du sie nicht
                 |veranlasst hast, wende dich jetzt an sie.
                 |
                 |Was bleibt: Was du in Bereiche gelegt hast, die dir nicht allein gehörten, gehört diesen Bereichen und
                 |erscheint als das eines ehemaligen Mitglieds. Moderationsunterlagen und Sicherungen eines Falls, die dein
-                |Konto nennen, bleiben bis zu ihrem gesetzlichen Ende. Kopien in den Backups der Instanz bleiben, bis diese
+                |Konto nennen, bleiben bis zu ihrem gesetzlichen Ende. Kopien in den Backups des Servers bleiben, bis diese
                 |Backups ablaufen.
             """.trimMargin()
         }

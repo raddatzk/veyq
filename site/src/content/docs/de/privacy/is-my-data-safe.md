@@ -55,18 +55,18 @@ zu liefern, zu regeln, wer reindarf — sieht der Server ein paar **wenig sensib
 Es ist, als sähe man **beschriftete Kisten im Regal und wer einen Schlüssel hat** — nie den Inhalt.
 Genau diese wenigen Fakten machen den Server nutzbar, ohne jemals zu entschlüsseln.
 
-**Was *deine* Instanz speichert, und wer sie betreibt.** Jede veyq-Instanz betreibt jemand — ein Familienmitglied, ein
-Verein, ein Unternehmen —, und jede hat ihre eigene **Datenschutzerklärung**: **Datenschutz**, unten auf jeder Seite,
-auch schon vor der Anmeldung. Sie nennt, wer verantwortlich ist, was diese Instanz zu deinem Konto, deiner Anmeldung
-und einer Meldung von dir speichert, wie lange, wer sonst etwas erhält (wer sie hostet, ein Mail-Dienst) und was du
-verlangen kannst. Den Text schreibt veyq; die Instanz füllt ihre eigenen Angaben ein, also sagt er, was *diese* Instanz
+**Was *dein* Server speichert, und wer ihn betreibt.** Jeden veyq-Server betreibt jemand — ein Familienmitglied, ein
+Verein, ein Unternehmen —, und jeder hat seine eigene **Datenschutzerklärung**: **Datenschutz**, unten auf jeder Seite,
+auch schon vor der Anmeldung. Sie nennt, wer verantwortlich ist, was dieser Server zu deinem Konto, deiner Anmeldung
+und einer Meldung von dir speichert, wie lange, wer sonst etwas erhält (wer ihn hostet, ein Mail-Dienst) und was du
+verlangen kannst. Den Text schreibt veyq; der Server füllt seine eigenen Angaben ein, also sagt der Text, was *dieser* Server
 tut. Die Einladungsseite, das Meldeformular und ein Link, über den du etwas hinzufügst, führen dich zu dem Teil, der
 dich betrifft.
 
 ## Zwei Anfragen, die dein Gerät von selbst verlassen
 
 Zwei Dinge macht veyq, ohne dich vorher zu fragen, weil das, was sie senden, nichts über deine Inhalte verrät. Die
-Datenschutzerklärung deiner Instanz nennt beide, und wer deinen Server betreibt, kann sie abschalten.
+Datenschutzerklärung deines Servers nennt beide, und wer ihn betreibt, kann sie abschalten.
 
 ### Ein neues Passwort prüfen
 
@@ -224,7 +224,7 @@ Betrieb, nicht vor böswilligem, und das sagen wir lieber, als mehr zu versprech
 Englisch)
 
 > **Hinweis fürs Self-Hosting:** Betreibst *du* deinen eigenen veyq-Server, liegt der Betrieb bei *dir* —
-> dann stellt sich die Frage, ob man der betreibenden Person vertrauen kann, für deine eigene Instanz gar nicht.
+> dann stellt sich die Frage, ob man der betreibenden Person vertrauen kann, für deinen eigenen Server gar nicht.
 
 ## Für technisch Interessierte
 

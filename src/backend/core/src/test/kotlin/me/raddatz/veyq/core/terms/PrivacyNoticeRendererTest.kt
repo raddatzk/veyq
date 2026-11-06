@@ -165,7 +165,7 @@ class PrivacyNoticeRendererTest {
         val default = render().passage("exchange-rates")!!
         assertTrue(default.text.en.contains("from Frankfurter (api.frankfurter.dev), at most once a day"), default.text.en)
         assertTrue(default.text.de.contains("von Frankfurter (api.frankfurter.dev)"), default.text.de)
-        assertTrue(default.text.en.contains("no currency, no amount") && default.text.en.contains("your IP address and the address of this instance"))
+        assertTrue(default.text.en.contains("no currency, no amount") && default.text.en.contains("your IP address and the address of this server"))
         assertTrue(default.text.en.contains("Art. 6(1)(f) GDPR") && default.text.en.contains("can switch it off"))
 
         val mirror = render(values = all.copy(exchangeRateService = PrivacyNoticeRenderer.serviceLabel("https://rates.example.org/v2/rates?date={date}")))

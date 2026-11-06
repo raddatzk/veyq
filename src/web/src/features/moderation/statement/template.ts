@@ -3,7 +3,7 @@
 // (`core/moderation/statement/StatementTemplate.kt`), and `template.test.ts` here and its conformance test there hold
 // both copies equal to it, so the placeholder and the mail render one text. It names the host, never the moderator.
 export const TEMPLATE = {
-  version: 3,
+  version: 4,
   measures: {
     SHARE: {
       en: { measure: 'a link was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.' },
@@ -32,8 +32,8 @@ export const TEMPLATE = {
       de: { measure: 'ein Gast, der über deinen Link hochgeladen hat, wurde gesperrt, zusammen mit dem Link', reach: 'Der Gast kann nichts mehr hinzufügen, und der Link antwortet, als gäbe es ihn nicht; gelöscht wurde nichts. Du kannst einen neuen Link ausstellen.' },
     },
     MEMBER_SIGN_IN: {
-      en: { measure: 'your account was blocked from signing in', reach: 'You cannot sign in to this veyq instance, and every session of your account was ended; nothing was deleted.' },
-      de: { measure: 'dein Konto wurde für die Anmeldung gesperrt', reach: 'Du kannst dich auf dieser veyq-Instanz nicht anmelden, und jede Sitzung deines Kontos wurde beendet; gelöscht wurde nichts.' },
+      en: { measure: 'your account was blocked from signing in', reach: 'You cannot sign in to this veyq server, and every session of your account was ended; nothing was deleted.' },
+      de: { measure: 'dein Konto wurde für die Anmeldung gesperrt', reach: 'Du kannst dich auf diesem veyq-Server nicht anmelden, und jede Sitzung deines Kontos wurde beendet; gelöscht wurde nichts.' },
     },
     TENANT_OFFLINE: {
       en: { measure: 'a space you own, {domain}, was taken offline', reach: 'Nobody can open it or anything in it, its members included, and its links answer as if they did not exist; nothing was deleted.' },
@@ -66,16 +66,16 @@ export const TEMPLATE = {
     TERMS_BREACH: { en: 'it breaches the terms of use that apply here', de: 'es verstößt gegen die hier geltenden Nutzungsbedingungen' },
   },
   passages: [
-    { id: 'measure', en: 'On {date}, the people who run this veyq instance took a measure: {measure}. {reach}', de: 'Am {date} wurde auf dieser veyq-Instanz eine Maßnahme ergriffen: {measure}. {reach}' },
+    { id: 'measure', en: 'On {date}, the people who run this veyq server took a measure: {measure}. {reach}', de: 'Am {date} wurde auf diesem veyq-Server eine Maßnahme ergriffen: {measure}. {reach}' },
     { id: 'roles', en: 'You are told as {roles}.', de: 'Du erhältst diese Begründung als {roles}.' },
     { id: 'facts', when: 'facts', en: 'What they found:', de: 'Was sie festgestellt haben:' },
     { id: 'basis', en: 'The measure was taken after {basis}.', de: 'Die Maßnahme wurde ergriffen nach {basis}.' },
     { id: 'automation', en: 'No automated means found or decided it: a person did.', de: 'Kein automatisiertes Verfahren hat das erkannt oder entschieden, sondern ein Mensch.' },
     { id: 'ground', en: 'The ground: {ground}.', de: 'Der Grund: {ground}.' },
     { id: 'provision', when: 'provision', en: 'It relies on {provision}.', de: 'Sie stützt sich auf {provision}.' },
-    { id: 'scope', en: 'It applies wherever this veyq instance is reached, and lasts until it is lifted.', de: 'Sie gilt überall, wo diese veyq-Instanz erreichbar ist, und dauert an, bis sie aufgehoben wird.' },
+    { id: 'scope', en: 'It applies wherever this veyq server is reached, and lasts until it is lifted.', de: 'Sie gilt überall, wo dieser veyq-Server erreichbar ist, und dauert an, bis sie aufgehoben wird.' },
     { id: 'objection', when: 'inApp', en: 'If you disagree, you can object once, in veyq, where you see this statement. Another moderator reviews your objection where there is one.', de: 'Wenn du nicht einverstanden bist, kannst du einmal widersprechen, in veyq, dort, wo du diese Begründung siehst. Eine andere Person aus der Moderation prüft deinen Widerspruch, sofern es eine gibt.' },
-    { id: 'objectionByContact', when: 'byContact', en: 'If you disagree, write to {contact}: the people who run this instance look at it again.', de: 'Wenn du nicht einverstanden bist, schreib an {contact}: Wer diese Instanz betreibt, prüft es erneut.' },
+    { id: 'objectionByContact', when: 'byContact', en: 'If you disagree, write to {contact}: the people who run this server look at it again.', de: 'Wenn du nicht einverstanden bist, schreib an {contact}: Wer diesen Server betreibt, prüft es erneut.' },
     { id: 'contact', en: 'Questions go to {contact}.', de: 'Fragen gehen an {contact}.' },
     { id: 'courts', en: 'You can also go to court; you do not need to object first.', de: 'Du kannst dich auch an ein Gericht wenden; ein Widerspruch vorher ist dafür nicht nötig.' },
   ],
@@ -84,7 +84,7 @@ export const TEMPLATE = {
       { id: 'again', en: 'If you have more information, you can report it again.', de: 'Wenn du weitere Informationen hast, kannst du es erneut melden.' },
       { id: 'contact', en: 'Questions go to {contact}.', de: 'Fragen gehen an {contact}.' },
       { id: 'courts', en: 'You can also go to court.', de: 'Du kannst dich auch an ein Gericht wenden.' },
-      { id: 'coordinator', en: 'Where the Digital Services Act (DSA) applies to this instance, you can also complain to the Digital Services Coordinator of the Member State where you live or are established.', de: 'Soweit das Gesetz über digitale Dienste (DSA) für diese Instanz gilt, kannst du dich auch beim Koordinator für digitale Dienste des Mitgliedstaats beschweren, in dem du lebst oder niedergelassen bist.' },
+      { id: 'coordinator', en: 'Where the Digital Services Act (DSA) applies to this server, you can also complain to the Digital Services Coordinator of the Member State where you live or are established.', de: 'Soweit das Gesetz über digitale Dienste (DSA) für diesen Server gilt, kannst du dich auch beim Koordinator für digitale Dienste des Mitgliedstaats beschweren, in dem du lebst oder niedergelassen bist.' },
     ],
   },
   mail: { subject: { en: 'veyq: a moderation decision concerns you', de: 'veyq: eine Moderationsentscheidung betrifft dich' }, factsInVeyq: { en: 'What they found is in veyq: sign in at {domain} to read it.', de: 'Was sie festgestellt haben, steht in veyq: Melde dich unter {domain} an, um es zu lesen.' } },

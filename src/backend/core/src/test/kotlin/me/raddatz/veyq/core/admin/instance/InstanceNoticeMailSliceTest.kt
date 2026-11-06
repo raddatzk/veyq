@@ -310,7 +310,7 @@ class InstanceNoticeMailSliceTest {
     }
 
     /** The mails that are not the code mail. */
-    private fun noticeMails(): List<MimeMessage> = mailbox.receivedMessages.filterNot { it.subject.startsWith("Confirm your veyq instance mail") }
+    private fun noticeMails(): List<MimeMessage> = mailbox.receivedMessages.filterNot { it.subject.startsWith("Confirm your veyq server's mail") }
 
     private fun codeIn(mail: MimeMessage): String {
         val body = partsOf(mail).first { it.isMimeType("text/plain") }.content as String

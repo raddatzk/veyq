@@ -18,7 +18,7 @@ private. No technical background needed.
 - [Privacy](/privacy/is-my-data-safe/): is my data safe?
 - [Help](/help/): a forgotten password, a lost kit or device, and more
 
-## Running an instance
+## Running a server
 
 Technical, English only — for whoever operates a server rather than uses one.
 

@@ -88,14 +88,14 @@ class CaseNotices(private val notices: ModeratorNotices) {
             val en = ordered.joinToString("\n") { "  ${counts.getValue(it)} × ${EN.getValue(it)}" }
             val de = ordered.joinToString("\n") { "  ${counts.getValue(it)} × ${DE.getValue(it)}" }
             return """
-                |New moderation cases were reported on this veyq instance:
+                |New moderation cases were reported on this veyq server:
                 |$en
                 |
                 |Open the moderation page to see them: ${ModeratorNotices.PAGE_EN}.
                 |
                 |—
                 |
-                |Auf dieser veyq-Instanz wurden neue Moderationsfälle gemeldet:
+                |Auf diesem veyq-Server wurden neue Moderationsfälle gemeldet:
                 |$de
                 |
                 |Öffne die Moderationsseite, um sie zu sehen: ${ModeratorNotices.PAGE_DE}.

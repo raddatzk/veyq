@@ -155,7 +155,7 @@ class StoreCheck(
             return true
         }
         if (publicOrigin == null) {
-            skip(StoreCheckStep.CORS, "No public origin is configured for this instance (veyq.tenant.ingress.bootstrap-domain), so there is no origin to send a preflight with.")
+            skip(StoreCheckStep.CORS, "No public origin is configured for this server (veyq.tenant.ingress.bootstrap-domain), so there is no origin to send a preflight with.")
             return true
         }
         val preflight = send(HttpRequest.newBuilder(URI.create(putUrl)).timeout(TIMEOUT)

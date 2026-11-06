@@ -98,8 +98,8 @@ class ApplicationErasureMail(private val mailer: InstanceNoticeMailer) {
             val name = title(row.application)
             val day = DATE.format(row.dueAt)
             val byOperator = row.switchedBy == SwitchLevel.INSTANCE.name
-            val whoEn = if (byOperator) "The operator of this veyq instance" else "The owner of the space"
-            val whoDe = if (byOperator) "Die Person, die diese veyq-Instanz betreibt," else "Die Person, der der Bereich gehört,"
+            val whoEn = if (byOperator) "The operator of this veyq server" else "The owner of the space"
+            val whoDe = if (byOperator) "Die Person, die diesen veyq-Server betreibt," else "Die Person, der der Bereich gehört,"
             val onlyEn = if (byOperator) " Only the operator can switch it back on." else ""
             val onlyDe = if (byOperator) " Wieder einschalten kann es nur die Betreiberseite." else ""
             val body = """

@@ -19,7 +19,7 @@ teilst, und warum sie privat bleiben. Kein technisches Vorwissen nötig.
 - [Privatsphäre](/de/privacy/is-my-data-safe/): Sind meine Daten sicher?
 - [Hilfe](/de/help/): vergessenes Passwort, verlorenes Kit oder Gerät und mehr
 
-## Eine Instanz betreiben
+## Einen Server betreiben
 
 Technisch und nur auf Englisch — für alle, die einen Server *betreiben* statt ihn zu nutzen.
 

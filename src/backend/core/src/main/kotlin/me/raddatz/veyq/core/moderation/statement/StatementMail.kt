@@ -226,14 +226,14 @@ class StatementMail(
          */
         fun decisionBody(reference: String, decision: Decision, contact: String?): String {
             val en = if (decision == Decision.DISMISSED) {
-                "The moderators of this veyq instance looked at your report and took no measure."
+                "The moderators of this veyq server looked at your report and took no measure."
             } else {
-                "The moderators of this veyq instance looked at your report and took a measure."
+                "The moderators of this veyq server looked at your report and took a measure."
             }
             val de = if (decision == Decision.DISMISSED) {
-                "Die Moderation dieser veyq-Instanz hat deine Meldung geprüft und keine Maßnahme ergriffen."
+                "Die Moderation dieses veyq-Servers hat deine Meldung geprüft und keine Maßnahme ergriffen."
             } else {
-                "Die Moderation dieser veyq-Instanz hat deine Meldung geprüft und eine Maßnahme ergriffen."
+                "Die Moderation dieses veyq-Servers hat deine Meldung geprüft und eine Maßnahme ergriffen."
             }
             val redressEn = StatementTemplate.renderRedress(StatementLang.EN, contact)
             val redressDe = StatementTemplate.renderRedress(StatementLang.DE, contact)
@@ -251,23 +251,23 @@ class StatementMail(
         }
 
         val OBJECTION_BODY = """
-            |Someone objected to a moderation decision on this veyq instance. Open the moderation page to see it:
+            |Someone objected to a moderation decision on this veyq server. Open the moderation page to see it:
             |${ModeratorNotices.PAGE_EN}. Another moderator than the one who decided reviews it.
             |
             |—
             |
-            |Gegen eine Moderationsentscheidung auf dieser veyq-Instanz wurde Widerspruch eingelegt. Öffne die Moderationsseite,
+            |Gegen eine Moderationsentscheidung auf diesem veyq-Server wurde Widerspruch eingelegt. Öffne die Moderationsseite,
             |um ihn zu sehen: ${ModeratorNotices.PAGE_DE}. Geprüft wird er von einer anderen Person aus der Moderation als
             |der, die entschieden hat.
         """.trimMargin()
 
         val ANSWER_BODY = """
-            |Your objection to a moderation decision on this veyq instance was decided. Sign in to veyq and open the item it
+            |Your objection to a moderation decision on this veyq server was decided. Sign in to veyq and open the item it
             |concerns to read the answer.
             |
             |—
             |
-            |Über deinen Widerspruch gegen eine Moderationsentscheidung auf dieser veyq-Instanz wurde entschieden. Melde dich
+            |Über deinen Widerspruch gegen eine Moderationsentscheidung auf diesem veyq-Server wurde entschieden. Melde dich
             |in veyq an und öffne das betroffene Element, um die Antwort zu lesen.
         """.trimMargin()
     }

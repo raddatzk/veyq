@@ -196,7 +196,7 @@ test(
     expect(mail.text).toContain('it is illegal under the law that applies')
     expect(mail.text).toContain('No automated means found or decided it')
     expect(mail.text).toContain(`It relies on ${provision}.`)
-    expect(mail.text).toContain('It applies wherever this veyq instance is reached, and lasts until it is lifted.')
+    expect(mail.text).toContain('It applies wherever this veyq server is reached, and lasts until it is lifted.')
     expect(mail.text).toContain(`sign in at ${instance().tenantDomain}`)
     expect(mail.text, 'the facts stay out of the mail').not.toContain(stamp)
     const [decision] = await awaitMails(reporterAddress(), DECISION_MAIL)
@@ -204,7 +204,7 @@ test(
     // The reporter's redress (DSA Art. 16(5), Art. 53), whole on every instance, the coordinator where the DSA applies.
     expect(decision!.text).toContain('If you have more information, you can report it again.')
     expect(decision!.text).toContain('You can also go to court.')
-    expect(decision!.text).toContain('Where the Digital Services Act (DSA) applies to this instance, you can also complain to the Digital Services Coordinator of the Member State where you live or are established')
+    expect(decision!.text).toContain('Where the Digital Services Act (DSA) applies to this server, you can also complain to the Digital Services Coordinator of the Member State where you live or are established')
     expect(decision!.text).toContain('Koordinator für digitale Dienste')
     expect(decision!.text).not.toContain(stamp)
   },
@@ -231,7 +231,7 @@ test(
     await expect(notice).toContainText('You are told as the person who uploaded it and an owner of the space it lies in.')
     await expect(notice.locator('.statement-facts')).toHaveText(facts)
     await expect(notice).toContainText(`It relies on ${provision}.`)
-    await expect(notice).toContainText('It applies wherever this veyq instance is reached')
+    await expect(notice).toContainText('It applies wherever this veyq server is reached')
     await expect(notice).toContainText('You can also go to court')
     await notice.locator('.statement-objection-text').fill(recordTyped(objection))
     await notice.getByRole('button', { name: 'Send the objection' }).click()

@@ -17,7 +17,7 @@ export function usage(): string {
   const width = Math.max(...Object.values(COMMANDS).map((c) => c.usage.length))
   const lines = Object.values(COMMANDS).map((c) => `  ${NAME} ${c.usage.padEnd(width)}  ${c.summary}`)
   return [
-    `${NAME} — Server-Owner administration for a veyq instance.`,
+    `${NAME} — Server-Owner administration for a veyq server.`,
     '',
     'Commands:',
     ...lines,
