@@ -110,7 +110,7 @@ How each of these is built — the modules, the seams core asks, the web registr
 - **The node tree is the platform's, not Memories'.** Rejected: the tree owned by Memories. Every other
   application would then need a tree of its own and, with it, its own sharing, trash and move rules — the
   duplication this decision exists to avoid. The price is that the tree's `kind` holds values core does not
-  interpret, so **node kinds are open**: an open, bounded token on the wire, core naming `FOLDER` only, each application
+  interpret, so **node kinds are open**: an open, bounded token on the wire, core naming its own few (`FOLDER`, and the bookmark of a received link, [ADR 0120](0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md)), each application
   bringing its kinds and their rules, and a kind no application claims refused by fail-closed seams, never by decoding.
   A link serves its root's kind, so the share page renders the body the kind's application claimed.
 - **A node's URL carries its application's slug** (the grammar is [ADR 0015](0015-operator-blind-readable-urls.md)'s).

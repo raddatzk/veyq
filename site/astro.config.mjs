@@ -134,6 +134,7 @@ export default defineConfig({
                 'sharing/request-uploads',
                 'sharing/manage-links',
                 'sharing/what-guests-see',
+                'sharing/keep-a-link',
               ],
             },
             {

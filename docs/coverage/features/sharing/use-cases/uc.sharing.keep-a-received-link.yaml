@@ -1,0 +1,47 @@
+useCase: uc.sharing.keep-a-received-link
+feature: sharing
+title: Keep a link someone sent as a bookmark in a space
+acceptanceCriteria:
+  - id: placed-at-a-folder-level
+    text: A member places a SHARE_BOOKMARK at a space's top level or directly in a folder and nowhere else; nothing is placed inside one, it roots no link of any role, and no guest creates one.
+    coverage:
+      backend:
+        integration: [ShareBookmarkCoreSliceTest.aMemberPlacesABookmarkAtTheTopOrInAFolderAndNothingInsideIt, ShareBookmarkCoreSliceTest.aBookmarkRootsNoLink, ShareBookmarkCoreSliceTest.aContributingGuestDoesNotPlaceABookmark]
+      web:
+        unit: [src/kindsContract.test.ts, src/core/bookmark/rights.test.ts]
+  - id: link-checked-when-pasted
+    text: The create dialog takes a share link with its whole key (https, or http on a development host, no credentials in the address), normalizes it to origin, /s/<id> and #k=<key>, refuses anything else with its reason and creates nothing; a link of another instance is taken like one of this; nothing is fetched.
+    coverage:
+      web:
+        unit: [src/core/bookmark/bookmarkLink.test.ts, src/core/bookmark/BookmarkCreateDialog.test.ts]
+  - id: sealed-and-blind
+    text: The link and its password are sealed in the node's meta under its own key, padded so the sealed size is one of a few, and read back fail closed; the server stores the meta as it was sent and reads none of it.
+    coverage:
+      backend:
+        integration: [ShareBookmarkCoreSliceTest.aMemberPlacesABookmarkAtTheTopOrInAFolderAndNothingInsideIt]
+      web:
+        unit: [src/core/bookmark/bookmarkMeta.test.ts, src/core/bookmark/BookmarkCreateDialog.test.ts]
+  - id: survives-a-rotation
+    text: A rotation re-keys a bookmark like every node; its link and password read the same under the new key and nothing of it under the key from before.
+    coverage:
+      web:
+        unit: [src/core/node/rekey/rekeyScope.test.ts]
+  - id: opens-where-the-share-lives
+    text: A link of this origin opens in the same tab with its password handed to the share page in memory and entered once (a wrong one leaves the page's form); a link of another origin opens in a new tab with no opener and no referrer, its password shown to copy and never put in a URL.
+    coverage:
+      web:
+        unit: [src/core/bookmark/openBookmark.test.ts, src/views/ShareView.bookmark.test.ts]
+  - id: report-goes-to-the-shares-operator
+    text: Reporting a bookmark's share opens the link with the report fragment parameter, and the share page opens its own report dialog for the link's root (or the link, for an upload link) once its gates are passed, drops the parameter, and reports as the link's guest; this instance's moderators receive a bookmark's name alone - the server refuses a NODE item of one - and a selection reports it by its name.
+    coverage:
+      backend:
+        integration: [ShareBookmarkCoreSliceTest.aMemberReportsABookmarksNameButNeverItsKey]
+      web:
+        unit: [src/core/bookmark/bookmarkReport.test.ts, src/views/ShareView.bookmark.test.ts, src/core/node/components/NodePage.report.test.ts]
+  - id: no-guest-reaches-it
+    text: A public link of an enclosing folder does not serve a bookmark (no entry, wrap, name or meta), its guest reports and places none, and a reported folder's hold leaves it out.
+    coverage:
+      backend:
+        integration: [ShareBookmarkCoreSliceTest.aLinkAboveABookmarkDoesNotServeIt, ShareBookmarkCoreSliceTest.aContributingGuestDoesNotPlaceABookmark, ShareBookmarkCoreSliceTest.aReportedFoldersHoldLeavesTheBookmarkOut]
+      web:
+        unit: [src/core/bookmark/rights.test.ts]

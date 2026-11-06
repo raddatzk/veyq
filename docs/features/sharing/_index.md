@@ -47,6 +47,10 @@ do there is each application's role matrix ([Memories](../../apps/memories.md#wh
   viewable link — switch-off, delete, re-issue, bulk or removal switch-off, end date — re-keys everything below it;
   [ADR 0114](../../decisions/0114-closing-a-link-re-keys-the-subtree-below-it.md))
 
+- [uc.sharing.keep-a-received-link](use-cases/uc.sharing.keep-a-received-link.md) — **built** (a link someone sent,
+  of this or another instance, kept as a bookmark node with its password, sealed; it opens and is reported where the
+  share lives; [ADR 0120](../../decisions/0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md))
+
 ## Deferred
 
 - **Buckets** are built, as Memories' per-uploader grouping: [uc.memory.buckets](../memory/use-cases/uc.memory.buckets.md),
@@ -55,5 +59,6 @@ do there is each application's role matrix ([Memories](../../apps/memories.md#wh
   moderation of contributions before they show; and a client-side id list so an uploader can delete after a reload.
 - **A password that keys the link** — folding `Argon2id(passphrase)` into the key, against a malicious operator
   ([ADR 0037](../../decisions/0037-password-protected-shares.md), alternative A).
-- **Persisted shares / person-resolution** and the **pre-auth login-page terms** surface.
+- **A received link browsed in place** (inbox #829) and **kept in the account** (inbox #435); **person-resolution** and
+  the **pre-auth login-page terms** surface.
 - **A foreign-operator-proof no-install viewer** — needs the future trusted-web client.
