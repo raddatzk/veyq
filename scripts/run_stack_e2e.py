@@ -25,8 +25,8 @@ the recipe:
      containers and network carry the run's project label and are removed by the stage itself; Traefik's log is
      `client-port-traefik.log`.
   1c. **release mirror** — the release check's test double (inbox #464, owner's option (a)): the run's instance is
-     stamped with the release `veyqctl` installs (`VEYQ_VERSION` in the overlay, overriding the image's `-SNAPSHOT`
-     for this container only), and `release_assets.py`'s own `produce` writes four releases into the run's `mirror/`,
+     stamped with the release `veyqctl` installs (`VEYQ_VERSION` in the overlay, set on this container rather than
+     taken from the image's own stamp), and `release_assets.py`'s own `produce` writes four releases into the run's `mirror/`,
      which the overlay's `release-mirror` serves on `admin`: that release, the next minor, the next major (planned)
      and the one after (marked unscheduled) — so the console has a release notice, a dated planned-major notice whose
      mail carries an `.ics`, and an urgent one to show. `stack.json` names them for the suite; nothing else reads them.

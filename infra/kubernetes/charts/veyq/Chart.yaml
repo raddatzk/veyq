@@ -7,8 +7,9 @@ description: >-
   of the operator's choice does here: the chart owns one Gateway, tenant domains are projected as HTTPRoutes (and,
   under per-domain TLS, ListenerSets) by the backend itself, and certificates are obtained through cert-manager.
 type: application
-# A placeholder no publish uses. The publish packages the chart with its own release version as BOTH `version` and
-# `appVersion` (`<major>.<minor>`, or `<major>.<minor>-SNAPSHOT`; ADR 0057 §1, ADR 0064), and the minor is a commit
+# A placeholder no publish uses. A publish packages the chart with its own name as BOTH `version` and `appVersion`
+# (`<major>.<minor>-SNAPSHOT` for every green commit's snapshot, `<major>.<minor>` for a release — the same images
+# under a release's tag; ADR 0057 §1, ADR 0064, ADR 0091 decision 5), and the minor is a commit
 # count — so no tree can hold the real value, and writing one here would be a number that is wrong on the next
 # commit. `appVersion` is the image tag the values default to, so an install from a checkout sets `image.tag` and
 # `admin.image.tag` (https://veyq.app/run/new-instance/, Kubernetes); an install from the registry needs neither.

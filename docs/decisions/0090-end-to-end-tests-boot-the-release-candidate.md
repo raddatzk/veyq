@@ -34,8 +34,8 @@ What a green run proves today stops short of what a Server Owner runs:
    it trusts (the run's ACME test root) and a mail relay whose mailbox the suite reads. The store check uploads through
    the public origin from inside the app container, so without them no tenant can be created. One more **test double,
    like the ACME server**: the release check ([ADR 0097](0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md))
-   reads releases only on a release-stamped build, and the candidate of a push is a `-SNAPSHOT` by design, so the run
-   stamps its own instance with the release `veyqctl` installed (on the app's container, never on the image), has it
+   reads releases only on a release-stamped build, and the candidate is stamped `<major>.<minor>` with no published
+   release around it (ADR 0091 decision 5), so the run stamps its own instance with the release `veyqctl` installed (on the app's container, never on the image), has it
    check every few seconds instead of daily, keeps it off veyq's real release source (an offline run's check fails,
    ADR 0097), and serves a stub mirror whose releases — newer than the stamp, one of them an unscheduled major — the
    release producer itself writes. No production change: the app's mirror reader verifies no signature, so the

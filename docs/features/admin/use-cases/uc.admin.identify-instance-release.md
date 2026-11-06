@@ -51,10 +51,13 @@ become so.
   answers what was *configured*; this answers what is *running*. They diverge after a pull that was never
   restarted, or a restart that silently reused a cached image — which is the case where an upgrade appears to
   have happened and did not.
-- **A5 — The instance runs a snapshot.** The version reads `<major>.<minor>-SNAPSHOT`, and it is reported as
-  it is: a snapshot is a published, signed build, but its name is the one that moves (ADR 0057 §1). So it is not
-  a rollback target, and a backup of a snapshot instance names a build that may no longer exist under that tag.
-  What does still name it is the digest the operator pinned.
+- **A5 — The instance runs a snapshot.** The version reads `<major>.<minor>`, the release its commit can become: every
+  green commit is published as a signed snapshot, and a release is a snapshot promoted — the same image (ADR 0091
+  decision 5). So the version cannot say whether this image IS a release; the release signature can, and the
+  instance does not check it (the Run area's Verify a release does). A snapshot that is never promoted is not a
+  rollback target, and retention deletes it after 20 newer ones, so a backup of a snapshot instance names a build
+  that may no longer exist; what still names it is the digest the operator pinned. An image stamped before that
+  change reads `<major>.<minor>-SNAPSHOT`, and it is reported as it is.
 
 ## Quality notes
 

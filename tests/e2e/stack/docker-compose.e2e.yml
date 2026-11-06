@@ -107,8 +107,8 @@ services:
         -Djavax.net.ssl.trustStore=/pebble/truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12
         -Djavax.net.ssl.trustStorePassword=veyq-e2e
       # The release stamp of THIS RUN's instance (the test double of `release-mirror` below): the release `veyqctl`
-      # installed it as, read by `veyq.release.version`. It overrides the image's own `-SNAPSHOT` stamp for this
-      # container only — the image is not rebuilt and carries no release's name.
+      # installed it as, read by `veyq.release.version`. Set on this container, not taken from the image: the image's
+      # stamp is the same `<major>.<minor>` today (ADR 0091 decision 5), and the test double must not depend on it.
       VEYQ_VERSION: ${VEYQ_E2E_RELEASE_STAMP:?set by scripts/run_stack_e2e.py}
       # `veyq.release-check.every` (24h by default): the check runs when the app starts — before the console can point
       # it anywhere — and then only a day later, so a run would never see it read the mirror. Every 5 s, the check the
@@ -189,8 +189,8 @@ services:
 
   # The release mirror an operator may point the release check at (ADR 0097 decision 1, uc.admin.learn-of-new-releases)
   # — a TEST DOUBLE, like Pebble, decided by the owner for inbox #464 (option (a), 2026-10-17). The check reads releases
-  # only on a release-stamped build, and the lane's candidate is a `-SNAPSHOT` by design (ci.yml's `version` job), so
-  # the run stamps ITS instance (`app` above) and serves releases newer than that stamp. The files are the publish's own
+  # only on a release-stamped build, which the lane's candidate is (`<major>.<minor>`, ci.yml's `version` job) without
+  # being a published release, so the run stamps ITS instance (`app` above) and serves releases newer than that stamp. The files are the publish's own
   # producer's (`scripts/release_assets.py`, which run_stack_e2e.py calls once per release into the run directory's
   # `mirror/`): `releases.json` and `<tag>/manifest.json`, the two files the app's mirror reader (`ReleaseFeed.Mirror`)
   # reads — it verifies no signature (a forged list can at worst produce a false notice, ADR 0097 decision 2), so the
