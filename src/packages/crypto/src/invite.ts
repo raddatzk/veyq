@@ -52,6 +52,7 @@ import {
   type SuccessionLink,
 } from './v1'
 import { b64url, fromB64url } from './base64'
+import { CROCKFORD, foldCrockford, isCrockford } from './crockford'
 
 // ── The invite key ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -113,8 +114,7 @@ export const signInviteAccept = (inviteSignPrivateKey: Uint8Array, a: InviteAcce
 export const INVITE_LINK_MODE = { code: 1, password: 2 } as const
 export type InviteLinkMode = keyof typeof INVITE_LINK_MODE
 
-/** Crockford's base32 alphabet: no I, L, O, U. A code is 10 of them — 50 bits. */
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+/** A code is 10 Crockford base32 characters (`crockford.ts`) — 50 bits. */
 export const INVITE_CODE_LENGTH = 10
 
 /** A fresh code: 10 Crockford base32 characters, each the low 5 bits of a random byte (256 is a multiple of 32, so
@@ -130,12 +130,8 @@ export const formatInviteCode = (code: string): string => `${code.slice(0, 5)}-$
  * Crockford's look-alikes read as the digit they stand for (I and L as 1, O as 0). U is not in the alphabet.
  */
 export function normalizeInviteCode(typed: string): string | null {
-  const s = typed
-    .toUpperCase()
-    .replace(/[\s-]/g, '')
-    .replace(/[IL]/g, '1')
-    .replace(/O/g, '0')
-  if (s.length !== INVITE_CODE_LENGTH || [...s].some((c) => !CROCKFORD.includes(c))) return null
+  const s = foldCrockford(typed)
+  if (s.length !== INVITE_CODE_LENGTH || !isCrockford(s)) return null
   return s
 }
 

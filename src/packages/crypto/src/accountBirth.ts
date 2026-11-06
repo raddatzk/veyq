@@ -7,6 +7,7 @@
 import * as v1 from './v1'
 import type { Identity } from './v1'
 import { b64std } from './base64'
+import { formatSecretKey } from './secretKey'
 import { deriveAuthKeypairAsync, recoveryKekAsync, unlockKekAsync } from './argonWorker'
 
 const ARGON = v1.ARGON
@@ -30,6 +31,7 @@ export type BuiltAccount = {
    *  trust marks by it before any vault unlocks it (ADR 0111 decision 23). The caller owns and zeroes it. */
   masterKey: Uint8Array
   material: AccountMaterial
+  /** The Secret Key in its printed text form (`secretKey.ts`) — what the Emergency Kit carries. */
   emergencyKit: { secretKey: string }
 }
 
@@ -73,7 +75,7 @@ export async function buildAccount(
   return {
     identity: id,
     masterKey,
-    emergencyKit: { secretKey: b64std(secretKey) },
+    emergencyKit: { secretKey: formatSecretKey(secretKey) },
     material: {
       suiteId: 'v1',
       identityPublicKey: b64std(v1.serializeIdentityPublic(id.pub)),
