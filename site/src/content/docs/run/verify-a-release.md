@@ -159,9 +159,11 @@ rollback target. Major `0` is pre-release and promises no upgrade path.
 
 ## How far this is proven
 
-**No release has been published yet**, and the workflow that signs one, `release.yml`, is not built (snapshots are
+**No release has been published yet**, and the workflow that signs one, `release.yml`, has never run (snapshots are
 published and signed by `ci.yml`; until the first release no digest verifies under the identity above, which is true:
-none is a release). So no command here has run against a veyq release. The image half has been run as
+none is a release). So no command here has run against a veyq release. The promotion checks its own work the way this
+page does before it publishes: it verifies `manifest.json` and `veyqctl` against their bundles under `veyqctl`'s own
+issuer and identity, and refuses to publish a release that fails it. The image half has been run as
 written against another image that is keyless-signed from a GitHub workflow on `main`, with that image's own identity.
 The chart half has been run against a local OCI registry, with a key of its own instead of the keyless identity:
 `helm push` put the chart at `<registry>/charts/veyq`, the digest above resolved from its tag, `cosign` signed and
@@ -180,5 +182,5 @@ identity for a key: it wrote both bundles as Sigstore bundles, and cosign 3.1.3 
 byte appended. No veyq manifest has been signed keylessly. The by-hand file check ran against a release produced
 from the tree by `scripts/release_assets.py`, fetched with `curl` from a `file://` base and checked with `shasum -a 256 -c`, macOS's equivalent of `sha256sum -c`. `veyqctl upgrade` has run `cosign verify` on a release whose app digest was one hex digit off, and stopped before
 any pull; with nothing published an unaltered digest is refused the same way, so the accepting half is held only by
-its self-test, with a stand-in for `cosign`. The GitHub Release is created by the release's promotion, as its last
-step, which is not built yet. The first release is where any of it is first run for real.
+its self-test, with a stand-in for `cosign`. The GitHub Release is published by the release's promotion, as its last
+step, with every file already on it. The first release is where any of it is first run for real.

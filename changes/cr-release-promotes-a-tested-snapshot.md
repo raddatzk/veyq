@@ -25,8 +25,8 @@ snapshot's signature and attestations, gives the same digests the release names 
 the asset set and publishes the draft last. Nothing is rebuilt.
 
 **The trigger is decided** (§ Open question, owner 2026-11-06: option 1): GitHub starts no workflow for a draft
-release, so the owner saves the draft and then presses *Run workflow* on `release.yml`. Phase 1 is built; phase 2
-waits for its review, phase 3 for the owner's go.
+release, so the owner saves the draft and then presses *Run workflow* on `release.yml`. Phases 1 and 3 are built;
+phase 2 (retention) waits until after V1 (owner 2026-11-06).
 
 ## Context & constraints
 
@@ -290,7 +290,8 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
     refuses the token (403):** the deletion stops, nothing else changes, and how to authorise it (a classic PAT with
     `delete:packages` as a secret, or pruning by hand) goes to the owner — it is a credential decision.
 
-- [ ] **3 — The promotion (trigger decided: option 1; waits for the owner's go).** New workflow `.github/workflows/release.yml`, concurrency
+- [x] **3 — The promotion (trigger decided: option 1).** *Built 2026-11-06* (commits listed in the phase-3
+  retrospective); its first run on GitHub is owed (#471, in click order). How it was built: § Phase 3 as built. New workflow `.github/workflows/release.yml`, concurrency
   `veyq-release`; refuses unless its ref is `main` or `release/<major>.x`.
   - Job `check` (`contents: write` — listing a draft needs push access, and a refusal writes into it — `packages:
     read`): finds the draft; then `scripts/promote_snapshot.py` (pure checks, selftest
@@ -333,7 +334,51 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
     shows `0.<n>`, `0`, `latest` and `0.<n>-SNAPSHOT` on one digest per image; `cosign verify` with the release
     identity passes for the three images and the chart; the release is published, immutable, with every asset and
     both bundles; `snapshot-0.<n>` is gone; the Actions list shows no run started by the publication; `veyqctl
-    install` from GitHub verifies and installs it on a throwaway host.
+    install` from GitHub verifies and installs it on a throwaway host. *The click-ordered version is in #471.*
+
+  **Phase 3 as built** (2026-11-06; what differs from the plan above, and why):
+  - **Five jobs, not two**, so each holds only what it writes: `check` (contents write — draft listing needs push
+    access — and packages read; it writes nothing, assertion 14 holds that), `promote` (packages and id-token write:
+    `<version>`, signatures, chart, files), `publish` (contents write: the git tag, the draft, its files, publication),
+    `channels` (packages write: `<major>` and `latest`, **after** publication — the plan moved them in `promote`, which
+    would have pointed `latest` at a release that a later failure never published), `refused` (contents write).
+  - **The draft rule is "exactly one draft", not "the one draft on a snapshot tag"**: a draft on another tag is
+    refused (with the reason in its notes), so the owner's refusal on purpose in the first-run list is reachable,
+    and the choice is never the workflow's.
+  - **A failure before publication is rolled back by `refused`**: the draft moved back onto its snapshot tag (or the
+    replacement draft deleted) and the pushed `v<version>` tag deleted; otherwise a retry would meet a draft on a `v`
+    tag and a taken `v` tag and refuse for good. Registry names (`<version>` on the tested digests, the chart, the
+    signatures) are accepted as this snapshot's by the next run (check 6), the phase-1 resume rule applied again.
+  - **`publish` verifies the files under `veyqctl`'s own identity** (`promote.py release-identity` reads the
+    constant) before anything reaches GitHub, and reads the draft's files back before publishing.
+  - **The promotion's branch rule**: `main` promotes only its own `VERSION`'s major, `release/<major>.x` only its
+    own; with "newer than every release of its major" that makes `latest` (from `main` only) the newest release there
+    is — no separate cross-major comparison needed.
+  - **Decision 6 (major entry)**: read from the tools image (`docker run … cat /opt/veyq/release.json`) and compared
+    with `release_assets.py --major-entry` of the snapshot's own tree (its pin file) and today's tags.
+  - **Not measured, each one fails safe** (a refusal or a red before publication, then `refused` rolls back): the
+    shape of `cosign verify-attestation`'s output under cosign 3.1.3 (both shapes parsed, selftest holds both);
+    `gh release upload` finding a draft by its tag; GitHub accepting a draft's `tag_name` change (fallback built);
+    Buildx's single-index copy keeping the digest (documented as a "carbon copy"; read back, and if it ever differs
+    the `<version>` tag must be deleted by hand — the only non-self-healing case, named in `infra/README.md`).
+  - **Review fix (`300a02908`): the writing jobs install PyYAML only as hashed wheels.** `check`, `promote` and
+    `ci.yml`'s `build` had run `pip install pyyaml` unpinned. Whatever PyPI served under that name would have run beside
+    the release identity's OIDC token, the drafts or the registry. They now install `scripts/requirements-release.txt`:
+    PyYAML 6.0.3 and the sha256 of every manylinux x86_64 and aarch64 wheel, read from PyPI's JSON metadata. The install
+    uses `--require-hashes --only-binary :all:`. Assertion 15 holds every `pip install` of `release.yml`, and of every
+    `ci.yml` job that can write, to that form. No other workflow's writing job installs a Python package (measured:
+    each job's permissions against its `pip install` lines).
+  - **First-run fix (`1a1fdae2e`): `snapshot-tag` was skipped on phase 1's first real run** (42274582708). Its
+    `if:` stated no status function, so GitHub's implicit `success()` saw the switched-off `upgrade-proof` skipped
+    upstream of `snapshot`. It now gates on `!cancelled() && needs.snapshot.result == 'success'`. Assertion 16 holds
+    every job of `ci.yml` and `release.yml` whose needs reach a skippable job to that form. Audited for `release.yml`:
+    no job there has a skippable need today (`check`, `promote` and `publish` carry no `if:`), and `channels` and
+    `refused` state `always()` and their own result conditions.
+  - **V1 as `1.0` needs a `0.<n>` release first.** The `1.0` commit sets the pin file's `release:` line, and from
+    then on the chart upgrade check (`chart_upgrade_check.py` exits 2 at `:251`, every commit) and the upgrade proof
+    find their predecessor among the `v` tags the parent reaches (`run_web_e2e.default_predecessor`, `:1515`); with no
+    `v` tag they refuse, so that commit's snapshot is never published. The workflow promotes either version; the
+    order is the owner's (an open question handed back, not decided here).
 
 ## Definition of done
 
@@ -358,3 +403,31 @@ Phase 1 (filled at its end; the CR's retro closes with phase 3):
   front of `git`, a heredoc fed to `python`). Small throwaway scripts in the scratch directory went through. It cost
   a few round trips and nothing else. Next time: write a helper file first whenever an edit or bite needs more than
   one plain command.
+
+Phase 3 (commits `f1b713c60` the decisions, `d1a3cd237` the workflow and its guard, then the docs):
+
+- **The plan moved `<major>` and `latest` before publication, and planned no way back from a half-done run.** In
+  `promote`, `latest` would have named an image whose release a later failure never published. And a run that had
+  already moved the draft onto `v<version>` and pushed that tag could not be retried: its own checks refuse both.
+  Root cause: the plan listed the writes in order, but never asked what the world looks like if the run dies between
+  two of them. Next time: for every write in a multi-job flow, write down the state a failure right after it leaves,
+  and who puts it back.
+- **Two first runs land on one day.** The first snapshot run (phase 1) and the first promotion (phase 3) both come
+  tomorrow, before V1. Four GitHub behaviours were not measured. Each one is built to fail before publication, and
+  `refused` then rolls the run back: the output shape of `cosign verify-attestation`, an upload to a draft, moving a
+  draft to another tag, and Buildx's copy of an index. Root cause: there is no GitHub sandbox to run them in, and the
+  calendar is fixed. Next time: a throwaway test repository with its own GHCR namespace would turn three of these
+  four into measurements.
+- **The worktree's shell checker refused a compound command once more** (`actionlint` with a pipe and
+  `pipestatus`). Under the coordinator's rule for this phase, I reran it as the plain command the refusal itself asked
+  for, not through a helper script. Helper scripts went only to work that had never been refused: edits, inserts, bite
+  specs. That is reported here so the rule can be checked against what was done.
+- **The review found what the build did not: an unpinned `pip install pyyaml` in the job that signs.** Root cause: the
+  job steps were copied from `ci.yml`'s read-only jobs, where the line is tolerable, without asking again what the
+  copied step runs beside. Next time: when a step moves into a job with more permissions, check every download it makes
+  against those permissions. Assertion 15 now does this for `pip`.
+- **Phase 1's first real run skipped the tag job, which no guard and no local run could have shown.** Root cause:
+  GitHub's implicit `success()` checks the whole chain of needs, not only the direct ones. Phase 1's design reasoned
+  only about `snapshot-tag`'s direct need, and `scripts/run_pipeline.py` cannot evaluate needs across a skipped job
+  the way GitHub does. Next time: every job after one that can be skipped states its own gate. Assertion 16 holds
+  that now.

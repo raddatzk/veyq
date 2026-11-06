@@ -1,11 +1,11 @@
 # ADR 0057 — A release is identified by the tree, and the deployment recipe is its assets
 
 - Status: Accepted
-- Built: partly (§ 2's `v<major>.<minor>` ref and § 3's GitHub Release are a release's, and a release is now ADR
-  0091's promotion, not built yet)
+- Built: yes (§ 2's `v<major>.<minor>` ref and § 3's GitHub Release are now set by ADR 0091's promotion,
+  `release.yml`, which has not run yet)
 - Date: 2026-08-10
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
-- Replaced in part: § 1 by ADR 0091 (its snapshot built, its promotion not), § 7 by ADR 0091 (not built); § 3 by ADR
+- Replaced in part: § 1 by ADR 0091 (built: the snapshot and its promotion), § 7 by ADR 0091 (not built); § 3 by ADR
   0096 (built)
 
 ## Context

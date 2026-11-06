@@ -193,7 +193,8 @@ triggers.
 | Profiling | no job: run by hand on one quiet machine, and never a verdict | — | unlock, the Chapter and the encryption reading 8 min at `87266fe3` (2026-10-23); the upload's six runs 12 min at `d4eab6be` (2026-10-24); the upload's and the import's twelve runs, the import's download made first, 8 min at `3a44065b` (2026-10-29), the same twelve again, 8 min each, at `0d48e569` and with the import and the tiles changed (2026-10-29); the video upload's six runs, 5 min each, before, without the tiles' posters and after (2026-10-29), and again before, with the size probe's player let go, without the probe, after, without the tiles' posters and with them drawn but not shown (2026-10-29) |
 
 The jobs that are no stage carry a budget too, so that none runs on GitHub's 360-minute default: reading the version
-5 min, the snapshot's publish 15 and its tag 5, a path-filter job 5, CodeQL's analysis 30, the docs site's check 10 and its deploy 5,
+5 min, the snapshot's publish 15 and its tag 5, a release's check and promote 15 each, its publish 10 and its channels
+and refusal 5 each, a path-filter job 5, CodeQL's analysis 30, the docs site's check 10 and its deploy 5,
 the dependency graph's resolve 15 and its submit 5. A budget no
 run has measured is an estimate until the first CI run replaces it.
 
@@ -241,11 +242,15 @@ stack lane's result per architecture as a signed attestation naming what it ran 
 release files it installed. A job of its own then tags the commit `snapshot-<major>.<minor>`. A pull request publishes
 nothing. All of that is a workflow file, and its first run on GitHub is still to be observed.
 
-The rest is designed, not built (ADR 0091): a release does not build again — it is started from a draft on a snapshot's
-tag, checks that snapshot's signature and attestations, produces the release files again and refuses if they differ
-from the ones the lanes installed, and gives the snapshot's bytes the release name and a release signature from a
-workflow of its own. So a release is always bytes every test saw, and anyone can check which release they run against
-its signature ([Verify a release](/run/verify-a-release/)); a snapshot's signature does not pass that check.
+A release does not build again (ADR 0091). It is started by hand from a draft on a snapshot's tag, by a workflow of
+its own, `release.yml`, which refuses unless that snapshot is signed as one and every stack lane attested a pass on
+exactly its images, on every architecture; unless the release files produced again from the commit are the ones the
+lanes installed; and unless it is newer than every release of its major. Only then does it give the snapshot's bytes
+the release name and a release signature, and publish the draft last. So a release is always bytes every test saw,
+and anyone can check which release they run against its signature ([Verify a release](/run/verify-a-release/)); a
+snapshot's signature does not pass that check. The workflow is built and has not run yet. Not built: re-running a lane
+whose inputs moved since the snapshot. Lane L1's inputs cannot move, and a promotion refuses an input it cannot
+compare.
 
 ## What no test here can prove
 
