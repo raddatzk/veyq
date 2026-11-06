@@ -27,11 +27,15 @@ function symbols(bits: number[], count: number): string {
   return out
 }
 
+/** A symbol's 5-bit value as bits, most significant first. */
+const symbolBits = (v: number): number[] => [4, 3, 2, 1, 0].map((sh) => (v >> sh) & 1)
+
 const bitsOf = (bytes: Uint8Array): number[] => Array.from(bytes, (b) => [7, 6, 5, 4, 3, 2, 1, 0].map((s) => (b >> s) & 1)).flat()
 
 /** The 54 symbols (no hyphens) of a 32-byte key. */
 function canonical(key: Uint8Array): string {
-  return symbols(bitsOf(key), BODY_SYMBOLS) + symbols(bitsOf(sha256(key)).slice(0, 10), 2)
+  // `symbols` reads the first 2 * 5 = 10 bits of the digest: the check.
+  return symbols(bitsOf(key), BODY_SYMBOLS) + symbols(bitsOf(sha256(key)), 2)
 }
 
 /** A 32-byte Secret Key as it is printed and shown: 9 groups of 6 symbols joined by `-`. */
@@ -53,19 +57,13 @@ export type SecretKeyReading = { ok: true; key: Uint8Array; text: string } | { o
 export function readSecretKey(typed: string): SecretKeyReading {
   const s = foldCrockford(typed)
   if (s.length !== SECRET_KEY_SYMBOLS || !isCrockford(s)) return { ok: false, problem: 'malformed' }
-  const key = new Uint8Array(SECRET_KEY_BYTES)
-  let acc = 0
-  let held = 0
-  let at = 0
-  for (const c of s.slice(0, BODY_SYMBOLS)) {
-    acc = (acc << 5) | CROCKFORD.indexOf(c)
-    held += 5
-    if (held >= 8) {
-      held -= 8
-      key[at++] = (acc >> held) & 0xff // 52 symbols are 260 bits: exactly 32 bytes, 4 bits left over
-      acc &= (1 << held) - 1
-    }
-  }
+  // The key is the first 256 bits the 54 symbols spell; the rest (the 52nd symbol's four zero bits and the check) is
+  // what the re-spelling below compares, so nothing here needs to stop at the 52nd symbol.
+  const bits = [...s].flatMap((c) => symbolBits(CROCKFORD.indexOf(c)))
+  const key = Uint8Array.from({ length: SECRET_KEY_BYTES }, (_, i) =>
+    // Indexed, not sliced: a wrong slice start would only add leading bits, which the byte's truncation hides.
+    [0, 1, 2, 3, 4, 5, 6, 7].reduce((v, j) => (v << 1) | bits[i * 8 + j], 0),
+  )
   // Re-spelling the decoded bytes is the whole check: it compares the check symbols AND the four bits of the last body
   // symbol that no key sets, so every 54-symbol string but the one this key prints as is a typo.
   if (canonical(key) !== s) {

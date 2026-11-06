@@ -34,8 +34,8 @@ describe('the Secret Key text form', () => {
   })
 
   it('refuses to write a key that is not 32 bytes', () => {
-    expect(() => formatSecretKey(new Uint8Array(31))).toThrow()
-    expect(() => formatSecretKey(new Uint8Array(33))).toThrow()
+    expect(() => formatSecretKey(new Uint8Array(31))).toThrow('formatSecretKey: a Secret Key is 32 bytes')
+    expect(() => formatSecretKey(new Uint8Array(33))).toThrow('formatSecretKey: a Secret Key is 32 bytes')
   })
 
   describe('reads what a person types', () => {
@@ -79,7 +79,9 @@ describe('the Secret Key text form', () => {
     it('throws it as SecretKeyUnreadable("typo")', () => {
       const typo = swapSymbol(RAMP.text, 0, RAMP.text[0] === 'A' ? 'B' : 'A')
       expect(() => secretKeyBytes(typo)).toThrow(SecretKeyUnreadable)
-      expect(() => secretKeyBytes(typo)).toThrow(expect.objectContaining({ problem: 'typo' }))
+      expect(() => secretKeyBytes(typo)).toThrow(
+        expect.objectContaining({ problem: 'typo', name: 'SecretKeyUnreadable', message: 'secret key unreadable: typo' }),
+      )
     })
   })
 

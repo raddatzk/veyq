@@ -8,7 +8,7 @@
 // package: this package depends on `@noble/*` alone, and jspdf/qrcode must not become the shared package's.
 
 import { b64url, fromB64url } from './base64'
-import { readSecretKey } from './secretKey'
+import { formatSecretKey, readSecretKey, secretKeyBytes } from './secretKey'
 
 /** `secretKey` is the Secret Key's printed text form (`secretKey.ts`), the one `formatSecretKey` writes. */
 export type KitData = { email: string; secretKey: string }
@@ -47,13 +47,13 @@ export function parseKit(text: string): KitData | null {
     // A token that decodes to JSON `null` throws on `.v` and lands in the catch like any other unreadable kit.
     const o = JSON.parse(utf8.decode(fromB64url(token))) as Record<string, unknown>
     if (o.v !== VERSION || typeof o.email !== 'string' || o.email === '') return null
-    // Stryker disable next-line ConditionalExpression: equivalent mutant — a non-string `sk` makes `readSecretKey`
+    // Stryker disable next-line ConditionalExpression: equivalent mutant — a non-string `sk` makes `secretKeyBytes`
     // throw into the catch below; the check is here to narrow the type.
     if (typeof o.sk !== 'string') return null
-    const sk = readSecretKey(o.sk)
-    if (!sk.ok) return null
-    sk.key.fill(0)
-    return { email: o.email, secretKey: sk.text }
+    const key = secretKeyBytes(o.sk) // a malformed or mistyped key throws SecretKeyUnreadable into the catch
+    const secretKey = formatSecretKey(key)
+    key.fill(0)
+    return { email: o.email, secretKey }
   } catch {
     return null
   }
