@@ -25,8 +25,8 @@ the recipe:
      containers and network carry the run's project label and are removed by the stage itself; Traefik's log is
      `client-port-traefik.log`.
   1c. **release mirror** — the release check's test double (inbox #464, owner's option (a)): the run's instance is
-     stamped with the release `veyqctl` installs (`VEYQ_VERSION` in the overlay, overriding the image's `-SNAPSHOT`
-     for this container only), and `release_assets.py`'s own `produce` writes four releases into the run's `mirror/`,
+     stamped with the release `veyqctl` installs (`VEYQ_VERSION` in the overlay, set on this container rather than
+     taken from the image's own stamp), and `release_assets.py`'s own `produce` writes four releases into the run's `mirror/`,
      which the overlay's `release-mirror` serves on `admin`: that release, the next minor, the next major (planned)
      and the one after (marked unscheduled) — so the console has a release notice, a dated planned-major notice whose
      mail carries an `.ics`, and an urgent one to show. `stack.json` names them for the suite; nothing else reads them.
@@ -128,8 +128,13 @@ everything the page sealed: a value the browser derived or unsealed and nobody t
 API-level suites, which record what they unseal, cover that half (`run_web_e2e.py`). And the round trip creates one
 tenant, one Memory, one photo and one link; a leak on a path no scenario walks is not seen.
 
+On a green run, `--asset-set-out FILE` writes the hash of the asset set `install` read (`release_assets.py
+--asset-set`): `ci.yml` records it in the leg's result, and lane L1's attestation names it as the input a promotion
+compares (ADR 0091 decision 5).
+
 Usage:
-    python3 scripts/run_stack_e2e.py --app veyq:local --admin veyq-admin:local [--keep] [-- <playwright test args>]
+    python3 scripts/run_stack_e2e.py --app veyq:local --admin veyq-admin:local [--keep] [--asset-set-out FILE] \\
+        [-- <playwright test args>]
 
 Environment (all optional):
     VEYQ_STACK_WAIT_SECS   How long `veyqctl install` waits for a healthy stack (its VEYQ_WAIT_SECS). Default: 300
@@ -1089,6 +1094,9 @@ def main() -> int:
     parser.add_argument("--app", required=True, help="the candidate app image")
     parser.add_argument("--admin", required=True, help="the candidate admin image")
     parser.add_argument("--keep", action="store_true", help="leave the stack running (no teardown)")
+    parser.add_argument("--asset-set-out", type=Path, default=None, metavar="FILE",
+                        help="on a green run, write the hash of the asset set it installed (release_assets.py "
+                             "--asset-set) to FILE — the input lane L1's attestation names (ADR 0091 decision 5)")
     parser.add_argument("selection", nargs=argparse.REMAINDER,
                         help="after `--`: handed to `playwright test` as it is (e.g. `-- --grep @uc.admin`)")
     args = parser.parse_args()
@@ -1165,6 +1173,17 @@ def main() -> int:
     if red:
         print("RED\n  " + "\n  ".join(red))
         return 1
+    if args.asset_set_out is not None and release is not None:
+        import release_assets  # the publish's producer, whose hash the promotion compares (ADR 0091 decision 5)
+
+        try:
+            digest = release_assets.asset_set_digest(release.tag)
+        except release_assets.ReleaseError as error:
+            print(f"RED\n  asset set: {error}")
+            return 1
+        args.asset_set_out.parent.mkdir(parents=True, exist_ok=True)
+        args.asset_set_out.write_text(digest + "\n")
+        print(f"asset set installed: {digest}")
     print("GREEN")
     return 0
 

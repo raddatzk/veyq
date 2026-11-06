@@ -4,8 +4,9 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 /**
- * A release number, `<major>.<minor>` (ADR 0057 §1). Only a published release parses: a snapshot
- * (`<major>.<minor>-SNAPSHOT`) and an unstamped build are on no release line, so they have nothing to compare.
+ * A release number, `<major>.<minor>` (ADR 0057 §1). A snapshot stamped the old way (`<major>.<minor>-SNAPSHOT`) and
+ * an unstamped build do not parse: they are on no release line, so they have nothing to compare. A snapshot stamped
+ * today carries the `<major>.<minor>` of the release it may become (ADR 0091 decision 5) and parses as it.
  */
 data class ReleaseVersion(val major: Int, val minor: Int) : Comparable<ReleaseVersion> {
     override fun compareTo(other: ReleaseVersion): Int = compareValuesBy(this, other, { it.major }, { it.minor })

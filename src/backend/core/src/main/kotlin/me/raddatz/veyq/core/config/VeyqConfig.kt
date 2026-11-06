@@ -99,8 +99,9 @@ interface VeyqConfig {
      */
     interface Release {
         /**
-         * `<major>.<minor>` for a release, `<major>.<minor>-SNAPSHOT` for a snapshot — derived from the tree at
-         * the commit that published this image (`VERSION` holds the major, the minor counts the commits since it
+         * `<major>.<minor>` (a snapshot and its release are one image, ADR 0091 decision 5; images stamped before
+         * that carry `<major>.<minor>-SNAPSHOT` for a snapshot) — derived from the tree at the commit that built
+         * this image (`VERSION` holds the major, the minor counts the commits since it
          * last changed, ADR 0057 §1), bound from the image's `VEYQ_VERSION` in `application.properties`. **Absent** for any build the release pipeline
          * never stamped (a local `docker build`, a `quarkusDev` run), and that absence is reported as itself:
          * a synthesised number is the one an operator would later try to roll back *to*

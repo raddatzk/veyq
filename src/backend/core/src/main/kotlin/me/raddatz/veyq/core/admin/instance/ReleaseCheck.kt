@@ -36,7 +36,9 @@ sealed interface ReleaseCheckRun {
  *
  * **Who checks: a stamped release only.** An unstamped build (no `VEYQ_VERSION`) and a `-SNAPSHOT` are on no release
  * line, so [check] returns before it reads its own setting — every local image, `quarkusDev` run and test lane stays
- * quiet by construction, which ADR 0097's "offline runs" consequence needs, with no switch of its own.
+ * quiet by construction, which ADR 0097's "offline runs" consequence needs, with no switch of its own. A snapshot the
+ * pipeline publishes today is stamped `<major>.<minor>` like the release it may become (ADR 0091 decision 5), so it
+ * checks as that release would; only images stamped before that carry `-SNAPSHOT`.
  */
 @ApplicationScoped
 class ReleaseCheck(

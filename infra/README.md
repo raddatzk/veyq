@@ -193,26 +193,39 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
 For the maintainer; an operator starts at the [Run area](https://veyq.app/run/) of the docs site. The
 release model itself — the version, snapshot and release, the assets, both targets, what is built and what is only
 decided — is [`docs/crosscutting/release-and-deployment.md`](../docs/crosscutting/release-and-deployment.md); this
-section keeps the commands. **Nothing is published by a push**
-([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) §1): a push to `main` or
-`release/**`, and every pull request, runs `.github/workflows/ci.yml` — the one pipeline per commit
-([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)) — as a **dry
-run**: every stage — listed once, in the stage map of
-[How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs) — and,
-beside them, the image builds (app, admin, tools), with no registry login and no push. A publish is started by hand, from `main` or `release/<major>.x`, runs the same stages,
-publishes only when every one is green, and is one of two kinds:
+section keeps the commands.
+
+**Every green push publishes a snapshot** ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+decision 5). A push to `main` or `release/<major>.x` runs `.github/workflows/ci.yml` — the one pipeline per commit,
+every stage listed once in the stage map of
+[How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs) — and when
+every stage is green, its `snapshot` job publishes the three images on exactly the digests lane L1 installed, as
+`<major>.<minor>-SNAPSHOT` and `sha-<commit>`, and the chart as `<major>.<minor>-SNAPSHOT`, signs them, attests each
+lane's result per architecture, and `snapshot-tag` sets the git tag `snapshot-<major>.<minor>` on the commit. A snapshot
+is **written once and never replaced**: a second build of a commit that has one is refused. A pull request
+(Dependabot's included) and a local run (`scripts/run_pipeline.py`) build and test the same and publish nothing. A
+commit whose run was superseded while it waited, or a docs-only tip (which `ci.yml` does not run on), gets its snapshot
+by hand:
 
 ```sh
-gh workflow run ci.yml --ref main                    # a snapshot: <major>.<minor>-SNAPSHOT
-gh workflow run ci.yml --ref main -f release=true    # a release:  <major>.<minor>
+gh workflow run ci.yml --ref main                    # the tip's snapshot, exactly as a push makes it
 ```
 
-- **A snapshot** publishes the three images and the chart as `<major>.<minor>-SNAPSHOT` (and the images as
-  `sha-<commit>`), signed, with no git ref. Dispatching again on the same commit replaces it — it is the one name
-  that moves, and it is never a rollback target.
-- **A release** publishes `<major>.<minor>`, `<major>`, `sha-<commit>`, `latest` from `main`, and the chart, all
-  signed, then creates the git ref `v<major>.<minor>`. A release whose images, chart or ref already exist is
-  **refused** before anything is pushed: release a later commit instead.
+- **A snapshot is signed by `ci.yml`, a release by `release.yml`**, both on `main` or `release/<major>.x`. The two are
+  the same digests, so the identity is what tells them apart: Verify a release and `veyqctl` accept only the release
+  identity. To check a snapshot you try on a throwaway instance, verify it under the snapshot identity:
+
+  ```sh
+  cosign verify ghcr.io/raddatzk/veyq@sha256:<digest> \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+  cosign verify-attestation ghcr.io/raddatzk/veyq@sha256:<digest> --type https://veyq.app/attestations/stack-lane/v1 \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+  ```
+
+- **The image carries `<major>.<minor>`**, the release its commit can become, never `-SNAPSHOT`: a snapshot instance
+  reports that number, and only the release signature says it is a release.
 - **The version is the tree's.** `VERSION` holds the major alone; the minor counts the commits since `VERSION` last
   changed, so `VERSION` is touched only to change the major — any commit touching it restarts the minor at `0`.
   Major `0` is pre-release: it exercises the whole path and promises no upgrade path.
@@ -221,7 +234,15 @@ gh workflow run ci.yml --ref main -f release=true    # a release:  <major>.<mino
   `imagePullSecrets` value, so public is the state it supports.
 - **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
   at the top of `ci.yml`, checked against the published `.sha256sum` and the GitHub release notes.
-- **The first `1.x` release is one commit, then a release dispatch:** `VERSION` set to `1` **and** the `release:`
+
+**A release promotes a snapshot — not built yet.** The owner saves a **draft** release in GitHub's release page on a
+`snapshot-<major>.<minor>` tag, with the notes, then starts `release.yml` (*Run workflow*, on the branch the snapshot
+came from); it verifies the snapshot's signature and attestations, gives the same digests `<major>.<minor>`, `<major>`
+and, from `main`, `latest`, signs them as a release, attaches the asset set and publishes the draft last, as
+`v<major>.<minor>` (ADR 0091 decision 5). Until it is built there is **no way to cut a release**: the release kind left
+`ci.yml` with the snapshot. The procedures below name a release as "promote", which is that step.
+
+- **The first `1.x` release is one commit, then its promotion:** `VERSION` set to `1` **and** the `release:`
   line of `scripts/applied_migrations.sha256` set to the highest migration that release ships, together. From then
   on a released migration is never edited ([src/backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
 
@@ -231,25 +252,23 @@ the same steps on its own date:
 
 1. **The clients that speak the new major are published first,** so the apps in the stores speak it before any server
    does. Until a native client exists this step is empty: the web client and admin-web ship in the server's image.
-2. **The old major's last release, on the commit before the bump:** a release dispatch on `main`.
+2. **The old major's last release, on the commit before the bump:** promote that commit's snapshot from `main`.
 3. **The release branch, cut from that release's tag.** Its own history counts on from it, so its first fix is
    `<old>.<n+1>`. The train ends every branch cut before it, so those get no more releases.
-4. **The bump:** one commit setting `VERSION` to the new major, then its release dispatch. Whatever an operator must act
-   on goes into that release's notes.
+4. **The bump:** one commit setting `VERSION` to the new major, then the promotion of its snapshot. Whatever an
+   operator must act on goes into that release's notes.
 
 ```sh
-gh workflow run ci.yml --ref main -f release=true                       # step 2: v<old>.<n>
 git fetch --tags && git branch release/<old>.x v<old>.<n> && git push origin release/<old>.x  # step 3
 ```
 
 **A fix for the previous major** is one decision 4 keeps inside a major. It never carries a migration. It lands on
-`main` first, then on the branch, and the branch is released **before** the current major's next release, because
-that release is the one the new major is entered from after it:
+`main` first, then on the branch, whose push publishes the fix's snapshot, and the branch is released **before** the
+current major's next release, because that release is the one the new major is entered from after it:
 
 ```sh
-git switch release/<old>.x && git cherry-pick -x <fix-commit-on-main>
-gh workflow run ci.yml --ref release/<old>.x -f release=true            # <old>.<m>: <old> moves, latest does not
-gh workflow run ci.yml --ref main -f release=true                       # then the current major's release
+git switch release/<old>.x && git cherry-pick -x <fix-commit-on-main> && git push   # snapshot-<old>.<m>
+# then promote snapshot-<old>.<m> from release/<old>.x (<old> moves, latest does not), then the current major's release
 ```
 
 The current major's next release then moves the major entry by itself: every release of major N is proved — the
@@ -257,15 +276,14 @@ upgrade proof and the chart upgrade check — from the newest release of major N
 included, beside its default predecessor, its tools image bakes that release as the one its gate admits a new
 major from, and its manifest names it as `majorEntry`, the one `veyqctl` enters the new major from
 (`run_web_e2e.py --upgrade-major-entry`, `chart_upgrade_check.py --upgrade-major-entry`,
-`release_assets.py --major-entry`, `release_assets.produce`: one derivation, ADR 0085 § Consequences). Until that release exists, an instance on
-the fix release cannot enter the new major. Not built is lane L3's archive holding that release (ADR 0096, inbox #461).
+`release_assets.py --major-entry`, `release_assets.produce`: one derivation, ADR 0085 § Consequences). A snapshot
+bakes the entry when it is built, so a release of major N promotes a snapshot built **after** that fix release. Until
+that release exists, an instance on the fix release cannot enter the new major. Not built is lane L3's archive holding
+that release (ADR 0096, inbox #461).
 
-**No dispatch has ever run** — this repository has no remote — so all of the above is a statement about a file,
-held by `scripts/validate_release_identity.py`, not about a run. The first runs are its proof, in this order: a
-push (the dry run is green and nothing lands in GHCR); a snapshot dispatch at `VERSION=0` (the images and the
-chart published and signed, no git tag); a release dispatch (`v0.<n>` exists), then a **second** release dispatch
-on the same commit, which must be red at the refusal; then the `1.x` commit above and its release dispatch. Until
-that refused repeat has run, ADR 0064 says the chart's release is built, its publish unobserved.
+**What a run on GitHub has shown, and what it still must,** is inbox #471: the first snapshot of a push, its
+signatures, attestations and tag, and later the first promotion. Until each has run, the statements above are about a
+file, held by `scripts/validate_release_identity.py`.
 
 ## Expenses' receipts moved to core (once per dev instance)
 

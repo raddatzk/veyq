@@ -10,12 +10,13 @@
   test stages, what each proves, when it runs and its budget — the one stage map,
   [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
-**Built, never run.** Everything below is in the tree unless it stands under [§ Decided, not built](#decided-not-built).
-The repository has no remote, so no workflow has executed and no release exists: `VERSION` is `0`, git holds no
-`v*` tag, and `scripts/applied_migrations.sha256` says `release: none`. A statement about what CI or a publish *does* is
-a statement about [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), held by
-`scripts/validate_release_identity.py`; the only runs are local, through `scripts/run_pipeline.py`, which reads that
-file and runs what this machine can.
+**Built, first run on GitHub.** Everything below is in the tree unless it stands under
+[§ Decided, not built](#decided-not-built). The repository has a remote since 2026-11-05 and `ci.yml` has run there; no
+release exists yet: `VERSION` is `0`, git holds no `v*` tag, and `scripts/applied_migrations.sha256` says
+`release: none`. A statement about what CI or a publish *does* is a statement about
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), held by `scripts/validate_release_identity.py`; what a run
+on GitHub has shown is inbox #471's list, and a local run goes through `scripts/run_pipeline.py`, which reads that file
+and runs what this machine can.
 
 ## The version
 
@@ -41,44 +42,52 @@ together; the image build needs only the version, and lane L1 needs the build. E
 (`timeout-minutes`, held by `scripts/validate_pipeline_shape.py`). **The stages themselves are listed once**, in
 [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
-**A push or a pull request is a dry run.** It runs every stage and builds every image (app, admin, tools; amd64 and
-arm64) and writes to no registry; nothing is published by a push (ADR 0057 § 1).
+**A pull request and a local run publish nothing.** They run every stage and build every image (app, admin, tools;
+amd64 and arm64 — a pull request's lane on amd64 only) and write to no registry and no remote: the `version` job's
+`kind` is `none` for them, and every write of the file is gated on `kind == 'snapshot'`.
 
-## Publishing: a snapshot or a release
+## Publishing: every green push is a snapshot
 
-A publish is a `workflow_dispatch` from `main` or `release/<major>.x`; the `version` job refuses any other branch. The
-run is the whole pipeline once more, and then:
+A push to `main` or `release/<major>.x` publishes its **snapshot** when every stage is green (ADR 0091 decision 5). A
+`workflow_dispatch` on one of those branches does the same by hand, for a commit that has none — a run superseded while
+it waited, a docs-only tip, which `ci.yml` does not run on. A push to any other `release/**` branch is red at the
+`version` job.
 
-1. `build` pushes each image under a staging tag, `build-<sha>-<arch>` — unsigned, carrying no release name.
+1. `build` pushes each image under a staging tag, `build-<sha>-<arch>` — unsigned, carrying no published name.
 2. Lane L1 (`stack`) installs exactly those images, pulled by the digests `build` handed over
-   ([ADR 0090](../decisions/0090-end-to-end-tests-boot-the-release-candidate.md) decision 2).
-3. `publish` runs only when every other job of the run is green (the disabled `upgrade-proof`'s *skipped* tolerated);
-   `validate_release_identity.py` holds its `needs` to every job of the file. It names those same digests:
-   - **A snapshot** (the default): the images as `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, the chart as
-     `<major>.<minor>-SNAPSHOT`, signed; no git ref, no GitHub Release. **A dispatch again on the same commit replaces
-     it** — it is the one name that moves, and never a rollback target.
-   - **A release** (`release: true`): `<major>.<minor>`, `<major>`, `sha-<commit>` and, from `main`, `latest`. A name
-     that already exists is **refused before anything is pushed**. The images and the chart are signed keylessly; then
-     the git ref `v<major>.<minor>` is created; then the release's assets are produced, `manifest.json` and `veyqctl`
-     signed with `cosign sign-blob`, and one `gh release create` uploads them all — last, so a release that has a
-     GitHub Release is a whole one.
-   - `unscheduled_major: true` marks a release as an unscheduled major in its manifest
-     ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)), refused unless it is the first of its major.
-4. **The image carries the version it was built for**: `VEYQ_VERSION` is `<major>.<minor>-SNAPSHOT` in a snapshot's
-   images and `<major>.<minor>` in a release's. A release is built by its own dispatch and tested by that run's lanes;
-   it does not reuse a snapshot's bytes.
+   ([ADR 0090](../decisions/0090-end-to-end-tests-boot-the-release-candidate.md) decision 2), and each green leg records
+   what it ran (`scripts/snapshot.py lane-result`): its digests and the hash of the asset set it installed
+   (`release_assets.py --asset-set`, the manifest's asset map: what a promotion produces again from the same commit).
+3. `snapshot` runs only when every stage is green (the disabled `upgrade-proof`'s *skipped* tolerated);
+   `validate_release_identity.py` holds its `needs` to every stage of the file. It refuses first: a snapshot is
+   **written once per commit and never replaced**, so each image's `<major>.<minor>-SNAPSHOT` and `sha-<commit>` must
+   be free or already name exactly this build (a re-run of a half-done snapshot continues; a second build of the commit,
+   or a version another commit took, is refused; a registry read that fails for any reason but "not found" is refused
+   too). Then it names those digests `<major>.<minor>-SNAPSHOT` and `sha-<commit>` — no `<major>`, no `latest` — packages
+   the chart as `<major>.<minor>-SNAPSHOT` (its `appVersion` is the image tag its values default to), signs the three
+   images and the chart keylessly, and attaches each lane's result as a signed in-toto attestation per architecture
+   (`https://veyq.app/attestations/stack-lane/v1`: lane, architecture, outcome, shards, the digests, and the inputs —
+   the asset set; a predecessor and backups once lanes L2 and L3 exist) to the app and admin images. No GitHub Release.
+4. `snapshot-tag`, a job that holds `contents: write` and nothing else, sets the git tag `snapshot-<major>.<minor>` on
+   the commit, so GitHub's release page offers the snapshots that can be promoted. Never `v…`.
+5. **The image carries `<major>.<minor>`, never `-SNAPSHOT`**: a release is the snapshot's bytes, so the two carry
+   one name, and a snapshot reports the release it may become. Whether a digest *is* a release is the release
+   signature's fact. Images published before this carry `<major>.<minor>-SNAPSHOT`.
 
-**The signing identity** is `.github/workflows/ci.yml` in `raddatzk/veyq` on `refs/heads/main` or
-`refs/heads/release/<major>.x`, with GitHub's OIDC issuer (ADR 0057 § 3); the operator's check is
-[Verify a release](../../site/src/content/docs/run/verify-a-release.md), and `validate_release_identity.py` holds that
-page to the branches the workflow publishes from.
+**Two signing identities**, both GitHub's OIDC issuer, in `raddatzk/veyq`, on `refs/heads/main` or
+`refs/heads/release/<major>.x`: a **snapshot** is signed by `.github/workflows/ci.yml`, a **release** by
+`.github/workflows/release.yml` — the promotion (§ Decided, not built). The operator's check, [Verify a
+release](../../site/src/content/docs/run/verify-a-release.md), and `veyqctl` pin the release identity and reject the
+snapshot's, so a snapshot never verifies as a release; `validate_release_identity.py` holds both to that. The owner and
+repository in those strings come from the chart's `home:`; a move of the repository edits that line, and the guard
+names every line that must follow it.
 
 **What a release consists of:**
 
 | Artifact | Where | Notes |
 |---|---|---|
 | `veyq` (the app, `runtime-jvm`), `veyq-admin` (admin-web on nginx), `veyq-tools` (the backup tool, for the cluster's gate) | `ghcr.io/<owner>/…`, amd64 and arm64 | signed by digest; `veyq-tools` bakes the release a new major is entered from (`release_assets.py --major-entry`) |
-| The Helm chart | `oci://ghcr.io/<owner>/charts/veyq` | `version` = `appVersion` = the publish's version, set at packaging; the tree's `Chart.yaml` carries the placeholder `0.0-dev` |
+| The Helm chart | `oci://ghcr.io/<owner>/charts/veyq` | `version` = `appVersion` = the release's version, set at packaging (a snapshot's chart: `<major>.<minor>-SNAPSHOT`); the tree's `Chart.yaml` carries the placeholder `0.0-dev` |
 | The GitHub Release on `v<major>.<minor>` | the repository's releases | `docker-compose.prod.yml`, `env.example`, every file the compose file reads beside itself (`garage.toml`), `veyqctl`, `instance_backup.py`, `manifest.json` (the three images by `tag@digest`, every asset by its sha256), and the two signature bundles ([ADR 0096](../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md) decision 3) |
 
 The asset set is **derived from the compose file**, never listed (`scripts/release_assets.py`; assertion 4 of
@@ -226,19 +235,21 @@ check is logged and retried with a back-off, and blocks nothing.
 
 ## Decided, not built
 
-- **A green push publishes a snapshot; a release promotes it** ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
-  decision 5; replaces part of ADR 0057 § 1). Every green push to `main` or `release/<major>.x` would publish its
-  images as `<major>.<minor>-SNAPSHOT` on the tested digests, **written once per commit and never replaced**, with each
-  lane's result as a signed attestation naming its inputs. A release would be a dispatch that verifies a snapshot's
-  attestations, runs only the lanes whose inputs moved, and gives the same digests the release names — nothing
-  rebuilt; the asset set produced again and refused if its hash differs from the attested one. The image would then
-  carry `<major>.<minor>`, never `-SNAPSHOT`. Retention: the 20 newest unpromoted snapshots per branch and every
-  promoted one.
+- **A release promotes a snapshot** ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+  decision 5; replaces part of ADR 0057 § 1). The snapshot half is built (§ Publishing). Not built: the promotion —
+  the owner saves a **draft** GitHub Release on a `snapshot-<major>.<minor>` tag, with the notes, and starts
+  `release.yml` (*Run workflow*); it verifies the snapshot's signature and attestations, gives the same digests
+  `<major>.<minor>`, `<major>` and, from `main`, `latest`, the release signature and the git ref `v<major>.<minor>`,
+  packages the chart as `<major>.<minor>`, produces the asset set again from the commit and refuses if its hash differs
+  from the attested one, and publishes the draft last — nothing rebuilt; and the rerun of the lanes whose inputs moved,
+  which no lane can need while L1 is the only one. Until then **there is no way to cut a release**: the release path
+  left `ci.yml` with the snapshot. Retention — the 20 newest unpromoted snapshots per major and every promoted one, a
+  scheduled job deleting the rest with their `snapshot-` tags — is not built either.
 - **Lanes L2 and L3 and the backup archive** (ADR 0091 decisions 3 and 6): the previous release upgraded in place
   with `veyqctl upgrade`, and every archived backup of the major, with its object pool, restored into the candidate.
   When they gate, the jar-level upgrade proof retires (decision 7; replaces ADR 0057 § 7).
-- **Immutable releases and the first publish** (ADR 0096 decision 3): the repository setting and the first dispatch
-  wait on the remote. The staged order of the first runs is in [`infra/README.md`](../../infra/README.md) § Cutting a release.
+- **Immutable releases and the first release** (ADR 0096 decision 3): the repository setting is the owner's, before
+  the first promotion. What the first runs on GitHub must show is inbox #471.
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.

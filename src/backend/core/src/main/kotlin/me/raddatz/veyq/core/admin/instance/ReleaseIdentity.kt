@@ -25,8 +25,10 @@ class ReleaseIdentity(
     config: VeyqConfig,
 ) {
     /**
-     * `<major>.<minor>` for a release, `<major>.<minor>-SNAPSHOT` for a snapshot (the one name that moves, ADR 0057
-     * §1), reported exactly as stamped; `null` for a build that carries no release stamp.
+     * `<major>.<minor>`, the release the image's commit is or can become — a snapshot and its release are one image
+     * (ADR 0091 decision 5), so whether it IS a release is the release signature's fact, not this value's; an image
+     * stamped before that carries `<major>.<minor>-SNAPSHOT` for a snapshot. Reported exactly as stamped; `null` for a
+     * build that carries no release stamp.
      */
     val version: String? = config.release().version().orElse(null)?.trim()?.takeIf { it.isNotEmpty() }
 }

@@ -2671,13 +2671,12 @@ components:
           # inclusion): the object has no other field, so `{}` would read as a broken read, not as "no stamp".
           x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.ALWAYS)'
           description: >
-            The release version the running image was stamped with at publish, and the tag the image carries
-            in the registry (ADR 0057 §1): `<major>.<minor>` for a release, or `<major>.<minor>-SNAPSHOT` for a
-            snapshot. The major is this repository's VERSION file at the commit that published it, the minor the
-            number of commits since VERSION last changed. A release onto an existing tag fails rather than
-            replacing it, which is what makes `<major>.<minor>` a rollback target rather than a label on a moving
-            artifact. A snapshot's name is the one that moves: publishing that commit again replaces it, so it is
-            never a rollback target.
+            The release version the running image was stamped with when it was built (ADR 0057 §1): `<major>.<minor>`,
+            the release that commit is or can become. The major is this repository's VERSION file at that commit, the
+            minor the number of commits since VERSION last changed. Every green commit is published as a snapshot
+            and a release is a snapshot promoted, the same image (ADR 0091 decision 5), so the stamp does not say
+            whether the image IS a release — the release signature does (the Run area's Verify a release). An image
+            built before that carries `<major>.<minor>-SNAPSHOT` for a snapshot, reported as stamped.
 
             `null` when the running build was never published — a locally built image or a `quarkusDev` run.
             That is reported as the absence it is, never as a placeholder.
