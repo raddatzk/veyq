@@ -76,11 +76,39 @@ it waited, a docs-only tip, which `ci.yml` does not run on. A push to any other 
 
 **Two signing identities**, both GitHub's OIDC issuer, in `raddatzk/veyq`, on `refs/heads/main` or
 `refs/heads/release/<major>.x`: a **snapshot** is signed by `.github/workflows/ci.yml`, a **release** by
-`.github/workflows/release.yml` — the promotion (§ Decided, not built). The operator's check, [Verify a
+`.github/workflows/release.yml` — the promotion (below). The operator's check, [Verify a
 release](../../site/src/content/docs/run/verify-a-release.md), and `veyqctl` pin the release identity and reject the
 snapshot's, so a snapshot never verifies as a release; `validate_release_identity.py` holds both to that. The owner and
 repository in those strings come from the chart's `home:`; a move of the repository edits that line, and the guard
 names every line that must follow it.
+
+## Releasing: a snapshot promoted
+
+A release is a snapshot promoted (ADR 0091 decision 5); nothing is built again. The owner saves a **draft** GitHub
+Release on a `snapshot-<major>.<minor>` tag, with the notes, and starts `release.yml` (*Run workflow*) on the branch
+the snapshot came from; the click path is [`infra/README.md`](../../infra/README.md) § Cutting a release. GitHub starts
+no workflow for a draft, which is why the dispatch starts it. Its jobs, each holding only what it writes, in group
+`veyq-release`:
+
+1. `check` (`scripts/promote.py`) refuses unless exactly one draft exists, on a snapshot tag; the run's branch may
+   release that major (`main` its `VERSION`, `release/<major>.x` its own); the tag's commit counts that version and is on
+   the branch; it is newer than every release of its major (so `<major>` and `latest` never move backwards); the
+   snapshot's `sha-<commit>` and `-SNAPSHOT` name one index per image, signed under the snapshot identity; no release
+   name is taken by anything else; every lane attested a pass on every architecture and shard, on exactly the index's
+   builds; the asset set produced again from the commit equals the attested one; and the tools image is stamped
+   `<major>.<minor>` with the major entry the tags give now.
+2. `promote` gives each index `<major>.<minor>` (read back: the tested digest), signs the three with the release
+   identity, packages the chart from the snapshot's commit as `<major>.<minor>` and signs it, and produces the release's
+   files with that commit's producer, checks them against the plan and signs `manifest.json` and `veyqctl`.
+3. `publish` verifies the files as `veyqctl` will, sets the git ref `v<major>.<minor>` on the commit, moves the draft
+   onto it (or, if GitHub refuses, replaces it with a new draft carrying its notes), attaches every file and publishes
+   the draft **last** — `latest` on GitHub from `main` only — then removes the `snapshot-` tag.
+4. `channels` then points `<major>` and, from `main`, `latest` at the release.
+
+A refusal or failure before publication leaves the draft a draft, back on its snapshot tag, with the reason appended to
+its notes by `refused`, which also removes a `v` tag the run had set; a second run accepts the registry names the first
+had already given this snapshot and completes them. `unscheduled_major` marks an unscheduled major in the manifest
+(ADR 0085), refused by the producer unless it is the first release of its major.
 
 **What a release consists of:**
 
@@ -235,16 +263,11 @@ check is logged and retried with a back-off, and blocks nothing.
 
 ## Decided, not built
 
-- **A release promotes a snapshot** ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
-  decision 5; replaces part of ADR 0057 § 1). The snapshot half is built (§ Publishing). Not built: the promotion —
-  the owner saves a **draft** GitHub Release on a `snapshot-<major>.<minor>` tag, with the notes, and starts
-  `release.yml` (*Run workflow*); it verifies the snapshot's signature and attestations, gives the same digests
-  `<major>.<minor>`, `<major>` and, from `main`, `latest`, the release signature and the git ref `v<major>.<minor>`,
-  packages the chart as `<major>.<minor>`, produces the asset set again from the commit and refuses if its hash differs
-  from the attested one, and publishes the draft last — nothing rebuilt; and the rerun of the lanes whose inputs moved,
-  which no lane can need while L1 is the only one. Until then **there is no way to cut a release**: the release path
-  left `ci.yml` with the snapshot. Retention — the 20 newest unpromoted snapshots per major and every promoted one, a
-  scheduled job deleting the rest with their `snapshot-` tags — is not built either.
+- **The rerun of moved lanes, and retention** ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+  decision 5). A promotion compares each lane's recorded inputs with the current ones; while L1 is the only lane none
+  can move, and an input it cannot compare (a predecessor, a backup list) is refused rather than rerun — the rerun comes
+  with lanes L2 and L3. Retention — the 20 newest unpromoted snapshots per major and every promoted one, a scheduled
+  job deleting the rest with their `snapshot-` tags — is not built: until it is, every snapshot stays in GHCR.
 - **Lanes L2 and L3 and the backup archive** (ADR 0091 decisions 3 and 6): the previous release upgraded in place
   with `veyqctl upgrade`, and every archived backup of the major, with its object pool, restored into the candidate.
   When they gate, the jar-level upgrade proof retires (decision 7; replaces ADR 0057 § 7).

@@ -1,9 +1,9 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
 - Status: Accepted
-- Built: partly (not built: decision 3's lanes L2 and L3, decision 5's promotion, its rerun of moved lanes and the
-  retention job, decision 6, decision 7; decision 5's snapshot per green push, its attestations and its `snapshot-` tag
-  are built)
+- Built: partly (not built: decision 3's lanes L2 and L3, decision 5's rerun of moved lanes — a promotion refuses an
+  input it cannot compare instead — and the retention job, decision 6, decision 7; decision 5's snapshot per green
+  push, its attestations, its `snapshot-` tag and the promotion `release.yml` are built, none of them run on GitHub yet)
 - Date: 2026-10-16
 - Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 

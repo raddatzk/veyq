@@ -105,6 +105,11 @@ jobs:
       - name: Snapshot self-test
         run: .venv/bin/python scripts/snapshot_selftest.py
 
+      # The promotion's decisions (scripts/promote.py, run by release.yml): proven on every commit that could change
+      # them, not first on the day of a release.
+      - name: Promotion self-test
+        run: .venv/bin/python scripts/promote_selftest.py
+
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
@@ -560,7 +565,9 @@ jobs:
       # proof and chart check ran from (ADR 0098) — the newest release of the previous major among every tag (ADR 0085
       # decision 10), the ONE derivation `upgrade-proof` and `chart` prove from too, read here and baked in as
       # VEYQ_MAJOR_ENTRY; empty when the previous major has no release. Planned to be replaced by the L2 lane's
-      # attestation (ADR 0091 decision 5, not built).
+      # attestation (ADR 0091 decision 5, not built). PyYAML as exact, hashed wheels only
+      # (scripts/requirements-release.txt): this job pushes images, and code PyPI served unpinned would run beside
+      # that access (validate_release_identity.py assertion 15).
       - name: Find the release a new major is entered from (tools)
         id: major-entry
         if: matrix.image == 'veyq-tools'
@@ -569,7 +576,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m venv "${RUNNER_TEMP}/entry-venv"
-          "${RUNNER_TEMP}/entry-venv/bin/pip" install --quiet pyyaml
+          "${RUNNER_TEMP}/entry-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
           entry="$("${RUNNER_TEMP}/entry-venv/bin/python" scripts/release_assets.py --major-entry "$VERSION")"
           echo "release ${VERSION} enters its major from: ${entry:-no release}"
           echo "value=${entry}" >> "$GITHUB_OUTPUT"
@@ -1275,7 +1282,10 @@ jobs:
     needs:
       - version
       - snapshot
-    if: needs.version.outputs.kind == 'snapshot'
+    # Its own status function and `snapshot`'s result, never GitHub's implicit `success()`: that one looks at the whole
+    # chain of needs, and `snapshot` follows the switched-off `upgrade-proof` (skipped), so on the first real run
+    # (2026-11-06, 42274582708) it skipped this job behind a green `snapshot` (validate_release_identity.py assertion 16).
+    if: ${{ !cancelled() && needs.snapshot.result == 'success' && needs.version.outputs.kind == 'snapshot' }}
     permissions:
       contents: write
     steps:

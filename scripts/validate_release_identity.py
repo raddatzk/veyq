@@ -66,13 +66,42 @@ snapshot happens:
      with that variable set to `scripts/snapshot.py`'s `PREDICATE_TYPE`, after the predicates and after every image
      signature.
  11. **(Retired here.)** A release's one immutable GitHub Release, created last (ADR 0096 decision 3), left this
-     pipeline with the release kind: a release is a promotion of a snapshot in a workflow of its own
-     (ADR 0091 decision 5's promotion, not built yet, which re-homes the assertion there). What stays of it: **the
+     pipeline with the release kind: a release is a promotion of a snapshot in a workflow of its own, and assertion
+     14 holds it there. What stays of it here: **the
      cosign that signs is the line operators verify with** (inbox #474): exactly one `sigstore/cosign-installer` step
      in the file, in the `snapshot` job before every step that runs `cosign`, with `cosign-release` an exact
      `v<major>.<minor>.<patch>` no older than `src/tools/veyqctl.py`'s `COSIGN_MIN_VERSION` — never the installer's
      default, which lags — and no `cosign` line anywhere passes the deprecated flag that chose the bundle format
      (cosign 3 writes the Sigstore bundle by default, and only its `=false` spelling still writes the legacy one).
+ 14. **The promotion** (`.github/workflows/release.yml`, ADR 0091 decision 5): the file the release identity names
+     exists; it is started by `workflow_dispatch` alone, whose one input is the boolean `unscheduled_major` (default
+     false); it runs in concurrency group `veyq-release`, never cancelled, under `permissions: {}`, and its five jobs
+     hold exactly — `check` contents write (draft listing) and packages read, `promote` packages and id-token write,
+     `publish` contents write, `channels` packages write, `refused` contents write; `promote` needs `check`, `publish`
+     both, `channels` runs only once `publish` says published, `refused` never after it. No step builds (a build-push
+     action, `docker build`, `buildx build`, a Gradle or pnpm run); only `publish` and `refused` write to the repository
+     or a GitHub Release; `<major>` and `latest` are named in `channels` alone. `publish` publishes the draft in one
+     step (`draft=false`), after it verifies the files against `veyqctl`'s own identity (`scripts/promote.py
+     release-identity`), sets the git tag, moves the draft and attaches every file — after it only the snapshot's tag
+     and a replaced draft are deleted. `promote` produces the files with the snapshot commit's own producer (the
+     `snapshot` worktree), holds them to the plan (`scripts/promote.py assets`), and only then signs exactly `veyqctl`
+     and the manifest into the producer's reserved bundle names; it packages the chart from the snapshot's commit as
+     `$VERSION` and signs it. Every job that runs cosign installs `ci.yml`'s cosign first, the Helm pin is `ci.yml`'s,
+     the file states no certificate identity of its own, and no other workflow writes a GitHub Release. What
+     `scripts/promote.py` decides — every refusal — is `scripts/promote_selftest.py`'s, which `check` and `ci.yml`'s
+     `guards` run.
+ 15. **A job that can write installs only hashed wheels.** Every `pip install` (also `python -m pip install`) of every
+     `release.yml` job, and of every `ci.yml` job whose permissions hold a `write` (`id-token`, `packages`, `contents`,
+     or `write-all`), carries `--require-hashes`, `--only-binary :all:` and `-r <file>`; each such file exists and every
+     requirement in it is `<name>==<version>` followed by its `--hash=sha256:` values (`scripts/requirements-release.txt`).
+     What PyPI serves unpinned at install time runs with the job's token — in `promote` the release identity's.
+     `ci.yml`'s read-only jobs are out of scope: they reach only their own runner.
+ 16. **No job relies on the implicit `success()` behind a job that can be skipped.** In `ci.yml` and `release.yml`,
+     a job whose needs reach a job with an `if:` (directly, or through the chain) states a status function in its own
+     `if:` (`!cancelled()` or `always()`, never `success()`) and, for every such need, `needs.<job>.result == 'success'`
+     (or a `contains(fromJSON(…), needs.<job>.result)`) as an `&&` term — GitHub's implicit `success()` looks at the
+     whole chain, so a skipped job anywhere upstream skips everything after it. `!cancelled()` is the one negation the
+     gating model of assertion 3 accepts.
   8. **The chart is the snapshot's third artifact** (ADR 0064). The refuse step checks `--image` for every published
      image (the build matrix) AND `--chart charts/<name>` (`Chart.yaml`'s `name`) under the workflow's own registry; the
      step that runs `helm package` sets `--version` and `--app-version` to the tree-derived version's `-SNAPSHOT`
@@ -182,7 +211,17 @@ Assertion 10 came with lane L1's job (cr-stack-e2e phase 4), no incident: assert
 deleting the lane — or renaming its job and dropping it from the publish's `needs:` in the same edit — was green there.
 Its limit is assertion 9's: it reads the file, and proves no run ever waited. Assertion 13 came with the snapshot's
 attestations (cr-release-promotes-a-tested-snapshot phase 1), no incident: an attestation that misses an architecture
-the lane runs would leave that architecture's result unverifiable at the promotion.
+the lane runs would leave that architecture's result unverifiable at the promotion. Assertion 14 came with the
+promotion itself (the same CR, phase 3, 2026-11-06), no incident: it re-homes what assertion 11 held of a release, and
+adds what a workflow that holds a release's write permissions must never do — build, write from the wrong job, move a
+channel before the release exists, or publish before its files are on it. Assertion 15 came with the review of that
+phase (2026-11-06): `release.yml`'s `check` and `promote` and `ci.yml`'s `build` installed PyYAML unpinned from PyPI,
+so whatever PyPI served under that name would have run beside the release identity's OIDC token, the drafts and the
+registry. Its first run against the untouched `build` job was red, as the bite that restores that line shows.
+Assertion 16 came with the first real run of the snapshot (2026-11-06, run 42274582708): every stage green, the snapshot
+published and attested, and `snapshot-tag` skipped. Its `if:` named no status function, so GitHub's implicit
+`success()` saw the switched-off `upgrade-proof` skipped upstream of `snapshot`, and no `snapshot-` tag was set. The
+assertion was written against that form first and was red on it, then the job was fixed.
 
 Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
 The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
@@ -198,8 +237,7 @@ REST docs, "Upload a release asset"), so every `veyqctl install` from GitHub wou
 not have. The producer now names it `env.example` and refuses a recipe file GitHub would rename, and assertion 4 holds
 `veyqctl`'s asset names to what the producer writes. Its two signatures came with inbox #469 (cr-signed-release-manifest):
 the manifest was unsigned, so whoever controls the source could serve a forged manifest with a forged compose file that
-matched it. Its release half left this pipeline with the release kind (ADR 0091 decision 5) and is re-homed in the
-promotion's workflow when it is built.
+matched it. Its release half left this pipeline with the release kind (ADR 0091 decision 5) and is assertion 14 now.
 
 Assertion 11's cosign half came with inbox #474, from a measured gap rather than an incident: the publish installed
 cosign through `sigstore/cosign-installer` v3.9.1, whose default is cosign v2.5.2, while `veyqctl` and the Run page
@@ -243,6 +281,13 @@ cosign it pins by sha256), and a `cosign` fetched another way — a `curl`, anot
 Assertion 13's limits. It reads the workflow, not the registry: that `cosign attest` stored the predicate where a
 promotion finds it is a run's to show. The predicates' own refusals (a missing, extra, failed or inconsistent leg) are
 `scripts/snapshot_selftest.py`'s, which `guards` runs; this assertion holds the arguments the workflow hands them.
+
+Assertion 14's limits. It reads the file's lines and job graph, not GitHub: that a draft can be moved onto another tag,
+that `gh release upload` finds a draft by its tag, that `make_latest` and the immutable-releases setting behave as the
+REST docs say, and that Buildx copies a single index unchanged are the first promotion's to show (inbox #471); the
+workflow reads back what it can (the moved draft's tag, the attached files, every new name's digest) and fails where
+one differs, before publication. A write it does not recognise (another CLI, a `curl` to the API) is not held, and
+the job table is by name: a job renamed is red until this guard learns its permissions.
 
 Assertion 3's gating is read as a conservative model of GitHub's expression language: an `if:` counts as gated
 only if it is a pure `&&` chain with the publishing test as one term, so an equivalent condition
@@ -328,8 +373,8 @@ CHART_DIR = repo_layout.CHART_DIR
 # The operator's verification is a page of the docs site's Run area (ADR 0087), kept `.md` with its commands in
 # plain fenced blocks so this guard can read them; it moved there from infra/README.md, which keeps the dev stack.
 VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
-# The workflow whose keyless signature says "release": the promotion of a snapshot (ADR 0091 decision 5;
-# not built yet). Named once, here; the identity's owner and repository are
+# The workflow whose keyless signature says "release": the promotion of a snapshot (ADR 0091 decision 5; assertion 14
+# holds what it does). Named once, here; the identity's owner and repository are
 # not — they are the chart's `home:` (assertion 7), so a move of the repository changes that one line and this guard
 # names every line that must follow it (`veyqctl`'s constant, the Run page's commands, the chart's image defaults).
 RELEASE_WORKFLOW = ".github/workflows/release.yml"
@@ -915,9 +960,14 @@ if workflow_doc:
         text = str(condition if condition is not None else "").strip()
         if text.startswith("${{") and text.endswith("}}"):
             text = text[3:-2].strip()
-        if not text or "||" in text or re.search(r"!(?!=)", text):
+        if not text or "||" in text:
             return False
-        return any(" ".join(term.split()) == conjunct for term in text.split("&&"))
+        terms = [" ".join(term.split()) for term in text.split("&&")]
+        # `!cancelled()` is the one negation allowed: it lifts GitHub's implicit `success()` (assertion 16) and can
+        # only narrow when the job runs, never let it run without the conjunct.
+        if any(re.search(r"!(?!=)", term) for term in terms if term != "!cancelled()"):
+            return False
+        return conjunct in terms
 
     jobs = workflow_doc.get("jobs") or {}
     publish_job = jobs.get(PUBLISH_JOB) or {}
@@ -950,10 +1000,13 @@ if workflow_doc:
     if tag_job and PUBLISH_JOB not in tag_needs:
         fail(f"the `{SNAPSHOT_TAG_JOB}` job does not need `{PUBLISH_JOB}` — a tag would offer a snapshot that was never "
              f"published for promotion")
+    tag_if = " ".join(str(tag_job.get("if") or "").split())
     if tag_job and (not gated_on(tag_job.get("if"), PUBLISHES)
-                    or re.search(r"\b(?:always|failure|cancelled)\s*\(", str(tag_job.get("if")))):
-        fail(f"the `{SNAPSHOT_TAG_JOB}` job runs when `{PUBLISHES}` is not true, or past a failed `{PUBLISH_JOB}` "
-             f"(if: `{tag_job.get('if')}`)")
+                    or re.search(r"\b(?:always|failure)\s*\(", tag_if)
+                    or f"needs.{PUBLISH_JOB}.result == 'success'" not in tag_if):
+        fail(f"the `{SNAPSHOT_TAG_JOB}` job runs when `{PUBLISHES}` is not true, or does not require "
+             f"`needs.{PUBLISH_JOB}.result == 'success'` (if: `{tag_job.get('if')}`) — a tag would offer a snapshot "
+             f"that was never published")
 
     for job_name, step_id, must_contain, why in (
         (
@@ -1778,6 +1831,312 @@ else:
             f"nothing checks, and the one the workflow carried accepted any workflow on any ref."
         )
 
+# ---- 14. the promotion: one workflow, started by hand, each job holding only what it writes, publishing last ----------
+# ADR 0091 decision 5 (and decision 3 of ADR 0096, which assertion 11 used to hold in `ci.yml`): a release is the
+# snapshot's bytes under the release's names and signature, started from a saved draft and a dispatch (owner
+# 2026-11-06). The file is the release identity (assertion 7), so what it may do is held here, job by job.
+release_summary = ""
+RELEASE_FILE = ROOT / RELEASE_WORKFLOW
+# Each job's permissions, exactly: a job added, or a permission widened, is a decision this guard makes someone take.
+RELEASE_JOBS = {
+    "check": {"contents": "write", "packages": "read"},
+    "promote": {"contents": "read", "packages": "write", "id-token": "write"},
+    "publish": {"contents": "write"},
+    "channels": {"contents": "read", "packages": "write"},
+    "refused": {"contents": "write"},
+}
+BUILD_RUN = re.compile(r"\b(?:docker\s+build|buildx\s+build|gradlew|pnpm\s|npm\s|quarkusBuild)\b")
+PUBLISH_DRAFT = re.compile(r"-F\s+draft=false\b")
+RELEASE_WRITE = re.compile(r"\bgh\s+release\s+(?:create|upload|edit|delete)\b|\bgh\s+api\s+-X\s+(?:PATCH|POST|DELETE)\b[^\n]*releases"
+                           r"|uploads\.github\.com")
+if not RELEASE_FILE.is_file():
+    fail(f"{RELEASE_WORKFLOW} is missing — the release identity (assertion 7) names a workflow that does not exist, so "
+         f"no release can be promoted and none would ever verify")
+else:
+    try:
+        rdoc = yaml.safe_load(RELEASE_FILE.read_text()) or {}
+    except yaml.YAMLError as e:
+        rdoc = {}
+        fail(f"{RELEASE_WORKFLOW} is not readable YAML: {e}")
+    rtext = RELEASE_FILE.read_text()
+    rjobs = rdoc.get("jobs") or {}
+    rtriggers = rdoc.get("on", rdoc.get(True)) or {}
+    if set(rtriggers) != {"workflow_dispatch"}:
+        fail(f"{RELEASE_WORKFLOW} triggers on {sorted(map(str, rtriggers))}, not on `workflow_dispatch` alone — a release "
+             f"is started by its owner (a saved draft, then Run workflow, ADR 0091 decision 5); a push, a pull request, "
+             f"a tag or a schedule would promote what nobody chose")
+    inputs = ((rtriggers.get("workflow_dispatch") or {}) if isinstance(rtriggers.get("workflow_dispatch"), dict)
+              else {}).get("inputs") or {}
+    unscheduled = inputs.get("unscheduled_major") or {}
+    if set(inputs) != {"unscheduled_major"} or unscheduled.get("type") != "boolean" or unscheduled.get("default") is not False:
+        fail(f"{RELEASE_WORKFLOW}'s dispatch takes {sorted(inputs)} — exactly the boolean `unscheduled_major`, default "
+             f"false: the draft names what is released, the dispatch only starts it")
+    concurrency = rdoc.get("concurrency") or {}
+    if concurrency.get("group") != "veyq-release" or concurrency.get("cancel-in-progress") is not False:
+        fail(f"{RELEASE_WORKFLOW}'s concurrency is {concurrency} — group `veyq-release`, never cancelled: two promotions "
+             f"(or a promotion and the snapshot retention) must not interleave, and a cancelled one leaves names half-moved")
+    if rdoc.get("permissions") != {}:
+        fail(f"{RELEASE_WORKFLOW} grants {rdoc.get('permissions')} to every job — `permissions: {{}}`, each job its own")
+    if set(rjobs) != set(RELEASE_JOBS):
+        fail(f"{RELEASE_WORKFLOW} has the jobs {sorted(rjobs)}, this guard holds {sorted(RELEASE_JOBS)} — a job added or "
+             f"renamed is a permission decision; hold it here")
+    for name, want in RELEASE_JOBS.items():
+        got = (rjobs.get(name) or {}).get("permissions")
+        if name in rjobs and got != want:
+            fail(f"{RELEASE_WORKFLOW}: job `{name}` holds {got}, not exactly {want} — each job holds only what it writes "
+                 f"(signing and the registry in `promote`, the GitHub Release in `publish`, the channels after it)")
+
+    def rsteps(job: str) -> list[dict]:
+        return [s for s in ((rjobs.get(job) or {}).get("steps") or []) if isinstance(s, dict)]
+
+    def rneeds(job: str) -> set[str]:
+        raw = (rjobs.get(job) or {}).get("needs") or []
+        return {raw} if isinstance(raw, str) else {str(n) for n in raw}
+
+    for job, needed in (("promote", {"check"}), ("publish", {"check", "promote"}), ("channels", {"check", "publish"}),
+                        ("refused", {"check", "promote", "publish"})):
+        if not needed <= rneeds(job):
+            fail(f"{RELEASE_WORKFLOW}: job `{job}` does not need {sorted(needed - rneeds(job))} — the order is check, "
+                 f"promote, publish, then the channels; `refused` reads all three")
+    channels_if = " ".join(str((rjobs.get("channels") or {}).get("if") or "").split())
+    if "needs.publish.outputs.published == 'true'" not in channels_if or "||" in channels_if:
+        fail(f"{RELEASE_WORKFLOW}: `channels` runs on `{channels_if}` — `<major>` and `latest` move only once the release "
+             f"is published, or they point at a release that does not exist")
+    refused_if = " ".join(str((rjobs.get("refused") or {}).get("if") or "").split())
+    if "needs.publish.outputs.published != 'true'" not in refused_if:
+        fail(f"{RELEASE_WORKFLOW}: `refused` runs on `{refused_if}` — it puts a draft back, so never after publication")
+
+    for job in rjobs:
+        for step in rsteps(job):
+            run = str(step.get("run") or "")
+            uses = str(step.get("uses") or "").split("@", 1)[0]
+            if uses == "docker/build-push-action" or BUILD_RUN.search(run):
+                fail(f"{RELEASE_WORKFLOW}: job `{job}`, step `{step.get('name')}` builds — a release is the snapshot's "
+                     f"bytes, never built again (ADR 0091 decision 5)")
+            if job not in ("publish", "refused") and (RELEASE_WRITE.search(run) or GIT_PUSH.search(run)):
+                fail(f"{RELEASE_WORKFLOW}: job `{job}`, step `{step.get('name')}` writes to the repository or a GitHub "
+                     f"Release — only `publish` (and `refused`, putting a draft back) does")
+            if job != "channels" and re.search(r"\blatest\b|\$\{?MAJOR\b", run):
+                fail(f"{RELEASE_WORKFLOW}: job `{job}`, step `{step.get('name')}` names `latest` or `<major>` — the "
+                     f"channels move in `channels` alone, after publication")
+    if "@refs/heads" in rtext or "@refs/tags" in rtext:
+        fail(f"{RELEASE_WORKFLOW} states a certificate identity of its own — the snapshot identity is "
+             f"scripts/promote.py's, the release identity `veyqctl`'s, each held where it is written")
+    if "scripts/promote.py check" not in "\n".join(str(s.get("run") or "") for s in rsteps("check")):
+        fail(f"{RELEASE_WORKFLOW}: `check` does not run `scripts/promote.py check` — nothing decides the promotion")
+
+    # The publication: one step, after every file is attached and the git tag set; after it only clean-up.
+    publish_steps = rsteps("publish")
+    at = {k: [i for i, s in enumerate(publish_steps) if pattern.search(str(s.get("run") or ""))] for k, pattern in (
+        ("publish", PUBLISH_DRAFT), ("upload", re.compile(r"\bgh\s+release\s+upload\b")),
+        ("verify", re.compile(r"\bcosign\s+verify-blob\b")), ("tag", re.compile(r"refs/tags/v\$\{VERSION\}")),
+        ("move", re.compile(r"tag_name=\"v\$\{VERSION\}\"")))}
+    if len(at["publish"]) != 1:
+        fail(f"{RELEASE_WORKFLOW}: `publish` publishes the draft in {len(at['publish'])} step(s), not one")
+    else:
+        last = at["publish"][0]
+        for key in ("upload", "verify", "tag", "move"):
+            if not at[key] or max(at[key]) > last:
+                fail(f"{RELEASE_WORKFLOW}: `publish` {'never' if not at[key] else 'only after publishing'} "
+                     f"{dict(upload='attaches the files', verify='verifies the files as veyqctl will', tag='sets the git tag', move='moves the draft onto it')[key]} "
+                     f"— an immutable release takes nothing once published (ADR 0096 decision 3), so publication is LAST")
+        for step in publish_steps[last + 1:]:
+            run = str(step.get("run") or "")
+            for line in run.splitlines():
+                if (RELEASE_WRITE.search(line) and "-X DELETE" not in line) or (
+                        GIT_PUSH.search(line) and "--delete \"refs/tags/snapshot-" not in line):
+                    fail(f"{RELEASE_WORKFLOW}: `publish` writes after publishing (`{line.strip()[:80]}`) — only the "
+                         f"snapshot's tag and a replaced draft are removed then")
+    verify_runs = "\n".join(str(s.get("run") or "") for s in publish_steps)
+    if "scripts/promote.py release-identity" not in verify_runs:
+        fail(f"{RELEASE_WORKFLOW}: `publish` does not verify the files against `veyqctl`'s own identity "
+             f"(`scripts/promote.py release-identity`) — a release `veyqctl` refuses could be published")
+
+    # The files: the snapshot commit's producer, held to the plan, then the two reserved bundles — nothing after.
+    files_run = next((str(s.get("run") or "") for s in rsteps("promote") if "release_assets.py" in str(s.get("run"))), "")
+    lines = [line.strip() for line in files_run.replace("\\\n", " ").splitlines()]
+    producer = [i for i, line in enumerate(lines) if "/snapshot/scripts/release_assets.py" in line]
+    checked = [i for i, line in enumerate(lines) if "scripts/promote.py assets" in line]
+    blobs = [(i, line) for i, line in enumerate(lines) if re.search(r"\bcosign\s+sign-blob\b", line)]
+    bundles = sorted(re.search(r"--bundle\s+\"?[^\s\"]*/([^/\s\"]+)\"?", line).group(1) for _, line in blobs
+                     if re.search(r"--bundle\s", line))
+    if not producer:
+        fail(f"{RELEASE_WORKFLOW}: `promote` does not produce the files with the snapshot commit's own "
+             f"`scripts/release_assets.py` (from the `snapshot` worktree) — the files would be this branch's, untested")
+    elif not checked or checked[0] < producer[0]:
+        fail(f"{RELEASE_WORKFLOW}: `promote` does not hold the produced files to the plan (`scripts/promote.py assets`) "
+             f"after producing them — the asset set the lanes installed would go unchecked")
+    elif bundles != sorted([release_assets.VEYQCTL_BUNDLE, release_assets.MANIFEST_BUNDLE]) or any(
+            i < checked[0] for i, _ in blobs) or any(i > max(i2 for i2, _ in blobs) for i in producer + checked):
+        fail(f"{RELEASE_WORKFLOW}: `promote` signs {bundles} — exactly `veyqctl` and the manifest, into the bundle names "
+             f"the producer reserves, after the files are checked and with nothing produced after")
+
+    # The chart, from the snapshot's commit, as the release.
+    chart_run = next((str(s.get("run") or "") for s in rsteps("promote") if "helm package" in str(s.get("run"))), "")
+    if ('/snapshot/infra/kubernetes/charts/' not in chart_run or '--version "$VERSION"' not in chart_run
+            or '--app-version "$VERSION"' not in chart_run or "helm push" not in chart_run):
+        fail(f"{RELEASE_WORKFLOW}: `promote` does not package the chart from the snapshot's commit as `--version` and "
+             f"`--app-version` `$VERSION` and push it (ADR 0064)")
+    if not any(re.search(r"\bcosign\s+sign\s", str(s.get("run") or "")) and "charts/veyq" in str(s.get("env") or {})
+               for s in rsteps("promote")):
+        fail(f"{RELEASE_WORKFLOW}: `promote` does not sign the chart")
+
+    # The pins it shares with `ci.yml`: one cosign, one Helm.
+    ci_installer = [s for job in (workflow_doc.get("jobs") or {}) for s in job_steps(workflow_doc, job)
+                    if str(s.get("uses") or "").startswith(COSIGN_INSTALLER)]
+    ci_cosign = str(((ci_installer[0].get("with") or {}) if ci_installer else {}).get("cosign-release") or "")
+    for job in rjobs:
+        steps = rsteps(job)
+        installs = [i for i, s in enumerate(steps) if str(s.get("uses") or "").startswith(COSIGN_INSTALLER)]
+        runs = [i for i, s in enumerate(steps) if COSIGN_RUN.search(str(s.get("run") or "").replace("\\\n", " "))
+                or "promote.py check" in str(s.get("run") or "")]
+        if runs and (not installs or min(installs) > min(runs)):
+            fail(f"{RELEASE_WORKFLOW}: job `{job}` runs cosign before installing the pinned one")
+        for i in installs:
+            if str((steps[i].get("with") or {}).get("cosign-release")) != ci_cosign:
+                fail(f"{RELEASE_WORKFLOW}: job `{job}` installs cosign {(steps[i].get('with') or {}).get('cosign-release')}, "
+                     f"`ci.yml` signs with {ci_cosign} — one cosign signs veyq (inbox #474)")
+    if (rdoc.get("env") or {}).get("HELM_SHA256") != (workflow_doc.get("env") or {}).get("HELM_SHA256") or \
+            (rdoc.get("env") or {}).get("HELM_VERSION") != (workflow_doc.get("env") or {}).get("HELM_VERSION"):
+        fail(f"{RELEASE_WORKFLOW}'s Helm pin is not `ci.yml`'s — the chart a release packages is the snapshot's Helm's")
+    release_summary = (f"; {RELEASE_WORKFLOW} is started by hand only, in group `veyq-release`, its {len(RELEASE_JOBS)} "
+                       f"jobs each holding only what they write, builds nothing, moves the channels after publishing "
+                       f"and publishes last")
+
+# Only the release identity's file writes a GitHub Release (assertion 7: what it signs is what verifies).
+for other in sorted(WORKFLOW.parent.glob("*.y*ml")):
+    if other.relative_to(ROOT).as_posix() == RELEASE_WORKFLOW:
+        continue
+    for number, line in enumerate(other.read_text().splitlines(), 1):
+        if RELEASE_WRITE.search(line) or GH_RELEASE_CREATE.search(line):
+            fail(f"{other.relative_to(ROOT)}:{number} writes a GitHub Release — only {RELEASE_WORKFLOW}, the release "
+                 f"identity, does")
+
+# ---- 15. a job that can write installs no Python package it has not pinned by hash ---------------------------------
+# Code PyPI serves at install time runs with the job's token: in `release.yml`'s `promote` the release identity's OIDC
+# token, in `check` the drafts, in `ci.yml`'s `build` the registry. So every `pip install` of every `release.yml` job,
+# and of every `ci.yml` job that holds a write permission (`id-token`, `packages`, `contents` …), installs exact
+# versions by hash and wheels only, from a requirements file whose every requirement carries its hashes. A read-only
+# job of `ci.yml` is out of scope: what it could reach is the runner it runs on.
+PIP_INSTALL = re.compile(r"\bpip3?\"?\s+install\b|\bpython3?\s+-m\s+pip\s+install\b")
+HASHED_REQUIREMENT = re.compile(r"^[A-Za-z0-9_.-]+==[0-9][^\s]*(?:\s+--hash=sha256:[0-9a-f]{64})+$")
+pip_summary = ""
+
+
+def can_write(permissions: object) -> bool:
+    if isinstance(permissions, str):
+        return permissions == "write-all"
+    return isinstance(permissions, dict) and any(str(v) == "write" for v in permissions.values())
+
+
+held_installs = 0
+requirement_files: set[str] = set()
+for wf_path, every_job in ((WORKFLOW, False), (ROOT / RELEASE_WORKFLOW, True)):
+    if not wf_path.is_file():
+        continue
+    wf_doc = yaml.safe_load(wf_path.read_text()) or {}
+    default_permissions = wf_doc.get("permissions")
+    for job_name, job in (wf_doc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        permissions = job.get("permissions", default_permissions)
+        if not (every_job or can_write(permissions)):
+            continue
+        for step in job.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            for line in str(step.get("run") or "").replace("\\\n", " ").splitlines():
+                if not PIP_INSTALL.search(line):
+                    continue
+                held_installs += 1
+                files = re.findall(r"(?:^|\s)(?:-r|--requirement)\s+(\S+)", line)
+                if "--require-hashes" not in line or "--only-binary :all:" not in line or not files:
+                    fail(
+                        f"{wf_path.relative_to(ROOT)}: job `{job_name}` (permissions {permissions}) runs "
+                        f"`{line.strip()[:100]}` — a job that can write installs only exact, hashed wheels: "
+                        f"`pip install --require-hashes --only-binary :all: -r <requirements>`, or what PyPI serves at "
+                        f"that moment runs with its token"
+                    )
+                requirement_files.update(files)
+for rel in sorted(requirement_files):
+    path = ROOT / rel
+    if not path.is_file():
+        fail(f"`{rel}`, which a writing job installs from, does not exist")
+        continue
+    requirements = [" ".join(line.split()) for line in path.read_text().replace("\\\n", " ").splitlines()
+                    if line.strip() and not line.lstrip().startswith("#")]
+    if not requirements:
+        fail(f"`{rel}` names no requirement, so the hashed install proves nothing")
+    for requirement in requirements:
+        if not HASHED_REQUIREMENT.match(requirement):
+            fail(f"`{rel}`: `{requirement[:80]}` is not `<name>==<version>` followed by its `--hash=sha256:` lines — "
+                 f"every requirement of a writing job is exact and hashed")
+if held_installs == 0:
+    fail("no `pip install` found in release.yml or in a writing job of ci.yml — assertion 15 checked NOTHING; re-anchor "
+         "it if the jobs no longer install Python packages")
+pip_summary = (f"; every one of the {held_installs} `pip install`(s) of a job that can write takes exact, hashed wheels "
+               f"({', '.join(sorted(requirement_files))})")
+
+# ---- 16. no job relies on the implicit `success()` behind a job that can be skipped --------------------------------
+# GitHub adds `success()` to a job's `if:` unless the condition calls a status function itself, and that `success()`
+# looks at the WHOLE chain of needs: a job skipped anywhere upstream skips everything after it. `snapshot` waits on the
+# switched-off `upgrade-proof` (`if: false`) and survives through `always()`; on the first real run (2026-11-06,
+# 42274582708) `snapshot-tag`, which needs `snapshot` and stated no status function, was skipped — the snapshot got no
+# tag. So in `ci.yml` and `release.yml` a job whose needs reach a job with an `if:` (one that can be skipped) states its
+# own gate: a status function (`always()`, `!cancelled()`) and, for each direct need that can be skipped or follows
+# one, that need's result (`needs.<job>.result == 'success'`, or a `contains(fromJSON(…), needs.<job>.result)`).
+STATUS_FUNCTION = re.compile(r"\b(?:always|cancelled|failure|success)\s*\(\s*\)")
+gates_checked = 0
+for wf_path in (WORKFLOW, ROOT / RELEASE_WORKFLOW):
+    if not wf_path.is_file():
+        continue
+    wf_jobs = (yaml.safe_load(wf_path.read_text()) or {}).get("jobs") or {}
+
+    def direct_needs(name: str) -> list[str]:
+        raw = (wf_jobs.get(name) or {}).get("needs") or []
+        return [raw] if isinstance(raw, str) else [str(n) for n in raw]
+
+    skippable: dict[str, bool] = {}
+
+    def can_be_skipped(name: str, seen: frozenset = frozenset()) -> bool:
+        """A job with an `if:` can be skipped, and so, by GitHub's implicit `success()`, can anything after one."""
+        if name in skippable:
+            return skippable[name]
+        job = wf_jobs.get(name) or {}
+        result = "if" in job or any(can_be_skipped(n, seen | {name}) for n in direct_needs(name) if n not in seen)
+        skippable[name] = result
+        return result
+
+    for name, job in wf_jobs.items():
+        if not isinstance(job, dict):
+            continue
+        risky = [n for n in direct_needs(name) if can_be_skipped(n)]
+        if not risky:
+            continue
+        gates_checked += 1
+        condition = " ".join(str(job.get("if") or "").split())
+        if condition.startswith("${{") and condition.endswith("}}"):
+            condition = condition[3:-2].strip()
+        terms = {t.strip() for t in condition.split("&&")}
+        if not STATUS_FUNCTION.search(condition) or "success()" in condition.replace(" ", ""):
+            fail(
+                f"{wf_path.relative_to(ROOT)}: job `{name}` needs {risky}, which can be skipped (or follow a job that "
+                f"can), and its `if:` (`{condition or 'none'}`) states no status function of its own — GitHub's implicit "
+                f"`success()` then skips it whenever anything upstream was skipped, as it skipped `snapshot-tag` on the "
+                f"first real run. Gate it with `!cancelled()` (or `always()`) and the needs' results."
+            )
+            continue
+        for need in risky:
+            if (f"needs.{need}.result == 'success'" not in terms
+                    and not any(f"needs.{need}.result)" in t and t.startswith("contains(fromJSON(") for t in terms)):
+                fail(
+                    f"{wf_path.relative_to(ROOT)}: job `{name}` lifts the implicit `success()` (`{condition}`) but does "
+                    f"not require `needs.{need}.result == 'success'` as one of its `&&` terms — it would run after a "
+                    f"failed or skipped `{need}`"
+                )
+if gates_checked == 0:
+    fail("no job in ci.yml or release.yml follows a job that can be skipped — assertion 16 checked NOTHING; re-anchor it")
+
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
     fail(
@@ -1804,4 +2163,5 @@ print(
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
+    f"{release_summary}{pip_summary}"
 )
