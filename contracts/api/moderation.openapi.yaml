@@ -123,6 +123,13 @@ paths:
         reporter is mostly a guest with nothing pinned and seals once to this one key. `404 moderation_off` while no
         epoch exists (first-run setup mints epoch 1) — then there is nothing to report to, and the report action is off.
         Unauthenticated; rate-limited per client address.
+
+        **Cross-origin** ([ADR 0121](../../docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
+        decision 3): while `core.public-shares.embeddable` is effective at the instance level it answers any origin, so a
+        guest browsing one of this instance's links from another instance seals its report to this key. A CORS preflight
+        is answered `204`, every answer carries `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy:
+        cross-origin` (`sharing.openapi.yaml` § Cross-origin), never `Access-Control-Allow-Credentials`; every other
+        moderation operation stays same-origin. A preflight is HTTP, not an operation.
       security: []
       responses:
         "200":

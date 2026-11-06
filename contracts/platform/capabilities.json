@@ -80,6 +80,42 @@
       "levels": ["instance", "tenant"],
       "description": "Public share links in the WRITE_ONLY access mode (a drop box: a guest adds and cannot read what others added; what it adds is the application's). Off => createShare, reactivateShare and reissueShare of a WRITE_ONLY link are refused with 422 capability_disabled, and so is creating a drop-box node (Depot's DEPOT_DROPBOX, createNode); the client hides the write-only option and the drop box. Every guest endpoint answers an existing WRITE_ONLY link exactly as an unknown link (404 share_not_found) until the entry is back on (ADR 0088 decision 5); an existing drop box node stays, since creating one is a feature switch that refuses only what is new."
     },
+    "core.public-shares.embeddable": {
+      "title": {
+        "en": "Links shown on other servers",
+        "de": "Links auf anderen Servern anzeigen"
+      },
+      "purpose": {
+        "en": "A member of another veyq server who keeps a link made here can see and use its content inside their own space. Their browser reads the link from this server directly, as when the link is opened, and this server learns nothing more than then.",
+        "de": "Ein Mitglied eines anderen veyq-Servers, das einen hier erstellten Link abgelegt hat, kann dessen Inhalt in seinem eigenen Bereich sehen und nutzen. Sein Browser liest den Link dabei direkt von diesem Server, wie beim Öffnen des Links, und dieser Server erfährt nicht mehr als dann."
+      },
+      "whenOff": {
+        "en": "Members of other servers can open links made here only on the link's own page, in a new tab. The links themselves keep working, and nothing is deleted.",
+        "de": "Mitglieder anderer Server können hier erstellte Links nur noch auf der eigenen Seite des Links öffnen, in einem neuen Tab. Die Links selbst funktionieren weiter, und nichts wird gelöscht."
+      },
+      "serves": ["uc.sharing.share-public-viewer"],
+      "source": "operator-policy",
+      "levels": ["instance", "tenant"],
+      "description": "The public share API answers any origin (ADR 0121 decision 3): while effective for the tenant of a link a guest is served (for a link no guest is served, an unknown one included: at the instance level, so the answer is no existence oracle), every guest operation under /api/shares/{shareId} (the ones that take no bearer) answers a CORS preflight 204 and carries Access-Control-Allow-Origin * and Cross-Origin-Resource-Policy cross-origin, refusals included; /api/setup and /api/moderation/key do at the instance level. Never Access-Control-Allow-Credentials. Off => those answers are same-origin again (a preflight is 405, no CORS header, CORP same-origin); the links keep working for a guest on their own page, nothing is written onto them. It serves uc.sharing.share-public-viewer until uc.sharing.browse-a-received-share-in-place is built, and from then on serves that one as well (a catalog entry serves only a built use-case, scripts/validate_capabilities.py)."
+    },
+    "core.share-embedding": {
+      "title": {
+        "en": "Received links opened in place",
+        "de": "Empfangene Links direkt im Bereich öffnen"
+      },
+      "purpose": {
+        "en": "A link someone sent a member, kept in a space, shows its content right there, from this or any other veyq server. For this, members' browsers may connect to any HTTPS server, not only to this one and the services set here; this server still learns nothing of what they read.",
+        "de": "Ein Link, den jemand einem Mitglied geschickt hat und der in einem Bereich abgelegt ist, zeigt seinen Inhalt direkt dort an, von diesem oder jedem anderen veyq-Server. Dafür dürfen die Browser der Mitglieder jeden HTTPS-Server erreichen, nicht nur diesen und die hier eingestellten Dienste; dieser Server erfährt weiterhin nichts davon, was sie lesen."
+      },
+      "whenOff": {
+        "en": "A kept link opens the link's own page in a new tab again, and members' browsers may reach only this server and the services set here. Nothing kept is deleted.",
+        "de": "Ein abgelegter Link öffnet wieder die eigene Seite des Links in einem neuen Tab, und die Browser der Mitglieder dürfen nur noch diesen Server und die hier eingestellten Dienste erreichen. Nichts Abgelegtes wird gelöscht."
+      },
+      "serves": ["uc.sharing.keep-a-received-link"],
+      "source": "operator-policy",
+      "levels": ["instance", "tenant"],
+      "description": "The CSP widening a bookmark's page needs to browse its share in place (ADR 0121 decision 2): while effective for the tenant whose domain serves the app shell (a host that claims no tenant: the instance level), the served policy's connect-src gains the https: scheme (AppShellRoutes, from a snapshot recomputed after every switch and domain write). Off => the policy is as before and a kept link opens as in ADR 0120. It serves uc.sharing.keep-a-received-link until uc.sharing.browse-a-received-share-in-place is built, and from then on serves that one as well (a catalog entry serves only a built use-case, scripts/validate_capabilities.py)."
+    },
     "core.group-space": {
       "title": {
         "en": "Groups",

@@ -14,6 +14,14 @@ info:
     Field validation and sanitization are declared here and enforced by the generated code via the
     `x-field-extra-annotation` vendor extension (bean-validation constraints + a trimming Jackson
     deserializer), so malformed input is rejected at the boundary (400) before any handler runs.
+
+    **Cross-origin** ([ADR 0121](../../docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
+    decision 3). `GET /api/setup` answers any origin while `core.public-shares.embeddable` is effective at the instance
+    level: another instance's client reads it to decide whether this instance's links can be browsed in place (its
+    major and its capabilities). A CORS preflight is answered `204` and every answer carries
+    `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`, exactly as the guest share
+    operations do (`sharing.openapi.yaml` § Cross-origin); never `Access-Control-Allow-Credentials`. `/api/setup/owner`
+    stays same-origin. A preflight is HTTP, not an operation, so no `options` is declared here.
 tags:
   - name: setup
     description: First-run instance setup and the single-owner lock.

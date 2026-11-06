@@ -78,3 +78,13 @@ falls back. Headless system Chrome, the bookmark pass's recipe. The site pages E
 Every phase's done; `./gradlew check`, `pnpm run check` (after `pnpm run generate:api`), every guard with
 `/usr/bin/python3`; each new refusal bitten (the filter off for one path class, the CSP switch ignored, a base dropped in
 one seam) and red; the P6 pass recorded; nothing merged.
+
+## Decisions taken in implementation
+
+- **P1 - which use-case each new entry `serves` until P5.** `scripts/validate_capabilities.py` lets an entry serve only a
+  *built* use-case (ADR 0032 § 6), and `uc.sharing.browse-a-received-share-in-place` stays `status: planned` until its
+  last criterion has a test (P5). So until then `core.public-shares.embeddable` serves `uc.sharing.share-public-viewer`
+  (what it switches is how that use-case's guest API answers another origin) and `core.share-embedding` serves
+  `uc.sharing.keep-a-received-link` (what it widens is for the kept link). **P5, in the commit that drops `status:
+  planned`, adds `uc.sharing.browse-a-received-share-in-place` to both entries' `serves`.** The web pins neither id yet
+  (`features/platform/capabilities.ts` pins ids it has UI for); P4 adds them with their first reader.

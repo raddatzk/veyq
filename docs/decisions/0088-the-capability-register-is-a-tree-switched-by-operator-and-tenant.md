@@ -133,6 +133,8 @@ core/
   *+  public-shares                → share role READ
     *+  contribute                 → share role READ_WRITE
     *+  drop-box                   → share role WRITE_ONLY
+    *+  embeddable                 → CORS on the guest share API (ADR 0121)
+  *+  share-embedding              → CSP connect-src https: (a kept link browsed in place, ADR 0121)
   *   breached-password            → external (HIBP); CSP connect-src (instance only: checked before sign-in)
   *+  push                [native] → external (APNs/FCM); a content-free wake-up
   ○   kept-shares, search, live-collab, notifications   [later]
@@ -208,6 +210,8 @@ both off a place still works, named by hand. The user's own consent to the two
   `core.public-shares.drop-box`, and so does its share.
 - **The served CSP is the instance level's.** The header is written with no database read, from a snapshot of the
   instance's origins, so a tenant's own switch of an external service acts through its set, not through the policy.
+  One part follows the tenant: `core.share-embedding`'s `https:` is appended for the tenant whose domain serves the
+  page, from a snapshot of the same kind ([ADR 0121](0121-a-received-share-is-browsed-in-place-through-its-own-api.md)).
 - **`download-originals` waits for a measurement.** If guests stream video from the `ORIGINAL`
   ([ADR 0047](0047-inline-video-playback-range-streaming.md)), switching it off also stops video playback for guests
   until a video preview tier exists. This must be measured before the entry is built.
