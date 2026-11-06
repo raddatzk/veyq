@@ -13,6 +13,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { deriveAuthKeypairAsync, unlockKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { secretKeyBytes } from '@veyq/crypto/secretKey'
 import { loginApi, accountPasswordApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { identityPrivate, setUnlocked } from '../../../app/vault'
@@ -47,12 +48,12 @@ export class ChangePasswordRefused extends Error {
  * Afterwards the session is marked `cold`: it has just proven password + Secret Key, whatever wrap originally
  * opened it — the same statement of fact rotation makes for the same reason.
  */
-export async function changePassword(newPassword: string, secretKeyB64: string, currentPassword: string): Promise<void> {
-  const mk = await proveColdCredential(currentPassword, secretKeyB64).catch(staleAsRejected).catch((e: unknown) => {
+export async function changePassword(newPassword: string, secretKeyText: string, currentPassword: string): Promise<void> {
+  const mk = await proveColdCredential(currentPassword, secretKeyText).catch(staleAsRejected).catch((e: unknown) => {
     if (e instanceof ColdCredentialRefused) throw new ChangePasswordRefused(e.reason)
     throw e
   })
-  const secretKey = fromB64std(secretKeyB64.trim())
+  const secretKey = secretKeyBytes(secretKeyText)
 
   try {
     const challenge = await loginApi().requestLoginChallenge({ loginChallengeRequest: { email: account.email } })

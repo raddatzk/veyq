@@ -66,6 +66,7 @@ import { grantContext, grantSignatureVerifies, recipientIdentityDigest, sealGran
 import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { openValue } from '../features/spaces/valueKey'
 
 /** A join record as every member opens it (ADR 0115): its value key from the wrap under the tenant key at the epoch the
@@ -143,7 +144,7 @@ beforeEach(() => {
     identity: NEWCOMER,
     masterKey: BORN_MK.slice(),
     material: { secretKeyProofPublicKey: b64std(PROOF_PUB) },
-    emergencyKit: { secretKey: b64std(SECRET_KEY) },
+    emergencyKit: { secretKey: formatSecretKey(SECRET_KEY) },
   } as unknown as Awaited<ReturnType<typeof buildAccount>>)
   vi.mocked(sealName).mockReturnValue({ sealedName: 'SEALED-NAME', wrappedNameValueKey: 'WRAPPED-NAME-KEY' })
   vi.mocked(sealAvatar).mockReturnValue({ sealedAvatar: 'SEALED-AVATAR', wrappedAvatarValueKey: 'WRAPPED-AVATAR-KEY' })
@@ -305,7 +306,7 @@ describe('TenantJoinView — a member invite to an existing account', () => {
     await typeCode(w, f.code)
     await w.find('input[name="username"]').setValue('bea')
     await w.find('input[type="password"]').setValue('pw')
-    await w.find('input.secret-key').setValue(b64std(SECRET_KEY))
+    await w.find('input.secret-key').setValue(formatSecretKey(SECRET_KEY))
     await w.find('form').trigger('submit')
     await flushPromises()
   }

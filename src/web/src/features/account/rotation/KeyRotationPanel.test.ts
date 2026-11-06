@@ -193,7 +193,7 @@ describe('the gate and the new password (decision 7)', () => {
     const w = await mountPanel()
     expect(w.find('#rotation-new-password-choice').attributes('data-state')).toBe('checked')
     await throughTheCeremony(w)
-    expect(rotateKeys).toHaveBeenCalledWith('pw', 'secret', { secretKeyB64: MINTED, password: NEW_PASSWORD })
+    expect(rotateKeys).toHaveBeenCalledWith('pw', 'secret', { secretKeyText: MINTED, password: NEW_PASSWORD })
   })
 
   it('control: unticked, the password is kept — the publish names none', async () => {
@@ -205,7 +205,7 @@ describe('the gate and the new password (decision 7)', () => {
     await toKit(w)
     await saveKit(w)
     await publish(w)
-    expect(rotateKeys).toHaveBeenCalledWith('pw', 'secret', { secretKeyB64: MINTED, password: undefined })
+    expect(rotateKeys).toHaveBeenCalledWith('pw', 'secret', { secretKeyText: MINTED, password: undefined })
   })
 
   it('the gate proves the current credential before a kit is printed; a refusal stays on the gate', async () => {
@@ -261,7 +261,7 @@ describe('the new Emergency Kit gates the publish (decision 7)', () => {
     await saveKit(w)
     expect(vi.mocked(renderKitPdf).mock.calls[0][0]).toMatchObject({ secretKey: MINTED })
     await publish(w)
-    expect(vi.mocked(rotateKeys).mock.calls[0][2].secretKeyB64).toBe(MINTED)
+    expect(vi.mocked(rotateKeys).mock.calls[0][2].secretKeyText).toBe(MINTED)
   })
 
   it('the result says the old kit no longer works, and the minted key leaves the panel', async () => {

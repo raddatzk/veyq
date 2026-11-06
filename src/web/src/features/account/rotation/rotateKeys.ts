@@ -29,6 +29,7 @@ import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import { deriveAuthKeypairAsync, recoveryKekAsync, unlockKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { formatSecretKey, secretKeyBytes } from '@veyq/crypto/secretKey'
 import { accountApi, accountRotationApi, loginApi, moderationApi } from '../../../api/client'
 import type { ModerationEpochGrant } from '../../../api/generated/moderation'
 import type {
@@ -124,24 +125,24 @@ export type RotationResult = {
   unreadableScopeIds: string[]
 }
 
-/** The credential the rotation installs: the new Secret Key (base64, the Emergency Kit's encoding — the caller has the
+/** The credential the rotation installs: the new Secret Key (its printed text form, as the Emergency Kit carries it — the caller has the
  *  kit saved and confirmed before it calls, decision 7), and a new password when one was chosen (else the password is
  *  kept, and so is the auth key it derives). */
-export type NextCredential = { secretKeyB64: string; password?: string }
+export type NextCredential = { secretKeyText: string; password?: string }
 
-/** A fresh 32-byte Secret Key in the Emergency Kit's encoding — what the ceremony prints into the new kit before it
- *  passes it to {@link rotateKeys} as `next.secretKeyB64`. */
+/** A fresh 32-byte Secret Key in its printed text form (`@veyq/crypto/secretKey`) — what the ceremony prints into the
+ *  new kit before it passes it to {@link rotateKeys} as `next.secretKeyText`. */
 export function mintSecretKey(): string {
   const key = v1.randomBytes(32)
   try {
-    return b64std(key)
+    return formatSecretKey(key)
   } finally {
     key.fill(0)
   }
 }
 
 /**
- * Secure the account. `password` and `secretKeyB64` are the CURRENT credential — the gate (ADR 0060 Decision 2); `next`
+ * Secure the account. `password` and `secretKeyText` are the CURRENT credential — the gate (ADR 0060 Decision 2); `next`
  * is what it installs.
  *
  *  1. **Mint**, all in memory: the cold proof, `MK'`, the new identity, the wraps `PASSWORD` =
@@ -167,8 +168,8 @@ export function mintSecretKey(): string {
  * publish — the floor opens to a Master Key the vault does not hold, and that key opens the served identity — re-opens
  * the vault and finishes; it never mints a second set of keys.
  */
-export async function rotateKeys(password: string, secretKeyB64: string, next: NextCredential): Promise<RotationResult> {
-  const newSecretKey = fromB64std(next.secretKeyB64.trim())
+export async function rotateKeys(password: string, secretKeyText: string, next: NextCredential): Promise<RotationResult> {
+  const newSecretKey = secretKeyBytes(next.secretKeyText)
   if (newSecretKey.length !== 32) {
     newSecretKey.fill(0)
     throw new Error('rotateKeys: the new Secret Key must be 32 bytes')
@@ -177,11 +178,11 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
   // cold credential behind two copies of the same proof is how one of them ends up without it.
   let oldMasterKey: Uint8Array
   try {
-    oldMasterKey = await proveColdCredential(password, secretKeyB64)
+    oldMasterKey = await proveColdCredential(password, secretKeyText)
   } catch (e) {
     newSecretKey.fill(0)
     if (!(e instanceof ColdCredentialRefused)) throw e
-    if (e.reason === 'vaultStale') return resumeCommitted(password, secretKeyB64)
+    if (e.reason === 'vaultStale') return resumeCommitted(password, secretKeyText)
     throw new RotationRefused(e.reason)
   }
   // The identity this rotation replaces, as the server's statements bind it. Read from the vault's own private key,
@@ -192,7 +193,7 @@ export async function rotateKeys(password: string, secretKeyB64: string, next: N
     newSecretKey.fill(0)
     throw new RotationRefused('vaultLocked')
   }
-  const secretKey = fromB64std(secretKeyB64.trim())
+  const secretKey = secretKeyBytes(secretKeyText)
   const identity = v1.generateIdentity()
   const newMasterKey = v1.randomBytes(32)
   const oldProof = v1.deriveSecretKeyProofKeypair(secretKey)
@@ -834,8 +835,8 @@ function opensTo(mk: Uint8Array, wrapped: string, bundle: Uint8Array): boolean {
  * re-opened through the cold unlock with the credential just proven against the account's current floor, and the
  * rotation is finished from there.
  */
-async function resumeCommitted(password: string, secretKeyB64: string): Promise<RotationResult> {
-  await unlockMasterKey(password, secretKeyB64, { noteDevice: false })
+async function resumeCommitted(password: string, secretKeyText: string): Promise<RotationResult> {
+  await unlockMasterKey(password, secretKeyText, { noteDevice: false })
   const published = masterKey()
   if (published) {
     try {

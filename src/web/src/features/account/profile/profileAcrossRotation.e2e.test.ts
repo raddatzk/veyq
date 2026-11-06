@@ -67,7 +67,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('a member\'s name and picture across a te
 
     // --- B secures the account: the tenant moves to epoch 1, and its commit re-wraps every profile field's value key ----
     await become(B)
-    await rotateKeys(B.password, B.built.emergencyKit.secretKey, { secretKeyB64: mintSecretKey() })
+    await rotateKeys(B.password, B.built.emergencyKit.secretKey, { secretKeyText: mintSecretKey() })
     const tenantRow = (await listMyScopes()).find((s) => s.kind === ScopeKind.Tenant)
     expect(tenantRow?.currentEpoch, 'securing the account rotated the tenant').toBe(1)
     const heldB = (await openScope(ScopeKind.Tenant))!

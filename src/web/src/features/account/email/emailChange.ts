@@ -12,6 +12,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { deriveAuthKeypairAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { secretKeyBytes } from '@veyq/crypto/secretKey'
 import { accountEmailChangeApi, loginApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { account } from '../../../app/account'
@@ -31,8 +32,8 @@ export class EmailChangeRefused extends Error {
  * Ask for the change. Resolves when the server answered `202` — which says only that IF the address can be used, a
  * link went to it: the answer is the same for an address another account holds (uc.account.change-email E1).
  */
-export async function requestEmailChange(newEmail: string, password: string, secretKeyB64: string): Promise<void> {
-  const mk = await proveColdCredential(password, secretKeyB64).catch(staleAsRejected).catch((e: unknown) => {
+export async function requestEmailChange(newEmail: string, password: string, secretKeyText: string): Promise<void> {
+  const mk = await proveColdCredential(password, secretKeyText).catch(staleAsRejected).catch((e: unknown) => {
     if (e instanceof ColdCredentialRefused) throw new EmailChangeRefused(e.reason)
     throw e
   })
@@ -40,7 +41,7 @@ export async function requestEmailChange(newEmail: string, password: string, sec
   mk.fill(0)
   // The attestation binds the account; its id comes from the key material every unlock reads.
   if (!account.userId) throw new EmailChangeRefused('vaultLocked')
-  const secretKey = fromB64std(secretKeyB64.trim())
+  const secretKey = secretKeyBytes(secretKeyText)
   const address = newEmail.trim()
 
   try {

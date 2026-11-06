@@ -44,6 +44,7 @@ import { account } from '../app/account'
 import { setupApi } from '../api/client'
 import { PRIVACY_ANCHOR, privacyLink } from '../core/privacy/privacyNotice'
 import { fromB64std } from '@veyq/crypto/base64'
+import { secretKeyBytes } from '@veyq/crypto/secretKey'
 import { identityPublicFromPrivate } from '@veyq/crypto/v1'
 import { HttpStatus, isUnauthorized } from '../shared/httpError'
 
@@ -309,7 +310,7 @@ async function signInAndAccept() {
         return
       }
       const userId = await myUserId()
-      const proofKey = deriveSecretKeyProofKeypair(fromB64std(secretKey.value.trim())).publicKey
+      const proofKey = deriveSecretKeyProofKeypair(secretKeyBytes(secretKey.value)).publicKey
       const identity = ownerOf(userId, priv).identity
       const handle = username.value.trim().toLowerCase()
       await acceptCheckedInvite(openedInvite!, (opened) => {

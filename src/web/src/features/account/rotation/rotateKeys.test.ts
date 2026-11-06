@@ -134,6 +134,7 @@ import { registerMemoriesLifecycle } from '../../../test/memoriesLifecycle'
 import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { formatSecretKey, secretKeyBytes } from '@veyq/crypto/secretKey'
 import { grantContext, grantSignatureVerifies, recipientIdentityDigest, sealGrant } from '../../spaces/grant'
 import { raiseMarks, readMarks } from '../trustMarks'
 import { runScopeRotationWorker } from '../../tasks/scopeRotationWorker'
@@ -155,7 +156,7 @@ beforeAll(() => registerMemoriesLifecycle())
 const PASSWORD = 'correct horse battery staple'
 const EMAIL = 'me@example.test'
 const SECRET_KEY = v1.randomBytes(32)
-const SECRET_KEY_B64 = b64std(SECRET_KEY)
+const SECRET_KEY_TEXT = formatSecretKey(SECRET_KEY)
 /** The account's *current* Master Key — what the stored PASSWORD wrap opens and what the vault is holding. */
 const MK = v1.randomBytes(32)
 /** The account's *current* identity — the one its scope grants are wrapped to, and the vault holds. */
@@ -181,8 +182,8 @@ const INSTANCE_SALT = v1.randomBytes(16)
 const AUTH_SALT = v1.deriveAuthSalt(INSTANCE_SALT, EMAIL)
 const authPubOf = (password: string) => v1.deriveAuthKeypair(password, AUTH_SALT, KDF).publicKey
 /** The new Secret Key the ceremony printed into the new kit before it published. */
-let NEXT: { secretKeyB64: string; password?: string }
-const nextSecretKey = () => fromB64std(NEXT.secretKeyB64)
+let NEXT: { secretKeyText: string; password?: string }
+const nextSecretKey = () => secretKeyBytes(NEXT.secretKeyText)
 
 /** The stored PASSWORD wrap, produced exactly as account birth produces it. */
 function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = PASSWORD): MasterKeyWrap {
@@ -749,7 +750,7 @@ const succeeds = (s: Scope, from: Uint8Array, to: Uint8Array, fromEpoch = 0) => 
     })),
   })
 }
-const rotate =(o: { password?: string; secretKeyB64?: string } = {}) => rotateKeys(o.password ?? PASSWORD, o.secretKeyB64 ?? SECRET_KEY_B64, NEXT)
+const rotate =(o: { password?: string; secretKeyText?: string } = {}) => rotateKeys(o.password ?? PASSWORD, o.secretKeyText ?? SECRET_KEY_TEXT, NEXT)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -766,7 +767,7 @@ beforeEach(() => {
   vault.origin = 'cold'
   setAccount(EMAIL)
   forgetVerifiedPins()
-  NEXT = { secretKeyB64: mintSecretKey() }
+  NEXT = { secretKeyText: mintSecretKey() }
   vi.mocked(resealFavoritesUnderNewMasterKey).mockResolvedValue(undefined)
   vi.mocked(retagItemMarksUnderNewMasterKey).mockResolvedValue(undefined)
 })
@@ -807,7 +808,7 @@ describe('the cold-credential gate (ADR 0060 Decision 2)', () => {
       // legitimate holder out permanently.
       vault.origin = origin
       const srv = fakeServer()
-      await expect(rotate({ secretKeyB64: b64std(v1.randomBytes(32)) })).rejects.toMatchObject({ reason: 'credentialRejected' })
+      await expect(rotate({ secretKeyText: formatSecretKey(v1.randomBytes(32)) })).rejects.toMatchObject({ reason: 'credentialRejected' })
       expect(srv.openRotationStage).not.toHaveBeenCalled()
       expect(srv.rotateAccountKeys).not.toHaveBeenCalled()
     },
@@ -827,7 +828,7 @@ describe('the cold-credential gate (ADR 0060 Decision 2)', () => {
 
   it('refuses a wrong Secret Key even on a cold unlock, and posts nothing', async () => {
     const srv = fakeServer()
-    await expect(rotate({ secretKeyB64: b64std(v1.randomBytes(32)) })).rejects.toMatchObject({ reason: 'credentialRejected' })
+    await expect(rotate({ secretKeyText: formatSecretKey(v1.randomBytes(32)) })).rejects.toMatchObject({ reason: 'credentialRejected' })
     expect(srv.rotateAccountKeys).not.toHaveBeenCalled()
   })
 
@@ -963,8 +964,8 @@ describe('what securing the account posts (decision 7, ADR 0060 Decision 2)', ()
     await rotate()
     const wire = JSON.stringify([srv.publishes, srv.putRotationStageGrants.mock.calls, srv.openRotationStage.mock.calls])
     expect(wire).not.toContain(PASSWORD)
-    expect(wire).not.toContain(SECRET_KEY_B64)
-    expect(wire).not.toContain(NEXT.secretKeyB64)
+    expect(wire).not.toContain(SECRET_KEY_TEXT)
+    expect(wire).not.toContain(NEXT.secretKeyText)
   })
 
   it('every self-grant is signed by the NEW identity and opens under it — the old one signs none (decision 3)', async () => {
@@ -1013,7 +1014,7 @@ describe('securing the account loses no space (inbox #556)', () => {
     srv.reconnect()
     vault.mk = MK.slice()
     vault.priv = oldPriv()
-    const retry = await rotateKeys(PASSWORD, NEXT.secretKeyB64, { secretKeyB64: mintSecretKey() })
+    const retry = await rotateKeys(PASSWORD, NEXT.secretKeyText, { secretKeyText: mintSecretKey() })
     expect(retry.outcome).toBe('resumed')
     expect(srv.rotateAccountKeys).toHaveBeenCalledTimes(1)
     expect(srv.openRotationStage).toHaveBeenCalledTimes(1)
@@ -1764,7 +1765,7 @@ describe('what securing the account leaves behind', () => {
     vault.mk = MK.slice()
     vault.priv = oldPriv()
     vi.mocked(carrySessionVault).mockClear()
-    await expect(rotateKeys(PASSWORD, NEXT.secretKeyB64, { secretKeyB64: mintSecretKey() })).resolves.toMatchObject({ outcome: 'resumed' })
+    await expect(rotateKeys(PASSWORD, NEXT.secretKeyText, { secretKeyText: mintSecretKey() })).resolves.toMatchObject({ outcome: 'resumed' })
     expect(carrySessionVault).toHaveBeenCalledTimes(1)
     expect(b64std(carried[0])).toBe(b64std(vault.mk!))
     expect(b64std(carried[0])).not.toBe(b64std(MK))
@@ -1780,7 +1781,7 @@ describe('what securing the account leaves behind', () => {
 
   it('control: a rotation refused before any write leaves the session vault alone', async () => {
     fakeServer({ scopes: ordinaryScopes() })
-    await expect(rotateKeys(PASSWORD, b64std(v1.randomBytes(32)), { secretKeyB64: mintSecretKey() })).rejects.toBeInstanceOf(RotationRefused)
+    await expect(rotateKeys(PASSWORD, formatSecretKey(v1.randomBytes(32)), { secretKeyText: mintSecretKey() })).rejects.toBeInstanceOf(RotationRefused)
     expect(carrySessionVault).not.toHaveBeenCalled()
     expect(clearSessionVault).not.toHaveBeenCalled()
   })

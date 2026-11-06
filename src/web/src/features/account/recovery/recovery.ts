@@ -12,6 +12,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { deriveAuthKeypairAsync, recoveryKekAsync, unlockKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { secretKeyBytes } from '@veyq/crypto/secretKey'
 import { loginApi, recoveryApi } from '../../../api/client'
 import type { RecoveryMaterial } from '../../../api/generated/auth'
 
@@ -45,8 +46,8 @@ export async function releaseRecoveryMaterial(token: string): Promise<RecoveryMa
  * profile is refused before deriving (`v1.KdfProfileRefused`, ADR 0017 rule 5). A wrong Secret Key fails here, on
  * the device, as an AEAD error — nothing is sent and the token stays live.
  */
-export async function openWithSecretKey(material: RecoveryMaterial, secretKeyB64: string): Promise<OpenedRecovery> {
-  const secretKey = fromB64std(secretKeyB64)
+export async function openWithSecretKey(material: RecoveryMaterial, secretKeyText: string): Promise<OpenedRecovery> {
+  const secretKey = secretKeyBytes(secretKeyText)
   const { params, salt } = v1.decodeKdfParams(fromB64std(material.kdfParams))
   const kek = await recoveryKekAsync(secretKey, salt, params)
   const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(material.wrappedKey))
@@ -69,10 +70,10 @@ export async function completeRecovery(
   token: string,
   material: RecoveryMaterial,
   opened: OpenedRecovery,
-  secretKeyB64: string,
+  secretKeyText: string,
   newPassword: string,
 ): Promise<void> {
-  const secretKey = fromB64std(secretKeyB64)
+  const secretKey = secretKeyBytes(secretKeyText)
 
   // A fresh salt + nonce for the new floor. Re-using the old wrap's salt would leak that the password changed
   // to anyone diffing two dumps, and costs nothing to avoid.

@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
+import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { fakeApi } from '../../test/apiMock'
 import type { AccountApi, MasterKeyWrap } from '../../api/generated/account'
 
@@ -44,28 +45,28 @@ describe('checkColdCredential (a locked vault, too)', () => {
   })
 
   it('passes the account’s own password and Secret Key with the vault locked', async () => {
-    await expect(checkColdCredential(PASSWORD, ` ${b64std(SECRET_KEY)} `)).resolves.toBeUndefined()
+    await expect(checkColdCredential(PASSWORD, ` ${formatSecretKey(SECRET_KEY)} `)).resolves.toBeUndefined()
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
   it('refuses a Secret Key that is not the account’s — and a wrong password with the right key', async () => {
-    const wrongKey = await refusal(checkColdCredential(PASSWORD, b64std(v1.randomBytes(32))))
+    const wrongKey = await refusal(checkColdCredential(PASSWORD, formatSecretKey(v1.randomBytes(32))))
     expect(wrongKey).toBeInstanceOf(ColdCredentialRefused)
     expect((wrongKey as ColdCredentialRefused).reason).toBe('credentialRejected')
-    const wrongPassword = await refusal(checkColdCredential('not the password', b64std(SECRET_KEY)))
+    const wrongPassword = await refusal(checkColdCredential('not the password', formatSecretKey(SECRET_KEY)))
     expect((wrongPassword as ColdCredentialRefused).reason).toBe('credentialRejected')
   }, PRODUCTION_ARGON_TIMEOUT_MS * 2)
 
   it('with an unlocked vault, also requires the floor to open THIS session’s Master Key', async () => {
     held.mk = MK
-    await expect(checkColdCredential(PASSWORD, b64std(SECRET_KEY))).resolves.toBeUndefined()
+    await expect(checkColdCredential(PASSWORD, formatSecretKey(SECRET_KEY))).resolves.toBeUndefined()
     held.mk = v1.randomBytes(32)
-    const stale = await refusal(checkColdCredential(PASSWORD, b64std(SECRET_KEY)))
+    const stale = await refusal(checkColdCredential(PASSWORD, formatSecretKey(SECRET_KEY)))
     expect((stale as ColdCredentialRefused).reason).toBe('credentialRejected')
   }, PRODUCTION_ARGON_TIMEOUT_MS * 2)
 
   it('refuses when there is no floor to check against', async () => {
     getAccountKeyMaterial.mockResolvedValue({ userId: 'u', suiteId: 'v1', wraps: [], wrappedIdentityPrivateKey: 'aWdub3JlZA==' })
-    const none = await refusal(checkColdCredential(PASSWORD, b64std(SECRET_KEY)))
+    const none = await refusal(checkColdCredential(PASSWORD, formatSecretKey(SECRET_KEY)))
     expect((none as ColdCredentialRefused).reason).toBe('noFloorWrap')
   })
 })

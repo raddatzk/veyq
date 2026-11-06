@@ -193,7 +193,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     const newKit = mintSecretKey()
     const restore = abandonAfterThePublish()
     try {
-      await rotateKeys(B.password, B.built.emergencyKit.secretKey, { secretKeyB64: newKit })
+      await rotateKeys(B.password, B.built.emergencyKit.secretKey, { secretKeyText: newKit })
     } finally {
       restore()
     }

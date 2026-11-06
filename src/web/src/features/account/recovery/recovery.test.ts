@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi, beforeEach } from 'vitest'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { formatSecretKey, secretKeyBytes } from '@veyq/crypto/secretKey'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { openWithSecretKey, completeRecovery, requestRecovery } from './recovery'
 import type { LoginApi, RecoveryApi, RecoveryMaterial } from '../../../api/generated/auth'
@@ -80,7 +81,7 @@ describe('recovery — opening the withheld wrap', () => {
     // Open the floor the ordinary way and compare: one Master Key, two locks.
     const floor = built.material.masterKeyWraps.find((w) => w.method === 'PASSWORD')!
     const { params, salt } = v1.decodeKdfParams(fromB64std(floor.kdfParams))
-    const viaPassword = v1.open({ purpose: 'master-key' }, v1.kekPasswordSecret(fromB64std(secretKey), PASSWORD, salt, params), fromB64std(floor.wrappedKey))
+    const viaPassword = v1.open({ purpose: 'master-key' }, v1.kekPasswordSecret(secretKeyBytes(secretKey), PASSWORD, salt, params), fromB64std(floor.wrappedKey))
     expect(b64std(opened.masterKey)).toBe(b64std(viaPassword))
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
@@ -95,7 +96,7 @@ describe('recovery — opening the withheld wrap', () => {
 
   it('a WRONG Secret Key fails on the device, with nothing sent', async () => {
     const { material } = mine
-    const wrong = b64std(v1.randomBytes(32))
+    const wrong = formatSecretKey(v1.randomBytes(32))
     await expect(openWithSecretKey(material, wrong)).rejects.toThrow()
     expect(completePasswordRecovery).not.toHaveBeenCalled()
   }, PRODUCTION_ARGON_TIMEOUT_MS)
@@ -144,7 +145,7 @@ describe('recovery — setting the new password', () => {
 
     const body = completePasswordRecovery.mock.calls[0][0].recoveryCompleteRequest
     const { params, salt } = v1.decodeKdfParams(fromB64std(body.kdfParams))
-    const raw = fromB64std(secretKey)
+    const raw = secretKeyBytes(secretKey)
 
     const reopened = v1.open({ purpose: 'master-key' }, v1.kekPasswordSecret(raw, 'a brand new password', salt, params), fromB64std(body.wrappedKey))
     expect(b64std(reopened)).toBe(b64std(opened.masterKey))

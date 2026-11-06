@@ -19,11 +19,14 @@ vi.mock('../../features/account/emergencyKit/emergencyKit', async (orig) => ({
 
 import SecretKeyField from './SecretKeyField.vue'
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
+import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { importKitFromFile } from '../../features/account/emergencyKit/emergencyKit'
 import { realI18n, t } from '../../test/i18n'
 
-// 32 bytes, as a real kit carries — the parser rejects a Secret Key of any other length.
-const KIT: KitData = { email: 'kevin@example.com', secretKey: 'ERERERERERERERERERERERERERERERERERERERERERE=' }
+// A real Secret Key in its printed form, as a real kit carries — the parser rejects anything that does not read as one.
+const KIT: KitData = { email: 'kevin@example.com', secretKey: formatSecretKey(new Uint8Array(32).fill(0x11)) }
+/** KIT's key with its last check symbol changed: 54 symbols, and a typo. */
+const TYPO = KIT.secretKey.slice(0, -1) + (KIT.secretKey.endsWith('A') ? 'B' : 'A')
 
 const stubs = {
   // `name`, `type`, `id` and the rest fall through as attributes — which is how every host's test finds this
@@ -129,6 +132,24 @@ describe('SecretKeyField (uc.account.unlock § One Secret-Key control)', () => {
     await flushPromises()
     expect(typed.emitted('update:modelValue')).toEqual([[KIT.secretKey]])
     expect(typed.emitted('kit')).toBeUndefined()
+  })
+
+  it('says a full-length key with a typo has one — and says nothing while a key is still being typed', async () => {
+    const w = mountField()
+    await field(w).setValue(TYPO)
+    await w.setProps({ modelValue: TYPO })
+    const shown = messages(w)
+    expect(shown).toHaveLength(1)
+    expect(shown[0].text()).toBe(t('unlock.secretKeyTypo'))
+    expect(shown[0].attributes('data-tone')).toBe('error')
+    // The key stays as typed: the message points at it, it does not rewrite it.
+    expect(w.emitted('update:modelValue')).toEqual([[TYPO]])
+
+    // Controls on the same predicate: the right key in any spelling, and a key not yet complete, show nothing.
+    for (const quiet of [KIT.secretKey, KIT.secretKey.toLowerCase().replace(/-/g, ' '), KIT.secretKey.slice(0, 20), '']) {
+      await w.setProps({ modelValue: quiet })
+      expect(messages(w), quiet).toHaveLength(0)
+    }
   })
 
   it('warns when the kit is for another account — and does not block, clear or refuse it', async () => {

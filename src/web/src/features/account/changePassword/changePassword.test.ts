@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { fakeApi } from '../../../test/apiMock'
 import type { LoginApi } from '../../../api/generated/auth'
 import type { AccountApi, AccountPasswordApi, MasterKeyWrap } from '../../../api/generated/account'
@@ -37,7 +38,7 @@ import { accountApi, accountPasswordApi, loginApi } from '../../../api/client'
 
 const INSTANCE_SALT = new Uint8Array(16).fill(7)
 const SECRET_KEY = v1.randomBytes(32)
-const SECRET_KEY_B64 = b64std(SECRET_KEY)
+const SECRET_KEY_TEXT = formatSecretKey(SECRET_KEY)
 const MK = v1.randomBytes(32)
 const OLD_PASSWORD = 'the old password'
 const NEW_PASSWORD = 'a brand new password'
@@ -78,7 +79,7 @@ describe('changePassword', () => {
   })
 
   it('the deliberate path signs the NEW auth key with the OLD keypair', async () => {
-    await changePassword(NEW_PASSWORD, SECRET_KEY_B64, OLD_PASSWORD)
+    await changePassword(NEW_PASSWORD, SECRET_KEY_TEXT, OLD_PASSWORD)
 
     const body = changePasswordCall.mock.calls[0][0].changePasswordRequest
     expect(body.attestationSignature).toBeTruthy()
@@ -93,7 +94,7 @@ describe('changePassword', () => {
     // The half a phished password cannot produce (ADR 0060 Decision 2). The server's check, run here: the
     // statement rebuilt from what was SENT verifies under the proof key the Secret Key derives — and under no
     // other, so it is the Secret Key's signature and not merely a well-formed one.
-    await changePassword(NEW_PASSWORD, SECRET_KEY_B64, OLD_PASSWORD)
+    await changePassword(NEW_PASSWORD, SECRET_KEY_TEXT, OLD_PASSWORD)
     const body = changePasswordCall.mock.calls[0][0].changePasswordRequest
 
     const oldAuth = v1.deriveAuthKeypair(OLD_PASSWORD, v1.deriveAuthSalt(INSTANCE_SALT, EMAIL), v1.ARGON)
@@ -108,7 +109,7 @@ describe('changePassword', () => {
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
   it('the new floor opens the SAME Master Key under the NEW password only', async () => {
-    await changePassword(NEW_PASSWORD, SECRET_KEY_B64, OLD_PASSWORD)
+    await changePassword(NEW_PASSWORD, SECRET_KEY_TEXT, OLD_PASSWORD)
     const body = changePasswordCall.mock.calls[0][0].changePasswordRequest
 
     const { params, salt } = v1.decodeKdfParams(fromB64std(body.passwordWrap.kdfParams))
@@ -124,7 +125,7 @@ describe('changePassword', () => {
   // open the app. A device-opened session that just supplied password + Secret Key is cold from here on —
   // the same fact rotation records for the same reason.
   it('leaves the session marked cold, whatever opened it', async () => {
-    await changePassword(NEW_PASSWORD, SECRET_KEY_B64, OLD_PASSWORD)
+    await changePassword(NEW_PASSWORD, SECRET_KEY_TEXT, OLD_PASSWORD)
 
     expect(setUnlocked).toHaveBeenCalledOnce()
     const [mk, , origin] = setUnlocked.mock.calls[0]
@@ -133,12 +134,12 @@ describe('changePassword', () => {
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
   it('never sends the password, Secret Key or Master Key onto the wire', async () => {
-    await changePassword(NEW_PASSWORD, SECRET_KEY_B64, OLD_PASSWORD)
+    await changePassword(NEW_PASSWORD, SECRET_KEY_TEXT, OLD_PASSWORD)
     const wire = JSON.stringify(changePasswordCall.mock.calls[0][0].changePasswordRequest)
 
     expect(wire).not.toContain(NEW_PASSWORD)
     expect(wire).not.toContain(OLD_PASSWORD)
-    expect(wire).not.toContain(SECRET_KEY_B64)
+    expect(wire).not.toContain(SECRET_KEY_TEXT)
     expect(wire).not.toContain(b64std(MK))
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
@@ -147,7 +148,7 @@ describe('changePassword', () => {
   // a gate that refuses after writing is not a gate, and here the write would wrap the victim's Master Key
   // under a KEK only the attacker holds.
   it('refuses before any write when the Secret Key does not open the current floor', async () => {
-    const foreignSecretKey = b64std(v1.randomBytes(32))
+    const foreignSecretKey = formatSecretKey(v1.randomBytes(32))
 
     await expect(changePassword(NEW_PASSWORD, foreignSecretKey, OLD_PASSWORD)).rejects.toBeTruthy()
     expect(changePasswordCall).not.toHaveBeenCalled()
@@ -164,13 +165,13 @@ describe('changePassword', () => {
       wrappedIdentityPrivateKey: 'aWdub3JlZA==',
     })
 
-    await expect(changePassword(NEW_PASSWORD, SECRET_KEY_B64, OLD_PASSWORD)).rejects.toBeInstanceOf(ChangePasswordRefused)
+    await expect(changePassword(NEW_PASSWORD, SECRET_KEY_TEXT, OLD_PASSWORD)).rejects.toBeInstanceOf(ChangePasswordRefused)
     expect(changePasswordCall).not.toHaveBeenCalled()
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
   it('refuses before any write when the vault is locked', async () => {
     held.mk = null
-    await expect(changePassword(NEW_PASSWORD, SECRET_KEY_B64, OLD_PASSWORD)).rejects.toBeInstanceOf(ChangePasswordRefused)
+    await expect(changePassword(NEW_PASSWORD, SECRET_KEY_TEXT, OLD_PASSWORD)).rejects.toBeInstanceOf(ChangePasswordRefused)
     expect(changePasswordCall).not.toHaveBeenCalled()
     expect(requestLoginChallenge).not.toHaveBeenCalled()
   })

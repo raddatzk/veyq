@@ -10,6 +10,7 @@ import { resolve } from 'node:path'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { fakeApi } from '../../../test/apiMock'
 import { httpError } from '../../../test/httpError'
 import type { LoginApi } from '../../../api/generated/auth'
@@ -48,7 +49,7 @@ const PASSWORD = vectors.auth.auth_keypair.password_utf8
 // The vector's address, typed the way a person might: the request must normalize it before deriving.
 const NEW_EMAIL_TYPED = `  ${vectors.auth.auth_salt.email_utf8.toUpperCase()} `
 const SECRET_KEY = v1.randomBytes(32)
-const SECRET_KEY_B64 = b64std(SECRET_KEY)
+const SECRET_KEY_TEXT = formatSecretKey(SECRET_KEY)
 const MK = v1.randomBytes(32)
 
 function storedFloor(): MasterKeyWrap {
@@ -85,7 +86,7 @@ describe('requestEmailChange', () => {
   })
 
   it('derives the new auth key under the NEW address’s salt — the contract’s vector key, byte for byte', async () => {
-    await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_B64)
+    await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_TEXT)
     expect(hex(fromB64std(sent().authPublicKey))).toBe(vectors.auth.auth_keypair.public_key)
     expect(sent().newEmail).toBe(NEW_EMAIL_TYPED.trim())
     // The salt is read for the CURRENT address — the challenge is for the account as it signs in today.
@@ -93,7 +94,7 @@ describe('requestEmailChange', () => {
   }, PRODUCTION_ARGON_TIMEOUT_MS * 3)
 
   it('attests with the CURRENT auth key over the account, the new address and the new key', async () => {
-    await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_B64)
+    await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_TEXT)
     const body = sent()
     const stmt = v1.emailChangeAttestationStatement({
       userId: acct.userId,
@@ -106,7 +107,7 @@ describe('requestEmailChange', () => {
   }, PRODUCTION_ARGON_TIMEOUT_MS * 3)
 
   it('proves the Secret Key over the key it replaces, the one it installs and the address', async () => {
-    await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_B64)
+    await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_TEXT)
     const body = sent()
     const stmt = v1.emailChangeProofStatement({
       currentAuthPublicKey,
@@ -119,15 +120,15 @@ describe('requestEmailChange', () => {
   }, PRODUCTION_ARGON_TIMEOUT_MS * 3)
 
   it('never sends the password, the Secret Key or the Master Key', async () => {
-    await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_B64)
+    await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_TEXT)
     const wire = JSON.stringify(sent())
     expect(wire).not.toContain(PASSWORD)
-    expect(wire).not.toContain(SECRET_KEY_B64)
+    expect(wire).not.toContain(SECRET_KEY_TEXT)
     expect(wire).not.toContain(b64std(MK))
   }, PRODUCTION_ARGON_TIMEOUT_MS * 3)
 
   it('refuses before any request when the Secret Key does not open the floor', async () => {
-    const err = await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, b64std(v1.randomBytes(32))).catch((e: unknown) => e)
+    const err = await requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, formatSecretKey(v1.randomBytes(32))).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(EmailChangeRefused)
     expect((err as EmailChangeRefused).reason).toBe('credentialRejected')
     expect(requestEmailChangeCall).not.toHaveBeenCalled()
@@ -135,14 +136,14 @@ describe('requestEmailChange', () => {
 
   it('refuses before any request when the vault is locked', async () => {
     held.mk = null
-    await expect(requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_B64)).rejects.toBeInstanceOf(EmailChangeRefused)
+    await expect(requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_TEXT)).rejects.toBeInstanceOf(EmailChangeRefused)
     expect(requestEmailChangeCall).not.toHaveBeenCalled()
     expect(requestLoginChallenge).not.toHaveBeenCalled()
   })
 
   it('refuses before any request when the account id is not known yet (the attestation binds it)', async () => {
     acct.userId = ''
-    await expect(requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_B64)).rejects.toBeInstanceOf(EmailChangeRefused)
+    await expect(requestEmailChange(NEW_EMAIL_TYPED, PASSWORD, SECRET_KEY_TEXT)).rejects.toBeInstanceOf(EmailChangeRefused)
     expect(requestEmailChangeCall).not.toHaveBeenCalled()
   }, PRODUCTION_ARGON_TIMEOUT_MS * 2)
 })
