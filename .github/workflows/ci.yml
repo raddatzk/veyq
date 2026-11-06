@@ -1282,7 +1282,10 @@ jobs:
     needs:
       - version
       - snapshot
-    if: needs.version.outputs.kind == 'snapshot'
+    # Its own status function and `snapshot`'s result, never GitHub's implicit `success()`: that one looks at the whole
+    # chain of needs, and `snapshot` follows the switched-off `upgrade-proof` (skipped), so on the first real run
+    # (2026-11-06, 42274582708) it skipped this job behind a green `snapshot` (validate_release_identity.py assertion 16).
+    if: ${{ !cancelled() && needs.snapshot.result == 'success' && needs.version.outputs.kind == 'snapshot' }}
     permissions:
       contents: write
     steps:

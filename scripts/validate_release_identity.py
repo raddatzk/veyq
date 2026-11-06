@@ -96,6 +96,12 @@ snapshot happens:
      requirement in it is `<name>==<version>` followed by its `--hash=sha256:` values (`scripts/requirements-release.txt`).
      What PyPI serves unpinned at install time runs with the job's token — in `promote` the release identity's.
      `ci.yml`'s read-only jobs are out of scope: they reach only their own runner.
+ 16. **No job relies on the implicit `success()` behind a job that can be skipped.** In `ci.yml` and `release.yml`,
+     a job whose needs reach a job with an `if:` (directly, or through the chain) states a status function in its own
+     `if:` (`!cancelled()` or `always()`, never `success()`) and, for every such need, `needs.<job>.result == 'success'`
+     (or a `contains(fromJSON(…), needs.<job>.result)`) as an `&&` term — GitHub's implicit `success()` looks at the
+     whole chain, so a skipped job anywhere upstream skips everything after it. `!cancelled()` is the one negation the
+     gating model of assertion 3 accepts.
   8. **The chart is the snapshot's third artifact** (ADR 0064). The refuse step checks `--image` for every published
      image (the build matrix) AND `--chart charts/<name>` (`Chart.yaml`'s `name`) under the workflow's own registry; the
      step that runs `helm package` sets `--version` and `--app-version` to the tree-derived version's `-SNAPSHOT`
@@ -212,6 +218,10 @@ channel before the release exists, or publish before its files are on it. Assert
 phase (2026-11-06): `release.yml`'s `check` and `promote` and `ci.yml`'s `build` installed PyYAML unpinned from PyPI,
 so whatever PyPI served under that name would have run beside the release identity's OIDC token, the drafts and the
 registry. Its first run against the untouched `build` job was red, as the bite that restores that line shows.
+Assertion 16 came with the first real run of the snapshot (2026-11-06, run 42274582708): every stage green, the snapshot
+published and attested, and `snapshot-tag` skipped. Its `if:` named no status function, so GitHub's implicit
+`success()` saw the switched-off `upgrade-proof` skipped upstream of `snapshot`, and no `snapshot-` tag was set. The
+assertion was written against that form first and was red on it, then the job was fixed.
 
 Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
 The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
@@ -950,9 +960,14 @@ if workflow_doc:
         text = str(condition if condition is not None else "").strip()
         if text.startswith("${{") and text.endswith("}}"):
             text = text[3:-2].strip()
-        if not text or "||" in text or re.search(r"!(?!=)", text):
+        if not text or "||" in text:
             return False
-        return any(" ".join(term.split()) == conjunct for term in text.split("&&"))
+        terms = [" ".join(term.split()) for term in text.split("&&")]
+        # `!cancelled()` is the one negation allowed: it lifts GitHub's implicit `success()` (assertion 16) and can
+        # only narrow when the job runs, never let it run without the conjunct.
+        if any(re.search(r"!(?!=)", term) for term in terms if term != "!cancelled()"):
+            return False
+        return conjunct in terms
 
     jobs = workflow_doc.get("jobs") or {}
     publish_job = jobs.get(PUBLISH_JOB) or {}
@@ -985,10 +1000,13 @@ if workflow_doc:
     if tag_job and PUBLISH_JOB not in tag_needs:
         fail(f"the `{SNAPSHOT_TAG_JOB}` job does not need `{PUBLISH_JOB}` — a tag would offer a snapshot that was never "
              f"published for promotion")
+    tag_if = " ".join(str(tag_job.get("if") or "").split())
     if tag_job and (not gated_on(tag_job.get("if"), PUBLISHES)
-                    or re.search(r"\b(?:always|failure|cancelled)\s*\(", str(tag_job.get("if")))):
-        fail(f"the `{SNAPSHOT_TAG_JOB}` job runs when `{PUBLISHES}` is not true, or past a failed `{PUBLISH_JOB}` "
-             f"(if: `{tag_job.get('if')}`)")
+                    or re.search(r"\b(?:always|failure)\s*\(", tag_if)
+                    or f"needs.{PUBLISH_JOB}.result == 'success'" not in tag_if):
+        fail(f"the `{SNAPSHOT_TAG_JOB}` job runs when `{PUBLISHES}` is not true, or does not require "
+             f"`needs.{PUBLISH_JOB}.result == 'success'` (if: `{tag_job.get('if')}`) — a tag would offer a snapshot "
+             f"that was never published")
 
     for job_name, step_id, must_contain, why in (
         (
@@ -2058,6 +2076,66 @@ if held_installs == 0:
          "it if the jobs no longer install Python packages")
 pip_summary = (f"; every one of the {held_installs} `pip install`(s) of a job that can write takes exact, hashed wheels "
                f"({', '.join(sorted(requirement_files))})")
+
+# ---- 16. no job relies on the implicit `success()` behind a job that can be skipped --------------------------------
+# GitHub adds `success()` to a job's `if:` unless the condition calls a status function itself, and that `success()`
+# looks at the WHOLE chain of needs: a job skipped anywhere upstream skips everything after it. `snapshot` waits on the
+# switched-off `upgrade-proof` (`if: false`) and survives through `always()`; on the first real run (2026-11-06,
+# 42274582708) `snapshot-tag`, which needs `snapshot` and stated no status function, was skipped — the snapshot got no
+# tag. So in `ci.yml` and `release.yml` a job whose needs reach a job with an `if:` (one that can be skipped) states its
+# own gate: a status function (`always()`, `!cancelled()`) and, for each direct need that can be skipped or follows
+# one, that need's result (`needs.<job>.result == 'success'`, or a `contains(fromJSON(…), needs.<job>.result)`).
+STATUS_FUNCTION = re.compile(r"\b(?:always|cancelled|failure|success)\s*\(\s*\)")
+gates_checked = 0
+for wf_path in (WORKFLOW, ROOT / RELEASE_WORKFLOW):
+    if not wf_path.is_file():
+        continue
+    wf_jobs = (yaml.safe_load(wf_path.read_text()) or {}).get("jobs") or {}
+
+    def direct_needs(name: str) -> list[str]:
+        raw = (wf_jobs.get(name) or {}).get("needs") or []
+        return [raw] if isinstance(raw, str) else [str(n) for n in raw]
+
+    skippable: dict[str, bool] = {}
+
+    def can_be_skipped(name: str, seen: frozenset = frozenset()) -> bool:
+        """A job with an `if:` can be skipped, and so, by GitHub's implicit `success()`, can anything after one."""
+        if name in skippable:
+            return skippable[name]
+        job = wf_jobs.get(name) or {}
+        result = "if" in job or any(can_be_skipped(n, seen | {name}) for n in direct_needs(name) if n not in seen)
+        skippable[name] = result
+        return result
+
+    for name, job in wf_jobs.items():
+        if not isinstance(job, dict):
+            continue
+        risky = [n for n in direct_needs(name) if can_be_skipped(n)]
+        if not risky:
+            continue
+        gates_checked += 1
+        condition = " ".join(str(job.get("if") or "").split())
+        if condition.startswith("${{") and condition.endswith("}}"):
+            condition = condition[3:-2].strip()
+        terms = {t.strip() for t in condition.split("&&")}
+        if not STATUS_FUNCTION.search(condition) or "success()" in condition.replace(" ", ""):
+            fail(
+                f"{wf_path.relative_to(ROOT)}: job `{name}` needs {risky}, which can be skipped (or follow a job that "
+                f"can), and its `if:` (`{condition or 'none'}`) states no status function of its own — GitHub's implicit "
+                f"`success()` then skips it whenever anything upstream was skipped, as it skipped `snapshot-tag` on the "
+                f"first real run. Gate it with `!cancelled()` (or `always()`) and the needs' results."
+            )
+            continue
+        for need in risky:
+            if (f"needs.{need}.result == 'success'" not in terms
+                    and not any(f"needs.{need}.result)" in t and t.startswith("contains(fromJSON(") for t in terms)):
+                fail(
+                    f"{wf_path.relative_to(ROOT)}: job `{name}` lifts the implicit `success()` (`{condition}`) but does "
+                    f"not require `needs.{need}.result == 'success'` as one of its `&&` terms — it would run after a "
+                    f"failed or skipped `{need}`"
+                )
+if gates_checked == 0:
+    fail("no job in ci.yml or release.yml follows a job that can be skipped — assertion 16 checked NOTHING; re-anchor it")
 
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
