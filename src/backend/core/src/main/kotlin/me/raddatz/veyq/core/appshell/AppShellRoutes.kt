@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.appshell
 import me.raddatz.veyq.core.blobstore.BlobStore
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.http.CrossOrigin
+import me.raddatz.veyq.core.tenant.TenantHostResolver
 import io.quarkus.vertx.http.runtime.RouteConstants
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.http.HttpHeaders
@@ -40,6 +41,8 @@ class AppShellRoutes(
     private val blobStore: BlobStore,
     files: AppShellFiles,
     private val external: ExternalOrigins,
+    private val hostSources: HostConnectSources,
+    private val hosts: TenantHostResolver,
 ) {
     private val policy: String? = files.read(AppShell.POLICY_FILE)?.toString(Charsets.UTF_8)
 
@@ -64,21 +67,24 @@ class AppShellRoutes(
 
     private class Emitted(val storeOrigin: String?, val external: ExternalOriginSet, val csp: String)
 
-    @Volatile
-    private var emitted: Emitted? = null
+    /** One memo per set of host sources ([HostConnectSources]: with `https:` or without), so a page on a tenant that has
+     *  it and one on a tenant that has not do not rebuild each other's policy on every response. */
+    private val emitted = java.util.concurrent.ConcurrentHashMap<List<String>, Emitted>()
 
     /** The policy for right now: the base policy plus the origin of the store the backend signs against and the origins
      *  of the outside services in use ([ExternalOrigins], a snapshot, so no database is read here). [emitted] is a memo
      *  checked against both on every call, so a racing response that stores the policy of an older state costs the
      *  next one a rebuild, never a stale header (inbox #445). This runs on the IO thread, so the store origin is read
      *  from `StoreSettings`' cached resolution, which its `invalidate()` resolves again at once for exactly this reason:
-     *  a database read here is refused and the response never written. */
-    private fun cspNow(): String {
+     *  a database read here is refused and the response never written. [host]'s sources ([HostConnectSources], a
+     *  snapshot too) come last: `https:` while the host's tenant has `core.share-embedding` on (ADR 0121 decision 2). */
+    private fun cspNow(host: String?): String {
         val origin = blobStore.storeOrigin
         val services = external.current()
-        emitted?.let { if (it.storeOrigin == origin && it.external == services) return it.csp }
-        return AppShell.withOrigins(policy!!, listOfNotNull(origin) + services.connect, services.img)
-            .also { emitted = Emitted(origin, services, it) }
+        val extra = hostSources.forHost(host)
+        emitted[extra]?.let { if (it.storeOrigin == origin && it.external == services) return it.csp }
+        return AppShell.withOrigins(policy!!, listOfNotNull(origin) + services.connect + extra, services.img)
+            .also { emitted[extra] = Emitted(origin, services, it) }
     }
 
     private val hsts: String? = config.http().hsts().let { if (it.enabled()) "max-age=${it.maxAge().seconds}" else null }
@@ -86,7 +92,7 @@ class AppShellRoutes(
     fun register(@Observes router: Router) {
         when (shell) {
             AppShell.Absent -> log.info("app shell: no web client on the classpath — serving the API only")
-            is AppShell.Present -> log.infof("app shell: serving the web client; policy %s", cspNow())
+            is AppShell.Present -> log.infof("app shell: serving the web client; policy %s", cspNow(null))
         }
         // First, so the end handler is registered before anything can write a response — including a JAX-RS
         // error, a static file and Vert.x's own 404.
@@ -131,7 +137,7 @@ class AppShellRoutes(
         if (isUnder(path, API_PREFIX)) return
         // Every response the shell serves, sw.js included: a worker takes its policy from its own script's
         // response, so this is what puts the playback Service Worker under the policy.
-        headers.set(CSP_HEADER, cspNow())
+        headers.set(CSP_HEADER, cspNow(hosts.hostOf { ctx.request().getHeader(it) }))
         // Revalidate everything but the content-hashed chunks, whose name changes whenever their bytes do. An
         // `immutable` index.html or sw.js survives an upgrade by a day and asks for chunks the new image lacks.
         if (!path.startsWith(ASSETS_PREFIX)) headers.set(HttpHeaders.CACHE_CONTROL, "no-cache")

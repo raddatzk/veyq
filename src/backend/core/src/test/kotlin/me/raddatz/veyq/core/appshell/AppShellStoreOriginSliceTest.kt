@@ -80,7 +80,8 @@ class AppShellStoreOriginSliceTest {
             .extract().header("Content-Security-Policy")
         assertEquals(
             "default-src 'self'; frame-ancestors 'none'; img-src 'self' https://tile.openstreetmap.org; " +
-                "connect-src 'self' $origin https://nominatim.openstreetmap.org https://api.pwnedpasswords.com https://api.frankfurter.dev; " +
+                // `https:` last: `core.share-embedding` is on by default (ADR 0121, AppShellShareEmbeddingSliceTest).
+                "connect-src 'self' $origin https://nominatim.openstreetmap.org https://api.pwnedpasswords.com https://api.frankfurter.dev https:; " +
                 "form-action 'self'",
             csp,
         )

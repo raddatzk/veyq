@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.platform.capabilities.ShareEmbeddingHosts
 import me.raddatz.veyq.core.quota.StorageUsage
 import me.raddatz.veyq.core.sharing.SharingStore
 import me.raddatz.veyq.core.spaces.scope.MembershipPolicy
@@ -270,6 +271,7 @@ class TenantHandler(
     private val storeSettings: StoreSettings,
     private val moderationSteps: SignInBlocks,
     private val deletionMail: TenantDeletionMail,
+    private val embeddingHosts: ShareEmbeddingHosts,
     config: VeyqConfig,
 ) {
     private val inviteTtl: Duration = config.tenant().invite().ttl()
@@ -820,7 +822,13 @@ class TenantHandler(
      * catches it. `scripts/validate_tenant_ingress_triggers.py` is what does, by deriving the routability-
      * changing `TenantStore` methods from the store itself and requiring each caller here to reach this.
      */
-    private fun reproject() = ingress.regenerate()
+    /** After every tenant write that changes which domain claims which tenant: the ingress projection, and the app shell's
+     *  per-domain `https:` snapshot (`ShareEmbeddingHosts`), which a tenant moved to a domain it does not know would
+     *  otherwise widen past that tenant's own switch. */
+    private fun reproject() {
+        ingress.regenerate()
+        embeddingHosts.refresh()
+    }
 
     /** Supersede + mint a bootstrap invite (resend/reassign), returning the payload to send **after** commit. */
     private fun mintToSend(tenantId: String, ownerEmail: String, domain: String): MintResult<InviteOutcome> {

@@ -20,6 +20,13 @@ acceptanceCriteria:
   # P3 (backend; the dev policy in web)
   - id: csp-widened-only-while-on
     text: The app shell's connect-src gains the https scheme exactly while core.share-embedding is effective for the tenant; switched off by the operator or the tenant, the policy is as before.
+    coverage:
+      backend:
+        integration:
+          - AppShellShareEmbeddingSliceTest.onByDefaultOnATenantsDomainAndOnAHostThatClaimsNone
+          - AppShellShareEmbeddingSliceTest.offByTheServerOwnerTakesItFromEveryHost
+          - AppShellShareEmbeddingSliceTest.offByATenantOwnerTakesItFromThatTenantsDomainAlone
+          - AppShellShareEmbeddingSliceTest.aTenantThatSwitchedItOffKeepsItOffOnTheDomainItMovedTo
   # P4 (the check), P5 (the fallback line)
   - id: embeds-only-what-says-it-may
     text: A bookmark embeds only where the share's instance serves the same major, core.public-shares and core.public-shares.embeddable; anything else falls back to opening the link, with its reason.

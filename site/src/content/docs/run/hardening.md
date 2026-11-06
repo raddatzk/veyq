@@ -8,6 +8,7 @@ sources:
   - docs/decisions/0065-admin-ui-cli-separate-service.md
   - docs/decisions/0050-operator-config-secret-encryption.md
   - docs/crosscutting/cc.security.csp.md
+  - docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md
   - docs/crosscutting/cc.security.rate-limit.md
   - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
 ---
@@ -96,7 +97,13 @@ It defends a leaked database backup, not a compromised host. So:
   connections only to the instance, its store and the outside services you configured (the breached-password check,
   the map tiles, the place-name lookup and the exchange rates, [External services](/run/capabilities/#external-services)); a service
   without an address, or switched off, is not allowed at all
-  ([cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md)). It also
+  ([cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md)). **One
+  widening, on by default:** while **Received links opened in place** (`core.share-embedding`) is on, the browser may
+  connect to any `https` server, so a link kept in a space can show its share from another veyq instance; that gives up
+  the policy's limit on where an injected script could send what it reads. Switch it off in
+  [Capabilities](/run/capabilities/) (a tenant owner can for their tenant) to have the backstop back; kept links then open
+  in a new tab
+  ([ADR 0121](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)). It also
   enforces Trusted Types: a browser that supports them refuses any markup or script address the web client did not
   make through its own sanitizer or its short list of library literals
   ([ADR 0117](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0117-the-web-client-enforces-trusted-types.md)).
@@ -104,7 +111,8 @@ It defends a leaked database backup, not a compromised host. So:
 - **The other security headers are built in too**, on the application and the admin console alike: no
   content-type sniffing, a page keeps no handle on the page that opened it nor that page on it
   (`Cross-Origin-Opener-Policy`), no other site may embed or read a response of the instance
-  (`Cross-Origin-Resource-Policy`), and every browser feature the client does not use — the position and the
+  (`Cross-Origin-Resource-Policy`) — except a link's guest operations, the setup read and the moderation key, which any
+  site may read while **Links shown on other servers** is on, with no cookie and no credentials ever accepted — and every browser feature the client does not use — the position and the
   microphone among them — is switched off (`Permissions-Policy`). There is nothing to set; a proxy of yours that
   rewrites or strips response headers must leave them as they are.
 - **Test certificates against a staging directory** (`VEYQ_ACME_CASERVER` / `gateway.tls.acme.server`), and switch

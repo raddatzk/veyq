@@ -104,3 +104,11 @@ one seam) and red; the P6 pass recorded; nothing merged.
   bounds how long a method stays offered.
 - **P2 - residuals named in ADR 0121:** a Vert.x-level answer before JAX-RS (the body-limit `413`) carries no CORS header;
   a preflight is not rate-limited and costs the gate's reads.
+- **P3 - which tenant a page's policy follows.** The tenant whose domain serves the page (`TenantHostResolver.hostOf`);
+  a host that claims no tenant follows the instance level. The header is written on the event loop, so the answer is a
+  per-domain snapshot (`ShareEmbeddingHosts`, behind the kernel seam `HostConnectSources`) refreshed after the Server
+  Owner's and a tenant owner's switch write and after every `TenantHandler` write that reprojects domains. A stale
+  snapshot is at most as wide as the tenant was; the domain move is the one write that could widen, so it refreshes.
+  ADR 0088's "the served CSP is the instance level's" gains this one tenant-dependent source.
+- **P3 - dev policy.** The Vite policy serves as if the switch were on: `https:` and `http://*.localhost:*`;
+  `verify:csp` refuses a scheme or wildcard in the built `connect-src`.

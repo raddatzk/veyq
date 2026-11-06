@@ -19,6 +19,7 @@ import me.raddatz.veyq.core.platform.capabilities.accepts
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.platform.capabilities.CapabilityTexts
+import me.raddatz.veyq.core.platform.capabilities.ShareEmbeddingHosts
 import me.raddatz.veyq.core.platform.capabilities.StoredTenantCapabilitySwitches
 import me.raddatz.veyq.core.platform.capabilities.TenantCapabilityState
 import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchStore
@@ -80,6 +81,7 @@ class TenantCapabilitySwitchHandler(
     private val registry: CapabilityRegistry,
     private val switchStore: TenantCapabilitySwitchStore,
     private val switches: StoredTenantCapabilitySwitches,
+    private val embeddingHosts: ShareEmbeddingHosts,
     private val requirementStore: CapabilityRequirementStore,
     private val requirementValues: StoredCapabilityRequirementValues,
     private val services: ExternalServiceAddresses,
@@ -115,6 +117,7 @@ class TenantCapabilitySwitchHandler(
         if (capabilityId !in CapabilityIds.TENANT_SWITCHABLE) return TenantCapabilitySetOutcome.NoSuchEntry
         QuarkusTransaction.requiringNew().run { switchStore.set(tenantId, capabilityId, off) }
         switches.invalidate()
+        embeddingHosts.refresh() // core.share-embedding's `https:` follows a tenant's switch (ADR 0121 decision 2)
         return TenantCapabilitySetOutcome.Stored(registry.tenantRegister(tenantId).single { it.id == capabilityId }.view(tenantId))
     }
 

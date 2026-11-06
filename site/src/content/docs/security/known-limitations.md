@@ -11,6 +11,8 @@ sources:
   - docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md
   - docs/features/sharing/enablers/en.sharing.public-link.md
   - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
+  - docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md
+  - docs/crosscutting/cc.security.csp.md
 ---
 
 This page collects what veyq does **not** protect against today, in one place. Each entry says why it remains, where
@@ -436,6 +438,23 @@ in its concept doc.
 **Decided in:** [security-model § Applications are compiled in](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#applications-are-compiled-in--never-loaded).
 
 **Closed by:** per application, a sequence number or hash chain in each entry's associated data.
+
+## Browsing a received link in place lets the page reach any HTTPS server
+
+The web client's Content Security Policy normally limits where the page may connect: the instance, its store and the
+outside services the Server Owner set. That is the backstop against injected code sending keys or plaintext elsewhere.
+While **Received links opened in place** (`core.share-embedding`, on by default) is on for a tenant, the page served on
+that tenant's domain may connect to **any `https` origin**, because a kept link's share lives on whichever veyq
+instance made it, and a list of those instances would tell this server which links its members keep. Script still
+runs only from the instance itself, inline script and `eval` stay refused, and Trusted Types still refuse markup the
+client did not sanitize; what is given up is the last line behind those, should one of them fail.
+
+**Decided in:** [ADR 0121](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
+decision 2, [cc.security.csp](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.csp.md).
+
+**Closed by:** switching the entry off, for the instance or for one tenant; kept links then open on their own page.
+A list of partner instances the operator keeps would close it while still embedding those instances; it was not
+chosen.
 
 ## Rate limiting is per instance
 
