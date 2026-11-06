@@ -167,3 +167,26 @@ one seam) and red; the P6 pass recorded; nothing merged.
 - **P5 - known limits, for P6 to look at.** The embedded node's own header is core's (a second `h1` on the page, under the
   bookmark's); the embed's stored view mode and tab are the member's account preferences (the share page's are the
   guest's); the guest uploader's statement of reasons on a blocked placeholder is shown on the share's own page only.
+
+## P6 - the live two-origin pass (2026-11-06)
+
+Run headless in system Chrome against one quarkusDev backend serving two tenants on two hosts (`veyq.localhost:8091` as the
+member's, `other.localhost:8091` as the share's), own database, CDP network capture. **Passed:** the embed in place with the
+stored password (no form), every call to the share's origin answered `Access-Control-Allow-Origin: *`, `CORP cross-origin`,
+no credentials sent and none allowed, preflights `204` with `Max-Age: 600`, no request of this origin carrying the share id;
+navigation inside the share with the URL naming the bookmark only; the naming gate, a guest folder and an upload (the PUT
+to the share's store) seen by the share's member as the guest's; a move inside the share; a guest report `201` at the
+share's instance; "Open on its own page" in a new tab (no opener, no referrer); `core.public-shares.embeddable` off for the
+share's tenant → the fallback line and the link, on again → the embed; `core.share-embedding` off here → ADR 0120's page and
+row, no request to the other origin. A curator's `DELETE` preflight offers `GET` only; a member path's preflight is `405`.
+
+**Found and fixed:** Vite's default dev CORS answered a `*.localhost` preflight itself and echoed the origin on proxied
+answers, so a switched-off `.embeddable` still embedded in dev; `src/web/vite.config.ts` sets `server.cors: false`, and the
+switch was proved under it. **Left as it is:** an embed whose resolve is blocked mounts the unavailable state's TCO removal
+notice once more (`OrderNotice`, one blocked request, harmless); the bookmark page carries two `h1`s; the share's member
+saw the guest's folder after a reload only (a share dialog was open on that page; not investigated).
+
+**Not proven live:** the backend-served per-tenant CSP losing and gaining `https:` (quarkusDev serves no shell; P3's
+`AppShellShareEmbeddingSliceTest` is the proof); a report sealed to a *distinct* instance's moderation key (one backend,
+one key); browsers other than Chromium. The user-facing word is "server", not "instance" (owner 2026-11-06), in the
+bookmark's and the embed's texts.
