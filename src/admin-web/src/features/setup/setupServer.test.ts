@@ -10,6 +10,7 @@ import type { SetupApi, SetupStatus } from '../../api/generated'
 import { fakeApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
 import { TEST_ARGON, PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
+import { readSecretKey } from '@veyq/crypto/secretKey'
 
 // Standard base64 (padded or not) — the encoding the operator-blind setup contract pins for its wire fields
 // (`[A-Za-z0-9+/]*={0,2}`). A base64url value (with `-`/`_`) would be rejected by the backend at the boundary.
@@ -53,7 +54,10 @@ describe('setupServer — Model B request (uc.admin.setup-server)', () => {
       expect(wrap.wrappedKey).toMatch(STD_B64)
       expect(wrap.kdfParams).toMatch(STD_B64)
     }
-    expect(emergencyKit.secretKey).toMatch(STD_B64)
+  })
+
+  it('hands back the Secret Key in its printed form, which reads back as a key', () => {
+    expect(readSecretKey(emergencyKit.secretKey)).toMatchObject({ ok: true, text: emergencyKit.secretKey })
   })
 
   it('wraps the master key under PASSWORD and RECOVERY, each carrying kdfParams', () => {
