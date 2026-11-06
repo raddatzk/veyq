@@ -93,10 +93,10 @@
         "en": "Members of other servers can open links made here only on the link's own page, in a new tab. The links themselves keep working, and nothing is deleted.",
         "de": "Mitglieder anderer Server können hier erstellte Links nur noch auf der eigenen Seite des Links öffnen, in einem neuen Tab. Die Links selbst funktionieren weiter, und nichts wird gelöscht."
       },
-      "serves": ["uc.sharing.share-public-viewer"],
+      "serves": ["uc.sharing.share-public-viewer", "uc.sharing.browse-a-received-share-in-place"],
       "source": "operator-policy",
       "levels": ["instance", "tenant"],
-      "description": "The public share API answers any origin (ADR 0121 decision 3): while effective for the tenant of a link a guest is served (for a link no guest is served, an unknown one included: at the instance level, so the answer is no existence oracle), every guest operation under /api/shares/{shareId} (the ones that take no bearer) answers a CORS preflight 204 and carries Access-Control-Allow-Origin * and Cross-Origin-Resource-Policy cross-origin, refusals included; /api/setup and /api/moderation/key do at the instance level. Never Access-Control-Allow-Credentials. Off => those answers are same-origin again (a preflight is 405, no CORS header, CORP same-origin); the links keep working for a guest on their own page, nothing is written onto them. It serves uc.sharing.share-public-viewer until uc.sharing.browse-a-received-share-in-place is built, and from then on serves that one as well (a catalog entry serves only a built use-case, scripts/validate_capabilities.py)."
+      "description": "The public share API answers any origin (ADR 0121 decision 3): while effective for the tenant of a link a guest is served (for a link no guest is served, an unknown one included: at the instance level, so the answer is no existence oracle), every guest operation under /api/shares/{shareId} (the ones that take no bearer) answers a CORS preflight 204 and carries Access-Control-Allow-Origin * and Cross-Origin-Resource-Policy cross-origin, refusals included; /api/setup and /api/moderation/key do at the instance level. Never Access-Control-Allow-Credentials. Off => those answers are same-origin again (a preflight is 405, no CORS header, CORP same-origin); the links keep working for a guest on their own page, nothing is written onto them. It serves uc.sharing.share-public-viewer, whose guest API it opens to other origins, and uc.sharing.browse-a-received-share-in-place."
     },
     "core.share-embedding": {
       "title": {
@@ -111,10 +111,10 @@
         "en": "A kept link opens the link's own page in a new tab again, and members' browsers may reach only this server and the services set here. Nothing kept is deleted.",
         "de": "Ein abgelegter Link öffnet wieder die eigene Seite des Links in einem neuen Tab, und die Browser der Mitglieder dürfen nur noch diesen Server und die hier eingestellten Dienste erreichen. Nichts Abgelegtes wird gelöscht."
       },
-      "serves": ["uc.sharing.keep-a-received-link"],
+      "serves": ["uc.sharing.keep-a-received-link", "uc.sharing.browse-a-received-share-in-place"],
       "source": "operator-policy",
       "levels": ["instance", "tenant"],
-      "description": "The CSP widening a bookmark's page needs to browse its share in place (ADR 0121 decision 2): while effective for the tenant whose domain serves the app shell (a host that claims no tenant: the instance level), the served policy's connect-src gains the https: scheme (AppShellRoutes, from a snapshot recomputed after every switch and domain write). Off => the policy is as before and a kept link opens as in ADR 0120. It serves uc.sharing.keep-a-received-link until uc.sharing.browse-a-received-share-in-place is built, and from then on serves that one as well (a catalog entry serves only a built use-case, scripts/validate_capabilities.py)."
+      "description": "The CSP widening a bookmark's page needs to browse its share in place (ADR 0121 decision 2): while effective for the tenant whose domain serves the app shell (a host that claims no tenant: the instance level), the served policy's connect-src gains the https: scheme (AppShellRoutes, from a snapshot recomputed after every switch and domain write). Off => the policy is as before and a kept link opens as in ADR 0120. It serves uc.sharing.keep-a-received-link, whose bookmark's row opens the bookmark's page while it is on, and uc.sharing.browse-a-received-share-in-place."
     },
     "core.group-space": {
       "title": {

@@ -48,7 +48,7 @@ export interface CoreNodeActions {
 }
 
 /** The injection key of {@link provideCoreNodeActions}; exported for a test that mounts a `NodeHeader` with a stand-in. */
-export const coreNodeActionsKey: InjectionKey<CoreNodeActions> = Symbol('veyq.coreNodeActions')
+export const coreNodeActionsKey: InjectionKey<CoreNodeActions | null> = Symbol('veyq.coreNodeActions')
 
 /**
  * Core's actions for the nodes a view draws, for whoever looks. Called in a view's setup (it uses the i18n, toast and
@@ -117,6 +117,13 @@ export function useCoreNodeActions(
 /** Hand `actions` to every `NodeHeader` below the calling view. */
 export function provideCoreNodeActions(actions: CoreNodeActions): void {
   provide(coreNodeActionsKey, actions)
+}
+
+/** A region that hands no core action of the view around it on (ADR 0121 decision 5): a bookmark's page shows its link
+ *  in place below the member's page, and nothing below it may reach the member's actions — its own views provide their
+ *  own, the guest's. */
+export function provideNoCoreNodeActions(): void {
+  provide(coreNodeActionsKey, null)
 }
 
 /** The core actions of the view around the caller (its cover above all: a page's own cover control opens the same dialog

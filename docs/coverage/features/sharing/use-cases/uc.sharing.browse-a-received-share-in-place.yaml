@@ -1,8 +1,7 @@
 useCase: uc.sharing.browse-a-received-share-in-place
 feature: sharing
 title: Browse a received share in place, inside the space
-# Planned (ADR 0121, changes/cr-browse-a-received-share-in-place.md): every criterion lands with its phase.
-status: planned
+# ADR 0121, changes/cr-browse-a-received-share-in-place.md (its live two-origin pass is the CR's P6).
 acceptanceCriteria:
   # P2 (backend)
   - id: share-api-answers-any-origin
@@ -27,14 +26,42 @@ acceptanceCriteria:
           - AppShellShareEmbeddingSliceTest.offByTheServerOwnerTakesItFromEveryHost
           - AppShellShareEmbeddingSliceTest.offByATenantOwnerTakesItFromThatTenantsDomainAlone
           - AppShellShareEmbeddingSliceTest.aTenantThatSwitchedItOffKeepsItOffOnTheDomainItMovedTo
+      web:
+        unit: [src/shared/security/csp.test.ts]
   # P4 (the check), P5 (the fallback line)
   - id: embeds-only-what-says-it-may
     text: A bookmark embeds only where the share's instance serves the same major, core.public-shares and core.public-shares.embeddable; anything else falls back to opening the link, with its reason.
+    coverage:
+      web:
+        unit: [src/core/sharing/shareInstance.test.ts, src/core/bookmark/BookmarkEmbed.test.ts]
   # P4 (the seams), P5 (the embedded view)
   - id: guest-inside-member-page
     text: The embedded view reads and writes through the share's own API base under a guest access of its own; no member access, key or door reaches it, and device-kept guest state is keyed by the share's origin.
+    coverage:
+      web:
+        unit:
+          - src/core/sharing/guestBase.wire.test.ts
+          - src/core/sharing/shareAt.test.ts
+          - src/features/memories/guestBase.wire.test.ts
+          - src/features/memories/shareTarget.wire.test.ts
+          - src/features/memories/ownShareMedia.test.ts
+          - src/features/depot/dropBox.wire.test.ts
+          - src/features/expenses/domain/potApi.wire.test.ts
+          - src/features/expenses/receipts.wire.test.ts
+          - src/core/bookmark/BookmarkEmbed.test.ts
   # P5
   - id: gates-writes-report
     text: The password, terms, note and naming gates run inline in the share page's order; a READ_WRITE write and a WRITE_ONLY drop reach the share's instance; a report seals to its moderation key.
-gaps:
-  web: "not built yet (CR phases P4-P5); the dev policy's https: and http://*.localhost:* are held by src/web/src/shared/security/csp.test.ts, cited once this file leaves planned"
+    coverage:
+      web:
+        unit: [src/core/bookmark/BookmarkEmbed.test.ts, src/core/report/report.wire.test.ts, src/features/depot/dropBox.wire.test.ts]
+  - id: row-opens-the-page
+    text: While core.share-embedding is effective a bookmark's row opens its page, whose header offers Open on its own page; switched off, the row opens the link as before and the page is ADR 0120's without a line.
+    coverage:
+      web:
+        unit: [src/core/bookmark/BookmarkEmbed.test.ts]
+  - id: share-page-unchanged
+    text: The share page /s/<id> runs the same gates through the same code, its calls and device keys exactly as before.
+    coverage:
+      web:
+        unit: [src/views/ShareView.test.ts, src/views/ShareView.folder.test.ts, src/views/ShareView.naming.test.ts, src/views/ShareView.live.test.ts, src/core/sharing/shareAt.test.ts]

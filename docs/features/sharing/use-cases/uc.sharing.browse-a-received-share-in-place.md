@@ -25,8 +25,9 @@
 
 ## Alternate / exception flows
 
-- **A1 Not embeddable:** another major, a missing capability, no CORS, a network error, or embedding switched off here →
-  the page says why in one line and offers **Open link**, ADR 0120's open.
+- **A1 Not embeddable:** another major, a missing capability, no CORS, a network error → the page says why in one line
+  and offers **Open link**, ADR 0120's open. With embedding switched off here the page is ADR 0120's as it was, without a
+  line, and the bookmark's row opens the link directly.
 - **A2 Open on its own page:** the member opens the link on the share page instead, as before.
 - **E1 Link gone:** revoked, expired or re-keyed away → the embedded view says the link is unavailable; the bookmark stays.
 - **E2 Wrong password:** the bookmark's password is refused → the password form, as on the share page.
@@ -49,4 +50,5 @@ nothing about it.
 - **Decisions:** [ADR 0121](../../../decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md),
   [ADR 0120](../../../decisions/0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md),
   [ADR 0088](../../../decisions/0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)
-- Work order: `changes/cr-browse-a-received-share-in-place.md` (not built yet)
+- Work order: `changes/cr-browse-a-received-share-in-place.md` (built; its live two-origin pass is P6)
+- End-user view (docs site): [Keep a link someone sent you](../../../../site/src/content/docs/sharing/keep-a-link.mdx)

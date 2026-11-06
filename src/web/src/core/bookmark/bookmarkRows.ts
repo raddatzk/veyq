@@ -1,6 +1,8 @@
 // The bookmark's part of the unified level list (inbox #407, ADR 0120): its ROW DATA, which core draws. The row names the
-// host the link points at as its one detail, read from the sealed meta under the bookmark's own key; a plain click opens
-// the link where it lives (`openBookmark.ts`), a bookmark whose meta does not read opens its page instead, which says so.
+// host the link points at as its one detail, read from the sealed meta under the bookmark's own key. A plain click opens
+// the bookmark's page, which shows the share in place (ADR 0121 decision 1) — while this instance embeds
+// (`core.share-embedding`); switched off, it opens the link where it lives, as before (`openBookmark.ts`, ADR 0120). A
+// bookmark whose meta does not read opens its page either way, which says so.
 // Its actions are core's: rename, move and delete are core's defaults, granted by `./rights.ts` for THAT node, and Report is
 // core's action, which for a bookmark hands the share's report to the share page (`core/node/coreNodeActions.ts`). A guest
 // never draws one: no link serves a bookmark (decision 7), and `./rights.ts` grants a guest nothing were one to arrive.
@@ -14,10 +16,13 @@ import { rowRightsOf, targetOf } from '../access'
 import { bookmarkRights } from './rights'
 import { bookmarkOfNode, openBookmark, useBookmarkDoors } from './openBookmark'
 import { hostOf } from './bookmarkLink'
+import { useCapabilities } from '../../shared/state/useCapabilities'
+import { CORE_SHARE_EMBEDDING } from '../../features/platform/capabilities'
 
 export function bookmarkRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsHost): LevelRowSource {
   const { t } = useI18n()
   const doors = useBookmarkDoors()
+  const { hasCapability } = useCapabilities()
   const bookmarks = computed(() => ctx.value.nodes.filter((n) => n.kind === SHARE_BOOKMARK_KIND))
 
   function bookmarkRow(node: TreeNode): LevelRow {
@@ -30,7 +35,7 @@ export function bookmarkRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRo
       details: kept ? [{ id: 'host', text: hostOf(kept.link) }] : [],
       primary: {
         label: t('node.bookmark.open', { name: node.name }),
-        onClick: () => (kept ? openBookmark(kept, false, doors) : host.open?.(node)),
+        onClick: () => (kept && !hasCapability(CORE_SHARE_EMBEDDING) ? openBookmark(kept, false, doors) : host.open?.(node)),
         disabled: !r.open,
       },
       actions: [],

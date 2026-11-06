@@ -1707,6 +1707,16 @@ const en = {
       reportAwayTitle: 'Report shared content',
       openAwayIntro: 'The link opens on {host} in a new tab and asks for its password there. Copy the password first.',
       reportAway: 'Open link to report',
+      // A bookmark's page that shows its link in place (ADR 0121): the region, the header's way to the link's own page,
+      // and why a link is not shown here (`core/sharing/shareInstance.ts`' refusals; a switched-off embedding says nothing).
+      embedRegion: 'Shared content from {host}',
+      openOwnPage: 'Open on its own page',
+      fallback: {
+        unreachable: 'The shared content cannot be shown here: {host} did not answer, or does not let it be shown on other instances.',
+        otherVersion: 'The shared content cannot be shown here: {host} runs another version of veyq.',
+        noLinks: 'The shared content cannot be shown here: {host} does not serve shared links at the moment.',
+        notEmbeddable: 'The shared content cannot be shown here: {host} does not let its links be shown on other instances.',
+      },
     },
     // Core's view switch (`core/node/ViewModeToggle.vue`, inbox #370): the level toolbar's group and its two own views.
     viewMode: 'View',
@@ -3770,6 +3780,14 @@ const de: typeof en = {
       reportAwayTitle: 'Geteilte Inhalte melden',
       openAwayIntro: 'Der Link öffnet auf {host} in einem neuen Tab und fragt dort nach seinem Passwort. Kopiere das Passwort vorher.',
       reportAway: 'Link zum Melden öffnen',
+      embedRegion: 'Geteilte Inhalte von {host}',
+      openOwnPage: 'Auf eigener Seite öffnen',
+      fallback: {
+        unreachable: 'Die geteilten Inhalte lassen sich hier nicht anzeigen: {host} hat nicht geantwortet oder lässt sie nicht auf anderen Instanzen anzeigen.',
+        otherVersion: 'Die geteilten Inhalte lassen sich hier nicht anzeigen: Auf {host} läuft eine andere veyq-Version.',
+        noLinks: 'Die geteilten Inhalte lassen sich hier nicht anzeigen: {host} stellt gerade keine geteilten Links bereit.',
+        notEmbeddable: 'Die geteilten Inhalte lassen sich hier nicht anzeigen: {host} lässt seine Links nicht auf anderen Instanzen anzeigen.',
+      },
     },
     viewMode: 'Ansicht',
     viewGrid: 'Rasteransicht',

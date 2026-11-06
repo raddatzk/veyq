@@ -145,3 +145,25 @@ one seam) and red; the P6 pass recorded; nothing merged.
   `openShare*`, `deleteSharePhoto`, `saveDropGuest`/`forgetDropGuest` now name the share's address
   (`{ shareId, apiBase: '' }`) where they named its id; test literals of a `GuestAccess`, `GuestUploadTarget`,
   `GuestTreeContext` and `PotTarget` gained `apiBase: ''`; `access.test.ts` lists `apiBase` among a guest access's keys.
+- **P5 - the gates extracted, not copied.** `core/sharing/shareGates.ts` (`useShareGates({ at, fragmentKey,
+  handedPassword, locale })`: the state machine, moved from `ShareView` unchanged) and `core/sharing/ShareGates.vue` (the
+  cards, the guest's line, the body and the naming dialog, with their styles). `ShareView` keeps what only it has (the
+  moderation mode, a bookmark's report hand-off, the footer, the guest audience, `openGuestPage`) and passes its id bare,
+  so every call it makes is the one it made; its twelve test files are unchanged but `ShareView.memory.test.ts`' four
+  factory calls (P4). Embedded, the cards head with `h2` and the guest uploader's statements (`guestPage`, the share page's
+  singleton) are not asked; the removal-order notice is, of the share's instance (`OrderNotice`'s `apiBase`).
+- **P5 - navigation inside the share.** `ShareTreePage`'s `embedded`: the node on screen is the page's own ref, never
+  `?node=`; each crumb's real `href` is the bookmark's page (`route.fullPath`), its plain click prevented and run in place.
+- **P5 - isolation.** `BookmarkEmbed` provides `NO_DOORS`, `provideNoCoreNodeActions()` and `provideNoNodeHeader()` (the
+  two keys now admit `null`): core's page of the link provides the guest's own below; a `WRITE_ONLY` drop page finds none
+  of the member's (pinned by a probe drop page in `BookmarkEmbed.test.ts`).
+- **P5 - the switch and the row.** `core.share-embedding` is read through `useCapabilities().hasCapability` (the tenant's
+  set once loaded, else the instance's). Off: no instance is asked, the page is ADR 0120's without a line, the row opens
+  the link (as before). On: the row's plain click is `host.open` (the bookmark's page); `open-own-page` leads the
+  bookmark's header (`header.order`) in both states. The fallback line names every refusal but `switchedOff`.
+- **P5 - a resolve with no answer falls back.** After the setup check passed, a resolve that ends `unreachable` (the
+  link's tenant switched `.embeddable` off: no CORS on its answers) hands `unreachable` back; any refusal (`not_found`)
+  is the share page's unavailable card, in place.
+- **P5 - known limits, for P6 to look at.** The embedded node's own header is core's (a second `h1` on the page, under the
+  bookmark's); the embed's stored view mode and tab are the member's account preferences (the share page's are the
+  guest's); the guest uploader's statement of reasons on a blocked placeholder is shown on the share's own page only.

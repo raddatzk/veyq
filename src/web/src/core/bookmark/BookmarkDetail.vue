@@ -1,10 +1,13 @@
 <script setup lang="ts">
-// A bookmark's page (ADR 0120), under core's header: where the link points (its host), the way to open it, and - where the
-// bookmark keeps one - the share's password to copy. A plain click on its row opens the link directly; this page is where a
-// favorite, a URL or a bookmark whose meta does not read lands. Its header carries core's rename in place, move and delete,
-// each where `./rights.ts` grants it and the page has the door, and core's own actions, Report among them (for a bookmark:
-// the share's report, handed to its share page; `core/node/coreNodeActions.ts`). A guest is never handed a bookmark, and is
-// offered nothing here if one were.
+// A bookmark's page (ADR 0120, ADR 0121), under core's header. While this instance embeds (`core.share-embedding`, effective
+// for the member's tenant) it shows the link's share in place (`./BookmarkEmbed.vue`): read and, where the link allows,
+// written, as that link's guest, through the share's own instance - and a plain click on the bookmark's row lands here
+// (`./bookmarkRows.ts`). Where the share may not be shown here, the page is ADR 0120's - where the link points (its host),
+// the way to open it and, where the bookmark keeps one, the share's password to copy - with one line saying why; with
+// embedding switched off it is that page as it always was, and the row opens the link directly. The header carries "Open
+// on its own page" (ADR 0120 decision 5's open), core's rename in place, move and delete, each where `./rights.ts` grants it
+// and the page has the door, and core's own actions, Report among them (for a bookmark: the share's report, handed to its
+// share page; `core/node/coreNodeActions.ts`). A guest is never handed a bookmark, and is offered nothing here if one were.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
@@ -17,6 +20,10 @@ import { targetOf } from '../access'
 import { bookmarkRights } from './rights'
 import { bookmarkOfNode, openBookmark, useBookmarkDoors } from './openBookmark'
 import { hostOf } from './bookmarkLink'
+import BookmarkEmbed from './BookmarkEmbed.vue'
+import { useCapabilities } from '../../shared/state/useCapabilities'
+import { CORE_SHARE_EMBEDDING } from '../../features/platform/capabilities'
+import type { EmbedRefusal } from '../sharing/shareInstance'
 
 const props = defineProps<NodeDetailProps>()
 const host = injectNodeHost()
@@ -26,7 +33,16 @@ const doors = useBookmarkDoors()
 const rights = computed(() => bookmarkRights(props.access, targetOf(props.tree, props.node)))
 const kept = computed(() => (rights.value.open ? bookmarkOfNode(props.access, props.tree, props.node) : null))
 const handlers = hostHandlers(host, () => props.node, () => shareOfferOf({}))
-const headerActions = computed(() => standardNodeActions(t, { ...hostRights(rights.value, host), deleteLabel: t('node.bookmark.delete') }, handlers))
+const sameOrigin = computed(() => kept.value?.link.origin === doors.origin)
+/** ADR 0120 decision 5's open, kept in the header whether or not the share is shown here (ADR 0121 decision 1). */
+const openOwnPage = computed(() => ({
+  id: 'open-own-page', label: t('node.bookmark.openOwnPage'), icon: sameOrigin.value ? ('link' as const) : ('external-link' as const),
+  shown: kept.value !== null, onClick: () => kept.value && openBookmark(kept.value, false, doors),
+}))
+const headerActions = computed(() => [
+  openOwnPage.value,
+  ...standardNodeActions(t, { ...hostRights(rights.value, host), deleteLabel: t('node.bookmark.delete') }, handlers),
+])
 const headerRename = computed(() => standardNodeRename(hostRights(rights.value, host), handlers))
 const subtitle = computed(() => (kept.value ? hostOf(kept.value.link) : undefined))
 contributeNodeHeader(() => ({ subtitle: subtitle.value, actions: headerActions.value, rename: headerRename.value }))
@@ -43,11 +59,19 @@ async function copyPassword() {
     /* clipboard denied: the member opens the link and types it */
   }
 }
-const sameOrigin = computed(() => kept.value?.link.origin === doors.origin)
+
+// Shown in place while this instance embeds and the share's instance lets it; else ADR 0120's page, saying why.
+const { hasCapability } = useCapabilities()
+const fallback = ref<EmbedRefusal | null>(null)
+const embeds = computed(() => kept.value !== null && hasCapability(CORE_SHARE_EMBEDDING) && fallback.value === null)
 </script>
 
 <template>
-  <section class="veyq-surface bookmark-detail" data-testid="bookmark-detail">
+  <BookmarkEmbed v-if="embeds && kept" :key="kept.link.link" :bookmark="kept" @fallback="(reason) => (fallback = reason)" />
+  <section v-else class="veyq-surface bookmark-detail" data-testid="bookmark-detail">
+    <p v-if="kept && fallback && fallback !== 'switchedOff'" class="bookmark-detail-fallback" data-testid="bookmark-fallback">
+      {{ t(`node.bookmark.fallback.${fallback}`, { host: hostOf(kept.link) }) }}
+    </p>
     <template v-if="kept">
       <p class="bookmark-detail-where">
         {{ sameOrigin ? t('node.bookmark.whereHere') : t('node.bookmark.whereAway', { host: hostOf(kept.link) }) }}
@@ -81,6 +105,11 @@ const sameOrigin = computed(() => kept.value?.link.origin === doors.origin)
   flex-direction: column;
   gap: 0.75rem;
   padding: 1.25rem;
+}
+.bookmark-detail-fallback {
+  margin: 0;
+  color: var(--app-muted);
+  overflow-wrap: anywhere;
 }
 .bookmark-detail-where {
   margin: 0;

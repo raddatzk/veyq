@@ -1,7 +1,7 @@
 # ADR 0121 — A received share is browsed in place, through its own instance's API
 
 - Status: Accepted
-- Built: partly (not built: decision 1 and decisions 4 to 8, the web client's half; built: the policy of decision 2 and the server of decision 3)
+- Built: yes (its live two-origin pass is `changes/cr-browse-a-received-share-in-place.md` P6)
 - Date: 2026-11-06
 - Model: [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)
 
