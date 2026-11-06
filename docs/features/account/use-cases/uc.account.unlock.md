@@ -16,9 +16,11 @@
 
 1. From an **authenticated-but-locked** state, the client obtains the **password** (reused from a login
    that just happened, or re-prompted on a fresh app session) and the **Secret Key** (from the Emergency
-   Kit, or already held by an enrolled device). The Secret Key may be **typed/pasted** or **imported from the
-   Emergency Kit** — uploading the kit file, scanning its QR code, or pasting its machine-readable token in
-   place of the key, all decoded **on-device** (the token never leaves the device). This is **one control**,
+   Kit, or already held by an enrolled device). The Secret Key may be **typed/pasted** in its text form
+   ([en.account.key-model § The Secret Key's text form](../enablers/en.account.key-model.md#the-secret-keys-text-form))
+   or **imported from the Emergency Kit** — uploading the kit file (the PDF, also one re-saved, printed to PDF, or
+   photographed or scanned into a PDF, or a picture of its QR), scanning its QR code, or pasting its
+   machine-readable token in place of the key, all decoded **on-device** (the token never leaves the device). This is **one control**,
    not a per-screen affordance — see *One Secret-Key control* under Quality notes.
 2. The client retrieves its **PASSWORD `MasterKeyWrap`** (the wrapped key + its KDF parameters/salt) from
    the server.
@@ -66,6 +68,9 @@ sequenceDiagram
   are derived on the device, and the server sees no secret.
 - **E1 — wrong password or Secret Key:** the KEK fails to open the wrap (AEAD tag mismatch) → **generic
   unlock failure**; the server is **uninvolved** and learns nothing; the user retries locally.
+- **E1a — a typo in the Secret Key:** a typed key of the full length whose check symbols disagree is named a typo
+  in the Secret-Key field itself, before anything is derived; a key that does not read at all says nothing while it
+  is typed. Submitted anyway, either is refused like a wrong key.
 - **E2 — no PASSWORD wrap / not authenticated:** the wrap cannot be fetched or does not exist; the user
   must (re-)login or use a recovery/alternate method.
 - **E3 — a served key-derivation profile the client does not write:** the client derives only with the

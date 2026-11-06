@@ -289,15 +289,42 @@ Two round-trip tests in two packages cannot keep a writer and a reader in agreem
 **once**, in `@veyq/crypto`, pinned by a fixed-literal vector.
 
 - **The token** is `veyqkit:` followed by the unpadded base64url of the UTF-8 bytes of
-  `{"v":1,"email":…,"sk":…}` — `sk` being the Secret Key's 32 bytes as padded standard base64. `v` is the
-  version. A reader rejects any other `v`, an `email` that is not a non-empty string, and an `sk` that is not 32 bytes.
-  The password is never in it.
+  `{"v":2,"email":…,"sk":…}` — `sk` being the Secret Key in its text form (below). `v` is the version. A reader
+  rejects any other `v` (version 1 carried the key as base64 and was never in use), an `email` that is not a non-empty
+  string, and an `sk` that does not read as a Secret Key. The password is never in it, and neither is the address of
+  the server: a kit names the account, not where it lives.
 - **It travels three ways, and each is part of the format:** as the **QR code**; as **printed** email +
   Secret Key for typing; and as a literal string in the PDF's **document information** (`keywords`), because
   a file import finds the kit by scanning the file's bytes for `veyqkit:`. The document information is not a
   compressed stream, so PDF compression leaves it intact. A writer that stops putting the token there breaks
-  every import of the kits it writes, while its QR codes keep scanning.
-- **The printed text follows the writer's UI language; the token never does.**
+  the first step of every import of the kits it writes, while its QR codes keep scanning.
+- **A kit that is no longer the file the writer made is still a kit.** `web`'s import reads a PDF in this order:
+  (a) the token in the file's bytes; (b) the document information's `Keywords` as pdf.js decodes it, for a viewer
+  that re-saved the file with that string compressed or re-encoded; (c) the QR, drawn from each of the first three
+  pages 2400 px wide and read in both polarities, for a copy printed to PDF (the drawing survives, the document
+  information does not) and a photo or scan of the sheet saved as a PDF. An image file goes straight to its QR, drawn
+  2400 px on its longer side. What was measured (macOS PDFKit's save keeps the token raw, a Quartz redraw drops it,
+  and how much distortion a photographed kit stands) is stated where the fixtures are,
+  `src/web/src/features/account/emergencyKit/emergencyKit.import.test.ts`.
+- **The printed text follows the writer's UI language; the token never does.** The sheet is one A4 page: the
+  email and the Secret Key; where the person signs in — `web`'s kit names the address it was made on (the page's
+  host), `admin-web`'s does not (it is served on localhost), and both offer three form fields for more addresses,
+  fillable on screen or by hand; the QR with three steps, the third saying that the password is deliberately not on
+  the sheet; how to keep it; and the docs site's forgot-password page in the writer's language. The layout code is
+  per package (no UI in `@veyq/crypto`), the two kept line for line alike but for the address row.
+
+### The Secret Key's text form
+
+How a Secret Key is printed, typed, carried in the token and compared — the one form, in `@veyq/crypto/secretKey`,
+pinned by `contracts/crypto/vectors/v1.json` § `secret_key_text`. The 32 key bytes are written as 52 Crockford base32
+symbols (`0-9`, `A-Z` without `I`, `L`, `O`, `U`; the bytes as one big-endian bit string, four zero bits appended),
+then **2 check symbols**: the first 10 bits of SHA-256 over the 32 bytes. The 54 symbols are shown as 9 groups of 6
+joined by `-` (on the kit, five groups over four). A reader folds case, drops spaces and hyphens, and reads `O` as
+`0` and `I`, `L` as `1`, as the invite code does. What then is not 54 symbols of the alphabet is **malformed**; 54
+symbols that are not exactly the form of the bytes they decode to — a check that disagrees, or padding bits set in
+the 52nd symbol — are a **typo**, and the Secret-Key field says so before anything is derived (one misread symbol
+slips past the check with probability 2^-10). Every flow that takes a typed key decodes it here; a key that does not
+read is a credential that does not match.
 
 ## Registration (account creation) — high level
 

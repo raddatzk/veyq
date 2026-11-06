@@ -64,6 +64,16 @@ describe('checkColdCredential (a locked vault, too)', () => {
     expect((stale as ColdCredentialRefused).reason).toBe('credentialRejected')
   }, PRODUCTION_ARGON_TIMEOUT_MS * 2)
 
+  it('refuses a typed key that does not read as one — a typo or not a key at all — before anything is fetched', async () => {
+    const right = formatSecretKey(SECRET_KEY)
+    const typo = right.slice(0, -1) + (right.endsWith('A') ? 'B' : 'A')
+    for (const typed of [typo, right.slice(0, 20), b64std(SECRET_KEY)]) {
+      const refused = await refusal(checkColdCredential(PASSWORD, typed))
+      expect((refused as ColdCredentialRefused).reason, typed).toBe('credentialRejected')
+    }
+    expect(getAccountKeyMaterial).not.toHaveBeenCalled()
+  })
+
   it('refuses when there is no floor to check against', async () => {
     getAccountKeyMaterial.mockResolvedValue({ userId: 'u', suiteId: 'v1', wraps: [], wrappedIdentityPrivateKey: 'aWdub3JlZA==' })
     const none = await refusal(checkColdCredential(PASSWORD, formatSecretKey(SECRET_KEY)))

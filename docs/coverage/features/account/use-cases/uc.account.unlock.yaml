@@ -19,6 +19,25 @@ acceptanceCriteria:
           - src/features/account/emergencyKit/emergencyKit.test.ts
           - src/shared/ui/SecretKeyField.test.ts
           - src/views/TenantJoinView.kitImport.test.ts
+  - id: kit-import-survives-a-resave
+    text: >
+      A kit PDF that no longer carries the token in its bytes is still imported: through its document information
+      as pdf.js reads it (a re-encoded Keywords), then through the QR drawn from its first pages — a kit printed to
+      PDF and a photographed kit saved as a PDF included.
+    coverage:
+      web:
+        unit:
+          - src/features/account/emergencyKit/emergencyKit.import.test.ts
+  - id: secret-key-typo-named
+    text: >
+      A typed Secret Key of the full length whose check symbols disagree is named a typo in the Secret-Key field
+      before anything is derived, and a shorter or foreign one says nothing while typed; a key that does not read is
+      refused as a credential that does not match, before anything is fetched (E1a).
+    coverage:
+      web:
+        unit:
+          - src/shared/ui/SecretKeyField.test.ts
+          - src/features/account/coldCredential.test.ts
   - id: kit-from-another-account-warns
     text: >
       Where the screen knows which account it is for, an imported kit carrying a different e-mail WARNS and does
