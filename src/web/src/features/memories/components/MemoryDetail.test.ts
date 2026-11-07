@@ -617,6 +617,30 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     expect(wrapper.find('.veyq-node-header-chip[data-fact="place"]').text()).toContain(t('memory.place.set'))
   })
 
+  it('leaves an unset place out where it may not be set — no "Set location" offered — and keeps the date', async () => {
+    emptyStore()
+    const wrapper = mountWithHeader(MemoryDetail, {
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), rights: { ...memberMemoryRights({ publicShares: false }), editMeta: false } },
+      global: { plugins: [realI18n()] },
+    })
+    await flushPromises()
+    expect(wrapper.find('.veyq-node-header-chip[data-fact="place"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(t('memory.place.set'))
+    expect(wrapper.find('.veyq-node-header-chip[data-fact="date"]').text()).toContain(t('memory.date.noDate'))
+  })
+
+  it('still shows a set place where it may not be edited', async () => {
+    emptyStore()
+    const memoryKey = v1.randomBytes(32)
+    const sealed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: GEOCODED })
+    const wrapper = mountWithHeader(MemoryDetail, {
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', sealed), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights({ publicShares: false }), editMeta: false } },
+      global: { plugins: [realI18n()] },
+    })
+    await flushPromises()
+    expect(wrapper.find('.veyq-node-header-chip[data-fact="place"]').text()).toContain('Teneriffa')
+  })
+
   it('renders the stored location name in the chip', async () => {
     emptyStore()
     const memoryKey = v1.randomBytes(32)

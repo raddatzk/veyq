@@ -168,11 +168,12 @@ function expectGuestOnly(w: Page) {
   }
   expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters')]) // no contributions organizer, no media trash
   expect(w.find('.gallery-mark-filter').exists(), 'the mark filter').toBe(false)
-  // Core's header heads the guest's page too (ADR 0110 decision 10): the Memory's visual with no cover button, the chips greyed.
+  // Core's header heads the guest's page too (ADR 0110 decision 10): the Memory's visual with no cover button, the date
+  // greyed, and an unset place left out - "Set place" is no offer to a guest (owner 2026-11-07).
   expect(w.find('.veyq-node-header-leading').exists(), 'control: the header\'s visual').toBe(true)
   expect(w.find('[data-testid="node-header-cover"]').exists(), 'the cover is no button').toBe(false)
   expect(w.find('.veyq-node-header-chip[data-fact="date"]').attributes('disabled'), 'the date').toBeDefined()
-  expect(w.find('.veyq-node-header-chip[data-fact="place"]').attributes('disabled'), 'the place').toBeDefined()
+  expect(w.find('.veyq-node-header-chip[data-fact="place"]').exists(), 'no unset place').toBe(false)
   // ADR 0083 decision 4: the interface shows a guest no participants - no people, no control, no link to a profile -
   // though the sealed meta the share serves lists them (see the residual test below).
   expect(w.find('[data-fact="people"]').exists(), 'the participants').toBe(false)

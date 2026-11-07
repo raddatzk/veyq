@@ -129,7 +129,7 @@ describe('MemoryDetail follows rights', () => {
     expect(w.find('input[type="file"]').exists()).toBe(false)
     expect(w.find('[data-testid="node-header-cover"]').exists(), 'no cover button').toBe(false)
     expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(true)
-    expect(disabled(w, '.veyq-node-header-chip[data-fact="place"]')).toBe(true)
+    expect(w.find('.veyq-node-header-chip[data-fact="place"]').exists(), 'an unset place it may not set is left out').toBe(false)
     expect(getItemFavorites).not.toHaveBeenCalled()
   })
 

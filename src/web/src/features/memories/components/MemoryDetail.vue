@@ -377,19 +377,22 @@ const {
 
 // --- what core's header shows under the name (ADR 0110 decision 10): the date and the place as chips that open this view's
 // editors (greyed where the meta may not be written: a guest, a pending deletion, keys not loaded), then who was there. The
-// cover is core's own (the kind's `cover`; core's page resolves and shows it, and opens core's dialog from it).
+// cover is core's own (the kind's `cover`; core's page resolves and shows it, and opens core's dialog from it). A place
+// that is unset and may not be set is left out: its only words are the invitation "Set place", which reads as an offer to
+// whoever cannot take it (owner 2026-11-07); an unset date keeps its chip, "No date yet" being a fact.
 const headerFacts = computed<NodeHeaderFact[]>(() => {
   const locked = !props.memoryKey || !can.value.editMeta
   const people = participantsRow.value?.fact
+  const place: NodeHeaderFact[] = locked && !locationResolved.value ? [] : [{
+    kind: 'place', label: locationLabel.value || t('memory.place.set'), empty: !locationResolved.value, disabled: locked,
+    actionLabel: locationResolved.value ? t('memory.place.edit') : t('memory.place.set'), onClick: () => openLocationEditor(),
+  }]
   return [
     {
       kind: 'date', label: dateLabel.value || t('memory.date.noDate'), empty: !dateLabel.value, disabled: locked,
       actionLabel: t('memory.date.edit'), onClick: () => (dateEditorOpen.value = true),
     },
-    {
-      kind: 'place', label: locationLabel.value || t('memory.place.set'), empty: !locationResolved.value, disabled: locked,
-      actionLabel: locationResolved.value ? t('memory.place.edit') : t('memory.place.set'), onClick: () => openLocationEditor(),
-    },
+    ...place,
     ...(people ? [people] : []),
   ]
 })
