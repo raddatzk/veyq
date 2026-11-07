@@ -1,6 +1,6 @@
 ---
 id: cr-workflows-split-pipeline-callers
-title: One pipeline definition and two workflows, PR and Publish; one Mutation workflow
+title: One pipeline definition and two workflows, Checks and Publish; one Mutation workflow
 status: planned
 satisfies: []
 adrs: ["0091", "0045", "0057"]
@@ -17,12 +17,13 @@ invariants:
 
 Before V1 the Actions list says what each workflow is for. Today `ci.yml` is three things at once — the check of
 every pull request and push, the weekly snapshot and the dispatched one. After this CR (owner 2026-11-07: two
-workflows, PR and Publish, on one shared base; a pure split, no security change):
+workflows on one shared base, Checks (owner first said "PR", then: pushes to `main` must run it too) and Publish; a
+pure split, no security change):
 
 - **`pipeline.yml`** (`on: workflow_call`) — the shared base: every stage of today's `ci.yml` (`guards`, `backend`,
   `backend-races`, `frontend`, `chart`, `web-e2e`, `api-fuzz`, `version`, `build`, `stack`, `upgrade-proof`) with
   its permissions unchanged, plus a `green` job that needs every stage.
-- **`pr.yml`** "PR" on `pull_request` and `push` (`main`, `release/**`, today's `paths-ignore`): calls the pipeline
+- **`checks.yml`** "Checks" on `pull_request` and `push` (`main`, `release/**`, today's `paths-ignore`): calls the pipeline
   with `publish: false`. Publishes nothing, as a PR and a push do today.
 - **`publish.yml`** "Publish" on `schedule` (`17 3 * * 1`) and `workflow_dispatch`: calls the pipeline with
   `publish: true`, then today's `snapshot` and `snapshot-tag` jobs **in the same run**. Keeps the
@@ -82,12 +83,12 @@ when a nested job was skipped by `if: false`. The design does not lean on (c): `
   `concurrency:` — the callers own it.
 - `stack`'s `exclude` keeps `github.event_name == 'pull_request'` (the caller's context).
 
-### `pr.yml` "PR"
+### `checks.yml` "Checks"
 
 `on: push / pull_request` exactly as today (branches, `paths-ignore`); `permissions: contents: read`;
-`concurrency: veyq-pr-<ref>`, `cancel-in-progress: false`; one job `pipeline: uses: ./.github/workflows/pipeline.yml`,
+`concurrency: veyq-checks-<ref>`, `cancel-in-progress: false`; one job `pipeline: uses: ./.github/workflows/pipeline.yml`,
 `permissions: {contents: read, packages: write}` (today's ceiling, (a)), `with: {publish: false}`. The push to
-`main` stays here: a merge is tested as today; only the name says "PR".
+`main` stays here: the owner works on `main` directly, so a push is tested as a PR is.
 
 ### `publish.yml` "Publish"
 
@@ -144,16 +145,16 @@ Re-point readers first: everything works on today's tree (no call job) and on a 
 
 ### Phase 2 — the split
 
-- Write `pipeline.yml`, `pr.yml`, `publish.yml`; delete `ci.yml`. Comments move with their jobs; each file's header
+- Write `pipeline.yml`, `checks.yml`, `publish.yml`; delete `ci.yml`. Comments move with their jobs; each file's header
   says what it is for and points at ADR 0091.
-- `validate_release_identity.py`: `WORKFLOW` → three constants (`PIPELINE`, `PR`, `PUBLISH`). Per assertion:
+- `validate_release_identity.py`: `WORKFLOW` → three constants (`PIPELINE`, `CHECKS`, `PUBLISH`). Per assertion:
   2 executes `version` with `PUBLISH`/`REF_NAME`/`RUNNER_ENVIRONMENT` scenarios (publish × branch × tag × runner);
   3 every registry write in the expanded Publish run is gated on `kind == 'snapshot'`, `snapshot`/`snapshot-tag` are
-  in `publish.yml` with today's permission shapes, and `pr.yml` passes `publish: false` (literal); 9 every stage of
+  in `publish.yml` with today's permission shapes, and `checks.yml` passes `publish: false` (literal); 9 every stage of
   `pipeline.yml` is needed by `green`, with today's result rule, and `snapshot` reads `green`; 10/13 the lane matrix
-  is read from `pipeline.yml`; 7 the release identity rejects `publish.yml`, `pipeline.yml` and `pr.yml`; 14 one
+  is read from `pipeline.yml`; 7 the release identity rejects `publish.yml`, `pipeline.yml` and `checks.yml`; 14 one
   cosign, one Helm pin across `pipeline.yml`, `publish.yml`, `release.yml`; 15/16 over the expanded Publish run +
-  `release.yml`; 17 triggers per file (`pr.yml`: push + PR only; `publish.yml`: schedule with a cron + dispatch
+  `release.yml`; 17 triggers per file (`checks.yml`: push + PR only; `publish.yml`: schedule with a cron + dispatch
   without inputs, no push/PR, no tag trigger; `pipeline.yml`: `workflow_call` only), concurrency per caller with
   `cancel-in-progress: false`. Docstring's defect/limits updated.
 - `promote.py`: `snapshot_identity()` → `publish.yml`; `stack_matrix()` reads `pipeline.yml` at the snapshot's
@@ -162,14 +163,14 @@ Re-point readers first: everything works on today's tree (no call job) and on a 
   `pipeline.yml@refs/heads/main` rejected.
 - Build-job readers to `pipeline.yml`: `validate_images_run_unprivileged.py`, `validate_image_pins.py`,
   `validate_compose_posture.py`, `image_identity_cache_proof.py`; `tests/e2e/shards.test.mjs` slices `pipeline.yml`.
-- `run_pipeline.py --workflow` default → `pr.yml` (through the call).
+- `run_pipeline.py --workflow` default → `checks.yml` (through the call).
 - **Bites** (each must go red, then restore): a stage removed from `green.needs`; `snapshot.if` without the `green`
-  term; `pr.yml` passing `publish: true`; `push:` added to `publish.yml`; `PUBLISH` replaced by `true` in the version
+  term; `checks.yml` passing `publish: true`; `push:` added to `publish.yml`; `PUBLISH` replaced by `true` in the version
   step (assertion 2's PR scenario publishes); a `git push` tag in `snapshot-tag`; `snapshot` moved into
   `pipeline.yml` (assertion 3: signing outside Publish); `promote_selftest` with `snapshot_identity` left on
   `ci.yml`.
 - **Done when:** guards + `promote_selftest` + `snapshot_selftest` + `workflow_calls_selftest` green, `pnpm run
-  check` in `tests/e2e` green (shards), `run_pipeline.py --dry-run` lists every pipeline job under `pr.yml`.
+  check` in `tests/e2e` green (shards), `run_pipeline.py --dry-run` lists every pipeline job under `checks.yml`.
 
 ### Phase 3 — one Mutation workflow
 
@@ -199,9 +200,9 @@ Re-point readers first: everything works on today's tree (no call job) and on a 
 
 ### Phase 5 — on GitHub (owner's go for each step)
 
-1. Owner pushes. **Measured then:** the push run of PR is green (proves (a): the call job's grant admits `build`);
+1. Owner pushes. **Measured then:** the push run of Checks is green (proves (a): the call job's grant admits `build`);
    Mutation runs only the gate(s) the push touched.
-2. A pull request (any Dependabot one) runs PR green, arm64 legs absent.
+2. A pull request (any Dependabot one) runs Checks green, arm64 legs absent.
 3. Owner dispatches Publish on `main`. **Measured then:** `build` pushes the staging tags, `snapshot` downloads the
    called jobs' artifacts (b), the snapshot and its tag land.
 4. `cosign verify ghcr.io/raddatzk/veyq:<v>-SNAPSHOT --certificate-identity-regexp '<new regex>'
