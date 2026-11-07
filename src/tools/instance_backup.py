@@ -2224,6 +2224,14 @@ def release_order(release: str | None) -> tuple[int, int, int] | None:
     return int(match.group(1)), int(match.group(2)), 0 if match.group(3) else 1
 
 
+def release_identity(release: str) -> str:
+    """The release whose bytes a name stands for: a snapshot `<major>.<minor>-SNAPSHOT` and the release it is promoted
+    to are one build (ADR 0091 decision 5), and since that rule the images are stamped `<major>.<minor>` either way —
+    while the chart still names the app image by its `-SNAPSHOT` tag. So the gate's "its own release's tools image"
+    compares this, never the raw names: raw, every snapshot install was refused (0.2343-SNAPSHOT, 2026-11-07)."""
+    return release[:-len("-SNAPSHOT")] if release.endswith("-SNAPSHOT") else release
+
+
 def read_record(root: Path) -> dict | None:
     """The gate's record, `state.json` on the backup volume — or None when there is none. A record that is not
     readable JSON FAILS, naming the file: "absent" means *capture and move on*, which would silently skip the
@@ -2474,7 +2482,7 @@ def cmd_gate(args: argparse.Namespace, env: dict[str, str] | None = None) -> int
         raise BackupError(f"the target release {target!r} is not a release (<major>.<minor>, optionally -SNAPSHOT, "
                           f"ADR 0057), so no upgrade path can be checked. A checkout's dev tag or a candidate runs "
                           f"with backup.enabled: false.")
-    if target != image_release:
+    if release_identity(target) != release_identity(image_release):
         raise BackupError(f"the app image is release {target} and this veyq-tools image is release {image_release}: "
                           f"the entry rule and the capture format are the app's release's, so the gate runs only in "
                           f"its own release's tools image. Leave backup.image.tag unset, or set it to {target}.")

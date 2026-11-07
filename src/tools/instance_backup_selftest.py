@@ -790,6 +790,18 @@ def g2_refusals(tmp: pathlib.Path) -> None:
               outcome == "ok 0" and len(captures(root)) == 1, outcome)
 
 
+    # A snapshot's tools image is stamped `<major>.<minor>` while the chart names the app by its `-SNAPSHOT` tag
+    # (ADR 0091 decision 5): the same build, so the gate runs; another release's snapshot is still refused.
+    outcome, root, _ = gate(tmp, "g2-snapshot-stamp", World(), target="0.5-SNAPSHOT", image="0.5",
+                            record={"release": "0.4"})
+    check("G2 gate: a snapshot app on its own build's tools image (stamped without -SNAPSHOT) captures",
+          outcome == "ok 0" and len(captures(root)) == 1 and record_of(root)["release"] == "0.5-SNAPSHOT", outcome)
+    outcome, root, before = gate(tmp, "g2-snapshot-other", World(), target="0.6-SNAPSHOT", image="0.5",
+                                 record={"release": "0.4"})
+    check("G2 gate: another release's snapshot on this tools image is still refused, writing nothing",
+          outcome.startswith("refused:") and "this veyq-tools image is release 0.5" in outcome
+          and volume_state(root) == before, outcome)
+
     def two_captures(root: pathlib.Path) -> None:
         for name, release in (("2020-01-01T00-00-00Z", "0.5"), ("2020-01-02T00-00-00Z", "0.6")):
             (root / ib.CAPTURES_DIR / name).mkdir(parents=True)
