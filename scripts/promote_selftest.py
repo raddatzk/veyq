@@ -2,7 +2,7 @@
 """Self-test of a promotion's decisions (`scripts/promote.py`, ADR 0091 decision 5), offline: a fake git, registry,
 cosign and producer, one world in which the promotion holds, and one forged world per refusal — every refusal
 `promote.check` can make is reached here and must name what it saw. `.github/workflows/release.yml`'s `check` job and
-`pipeline.yml`'s `guards` job run it.
+`checks.yml`'s `guards` job run it.
 
     python3 scripts/promote_selftest.py
 
