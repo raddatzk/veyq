@@ -269,6 +269,6 @@ gaps:
     `a-guests-write-records-the-address-the-network-vouches-for`: a guest reads the notice with N = 7 in the naming
     dialog and creates a folder through the release's Traefik, and the orchestrator's `guest-write record` stage holds
     the app's record of it to the browser container's own socket (address and port). Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job
-    (`pipeline.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log
+    (`checks.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log
     shows the suite executed. On that run each file becomes a ref on the criteria its tests are tagged with, and this
     gap goes.

@@ -69,7 +69,7 @@ updates:
       - dependency-name: "typescript"
         update-types:
           - "version-update:semver-major"
-      # CI runs Node 22 (`node-version: "22"` in pipeline.yml); the types follow the runtime, not the newest Node. Lifted
+      # CI runs Node 22 (`node-version: "22"` in checks.yml); the types follow the runtime, not the newest Node. Lifted
       # together with that runtime bump, by hand in the same commit.
       - dependency-name: "@types/node"
         update-types:
@@ -192,7 +192,7 @@ updates:
   # `previous_version_from_comment`, via `most_specific_version_tags_for_sha`); otherwise it keeps the comment
   # verbatim. A floating major (`# v4`) has moved off the pinned SHA by the time a bump arrives, so it would stay
   # standing beside a v7 SHA; a full-version tag never moves, so it is always rewritten.
-  # Reached by no ecosystem: an action's `with:` inputs. pipeline.yml's `cosign-release` (the cosign the publish signs
+  # Reached by no ecosystem: an action's `with:` inputs. checks.yml's `cosign-release` (the cosign the publish signs
   # with) is bumped by hand; scripts/validate_release_identity.py holds it to src/tools/veyqctl.py's COSIGN_MIN_VERSION.
   - package-ecosystem: "github-actions"
     directory: "/"

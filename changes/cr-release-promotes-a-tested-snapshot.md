@@ -34,10 +34,11 @@ phase 2 (retention) waits until after V1 (owner 2026-11-06).
 
 ## Context & constraints
 
-- **Since cr-workflows-split-pipeline-callers (2026-11-07)** `ci.yml` is three files: `pipeline.yml` (every stage),
-  `checks.yml` (push and pull request) and `publish.yml` (schedule and dispatch, with `snapshot` and `snapshot-tag`);
-  the snapshot identity is `publish.yml`'s. The `ci.yml` names and line citations below are of the file this CR's
-  built phases changed; phase 2 (retention) works on the split.
+- **Since cr-workflows-split-pipeline-callers (2026-11-07)** `ci.yml` is two files: `checks.yml` (the pipeline, push
+  and pull request; a push stages `build-<sha>-<arch>`) and `publish.yml` (schedule and dispatch: `checks-run`,
+  `snapshot`, `snapshot-tag` sign what HEAD's green Checks push run staged, and a weekly `staging-retention`); the
+  snapshot identity is `publish.yml`'s. The `ci.yml` names and line citations below are of the file this CR's built
+  phases changed; phase 2 (the snapshots' retention) works on the split, beside the staging retention built there.
 
 - **ADR 0091** decisions 4 and 5 (the work; decision 5's bullet of 2026-11-06 is the owner's shape), decision 2 (one
   pipeline per commit: the snapshot stays in `ci.yml`), decision 3 (lanes; only L1 is built).

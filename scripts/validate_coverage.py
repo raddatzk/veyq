@@ -135,7 +135,6 @@ from typing import NamedTuple
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 from kotlin_lexer import mask as _mask
-import workflow_calls  # a job that calls a reusable workflow is read as the jobs it calls
 
 try:
     import yaml
@@ -462,7 +461,7 @@ _SHELL_VALUE = r"""('[^']*'|"[^"]*"|[^\s;&|]*)"""
 
 
 class CiRun(NamedTuple):
-    where: str        # "checks.yml › pipeline › backend"
+    where: str        # "checks.yml › backend"
     env: dict         # name -> value the Gradle invocation sees (None: a `${{ }}` expression, unknowable here)
     os: str | None    # the runner's JUnit OS constant; None when `runs-on` does not decide it
     tests: tuple      # `--tests` filters; empty = the whole suite
@@ -532,21 +531,14 @@ def ci_backend_runs() -> list[CiRun]:
             errors.append(f"{rel(wf)}: does not parse as YAML ({str(exc).splitlines()[0]}), so GitHub runs "
                           f"nothing from it and no test run it declares can be counted — fix the file")
             continue
-        if not workflow_calls.triggers(data) & CI_TRIGGERS:
-            continue  # a called workflow (`on: workflow_call`) is read through each caller below, as it runs
-        # A job that calls a reusable workflow is the jobs of that workflow (workflow_calls.py, the one reading of a
-        # call): the pipeline's Gradle runs are in `pipeline.yml`, and a push or a pull request runs them through
-        # `checks.yml`. A call this guard cannot read is red, never a silently missing run.
-        try:
-            expanded = workflow_calls.expand(data, file=rel(wf))
-        except workflow_calls.CallError as exc:
-            errors.append(f"{rel(wf)}: {exc} — so the Gradle runs it calls cannot be counted")
+        on = data.get("on", data.get(True))  # YAML 1.1 reads a bare `on:` key as the boolean True
+        triggers = {on} if isinstance(on, str) else set(on or ())
+        if not triggers & CI_TRIGGERS:
             continue
-        for ej in expanded:
-            job_id, job = ej.id.replace("/", " › "), ej.job
-            if not isinstance(job, dict) or _conditional(job) or ej.call_if is not None:
+        wf_env = _env(data.get("env"))
+        for job_id, job in (data.get("jobs") or {}).items():
+            if not isinstance(job, dict) or _conditional(job):
                 continue
-            wf_env = _env(ej.env)
             runs_on = job.get("runs-on")
             runner_os = next((os_ for prefix, os_ in RUNNER_OS.items()
                               if isinstance(runs_on, str) and runs_on.startswith(prefix)), None)

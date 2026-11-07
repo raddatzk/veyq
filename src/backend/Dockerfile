@@ -38,7 +38,7 @@ COPY src/packages/crypto /repo/src/packages/crypto
 # verifier and the generator read the pinned version from it (without it the verifier fails the install).
 COPY src/web/package.json src/web/openapitools.json ./
 # Not run through scripts/pnpm_install_no_deprecated.py, and covered anyway: this installs the root lockfile that
-# pipeline.yml's `frontend` job scans through it on the same commit, and every job that publishes the image needs that
+# checks.yml's `frontend` job scans through it on the same commit, and every job that publishes the image needs that
 # job (ADR 0091 decision 2: the build itself no longer waits for the tests, so the premise is "before published").
 # scripts/validate_pnpm_installs_gated.py holds both premises — keep `--frozen-lockfile` and the COPY.
 RUN pnpm install --frozen-lockfile
@@ -102,7 +102,7 @@ COPY src/backend/apps/expenses/src ./apps/expenses/src
 COPY src/backend/licenses ./licenses
 COPY --from=frontend-build /repo/src/web/dist ./src/main/resources/META-INF/resources
 # Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (the version is src/backend/gradle/libs.versions.toml's)
-# and fast-jar is the default anyway — pipeline.yml builds the same artifact with a bare `quarkusBuild`.
+# and fast-jar is the default anyway — checks.yml builds the same artifact with a bare `quarkusBuild`.
 RUN ./gradlew --no-daemon quarkusBuild -x test
 
 # Removed: a native build (Mandrel) and its `runtime-native` stage, 2026-10-01 (inbox #200). No ADR
@@ -144,7 +144,7 @@ RUN mkdir -p /prep/classes /prep/opt/veyq /prep/empty /prep/etc/traefik /prep/sm
     && ! java -jar /prep/opt/veyq/image-commands.jar health http://127.0.0.1:9/ \
     && rm -r /prep/smoke /prep/classes /prep/src
 
-# --- runtime (JVM) — the target pipeline.yml's `build` job builds -------------------------------------------------
+# --- runtime (JVM) — the target checks.yml's `build` job builds -------------------------------------------------
 # The LAST stage on purpose: a build with no `--target` (`docker build -f src/backend/Dockerfile .`) builds the last
 # stage, so it builds what the release publishes. scripts/validate_images_run_unprivileged.py holds every published target to its file's last stage.
 FROM distroless-java AS runtime-jvm

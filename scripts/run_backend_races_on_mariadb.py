@@ -39,7 +39,7 @@ MariaDB hides without it, and fails by name rather than counting an unchecked ro
 name, binds a free 127.0.0.1 port, is created fresh per run (`--rm`, a fresh database each time) and is stopped
 in a `finally`. Its image is read from `infra/docker/docker-compose.yml`, so the pin has one home.
 
-**Not a `validate_*` guard; a CI job, not yet an admitted one.** It needs Docker, so it runs as `pipeline.yml`'s
+**Not a `validate_*` guard; a CI job, not yet an admitted one.** It needs Docker, so it runs as `checks.yml`'s
 `backend-races` job, not in the buildless glob. Its first CI run (2026-11-05) ran three of its four projects green
 and was cancelled at the job's budget inside `:core`'s, so until a run's log shows every project's race classes
 executed it admits nothing (ADR 0040), and a hand run stays the proof.

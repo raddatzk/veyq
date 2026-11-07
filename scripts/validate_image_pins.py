@@ -16,7 +16,7 @@ list of files or names (§ *a guard derives its anchor set from the code*, chang
 
 A reference is **external** unless it is a variable (`${VEYQ_IMAGE:?…}` — the operator's pin, which
 `site/src/content/docs/run/verify-a-release.md` resolves to a verified digest), an earlier stage of the same
-Dockerfile, `scratch`, or one of veyq's own published images (read out of `.github/workflows/pipeline.yml`'s
+Dockerfile, `scratch`, or one of veyq's own published images (read out of `.github/workflows/checks.yml`'s
 build matrix). Every external reference must be written `repo:tag@sha256:<64 hex>` — the tag so a person can
 still read the version, the digest so what runs is what was pinned — and one `repo:tag` must carry one digest
 everywhere it appears, so the dev stack, the release recipe, the chart and the backup tool cannot quietly run
@@ -59,7 +59,7 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     sys.exit(2)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github/workflows/pipeline.yml"
+WORKFLOW = ROOT / ".github/workflows/checks.yml"
 
 # The flow surfaces and vendored trees — the same line the other guards draw.
 SKIP_PREFIXES = ("changes/", "docs/", "site/src/content/")

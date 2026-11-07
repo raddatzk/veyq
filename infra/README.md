@@ -197,20 +197,23 @@ section keeps the commands.
 
 **A snapshot is published weekly, or when you ask for one** ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
 decision 5, amended 2026-11-07). Every push to `main` or `release/<major>.x` and every pull request (Dependabot's
-included) runs **Checks** (`.github/workflows/checks.yml`), which calls `.github/workflows/pipeline.yml` — the one
-pipeline per commit, every stage listed once in the stage map of
-[How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs) — and
-**publishes nothing**. **Publish** (`.github/workflows/publish.yml`) is what publishes, on two triggers: the **weekly
-schedule** (Monday 03:17 UTC, `main` only — GitHub runs a schedule on the default branch alone) and a **dispatch**. It
-runs the same pipeline on its branch's HEAD and, in the same run, when every stage is green, its `snapshot` job publishes the three images on exactly the digests lane L1 installed, as
-`<major>.<minor>-SNAPSHOT` and `sha-<commit>`, and the chart as `<major>.<minor>-SNAPSHOT`, signs them, attests each
-lane's result per architecture, and `snapshot-tag` sets the git tag `snapshot-<major>.<minor>` on the commit. A snapshot
-is **written once and never replaced**: a scheduled or dispatched run of a HEAD that already carries a `snapshot-` tag
-tests it again and publishes nothing (its `version` job leaves a notice saying so). A local run
-(`scripts/run_pipeline.py`) publishes nothing either.
+included) runs **Checks** (`.github/workflows/checks.yml`) — the one pipeline per commit, every stage listed once in the
+stage map of [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs)
+— and **publishes nothing**; a push to `main` or `release/<major>.x` also **stages** the images (`build-<sha>-<arch>`,
+unsigned) that its lane L1 installs. **Publish** (`.github/workflows/publish.yml`) is what publishes, on two triggers:
+the **weekly schedule** (Monday 03:17 UTC, `main` only — GitHub runs a schedule on the default branch alone) and a
+**dispatch**. It runs no pipeline: it takes **HEAD's newest Checks push run**, refuses unless that run is wholly green
+(its gate and every lane leg on both architectures), and its `snapshot` job publishes the three images on exactly the
+digests that run staged and its lanes installed, as `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, and the chart as
+`<major>.<minor>-SNAPSHOT`, signs them, attests each lane's result per architecture (naming the Checks run), and
+`snapshot-tag` sets the git tag `snapshot-<major>.<minor>` on the commit — in minutes. A snapshot is **written once
+and never replaced**: a run for a HEAD that already carries a `snapshot-` tag publishes nothing (a notice says so). A
+local run (`scripts/run_pipeline.py`) publishes and stages nothing. If HEAD's Checks run is still going, red, or was
+cancelled by hand, Publish is red and says so: re-run that Checks run (or push again), then publish. The weekly run
+also deletes staging images older than 30 days that are no branch tip.
 
 **A snapshot now:** GitHub → **Actions → Publish → Run workflow**, branch `main` (or `release/<major>.x` for a fix of a
-previous major, which the schedule never reaches; any other branch is red at `version`). From a terminal:
+previous major, which the schedule never reaches; any other branch is red at `checks-run`). From a terminal:
 
 ```sh
 gh workflow run publish.yml --ref main               # the tip's snapshot now, as the weekly run makes it
@@ -247,7 +250,7 @@ gh workflow run publish.yml --ref main               # the tip's snapshot now, a
   owner's GHCR packages. Make all four public, or every operator needs registry credentials — and the chart has no
   `imagePullSecrets` value, so public is the state it supports.
 - **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
-  at the top of `pipeline.yml` and `publish.yml` (and `release.yml`; one value, held equal), checked against the published `.sha256sum` and the GitHub release notes.
+  at the top of `checks.yml` and `publish.yml` (and `release.yml`; one value, held equal), checked against the published `.sha256sum` and the GitHub release notes.
 
 **A release promotes a snapshot** (ADR 0091 decision 5, `.github/workflows/release.yml`). Nothing is built: the
 images every lane tested get the release's names and a second signature, from `release.yml` — the identity Verify a

@@ -75,18 +75,25 @@ def anchor_files() -> list[str]:
                   or pathlib.PurePosixPath(p).name in ("action.yml", "action.yaml"))
 
 
-def yaml_uses(node: object) -> list[str]:
-    """Every string value under a `uses` key, at any depth."""
+def yaml_uses(node: object, seen: set | None = None) -> list[str]:
+    """Every string value under a `uses` key, at any depth — each written one once: a YAML alias (`steps:
+    *build-steps`, checks.yml's two image builds) is the anchored node itself, which PyYAML hands over as the SAME
+    object, so it is read where it is written and not again where it is aliased, as the line count reads it."""
+    seen = set() if seen is None else seen
     found: list[str] = []
+    if isinstance(node, (dict, list)):
+        if id(node) in seen:
+            return found
+        seen.add(id(node))
     if isinstance(node, dict):
         for key, value in node.items():
             if key == "uses" and isinstance(value, str):
                 found.append(value)
             else:
-                found.extend(yaml_uses(value))
+                found.extend(yaml_uses(value, seen))
     elif isinstance(node, list):
         for item in node:
-            found.extend(yaml_uses(item))
+            found.extend(yaml_uses(item, seen))
     return found
 
 
