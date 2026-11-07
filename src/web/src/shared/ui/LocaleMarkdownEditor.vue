@@ -143,6 +143,7 @@ function cancelEdit() {
       :visible="true"
       :header="adding ? t('localeEditor.addTitle') : t('localeEditor.editTitle', { lang: localeLabel(editing ?? '') })"
       class="locale-md-dialog"
+      :style="{ '--veyq-dialog-max-width': 'none' }"
       @update:visible="cancelEdit"
     >
       <!-- The app's form layout (`.veyq-form`, `.veyq-form-field`) and its control look: the select is the layer's, the

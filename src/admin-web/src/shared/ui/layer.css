@@ -612,6 +612,13 @@
   margin: 1rem;
 }
 
+/* A centred dialog is never wider than a reading column, whatever its text: unsized, the box takes its content's natural
+   width, and one long sentence stretches it across the screen. A dialog that needs more opts out through
+   `--veyq-dialog-max-width` (`none`, beside its own width) - never by out-ranking this rule, so load order cannot decide. */
+.veyq-dialog--center {
+  max-width: var(--veyq-dialog-max-width, min(36rem, calc(100vw - 2rem)));
+}
+
 .veyq-dialog__header {
   display: flex;
   flex-shrink: 0;
