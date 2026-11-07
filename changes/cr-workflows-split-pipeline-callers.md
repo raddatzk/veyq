@@ -297,8 +297,8 @@ phase 5 stand: measured below).
   4. `staging-retention` job, weekly (schedule only): deletes `build-*` staging indexes older than **30 days** whose
      commit is no branch tip; for a commit without a snapshot it deletes the index's two children too (nothing else
      references them), for one with a snapshot only the staging index (the snapshot references the children). Its
-     selection is `scripts/staging_retention.py`'s, selftested; it runs **`--dry-run` until the owner switches it on**,
-     after one GitHub run has listed what it would delete (the delete path is a public preview and unmeasured here).
+     selection is `scripts/staging_retention.py`'s, selftested; it deletes from its first run (owner) and prints
+     every version it deletes and why (the delete path is a public preview and unmeasured here).
 - **Guards**: `validate_release_identity.py` — Checks: every write gated on `kind == 'stage'`, no job of a PR run can
   write (`build-local`, every other job read-only), assertion 2's scenarios (push → stage, PR / local / other branch →
   none); Publish: no pipeline job and no build, runs `snapshot.py checks-run` before its first write, downloads only
@@ -318,15 +318,15 @@ phase 5 stand: measured below).
    reader, stage on push, split the build — guards green, bites for the PR-write and the version step.
 7. Publish from the Checks run: `snapshot.py checks-run` + the digest/staging verification + selftest; publish.yml;
    guards and bites; `promote.py`.
-8. Staging retention (dry-run) + selftest.
+8. Staging retention + selftest.
 9. Docs; `validate_guard_gaps.py --force`.
 10. GitHub (owner's go per step): push → a Checks push run stages and goes green; dispatch Publish → it publishes in
-    minutes; `cosign verify` under publish.yml's identity (rc 0) and ci.yml's (rc ≠ 0); the retention's dry-run list;
-    then the owner switches retention on, deletes `snapshot-0.2343` and the retired runs.
+    minutes; `cosign verify` under publish.yml's identity (rc 0) and ci.yml's (rc ≠ 0); the retention's first run and what it deleted;
+    then the owner deletes `snapshot-0.2343` and the retired runs.
 
-### Open questions (owner)
+### Decided (owner 2026-11-07)
 
-1. **Retention starts in dry-run** and is switched on only after one GitHub run shows its list — or on at once?
-2. **A Checks run cancelled by hand** (as today's were) leaves HEAD unpublishable until the next push or a re-run of
-   that run; Publish refuses with that reason. Fine, or should Publish re-run Checks itself (it would then wait ~40 min
-   again)? Proposed: refuse, named.
+1. **Retention is on from its first run** — no dry-run phase. So its first GitHub run deletes; its selection is
+   proven before that only by its selftest, and its job prints every version it deletes and why.
+2. **A Checks run cancelled by hand, or not green, is refused, named** — Publish never re-runs Checks; the next push
+   or a re-run of that Checks run makes HEAD publishable again.
