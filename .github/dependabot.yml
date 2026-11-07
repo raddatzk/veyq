@@ -4,15 +4,28 @@ version: 2
 # that belongs to a multi-ecosystem group may not carry `open-pull-requests-limit` ("should only be set on the
 # associated multi-ecosystem group"); a group is one pull request per run anyway, so its members carry none. What is
 # still marked "remembered" below has not been seen in a run.
+#
+# A major update never shares a pull request with minor and patch ones (owner, 2026-11-07): its first run grouped
+# typescript 6→7, @types/node 22→26, vitest 4→5 and Stryker 9→10 with forty minor bumps into one red PR (#4), so none
+# of the minors could land. Each code ecosystem therefore has its own group restricted to `update-types: ["minor",
+# "patch"]`, and a major falls through it into a pull request of its own. Read from GitHub's "Dependabot options
+# reference" (docs.github.com, 2026-11-07): `groups.<id>.update-types` takes `minor`, `patch`, `major`; "Any outdated
+# dependencies that do not match a rule are updated in individual pull requests"; `schedule.interval` is required on
+# every entry outside a multi-ecosystem group; `open-pull-requests-limit` defaults to 5; `ignore.update-types` takes
+# `version-update:semver-major|minor|patch`; `commit-message.prefix` sets commit message AND pull request title, and
+# `include: "scope"` follows it with the dependency type, `deps` or `deps-dev` — so a PR touching only dev
+# dependencies reads `chore(deps-dev): …`, every other `chore(deps): …`. A colon is added after a prefix ending in a
+# letter.
+# The `images` group carries no `commit-message`: the docs say only that a multi-ecosystem group takes "assignees,
+# labels, or other configuration options" — whether `commit-message` is one of them, and whether a member may carry it
+# instead, they leave unsaid, and a key Dependabot refuses stops every update in this file (the header's first read).
 
 multi-ecosystem-groups:
-  app-runtime:
-    schedule:
-      interval: "daily"
   # Third-party image pins (ADR 0057 §6). Every image is pinned `repo:tag@sha256:<index digest>`, so a new tag or a
   # re-pushed one reaches this repository only as one of these PRs — the explicit bump the pin trades silent
   # patches for. One `repo:tag` carries one digest everywhere (scripts/validate_image_pins.py), so a bump that
-  # reaches only some of its sites is red until the rest follow.
+  # reaches only some of its sites is red until the rest follow. That is why this stays ONE group across ecosystems,
+  # majors included.
   images:
     schedule:
       interval: "weekly"
@@ -24,17 +37,40 @@ updates:
   # lockfile, which carries pnpm's own pin as a first YAML document, is unproven like the rest of this file). It bumps the openapi-generator-cli WRAPPER only: the generator
   # JAR it runs is chosen by `generator-cli.version` in src/web/ and src/admin-web/openapitools.json and pinned in
   # scripts/openapi_generator_jar.sha256, which no ecosystem here reads — that bump is by hand, at a release.
+  # Daily, as the former `app-runtime` group was. The limit is 5 (the documented default, spelled out): the minor/patch
+  # group is one PR, and each major beside it is one more — a limit of 1 would let a single stuck major block the group.
   - package-ecosystem: "npm"
     directory: "/"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "app-runtime"
+    schedule:
+      interval: "daily"
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      # typescript-eslint does not support TS 7 (PR #4's CI: "Error: typescript-eslint does not support TS 7.0").
+      # Lifted when a typescript-eslint release declares typescript 7 in its peer range.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
+      # CI runs Node 22 (`node-version: "22"` in ci.yml); the types follow the runtime, not the newest Node. Lifted
+      # together with that runtime bump, by hand in the same commit.
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
 
   # The docs site is its own package with its own lockfile, deliberately outside the root workspace (site/package.json
   # says why), so the entry above never reads it (remembered, NOT read from dependabot-core: the file fetcher follows
   # the root's pnpm-workspace.yaml `packages`, and site/ is none of them). Without this entry its tree aged unseen — undici sat at an advisory version until an ORT run found it
-  # (2026-10-30). Its own group and a weekly schedule rather than app-runtime's daily one: the site ships nothing in an
-  # image, only the GitHub Pages build.
+  # (2026-10-30). Weekly rather than daily: the site ships nothing in an image, only the GitHub Pages build. Its limit
+  # is 5 for the same reason as the root entry's.
   - package-ecosystem: "npm"
     directory: "/site"
     schedule:
@@ -43,21 +79,48 @@ updates:
       site:
         patterns:
           - "*"
-    open-pull-requests-limit: 1
+        update-types:
+          - "minor"
+          - "patch"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      # Kept on the root's TypeScript major (PR #2 proposed 7 here too), so one TS major is checked repository-wide.
+      # Lifted with the root entry's rule.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
 
   # Remembered, NOT read from dependabot-core like the rest of this file: Dependabot does not regenerate
   # src/backend/gradle/verification-metadata.xml, so a version bump from this entry fails verification until the
   # metadata is regenerated by hand (src/backend/CLAUDE.md). A bump of the backend's openapi-generator alone is red
-  # either way: scripts/validate_build_input_pins.py holds it to the clients' version.
+  # either way: scripts/validate_build_input_pins.py holds it to the clients' version — so it is ignored here (inside
+  # the group it would turn every minor/patch PR red); it moves by hand, with the clients' openapitools.json, at a release.
+  # (Gradle's `dependency-name` is `groupId:artifactId`, read from the options reference 2026-11-07.)
   # One directory reaches every module (read from dependabot-core, main, 2026-10-20): the Gradle file fetcher reads
   # src/backend/settings.gradle.kts's `include(":core")`-style calls (SettingsFileParser#subproject_paths, Kotlin DSL
   # parentheses matched, `:apps:memories` → apps/memories) and fetches each subproject's build file; it adds buildSrc
   # when the directory exists, and gradle/libs.versions.toml at this entry's root. So no `directories:` list.
+  # Daily and a limit of 5, as the root npm entry and for the same reason.
   - package-ecosystem: "gradle"
     directory: "/src/backend"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "app-runtime"
+    schedule:
+      interval: "daily"
+    groups:
+      gradle-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "org.openapitools:openapi-generator"
 
   # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): each image's beside
   # the code it ships — the app image's in src/backend/, the admin image's in src/admin-web/, the tools image's in
@@ -110,3 +173,7 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 1
+
+    commit-message:
+      prefix: "chore"
+      include: "scope"
