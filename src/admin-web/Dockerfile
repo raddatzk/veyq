@@ -73,7 +73,7 @@ RUN pnpm run build && pnpm run build:cli
 # mainline branch (odd minor): the tag of a mainline minor stops receiving builds once the next mainline opens
 # (1.29-alpine was last pushed 2026-05-11). src/admin-web/nginx.conf.template needs
 # `add_header_inherit` (nginx 1.29.3+), so the floor is 1.30. The digest is the tag's multi-arch index (ADR 0057 §6).
-FROM nginxinc/nginx-unprivileged:1.30-alpine@sha256:4714e0b1b2577eaa1a6131d07c958b67f0eb68e6d0521e90c6e5287db8cf0bc5 AS runtime-nginx
+FROM nginxinc/nginx-unprivileged:1.30-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03 AS runtime-nginx
 # The base ends on `USER 101`, and `apk add` as 101 fails (measured) — so root for the build steps, and back
 # to 101 at the very end of this stage. BOTH switches are load-bearing: without the first the build dies on
 # its first RUN, without the second the image silently runs as root again, with a green build on top.

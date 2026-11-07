@@ -387,9 +387,11 @@ def compose_up() -> None:
     Mailpit is unconditional, not a flag: every suite's tenant is now pointed at it (`e2eBootstrap.birthInstance`)
     because a member invite travels by mail only (ADR 0055 §2). Gating that behind an argument would mean gating
     something that must always be on — and this script has no argparse at all; every argv entry is a test path.
-    Note that mailpit's healthcheck declares a 15 s interval and no `start_period`, so a cold `--wait` genuinely
-    blocks about that long. That is the right trade against a first-suite flake, and the reason not to substitute
-    a snappier poll of our own.
+    Note that mailpit's healthcheck is the image's own: a 15 s interval and, since the pinned v1.33.0, a 10 s start
+    period polled every second (`docker inspect` on the pin, 2026-11-07), so a cold `--wait` returns about a second
+    after Mailpit is up wherever the engine honours `start_interval`, and blocks up to the 15 s interval where it
+    does not (v1.20.0 declared no start period at all). Waiting on the image's own check is the right trade against a
+    first-suite flake, and the reason not to substitute a snappier poll of our own.
     """
     log(f"compose up (--profile s3 --profile mail) from {COMPOSE_FILE}")
     # Run from a git WORKTREE, this is the same compose project (`infra`) from a different directory: bind mounts

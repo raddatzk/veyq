@@ -66,7 +66,7 @@ services:
   # the settings take only one (`instance.openapi.yaml`'s host pattern refuses a bare `mailpit`). The image has no
   # USER and would run as root; measured to run with the triple, a non-root uid and only /tmp writable.
   mailpit:
-    image: axllent/mailpit:v1.20.0@sha256:6105f08377323c3e11a21b6e5e51648e33151fb4e525aab8d0961573c9e94a4d
+    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     read_only: true
