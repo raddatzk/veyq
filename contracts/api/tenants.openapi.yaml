@@ -1347,7 +1347,7 @@ paths:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
                 operatorSection:
-                  revision: 3
+                  revision: 1
                   text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
                   record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
         "401":
@@ -1405,7 +1405,7 @@ paths:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
                 operatorSection:
-                  revision: 3
+                  revision: 1
                   text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
                   record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
         "400":
@@ -1464,7 +1464,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/AcceptTermsRequest" }
-            example: { revision: 3, operatorRevision: 3 }
+            example: { revision: 3, operatorRevision: 1 }
       responses:
         "200":
           description: Accepted; the current terms state (now `accepted`) is returned.
@@ -1478,7 +1478,7 @@ paths:
                   de: "## Nutzungsbedingungen\n…"
                   en: "## Terms of use\n…"
                 operatorSection:
-                  revision: 3
+                  revision: 1
                   text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
                   record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
         "400":
