@@ -115,7 +115,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The backend's Gradle toolchain asks for its one Java major (src/backend/gradle/libs.versions.toml's `java`,
-      # ADR 0119) and resolves no JDK of its own, so the build below needs it installed — the same setup pipeline.yml's jobs run.
+      # ADR 0119) and resolves no JDK of its own, so the build below needs it installed — the same setup checks.yml's jobs run.
       - name: Set up Java
         if: matrix.language == 'java-kotlin'
         uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0

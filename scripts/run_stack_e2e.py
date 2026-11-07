@@ -2,7 +2,7 @@
 """Install the release candidate as a Server Owner would, through `veyqctl install`, and drive it in a browser (ADR 0090, lane L1 of ADR 0091).
 
 **What it does: lane L1 — a boot, first run, a Memory round trip and the feature scenarios in a browser, and the
-stack swept for every value the browser typed.** `pipeline.yml`'s `stack` job runs it per architecture. Takes the two candidate images (`--app`,
+stack swept for every value the browser typed.** `checks.yml`'s `stack` job runs it per architecture. Takes the two candidate images (`--app`,
 `--admin`: a local build's bare `name:tag` — `veyqctl --unsigned-local` refuses anything else) and from there
 installs it the way the Run area does, through the release's own `veyqctl`, never through this repository's copy of
 the recipe:
@@ -64,7 +64,7 @@ the recipe:
      browser is baked into the image; a library one patch apart fails at launch) or is not installed at all. **A
      green needs at least one EXECUTED test** (the JUnit report): a selection that matched nothing, or a run whose
      every test was skipped, is red, never "nothing failed". Arguments after `--` go to `playwright test` as they are.
-     **A leg is a run of its own**: `pipeline.yml`'s `stack` legs pass `-- --project <domain>`, one domain folder of
+     **A leg is a run of its own**: `checks.yml`'s `stack` legs pass `-- --project <domain>`, one domain folder of
      `tests/e2e/tests/features/` each, and each leg boots its own instance, runs Playwright's dependency projects
      (`setup`, `scenarios`, `instance`) whole and its domain (`tests/e2e/playwright.config.ts`), and sweeps only what its
      own browser typed — every stage below reads this run's directory and this run's stack, so no leg reads another's.
@@ -129,7 +129,7 @@ API-level suites, which record what they unseal, cover that half (`run_web_e2e.p
 tenant, one Memory, one photo and one link; a leak on a path no scenario walks is not seen.
 
 On a green run, `--asset-set-out FILE` writes the hash of the asset set `install` read (`release_assets.py
---asset-set`): `pipeline.yml` records it in the leg's result, and lane L1's attestation names it as the input a promotion
+--asset-set`): `checks.yml` records it in the leg's result, and lane L1's attestation names it as the input a promotion
 compares (ADR 0091 decision 5).
 
 Usage:

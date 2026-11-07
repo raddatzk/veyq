@@ -1,5 +1,5 @@
 # The one Python dependency of the jobs that hold write permissions — release.yml's `check` and `promote` and
-# pipeline.yml's `build` — installed only as these exact wheels:
+# checks.yml's `build` — installed only as these exact wheels:
 #   pip install --require-hashes --only-binary :all: -r scripts/requirements-release.txt
 # Unpinned, whatever PyPI serves as "pyyaml" at that moment would run beside the job's OIDC token and registry or
 # repository write access, and could sign or publish what nobody tested. scripts/validate_release_identity.py

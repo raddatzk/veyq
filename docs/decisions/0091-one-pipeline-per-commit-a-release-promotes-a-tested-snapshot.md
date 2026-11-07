@@ -60,23 +60,23 @@ Three structural costs sat on top of what a run took:
    workflow has a budget; the values, and each stage's workflow job, trigger and measured time, are the one stage
    map's ([How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)).
 
-2. **One pipeline per commit, and nothing waits that need not.** One pipeline definition, `pipeline.yml`.
+2. **One pipeline per commit, and nothing waits that need not.** One workflow, `checks.yml` ("Checks").
    The guards, the surface checks, the races, the API end-to-end run, the API fuzzing **and the image build start
    together**; the build does not wait for the tests, because nothing is published until every stage is green — the
-   pipeline's gate job (`green`) needs every other job of the file, and the publish needs the gate. The stack lanes
-   need the build. The surface checks run once. The guard gaps are not in it (decision 4), and `trust-chain.yml` stays
+   gate job (`green`) needs every other job of the file, and a publish needs that run's gate. The stack lanes need the
+   build. The surface checks run once. The guard gaps are not in it (decision 4), and `trust-chain.yml` stays
    separate and unfiltered, because a docs-only commit is validated there and nowhere else.
-   - **Amended 2026-11-07 (owner, cr-workflows-split-pipeline-callers): one definition, two workflows that run it.**
-     Until then the pipeline was one file, `ci.yml`, that was also the weekly and the dispatched publish. Now
-     `pipeline.yml` is a reusable workflow (`on: workflow_call`, a `publish` input), and the Actions list shows what
-     each run is for: **Checks** (`checks.yml`) runs it on every push and pull request with `publish: false`, and
-     **Publish** (`publish.yml`) runs it weekly and on a dispatch with `publish: true` and then, **in the same run**,
-     its own `snapshot` and `snapshot-tag` jobs — so the published bytes stay the ones that run tested (decision 5),
-     with no hand-over between runs. The signing jobs are Publish's own, not the pipeline's: keyless signing names the
-     file that holds the signing job, so a job of the called pipeline would sign as `pipeline.yml` whoever called it.
-     Permissions are unchanged job by job; both callers grant the pipeline the `packages: write` its `build` job asks
-     for, which only a publishing run uses.
-
+   - **Amended 2026-11-07 (owner, cr-workflows-split-pipeline-callers): the pipeline publishes nothing; Publish signs
+     what a Checks run staged.** Until then the pipeline was `ci.yml`, which was also the weekly and the dispatched
+     publish (and, for a few hours that day, `pipeline.yml`, a reusable workflow that Checks and Publish both called).
+     Now `checks.yml` runs on every push and pull request; a push to `main` or `release/<major>.x` **stages** its images
+     — the per-arch `build-<sha>-<arch>` tags, unsigned, pulled by digest by its lanes, whose green legs record what
+     they installed. **Publish** (`publish.yml`, weekly and on a dispatch) runs no pipeline and builds nothing: it finds
+     HEAD's newest Checks push run, refuses unless that run concluded `success` with its gate and every lane leg on
+     both architectures green, and then signs and names exactly the digests that run staged and its lanes recorded
+     (decision 5). The signing is Publish's own: keyless signing names the file that holds the signing job. A pull
+     request's run holds no write (`build` runs on a push alone and is the one job with `packages: write`; a pull
+     request builds the same matrix and steps as `build-local`).
 3. **Three stack lanes, one scenario suite.** The scenarios are split into a **write half** (put content into an
    instance) and a **read half** (open every item and assert it), with one record between them — the shape the
    upgrade proof already has:
@@ -100,9 +100,10 @@ Three structural costs sat on top of what a run took:
    - **Pull request** (Checks): everything in 1 except mutation's scope rule, L1 on amd64, nothing published. A pull
      request never writes to a registry.
    - **Push to `main` or `release/<major>.x`** (Checks): everything, all three lanes on **both** architectures (what is
-     published for an architecture must have passed on it), nothing published since decision 5's amendment of
-     2026-11-07.
-   - **The weekly schedule and a dispatch** (Publish): everything as on a push, then the snapshot (decision 5).
+     published for an architecture must have passed on it), its images staged; nothing published since decision 5's
+     amendment of 2026-11-07.
+   - **The weekly schedule and a dispatch** (Publish): the snapshot of HEAD's green Checks push run (decision 5), in
+     minutes, and on the schedule the deletion of staging images older than 30 days.
    - **Guard gaps** run when what the guards are made of changes, and nightly on `main` — they test the guards, and a
      product commit changes no guard.
    - **Release**: decision 5's promotion; the tests it needs already ran.
@@ -150,28 +151,30 @@ Three structural costs sat on top of what a run took:
    - **Amended 2026-11-07 (owner): a snapshot is published weekly and by dispatch, no longer per push.** Once
      Dependabot opened its pull requests, every merged bump was a green push, so every one became a snapshot — three
      images, a chart, signatures, attestations and a `snapshot-` tag — far more than anyone would promote or try. Every
-     push still runs the whole pipeline (decision 2) and writes nothing; the publish runs on two events only (since
-     decision 2's amendment of the same day, as its own workflow, `publish.yml`):
+     push still runs the whole pipeline (decision 2) and publishes nothing; the publish is its own workflow,
+     `publish.yml`, on two events only:
      - its **weekly `schedule`** (Monday 03:17 UTC). GitHub runs a schedule on the default branch alone, so it
        publishes `main`'s HEAD and never reaches a `release/<major>.x` branch;
      - a **`workflow_dispatch`** — the owner's *Run workflow* in Actions, "a snapshot now" — on `main` or
        `release/<major>.x` (red on any other branch). A fix on a release branch gets its snapshot this way.
 
-     Both run the whole pipeline on the ref's HEAD and publish only when it is green, with the same jobs, conditions
-     and attestations a push published with before; the signing identity is `publish.yml`'s (it was `ci.yml`'s until
-     decision 2's amendment, and a snapshot signed under it is not promotable, owner 2026-11-07). **Neither publishes a HEAD that
-     already carries a `snapshot-` tag**: such a run tests the commit again and writes nothing, with a notice saying
-     so — for a dispatch too, because a snapshot is written once and never replaced, so a republish could only be the
-     refusal's red after a full build. The `version` job reads the tag from its own checkout (`fetch-depth: 0` fetches
-     every tag): no registry, no token, no network, and the tag is the last write of a complete publish, so it is
-     exactly "this commit has a promotable snapshot". A publish that lost its tag (its `snapshot` green, its
-     `snapshot-tag` failed) is not seen as published: the next run builds again and is refused by the registry's
-     write-once check — red, which is the signal to re-run the old run's failed `snapshot-tag`. A rule read from commit
-     messages was rejected: a message is a weak source of what a commit is. The publishing runs share a concurrency
-     group per ref, apart from pushes and pull requests, so two of them go one after the other and the later one sees
-     the earlier one's tag, and a push neither delays a snapshot nor cancels a pending scheduled run. A snapshot is
-     therefore "the newest green `main` of that week, or the commit the owner asked for" — no longer "every green
-     commit". `release.yml`'s promotion is unchanged.
+     Neither runs the pipeline (decision 2's amendment of the same day): both publish HEAD's newest Checks push run
+     when it is wholly green, from the digests that run staged and the records its lanes left (kept 30 days as the run's
+     artifacts), and refuse, red and named, a run still going, red, or cancelled by hand — Publish never starts Checks
+     (owner). The signing identity is `publish.yml`'s (it was `ci.yml`'s before, and a snapshot signed under it is not
+     promotable, owner 2026-11-07); each attestation names the Checks run its lane ran in. **Neither publishes a HEAD
+     that already carries a `snapshot-` tag**: such a run writes nothing, with a notice saying so, because a snapshot is
+     written once and never replaced. The tag is read from Publish's own checkout (`fetch-depth: 0` fetches every tag):
+     no registry, no network, and the tag is the last write of a complete publish, so it is exactly "this commit has a
+     promotable snapshot". A publish that lost its tag (its `snapshot` green, its `snapshot-tag` failed) is not seen as
+     published: the next run is refused by the registry's write-once check — red, which is the signal to re-run the
+     old run's failed `snapshot-tag`. A rule read from commit messages was rejected: a message is a weak source of what
+     a commit is. Publish has a concurrency group per ref apart from Checks', so two publishing runs go one after the
+     other and the later one sees the earlier one's tag. A snapshot is therefore "the newest green `main` of that week,
+     or the commit the owner asked for" — no longer "every green commit". **Staging images** are deleted by the weekly
+     run 30 days after their push unless their commit is a branch tip; a staging index whose commit has a snapshot goes
+     alone, the snapshot's own index naming its children (owner: on from the first run). `release.yml`'s promotion is
+     unchanged.commit". `release.yml`'s promotion is unchanged.
 
 6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) **with its
    object pool** (`--objects-to`: a capture's store leg is only its index, ADR 0056 §3) as a signed OCI artifact
@@ -271,12 +274,12 @@ Three structural costs sat on top of what a run took:
 - **Guard gaps on every push.** 90 % of the trust-chain's time spent proving that guards no commit touched still bite.
 - **Keeping `ci.yml` and `container.yml` apart.** The second copy of the surface checks is a quarter of an hour on the
   critical path and proves nothing the first did not.
-- **A publish that reads another run's results** (a `workflow_run` on Checks, or a dispatch that trusts the last green
-  run of a commit). The published bytes would be another run's, and decision 5 publishes the ones its own lanes
-  installed; Publish calls the pipeline instead (decision 2's amendment).
-- **A pipeline that hands its images on as files**, so that it could hold no `packages: write` at all: an OCI tarball
-  per image and architecture as a run artifact, pushed by Publish. Several hundred megabytes a run and a second push
-  path that must keep every digest, to remove a right that only a publishing run uses (decision 2's amendment).
+- **Publish running the pipeline itself** (built for a few hours on 2026-11-07, the owner reversed it the same day):
+  a snapshot took the pipeline's 40 minutes again, re-testing a commit Checks had just tested, and a snapshot run that
+  went red on a flaky leg left a green commit unpublished. Publishing the Checks run's own staging keeps the published
+  bytes the tested ones and takes minutes.
+- **A Publish triggered by the Checks run** (`workflow_run`): a snapshot per green push, which is what the amendment of
+  decision 5 removed. Publish reads the run by the commit instead, when the schedule or the owner starts it.
 - **The API fuzzing inside the API end-to-end job.** That job runs close to its budget; a second workload in it would
   push it over, and a fuzz finding would read as a wire-sweep red.
 - **The API fuzzing on lane L1, or only in the pentests.** The candidate's production rate limits refuse a fuzzer's

@@ -255,7 +255,7 @@ def _git(root: pathlib.Path, *args: str) -> str:
 
 
 def tree_release(root: pathlib.Path = ROOT) -> str:
-    """`<major>.<minor>` exactly as `pipeline.yml`'s `veyq-version` step counts it (ADR 0057 §1).
+    """`<major>.<minor>` exactly as `checks.yml`'s `veyq-version` step counts it (ADR 0057 §1).
 
     That step is the authority; validate_release_identity.py runs both against one throwaway history and holds
     them to the same answer, so this copy cannot drift from it unnoticed.

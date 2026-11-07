@@ -135,6 +135,6 @@ gaps:
     document survives), in separate browser contexts; the pause of a tab in the background is not driven (Playwright keeps every
     page visible). `view-modes` is driven as far as a Memory's chapters grid and its grid/list switch, read as computed
     styles in light and dark (inbox #513 moved those rules into Memories' own stylesheet).
-    Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`pipeline.yml` → `stack`) awaits the first CI
+    Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`checks.yml` → `stack`) awaits the first CI
     run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On that run each
     file becomes a ref on the criteria its tests are tagged with, and this gap goes.

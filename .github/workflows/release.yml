@@ -43,7 +43,7 @@ concurrency:
 
 permissions: {}
 
-# The Helm `pipeline.yml` and `publish.yml` pin (their comment says how the pin was checked); validate_release_identity.py
+# The Helm `checks.yml` and `publish.yml` pin (their comment says how the pin was checked); validate_release_identity.py
 # holds the three equal.
 env:
   HELM_VERSION: v4.0.1

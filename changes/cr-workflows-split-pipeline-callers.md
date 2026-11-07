@@ -324,6 +324,26 @@ phase 5 stand: measured below).
     minutes; `cosign verify` under publish.yml's identity (rc 0) and ci.yml's (rc ≠ 0); the retention's first run and what it deleted;
     then the owner deletes `snapshot-0.2343` and the retired runs.
 
+### Progress of amendment 2 (2026-11-07)
+
+Phases 6–9 are built on `claude/awesome-sinoussi-6ae208` (on top of origin/main `867fc543a`); phase 10 waits for the
+owner. Where the build left the plan:
+- **`green` stays, as checks.yml's gate**; Publish reads its result (`Pipeline green`) and every lane leg's by name
+  through the API, and `validate_release_identity.py` holds the names `snapshot.py` reads to checks.yml's. A job that
+  runs on one event alone (`build`, `build-local`) may be `skipped` in the gate, as `if: false` may.
+- **`stack` needs `build` with its own status function** (`contains(…success, skipped…)` for `build`), since on a pull
+  request `build` is skipped and the lane builds its own images.
+- **`validate_action_pins.py` reads a YAML alias once** (it counted `build-local`'s aliased steps twice against the
+  lines): a node PyYAML hands over twice as the same object is read where it is written.
+- **The retention keeps every child a staying version names** — which is how a commit with a snapshot keeps its
+  children; the separate "commit has a snapshot" rule was a second copy of that and was removed when its bite stayed
+  green (the bite of the remaining rule is red).
+- **The call reader is gone** (`workflow_calls.py`, its selftest, `composed_run`); `validate_coverage`,
+  `validate_pnpm_installs_gated` and `run_pipeline` are back to their pre-split reading, pointed at `checks.yml`.
+- Bites: 21 for the guard and the two selftests, each red with its own message (one lever, "the version step stages a
+  pull request", was first written so that a pull request's `<n>/merge` ref already stopped it — re-written to stage
+  every event).
+
 ### Decided (owner 2026-11-07)
 
 1. **Retention is on from its first run** — no dry-run phase. So its first GitHub run deletes; its selection is

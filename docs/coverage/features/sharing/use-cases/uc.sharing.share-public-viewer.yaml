@@ -152,6 +152,6 @@ gaps:
     drives `anonymous-resolve-decrypt`, `create-public-share`, `guest-sees-the-member-view` in Chromium against the
     release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its criterion. The
     field-seal scenario resolves a contributor link: the Memory's name the link carries, opened anonymously. Green only
-    in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`pipeline.yml` → `stack`) awaits the first CI run (no
+    in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`checks.yml` → `stack`) awaits the first CI run (no
     remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On that run each file
     becomes a ref on the criteria its tests are tagged with, and this gap goes.
