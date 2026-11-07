@@ -97,8 +97,8 @@ object PrivacyNoticeRenderer {
     }
 
     /**
-     * The services veyq's defaults call, by their own names (the migrations that seed them,
-     * `V202610161210__core_external_service.sql` and `V202610251600__core_exchange_rate_service.sql`). A mirror the Server Owner sets is named by its host alone, so the
+     * The services veyq's defaults call, by their own names (the rows the core baseline seeds into
+     * `veyq_external_service`). A mirror the Server Owner sets is named by its host alone, so the
      * notice never names a provider the instance does not call.
      */
     private val KNOWN = mapOf(

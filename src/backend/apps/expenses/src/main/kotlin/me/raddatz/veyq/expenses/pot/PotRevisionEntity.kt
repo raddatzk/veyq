@@ -11,7 +11,7 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * One revision of one record of a Pot (ADR 0108 decisions 3-5; the migration `V202610242200__expenses_revisions.sql`
+ * One revision of one record of a Pot (ADR 0108 decisions 3-5; the Expenses baseline's `veyq_expenses_revision`
  * says what each column holds). **Never overwritten**: the only column a write after the insert changes is
  * [wrappedRevisionKey], by a re-key ([PotNodeRekeyParticipant]) — the body and every digest of it stay byte-identical —
  * and [position], which every writer that moves the row to the list's end stamps. The only writer that removes a row

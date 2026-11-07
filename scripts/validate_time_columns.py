@@ -17,8 +17,8 @@
      would otherwise see no `TIMESTAMP` and pass.
 
 **The defect that bought it.** Inbox #509: the API fuzzing's positive writes (#495) sent a share an `expiresAt` in 2577,
-and the `UPDATE` of the `TIMESTAMP` column failed with a 500; every time column was converted to `DATETIME` by
-`V202610192230__core_time_columns_are_datetime.sql` and `V202610192231__memories_time_columns_are_datetime.sql`.
+and the `UPDATE` of the `TIMESTAMP` column failed with a 500; every time column was converted to `DATETIME` by one core
+and one Memories migration of 2026-10-19, since folded into the baselines.
 
 **Its limit.** (a) It reads *declarations, not a database*: a column made through dynamic SQL, a `CREATE TABLE … AS
 SELECT` (its columns are not declared; the one such table today is dropped in the same file), or a type named through

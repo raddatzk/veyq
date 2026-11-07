@@ -14,7 +14,6 @@ import me.raddatz.veyq.core.moderation.hold.HoldTrigger
 import me.raddatz.veyq.core.moderation.hold.Holds
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
-import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
 import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchFixtures
 import me.raddatz.veyq.core.sharing.GuestTreeShare
@@ -25,7 +24,6 @@ import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
-import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusMock
@@ -34,7 +32,6 @@ import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.specification.RequestSpecification
 import jakarta.inject.Inject
-import jakarta.persistence.EntityManager
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -70,7 +67,6 @@ class GuestWriteRecordCoreSliceTest {
     @Inject lateinit var records: GuestWriteRecords
     @Inject lateinit var holds: Holds
     @Inject lateinit var config: VeyqConfig
-    @Inject lateinit var em: EntityManager
 
     private data class Tree(val userId: String, val scopeId: String, val root: String, val a: String, val link: Link)
 
@@ -363,30 +359,6 @@ class GuestWriteRecordCoreSliceTest {
         )
     }
 
-    /** The migration that retired the switch deletes its rows, instance and tenant, and nothing else: its statements, run. */
-    @Test
-    fun theMigrationDeletesTheRetiredSwitchsRowsAndNoOther() {
-        val statements = javaClass.classLoader.getResource("db/migration/V202610211101__core_guest_write_record_has_no_switch.sql")!!
-            .readText().lines().filterNot { it.startsWith("--") }.joinToString("\n").split(";").map { it.trim() }.filter { it.isNotEmpty() }
-        val tenantId = seedTenant()
-        QuarkusTransaction.requiringNew().run {
-            for ((table, id) in listOf("veyq_capability_switch" to RETIRED, "veyq_capability_switch" to PUBLIC_SHARES_CONTRIBUTE)) {
-                em.createNativeQuery("INSERT INTO $table (id) VALUES (?1)").setParameter(1, id).executeUpdate()
-            }
-            for (id in listOf(RETIRED, PUBLIC_SHARES_CONTRIBUTE)) {
-                em.createNativeQuery("INSERT INTO veyq_tenant_capability_switch (id, tenant_id, capability_id) VALUES (?1, ?2, ?3)")
-                    .setParameter(1, UUID.randomUUID()).setParameter(2, UUID.fromString(tenantId)).setParameter(3, id).executeUpdate()
-            }
-            statements.forEach { em.createNativeQuery(it).executeUpdate() }
-        }
-        assertEquals(setOf(PUBLIC_SHARES_CONTRIBUTE), instanceSwitches(), "the retired id's instance row is gone; another stays")
-        val tenantRows = QuarkusTransaction.requiringNew().call {
-            em.createNativeQuery("SELECT capability_id FROM veyq_tenant_capability_switch WHERE tenant_id = ?1")
-                .setParameter(1, UUID.fromString(tenantId)).resultList.map { it.toString() }
-        }
-        assertEquals(listOf(PUBLIC_SHARES_CONTRIBUTE), tenantRows, "…and its tenant row; another tenant row stays")
-    }
-
     // --- the disclosure the resolve serves (decision 6) ---------------------------------------------------------------
 
     @Test
@@ -495,9 +467,6 @@ class GuestWriteRecordCoreSliceTest {
 
     private fun count(query: String, value: Any): Long = QuarkusTransaction.requiringNew().call { GuestWriteRecordEntity.count(query, value) }
 
-    private fun instanceSwitches(): Set<String> =
-        QuarkusTransaction.requiringNew().call { CapabilitySwitchEntity.listAll().map { it.id }.toSet() }
-
     /** Every log record the app emits at its configured levels while [block] runs, as text; a control proves the capture. */
     private fun capture(block: () -> Unit): String {
         val records = mutableListOf<LogRecord>()
@@ -529,8 +498,5 @@ class GuestWriteRecordCoreSliceTest {
     private companion object {
         const val PATH = "/api/instance/guest-write-record"
         const val CONTROL = "guest-write-record capture control"
-
-        /** The switch the record had until cr-operating-mode-retires, as its stored rows spelt it. */
-        const val RETIRED = "core.public-shares.guest-write-record"
     }
 }

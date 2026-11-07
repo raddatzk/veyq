@@ -12,8 +12,8 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * One blob an application stores through core's blob service (ADR 0112 decision 1; the migration
- * `V202611012215__core_application_blob.sql` says what each column holds): a blob of `veyq_blob`, the fourth arm that
+ * One blob an application stores through core's blob service (ADR 0112 decision 1; the core baseline's
+ * `veyq_application_blob` says what each column holds): a blob of `veyq_blob`, the fourth arm that
  * references one. Written once by its completion ([ApplicationBlobs.attach]); the only columns a write after the insert
  * changes are [keptAt] and [releasedAt], set by its application's own writes ([ApplicationBlobs.keep],
  * [ApplicationBlobs.releaseOwners], [ApplicationBlobs.release]). Its `K_blob` wrap is the blob row's, so a re-key rewrites
