@@ -29,7 +29,7 @@ multi-ecosystem-groups:
   images:
     schedule:
       interval: "weekly"
-      day: "sunday"
+      day: "saturday"
       time: "06:00"
       timezone: "Europe/Berlin"
 
@@ -40,8 +40,8 @@ updates:
   # lockfile, which carries pnpm's own pin as a first YAML document, is unproven like the rest of this file). It bumps the openapi-generator-cli WRAPPER only: the generator
   # JAR it runs is chosen by `generator-cli.version` in src/web/ and src/admin-web/openapitools.json and pinned in
   # scripts/openapi_generator_jar.sha256, which no ecosystem here reads — that bump is by hand, at a release.
-  # Weekly, Sunday 06:00 Europe/Berlin (owner 2026-11-07), and so is every entry here: the pull requests and their
-  # Checks runs are ready on Sunday, so what is merged that day is in the snapshot `publish.yml` cuts on Monday at
+  # Weekly, Saturday 06:00 Europe/Berlin (owner 2026-11-07), and so is every entry here: the pull requests and their
+  # Checks runs are ready on Saturday, so what is merged over the weekend is in the snapshot `publish.yml` cuts on Monday at
   # 03:17 UTC. Security updates follow Dependabot's alerts, not this schedule. The limit is 5 (the documented default,
   # spelled out): the minor/patch group is one PR, and each major beside it is one more — a limit of 1 would let a
   # single stuck major block the group.
@@ -49,7 +49,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "sunday"
+      day: "saturday"
       time: "06:00"
       timezone: "Europe/Berlin"
     groups:
@@ -83,7 +83,7 @@ updates:
     directory: "/site"
     schedule:
       interval: "weekly"
-      day: "sunday"
+      day: "saturday"
       time: "06:00"
       timezone: "Europe/Berlin"
     groups:
@@ -119,7 +119,7 @@ updates:
     directory: "/src/backend"
     schedule:
       interval: "weekly"
-      day: "sunday"
+      day: "saturday"
       time: "06:00"
       timezone: "Europe/Berlin"
     groups:
@@ -182,7 +182,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "sunday"
+      day: "saturday"
       time: "06:00"
       timezone: "Europe/Berlin"
     groups:
