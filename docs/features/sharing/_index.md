@@ -53,8 +53,7 @@ do there is each application's role matrix ([Memories](../../apps/memories.md#wh
 
 - [uc.sharing.browse-a-received-share-in-place](use-cases/uc.sharing.browse-a-received-share-in-place.md) — **built**
   (a bookmarked share of any instance browsed and written in place;
-  [ADR 0121](../../decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md),
-  `changes/cr-browse-a-received-share-in-place.md`)
+  [ADR 0121](../../decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md))
 
 ## Deferred
 
@@ -64,6 +63,6 @@ do there is each application's role matrix ([Memories](../../apps/memories.md#wh
   moderation of contributions before they show; and a client-side id list so an uploader can delete after a reload.
 - **A password that keys the link** — folding `Argon2id(passphrase)` into the key, against a malicious operator
   ([ADR 0037](../../decisions/0037-password-protected-shares.md), alternative A).
-- **A received link browsed in place** (inbox #829) and **kept in the account** (inbox #435); **person-resolution** and
+- **A received link kept in the account** (inbox #435); **person-resolution** and
   the **pre-auth login-page terms** surface.
 - **A foreign-operator-proof no-install viewer** — needs the future trusted-web client.

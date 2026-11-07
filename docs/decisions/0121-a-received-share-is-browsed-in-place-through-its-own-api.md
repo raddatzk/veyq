@@ -1,7 +1,7 @@
 # ADR 0121 — A received share is browsed in place, through its own instance's API
 
 - Status: Accepted
-- Built: yes (its live two-origin pass is `changes/cr-browse-a-received-share-in-place.md` P6)
+- Built: yes (its live two-origin pass ran 2026-11-06, § Consequences)
 - Date: 2026-11-06
 - Model: [en.sharing.public-link](../features/sharing/enablers/en.sharing.public-link.md)
 
@@ -33,7 +33,18 @@ proxy through this instance would make it learn what each member reads.
    other node, a `WRITE_ONLY` link's drop page — the views the share page draws, handed a guest's access. A row's
    plain click opens the bookmark's page, no longer the link; **Open on its own page** keeps ADR 0120 decision 5. The
    navigation inside the share is the page's own (a breadcrumb under the header); the space's URL names the bookmark
-   only, so no node id of another instance enters this space's addresses.
+   only, so no node id of another instance enters this space's addresses. As built (`core/bookmark/BookmarkEmbed.vue`,
+   `core/sharing/ShareTreePage.vue`'s `embedded`):
+   - **The switch decides the row too.** `core.share-embedding` is read through `useCapabilities().hasCapability` (the
+     tenant's set once loaded, else the instance's). Off: no instance is asked, the page is ADR 0120's without a line and
+     the row opens the link. On: the row's plain click opens the bookmark's page. **Open on its own page** leads the
+     bookmark's header (`header.order`) in both states.
+   - **Navigation inside the share is the page's own state**, never `?node=`; each crumb's real `href` is the bookmark's
+     page (`route.fullPath`), its plain click prevented and run in place.
+   - **The word is "server"** (de: *Server*), not "instance", in the bookmark's and the embed's texts (owner 2026-11-06).
+   - **Known limits:** the embedded node's own header is core's, so the page carries a second `h1` under the
+     bookmark's; the embed's stored view mode and tab are the member's account preferences (the share page's are the
+     guest's).
 2. **This client may connect to any `https` origin while embedding is on** (owner, 2026-11-06). The app shell's
    `connect-src` gains `https:` for a tenant whose `core.share-embedding` is effective (ADR 0088: switched by the
    operator `*` and the tenant owner `+`; on by default, owner 2026-11-06); off, the policy is as before and a bookmark
@@ -42,7 +53,17 @@ proxy through this instance would make it learn what each member reads.
    stops an injected script from sending what it reads to a host of its choice; `script-src 'self'`, Trusted Types
    ([ADR 0117](0117-the-web-client-enforces-trusted-types.md)) and the absence of inline script remain the defences in
    front of it. The owner chose this over an operator-kept list of partner instances, which keeps the backstop but
-   reaches only listed instances.
+   reaches only listed instances. As built:
+   - **The tenant a page's policy follows** is the one whose domain serves the page (`TenantHostResolver.hostOf`); a
+     host that claims no tenant follows the instance level. The header is written on the event loop, so the answer is a
+     per-domain snapshot (`ShareEmbeddingHosts`, behind the app shell's seam `HostConnectSources`) refreshed after the
+     Server Owner's and a tenant owner's switch write and after every tenant write that moves a domain. A stale snapshot
+     is at most as wide as the tenant was; the domain move is the one write that could widen, so it refreshes. It is the one
+     tenant-dependent source of the served CSP (ADR 0088, § Consequences).
+   - **The dev policy serves as if the switch were on** (`https:` and `http://*.localhost:*`, `shared/security/csp.ts`);
+     `verify:csp` refuses a scheme or wildcard in the built `connect-src`. The dev server answers no CORS of its own
+     (`server.cors: false`): Vite's default answered a `*.localhost` preflight itself and echoed the origin on proxied
+     answers, so a switched-off `core.public-shares.embeddable` still embedded in dev.
 3. **An instance lets its links be embedded elsewhere** under `core.public-shares.embeddable` (`*` and `+`, a child of
    `core.public-shares`, on by default). Where it is effective, the public share API — `/api/shares/{shareId}` and
    everything below it — answers any origin: a preflight `OPTIONS` is `204` with `Access-Control-Allow-Origin: *`, the
@@ -74,22 +95,47 @@ proxy through this instance would make it learn what each member reads.
    ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md)'s rule for the web client) and it serves `core.public-shares`
    and `core.public-shares.embeddable`; anything else — a refusal, another major, a missing entry, a network error —
    falls back to ADR 0120's open, with one line saying why. A write's own capability (`.contribute`) is the share's
-   server's to refuse, as on its page.
+   server's to refuse, as on its page. As built (`core/sharing/shareInstance.ts`): `embeddability` is one pure function
+   over what was read, its refusals `switchedOff`, `unreachable` (no answer, or no version or capability list),
+   `otherVersion`, `noLinks` and `notEmbeddable`; the fallback line names each but `switchedOff`. "No answer" is its own
+   unavailable (`ShareUnavailableError('unreachable')`, where the generated client got no HTTP response — the network,
+   or a browser that withheld a cross-origin answer); every refusal stays `not_found`. The share page treats both alike;
+   a bookmark's page whose resolve ends `unreachable` after the setup check passed (the link's tenant switched
+   `.embeddable` off, so its answers carry no CORS) falls back, and any refusal is the share page's unavailable card, in
+   place.
 5. **A guest inside a member's page.** The embedded view is given a `GuestAccess` of its own, under its own `NodeHost`
    (the guest's doors) provided below the bookmark's page; nothing of the member's access, keys or doors reaches it, and
    nothing of it reaches the member's tree. `GuestAccess` carries the share's API base (`''` for this origin), and every
    guest read and write takes it — the resolve, the poll, the terms, the blobs, the tree writes, the identities, the
    reports and each application's guest client. What a guest keeps on the device (its identity, its acceptance of the
-   terms and of a note) is keyed by the share's origin as well as its id.
+   terms and of a note) is keyed by the share's origin as well as its id. As built:
+   - **Where a guest call goes is a `ShareAt`** (`core/sharing/shareAt.ts`): a bare id (this origin) or `{ shareId,
+     apiBase }`; a `GuestAccess` carries `apiBase` (required) and so is one, and a view hands `access` to every guest call.
+     Every public factory takes `apiBase` as a **required** argument, so no guest call reaches a base its caller did not
+     choose; the this-origin factories pass `''`. A head records where it was resolved (`PublicShareHead.apiBase`, absent
+     for this origin), and what starts from a head goes there. `fetch` sends no cookie to another origin by default and no
+     factory sets `credentials`; the wire tests assert no `Authorization` and no `include`.
+   - **Device keys:** this origin's are byte-identical to before (`<prefix>:<id>`), another instance's
+     `<prefix>@<origin>:<id>` (`originKey`/`deviceKey`). The character after the prefix tells them apart, so no id a
+     `/s/:shareId` route hands the share page (vue-router decodes `%2F`, so it can hold anything) reads another origin's
+     entry. Keyed so: the guest's session (a drop-box guest's too), a note's acceptance, the accepted terms (per tenant
+     AND origin), Memories' record of its own uploads, the presigner cache, the guest-notice read cache.
+   - **Isolation:** the embed's region provides `NO_DOORS`, no core node actions and no header sink; core's page of the
+     link provides the guest's own below, and a `WRITE_ONLY` drop page finds none of the member's.
 6. **The gates run inline, in the share page's order**: the password (the bookmark's, entered once; else the form), the
    share's tenant's terms, the note's acceptance, and — for a `READ_WRITE` write — the guest's naming. The components
-   are the share page's.
+   are the share page's: `core/sharing/shareGates.ts` (the state machine) and `ShareGates.vue`, extracted from the share
+   page unchanged, which still passes its id bare. Embedded, the cards head with `h2`, and the guest uploader's
+   statements of reasons on a blocked placeholder are not asked there — the share's own page shows them; the
+   removal-order notice is, of the share's instance.
 7. **Writes are the link's guest's.** A `READ_WRITE` link's create, upload, move and abandon, a `WRITE_ONLY` link's
    drop, go through the share's API under the guest identity this device holds for it; the share's operator records the
    member's address per write as for any guest, with this page's origin as the request's `Origin`
    ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 10).
 8. **A report from the embedded view is a guest's report to the share's instance**, sealed to that instance's
-   moderation key (ADR 0120 decision 6 unchanged).
+   moderation key (ADR 0120 decision 6 unchanged). As built: the published key and whether Report is offered are held
+   per instance (`publishedKey(fresh, apiBase)`, `useReportOffered(apiBase)`), and `reportBaseOf(access)` is a guest's
+   link's base, a member's `''`, so a foreign guest's Report shows by the foreign instance's key and seals to it.
 
 ## Consequences
 
@@ -122,6 +168,16 @@ proxy through this instance would make it learn what each member reads.
   no browser chooses it), and the write itself still lands, as it would from `curl`.
 - **The register grows by two entries**, both switchable; an instance that switches `core.public-shares.embeddable` off
   is opened in a new tab by every other instance, as before.
+- **Proven live, and what is not.** A two-origin pass (2026-11-06: one backend, two tenants on `veyq.localhost` and
+  `other.localhost`, headless Chrome with a network capture) showed the embed with the stored password, every call to the
+  share's origin answered `Access-Control-Allow-Origin: *` and CORP `cross-origin` with no credential sent or allowed,
+  preflights `204` with `Max-Age: 600`, no request of this origin carrying the share id; navigation, naming, a folder, an
+  upload to the share's store, a move and a report `201` at the share's instance; Open on its own page with no opener or
+  referrer; `.embeddable` off for the share's tenant → the fallback line, `core.share-embedding` off here → ADR 0120's page
+  with no request to the other origin; a curator's `DELETE` preflight offered `GET` only, a member path's preflight `405`.
+  **Not proven live:** the backend-served per-tenant CSP losing and gaining `https:` (the dev server serves no shell;
+  `AppShellShareEmbeddingSliceTest` is the proof), a report sealed to a *distinct* instance's moderation key (one backend
+  held one key), and any browser but Chromium.
 - **Deferred: the embed in an isolated document.** A sandboxed iframe of an `/embed.html` on this origin, without
   `allow-same-origin`, under a policy of its own with `connect-src https:`, the app's document keeping `'self'`. It
   contains script injected through FOREIGN content — today a foreign share renders in the member's document, beside the

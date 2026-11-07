@@ -13,8 +13,9 @@ password beside it that the share page asks for ([ADR 0029](0029-public-viewer-s
 Inbox #435 wanted a received link kept in the account, sealed under the account's own key; the owner decided (2026-11-06)
 that its first form is **a node in a space**: a member pastes a link they received — of this instance or of any other
 veyq instance — and places it at a folder level like any other node, and opening it opens the share page as the link
-itself would. Browsing a foreign share *in place*, as if it were a folder of the space, is wanted later (inbox #829); it
-needs a wider `connect-src` and capability discovery, and is not decided here.
+itself would. Browsing a foreign share *in place*, as if it were a folder of the space, is wanted later; it
+needs a wider `connect-src` and capability discovery, and is not decided here (it is
+[ADR 0121](0121-a-received-share-is-browsed-in-place-through-its-own-api.md)'s).
 
 Three things had no answer: where such a node's kind lives, what a member of a group space learns by holding one, and
 what "Report" means on a node whose content lives on another operator's server — which must not end with that content,
