@@ -98,7 +98,7 @@ describe('a guest call goes where the share lives', () => {
     const sent = recordFetch()
     await quiet(run(AWAY))
     expect(sent.length).toBeGreaterThan(0)
-    for (const s of sent.filter((x) => !x.url.startsWith('https://store.example'))) {
+    for (const s of sent.filter((x) => !x.url.startsWith('https://store.example/'))) {
       expect(s.url.startsWith(`${AWAY}/api/`), s.url).toBe(true)
       expect(s.headers.get('authorization')).toBeNull()
       expect(s.credentials === 'include').toBe(false)
@@ -109,7 +109,7 @@ describe('a guest call goes where the share lives', () => {
     const sent = recordFetch()
     await quiet(run(''))
     expect(sent.length).toBeGreaterThan(0)
-    for (const s of sent.filter((x) => !x.url.startsWith('https://store.example'))) expect(s.url.startsWith('/api/'), s.url).toBe(true)
+    for (const s of sent.filter((x) => !x.url.startsWith('https://store.example/'))) expect(s.url.startsWith('/api/'), s.url).toBe(true)
   })
 })
 

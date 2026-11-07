@@ -139,7 +139,7 @@ describe('a guest of another instance\'s link (a bookmark\'s page, ADR 0121)', (
     const away = 'https://photos.example.org'
     fakeServer()
     await uploadReceipt({ ...GUEST, apiBase: away }, { key: potKey, epoch: 0 }, ENTRY, RECEIPT, fileOf(10))
-    const api = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((u) => !u.startsWith('https://store.test'))
+    const api = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((u) => !u.startsWith('https://store.test/'))
     expect(api).toEqual([`${away}/api/shares/${SHARE}/blob-uploads`, `${away}/api/shares/${SHARE}/nodes/${POT}/application-blobs`])
   })
 })

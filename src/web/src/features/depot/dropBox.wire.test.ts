@@ -165,7 +165,7 @@ describe('a drop-box guest on the wire', () => {
     // and the share's guest source reads its files there too
     const access = guestAccessOf(ShareRole.Read, { shareId: SHARE, apiBase: away, head: foreign })
     await guestDepotSource(() => access).listBlobs(null).catch(() => undefined)
-    const api = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((u) => !u.startsWith('https://store.test'))
+    const api = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((u) => !u.startsWith('https://store.test/'))
     expect(api.map((u) => new URL(u).pathname)).toEqual([
       `/api/shares/${SHARE}/identities`, `/api/shares/${SHARE}/files/drop-folder`, `/api/shares/${SHARE}/nodes`,
       `/api/shares/${SHARE}/blob-uploads`, expect.stringMatching(/\/files\/[^/]+\/content$/), `/api/shares/${SHARE}/files`,
