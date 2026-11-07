@@ -42,7 +42,6 @@ class TenantTermsOperatorSectionSliceTest {
     @Inject lateinit var sections: OperatorSections
     @Inject lateinit var details: OperatorDetailsHandler
     @Inject lateinit var records: GuestWriteRecords
-    @Inject lateinit var em: jakarta.persistence.EntityManager
 
     @BeforeEach
     fun start() = restore()
@@ -114,42 +113,6 @@ class TenantTermsOperatorSectionSliceTest {
         assertEquals(2L, acceptances(member, tenantId))
         assertThrows<Exception>("the UNIQUE holds one row per pair") { insert(shown.getInt("operatorSection.revision")) }
         assertEquals(2L, acceptances(member, tenantId))
-    }
-
-    /**
-     * The migration that made the acceptance a pair (V202610211103) keeps one row per pair of the history it found: where
-     * a member had accepted both variants of one pair, the earlier row and its time stay. Its copy statement, run against
-     * a history with the variant column as it stood; a row of another pair is the control.
-     */
-    @Test
-    fun theMigrationKeepsTheEarliestRowOfAPairAcceptedInBothVariants() {
-        val copy = javaClass.classLoader.getResource("db/migration/V202610211103__core_terms_acceptance_is_a_pair.sql")!!.readText()
-            .let { sql -> sql.substring(sql.indexOf("INSERT INTO veyq_tenant_terms_acceptance")).substringBefore(";") }
-        val (tenantId, member) = acceptedMember("terms-op-migration.example.com", accept = false)
-        val (early, late, other) = List(3) { UUID.randomUUID().toString() }
-        val t0 = java.time.LocalDateTime.of(2026, 10, 18, 9, 0)
-        QuarkusTransaction.requiringNew().run {
-            em.createNativeQuery(
-                "CREATE TABLE veyq_tenant_terms_acceptance_prev (id UUID, user_id UUID, tenant_id UUID, accepted_revision INT, " +
-                    "operator_revision INT, variant VARCHAR(16), accepted_at DATETIME(3))",
-            ).executeUpdate()
-            for ((id, operatorRevision, variant, at) in listOf(
-                listOf(late, 2, "FULL", t0.plusHours(1)), listOf(early, 2, "REDUCED", t0), listOf(other, 1, "FULL", t0.plusHours(2)),
-            )) {
-                em.createNativeQuery("INSERT INTO veyq_tenant_terms_acceptance_prev VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6)")
-                    .setParameter(1, UUID.fromString(id as String)).setParameter(2, UUID.fromString(member)).setParameter(3, UUID.fromString(tenantId))
-                    .setParameter(4, operatorRevision).setParameter(5, variant).setParameter(6, at).executeUpdate()
-            }
-        }
-        try {
-            QuarkusTransaction.requiringNew().run { em.createNativeQuery(copy).executeUpdate() }
-            val kept = QuarkusTransaction.requiringNew().call {
-                TenantTermsAcceptanceEntity.list("userId = ?1 and tenantId = ?2", member, tenantId).map { it.id }.toSet()
-            }
-            assertEquals(setOf(early, other), kept, "the earlier of the pair's two rows stays, and the other pair's row")
-        } finally {
-            QuarkusTransaction.requiringNew().run { em.createNativeQuery("DROP TABLE veyq_tenant_terms_acceptance_prev").executeUpdate() }
-        }
     }
 
     @Test

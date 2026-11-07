@@ -229,31 +229,31 @@ def history_cases() -> None:
 
 PINS_BEFORE = """# comment
 release: none
-aaaa  backend/core/src/main/resources/db/migration/V202610041200__core_baseline.sql
-bbbb  backend/apps/memories/src/main/resources/db/migration/V202610041201__memories_baseline.sql
-cccc  backend/core/src/main/resources/db/migration/V202610101200__core_gone.sql
+aaaa  backend/core/src/main/resources/db/migration/V202611070831__core_baseline.sql
+bbbb  backend/apps/memories/src/main/resources/db/migration/V202611070832__memories_baseline.sql
+cccc  backend/core/src/main/resources/db/migration/V202611101200__core_gone.sql
 """
-PINS_AFTER = """release: 202610121200
-aaaa  backend/core/src/main/resources/db/migration/V202610041200__core_baseline.sql
-b2b2  backend/apps/memories/src/main/resources/db/migration/V202610041201__memories_baseline.sql
-dddd  backend/core/src/main/resources/db/migration/V202610121200__core_new.sql
+PINS_AFTER = """release: 202611121200
+aaaa  backend/core/src/main/resources/db/migration/V202611070831__core_baseline.sql
+b2b2  backend/apps/memories/src/main/resources/db/migration/V202611070832__memories_baseline.sql
+dddd  backend/core/src/main/resources/db/migration/V202611121200__core_new.sql
 """
 
 
 def pin_cases() -> None:
     before, after = e2e.pinned_migrations(PINS_BEFORE), e2e.pinned_migrations(PINS_AFTER)
     check("the release line: none", e2e.read_release(PINS_BEFORE) == "none")
-    check("the release line: a version", e2e.read_release(PINS_AFTER) == "202610121200")
+    check("the release line: a version", e2e.read_release(PINS_AFTER) == "202611121200")
     check("a pin file without a release line is refused", "release:" in refused(e2e.read_release, "aaaa  x.sql\n"))
     check("pins are read by path", len(before) == 3 and before[
-        "backend/core/src/main/resources/db/migration/V202610041200__core_baseline.sql"] == "aaaa")
-    check("the highest migration, before", e2e.highest_migration(before) == "202610101200")
-    check("the highest migration, after", e2e.highest_migration(after) == "202610121200")
+        "backend/core/src/main/resources/db/migration/V202611070831__core_baseline.sql"] == "aaaa")
+    check("the highest migration, before", e2e.highest_migration(before) == "202611101200")
+    check("the highest migration, after", e2e.highest_migration(after) == "202611121200")
     check("no migration, no highest", e2e.highest_migration({}) is None)
     changed = e2e.changed_migrations(before, after)
     check("a changed checksum and a removed file are named, an added one is not", changed == [
-        "changed: backend/apps/memories/src/main/resources/db/migration/V202610041201__memories_baseline.sql",
-        "removed: backend/core/src/main/resources/db/migration/V202610101200__core_gone.sql",
+        "changed: backend/apps/memories/src/main/resources/db/migration/V202611070832__memories_baseline.sql",
+        "removed: backend/core/src/main/resources/db/migration/V202611101200__core_gone.sql",
     ], repr(changed))
     check("identical pins name nothing", e2e.changed_migrations(before, before) == [])
     # ADR 0106 stage 2 moved the backend under `src/`: the pin file's paths change prefix, Flyway's record does not.
@@ -261,10 +261,10 @@ def pin_cases() -> None:
     check("a migration that only moved is neither changed nor removed", e2e.changed_migrations(before, moved) == [],
           repr(e2e.changed_migrations(before, moved)))
     moved_and_edited = dict(moved, **{
-        "src/backend/core/src/main/resources/db/migration/V202610041200__core_baseline.sql": "a2a2"})
+        "src/backend/core/src/main/resources/db/migration/V202611070831__core_baseline.sql": "a2a2"})
     check("a moved migration whose checksum changed is named by its new path",
           e2e.changed_migrations(before, moved_and_edited) == [
-              "changed: src/backend/core/src/main/resources/db/migration/V202610041200__core_baseline.sql"],
+              "changed: src/backend/core/src/main/resources/db/migration/V202611070831__core_baseline.sql"],
           repr(e2e.changed_migrations(before, moved_and_edited)))
 
 
@@ -272,20 +272,20 @@ def flyway_cases() -> None:
     F = e2e.flyway_cause
     mismatch = ("ERROR [io.qua.run.Application] Failed to start application\n"
                 "org.flywaydb.core.api.exception.FlywayValidateException: Validate failed: Migrations have failed "
-                "validation\nMigration checksum mismatch for migration version 202610041200\n-> Applied to database "
+                "validation\nMigration checksum mismatch for migration version 202611070831\n-> Applied to database "
                 ": 123\n-> Resolved locally    : 456.")
     cause = F(mismatch) or ""
-    check("a checksum mismatch is named, with its version", "checksum" in cause and "V202610041200" in cause, cause)
+    check("a checksum mismatch is named, with its version", "checksum" in cause and "V202611070831" in cause, cause)
     cause = F("Validate failed: Migrations have failed validation\nDetected applied migration not resolved locally: "
-              "202610101200.") or ""
-    check("an applied migration the candidate lacks is named", "V202610101200" in cause and "no longer" in cause, cause)
+              "202611101200.") or ""
+    check("an applied migration the candidate lacks is named", "V202611101200" in cause and "no longer" in cause, cause)
     cause = F("Validate failed: Migrations have failed validation\nDetected resolved migration not applied to "
-              "database: 202610051200.") or ""
-    check("a migration below the restored history is named", "V202610051200" in cause and "below" in cause, cause)
+              "database: 202611051200.") or ""
+    check("a migration below the restored history is named", "V202611051200" in cause and "below" in cause, cause)
     cause = F("FlywayValidateException: Validate failed: something new") or ""
     check("any other validation failure is still named as Flyway's", "Flyway" in cause, cause)
     check("a clean boot names nothing",
-          F("Successfully applied 2 migrations to schema `veyq_e2e_1`, now at version v202610041201") is None)
+          F("Successfully applied 2 migrations to schema `veyq_e2e_1`, now at version v202611070832") is None)
 
 
 def seeder_cases() -> None:

@@ -76,7 +76,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OperatorSection" }
               example:
-                revision: 3
+                revision: 1
                 text: { de: "## Auf dieser Instanz: …", en: "## On this instance: …" }
                 record: { de: "### Deine IP-Adresse …", en: "### Your IP address …" }
         "429":
@@ -112,7 +112,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PrivacyNotice" }
               example:
-                revision: 4
+                revision: 1
                 passages:
                   - id: account
                     separate: false

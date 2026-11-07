@@ -178,9 +178,10 @@ rotation, without its scope-level re-seal and its re-grant. Writes into a node w
   wait per node until it is done — for a guest of another link until a member's device has run it. A revoke followed by
   a re-activation pays a re-key for nothing it keeps.
 - **The links closed before this record are re-keyed after it, on the safe side.** The upgrade cleared the keys of the
-  links switched off before it and, in a migration of its own (`V202611021647__core_closed_links_mark_due.sql`), marks
-  due every node of every scope holding such a READ or READ_WRITE link, or a deleted one whose root still exists — more
-  than their subtrees, a one-time cost; a link whose end date had passed is closed and marked by the sweep's first run.
+  links switched off before it and, in a migration of its own, marked due every node of every scope holding such a READ
+  or READ_WRITE link, or a deleted one whose root still exists — more than their subtrees, a one-time cost; a link whose
+  end date had passed is closed and marked by the sweep's first run. Before the first release the migration history was
+  folded into one baseline per module and every dev database recreated, so that one-time upgrade exists no more.
 - **A node's `epoch` is its own key's** on every reader and writer, the scope's at its mint is `scopeEpoch`; the wire
   names a writer states are the same.
 
@@ -217,7 +218,7 @@ are among them.
   cases 100 (a revoke written as its own assignment beside the body) and 101 (a removal's switch-off spelled as a bulk
   update).
 - `ShareSealedNameCoreSliceTest` refuses a rename's re-seal of a switched-off link and of one past its end date, each
-  beside an open control that takes it (point 5); `ClosedLinksMarkDueMigrationSliceTest` proves the upgrade's marks.
+  beside an open control that takes it (point 5).
 - `validate_write_concurrency.py` keeps its node-epoch declarations, the epoch read as the node key's own.
 - `validate_node_rekey_arity.py` proves the assignments exist, not which rows they reach — point 5's selection is the
   slice tests'.

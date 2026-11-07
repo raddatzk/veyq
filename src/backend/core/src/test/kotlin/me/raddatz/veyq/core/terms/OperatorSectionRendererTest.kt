@@ -102,7 +102,7 @@ class OperatorSectionRendererTest {
         val withSeparate = ObjectMapper().readTree(file).deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()
         (withSeparate.get("passages").get(0) as com.fasterxml.jackson.databind.node.ObjectNode).put("separate", true)
         assertThrows<IllegalArgumentException> { OperatorSectionText.parse(withSeparate) }
-        assertEquals(4, text.revision, "Q27's move bumped it to 2, the one form (cr-operating-mode-retires) to 3, instance -> server to 4")
+        assertEquals(1, text.revision, "the first release ships the section at revision 1; a release that changes its text moves it")
     }
 
     @Test

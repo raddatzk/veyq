@@ -186,7 +186,7 @@ A receipt is an image or a PDF of at most 10 MiB kept with an entry, up to 100 p
   its count — 100 not released per entry — and a guest may add one, and at a completion whether the entry may hold it
   here (no other Pot's record) and where it stands (no revision yet, live, deleted). A receipt id and a record id share
   the reportable-item id space, so neither is taken by the other (`id_taken`). Expenses' dev data from before the move was
-  discarded, not migrated (ADR 0112 decision 5; the reset: [infra/README.md](../../infra/README.md#expenses-receipts-moved-to-core-once-per-dev-instance)).
+  discarded, not migrated (ADR 0112 decision 5).
 - **Upload** through core's transport in the role `EXPENSES_RECEIPT`, the owner the Pot's node: the `K_blob` is wrapped
   under the Pot's key bound to (blob, Pot, role), the file's type, name and time are sealed in the blob meta. The
   service's completion (`completeApplicationBlob`, member and guest alike) checks the session's binding

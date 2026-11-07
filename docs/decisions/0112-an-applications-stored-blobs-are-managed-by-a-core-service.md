@@ -14,11 +14,11 @@ management, which is core's (owner, 2026-11-01). This record decides what that e
 
 **What Expenses built** (measured in the tree at `532a71ab6`). [ADR 0108](0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
 keeps a Pot's entries as sealed revisions in `veyq_expenses_revision` and its receipts as blobs kept with an entry in
-`veyq_expenses_receipt` (`src/backend/apps/expenses/src/main/resources/db/migration/V202610250946__expenses_receipts.sql:18-35`):
+`veyq_expenses_receipt` (Expenses' own migration at that commit):
 the receipt's client-minted id, its scope, Pot and entry, the blob, the writer (a member or a link identity, exactly one),
 created and dropped. It is the fourth `veyq_blob` arm (`scripts/validate_blob_reference_arity.py`'s docstring pins four by
 entity, schema, foreign key and the live share predicate); core's node attachments could not hold it, being one blob per
-named slot of a node (`ux_attachment_node_slot`, `V202610041200__core_baseline.sql:485`). Around that table Expenses
+named slot of a node (`ux_attachment_node_slot`, the core baseline). Around that table Expenses
 carries every platform duty a stored blob has: the completion, the member roles and the guest upload, the link's usage,
 the share's blob predicate (`…/expenses/receipt/ReceiptBlobSeams.kt`), the retention purge with its two-layer cutoff
 (`PotReceiptPurge.kt`), and a receipt half in the report's reach, the hold, "everything from this uploader"
@@ -91,8 +91,7 @@ same client-minted ids, which are now the service's.
 the owner chose a reset of Expenses' data on the dev instances over a migration. Core's migration creates
 `veyq_application_blob`; Expenses' drops `veyq_expenses_receipt`. **That migration deletes no row: it refuses to run while
 the table holds one** (a CHECK no row can meet, added to the table, refused on a table that holds a row — on H2 and on
-MariaDB alike). The reset before it is a manual step, documented for each dev instance in
-[infra/README.md § Expenses' receipts moved to core](../../infra/README.md#expenses-receipts-moved-to-core-once-per-dev-instance) — every Pot
+MariaDB alike). The reset before it was a manual step for each dev instance — every Pot
 deleted and purged from its space's trash (`purgeNode`, [ADR 0061](0061-node-deletion-reversible-node-trash.md) decision 6),
 or the dev instance reset whole with its store volume. The purge is today's erasure, one erase with two triggers: the
 revisions, the receipts, their blob rows with the store objects on the reclaim list, the Pots' links and guest
@@ -101,7 +100,9 @@ copy of that erasure — a reclaim row only for an object's last blob row, the m
 guest-write records, the links — that no arity guard watches; a bare `DROP` would leave the receipts' blob rows with no
 arm and their objects in the store, found only by the bucket reconcile, and only once the Server Owner confirmed the
 bucket exclusive. The refusal makes a forgotten reset a failed start, not a leak. Expenses' receipt tests move to the
-service's operations; its other tests pass unchanged.
+service's operations; its other tests pass unchanged. *Since folded:* before the first release the whole migration
+history became one baseline per module, so neither that migration nor its refusal exists any more, and every dev
+database is recreated instead ([infra/README.md § The migration history starts at three baselines](../../infra/README.md#the-migration-history-starts-at-three-baselines-once-per-dev-database)).
 
 **6. The operator sees nothing new.** Per blob: size, role, owner, writer, times and its kept or released state — what a
 receipt row shows today, its entry id now named the owner.

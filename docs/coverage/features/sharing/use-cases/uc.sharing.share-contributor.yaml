@@ -228,12 +228,11 @@ acceptanceCriteria:
       with its own end; the purge — at startup and hourly — deletes a row past its end or older than N as it stands now,
       so a shortening reaches every row and a lengthening only new ones, while a hold's copy stays. The record has no
       switch and needs no mode: it is kept wherever a guest may write, so where guest writes are switched off (here,
-      `contribute`) the write is refused and nothing is recorded; the migration that retired the switch deleted its
-      stored rows and no other. A hold copies the records of what it holds — a node, a medium, every record of a
-      reported link's guests.
+      `contribute`) the write is refused and nothing is recorded. A hold copies the records of what it holds — a node,
+      a medium, every record of a reported link's guests.
     coverage:
       backend:
-        integration: [GuestWriteRecordCoreSliceTest.aShorteningReachesAnOldRowAtTheNextPurgeAndALengtheningDoesNotExtendIt, GuestWriteRecordCoreSliceTest.theServerOwnerSetsNWithinOneToThirty, GuestWriteRecordCoreSliceTest.thePurgeDeletesALiveRowAtItsEndWhileAHoldCopyStays, GuestWriteRecordCoreSliceTest.whereGuestWritesAreOffNothingIsWrittenAndNothingRecorded, GuestWriteRecordCoreSliceTest.anInstanceWithNoModeServesEveryTextWholeAndRecordsAGuestWrite, GuestWriteRecordCoreSliceTest.theMigrationDeletesTheRetiredSwitchsRowsAndNoOther, GuestWriteRecordCoreSliceTest.aHoldOnALinkCopiesEveryRecordItsGuestsWrote]
+        integration: [GuestWriteRecordCoreSliceTest.aShorteningReachesAnOldRowAtTheNextPurgeAndALengtheningDoesNotExtendIt, GuestWriteRecordCoreSliceTest.theServerOwnerSetsNWithinOneToThirty, GuestWriteRecordCoreSliceTest.thePurgeDeletesALiveRowAtItsEndWhileAHoldCopyStays, GuestWriteRecordCoreSliceTest.whereGuestWritesAreOffNothingIsWrittenAndNothingRecorded, GuestWriteRecordCoreSliceTest.anInstanceWithNoModeServesEveryTextWholeAndRecordsAGuestWrite, GuestWriteRecordCoreSliceTest.aHoldOnALinkCopiesEveryRecordItsGuestsWrote]
   - id: a-guest-who-objects-has-its-record-deleted-except-what-a-hold-copied
     text: >-
       A guest's objection (GDPR Art. 21): the Server Owner, on the admin channel or with `veyq-admin guest-write-record

@@ -19,8 +19,8 @@ management of an application's blobs is core's). This record decides how.
 - **Four arms.** `veyq_blob` has four arms (`scripts/validate_blob_reference_arity.py`'s docstring):
   `veyq_media.blob_id` and `veyq_media_derivative.blob_id` are Memories', `veyq_node_attachment.blob_id` holds core's
   covers and banners, and `veyq_application_blob.blob_id` is the service.
-- **The Memories arms are in the baseline.** Both are declared in
-  `src/backend/apps/memories/src/main/resources/db/migration/V202610041201__memories_baseline.sql:40-75`. A derivative
+- **The Memories arms are in the baseline.** Both were declared in the Memories baseline of the day (`veyq_media`,
+  `veyq_media_derivative`). A derivative
   row is (id, media, kind, blob), with no unique key on (media, kind).
 - **Memories copies every duty the service has.** It does so in its own implementations of the same seams:
   `MediaUploadCompletion`, `MediaShareGuestWrites`, `MediaUploadAdmission`, `MediaSharedSubtreeContributor`,
@@ -224,8 +224,7 @@ Expenses' roles are own items, and their behaviour does not change. Memories' th
   3. drops `veyq_media.blob_id`.
 - **Why the held copies refuse too:** a held copy keeps the shape it was copied in, and after the move no code reads a
   medium's blob from that shape.
-- **The reset happens before the new code starts.** It is documented in `infra/README.md` as § Memories' media moved to
-  core (once per dev instance). It is run on the commit before the move, one of two ways:
+- **The reset happens before the new code starts.** It was run on the commit before the move, one of two ways:
   - **Every medium gone.** In each Memory, delete each medium and empty it from the Memory's trash (`deleteMedia`, then
     `purgeMedia`), or delete and purge the Memory itself (`deleteNode`, `purgeNode`). Then
     `SELECT COUNT(*) FROM veyq_media` and `SELECT COUNT(*) FROM veyq_media_derivative` both answer `0`.
@@ -233,7 +232,9 @@ Expenses' roles are own items, and their behaviour does not change. Memories' th
     `SELECT COUNT(*) FROM veyq_hold_row WHERE source_table IN ('veyq_media', 'veyq_media_derivative')` is not `0`.
   - A start that refused clears its failed run on the next dev start (`quarkus.flyway.repair-at-start=true`).
   - Never delete the rows in SQL: that would leave their blob rows with no arm and their objects in the store.
-  - `MediaResetMigrationSliceTest` holds the refusal.
+  - *Since folded:* before the first release the whole migration history became one baseline per module, so neither
+    the migration nor its refusal exists any more, and every dev database is recreated instead
+    ([infra/README.md § The migration history starts at three baselines](../../infra/README.md#the-migration-history-starts-at-three-baselines-once-per-dev-database)).
 - **Why discard, though the binding would allow a byte-identical move:**
   - No instance is live. The owner's dev database holds one medium.
   - A migration would have to parse each writer out of `created_by` (`user:…` or `share:…`) and answer the old-shape

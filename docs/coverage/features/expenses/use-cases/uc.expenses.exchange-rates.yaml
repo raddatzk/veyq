@@ -2,7 +2,7 @@ useCase: uc.expenses.exchange-rates
 feature: expenses
 title: An entry in a foreign currency gets its rate
 # Built by cr-expenses-exchange-rates (inbox #325, ADR 0108 decision 8): the register entry expenses.exchange-rates and its
-# seeded address (Frankfurter's table of the ECB's euro reference rates, core's V202610251600 migration), the CSP origin
+# seeded address (Frankfurter's table of the ECB's euro reference rates, seeded by the core baseline), the CSP origin
 # and the privacy notice's passage in :core; a link guest's Pot read carrying the table's address while the rates are on
 # for its tenant in :apps:expenses; the fetch, its device cache and the editor's fill in features/expenses on the web.
 acceptanceCriteria:

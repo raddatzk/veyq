@@ -314,46 +314,16 @@ that release (ADR 0096, inbox #461).
 signatures, attestations and tag, and later the first promotion. Until each has run, the statements above are about a
 file, held by `scripts/validate_release_identity.py`.
 
-## Expenses' receipts moved to core (once per dev instance)
+## The migration history starts at three baselines (once per dev database)
 
-Expenses' receipts are blobs of core's blob service since ADR 0112, and their old table was **discarded, not migrated**
-(decision 5: no instance is live). The migration that drops it, `V202611012216__expenses_receipts_move_to_core.sql`,
-**deletes no row and refuses to run while `veyq_expenses_receipt` holds one**: a dev instance with a receipt from before
-the move does not start, and its log names `ck_expenses_receipt_reset_first`. Reset it first, one of two ways, on the
-code from before the move (the commit before the move is the last that runs on such a database):
-
-- **Every Pot gone**: delete each Pot (`deleteNode`) and purge it from its space's trash (`purgeNode`) — today's erasure
-  of its revisions, its receipts, their blob rows (their store objects on the reclaim list), its links and guest
-  identities and the measures on them. Then check `SELECT COUNT(*) FROM veyq_expenses_receipt` is `0`.
-- **The whole dev instance**: `./gradlew infra:wipe infra:up` (or `docker compose -f infra/docker/docker-compose.yml down -v`
-  and `up -d` with the store's profile), which drops the database and the store volume, then seed again
-  (§ Seeding the local dev principal).
-
-Then start the new code. A start that already refused left a failed run in Flyway's history: a dev start clears it
-(`application-dev.properties`: `quarkus.flyway.repair-at-start=true`) and runs the migration again, which now drops the
-empty table. Never delete the rows in SQL instead — that would leave their blob rows with no arm and their objects in
-the store, found only by the bucket reconcile (ADR 0112 decision 5). `ReceiptsResetMigrationSliceTest` holds the refusal.
-
-## Memories' media moved to core (once per dev instance)
-
-A medium's original and derivatives are blobs of core's blob service since ADR 0113, and the media from before the move
-are **discarded, not migrated** (decision 9: no instance is live). The migration that drops `veyq_media.blob_id` and
-`veyq_media_derivative`, `V202611020620__memories_media_move_to_core.sql`, **deletes no row and refuses to run while a
-medium, a derivative or a hold's copy of either is left**: such a dev instance does not start, and its log names
-`ck_media_reset_first`, `ck_media_derivative_reset_first` or `ck_hold_row_media_reset_first`. Reset it first, on the
-code from before the move (the commit before the move is the last that runs on such a database), one of two ways:
-
-- **Every medium gone**: in each Memory, delete every medium and empty it from the Memory's trash (`deleteMedia`, then
-  `purgeMedia`), or delete each Memory and purge it from its space's trash (`deleteNode`, `purgeNode`) — today's erasure
-  of a medium, its blob rows (their store objects on the reclaim list) and the measures on it. Then check
-  `SELECT COUNT(*) FROM veyq_media` and `SELECT COUNT(*) FROM veyq_media_derivative` both answer `0`.
-- **The whole dev instance**: `./gradlew infra:wipe infra:up`, then seed again (§ Seeding the local dev principal). The
-  only way when `SELECT COUNT(*) FROM veyq_hold_row WHERE source_table IN ('veyq_media', 'veyq_media_derivative')` is not
-  `0`: a hold keeps its copy, and after the move no code reads a medium's blob from that shape.
-
-Then start the new code; a start that refused clears its failed run at the next dev start, as above. Never delete the
-rows in SQL instead — that would leave their blob rows with no arm and their objects in the store.
-`MediaResetMigrationSliceTest` holds the refusal.
+Before the first release the Flyway history was folded into one baseline per module —
+`V202611070831__core_baseline.sql`, `V202611070832__memories_baseline.sql`, `V202611070833__expenses_baseline.sql`
+(`src/backend/CLAUDE.md` § Migrations) — whose schema and seeded rows equal what the history before them built. A
+database created before that holds applied versions no file resolves any more, so the backend's validate refuses it at
+start (`%dev`'s `repair-at-start` does not rescue it either: the baselines then meet tables that exist). Nothing was
+released, so nothing is migrated: recreate the dev database and its store — `./gradlew infra:wipe infra:up` (or
+`docker compose -f infra/docker/docker-compose.yml down -v` and `up -d` with the store's profile) — then seed again
+(§ Seeding the local dev principal). An e2e database is recreated by its own run.
 
 ## Running in production
 

@@ -1,3 +1,8 @@
+-- The Expenses application's schema as one baseline (ADR 0079, ADR 0108). It sorts after the core baseline and its
+-- foreign keys point at core tables only; no core table references a table created here. Same type rules as the core
+-- baseline. A receipt is a blob of core's blob service (veyq_application_blob, held by its entry; ADR 0112), so no
+-- table here names a blob.
+
 -- ADR 0108 decisions 3-6: a Pot's records (participants and entries) are sequences of sealed revisions, appended and
 -- never overwritten. One row per revision; the server holds what ADR 0108 § Consequences names and nothing else:
 --
@@ -17,20 +22,20 @@
 -- The scope FK is load-bearing: it puts the table in the scope erasure's closure (validate_scope_erasure_arity.py).
 -- node_id has no FK, as a medium's: a Pot's trash is soft, and its purge erases these rows first (phase 100).
 CREATE TABLE veyq_expenses_revision (
-    id                   UUID         NOT NULL,
-    scope_id             UUID         NOT NULL,
-    node_id              UUID         NOT NULL,
-    entry_id             UUID         NOT NULL,
-    revision             BIGINT       NOT NULL,
-    tombstone            BOOLEAN      NOT NULL,
-    erasure              BOOLEAN      NOT NULL,
-    sealed_body          TEXT         NOT NULL,
-    wrapped_revision_key TEXT         NOT NULL,
-    size_class           INT          NOT NULL,
-    writer_user_id       UUID         NULL,
-    writer_identity_id   UUID         NULL,
-    item_position        INT          NOT NULL,
-    created_at           DATETIME(3)  NOT NULL,
+    id                   UUID NOT NULL,
+    scope_id             UUID NOT NULL,
+    node_id              UUID NOT NULL,
+    entry_id             UUID NOT NULL,
+    revision             BIGINT NOT NULL,
+    tombstone            BOOLEAN NOT NULL,
+    erasure              BOOLEAN NOT NULL,
+    sealed_body          TEXT NOT NULL,
+    wrapped_revision_key TEXT NOT NULL,
+    size_class           INT NOT NULL,
+    writer_user_id       UUID NULL,
+    writer_identity_id   UUID NULL,
+    item_position        INT NOT NULL,
+    created_at           DATETIME(3) NOT NULL,
     CONSTRAINT pk_expenses_revision PRIMARY KEY (id),
     CONSTRAINT ux_expenses_revision_entry UNIQUE (entry_id, revision),
     CONSTRAINT fk_expenses_revision_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id),

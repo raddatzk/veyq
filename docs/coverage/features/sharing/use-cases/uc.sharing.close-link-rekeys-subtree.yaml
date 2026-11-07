@@ -59,10 +59,6 @@ acceptanceCriteria:
           - LinkCloseRekeyCoreSliceTest.aKeyLostNameForAnotherCopyOrLinkIsStaleAndClosesNothing
           - LinkCloseRekeyCoreSliceTest.aRefusalAfterTheKeyLostCloseRollsTheCloseBack
       web: { unit: [src/core/node/rekey/rekeyScope.test.ts, src/features/spaces/scopeRekey.test.ts] }
-  - id: links-closed-before-the-upgrade-are-marked
-    text: The upgrade marks due every node of every scope holding a READ or READ_WRITE link switched off or deleted before the close body existed whose root still exists; a scope with only open links, only a closed WRITE_ONLY link or a closed link whose root was purged gets no mark.
-    coverage:
-      backend: { integration: [ClosedLinksMarkDueMigrationSliceTest.everyNodeOfAScopeWithAClosedViewableLinkIsDue_andNoneElsewhere] }
   - id: the-sweep-closes-an-expired-link-once
     text: The end-date sweep closes every enabled link whose end date passed and whose close it has not carried out, once, and leaves an open link alone.
     coverage:

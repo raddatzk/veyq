@@ -232,7 +232,8 @@ name's and the icon's HKDF-derived keys (`K_name`, `K_icon`) are gone with their
 other seal keeps its bytes: a value's own seal is unchanged but for the key it is sealed under, and the binding field
 renamed `scopeEpoch` in `content-key` and `node-name` changes no AAD, since fields are encoded by position. No instance
 was live when values took their own keys, and the dev database is reset: the migration clears every stored value it
-cannot give a wrap — a group's name stays, unreadable until renamed (`V202611021800__core_value_keys.sql`).
+cannot give a wrap — a group's name stays, unreadable until renamed (since folded into the core baseline, before the
+first release).
 
 ## Consequences
 

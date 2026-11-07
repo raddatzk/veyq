@@ -363,7 +363,7 @@ class PotSliceTest {
             .`when`().post("/api/shares").then()
 
     private companion object {
-        /** What V202610251600__core_exchange_rate_service.sql seeds: Frankfurter's table of the ECB's reference rates. */
+        /** What the core baseline seeds into `veyq_external_service`: Frankfurter's table of the ECB's reference rates. */
         const val SEEDED_RATES = "https://api.frankfurter.dev/v2/providers/ecb/rates?date={date}"
     }
 }

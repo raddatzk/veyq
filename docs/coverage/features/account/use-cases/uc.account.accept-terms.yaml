@@ -54,10 +54,10 @@ acceptanceCriteria:
       What a member accepts is the pair of the space's revision and the section's revision, one history row per pair: a
       release that changes the section reopens the gate, a value or N changed in admin-web renders at once and reopens
       nothing; accepting the pair again adds no row, and the database holds one row per pair; an accept naming another
-      pair is 409. A history the variant was part of keeps, per pair, its earliest row.
+      pair is 409.
     coverage:
       backend:
-        integration: [TenantTermsOperatorSectionSliceTest.aValueChangedInAdminWebRendersAtOnceAndReopensNoGate, TenantTermsOperatorSectionSliceTest.aMemberAcceptsThePairAndTheHistoryHoldsOneRowPerPair, TenantTermsOperatorSectionSliceTest.theMigrationKeepsTheEarliestRowOfAPairAcceptedInBothVariants]
+        integration: [TenantTermsOperatorSectionSliceTest.aValueChangedInAdminWebRendersAtOnceAndReopensNoGate, TenantTermsOperatorSectionSliceTest.aMemberAcceptsThePairAndTheHistoryHoldsOneRowPerPair]
       web:
         unit: [src/features/tenant/tenantTerms.test.ts, src/views/TermsAcceptView.test.ts]
   - id: the-section-has-one-form
