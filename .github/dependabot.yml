@@ -206,6 +206,13 @@ updates:
       - dependency-name: "mariadb"
         versions:
           - ">= 12.4"
+      # Held on v2.0.0 until the move is done by hand (owner 2026-11-07): from v2.1 a fresh node answers the admin API
+      # 500 "Layout not ready" (the e2e harness reads only 503), from v2.5 its cold /health answers 503, so the chart's
+      # probes never let it become ready, and v2.5 cannot be downgraded (veyqctl rollback would start the old store on
+      # migrated metadata). Measured on throwaway containers on 2026-11-07. Lifted with that move.
+      - dependency-name: "dxflrs/garage"
+        versions:
+          - ">= 2.1"
 
   # Reached by no ecosystem: the chart's mariadb and garage pins (infra/kubernetes/charts/veyq/values.yaml). There was
   # a `helm` entry, and it could never update them: Dependabot's helm updater skips every digest-pinned image on
