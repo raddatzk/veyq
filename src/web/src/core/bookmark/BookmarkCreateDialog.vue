@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n'
 import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../shared/ui/notALogin'
 import VeyqPassword from '../../shared/ui/VeyqPassword.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import type { NodeCreateDialogEmits, NodeCreateDialogProps } from '../applications/registry'
@@ -91,7 +92,7 @@ async function submit() {
       <p class="veyq-form-copy">{{ t('node.bookmark.createIntro') }}</p>
       <div class="veyq-form-field">
         <label :for="linkId">{{ t('node.bookmark.linkLabel') }}</label>
-        <VeyqInput
+        <VeyqInput v-bind="NOT_A_LOGIN"
           :id="linkId"
           v-model="linkInput"
           data-testid="bookmark-link"
@@ -106,12 +107,12 @@ async function submit() {
       </div>
       <div class="veyq-form-field">
         <label :for="passwordId">{{ t('node.bookmark.passwordLabel') }}</label>
-        <VeyqPassword :input-id="passwordId" v-model="password" autocomplete="off" :disabled="loading" />
+        <VeyqPassword not-a-login :input-id="passwordId" v-model="password" autocomplete="off" :disabled="loading" />
         <span class="veyq-form-copy">{{ t('node.bookmark.passwordHint') }}</span>
       </div>
       <label>
         {{ t('node.nameLabel') }}
-        <VeyqInput v-model="shownName" data-testid="bookmark-name" autocomplete="off" required :disabled="loading" />
+        <VeyqInput v-bind="NOT_A_LOGIN" v-model="shownName" data-testid="bookmark-name" autocomplete="off" required :disabled="loading" />
       </label>
       <p class="veyq-form-copy" data-testid="bookmark-who-can-open">{{ t('node.bookmark.whoCanOpen') }}</p>
       <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>

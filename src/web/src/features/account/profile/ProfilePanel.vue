@@ -95,7 +95,7 @@ async function save() {
 
       <form v-else class="veyq-form" @submit.prevent="save">
         <label>{{ t('profile.username') }}
-          <VeyqInput v-model="username" name="username" autocomplete="username" required />
+          <VeyqInput v-model="username" name="username" autocomplete="nickname" required />
           <small class="field-hint">{{ t('profile.usernameHint') }}</small>
         </label>
         <NamePictureFields :model="identity" :display-name="`${identity.firstName} ${identity.lastName}`.trim() || username" />

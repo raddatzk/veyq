@@ -14,6 +14,7 @@ import { useI18n } from 'vue-i18n'
 import VeyqButton from '../shared/ui/VeyqButton.vue'
 import VeyqCard from '../shared/ui/VeyqCard.vue'
 import VeyqInput from '../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../shared/ui/notALogin'
 import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import { useBreachCheck } from '../features/account/passwordWarning'
@@ -438,9 +439,9 @@ async function mapError(e: unknown): Promise<string> {
         <p class="veyq-form-copy">{{ t(codeMode === 'code' ? 'tenant.join.codeSub' : 'tenant.join.passwordSub') }}</p>
         <form class="veyq-form" @submit.prevent="openWithCode">
           <label v-if="codeMode === 'code'">{{ t('tenant.join.code') }}
-            <VeyqInput v-model="code" name="invite-code" autocomplete="off" required />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="code" name="invite-code" autocomplete="off" required />
           </label>
-          <label v-else>{{ t('tenant.join.invitePassword') }}<VeyqPassword v-model="code" input-id="invite-password" /></label>
+          <label v-else>{{ t('tenant.join.invitePassword') }}<VeyqPassword not-a-login v-model="code" input-id="invite-password" /></label>
           <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
           <VeyqButton type="submit" :label="t('tenant.join.continue')" icon="arrow-right" :loading="busy" :disabled="code.trim().length === 0" />
         </form>
@@ -452,7 +453,7 @@ async function mapError(e: unknown): Promise<string> {
         <p class="join-privacy"><a :href="privacyLink(PRIVACY_ANCHOR.account)" target="_blank" rel="noopener">{{ t('privacyNotice.atInvite') }}</a></p>
         <form class="veyq-form" @submit.prevent="prepareRegistration">
           <label>{{ t('tenant.join.username') }}
-            <VeyqInput v-model="username" name="username" autocomplete="username" required />
+            <VeyqInput v-model="username" name="username" autocomplete="nickname" required />
             <small class="field-hint">{{ t('tenant.join.usernameHint') }}</small>
           </label>
           <template v-if="!handover">
@@ -467,7 +468,7 @@ async function mapError(e: unknown): Promise<string> {
             <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
             <JoinPicturePicker v-model="avatarBytes" :name="`${firstName} ${lastName}`.trim() || username" />
           </template>
-          <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="join-password" @blur="checkBreaches" /></label>
+          <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="join-password" autocomplete="new-password" @blur="checkBreaches" /></label>
           <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
           <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="join" :disabled="busy" />
           <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
@@ -492,7 +493,7 @@ async function mapError(e: unknown): Promise<string> {
         <!-- The per-tenant handle (ADR 0023): an existing account still picks a username for THIS tenant — unless it is
              handed the space it is a member of already, which keeps its handle. -->
         <label v-if="!handover" class="veyq-form-field">{{ t('tenant.join.username') }}
-          <VeyqInput v-model="username" name="username" autocomplete="username" required />
+          <VeyqInput v-model="username" name="username" autocomplete="nickname" required />
           <small class="field-hint">{{ t('tenant.join.usernameHint') }}</small>
         </label>
         <template v-if="!handover">
@@ -514,7 +515,7 @@ async function mapError(e: unknown): Promise<string> {
           <template v-if="needsReauth">
             <p class="veyq-form-copy">{{ t('tenant.join.reauthSub') }}</p>
             <form class="veyq-form" @submit.prevent="reauthAndAccept">
-              <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="reauth-password" /></label>
+              <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="reauth-password" autocomplete="current-password" /></label>
               <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
               <VeyqButton type="submit" :label="jcopy('join')" icon="check" :loading="busy"
                       :disabled="!usernameReady || password.length === 0" />
@@ -531,7 +532,7 @@ async function mapError(e: unknown): Promise<string> {
         <template v-else>
           <p class="veyq-form-copy">{{ jcopy('signinSub', { email: ownerEmail }) }}</p>
           <form class="veyq-form" @submit.prevent="signInAndAccept">
-            <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="signin-password" /></label>
+            <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="signin-password" autocomplete="current-password" /></label>
             <label>{{ t('unlock.secretKey') }}
               <SecretKeyField v-model="secretKey" input-id="signin-secret-key" :expected-email="ownerEmail" required />
               <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>

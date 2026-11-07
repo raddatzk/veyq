@@ -13,6 +13,7 @@ import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../shared/ui/notALogin'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqPassword from '../../shared/ui/VeyqPassword.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
@@ -135,10 +136,10 @@ async function submit() {
       <p class="dialog-intro">{{ t('members.inviteIntro') }}</p>
       <label>
         {{ t('members.email') }}
-        <VeyqInput v-model="email" type="email" autocomplete="email" required :disabled="loading" />
+        <VeyqInput v-bind="NOT_A_LOGIN" v-model="email" type="email" autocomplete="email" required :disabled="loading" />
       </label>
       <template v-if="usePassword">
-        <label>{{ t('members.invitePasswordLabel') }}<VeyqPassword v-model="password" input-id="invite-member-password" :disabled="loading" /></label>
+        <label>{{ t('members.invitePasswordLabel') }}<VeyqPassword not-a-login v-model="password" input-id="invite-member-password" :disabled="loading" /></label>
         <small class="dialog-intro">{{ t('members.invitePasswordNote') }}</small>
       </template>
       <VeyqButton

@@ -81,7 +81,7 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
 
   it('loads and shows the stored name, unsealed on the device', async () => {
     const wrapper = await mountPanel()
-    expect((input(wrapper, 'username').element as HTMLInputElement).value).toBe('kevin')
+    expect((input(wrapper, 'nickname').element as HTMLInputElement).value).toBe('kevin')
     expect((input(wrapper, 'given-name').element as HTMLInputElement).value).toBe('Kevin')
     expect((input(wrapper, 'family-name').element as HTMLInputElement).value).toBe('Raddatz')
     expect(input(wrapper, 'given-name').attributes('disabled')).toBeUndefined() // the key is held: editable
@@ -89,7 +89,7 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
 
   it('saves the handle trimmed and lower-cased, with the name sealed at the member’s own address', async () => {
     const wrapper = await mountPanel()
-    await input(wrapper, 'username').setValue('  Kevin ')
+    await input(wrapper, 'nickname').setValue('  Kevin ')
     await input(wrapper, 'given-name').setValue('Kev')
     await input(wrapper, 'family-name').setValue('Raddatz')
     await save(wrapper)
@@ -115,9 +115,9 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
     expect(wrapper.text()).toContain(t('profile.noNameYet'))
     expect(input(wrapper, 'given-name').attributes('disabled')).toBeDefined()
     expect(input(wrapper, 'family-name').attributes('disabled')).toBeDefined()
-    expect(input(wrapper, 'username').attributes('disabled')).toBeUndefined()
+    expect(input(wrapper, 'nickname').attributes('disabled')).toBeUndefined()
 
-    await input(wrapper, 'username').setValue('newhandle')
+    await input(wrapper, 'nickname').setValue('newhandle')
     await save(wrapper)
     const update = sent()
     expect(update.username).toBe('newhandle')

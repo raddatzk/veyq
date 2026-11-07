@@ -15,6 +15,7 @@ import { useI18n } from 'vue-i18n'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../../shared/ui/notALogin'
 import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { isoDateToLocalDate, localDateToIsoDate } from '../../../shared/isoDate'
@@ -280,7 +281,7 @@ async function copy(text: string, id: string) {
         <strong>{{ t('share.guestStops.fixTitle') }}</strong>
         <template v-if="fixNeedsPassword">
           <label for="dropbox-fix-password">{{ t('share.passwordLabel') }}</label>
-          <VeyqInput id="dropbox-fix-password" v-model="fixPassword" type="password" autocomplete="new-password" :disabled="busy" />
+          <VeyqInput v-bind="NOT_A_LOGIN" id="dropbox-fix-password" v-model="fixPassword" type="password" autocomplete="new-password" :disabled="busy" />
           <small class="veyq-form-copy">{{ t('share.passwordSectionHint', { min: MIN_PW }) }}</small>
         </template>
         <template v-if="fixNeedsExpiry">
@@ -301,7 +302,7 @@ async function copy(text: string, id: string) {
       <p v-if="!changes" class="veyq-form-copy dropbox-share-pending">{{ t('share.pendingDeletion') }}</p>
       <template v-if="changes && rules.passwordRequired">
         <label for="dropbox-share-password">{{ t('share.passwordLabel') }}</label>
-        <VeyqInput id="dropbox-share-password" v-model="password" type="password" autocomplete="new-password" :disabled="busy" />
+        <VeyqInput v-bind="NOT_A_LOGIN" id="dropbox-share-password" v-model="password" type="password" autocomplete="new-password" :disabled="busy" />
         <small class="veyq-form-copy">{{ t('share.passwordRequiredByRule') }} {{ t('share.passwordSectionHint', { min: MIN_PW }) }}</small>
       </template>
       <template v-if="changes && rules.maxDays !== null">

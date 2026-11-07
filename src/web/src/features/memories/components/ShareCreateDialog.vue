@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../../shared/ui/notALogin'
 import VeyqToggleGroup from '../../../shared/ui/VeyqToggleGroup.vue'
 import VeyqSwitch from '../../../shared/ui/VeyqSwitch.vue'
 import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
@@ -300,7 +301,7 @@ function endOfDay(d: Date): Date {
     <template v-else>
       <div class="share-field">
         <label for="share-create-name">{{ t('share.name') }}</label>
-        <VeyqInput id="share-create-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="busy" />
+        <VeyqInput v-bind="NOT_A_LOGIN" id="share-create-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="busy" />
       </div>
 
       <!-- The role: every role offered on create, READ/READ_WRITE on the edit of such a link (cr-0119, re-grade in place);
@@ -355,7 +356,7 @@ function endOfDay(d: Date): Date {
         <div v-if="passwordEnabled" class="share-group-body">
           <label for="share-create-password">{{ t('share.passwordLabel') }}</label>
           <div class="share-password-row">
-            <VeyqInput
+            <VeyqInput v-bind="NOT_A_LOGIN"
               id="share-create-password"
               v-model="password"
               :type="revealPw ? 'text' : 'password'"

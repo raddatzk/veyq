@@ -35,6 +35,7 @@ import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../shared/ui/notALogin'
 import VeyqSwitch from '../../shared/ui/VeyqSwitch.vue'
 import VeyqToggleGroup from '../../shared/ui/VeyqToggleGroup.vue'
 import VeyqDateField from '../../shared/ui/VeyqDateField.vue'
@@ -560,7 +561,7 @@ function onDialogVisible(visible: boolean) {
     <div v-else-if="view === 'create' || view === 'edit'" class="veyq-form">
       <div class="veyq-form-field">
         <label for="folder-share-name">{{ t('share.name') }}</label>
-        <VeyqInput
+        <VeyqInput v-bind="NOT_A_LOGIN"
           id="folder-share-name"
           v-model="name"
           :placeholder="uploading ? t('share.folder.uploadNamePlaceholder') : t('share.nameOptional')"
@@ -621,7 +622,7 @@ function onDialogVisible(visible: boolean) {
         <template v-if="passwordEnabled">
           <label for="folder-share-password">{{ t('share.passwordLabel') }}</label>
           <div class="folder-share-link-row">
-            <VeyqInput
+            <VeyqInput v-bind="NOT_A_LOGIN"
               id="folder-share-password"
               v-model="password"
               class="folder-share-link"

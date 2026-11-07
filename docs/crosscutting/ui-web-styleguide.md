@@ -445,6 +445,20 @@ Visible focus states, accessible names, predictable keyboard behaviour. No hover
 essential actions. Text must not overflow on mobile — prefer existing responsive `.veyq-*` behaviour
 before component-specific media queries.
 
+### Password fields and password managers
+
+Owner 2026-11-07. Every password field says whether it is the person's veyq login, so a password manager fills the
+right ones and leaves the rest alone (`src/web/src/shared/ui/passwordFields.test.ts` and its admin-web twin are red on
+one that says neither):
+
+- **An account credential** (sign-in, registration, re-authentication, a new or confirmed password) carries its
+  standard token, `current-password` or `new-password`; the sign-in identifier is the e-mail (`username`), and a
+  per-tenant handle is a `nickname`, never a `username`.
+- **Anything else** — a share link's password (set, entered or kept on a bookmark), a PDF's, an invite's, an SMTP or
+  object-store secret — and every field in its form carries the managers' own opt-outs, which they read where they
+  ignore `autocomplete="off"`: `v-bind="NOT_A_LOGIN"` on a `VeyqInput`, `not-a-login` on a `VeyqPassword`
+  (`shared/ui/notALogin.ts` in each surface).
+
 ### Heading levels
 
 Owner 2026-10-24.

@@ -14,6 +14,7 @@ import { useRouter } from 'vue-router'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../shared/ui/notALogin'
 import VeyqSwitch from '../../shared/ui/VeyqSwitch.vue'
 import VeyqTextarea from '../../shared/ui/VeyqTextarea.vue'
 import { getTenantMailSettings, updateTenantMailSettings, type TenantMailSettings, type TenantMailSettingsUpdate } from './tenantMailSettings'
@@ -205,25 +206,25 @@ async function save() {
         <!-- SMTP transport -->
         <label>
           <span>{{ t('mail.host') }}</span>
-          <VeyqInput v-model="host" :placeholder="t('mail.hostPlaceholder')" autocomplete="off" />
+          <VeyqInput v-bind="NOT_A_LOGIN" v-model="host" :placeholder="t('mail.hostPlaceholder')" autocomplete="off" />
         </label>
         <div class="mail-field-row">
           <label>
             <span>{{ t('mail.port') }}</span>
-            <VeyqInput v-model="port" inputmode="numeric" :placeholder="t('mail.portPlaceholder')" autocomplete="off" />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="port" inputmode="numeric" :placeholder="t('mail.portPlaceholder')" autocomplete="off" />
           </label>
           <label>
             <span>{{ t('mail.from') }}</span>
-            <VeyqInput v-model="from" :placeholder="t('mail.fromPlaceholder')" autocomplete="off" />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="from" :placeholder="t('mail.fromPlaceholder')" autocomplete="off" />
           </label>
         </div>
         <label>
           <span>{{ t('mail.username') }}</span>
-          <VeyqInput v-model="username" autocomplete="off" />
+          <VeyqInput v-bind="NOT_A_LOGIN" v-model="username" autocomplete="off" />
         </label>
         <label>
           <span>{{ t('mail.password') }}</span>
-          <VeyqInput v-model="password" type="password" autocomplete="new-password" :placeholder="passwordSet ? t('mail.passwordKeepPlaceholder') : ''" />
+          <VeyqInput v-bind="NOT_A_LOGIN" v-model="password" type="password" autocomplete="new-password" :placeholder="passwordSet ? t('mail.passwordKeepPlaceholder') : ''" />
           <small class="field-hint">{{ passwordSet ? t('mail.passwordSetHint') : t('mail.passwordHint') }}</small>
         </label>
 
@@ -247,7 +248,7 @@ async function save() {
         <small class="field-hint">{{ t('mail.templateVarsHint', { vars: TEMPLATE_VARS }) }}</small>
         <label>
           <span>{{ t('mail.subject') }}</span>
-          <VeyqInput v-model="subjectTemplate" :placeholder="t('mail.subjectPlaceholder', TEMPLATE_TOKENS)" />
+          <VeyqInput v-bind="NOT_A_LOGIN" v-model="subjectTemplate" :placeholder="t('mail.subjectPlaceholder', TEMPLATE_TOKENS)" />
         </label>
         <label>
           <span>{{ t('mail.body') }}</span>
