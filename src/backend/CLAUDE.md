@@ -210,9 +210,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `core` or an application's name — `memories` — as `settings.gradle.kts` includes it, `:apps:<name>`), each in its
   owner's `src/main/resources/db/migration/` (`src/backend/core/…` for core,
   `src/backend/apps/memories/…` for Memories; the guard holds the name to the directory) — one classpath path, `db/migration`, so Flyway reads them
-  as one set and two files of one version fail startup. The schema starts from two baselines,
-  `V202610041200__core_baseline.sql` and `V202610041201__memories_baseline.sql`; a Memories migration references
-  core tables or its own, a core migration never names a Memories table (ADR 0079). A new migration sorts above
+  as one set and two files of one version fail startup. The schema starts from one baseline per module,
+  `V202611070831__core_baseline.sql`, `V202611070832__memories_baseline.sql` and `V202611070833__expenses_baseline.sql`
+  (Depot has no table) — before the first release the whole history was folded into them, its end state proved equal
+  on a throwaway MariaDB (tables, columns, keys, constraints and seeded rows); an application migration references
+  core tables or its own, a core migration never names an application's table (ADR 0079). A new migration sorts above
   every existing one — Flyway runs `outOfOrder=false`, so an instance past a version refuses a file below it —
   and appends its SHA-256 line to `scripts/applied_migrations.sha256` in the same commit;
   `scripts/validate_migration_versions.py` holds the name shape, unique versions, the pins, their order and the

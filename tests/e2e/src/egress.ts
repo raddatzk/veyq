@@ -26,7 +26,7 @@ import { stack } from './stack'
 // admin-web's default range API (ADR 0088 decision 7) plus the 5-hex-character SHA-1 prefix it appends.
 const HIBP_RANGE = /^https:\/\/api\.pwnedpasswords\.com\/range\/[0-9A-F]{5}$/
 
-// The seeded exchange-rate address (V202610251600__core_exchange_rate_service.sql) with the device's date in it, alone.
+// The seeded exchange-rate address (the core baseline's veyq_external_service row) with the device's date in it, alone.
 const ECB_RATES = /^https:\/\/api\.frankfurter\.dev\/v2\/providers\/ecb\/rates\?date=[0-9]{4}-[0-9]{2}-[0-9]{2}$/
 const ECB_TABLE = readFileSync(fileURLToPath(new URL('../fixtures/ecb-rates-2026-10-23.json', import.meta.url)), 'utf8')
 

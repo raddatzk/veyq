@@ -84,7 +84,7 @@ with `core.public-shares` — already decide where it is kept. A Server Owner or
 kept switches guest writes off; a write those switches refuse records nothing. Why no switch: what the record is for,
 a write link that reached strangers, is exactly what an operator-blind Server Owner cannot see. The switch it once had
 (`core.public-shares.guest-write-record`, its default following the operating mode) and its stored rows were removed
-by migration `V202610211101`.
+before the first release.
 
 ## Retention
 
