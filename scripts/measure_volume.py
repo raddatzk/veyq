@@ -88,7 +88,7 @@ DOUBLES = ("pebble", "mailpit", "release-mirror", "browser")
 INVITE_ENV = "VEYQ_RATELIMIT_INVITE_PER_TENANT_MAX_REQUESTS"
 SEEDING_INVITE_LIMIT = "100000"  # the member seeder's invites in one hour, a 1,000-member tenant several times over
 GIB = 1024 ** 3
-PROBE_IMAGE = "busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e"  # the recipe's own
+PROBE_IMAGE = "busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4"  # the recipe's own
 PROBE_LOOP = ('while :; do echo "$(date +%s) $(cut -d" " -f1-3 /proc/loadavg) '
               '$(grep -E "^(MemTotal|MemAvailable):" /proc/meminfo | tr -s " " | cut -d" " -f2 | tr "\\n" " ")"; '
               'sleep 1; done')
