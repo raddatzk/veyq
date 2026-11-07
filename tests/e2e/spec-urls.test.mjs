@@ -2,7 +2,7 @@
 // ADR 0106). The specs take fixtures from outside this package (`../../../../web/…`, `../../../../contracts/…`), and
 // such a specifier is a string: no type check reads it, and `playwright test --list` loads a spec without reading
 // the file a `fileURLToPath` names — so a directory move that miscounts one `../` stays green until lane L1 runs.
-// `pnpm run check` runs this file, and `ci.yml`'s frontend job runs that on every commit.
+// `pnpm run check` runs this file, and `pipeline.yml`'s frontend job runs that on every commit.
 //
 // Its limit: it sees only the `new URL(<string literal>, import.meta.url)` form; a path built any other way
 // (`path.join`, a template string, a variable) is not read.

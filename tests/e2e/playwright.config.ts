@@ -7,7 +7,7 @@
 //
 // The feature specs are grouped by domain, one folder each under `tests/features/` (memories, depot, expenses, moderation,
 // platform, account), and each folder is a project of its own (`DOMAINS`, read from the folders). CI runs one domain per
-// leg (`ci.yml`'s `stack` job, `-- --project <domain>`), each on an instance of its own; Playwright runs a project's
+// leg (`pipeline.yml`'s `stack` job, `-- --project <domain>`), each on an instance of its own; Playwright runs a project's
 // dependencies with it, so every leg runs `setup`, `scenarios` and `instance` first. The state a feature scenario needs
 // from another one therefore lives in a dependency project (`instance`, below): every domain's spec starts from what
 // those three left, never from another feature spec. A new spec goes into its domain's folder; a new folder is a new

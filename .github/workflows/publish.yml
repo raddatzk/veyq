@@ -1,0 +1,310 @@
+name: Publish
+
+# The SNAPSHOT (ADR 0091 decision 5, amended 2026-11-07): the whole pipeline (pipeline.yml, the base checks.yml runs
+# too) on the branch's HEAD, and — in the same run, once its `green` output says every stage passed — the images on
+# exactly the digests lane L1 installed, as `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, the chart, a signature, an
+# attestation per lane and architecture, and the git tag `snapshot-<major>.<minor>`. Written once, never replaced: a
+# HEAD that already carries its `snapshot-` tag is tested again and publishes nothing (the pipeline's `version` job
+# says so in a notice). Two triggers, and no other: the weekly `schedule` (on `main` only: GitHub runs a schedule on
+# the default branch alone) and a `workflow_dispatch` (Actions → Publish → Run workflow, on `main` or
+# `release/<major>.x`). A push, a pull request and a local run are checks.yml's, and publish nothing.
+#
+# This file signs SNAPSHOTS. Keyless signing names the workflow file that holds the signing job, so a snapshot's
+# identity is `.github/workflows/publish.yml` on `main` or `release/<major>.x` — `snapshot` must stay a job of THIS
+# file: moved into pipeline.yml it would sign as `pipeline.yml`, whoever called it. A release is a promotion of a
+# snapshot, signed by another workflow, `.github/workflows/release.yml`, so that `cosign verify` with the release
+# identity — site/src/content/docs/run/verify-a-release.md, `veyqctl` — answers whether a digest is a release.
+# Renaming this file changes the snapshot identity (scripts/promote.py's `snapshot_identity`);
+# scripts/validate_release_identity.py holds the release identity to rejecting it. Until 2026-11-07 the snapshot was
+# signed by `ci.yml` (cr-workflows-split-pipeline-callers); those snapshots are not promotable.
+#
+# A tag is deliberately NOT a trigger. This file CREATES `snapshot-<major>.<minor>`, with `GITHUB_TOKEN`, which starts
+# no workflow anyway — a trigger on it could only ever re-run a commit whose snapshot exists, which the
+# `assert-snapshot-unpublished` step refuses by design.
+on:
+  # The weekly snapshot: Monday 03:17 UTC, off the full hour GitHub's scheduler is busiest at. GitHub runs a schedule
+  # on the default branch only, so this publishes `main`'s HEAD and never a `release/<major>.x` branch — a fix there
+  # gets its snapshot by a dispatch on that branch. No path filter: a docs-only HEAD is published too.
+  schedule:
+    - cron: "17 3 * * 1"
+  # A snapshot now, by hand (Actions → Publish → Run workflow), of the chosen branch's HEAD: `main` or
+  # `release/<major>.x`, red on any other branch. No inputs; a commit that already has its snapshot is tested again
+  # and publishes nothing.
+  workflow_dispatch:
+
+# One group per ref, apart from checks.yml's: two publishing runs of a ref publish in the order they were started, and
+# the later one's `version` job sees the earlier one's `snapshot-` tag. A dispatch while another publishing run of the
+# ref waits replaces the waiting one (GitHub keeps one pending run per group) — it publishes the same HEAD, or a newer
+# one. A push or a pull request neither delays a snapshot nor gets a pending scheduled run cancelled.
+concurrency:
+  group: veyq-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+# Helm for the chart packaging in `snapshot`: the same pin as pipeline.yml's (a caller's workflow-level `env` does
+# not reach a called workflow, so each file carries it); validate_release_identity.py holds every copy equal.
+env:
+  HELM_VERSION: v4.0.1
+  HELM_SHA256: e0365548f01ed52a58a1181ad310b604a3244f59257425bb1739499372bdff60
+
+# Least-privilege default; each job widens only what it needs (see per-job permissions blocks).
+permissions:
+  contents: read
+
+jobs:
+  # The whole pipeline, asked to publish. The grant is what its `build` job asks for to stage the per-arch images
+  # (`packages: write`) and no more: a called job can ask only for what this grants, and the signing (`id-token`) and
+  # the tag (`contents: write`) are the two jobs below.
+  pipeline:
+    name: Pipeline
+    uses: ./.github/workflows/pipeline.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      publish: true
+
+  snapshot:
+    name: Publish the snapshot (the images, the chart, their signatures and the lanes' attestations)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The whole pipeline green (ADR 0091 decision 2) — the only thing that makes it safe for `build` to start beside
+    # the tests: the call's result AND its `green` output, which the pipeline's `green` job sets only once every stage
+    # passed. Its own status function, never GitHub's implicit `success()`, which looks at the whole chain and would
+    # see the pipeline's switched-off `upgrade-proof` (skipped); a run that skips it still concludes `success` (measured
+    # on run 42274582708). validate_release_identity.py holds the terms.
+    needs:
+      - pipeline
+    if: >-
+      !cancelled() && needs.pipeline.result == 'success' && needs.pipeline.outputs.green == 'true'
+      && needs.pipeline.outputs.kind == 'snapshot'
+    permissions:
+      contents: read # the checkout only: the git tag is `snapshot-tag`'s, a job that holds nothing else
+      packages: write
+      id-token: write # keyless cosign signing and attesting via GitHub OIDC
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The per-arch digests `build` pushed — the bytes lane L1 pulled by the same artifacts and installed — so the
+      # snapshot is assembled from exactly those, never from the staging tags, which a later build of the commit could
+      # move (ADR 0090 decision 2). One directory per artifact: `digests/digest-<image>-<arch>/<image>`.
+      - name: Fetch the digests build pushed
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+
+      # What every green leg of lane L1 recorded (`scripts/snapshot.py lane-result`).
+      - name: Fetch the lanes' results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: lane-result-*
+          path: ${{ runner.temp }}/lane-results
+
+      # The pinned Helm (workflow-level env above): verified against the pin BEFORE it is extracted, so a
+      # tarball that does not match never runs. The same step installs it in pipeline.yml's `chart` and here.
+      - name: Install Helm (pinned tarball)
+        run: |
+          set -euo pipefail
+          tarball="helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLo "${RUNNER_TEMP}/${tarball}" "https://get.helm.sh/${tarball}"
+          echo "${HELM_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict -
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}" linux-amd64/helm
+          echo "${RUNNER_TEMP}/linux-amd64" >> "$GITHUB_PATH"
+
+      # The cosign every signature below is made with: the same line an operator verifies with. `cosign-release` is
+      # pinned because the installer's own default lags (v4.1.2 installs v3.0.6, inside GHSA-fx35-mq7g-6g98's range),
+      # and no Dependabot ecosystem reads it: a newer cosign is a bump by hand. scripts/validate_release_identity.py
+      # holds it to an exact version no older than src/tools/veyqctl.py's COSIGN_MIN_VERSION.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+
+      # A snapshot is written once per commit and never replaced (ADR 0091 decision 5). Each image's
+      # `<version>-SNAPSHOT` and `sha-<commit>` must be free, or already name exactly the manifests this run's build
+      # pushed — a "re-run failed jobs" of a half-done snapshot continues, a second build of the same commit is refused,
+      # and so is a version another commit took (two branches counting one minor, ADR 0057 §1). A read that fails for any
+      # reason but "not found" is refused rather than read as "nothing published yet" — the silent republish ADR 0057
+      # was written against. The decisions are scripts/snapshot.py's, proven by its self-test in `guards`.
+      - name: Refuse to replace a published snapshot
+        id: assert-snapshot-unpublished
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          VERSION: ${{ needs.pipeline.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 scripts/snapshot.py check-unpublished --registry "$REGISTRY" --version "$VERSION" \
+            --commit "$GITHUB_SHA" --digests "${RUNNER_TEMP}/digests" \
+            --image veyq --image veyq-admin --image veyq-tools --chart charts/veyq
+
+      # One predicate per lane and architecture, refused unless every leg of the matrix left a green record, with one
+      # asset set across all of them (ADR 0091 decision 5). Its `--arch` and `--shard` are the `stack` matrix's, which
+      # scripts/validate_release_identity.py holds equal.
+      - name: Assemble the lanes' attestations
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 scripts/snapshot.py predicates --lane L1 --arch amd64 --arch arm64 \
+            --shard account --shard depot --shard expenses --shard memories --shard moderation --shard platform \
+            --commit "$GITHUB_SHA" --run "$RUN_URL" --results "${RUNNER_TEMP}/lane-results" --out "${RUNNER_TEMP}/predicates"
+
+      # The snapshot's names on the digests `build` pushed: `<version>-SNAPSHOT` and `sha-<commit>`, nothing else — no
+      # `<major>`, no `latest`, no `<major>.<minor>`, which are a release's and only a promotion gives them. No metadata
+      # action: it would name the branch as the image's version; the tags are these two, written out.
+      - name: Create the multi-arch manifests
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          VERSION: ${{ needs.pipeline.outputs.version }}
+        run: |
+          set -euo pipefail
+          for name in veyq veyq-admin veyq-tools; do
+            sources=()
+            for arch in amd64 arm64; do
+              digest="$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/digest-${name}-${arch}/${name}")"
+              if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                echo "no digest for ${name} (${arch}) from build: '${digest}'" >&2
+                exit 1
+              fi
+              sources+=("${REGISTRY}/${name}@${digest}")
+            done
+            docker buildx imagetools create -t "${REGISTRY}/${name}:${VERSION}-SNAPSHOT" -t "${REGISTRY}/${name}:sha-${GITHUB_SHA}" "${sources[@]}"
+          done
+
+      - name: Sign the snapshot's images (keyless)
+        id: sign-images
+        env:
+          # Every image of the snapshot. An unsigned admin image would be the weaker half of a pair an operator
+          # is told to pin together — and it is the higher-privilege half (ADR 0065); an unsigned tools image would be
+          # an unverified program reading the database and the store's admin token in a cluster (ADR 0098).
+          IMAGES: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin ghcr.io/${{ github.repository_owner }}/veyq-tools
+        run: |
+          set -euo pipefail
+          # Resolve each manifest-list digest from the sha- tag and sign THAT, so both names pointing at it are
+          # covered. The identity this produces is this file on the branch that ran it — the SNAPSHOT identity, which
+          # the release identity (verify-a-release.md, `veyqctl`) rejects: a promotion signs again, as `release.yml`.
+          for image in $IMAGES; do
+            digest="sha256:$(docker buildx imagetools inspect --raw "$image:sha-${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)"
+            echo "Signing $image@${digest}"
+            cosign sign --yes "$image@${digest}"
+            echo "${image##*/}=${digest}" >> "$GITHUB_OUTPUT"
+          done
+
+      # The chart beside the images (ADR 0064), as `<version>-SNAPSHOT` for its `version` and `appVersion`: its
+      # `appVersion` is the image tag its values default to, so this chart runs this snapshot's images, and the release's
+      # chart is packaged again by the promotion. `helm push` appends
+      # the chart's NAME to the target, so it lands on ghcr.io/<owner>/charts/veyq. A chart this commit already pushed
+      # (the refusal step said `present`) is kept, not pushed twice.
+      - name: Package and push the chart
+        id: chart
+        env:
+          VERSION: ${{ needs.pipeline.outputs.version }}
+          CHART_REGISTRY: oci://ghcr.io/${{ github.repository_owner }}/charts
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATE: ${{ steps.assert-snapshot-unpublished.outputs.chart }}
+          KEPT: ${{ steps.assert-snapshot-unpublished.outputs.chart_digest }}
+        run: |
+          set -euo pipefail
+          if [[ "$STATE" == "present" ]]; then
+            echo "the chart ${VERSION}-SNAPSHOT is this commit's already: ${KEPT}"
+            echo "digest=${KEPT}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s' "$REGISTRY_TOKEN" | helm registry login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          helm package infra/kubernetes/charts/veyq --version "${VERSION}-SNAPSHOT" --app-version "${VERSION}-SNAPSHOT" --destination "${RUNNER_TEMP}/chart"
+          helm push "${RUNNER_TEMP}/chart/veyq-${VERSION}-SNAPSHOT.tgz" "$CHART_REGISTRY" 2>&1 | tee "${RUNNER_TEMP}/chart-push.log"
+          # Measured with Helm 4.0.1: a push prints `Pushed: <ref>` and `Digest: sha256:<64 hex>`, and that digest
+          # is the sha256 of the manifest `docker buildx imagetools inspect --raw` returns for the same tag.
+          digest="$(sed -n 's/^Digest: \(sha256:[0-9a-f]\{64\}\)$/\1/p' "${RUNNER_TEMP}/chart-push.log")"
+          if [[ -z "$digest" ]]; then
+            echo "helm push printed no digest, so there is nothing to sign" >&2
+            exit 1
+          fi
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign the snapshot's chart (keyless)
+        env:
+          CHART: ghcr.io/${{ github.repository_owner }}/charts/veyq
+          DIGEST: ${{ steps.chart.outputs.digest }}
+        run: |
+          set -euo pipefail
+          echo "Signing ${CHART}@${DIGEST}"
+          cosign sign --yes "${CHART}@${DIGEST}"
+
+      # Each lane's result as a signed in-toto attestation, per architecture, on the two images the lane installs (ADR
+      # 0091 decision 5): a promotion verifies them with the snapshot identity and compares their `inputs` with its own.
+      # Stored by cosign in the registry beside the image — no attestation service.
+      - name: Attest the lanes' results (keyless)
+        env:
+          PREDICATE_TYPE: https://veyq.app/attestations/stack-lane/v1
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          APP: ${{ steps.sign-images.outputs.veyq }}
+          ADMIN: ${{ steps.sign-images.outputs.veyq-admin }}
+        run: |
+          set -euo pipefail
+          for predicate in "${RUNNER_TEMP}"/predicates/*.json; do
+            for subject in "veyq@${APP}" "veyq-admin@${ADMIN}"; do
+              echo "Attesting $(basename "$predicate" .json) on ${REGISTRY}/${subject}"
+              cosign attest --yes --type "$PREDICATE_TYPE" --predicate "$predicate" "${REGISTRY}/${subject}"
+            done
+          done
+
+  # The git tag `snapshot-<major>.<minor>` on the snapshot's commit (ADR 0091 decision 5), so GitHub's release page offers
+  # exactly the snapshots that can be promoted; the retention job deletes it with the snapshot's images. A job of its
+  # own because it is the one that writes to the repository, and it holds that and nothing else. Never `v…`: that name
+  # says "released" (ADR 0057 §2), and every tag watcher would read a snapshot as a release. Created with
+  # `GITHUB_TOKEN`, which starts no workflow, through the REST API, and never moved: a tag on another commit is red.
+  snapshot-tag:
+    name: Tag the snapshot's commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - pipeline
+      - snapshot
+    # Its own status function and `snapshot`'s result, never GitHub's implicit `success()`: that one looks at the whole
+    # chain of needs, and behind `snapshot` sits the switched-off `upgrade-proof` (skipped), so on the first real run
+    # (2026-11-06, 42274582708) it skipped this job behind a green `snapshot` (validate_release_identity.py assertion 16).
+    if: ${{ !cancelled() && needs.snapshot.result == 'success' && needs.pipeline.outputs.kind == 'snapshot' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Tag the commit
+        id: snapshot-tag
+        env:
+          VERSION: ${{ needs.pipeline.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="snapshot-${VERSION}"
+          existing="$(git ls-remote origin "refs/tags/${tag}" | cut -f1)"
+          if [[ -n "$existing" ]]; then
+            if [[ "$existing" == "$GITHUB_SHA" ]]; then
+              echo "refs/tags/${tag} already names ${GITHUB_SHA}"
+              exit 0
+            fi
+            echo "refs/tags/${tag} names ${existing}, not ${GITHUB_SHA} — a snapshot is written once per commit" >&2
+            exit 1
+          fi
+          # Through the REST API, never `git push`: GitHub refuses a GITHUB_TOKEN push of a ref whose commit's
+          # .github/workflows/ differs from every branch head ("refusing to allow a GitHub App to create or update
+          # workflow"), so a tag was red whenever main had moved past the snapshot with a workflow change (0.2347,
+          # 2026-11-07, run 42377299125). A ref created by the API writes no file; that it is not held to the rule is
+          # reported by others (GitHub's docs say nothing), so the next such run is its proof. Exists already → 422.
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            --raw-field "ref=refs/tags/${tag}" --raw-field "sha=${GITHUB_SHA}" > /dev/null
+          echo "refs/tags/${tag} now names ${GITHUB_SHA}"

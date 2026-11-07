@@ -2,7 +2,7 @@
 """Self-test of a promotion's decisions (`scripts/promote.py`, ADR 0091 decision 5), offline: a fake git, registry,
 cosign and producer, one world in which the promotion holds, and one forged world per refusal — every refusal
 `promote.check` can make is reached here and must name what it saw. `.github/workflows/release.yml`'s `check` job and
-`ci.yml`'s `guards` job run it.
+`pipeline.yml`'s `guards` job run it.
 
     python3 scripts/promote_selftest.py
 
@@ -298,13 +298,18 @@ refuses("a major entry that moved since the snapshot", w, "a release published s
 identity = promote.snapshot_identity(REPO)
 import re  # noqa: E402
 for subject, want in (
-    (f"https://github.com/{REPO}/.github/workflows/ci.yml@refs/heads/main", True),
-    (f"https://github.com/{REPO}/.github/workflows/ci.yml@refs/heads/release/0.x", True),
+    (f"https://github.com/{REPO}/.github/workflows/publish.yml@refs/heads/main", True),
+    (f"https://github.com/{REPO}/.github/workflows/publish.yml@refs/heads/release/0.x", True),
     (f"https://github.com/{REPO}/.github/workflows/release.yml@refs/heads/main", False),
-    (f"https://github.com/{REPO}/.github/workflows/ci.yml@refs/pull/1/merge", False),
-    (f"https://github.com/{REPO}/.github/workflows/ci.yml@refs/tags/snapshot-0.12", False),
-    (f"https://github.com/{REPO}-fork/.github/workflows/ci.yml@refs/heads/main", False),
-    (f"https://github.com/x{REPO}/.github/workflows/ci.yml@refs/heads/main", False),
+    # The workflow that signed snapshots before the split, and the pipeline publish.yml calls (cr-workflows-split-
+    # pipeline-callers): neither is the file that holds `snapshot`, so neither is a snapshot's identity.
+    (f"https://github.com/{REPO}/.github/workflows/ci.yml@refs/heads/main", False),
+    (f"https://github.com/{REPO}/.github/workflows/pipeline.yml@refs/heads/main", False),
+    (f"https://github.com/{REPO}/.github/workflows/checks.yml@refs/heads/main", False),
+    (f"https://github.com/{REPO}/.github/workflows/publish.yml@refs/pull/1/merge", False),
+    (f"https://github.com/{REPO}/.github/workflows/publish.yml@refs/tags/snapshot-0.12", False),
+    (f"https://github.com/{REPO}-fork/.github/workflows/publish.yml@refs/heads/main", False),
+    (f"https://github.com/x{REPO}/.github/workflows/publish.yml@refs/heads/main", False),
 ):
     if bool(re.search(identity, subject)) != want:
         failures.append(f"the snapshot identity {'rejects' if want else 'accepts'} {subject}")

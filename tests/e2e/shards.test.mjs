@@ -1,5 +1,5 @@
 // The legs CI runs split the suite by domain, the way playwright.config.ts says (ADR 0090 decision 7, ADR 0091 decision
-// 1, `ci.yml`'s `stack` legs). A domain is a folder under `tests/features/` and a Playwright project of the same name;
+// 1, `pipeline.yml`'s `stack` legs). A domain is a folder under `tests/features/` and a Playwright project of the same name;
 // `features/instance/` is the dependency project `instance`, not a domain. Each leg runs one domain with
 // `--project <domain>`, and Playwright runs that project's dependencies with it. What can go wrong silently: a spec
 // left directly in `features/` (or two folders deep) matches no project and runs in no leg, a folder no leg names never
@@ -8,12 +8,12 @@
 //   1. every feature spec lies in exactly one folder one level below `features/`, and none directly in `features/`;
 //   2. the projects are `setup`, `scenarios`, `instance` and one per domain folder — nothing else, so a new kind of
 //      project is a decision this file is told about — and every spec runs in exactly one of them;
-//   3. `ci.yml`'s matrix names exactly the domain folders, and its `--project` passes the leg's domain;
+//   3. `pipeline.yml`'s matrix names exactly the domain folders, and its `--project` passes the leg's domain;
 //   4. every leg runs `setup`, `scenarios` and `instance` whole — the state its feature specs start from — and its own
 //      domain whole, and nothing of another domain.
 // The checks are a pure function over what the listing and the files say (`problems`), bitten below with a spec outside
 // a domain folder, a spec in two projects, a folder missing from the matrix and a matrix leg with no folder.
-// `pnpm run check` runs this file, and `ci.yml`'s frontend job runs that on every commit.
+// `pnpm run check` runs this file, and `pipeline.yml`'s frontend job runs that on every commit.
 //
 // Its limit: it proves the split, not that a feature spec reads nothing another feature spec left — that is
 // playwright.config.ts's rule for the domains, kept by each spec, and a breach shows only as a red leg.
@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url))
 const FEATURES = join(ROOT, 'tests', 'features')
-const CI = fileURLToPath(new URL('../../.github/workflows/ci.yml', import.meta.url))
+const CI = fileURLToPath(new URL('../../.github/workflows/pipeline.yml', import.meta.url))
 const CLI = fileURLToPath(new URL('./node_modules/@playwright/test/cli.js', import.meta.url))
 const WHOLE = ['setup', 'scenarios', 'instance']
 const INSTANCE = 'instance'
@@ -48,11 +48,11 @@ function layout() {
   return { specs: specs.sort(), folders: folders.sort() }
 }
 
-/** The domains `ci.yml`'s `stack` job runs, one per leg: its matrix `domain: [...]`, and whether it passes the leg's. */
+/** The domains `pipeline.yml`'s `stack` job runs, one per leg: its matrix `domain: [...]`, and whether it passes the leg's. */
 function ciLegs() {
   const ci = readFileSync(CI, 'utf8')
   const stack = ci.slice(ci.indexOf('\n  stack:\n'), ci.indexOf('\n  upgrade-proof:\n'))
-  assert.ok(stack.length > 0, 'ci.yml has no `stack` job before `upgrade-proof` — this file reads it from there')
+  assert.ok(stack.length > 0, 'pipeline.yml has no `stack` job before `upgrade-proof` — this file reads it from there')
   const matrix = /^\s+domain: \[([a-z0-9, -]+)\]$/m.exec(stack)
   assert.ok(matrix, "the stack job's matrix names no `domain: [...]`")
   assert.match(stack, /-- --project "\$\{DOMAIN\}"/, 'the stack job passes no `-- --project "${DOMAIN}"` to the orchestrator')
@@ -116,9 +116,9 @@ export function problems({ specs, folders, matrix, all, legs }) {
     }
   }
   // 3. The matrix names exactly the domain folders.
-  for (const d of domains) if (!matrix.includes(d)) found.push(`domain folder \`${d}\` is no leg of ci.yml's stack matrix`)
-  for (const d of matrix) if (!domains.includes(d)) found.push(`ci.yml's stack matrix has a leg \`${d}\` with no domain folder`)
-  if (new Set(matrix).size !== matrix.length) found.push("ci.yml's stack matrix names a domain twice")
+  for (const d of domains) if (!matrix.includes(d)) found.push(`domain folder \`${d}\` is no leg of pipeline.yml's stack matrix`)
+  for (const d of matrix) if (!domains.includes(d)) found.push(`pipeline.yml's stack matrix has a leg \`${d}\` with no domain folder`)
+  if (new Set(matrix).size !== matrix.length) found.push("pipeline.yml's stack matrix names a domain twice")
   // 4. Each leg: the dependency projects whole, its own domain whole, nothing else.
   for (const [domain, leg] of legs) {
     for (const name of [...WHOLE, domain]) {
@@ -139,7 +139,7 @@ test('each CI leg runs the dependency projects whole and one domain folder, and 
   const all = listed()
   const legs = new Map(matrix.filter((d) => folders.includes(d)).map((d) => [d, listed(['--project', d])]))
   assert.deepEqual(problems({ specs, folders, matrix, all, legs }), [])
-  assert.ok(matrix.length >= 2, `ci.yml runs ${matrix.length} leg(s); this file holds a split`)
+  assert.ok(matrix.length >= 2, `pipeline.yml runs ${matrix.length} leg(s); this file holds a split`)
 })
 
 // The bites: each breach, planted in a split that holds, must be named — or a green above proves nothing.

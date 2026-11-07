@@ -189,7 +189,7 @@ services:
 
   # The release mirror an operator may point the release check at (ADR 0097 decision 1, uc.admin.learn-of-new-releases)
   # — a TEST DOUBLE, like Pebble, decided by the owner for inbox #464 (option (a), 2026-10-17). The check reads releases
-  # only on a release-stamped build, which the lane's candidate is (`<major>.<minor>`, ci.yml's `version` job) without
+  # only on a release-stamped build, which the lane's candidate is (`<major>.<minor>`, pipeline.yml's `version` job) without
   # being a published release, so the run stamps ITS instance (`app` above) and serves releases newer than that stamp. The files are the publish's own
   # producer's (`scripts/release_assets.py`, which run_stack_e2e.py calls once per release into the run directory's
   # `mirror/`): `releases.json` and `<tag>/manifest.json`, the two files the app's mirror reader (`ReleaseFeed.Mirror`)

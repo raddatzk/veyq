@@ -25,8 +25,9 @@ signatures, the chart, the git tag, the GitHub Release — stay in the workflow'
      exists or never should (ADR 0057 §1: "release a later commit"). `main` releases its own, highest major only, so
      `latest`, given from `main` alone, is always the newest release there is.
   5. **The snapshot is there and signed as one**: per image, `sha-<commit>` and `<version>-SNAPSHOT` name one index,
-     and `cosign verify` accepts it under the SNAPSHOT identity (`ci.yml` of this repository on `main` or
-     `release/<major>.x`).
+     and `cosign verify` accepts it under the SNAPSHOT identity (`publish.yml` of this repository on `main` or
+     `release/<major>.x` — the file that holds the signing job; a snapshot signed by `ci.yml`, before
+     cr-workflows-split-pipeline-callers, is not one, owner 2026-11-07).
   6. **No release name is taken by anything else**: `<version>` on an image is absent or already that index (a
      promotion that failed half-way and runs again); the chart's `<version>` exists only where the images' do.
   7. **Every lane attested a pass**: for every lane that exists (L1) and every architecture of the `stack` matrix at
@@ -79,6 +80,8 @@ SNAPSHOT_TAG = re.compile(r"^snapshot-(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 RELEASE_TAG = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 RELEASE_BRANCH = re.compile(r"^release/(0|[1-9][0-9]*)\.x$")
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
+# The pipeline whose `stack` job is lane L1, read at the snapshot's commit for its matrix.
+PIPELINE_WORKFLOW = ".github/workflows/pipeline.yml"
 
 
 class Refused(Exception):
@@ -94,10 +97,13 @@ def digest_of(raw: str) -> str:
 
 
 def snapshot_identity(repository: str) -> str:
-    """The certificate identity a SNAPSHOT is signed with: this repository's `ci.yml`, on a publishing branch."""
+    """The certificate identity a SNAPSHOT is signed with: this repository's `publish.yml`, on a publishing branch.
+
+    Keyless signing names the workflow file that holds the signing job (Fulcio's SAN is its `job_workflow_ref`), and
+    `snapshot` is publish.yml's own job, not the pipeline's it calls."""
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise Refused(f"`{repository}` is not an `<owner>/<repository>`")
-    return (rf"^https://github\.com/{re.escape(repository)}/\.github/workflows/ci\.yml"
+    return (rf"^https://github\.com/{re.escape(repository)}/\.github/workflows/publish\.yml"
             rf"@refs/heads/(main|release/[0-9]+\.x)$")
 
 
@@ -300,8 +306,8 @@ def _check(host, draft: Draft, *, ref: str, repository: str, registry: str, unsc
         if by_sha is None or by_name is None:
             raise Refused(f"{registry}/{image} has no snapshot of {commit} (`sha-{commit}` "
                           f"{'absent' if by_sha is None else 'present'}, `{version}-SNAPSHOT` "
-                          f"{'absent' if by_name is None else 'present'}) — a snapshot is published by ci.yml's weekly "
-                          f"schedule or a dispatch of it")
+                          f"{'absent' if by_name is None else 'present'}) — a snapshot is published by publish.yml's "
+                          f"weekly schedule or a dispatch of it")
         if digest_of(by_sha) != digest_of(by_name):
             raise Refused(f"{registry}/{image}: `sha-{commit}` and `{version}-SNAPSHOT` name two different indexes")
         digests[image] = digest_of(by_sha)
@@ -314,7 +320,7 @@ def _check(host, draft: Draft, *, ref: str, repository: str, registry: str, unsc
             resumed.append(image)
         if not host.verify_signature(f"{registry}/{image}@{digests[image]}", identity):
             raise Refused(f"{registry}/{image}@{digests[image]} does not verify as a snapshot of this repository "
-                          f"(`ci.yml` on a publishing branch)")
+                          f"(`publish.yml` on a publishing branch)")
     chart = "absent" if host.inspect(f"{registry}/{CHART}:{version}") is None else "present"
     if chart == "present" and len(resumed) != len(IMAGES):
         raise Refused(f"{registry}/{CHART}:{version} exists while the images' `{version}` is not this snapshot's — "
@@ -446,7 +452,13 @@ class Host:
 
     def stack_matrix(self, commit: str) -> tuple[list[str], list[str]]:
         import yaml
-        doc = yaml.safe_load(self._run("git", "show", f"{commit}:.github/workflows/ci.yml").stdout) or {}
+        # The lane's matrix is the pipeline's (publish.yml calls it); a commit without the file was snapshotted by
+        # `ci.yml`, under an identity no promotion accepts (cr-workflows-split-pipeline-callers, owner 2026-11-07).
+        shown = self._run("git", "show", f"{commit}:{PIPELINE_WORKFLOW}", check=False)
+        if shown.returncode != 0:
+            raise Refused(f"{commit} has no {PIPELINE_WORKFLOW}: its snapshot was made before the workflow split, "
+                          f"signed by ci.yml, and is not promotable — promote a snapshot publish.yml made")
+        doc = yaml.safe_load(shown.stdout) or {}
         for job in (doc.get("jobs") or {}).values():
             if isinstance(job, dict) and any(LANE_ORCHESTRATOR in str(s.get("run") or "")
                                              for s in job.get("steps") or [] if isinstance(s, dict)):

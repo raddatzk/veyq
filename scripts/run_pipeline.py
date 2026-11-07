@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the pipeline locally, from `.github/workflows/ci.yml` itself (ADR 0091; cr-one-pipeline-per-commit phase 5).
+"""Run the pipeline locally, from `.github/workflows/checks.yml` itself, through its call of `pipeline.yml` (ADR 0091).
 
 **Why.** The repository has no remote, and will have none until the owner judges veyq ready to publish (ADR 0091
 § Consequences): until then the local run is the only run. A local run assembled by hand from memory is a second list
@@ -62,14 +62,14 @@ Node or Java major other than the workflow's is run and named in the job's notes
 carries — the summary prints the load average, and a job over budget under a load of 90 says more about the load
 than about the job. The expression evaluator covers what the repository's workflows use; an expression it cannot
 read makes that step or job not run, never green. A job that `needs:` a matrix job is `not run` when that job has
-a leg of another architecture, because GitHub waits for every leg and this host never runs that one: `ci.yml`'s
+a leg of another architecture, because GitHub waits for every leg and this host never runs that one: the pipeline's
 `stack` legs are such jobs on any one host, so their steps are run by hand (cr-stack-e2e phase 4 did). A matrix
 value given as an expression (`stack`'s `exclude`, which drops arm64 on a pull request) is not evaluated: the leg it
 would drop is kept.
 
 Usage (from anywhere; paths resolve against this checkout):
 
-    python3 scripts/run_pipeline.py                         # every job of ci.yml, the host's legs
+    python3 scripts/run_pipeline.py                         # every job checks.yml runs, the host's legs
     python3 scripts/run_pipeline.py --dry-run               # the plan: what would run, what would not and why
     python3 scripts/run_pipeline.py --job frontend --job chart          # these jobs (and what they need)
     python3 scripts/run_pipeline.py --skip-job web-e2e --skip-job build # leave jobs out; they are listed as not run
@@ -104,7 +104,7 @@ except ModuleNotFoundError:  # pragma: no cover
     sys.exit(2)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DEFAULT_WORKFLOW = ".github/workflows/ci.yml"
+DEFAULT_WORKFLOW = ".github/workflows/checks.yml"
 OUT = ROOT / ".pipeline-out"
 DEFAULT_PARALLEL = 4
 
@@ -1116,9 +1116,9 @@ def load_average() -> str:
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(description="Run ci.yml locally (see the module docstring).")
+    ap = argparse.ArgumentParser(description="Run checks.yml (the pipeline) locally (see the module docstring).")
     ap.add_argument("--workflow", default=DEFAULT_WORKFLOW,
-                    help="the workflow (default: ci.yml, read from the commit); a path to a file is read from disk")
+                    help="the workflow (default: checks.yml, read from the commit); a path to a file is read from disk")
     ap.add_argument("--rev", default="HEAD", help="the commit to run (default HEAD)")
     ap.add_argument("--event", choices=("push", "pull_request"), default="push")
     ap.add_argument("--job", action="append", default=[], help="run only this job (and what it needs); repeatable")
