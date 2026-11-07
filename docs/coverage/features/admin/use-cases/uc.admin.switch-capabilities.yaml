@@ -120,7 +120,7 @@ gaps:
     `admin-web` (ADR 0065), and their suites (`CapabilitiesPanel.test.ts` for the tree, the three states, the
     confirmation with `whenOff` in both locales and the refusal; `cli.test.ts` for the commands, the locale from
     `--lang`, `LC_ALL` and `LANG`, and the exit codes; `AdminConsoleView.test.ts` for the nav) exist and pass
-    locally, but `admin-web`'s job (`ci.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR
+    locally, but `admin-web`'s job (`pipeline.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR
     0040 admits none of them. They are mocked-client tests that pin the call and the rendering, never the server's
     answer. On the first run of that job they flip to refs on register-listed, switch-without-restart and
     unknown-id-refused.
@@ -136,6 +136,6 @@ gaps:
     in, and unlock with them, sending no POST or DELETE to `/api/account/wraps` while the switch is off; the child is
     "off through" its parent; switched back on, every affordance returns, the remembered device opens without a
     prompt and the trusted one unlocks with the password alone. Green only in local runs of `scripts/run_stack_e2e.py`:
-    the lane's CI job (`ci.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only
+    the lane's CI job (`pipeline.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only
     once a run's log shows the suite executed. On that run the file becomes a ref on those three criteria, and this
     gap goes. Not covered there: a browser restart (a new context would be a new device to this suite).

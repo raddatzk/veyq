@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Self-test of a snapshot's pure decisions (ADR 0091 decision 5), offline and Docker-free: the asset-set hash
 (`release_assets.asset_set_digest`) and `scripts/snapshot.py`'s lane records, predicates and write-once verdicts.
-`ci.yml`'s `guards` job runs it.
+`pipeline.yml`'s `guards` job runs it.
 
     python3 scripts/snapshot_selftest.py
 

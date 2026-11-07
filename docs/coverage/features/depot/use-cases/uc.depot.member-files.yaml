@@ -77,6 +77,6 @@ gaps:
     once upload, a picked name that folds onto a file replaces it after the question, a renamed file saves under its
     new name, a delete goes to the trash and Undo restores it; and once in German
     (`tests/e2e/tests/features/platform/locale-de.spec.ts`, ADR 0090 decision 9), an uploaded file's row with its size and date in
-    German format and a long German name at 375 px. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` → `stack`) awaits the first CI
+    German format and a long German name at 375 px. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`pipeline.yml` → `stack`) awaits the first CI
     run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On that run each
     file becomes a ref on the criteria its tests are tagged with, and this gap goes.

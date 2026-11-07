@@ -369,7 +369,7 @@ acceptanceCriteria:
           - src/views/SettingsHubView.test.ts
 gaps:
   crypto: >-
-    `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
+    `packages/crypto`'s job (`pipeline.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
     admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
     which rows a run has admitted). `src/v1.conformance.test.ts` pins the register's own AAD context against the
     `seal.sym.device-register` vector and asserts its domain separation from `identity-pins`, so a register blob can

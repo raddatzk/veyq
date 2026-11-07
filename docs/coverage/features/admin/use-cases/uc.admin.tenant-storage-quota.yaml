@@ -61,7 +61,7 @@ gaps:
   admin-web: >-
     The quota's Server-Owner surface lives here (ADR 0065) — the detail panel sets and clears it, the list shows
     usage beside quota, and `veyq-admin tenant quota` sets it from a script — and its suites exist and pass
-    locally, but `admin-web`'s job (`ci.yml` → `frontend` → "Run admin surface checks") has never executed, so
+    locally, but `admin-web`'s job (`pipeline.yml` → `frontend` → "Run admin surface checks") has never executed, so
     ADR 0040 admits none of them. On the first run whose log shows admin-web's suites executed,
     `the-server-owner-sets-the-quota` gains `src/features/tenants/TenantDetailPanel.test.ts`,
     `src/features/tenants/tenants.test.ts`, `src/views/AdminConsoleView.test.ts` and `src/cli/cli.test.ts`, and

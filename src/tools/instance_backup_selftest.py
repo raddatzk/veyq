@@ -55,7 +55,7 @@ This asserts, with no daemon and no root:
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key
 in a running container — that is the live proof on the production recipe, recorded where the coverage of
 `uc.admin.back-up-and-restore-instance` says. Not a `validate_*.py`: it asserts nothing about the repository,
-only about the tool, and it runs beside the tool's own rehearsal in `ci.yml`'s `web-e2e` job. Runnable locally:
+only about the tool, and it runs beside the tool's own rehearsal in `pipeline.yml`'s `web-e2e` job. Runnable locally:
 
     python3 src/tools/instance_backup_selftest.py
 """
@@ -402,7 +402,7 @@ def checkout_backend() -> pathlib.Path | None:
     """The backend of the repository checkout this file sits in (`scripts/repo_layout.py`'s), or None outside one.
 
     The veyq-tools image ships the tool and this self-test, not the backend: there no migration is beside it, and the
-    repository's run (ci.yml's web-e2e job) is the one that reads them. Only there - no `.git` two levels above
+    repository's run (pipeline.yml's web-e2e job) is the one that reads them. Only there - no `.git` two levels above
     `src/tools/` - is a case that reads the backend skipped. Inside a checkout the backend is `repo_layout`'s, and one
     that is not where that says fails the case instead of skipping it: a skip keyed on the directory itself went quiet
     when the backend moved (cr-repo-layout-src). `repo_layout` lives in the checkout's `scripts/`, which is not this

@@ -41,7 +41,7 @@ acceptanceCriteria:
   - id: a-cluster-start-that-would-migrate-backs-up-first
     # A6, ADR 0098. The gate is `src/tools/instance_backup.py gate` in the `veyq-tools` image, and neither a Python
     # operator tool nor a chart render is a coverage surface (ADR 0040), so this file stays `planned` for it too. What
-    # proves it: `src/tools/instance_backup_selftest.py` (ci.yml's `web-e2e` job, and inside the image in the `build`
+    # proves it: `src/tools/instance_backup_selftest.py` (pipeline.yml's `web-e2e` job, and inside the image in the `build`
     # job's tools leg) pins the decision table, every refusal writing nothing with a control one field away, the order
     # (an emptied database passes before the downgrade refusal), retention, and that the key is never read (G1-G4,
     # G8); `scripts/chart_meta_check.py` (the `chart` job) pins (xxiv) the init container on the tools image with the

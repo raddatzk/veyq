@@ -197,42 +197,45 @@ section keeps the commands.
 
 **A snapshot is published weekly, or when you ask for one** ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
 decision 5, amended 2026-11-07). Every push to `main` or `release/<major>.x` and every pull request (Dependabot's
-included) runs `.github/workflows/ci.yml` — the one pipeline per commit, every stage listed once in the stage map of
+included) runs **Checks** (`.github/workflows/checks.yml`), which calls `.github/workflows/pipeline.yml` — the one
+pipeline per commit, every stage listed once in the stage map of
 [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs) — and
-**publishes nothing**. Two runs publish: the **weekly schedule** (Monday 03:17 UTC, `main` only — GitHub runs a schedule
-on the default branch alone) and a **dispatch**. Each runs the same pipeline on its branch's HEAD and, when every stage
-is green, its `snapshot` job publishes the three images on exactly the digests lane L1 installed, as
+**publishes nothing**. **Publish** (`.github/workflows/publish.yml`) is what publishes, on two triggers: the **weekly
+schedule** (Monday 03:17 UTC, `main` only — GitHub runs a schedule on the default branch alone) and a **dispatch**. It
+runs the same pipeline on its branch's HEAD and, in the same run, when every stage is green, its `snapshot` job publishes the three images on exactly the digests lane L1 installed, as
 `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, and the chart as `<major>.<minor>-SNAPSHOT`, signs them, attests each
 lane's result per architecture, and `snapshot-tag` sets the git tag `snapshot-<major>.<minor>` on the commit. A snapshot
 is **written once and never replaced**: a scheduled or dispatched run of a HEAD that already carries a `snapshot-` tag
 tests it again and publishes nothing (its `version` job leaves a notice saying so). A local run
 (`scripts/run_pipeline.py`) publishes nothing either.
 
-**A snapshot now:** GitHub → **Actions → CI → Run workflow**, branch `main` (or `release/<major>.x` for a fix of a
+**A snapshot now:** GitHub → **Actions → Publish → Run workflow**, branch `main` (or `release/<major>.x` for a fix of a
 previous major, which the schedule never reaches; any other branch is red at `version`). From a terminal:
 
 ```sh
-gh workflow run ci.yml --ref main                    # the tip's snapshot now, as the weekly run makes it
+gh workflow run publish.yml --ref main               # the tip's snapshot now, as the weekly run makes it
 ```
 
-- **The weekly run and a dispatch queue behind each other** (one concurrency group per ref for the two), never behind a
-  push: pushes and pull requests have a group of their own, so a dispatch starts at once beside a running push. A
+- **The weekly run and a dispatch queue behind each other** (one concurrency group per ref for Publish), never behind a
+  push: Checks has a group of its own, so a dispatch starts at once beside a running push. A
   second dispatch while one waits replaces the waiting one. A publish that lost its tag (`snapshot` green,
   `snapshot-tag` failed) is not seen as published: the next run is red at the write-once refusal — re-run the old
   run's failed `snapshot-tag` instead. GitHub disables a public repository's scheduled workflow after 60 days without
   activity in it (its docs, not measured here); Actions then offers to enable it again.
 
-- **A snapshot is signed by `ci.yml`, a release by `release.yml`**, both on `main` or `release/<major>.x`. The two are
+- **A snapshot is signed by `publish.yml`, a release by `release.yml`**, both on `main` or `release/<major>.x` (keyless
+  signing names the file holding the signing job, and `snapshot` is Publish's own; a snapshot signed by `ci.yml`, before
+  the split of 2026-11-07, is not promotable). The two are
   the same digests, so the identity is what tells them apart: Verify a release and `veyqctl` accept only the release
   identity. To check a snapshot you try on a throwaway instance, verify it under the snapshot identity:
 
   ```sh
   cosign verify ghcr.io/raddatzk/veyq@sha256:<digest> \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/publish\.yml@refs/heads/(main|release/[0-9]+\.x)$'
   cosign verify-attestation ghcr.io/raddatzk/veyq@sha256:<digest> --type https://veyq.app/attestations/stack-lane/v1 \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/publish\.yml@refs/heads/(main|release/[0-9]+\.x)$'
   ```
 
 - **The image carries `<major>.<minor>`**, the release its commit can become, never `-SNAPSHOT`: a snapshot instance
@@ -244,7 +247,7 @@ gh workflow run ci.yml --ref main                    # the tip's snapshot now, a
   owner's GHCR packages. Make all four public, or every operator needs registry credentials — and the chart has no
   `imagePullSecrets` value, so public is the state it supports.
 - **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
-  at the top of `ci.yml`, checked against the published `.sha256sum` and the GitHub release notes.
+  at the top of `pipeline.yml` and `publish.yml` (and `release.yml`; one value, held equal), checked against the published `.sha256sum` and the GitHub release notes.
 
 **A release promotes a snapshot** (ADR 0091 decision 5, `.github/workflows/release.yml`). Nothing is built: the
 images every lane tested get the release's names and a second signature, from `release.yml` — the identity Verify a
@@ -309,7 +312,7 @@ release is the one the new major is entered from after it:
 
 ```sh
 git switch release/<old>.x && git cherry-pick -x <fix-commit-on-main> && git push   # tested, not published
-gh workflow run ci.yml --ref release/<old>.x                                         # snapshot-<old>.<m>
+gh workflow run publish.yml --ref release/<old>.x                                    # snapshot-<old>.<m>
 # then promote snapshot-<old>.<m> from release/<old>.x (<old> moves, latest does not), then the current major's release
 ```
 

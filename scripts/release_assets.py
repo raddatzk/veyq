@@ -5,7 +5,7 @@
     python3 scripts/release_assets.py --major-entry <release>   # what the tools image bakes as its major entry
     python3 scripts/release_assets.py --asset-set <out>/<tag>   # the hash of a produced release's asset set
 
-writes, for the release the tree names (`v<major>.<minor>`, counted the way `ci.yml`'s version step counts it):
+writes, for the release the tree names (`v<major>.<minor>`, counted the way the pipeline's version step counts it):
 
     <out>/releases.json           every release in <out>: tag, date, prerelease flag, manifest — merged, never replaced
     <out>/<tag>/manifest.json     release, date, the images, unscheduled, majorEntry, every asset with its sha256
@@ -30,7 +30,7 @@ the compose file read it, and the two `COPY` lines that carried the recipe did n
 `scripts/validate_release_identity.py` assertion 4 holds the producer to this derivation: it runs the carry
 step into a scratch directory and requires every derived file there, byte-identical to the tree.
 
-**The publish uploads `<out>/<tag>/` whole** (`ci.yml`'s `publish` job, one `gh release create` with every file),
+**The publish uploads `<out>/<tag>/` whole** (`release.yml`'s `publish` job, which attaches every file to the draft),
 after it has added two `cosign sign-blob` bundles, which no manifest lists because each is made after it:
 `manifest.json.bundle`, the manifest's own signature, which `veyqctl` verifies before it trusts any sha256 or digest
 the manifest names (from GitHub, a mirror or a directory alike), and `veyqctl.bundle`, which vouches for `veyqctl`
@@ -255,7 +255,7 @@ def _git(root: pathlib.Path, *args: str) -> str:
 
 
 def tree_release(root: pathlib.Path = ROOT) -> str:
-    """`<major>.<minor>` exactly as `ci.yml`'s `veyq-version` step counts it (ADR 0057 §1).
+    """`<major>.<minor>` exactly as `pipeline.yml`'s `veyq-version` step counts it (ADR 0057 §1).
 
     That step is the authority; validate_release_identity.py runs both against one throwaway history and holds
     them to the same answer, so this copy cannot drift from it unnoticed.

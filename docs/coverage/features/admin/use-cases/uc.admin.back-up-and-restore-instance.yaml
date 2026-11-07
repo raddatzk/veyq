@@ -33,7 +33,7 @@ acceptanceCriteria:
       # (uid 10001 on both deployment targets), or it reads ABSENT with the key present (inbox #188). The
       # rehearsal cannot see it — it restores as the same user that runs the backend. The tool's owner rule is
       # proven docker-free by `src/tools/instance_backup_selftest.py` (every plan branch, and a refusal before the
-      # first write), which `ci.yml`'s `web-e2e` job runs; a Python operator tool is no coverage surface, so it is
+      # first write), which `pipeline.yml`'s `web-e2e` job runs; a Python operator tool is no coverage surface, so it is
       # named here rather than cited. The production recipe's live run was recorded once, on 2026-10-15, in
       # cr-restore-places-the-key-as-the-runtime-user phase 3. It ran in containers on Docker Desktop's Linux VM, with
       # the tool as root in a container that mounted the 10001-owned volume, not as `sudo` on a Linux host. Today's
@@ -122,7 +122,7 @@ acceptanceCriteria:
     # `upgrade.a-seed.e2e.test.ts` from a worktree of its ref on its own jar, restores the capture onto an instance
     # installed by the candidate's jar, and the candidate's `upgrade.b-read.e2e.test.ts` asserts configSecretState
     # OK first and then every item of the record the seeder wrote, byte for byte; its summary names the predecessor,
-    # both highest migrations and the outcome with its cause. No CI run executes it: ci.yml's `upgrade-proof`
+    # both highest migrations and the outcome with its cause. No CI run executes it: pipeline.yml's `upgrade-proof`
     # is disabled until the first release, so the claim is the recorded run, not a build. Recorded run:
     # 2026-10-14, `--upgrade-from 0d57c3b2` (the seeder's own commit) onto candidate 0e5450ca: GREEN - both builds at
     # V202610041201 (no migration between them, so no migration ran), configSecretState OK, all 18 recorded items
@@ -179,7 +179,7 @@ acceptanceCriteria:
     # and a resized object each refuse naming it before the load, an extra object is tolerated,
     # `--accept-missing-objects` loads and names the broken object, `--record` writes the backup's release; G6: every
     # capture, Compose's default included, is backupFormat 3, the store's listing and no objects/; P9: an empty live
-    # store refuses naming --objects-from and the capture's pool), run by ci.yml's `web-e2e` job and inside the tools
+    # store refuses naming --objects-from and the capture's pool), run by pipeline.yml's `web-e2e` job and inside the tools
     # image in the `build` job. Run live in a kind cluster's restore Job (cr-kubernetes-backup-gate) and on throwaway
     # Compose projects (cr-backup-store-leg-is-an-index: the in-place rollback restores with the check only).
     text: >-

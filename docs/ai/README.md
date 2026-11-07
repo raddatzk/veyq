@@ -421,11 +421,11 @@ this section only points at it (rule 2) — assembling this picture by hand each
   guards. Run the chain locally as CI does:
   `for f in scripts/validate_*.py; do python3 "$f"; done` — with one difference, `validate_guard_gaps.py`, which
   skips locally while no guard changed (`--force` runs it). The whole pipeline runs locally by one command,
-  `python3 scripts/run_pipeline.py`, read from `ci.yml` itself; until the repository has a remote, that run is the
+  `python3 scripts/run_pipeline.py`, read from `checks.yml` and the pipeline it calls; until the repository has a remote, that run is the
   only run (its docstring says what it cannot reproduce).
 - **What runs where** — every stage, its workflow job, trigger and budget — is the one stage map,
   [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md) § Where and when each stage runs;
-  it is not restated here. What it means for a doc change: `ci.yml` ignores `docs/**`, so a docs-only change is
+  it is not restated here. What it means for a doc change: `checks.yml` ignores `docs/**`, so a docs-only change is
   validated by `trust-chain.yml` alone.
 - **What green proves — and where it stops.** A reference **resolves**; not that what it points at carries
   weight. Those limits are **executable, not prose**:

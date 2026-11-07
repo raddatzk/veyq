@@ -82,7 +82,7 @@ acceptanceCriteria:
       web: { unit: [src/features/account/unlock/unlock.test.ts] }
 gaps:
   crypto: >-
-    `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
+    `packages/crypto`'s job (`pipeline.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
     admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
     which rows a run has admitted). `src/v1.conformance.test.ts` pins the one check itself — `decodeKdfParams`
     refuses every field one step off `ARGON` and every salt but 16 bytes, on the refusal's own message. On the
@@ -91,7 +91,7 @@ gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/scenarios/memory-roundtrip.spec.ts`) drives `unlock-opens-master-key` in
     Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged
-    with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` →
+    with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`pipeline.yml` →
     `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the
     suite executed. On that run each file becomes a ref on the criteria its tests are tagged with, and this gap
     goes.

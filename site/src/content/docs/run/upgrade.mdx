@@ -42,7 +42,7 @@ the release its tools image's gate lets a new major be entered from. Where there
 above, that run says so and runs nothing. The run's summary ends with the predecessor, both
 builds' highest migration, the migrations changed or removed between them, and the outcome with its cause — a Flyway
 refusal (a changed baseline's checksum above all) is named as such. Before the first release a red proof informs and
-gates nothing; `ci.yml`'s `upgrade-proof` job, which `publish` needs, is disabled until then
+gates nothing; the pipeline's `upgrade-proof` job, which its `green` gate — and so the snapshot — needs, is disabled until then
 ([backend/CLAUDE.md](https://github.com/raddatzk/veyq/blob/main/src/backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
 images, so a pull, an `up` that migrates, and the rollback stay unrehearsed; and it says nothing
 about the chart — `helm upgrade` from the predecessor's chart to the candidate's runs in no cluster; its immutable
@@ -156,7 +156,7 @@ way back. Four things are specific to this target.
   also renders this chart with the predecessor's `ci/` values: values you already run must still pass the schema —
   and from the release that brings the gate on, they must make the backup choice (`backup.existingClaim`, or
   `backup.enabled: false`), or the schema refuses them naming `backup`.
-  `ci.yml`'s `chart` job runs it; before the first release its findings inform, from it they block the publish.
+  The pipeline's `chart` job runs it; before the first release its findings inform, from it they block the publish.
   **It renders and installs nothing**, so it does not see a missing StorageClass or one that cannot expand a growing
   claim, admission, image pulls, your data surviving the upgrade, a `mariadbPassword` changed on upgrade (MariaDB keeps
   the old one), a value path no `ci/` file

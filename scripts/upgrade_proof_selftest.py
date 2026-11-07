@@ -31,7 +31,7 @@ decide WHICH predecessor and WHAT a red run means are plain functions. This asse
 What it cannot show: that the proof runs - the worktree, the two builds, the restore and the two suites need Docker
 and a jar, and the run itself is the proof (its summary is recorded in the criterion's comment). Not a
 `validate_*.py`: it asserts nothing about the repository, only about the orchestrator, and it runs beside
-`instance_backup_selftest.py` in `ci.yml`'s `web-e2e` job. Runnable locally:
+`instance_backup_selftest.py` in `pipeline.yml`'s `web-e2e` job. Runnable locally:
 
     python3 scripts/upgrade_proof_selftest.py
 """
@@ -88,7 +88,7 @@ def request_cases() -> None:
 
 
 def resolve_cases() -> None:
-    """`--resolve`, the question `ci.yml`'s `upgrade-proof` legs ask before they build anything: the predecessor as the
+    """`--resolve`, the question `pipeline.yml`'s `upgrade-proof` legs ask before they build anything: the predecessor as the
     last line `predecessor=<ref>`, empty where the major entry has no second proof, and nothing started — `docker` is
     never looked for. Run against stand-ins for the two derivations."""
     import contextlib
@@ -307,7 +307,7 @@ def layout_cases() -> None:
             found = e2e.Build("predecessor", tree, tree / "x.jar").web
             check(f"a predecessor tree in {layout} has its web client found", found == tree / path, str(found))
     # The commit before stage 2's move: HEAD while it still carries the legacy layout, else the first parent of the
-    # commit that took the web client's manifest away from its legacy place. ci.yml's web-e2e job checks out the
+    # commit that took the web client's manifest away from its legacy place. pipeline.yml's web-e2e job checks out the
     # whole history (fetch-depth: 0), so it is always reachable there.
     legacy_manifest = f"{repo_layout.LEGACY_SURFACES[repo_layout.WEB]}/package.json"
     on_head = subprocess.run(["git", "cat-file", "-e", f"HEAD:{legacy_manifest}"], cwd=ROOT, capture_output=True)

@@ -48,7 +48,7 @@ documented". Then it deletes the harness.
 
 | Fact | Locator |
 |---|---|
-| The release is built per architecture, arm64 included | `scripts/run_pipeline.py:463-470`; `ci.yml`'s `stack` job matrix |
+| The release is built per architecture, arm64 included | `scripts/run_pipeline.py:463-470`; `pipeline.yml`'s `stack` job matrix |
 | `veyqctl --unsigned-local` installs local images, a bare `name:tag` only | `scripts/run_stack_e2e.py:4-5` |
 | What a Compose install needs and how it runs | `site/src/content/docs/run/new-instance.mdx` |
 | The recipe's limits: application `mem_limit` 1 GiB, heap 60 % of it; MariaDB and Garage unlimited on Compose | `site/src/content/docs/run/plan.md` § Size the host |

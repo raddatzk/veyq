@@ -21,7 +21,7 @@ build is `verdict`'s. This asserts each of them:
      and a predecessor carrying neither skipped.
 
 What it cannot show: that the two renders are the predecessor's and the candidate's - the run itself is that proof.
-Not a `validate_*.py`: it asserts nothing about the repository, only about the check, and it runs in `ci.yml`'s
+Not a `validate_*.py`: it asserts nothing about the repository, only about the check, and it runs in `pipeline.yml`'s
 `chart` job just before the check. Runnable locally:
 
     python3 scripts/chart_upgrade_check_selftest.py

@@ -59,7 +59,7 @@ acceptanceCriteria:
 # round-trip (and the live preview smoke).
 gaps:
   crypto: >-
-    `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
+    `packages/crypto`'s job (`pipeline.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
     admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
     which rows a run has admitted). `src/v1.conformance.test.ts` pins `kekDevicePassword` itself against the
     `device_password_argon2id` vector for `device-kek-conformance`. The criterion's web ref pins the same vector

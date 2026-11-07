@@ -1,7 +1,7 @@
 ---
 id: cr-workflows-split-pipeline-callers
 title: One pipeline definition and two workflows, Checks and Publish; one Mutation workflow
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0091", "0045", "0057"]
 invariants:
@@ -120,6 +120,26 @@ self-paths become `.github/workflows/mutation.yml`), `workflow_dispatch`. Jobs: 
 list, `backend:` = today's PIT list), `crypto` and `backend` — today's two jobs unchanged, each `if:
 github.event_name == 'workflow_dispatch' || needs.changes.outputs.<f> == 'true'`. One concurrency group
 (`veyq-mutation-<pr|ref>`, cancel-in-progress true): both gates belong to one run now.
+
+## Progress (2026-11-07)
+
+Phases 1–4 are built and committed on `claude/awesome-sinoussi-6ae208` (`57b4cfb94`, `51f22f12f`, `6a5777127`, and the
+docs phase); phase 5 waits for the owner. Where the build left the plan above:
+- **The gate is a job-level `if:`**, as the snapshot's was: `green` has `always()` and every stage's result as `&&`
+  terms and one step that writes `green=true`, so a red stage skips it and no output exists. `snapshot` reads
+  `needs.pipeline.outputs.green == 'true'` **and** `needs.pipeline.result == 'success'`. Remembered point (c) is
+  measured in substance: run 42274582708 of `ci.yml`, with `upgrade-proof` and `snapshot-tag` skipped, concluded
+  `success` (`gh run view 42274582708 --json conclusion,jobs`), and a call's result is its called run's conclusion.
+- **`validate_release_identity.py` reads each caller's run as one workflow** (`composed_run`): the call replaced by the
+  pipeline's jobs, `needs.pipeline.outputs.<o>` read as the job that sets it, `needs.pipeline.result` as `green`'s, a
+  caller's need on the call as the called jobs it reads. So the existing assertions run unchanged on the Publish run;
+  the split's own holds were added beside them (checks.yml runs nothing of its own, `publish` literals per caller,
+  triggers per file, no concurrency and no `id-token` in the pipeline). Twelve bites, each red with its own message.
+- **A push to a non-release branch is green** (kind `none`), no longer red: it publishes nothing, so the red guarded
+  nothing (decided at refine, built as such; the scenarios hold it).
+- **`promote.py`'s refusal of a pre-split commit** (no `pipeline.yml` at the snapshot's commit) is in the real host's
+  `stack_matrix`, which the selftest fakes; it is a run's to show, at the first promotion of an old tag — none is
+  wanted (owner: the tag is deleted in phase 5).
 
 ## Phases
 

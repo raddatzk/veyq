@@ -16,6 +16,6 @@ docstring owns what it does. Loaded in addition to the root `CLAUDE.md` when wor
 
 ## Prove your work
 `python3 src/tools/veyqctl_selftest.py` and `python3 src/tools/instance_backup_selftest.py` — Docker-free, run by
-`ci.yml`'s `web-e2e` job; the backup selftest also runs inside the built image (`build` job), where the cases that
+`pipeline.yml`'s `web-e2e` job; the backup selftest also runs inside the built image (`build` job), where the cases that
 read the checkout skip. A change to `veyqctl.py`'s cosign identity, floor or asset names also runs
 `python3 scripts/validate_release_identity.py`, which reads them.
