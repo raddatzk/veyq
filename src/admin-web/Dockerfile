@@ -10,7 +10,7 @@
 # Mirrors the app image Dockerfile's frontend-build stage, including its two hard-won details: the OpenAPI client is
 # GENERATED and never tracked (so the stage needs a JRE for openapi-generator), and the specs must land BEFORE
 # the install because `prepare` runs generate:api during it.
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS build
 WORKDIR /repo/src/admin-web
 RUN apt-get update \
     && apt-get install -y --no-install-recommends default-jre-headless \
@@ -73,7 +73,7 @@ RUN pnpm run build && pnpm run build:cli
 # mainline branch (odd minor): the tag of a mainline minor stops receiving builds once the next mainline opens
 # (1.29-alpine was last pushed 2026-05-11). src/admin-web/nginx.conf.template needs
 # `add_header_inherit` (nginx 1.29.3+), so the floor is 1.30. The digest is the tag's multi-arch index (ADR 0057 §6).
-FROM nginxinc/nginx-unprivileged:1.30-alpine@sha256:4714e0b1b2577eaa1a6131d07c958b67f0eb68e6d0521e90c6e5287db8cf0bc5 AS runtime-nginx
+FROM nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e AS runtime-nginx
 # The base ends on `USER 101`, and `apk add` as 101 fails (measured) — so root for the build steps, and back
 # to 101 at the very end of this stage. BOTH switches are load-bearing: without the first the build dies on
 # its first RUN, without the second the image silently runs as root again, with a green build on top.

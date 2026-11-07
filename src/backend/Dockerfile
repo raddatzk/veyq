@@ -5,7 +5,7 @@
 
 # --- web -------------------------------------------------------------------------------------------------
 # Was `frontend/` — the surface is `src/web/` since the greenfield reset.
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend-build
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS frontend-build
 # The install is a WORKSPACE install since cr-admin-web-extraction (ADR 0065): the lockfile lives at the repo
 # root and `src/web/` resolves `@veyq/crypto` through it, so the stage builds from /repo with src/web/ as a
 # workspace rather than treating it as a standalone project. The image mirrors the checkout under /repo (ADR 0106

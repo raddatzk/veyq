@@ -50,7 +50,7 @@ services:
   # bucket (traefik-dev/blobs.yml) so a browser reaches presigned URLs **same-origin** (no CORS, ADR 0013 §4).
   # Throwaway creds only.
   garage:
-    image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
+    image: dxflrs/garage:v2.5.0@sha256:677e5b758e4425a325b811c425c026bf35a4bf42f7ddbaa773de3f4fd779a5a5
     container_name: veyq-garage
     profiles: ["s3"]
     restart: unless-stopped
@@ -92,7 +92,7 @@ services:
   # (MIT, actively maintained) — NOT the archived MailHog (root CLAUDE.md: no EOL deps). Nothing is stored across
   # restarts (in-memory), which is exactly what a throwaway test mailbox wants.
   mailpit:
-    image: axllent/mailpit:v1.20.0@sha256:6105f08377323c3e11a21b6e5e51648e33151fb4e525aab8d0961573c9e94a4d
+    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     container_name: veyq-mailpit
     profiles: ["mail"]
     restart: unless-stopped

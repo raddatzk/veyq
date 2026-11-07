@@ -54,7 +54,7 @@ services:
   # `sh`, `stat` and `chown` and nothing else: a step that does one thing reads as that thing. It is pinned by
   # digest like every other image here, and Dependabot's `docker-compose` ecosystem bumps it.
   volume-ownership:
-    image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    image: busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
     <<: *hardened
     logging: *logging
     user: "0:0"
@@ -103,7 +103,7 @@ services:
       retries: 12
 
   garage:
-    image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
+    image: dxflrs/garage:v2.5.0@sha256:677e5b758e4425a325b811c425c026bf35a4bf42f7ddbaa773de3f4fd779a5a5
     restart: unless-stopped
     <<: *hardened
     logging: *logging
