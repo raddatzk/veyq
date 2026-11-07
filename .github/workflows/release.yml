@@ -4,7 +4,7 @@ name: Release
 # release signature, and nothing is built again. The owner starts it in two clicks (owner 2026-11-06):
 #
 #   1. GitHub's release page → Draft a new release → choose the tag `snapshot-<major>.<minor>` of the snapshot to
-#      release (every green push of `main` or `release/<major>.x` set one) → write the notes → Save draft.
+#      release (every snapshot `ci.yml` published — weekly, or by a dispatch — set one) → write the notes → Save draft.
 #   2. Actions → Release → Run workflow, on the branch the snapshot came from (`main`; `release/<major>.x` for a fix of
 #      a previous major). `unscheduled_major` marks an unscheduled major (ADR 0085).
 #

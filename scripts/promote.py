@@ -300,7 +300,8 @@ def _check(host, draft: Draft, *, ref: str, repository: str, registry: str, unsc
         if by_sha is None or by_name is None:
             raise Refused(f"{registry}/{image} has no snapshot of {commit} (`sha-{commit}` "
                           f"{'absent' if by_sha is None else 'present'}, `{version}-SNAPSHOT` "
-                          f"{'absent' if by_name is None else 'present'}) — a snapshot is published by a green push")
+                          f"{'absent' if by_name is None else 'present'}) — a snapshot is published by ci.yml's weekly "
+                          f"schedule or a dispatch of it")
         if digest_of(by_sha) != digest_of(by_name):
             raise Refused(f"{registry}/{image}: `sha-{commit}` and `{version}-SNAPSHOT` name two different indexes")
         digests[image] = digest_of(by_sha)

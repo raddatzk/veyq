@@ -2,7 +2,7 @@
 """Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
-**What it asserts.** Thirteen things (11 retired from this pipeline with the release kind, below), in the order a
+**What it asserts.** Fourteen things (11 retired from this pipeline with the release kind, below), in the order a
 snapshot happens:
 
   1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
@@ -10,12 +10,14 @@ snapshot happens:
      answers what it is, with no network call and no registry — and no tree can hold the minor.
   2. **The publish workflow derives the version from the tree, offline.** The `version` job's compute step is
      *executed* here, inside a throwaway git repository this guard builds — `VERSION` changed twice, then a
-     known number of commits, plus a shallow clone of it — so the minor is asserted against a known count, never
-     against this repository's own history, which moves. Scenarios: a push and a dispatch on `main` and on
-     `release/<major>.x` (kind `snapshot`), a pull request and a local run (`runner.environment` `local`, as
+     known number of commits, an older commit carrying an older `snapshot-` tag, plus a shallow clone of it and a
+     clone whose HEAD carries its own `snapshot-` tag — so the minor is asserted against a known count, never
+     against this repository's own history, which moves. Scenarios: the schedule on `main` and a dispatch on `main` and
+     on `release/<major>.x` (kind `snapshot`); the same three on a HEAD that already carries its snapshot, a push to
+     `main` and to `release/<major>.x`, a pull request and a local run (`runner.environment` `local`, as
      `scripts/run_pipeline.py` sets it) of a push to `main` and to a feature branch (kind `none`), every one stamping
-     `<major>.<minor>` and never `-SNAPSHOT` (ADR 0091 decision 5) — and, each must FAIL, a push or a dispatch on a
-     branch that disagrees with the tree or is not a release branch, and a shallow checkout. Executing it is the only
+     `<major>.<minor>` and never `-SNAPSHOT` (ADR 0091 decision 5) — and, each must FAIL, a push, a schedule or a
+     dispatch on a branch that disagrees with the tree or is not a release branch, and a shallow checkout. Executing it is the only
      honest way to assert what a publish *would* stamp; reading it would only
      assert what it looks like. The step is also held to declaring no network tool at all (a `git` that talks to
      a remote included), because a version a registry decides is not an identity (ADR 0057 § Rejected), and to
@@ -26,8 +28,8 @@ snapshot happens:
      Every write in the file — found by what a step does (a login or build-push action, or a `run:` that pushes, logs
      in, signs or attests), never listed — is gated on `needs.version.outputs.kind == 'snapshot'` by its step, its
      job or its push input, so a pull request (Dependabot's included) and a local run write nothing.
-     `workflow_dispatch` takes no input: a dispatch is a snapshot by hand, and a release is a promotion in a workflow
-     of its own. The `snapshot` job holds `packages: write` and `id-token: write` and never `contents: write`; the
+     `workflow_dispatch` takes no input: a dispatch is a snapshot now, by hand, and a release is a promotion in a
+     workflow of its own. The `snapshot` job holds `packages: write` and `id-token: write` and never `contents: write`; the
      `snapshot-tag` job needs it, is gated the same way and holds exactly `contents: write`; `git push` runs in that
      job alone, as `snapshot-${VERSION}` and never a `v…` name, and no step writes a GitHub Release. The `snapshot` job's
      refusal (`scripts/snapshot.py check-unpublished`) and the tag step are keyed on the *tree-derived* version, force
@@ -102,6 +104,18 @@ snapshot happens:
      (or a `contains(fromJSON(…), needs.<job>.result)`) as an `&&` term — GitHub's implicit `success()` looks at the
      whole chain, so a skipped job anywhere upstream skips everything after it. `!cancelled()` is the one negation the
      gating model of assertion 3 accepts.
+ 17. **Only the weekly schedule and a dispatch publish, and never twice for one commit** (ADR 0091 decision 5, owner
+     2026-11-07). `ci.yml` triggers on `push`, `pull_request`, a `schedule` with at least one `cron` and
+     `workflow_dispatch`. Of assertion 2's executed scenarios, the events that came out `kind=snapshot` are exactly
+     `schedule` and `workflow_dispatch` — derived from what the step wrote, not from the expectations table, so a push
+     that publishes is red even with the table edited to expect it — and no scenario whose HEAD already carries a
+     `snapshot-` tag publishes, while the clone whose only `snapshot-` tag sits on an older commit does (a check
+     that reads "any snapshot tag exists" would stop every snapshot after the first). Assertion 3 holds every write to
+     that `kind`, so a push run cannot reach one. And the `concurrency.group` — *evaluated* for each event on `main`
+     and `release/<major>.x`, never matched as text — puts the schedule and a dispatch of a ref in one group and a
+     push or a pull request in another, per ref, never cancelled in progress: two publishing runs then go one after
+     the other, so the later one sees the earlier one's tag, and a push neither waits for a snapshot nor gets a
+     pending scheduled run cancelled by queueing behind it.
   8. **The chart is the snapshot's third artifact** (ADR 0064). The refuse step checks `--image` for every published
      image (the build matrix) AND `--chart charts/<name>` (`Chart.yaml`'s `name`) under the workflow's own registry; the
      step that runs `helm package` sets `--version` and `--app-version` to the tree-derived version's `-SNAPSHOT`
@@ -222,6 +236,11 @@ Assertion 16 came with the first real run of the snapshot (2026-11-06, run 42274
 published and attested, and `snapshot-tag` skipped. Its `if:` named no status function, so GitHub's implicit
 `success()` saw the switched-off `upgrade-proof` skipped upstream of `snapshot`, and no `snapshot-` tag was set. The
 assertion was written against that form first and was red on it, then the job was fixed.
+Assertion 17 came with the owner's decision of 2026-11-07, no incident in the code: every green push published, so
+once Dependabot opened its pull requests each merged bump was a snapshot, three images, a chart and a `snapshot-` tag
+of its own. Publishing moved to a weekly schedule and the dispatch, gated on HEAD having no snapshot yet; a push still
+runs the whole pipeline (ADR 0091 decision 2). Assertions 2 and 3 were reshaped with it: a push's scenarios now
+expect `none`.
 
 Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
 The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
@@ -258,7 +277,12 @@ scan — puts a hole in exactly the place a future instruction would hide.
 
 **Its limit — what a green run does NOT prove.** It reads **files**, and executes exactly one of them (the
 version step's shell, against a history it built — so `fetch-depth: 0` on the real checkout is proven only by a
-run, where its absence is a loud red at the shallow refusal). It cannot prove a snapshot was ever published, that a
+run, where its absence is a loud red at the shallow refusal — and so is the tag check's premise, that the same
+checkout holds every tag). Assertion 17 evaluates one expression, the concurrency group, by a model of GitHub's
+expression language that knows `format`, `==`, `!=`, `&&`, `||`, `!`, string literals, `github.event_name` and
+`github.ref` and refuses anything else (red, never a guess); that GitHub cancels and queues by that group as its docs
+say is a run's to show, and the schedule firing at all is GitHub's (it runs on the default branch only, and a public
+repository's schedule is switched off after 60 days without activity). It cannot prove a snapshot was ever published, that a
 tag was created, that a second build of a commit was refused, or that the registry holds what the workflow says it
 would push — those are a run's on GitHub (the remote exists since 2026-11-05; the first-run list is inbox #471), and
 the publish path stays an explicitly stated ADR 0040 gap. It says nothing
@@ -436,8 +460,14 @@ def non_release_branches(major: str) -> list[str]:
     return ["master", "develop", "main-next", f"release/{major}.x-rc", f"release/{major}.x/hotfix"]
 
 
-# Filled by assertion 2's scenarios: every branch a push to which the version step turns into a publish.
+# Filled by assertion 2's scenarios: every branch a run on which the version step turns into a publish.
 publishing_branches: list[str] = []
+# Filled by the same scenarios, for assertion 17: (event, checkout, label) of every one that came out `kind=snapshot`.
+publishing_runs: list[tuple[str, str, str]] = []
+# The publishing events those scenarios ran on a HEAD that already has its snapshot (and the step did not refuse).
+tagged_probes: list[str] = []
+# The events that may publish (assertion 17, owner 2026-11-07): the weekly schedule and the owner's dispatch.
+PUBLISHING_EVENTS = {"schedule", "workflow_dispatch"}
 
 errors: list[str] = []
 signing_cosign = ""  # assertion 11's installer pin, for the OK line
@@ -536,8 +566,13 @@ def git(cwd: pathlib.Path, *args: str) -> str:
 EXPECTED_MINOR = 3
 
 
-def build_history(tmp: pathlib.Path, major: str) -> tuple[pathlib.Path, pathlib.Path]:
-    """A full clone and a shallow clone of a history whose VERSION last changed EXPECTED_MINOR commits ago."""
+def build_history(tmp: pathlib.Path, major: str) -> dict[str, pathlib.Path]:
+    """Clones of a history whose VERSION last changed EXPECTED_MINOR commits ago, keyed by what HEAD carries.
+
+    `full`: the commit before HEAD carries its `snapshot-` tag, HEAD none (assertion 17's decoy: an earlier week's
+    snapshot must not stop this one). `tagged`: the same history, HEAD carrying its own `snapshot-` tag (it is
+    published). `shallow`: one commit deep, which the step must refuse.
+    """
     origin = tmp / "origin"
     origin.mkdir()
     git(origin, "init", "-q", "-b", "main")
@@ -553,11 +588,16 @@ def build_history(tmp: pathlib.Path, major: str) -> tuple[pathlib.Path, pathlib.
     commit("the major this tree holds", VERSION=version_text or "")
     for n in range(EXPECTED_MINOR):
         commit(f"work {n}", notes=f"{n + 3}\n")
+    # What the pipeline itself would have left on the parent: its snapshot's lightweight tag (`snapshot-tag`'s shape).
+    git(origin, "tag", f"snapshot-{major}.{EXPECTED_MINOR - 1}", "HEAD~1")
     full = tmp / "full"
+    tagged = tmp / "tagged"
     shallow = tmp / "shallow"
     git(tmp, "clone", "-q", "--no-local", str(origin), str(full))
+    git(tmp, "clone", "-q", "--no-local", str(origin), str(tagged))
+    git(tagged, "tag", f"snapshot-{major}.{EXPECTED_MINOR}", "HEAD")
     git(tmp, "clone", "-q", "--depth", "1", f"file://{origin}", str(shallow))
-    return full, shallow
+    return {"full": full, "tagged": tagged, "shallow": shallow}
 
 
 def run_scenario(script: str, checkout: pathlib.Path, env: dict[str, str]) -> tuple[int, dict[str, str], str]:
@@ -626,64 +666,90 @@ elif compute is not None and version_match:
         # The stamp is `<major>.<minor>` on EVERY event (ADR 0091 decision 5: a release is the snapshot's bytes, so the
         # two carry one name); only `kind` says whether the run publishes.
         stamp = {"version": release, "major": major}
-        # (label, shallow?, env, expected exit, expected outputs)
+        # (label, checkout, env, expected exit, expected outputs). The checkout is build_history's key: `full` (HEAD has
+        # no snapshot yet, its parent has), `tagged` (HEAD has its snapshot), `shallow`.
         scenarios = [
             (
+                # Owner 2026-11-07: a push runs the whole pipeline and publishes nothing (assertion 17).
                 "a push to main",
-                False, event("push", "main"), 0, {"kind": "snapshot", **stamp},
+                "full", event("push", "main"), 0, {"kind": "none", **stamp},
             ),
             (
                 f"a push to release/{major}.x",
-                False, event("push", f"release/{major}.x"), 0, {"kind": "snapshot", **stamp},
+                "full", event("push", f"release/{major}.x"), 0, {"kind": "none", **stamp},
+            ),
+            (
+                # GitHub runs a schedule on the default branch only, so `main` is the one branch it reaches.
+                "the weekly schedule on main",
+                "full", event("schedule", "main"), 0, {"kind": "snapshot", **stamp},
             ),
             (
                 "a dispatch on main",
-                False, event("workflow_dispatch", "main"), 0, {"kind": "snapshot", **stamp},
+                "full", event("workflow_dispatch", "main"), 0, {"kind": "snapshot", **stamp},
             ),
             (
                 f"a dispatch on release/{major}.x",
-                False, event("workflow_dispatch", f"release/{major}.x"), 0, {"kind": "snapshot", **stamp},
+                "full", event("workflow_dispatch", f"release/{major}.x"), 0, {"kind": "snapshot", **stamp},
+            ),
+            (
+                # A snapshot is written once and never replaced: a HEAD that has one is tested again, not published.
+                "the weekly schedule on main, whose HEAD already has its snapshot",
+                "tagged", event("schedule", "main"), 0, {"kind": "none", **stamp},
+            ),
+            (
+                "a dispatch on main, whose HEAD already has its snapshot",
+                "tagged", event("workflow_dispatch", "main"), 0, {"kind": "none", **stamp},
+            ),
+            (
+                f"a dispatch on release/{major}.x, whose HEAD already has its snapshot",
+                "tagged", event("workflow_dispatch", f"release/{major}.x"), 0, {"kind": "none", **stamp},
             ),
             (
                 # Dependabot's included: a pull request builds and tests, and publishes nothing.
                 "a pull request",
-                False, event("pull_request", "12/merge"), 0, {"kind": "none", **stamp},
+                "full", event("pull_request", "12/merge"), 0, {"kind": "none", **stamp},
             ),
             (
                 # scripts/run_pipeline.py simulates a push on `runner.environment` `local`: a local run on main must
                 # not reach a registry, a signature or the remote.
                 "a local run of a push to main",
-                False, event("push", "main", runner="local"), 0, {"kind": "none", **stamp},
+                "full", event("push", "main", runner="local"), 0, {"kind": "none", **stamp},
             ),
             (
                 # ... nor turn red on a feature branch, which is where a local run usually is.
                 "a local run of a push to a feature branch",
-                False, event("push", "feature/x", runner="local"), 0, {"kind": "none", **stamp},
+                "full", event("push", "feature/x", runner="local"), 0, {"kind": "none", **stamp},
             ),
             (
                 # A shallow clone counts 1: the step must refuse it rather than stamp a wrong minor that looks right.
                 "a push to main from a shallow checkout",
-                True, event("push", "main"), 1, {},
+                "shallow", event("push", "main"), 1, {},
+            ),
+            (
+                "the weekly schedule on main from a shallow checkout",
+                "shallow", event("schedule", "main"), 1, {},
             ),
             (
                 "a pull request from a shallow checkout",
-                True, event("pull_request", "12/merge"), 1, {},
+                "shallow", event("pull_request", "12/merge"), 1, {},
             ),
         ] + [
             # A ref that disagrees with the tree, and branches that are not release branches, must publish nothing:
             # whatever publishes also signs, and assertion 7 holds the documented verify to rejecting exactly these
             # (ADR 0057 §3: what signs and what verifies agree). `master` is the one a publish accepted until
-            # cr-image-provenance. A push to such a branch is red, not a green run that left no snapshot.
+            # cr-image-provenance. A push, a schedule or a dispatch on such a branch is red, not a green run that
+            # looks like a publishing one.
             (
                 f"a {name} on {branch}, which is not a release branch of this tree",
-                False, event(name, branch), 1, {},
+                "full", event(name, branch), 1, {},
             )
             for branch in [f"release/{int(major) + 7}.x", *non_release_branches(major)]
-            for name in ("push", "workflow_dispatch")
+            for name in ("push", "schedule", "workflow_dispatch")
         ]
         try:
             with tempfile.TemporaryDirectory(prefix="release_identity_") as tmp:
-                full, shallow = build_history(pathlib.Path(tmp), major)
+                checkouts = build_history(pathlib.Path(tmp), major)
+                full, shallow = checkouts["full"], checkouts["shallow"]
                 # The producer counts the release a second time, in Python (it names the release's assets); the
                 # two counts must agree, and its copy must refuse a shallow checkout as the step does.
                 try:
@@ -700,14 +766,17 @@ elif compute is not None and version_match:
                     fail("scripts/release_assets.py counts a release from a shallow checkout, which the version step refuses")
                 except release_assets.ReleaseError:
                     pass
-                for label, use_shallow, env, expect_rc, expect in scenarios:
+                for label, checkout, env, expect_rc, expect in scenarios:
                     try:
-                        rc, written, message = run_scenario(script, shallow if use_shallow else full, env)
+                        rc, written, message = run_scenario(script, checkouts[checkout], env)
                     except subprocess.TimeoutExpired:
                         fail(f"the `{VERSION_STEP}` step hung for {label} — a version derivation that waits is waiting on a network")
                         continue
+                    if rc == 0 and checkout == "tagged" and env["EVENT_NAME"] in PUBLISHING_EVENTS:
+                        tagged_probes.append(env["EVENT_NAME"])
                     if rc == 0 and written.get("kind") == "snapshot":
                         publishing_branches.append(env["REF_NAME"])
+                        publishing_runs.append((env["EVENT_NAME"], checkout, label))
                     if expect_rc == 0 and rc != 0:
                         fail(f"the `{VERSION_STEP}` step fails for {label}: {message or f'exit {rc}'}")
                         continue
@@ -936,17 +1005,17 @@ if workflow_doc:
             f"so a tag trigger could only re-run a commit whose snapshot exists — which the `{REFUSE_STEP}` step "
             f"refuses by design."
         )
-    # A dispatch is a snapshot by hand, exactly as a push makes one: an input would be a second kind of publish, and the
-    # release kind left this file for the promotion (ADR 0091 decision 5).
+    # A dispatch is a snapshot now, exactly as the weekly schedule makes one: an input would be a second kind of publish,
+    # and the release kind left this file for the promotion (ADR 0091 decision 5).
     dispatch_inputs = (triggers.get("workflow_dispatch") or {}).get("inputs") if isinstance(
         triggers.get("workflow_dispatch"), dict) else None
     if "workflow_dispatch" not in triggers:
-        fail(f"{WORKFLOW.relative_to(ROOT)} has no `workflow_dispatch` — a commit whose run was superseded while pending "
-             f"has no other way to its snapshot")
+        fail(f"{WORKFLOW.relative_to(ROOT)} has no `workflow_dispatch` — a snapshot now, a release branch's fix "
+             f"above all (the schedule runs on `main` alone), has no other way to be published")
     elif dispatch_inputs:
         fail(
             f"{WORKFLOW.relative_to(ROOT)}: `workflow_dispatch` takes inputs ({', '.join(map(str, dispatch_inputs))}) — a "
-            f"dispatch publishes a snapshot exactly as a push does; a release is a promotion in a workflow of its own "
+            f"dispatch publishes a snapshot exactly as the schedule does; a release is a promotion in a workflow of its own "
             f"(ADR 0091 decision 5), never a kind this pipeline builds"
         )
 
@@ -973,7 +1042,7 @@ if workflow_doc:
     publish_job = jobs.get(PUBLISH_JOB) or {}
     tag_job = jobs.get(SNAPSHOT_TAG_JOB) or {}
     if not publish_job:
-        fail(f"{WORKFLOW.relative_to(ROOT)} has no `{PUBLISH_JOB}` job — nothing publishes the snapshot of a green push")
+        fail(f"{WORKFLOW.relative_to(ROOT)} has no `{PUBLISH_JOB}` job — nothing publishes a green run's snapshot")
     if not tag_job:
         fail(f"{WORKFLOW.relative_to(ROOT)} has no `{SNAPSHOT_TAG_JOB}` job — no snapshot gets its git tag, so GitHub's "
              f"release page offers nothing to promote (ADR 0091 decision 5)")
@@ -1183,7 +1252,7 @@ if workflow_doc:
                  f"— what is published for an architecture must have passed on it (ADR 0091 decision 4)")
 
     # ---- 13. each lane's result is attested, per architecture, by the publish and never by the lane --------------
-    # ADR 0091 decision 5: every green push publishes its snapshot with each lane's result as a signed attestation
+    # ADR 0091 decision 5: every snapshot is published with each lane's result as a signed attestation
     # (lane, architecture, outcome, inputs). A leg records what it ran; the publish assembles one predicate per
     # architecture from every leg the lane's matrix runs — the `--arch` and `--shard` it passes are that matrix, read
     # here, never listed — and attests it with the type `scripts/snapshot.py` names, after the signatures. The leg runs
@@ -2137,6 +2206,172 @@ for wf_path in (WORKFLOW, ROOT / RELEASE_WORKFLOW):
 if gates_checked == 0:
     fail("no job in ci.yml or release.yml follows a job that can be skipped — assertion 16 checked NOTHING; re-anchor it")
 
+
+# ---- 17. only the weekly schedule and a dispatch publish, and never twice for one commit ---------------------------
+# Owner 2026-11-07: a snapshot per green push flooded the registry and the tags once Dependabot opened its pull
+# requests. A push still runs the whole pipeline (ADR 0091 decision 2); what publishes is the weekly schedule and a
+# dispatch, on a HEAD that has no snapshot yet.
+EXPR = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
+EXPR_TOKEN = re.compile(r"\s*(?:('[^']*')|(github\.event_name|github\.ref)\b|(format)\s*(?=\()|(==|!=|&&|\|\||!|\(|\)|,))")
+
+
+def evaluate_expression(text: str, context: dict[str, str]) -> str:
+    """A GitHub expression of the small subset a concurrency group needs, evaluated; anything else is refused.
+
+    Literals, `github.event_name`, `github.ref`, `format(…)`, `==`, `!=`, `&&`, `||`, `!` and parentheses. `&&` and `||`
+    return an operand, as GitHub's do. String comparison is GitHub's: case-insensitive.
+    """
+    tokens: list[tuple[str, str]] = []
+    pos, text = 0, text.strip()
+    while pos < len(text):
+        m = EXPR_TOKEN.match(text, pos)
+        if not m or m.end() == pos:
+            raise ValueError(f"cannot read `{text[pos:pos + 30]}` (this guard models only a concurrency group's subset)")
+        literal, name, func, op = m.groups()
+        tokens.append(("lit", literal[1:-1]) if literal else ("ctx", name) if name else ("fn", func) if func
+                      else ("op", op))
+        pos = m.end()
+    at = 0
+
+    def peek() -> tuple[str, str] | None:
+        return tokens[at] if at < len(tokens) else None
+
+    def take(kind: str, value: str | None = None) -> tuple[str, str]:
+        nonlocal at
+        token = peek()
+        if token is None or token[0] != kind or (value is not None and token[1] != value):
+            raise ValueError(f"expected {value or kind}, found {token}")
+        at += 1
+        return token
+
+    def primary() -> object:
+        token = peek()
+        if token is None:
+            raise ValueError("the expression ends early")
+        if token == ("op", "!"):
+            take("op", "!")
+            return not primary()
+        if token == ("op", "("):
+            take("op", "(")
+            value = disjunction()
+            take("op", ")")
+            return value
+        if token[0] == "lit":
+            take("lit")
+            return token[1]
+        if token[0] == "ctx":
+            take("ctx")
+            return context[token[1]]
+        if token[0] == "fn":
+            take("fn")
+            take("op", "(")
+            args = [disjunction()]
+            while peek() == ("op", ","):
+                take("op", ",")
+                args.append(disjunction())
+            take("op", ")")
+            out = str(args[0])
+            for index, arg in enumerate(args[1:]):
+                out = out.replace("{" + str(index) + "}", str(arg))
+            return out
+        raise ValueError(f"unexpected {token}")
+
+    def comparison() -> object:
+        left = primary()
+        while peek() in (("op", "=="), ("op", "!=")):
+            op = take("op")[1]
+            right = primary()
+            same = str(left).lower() == str(right).lower()
+            left = same if op == "==" else not same
+        return left
+
+    def conjunction() -> object:
+        left = comparison()
+        while peek() == ("op", "&&"):
+            take("op", "&&")
+            right = comparison()
+            left = right if left else left
+        return left
+
+    def disjunction() -> object:
+        left = conjunction()
+        while peek() == ("op", "||"):
+            take("op", "||")
+            right = conjunction()
+            left = left if left else right
+        return left
+
+    value = disjunction()
+    if at != len(tokens):
+        raise ValueError(f"unread tokens after the expression: {tokens[at:]}")
+    return str(value)
+
+
+publish_summary = ""
+if workflow_doc and version_match:
+    rel = WORKFLOW.relative_to(ROOT)
+    triggers = workflow_doc.get("on", workflow_doc.get(True)) or {}
+    for name in ("push", "pull_request", "workflow_dispatch"):
+        if name not in triggers:
+            fail(f"{rel} does not trigger on `{name}` — every push and pull request runs the whole pipeline (ADR 0091 "
+                 f"decision 2), and a dispatch is the owner's snapshot now (ADR 0091 decision 5)")
+    crons = [str(entry.get("cron")) for entry in (triggers.get("schedule") or [])
+             if isinstance(entry, dict) and entry.get("cron")] if isinstance(triggers.get("schedule"), list) else []
+    if not crons:
+        fail(f"{rel} has no `schedule` with a `cron` — the weekly snapshot (owner 2026-11-07) never runs, so `main` is "
+             f"published only when someone remembers to dispatch")
+    events = {event for event, _, _ in publishing_runs}
+    if events != PUBLISHING_EVENTS:
+        fail(f"the `{VERSION_STEP}` step turned {sorted(events) or 'no event'} into a publish, not exactly "
+             f"{sorted(PUBLISHING_EVENTS)} — a push runs the whole pipeline and publishes nothing; only the weekly "
+             f"schedule and a dispatch do (owner 2026-11-07)")
+    if set(tagged_probes) != PUBLISHING_EVENTS:
+        fail(f"assertion 2 runs {sorted(set(tagged_probes)) or 'no event'} on a HEAD that has its snapshot, not every "
+             f"one of {sorted(PUBLISHING_EVENTS)} — assertion 17's write-once half would check too little")
+    for event, checkout, label in publishing_runs:
+        if checkout == "tagged":
+            fail(f"the `{VERSION_STEP}` step publishes for {label} — that HEAD carries a `snapshot-` tag, and a snapshot "
+                 f"is written once and never replaced (ADR 0091 decision 5)")
+    if not any(checkout == "full" for _, checkout, _ in publishing_runs):
+        fail(f"the `{VERSION_STEP}` step publishes nothing for a HEAD whose only `snapshot-` tag is on its parent — read "
+             f"as `published`, an earlier snapshot would stop every later one")
+
+    concurrency = workflow_doc.get("concurrency")
+    group = str(concurrency.get("group") or "") if isinstance(concurrency, dict) else str(concurrency or "")
+    if not isinstance(concurrency, dict) or concurrency.get("cancel-in-progress") is not False:
+        fail(f"{rel}'s concurrency is {concurrency!r} — it needs a `group` and `cancel-in-progress: false`: a publish "
+             f"cancelled midway leaves a half-written snapshot behind")
+    try:
+        major = version_match.group(1)
+
+        def group_of(event: str, ref: str) -> str:
+            return EXPR.sub(lambda m: evaluate_expression(m.group(1), {"github.event_name": event, "github.ref": ref}),
+                            group)
+
+        refs = ["refs/heads/main", f"refs/heads/release/{major}.x"]
+        seen: dict[str, tuple[str, str]] = {}
+        for ref in refs:
+            schedule, dispatch = group_of("schedule", ref), group_of("workflow_dispatch", ref)
+            push, pull = group_of("push", ref), group_of("pull_request", "refs/pull/12/merge")
+            if schedule != dispatch:
+                fail(f"{rel}: on {ref} the schedule runs in concurrency group `{schedule}` and a dispatch in `{dispatch}` "
+                     f"— two publishing runs of one ref must go one after the other, or both build a snapshot of a HEAD "
+                     f"neither has tagged yet")
+            for other, value in (("a push", push), ("a pull request", pull)):
+                if value == schedule:
+                    fail(f"{rel}: on {ref} {other} shares concurrency group `{value}` with the publishing runs — "
+                         f"queued behind one it delays the snapshot, and a push arriving while a scheduled run waits "
+                         f"cancels that run (GitHub keeps one pending run per group)")
+            for value, what in ((schedule, "publish"), (push, "push")):
+                if value in seen and seen[value] != (what, ref):
+                    fail(f"{rel}: concurrency group `{value}` is shared by {seen[value]} and {(what, ref)} — one group "
+                         f"per ref, or a push to one branch waits on another's run")
+                seen.setdefault(value, (what, ref))
+        publish_summary = (f"; only the schedule ({', '.join(crons) or '?'}) and a dispatch publish, never a HEAD "
+                           f"that has its snapshot, in a concurrency group of their own")
+    except (ValueError, KeyError) as e:
+        fail(f"{rel}'s concurrency group `{group}` cannot be evaluated here: {e}")
+
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
     fail(
@@ -2163,5 +2398,5 @@ print(
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
-    f"{release_summary}{pip_summary}"
+    f"{release_summary}{pip_summary}{publish_summary}"
 )
