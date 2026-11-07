@@ -208,13 +208,18 @@ Re-point readers first: everything works on today's tree (no call job) and on a 
 4. `cosign verify ghcr.io/raddatzk/veyq:<v>-SNAPSHOT --certificate-identity-regexp '<new regex>'
    --certificate-oidc-issuer https://token.actions.githubusercontent.com` → rc 0, and with `ci.yml`'s identity →
    rc ≠ 0; `cosign verify-attestation --type https://veyq.app/attestations/stack-lane/v1` likewise.
-5. The CR's lessons moved, the CR deleted.
+5. Delete the tag `snapshot-0.2343` (`gh api --method DELETE repos/raddatzk/veyq/git/refs/tags/snapshot-0.2343`), so
+   the release page offers no tag `promote.py` refuses.
+6. Delete the runs of the retired workflows "CI", "Mutation (backend)" and "Mutation (crypto)", once Checks, Publish
+   and Mutation each ran green once — GitHub lists a workflow while it has runs.
+7. The CR's lessons moved, the CR deleted.
 
-## Open questions (owner)
+## Decided (owner 2026-11-07)
 
-1. **The ci.yml-signed snapshots** 0.2343 (tagged), 0.2347, 0.2350: after this CR `promote.py` refuses them (identity
-   and lane-matrix file), and V1 is promoted from the first Publish snapshot. Confirm — and: should `snapshot-0.2343`
-   be deleted so the release page offers no tag that cannot be promoted? Run 42380712118 should then **not** be
-   re-run (its 0.2350 would be one more unpromotable snapshot).
-2. **Old workflow entries.** GitHub keeps "CI" and "Mutation (backend)/(crypto)" in the Actions list while runs of them
-   exist; delete those runs after phase 5, or keep the history?
+- **The ci.yml-signed snapshots are given up.** 0.2343, 0.2347 and 0.2350 stay unpromotable (`promote.py` refuses
+  their identity and their lane-matrix file); V1 is promoted from the first Publish snapshot. The tag
+  `snapshot-0.2343` is deleted (phase 5 step 5), and run 42380712118 (0.2350, red at signing during a Rekor outage)
+  is **not** re-run.
+- **The retired workflows' runs are deleted** after the first green runs of the new ones (phase 5 step 6).
+- **Names:** `checks.yml` "Checks" (pull requests and pushes to `main` and `release/**`, since the owner works on
+  `main` directly) and `publish.yml` "Publish", both on `pipeline.yml`.
