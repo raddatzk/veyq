@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { b64std, b64url } from './base64'
 import { kitPayload, parseKit } from './emergencyKit'
+import * as secretKey from './secretKey'
 import { formatSecretKey } from './secretKey'
 
 // A real-shaped Secret Key (32 fixed bytes in its printed form — what `accountBirth` puts in the kit; the bytes are
@@ -49,6 +50,28 @@ describe('emergencyKit codec', () => {
 
   it('reads a key spelled the way a person might type it, and hands back its printed form', () => {
     expect(parseKit(tokenFor({ v: 2, email: 'a@b.c', sk: SK.toLowerCase().replace(/-/g, '').replace(/0/g, 'o') }))).toEqual({ email: 'a@b.c', secretKey: SK })
+  })
+
+  // The codec decodes the Secret Key to its 32 bytes only to check and re-spell it; neither the token nor the kit it reads
+  // back carries the bytes, so they are wiped before it returns. The spies are the only way to see them: the buffer is
+  // what `readSecretKey` / `secretKeyBytes` handed the codec, and it must read as zeros once the codec is done with it.
+  describe('wipes the key bytes it decoded', () => {
+    afterEach(() => vi.restoreAllMocks())
+
+    it('once the token is written', () => {
+      const read = vi.spyOn(secretKey, 'readSecretKey')
+      expect(kitPayload(KIT)).toBe(TOKEN)
+      expect(read).toHaveBeenCalledTimes(1)
+      const reading = read.mock.results[0].value as secretKey.SecretKeyReading
+      expect(reading.ok && reading.key).toEqual(new Uint8Array(32))
+    })
+
+    it('once the key is printed again (the printed form is taken before the wipe)', () => {
+      const bytes = vi.spyOn(secretKey, 'secretKeyBytes')
+      expect(parseKit(TOKEN)).toEqual(KIT)
+      expect(bytes).toHaveBeenCalledTimes(1)
+      expect(bytes.mock.results[0].value).toEqual(new Uint8Array(32))
+    })
   })
 
   describe('rejects', () => {
