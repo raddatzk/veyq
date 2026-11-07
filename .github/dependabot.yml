@@ -29,6 +29,9 @@ multi-ecosystem-groups:
   images:
     schedule:
       interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
 
 updates:
   # The pnpm workspace's one lockfile is at the root (src/web/, src/admin-web/, src/packages/crypto/ and tests/e2e/ are its
@@ -37,12 +40,18 @@ updates:
   # lockfile, which carries pnpm's own pin as a first YAML document, is unproven like the rest of this file). It bumps the openapi-generator-cli WRAPPER only: the generator
   # JAR it runs is chosen by `generator-cli.version` in src/web/ and src/admin-web/openapitools.json and pinned in
   # scripts/openapi_generator_jar.sha256, which no ecosystem here reads — that bump is by hand, at a release.
-  # Daily, as the former `app-runtime` group was. The limit is 5 (the documented default, spelled out): the minor/patch
-  # group is one PR, and each major beside it is one more — a limit of 1 would let a single stuck major block the group.
+  # Weekly, Saturday 06:00 Europe/Berlin (owner 2026-11-07), and so is every entry here: the pull requests and their
+  # Checks runs are ready on Saturday, so what is merged over the weekend is in the snapshot `publish.yml` cuts on Monday at
+  # 03:17 UTC. Security updates follow Dependabot's alerts, not this schedule. The limit is 5 (the documented default,
+  # spelled out): the minor/patch group is one PR, and each major beside it is one more — a limit of 1 would let a
+  # single stuck major block the group.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
     groups:
       npm-minor-patch:
         patterns:
@@ -69,12 +78,14 @@ updates:
   # The docs site is its own package with its own lockfile, deliberately outside the root workspace (site/package.json
   # says why), so the entry above never reads it (remembered, NOT read from dependabot-core: the file fetcher follows
   # the root's pnpm-workspace.yaml `packages`, and site/ is none of them). Without this entry its tree aged unseen — undici sat at an advisory version until an ORT run found it
-  # (2026-10-30). Weekly rather than daily: the site ships nothing in an image, only the GitHub Pages build. Its limit
-  # is 5 for the same reason as the root entry's.
+  # (2026-10-30). Weekly in the root entry's slot. Its limit is 5 for the same reason as the root entry's.
   - package-ecosystem: "npm"
     directory: "/site"
     schedule:
       interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
     groups:
       site:
         patterns:
@@ -103,11 +114,14 @@ updates:
   # src/backend/settings.gradle.kts's `include(":core")`-style calls (SettingsFileParser#subproject_paths, Kotlin DSL
   # parentheses matched, `:apps:memories` → apps/memories) and fetches each subproject's build file; it adds buildSrc
   # when the directory exists, and gradle/libs.versions.toml at this entry's root. So no `directories:` list.
-  # Daily and a limit of 5, as the root npm entry and for the same reason.
+  # Weekly in the root npm entry's slot, with a limit of 5 for the same reason.
   - package-ecosystem: "gradle"
     directory: "/src/backend"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
     groups:
       gradle-minor-patch:
         patterns:
@@ -167,7 +181,10 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
     groups:
       actions:
         patterns:
