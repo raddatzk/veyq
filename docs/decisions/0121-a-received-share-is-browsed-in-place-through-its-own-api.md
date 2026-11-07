@@ -42,9 +42,10 @@ proxy through this instance would make it learn what each member reads.
    - **Navigation inside the share is the page's own state**, never `?node=`; each crumb's real `href` is the bookmark's
      page (`route.fullPath`), its plain click prevented and run in place.
    - **The word is "server"** (de: *Server*), not "instance", in the bookmark's and the embed's texts (owner 2026-11-06).
-   - **Known limits:** the embedded node's own header is core's, so the page carries a second `h1` under the
-     bookmark's; the embed's stored view mode and tab are the member's account preferences (the share page's are the
-     guest's).
+   - **One `h1`, the bookmark's.** The embedded node's own header is core's, named by an `h2` a size smaller
+     (`provideNestedNodeHeading`, `core/node/nodeHeaderContribution.ts`; owner 2026-11-07).
+   - **Known limit:** the embed's stored view mode and tab are the member's account preferences (the share page's are
+     the guest's).
 2. **This client may connect to any `https` origin while embedding is on** (owner, 2026-11-06). The app shell's
    `connect-src` gains `https:` for a tenant whose `core.share-embedding` is effective (ADR 0088: switched by the
    operator `*` and the tenant owner `+`; on by default, owner 2026-11-06); off, the policy is as before and a bookmark

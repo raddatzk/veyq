@@ -804,6 +804,11 @@
   white-space: nowrap;
 }
 
+/* A node named under another page's header (`h2`, a bookmark's share shown in place): a size below the page's own name. */
+.veyq-node-header.is-nested .veyq-node-header-title {
+  font-size: 1.5rem;
+}
+
 /* The name where it may be renamed: a real button that looks like the name (it carries the ellipsis then), a subtle hover so
    it reads as editable; a click turns it into the field below. */
 .veyq-node-header-rename {

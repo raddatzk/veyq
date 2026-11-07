@@ -23,7 +23,7 @@ import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import { EXPECTED_MAJOR } from '../../shared/state/capabilities'
 import { NO_DOORS, provideNodeHost } from '../node/nodeHost'
 import { provideNoCoreNodeActions } from '../node/coreNodeActions'
-import { provideNoNodeHeader } from '../node/nodeHeaderContribution'
+import { provideNestedNodeHeading, provideNoNodeHeader } from '../node/nodeHeaderContribution'
 import ShareGates from '../sharing/ShareGates.vue'
 import { useShareGates } from '../sharing/shareGates'
 import { apiBaseFor } from '../sharing/shareAt'
@@ -41,6 +41,7 @@ const { t, locale } = useI18n()
 provideNodeHost(NO_DOORS)
 provideNoCoreNodeActions()
 provideNoNodeHeader()
+provideNestedNodeHeading() // the bookmark's header is the page's h1; the share's node is named under it, as a section
 
 const { link } = props.bookmark
 const apiBase = apiBaseFor(link.origin, window.location.origin)
