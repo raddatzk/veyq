@@ -81,7 +81,7 @@ acceptanceCriteria:
 gaps:
   admin-web: >-
     The release panel lives here with the rest of the Server-Owner administration (ADR 0065), and its suites
-    exist and pass locally, but `admin-web`'s job (`pipeline.yml` → `frontend` → "Run admin surface checks") has never
+    exist and pass locally, but `admin-web`'s job (`checks.yml` → `frontend` → "Run admin surface checks") has never
     executed, so ADR 0040 admits none of them: a declared run is enough only on a job a run has already
     executed. `src/features/instance/ReleaseVersionPanel.test.ts` covers the first three criteria on this
     surface: the stamped render (the version verbatim), the unstamped render (the absence stated, and the value

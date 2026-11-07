@@ -81,7 +81,7 @@ RELEASE_TAG = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 RELEASE_BRANCH = re.compile(r"^release/(0|[1-9][0-9]*)\.x$")
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
 # The pipeline whose `stack` job is lane L1, read at the snapshot's commit for its matrix.
-PIPELINE_WORKFLOW = ".github/workflows/pipeline.yml"
+PIPELINE_WORKFLOW = ".github/workflows/checks.yml"
 
 
 class Refused(Exception):

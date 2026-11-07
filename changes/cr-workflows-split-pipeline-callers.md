@@ -243,3 +243,110 @@ Re-point readers first: everything works on today's tree (no call job) and on a 
 - **The retired workflows' runs are deleted** after the first green runs of the new ones (phase 5 step 6).
 - **Names:** `checks.yml` "Checks" (pull requests and pushes to `main` and `release/**`, since the owner works on
   `main` directly) and `publish.yml` "Publish", both on `pipeline.yml`.
+
+## Amendment 2 (owner 2026-11-07, before V1): Publish signs what Checks tested, and runs no pipeline
+
+**The ask.** Publish no longer runs the pipeline. It publishes HEAD only when HEAD's **Checks** push run is fully
+green, and it publishes exactly the bytes that run tested. Release stays as it is. This supersedes the "Publish calls
+the pipeline" half of the design above and its phase 5 Publish steps (the push, the PR and the Mutation half of
+phase 5 stand: measured below).
+
+### Measured at refine (substrate: origin/main `867fc543a`, this branch at `d107fde35` + the merge `d7f5bea69`)
+
+| Fact | Command / source |
+|---|---|
+| The split runs on GitHub: a PR run of Checks went green (42390810915, Dependabot's stryker bump); it ran no arm64 lane leg (3 arm64 jobs, the `build` legs) | `gh run view 42390810915 --json jobs` |
+| A nested job asking `packages: write` under a call granting it starts (no startup error) | push run 42388487609's `build` legs started |
+| The push runs of Checks on `d7f5bea69`…`e78e0a707` were cancelled by `raddatzk` (by hand), not by the concurrency group | `gh api …/runs/42390271894 --jq .triggering_actor.login` |
+| A per-arch staging push is an OCI **index** (the image manifest + its attestation manifest); the snapshot index (`imagetools create`) references the per-arch **children**, not the staging index | `docker buildx imagetools inspect --raw ghcr.io/raddatzk/veyq:build-79ff52e8…-amd64` and `…:0.2343-SNAPSHOT` |
+| YAML anchors and aliases are supported in workflow files (merge keys `<<:` not documented) | docs.github.com …/reusing-workflow-configurations § YAML anchors and aliases |
+| `actions/download-artifact` downloads another run's artifacts with `run-id` + `github-token` (a token with `actions: read`); `pattern` with `run-id` is not documented | github.com/actions/download-artifact README |
+| Artifact retention is at most 90 days | upload-artifact README |
+| "List workflow runs for a workflow" filters by `head_sha`, `event`, `branch`, `status`; a run carries `run_attempt`, `conclusion`; jobs list takes `filter=latest` | docs.github.com/en/rest/actions/workflow-runs, …/workflow-jobs |
+| A workflow's `GITHUB_TOKEN` may delete a package version when the repository has the package's Admin role (granted to the repo that published it) — **public preview**; no untag API exists | docs.github.com …/deleting-and-restoring-a-package |
+| The owner's `gh` token lacks `read:packages`, so the package versions could not be listed from here | `gh api users/raddatzk/packages/container/veyq/versions` → 403 |
+
+### Design
+
+- **The pipeline folds back into `checks.yml`.** With Publish no longer calling it, `pipeline.yml` has one caller;
+  folding it in removes the Actions entry the owner asked about, and `scripts/workflow_calls.py` (with its selftest,
+  `composed_run` and the expansions in `validate_coverage`, `validate_pnpm_installs_gated`, `run_pipeline`) has no
+  call left to read, so it is deleted rather than kept for a call nobody makes. (Decided here: technical.)
+- **Checks stages on a push.** The `version` job's `kind` becomes `stage` on GitHub's runner for a push to `main` or
+  `release/<major>.x`, `none` for a pull request, a local run and a push to any other branch — no third value: what
+  `kind=snapshot` did in the pipeline is exactly staging (push `build-<sha>-<arch>`, lanes pull by digest and record
+  their result), and the "HEAD already has its snapshot" check moves to Publish. The digest and lane-result artifacts
+  are kept **30 days** (from 7), so a Publish can read them.
+- **`packages: write` on the push's build only**, as the owner asks: two jobs share one definition through YAML
+  anchors on `strategy:` and `steps:` (no merge keys) — `build` (`if: push`, `packages: write`) and `build-local`
+  (`if: pull_request`, `contents: read`). `stack` needs both and gates on whichever ran. PR runs then hold no write in
+  any job — a guard holds it.
+- **Publish** (`schedule` + `workflow_dispatch`, identity unchanged, `publish.yml`):
+  1. `checks-run` job (`actions: read`): HEAD's SHA on `main` or `release/<major>.x` (red elsewhere); HEAD already
+     tagged `snapshot-*` → notice, publish nothing; else HEAD's Checks run = the newest `event=push` run of
+     `checks.yml` for that SHA and branch. Refused, red and named, unless it is completed, `success`, its latest
+     attempt, and every job `success` (only `upgrade-proof` may be `skipped`), with a lane leg per architecture × domain
+     of the commit's own `stack` matrix. The decisions are `scripts/snapshot.py checks-run` (the API answers in, the
+     verdict out), held by `snapshot_selftest.py` on recorded API shapes.
+  2. `snapshot` job: downloads `digest-*` and `lane-result-*` **from that run id**; refuses unless every lane record
+     names exactly the digest artifacts, and every `build-<sha>-<arch>` staging tag still resolves to its digest (a
+     re-staged or moved tag is red); version from the tree (`release_assets.tree_release`, already held equal to the
+     version step); then today's steps unchanged — write-once refusal, `-SNAPSHOT` and `sha-…` names, signatures,
+     chart, one attestation per lane and architecture whose `run` is the **Checks run's** URL.
+  3. `snapshot-tag` unchanged (REST API).
+  4. `staging-retention` job, weekly (schedule only): deletes `build-*` staging indexes older than **30 days** whose
+     commit is no branch tip; for a commit without a snapshot it deletes the index's two children too (nothing else
+     references them), for one with a snapshot only the staging index (the snapshot references the children). Its
+     selection is `scripts/staging_retention.py`'s, selftested; it deletes from its first run (owner) and prints
+     every version it deletes and why (the delete path is a public preview and unmeasured here).
+- **Guards**: `validate_release_identity.py` — Checks: every write gated on `kind == 'stage'`, no job of a PR run can
+  write (`build-local`, every other job read-only), assertion 2's scenarios (push → stage, PR / local / other branch →
+  none); Publish: no pipeline job and no build, runs `snapshot.py checks-run` before its first write, downloads only
+  from the verified run id, `actions: read` only where it reads, the old split holds trimmed. `promote.py`'s
+  `stack_matrix` reads `checks.yml` at the snapshot's commit. `validate_pipeline_shape.py` is checked for anything
+  that assumes the call (it exempted call jobs only).
+- **Bites** (each red): Publish without a green Checks run (a failed job, a cancelled run, an older attempt, a missing
+  arm64 leg — selftest), a publish of digests other than the staged ones (a lane record or a staging tag that differs —
+  selftest + a guard bite that drops the check), a write in a PR run (`packages: write` on `build-local`, an ungated
+  push), Publish calling a pipeline again, the version step staging a PR.
+- **Docs**: ADR 0091 decisions 2 and 5 (today's first amendment rewritten, not stacked), release-and-deployment,
+  infra/README § Cutting a release, how-veyq-is-tested, the verify pages (identity unchanged).
+
+### Phases
+
+6. Sync onto origin/main (the Dependabot and MariaDB commits), fold `pipeline.yml` into `checks.yml`, delete the call
+   reader, stage on push, split the build — guards green, bites for the PR-write and the version step.
+7. Publish from the Checks run: `snapshot.py checks-run` + the digest/staging verification + selftest; publish.yml;
+   guards and bites; `promote.py`.
+8. Staging retention + selftest.
+9. Docs; `validate_guard_gaps.py --force`.
+10. GitHub (owner's go per step): push → a Checks push run stages and goes green; dispatch Publish → it publishes in
+    minutes; `cosign verify` under publish.yml's identity (rc 0) and ci.yml's (rc ≠ 0); the retention's first run and what it deleted;
+    then the owner deletes `snapshot-0.2343` and the retired runs.
+
+### Progress of amendment 2 (2026-11-07)
+
+Phases 6–9 are built on `claude/awesome-sinoussi-6ae208` (on top of origin/main `867fc543a`); phase 10 waits for the
+owner. Where the build left the plan:
+- **`green` stays, as checks.yml's gate**; Publish reads its result (`Pipeline green`) and every lane leg's by name
+  through the API, and `validate_release_identity.py` holds the names `snapshot.py` reads to checks.yml's. A job that
+  runs on one event alone (`build`, `build-local`) may be `skipped` in the gate, as `if: false` may.
+- **`stack` needs `build` with its own status function** (`contains(…success, skipped…)` for `build`), since on a pull
+  request `build` is skipped and the lane builds its own images.
+- **`validate_action_pins.py` reads a YAML alias once** (it counted `build-local`'s aliased steps twice against the
+  lines): a node PyYAML hands over twice as the same object is read where it is written.
+- **The retention keeps every child a staying version names** — which is how a commit with a snapshot keeps its
+  children; the separate "commit has a snapshot" rule was a second copy of that and was removed when its bite stayed
+  green (the bite of the remaining rule is red).
+- **The call reader is gone** (`workflow_calls.py`, its selftest, `composed_run`); `validate_coverage`,
+  `validate_pnpm_installs_gated` and `run_pipeline` are back to their pre-split reading, pointed at `checks.yml`.
+- Bites: 21 for the guard and the two selftests, each red with its own message (one lever, "the version step stages a
+  pull request", was first written so that a pull request's `<n>/merge` ref already stopped it — re-written to stage
+  every event).
+
+### Decided (owner 2026-11-07)
+
+1. **Retention is on from its first run** — no dry-run phase. So its first GitHub run deletes; its selection is
+   proven before that only by its selftest, and its job prints every version it deletes and why.
+2. **A Checks run cancelled by hand, or not green, is refused, named** — Publish never re-runs Checks; the next push
+   or a re-run of that Checks run makes HEAD publishable again.

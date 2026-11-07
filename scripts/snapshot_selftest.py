@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Self-test of a snapshot's pure decisions (ADR 0091 decision 5), offline and Docker-free: the asset-set hash
-(`release_assets.asset_set_digest`) and `scripts/snapshot.py`'s lane records, predicates and write-once verdicts.
-`pipeline.yml`'s `guards` job runs it.
+(`release_assets.asset_set_digest`) and `scripts/snapshot.py`'s lane records, predicates, write-once verdicts, and
+which Checks run a snapshot is made from and that its staged bytes are that run's (on recorded API shapes).
+`checks.yml`'s `guards` job runs it.
 
     python3 scripts/snapshot_selftest.py
 
@@ -126,10 +127,74 @@ check(refused(snapshot.decide, "i", {"0.3-SNAPSHOT": other, f"sha-{SHA}": None},
 check(refused(snapshot.decide, "i", {"0.3-SNAPSHOT": index, f"sha-{SHA}": other}, {D1, D2}),
       "a sha tag of another build is replaced")
 
+# ---- the Checks run a snapshot is made from --------------------------------------------------------------------
+ARCHS, DOMAINS = ["amd64", "arm64"], ["account", "memories"]
+
+
+def run_of(**override) -> dict:
+    run = {"id": 7, "run_number": 70, "run_attempt": 2, "head_sha": SHA, "head_branch": "main", "event": "push",
+           "path": ".github/workflows/checks.yml", "status": "completed", "conclusion": "success",
+           "html_url": "https://github.com/o/veyq/actions/runs/7", "created_at": "2026-11-07T10:00:00Z"}
+    run.update(override)
+    return run
+
+
+def jobs_of(drop: str = "", **conclusions) -> list[dict]:
+    names = [snapshot.GATE_JOB_NAME] + [snapshot.LANE_JOB_NAME.format(arch=a, domain=d) for a in ARCHS for d in DOMAINS]
+    return [{"name": n, "run_attempt": 2, "conclusion": conclusions.get(n, "success")} for n in names if n != drop]
+
+
+good = snapshot.checks_verdict(run_of(), jobs_of(), ARCHS, DOMAINS)
+check(good == {"run_id": "7", "run_url": "https://github.com/o/veyq/actions/runs/7", "attempt": "2"},
+      f"a wholly green Checks run is not the one: {good}")
+newer = run_of(id=8, run_number=71, conclusion="failure")
+check(snapshot.pick_run([run_of(), newer], SHA, "main")["id"] == 8, "an older green run hides the newest, red one")
+check(refused(snapshot.pick_run, [run_of(head_sha="b" * 40)], SHA, "main"), "another commit's run is taken")
+check(refused(snapshot.pick_run, [run_of(event="pull_request")], SHA, "main"), "a pull request's run is taken")
+check(refused(snapshot.pick_run, [run_of(head_branch="release/0.x")], SHA, "main"), "another branch's run is taken")
+check(refused(snapshot.pick_run, [run_of(path=".github/workflows/publish.yml")], SHA, "main"),
+      "another workflow's run is taken")
+check(refused(snapshot.pick_run, [], SHA, "main"), "no Checks run at all is not refused")
+check(refused(snapshot.checks_verdict, run_of(status="in_progress", conclusion=None), jobs_of(), ARCHS, DOMAINS),
+      "a running Checks run is published from")
+check(refused(snapshot.checks_verdict, run_of(conclusion="cancelled"), jobs_of(), ARCHS, DOMAINS),
+      "a Checks run cancelled by hand is published from")
+check(refused(snapshot.checks_verdict, run_of(conclusion="failure"), jobs_of(), ARCHS, DOMAINS),
+      "a red Checks run is published from")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(**{snapshot.GATE_JOB_NAME: "skipped"}), ARCHS, DOMAINS),
+      "a run whose gate did not pass is published from")
+lane = snapshot.LANE_JOB_NAME.format(arch="arm64", domain="memories")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(drop=lane), ARCHS, DOMAINS),
+      "a run without an arm64 lane leg is published from")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(**{lane: "cancelled"}), ARCHS, DOMAINS),
+      "a run whose lane leg was cancelled is published from")
+stale = [dict(j, run_attempt=1) for j in jobs_of()]
+check(refused(snapshot.checks_verdict, run_of(), stale, ARCHS, DOMAINS), "an older attempt's jobs are read")
+
+# ---- the staged bytes are the run's -------------------------------------------------------------------------------
+staged_digests = {(i, a): ("sha256:" + (str(n) * 64)) for n, (i, a) in enumerate(
+    ((i, a) for i in snapshot.BUILD_IMAGES for a in ARCHS), start=1)}
+records = [{"arch": a, "shard": d, "images": {i: staged_digests[(i, a)] for i in snapshot.LANE_IMAGES}}
+           for a in ARCHS for d in DOMAINS]
+check(not refused(snapshot.staged_verdict, staged_digests, records, dict(staged_digests), ARCHS),
+      "the staged bytes of the run are refused")
+moved = dict(staged_digests); moved[("veyq", "arm64")] = D4
+check(refused(snapshot.staged_verdict, staged_digests, records, moved, ARCHS), "a moved staging tag is published")
+gone = dict(staged_digests); gone[("veyq-tools", "amd64")] = None
+check(refused(snapshot.staged_verdict, staged_digests, records, gone, ARCHS), "a deleted staging tag is published")
+partial = {k: v for k, v in staged_digests.items() if k != ("veyq-admin", "amd64")}
+check(refused(snapshot.staged_verdict, partial, records, dict(staged_digests), ARCHS),
+      "an image the run did not stage is published")
+foreign = [dict(r, images=dict(r["images"], veyq=D3)) if r["shard"] == "account" else r for r in records]
+check(refused(snapshot.staged_verdict, staged_digests, foreign, dict(staged_digests), ARCHS),
+      "a lane record of other bytes is published")
+check(refused(snapshot.staged_verdict, staged_digests, [], dict(staged_digests), ARCHS), "no lane record is published")
+
 if failures:
     print("SNAPSHOT SELFTEST FAILED:")
     for message in failures:
         print("  -", message)
     sys.exit(1)
 print("snapshot selftest OK: the asset-set hash ignores what differs between productions and sees a changed file; "
-      "the predicates refuse a missing, extra, failed, foreign or inconsistent leg; a snapshot name holds only its build")
+      "the predicates refuse a missing, extra, failed, foreign or inconsistent leg; a snapshot name holds only its build; "
+      "only HEAD's newest, wholly green push run of Checks is published from, and only the bytes it staged and tested")

@@ -93,8 +93,6 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
     print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
-import workflow_calls  # a job that calls a reusable workflow is read as the jobs it calls
-
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GATE = "scripts/pnpm_install_no_deprecated.py"
 SKIP_REGISTRY = "--skip-registry-check"  # the gate's opt-out of its registry half (inbox #312)
@@ -260,52 +258,22 @@ for rel in sorted(f for f in files if WORKFLOW_NAME.match(f)):
 if not workflows:
     errors.append("no tracked .github/workflows/*.yml was found — this guard checked nothing")
 
-# What GitHub runs, per workflow that a change or a person starts: a job that calls a reusable workflow is the jobs
-# it calls (workflow_calls.py, the one reading of a call), so the pipeline's install and image build are judged in the
-# run of each caller (`checks.yml`, `publish.yml`), with qualified ids and `needs`. A called workflow nobody calls
-# is read on its own, so no step goes unread. Each job keeps its SITE — the file and job id that define it — so a
-# step two callers run is one install, not two.
-SITE = "__site__"
-runs: dict[str, dict] = {}
-called_files: set[str] = set()
-for rel, doc in workflows.items():
-    if workflow_calls.triggers(doc) <= {"workflow_call"}:
-        continue
-    try:
-        expanded = workflow_calls.expand(doc, file=rel)
-    except workflow_calls.CallError as e:
-        errors.append(f"{rel}: {e} — its installs could not be checked")
-        continue
-    runs[rel] = {}
-    for ej in expanded:
-        if ej.call:
-            called_files.add(ej.file)
-        if isinstance(ej.job, dict):
-            runs[rel][ej.id] = {**ej.job, "needs": list(ej.needs), SITE: (ej.file, ej.local)}
-for rel, doc in workflows.items():
-    if rel not in runs and rel not in called_files:
-        runs[rel] = {job_id: {**job, SITE: (rel, job_id)} for job_id, job in (doc.get("jobs") or {}).items()
-                     if isinstance(job, dict)}
-
-# lockfile -> run (the starting workflow) -> jobs with a step that installs that lockfile through the gate
+# lockfile -> workflow -> jobs with a step that installs that lockfile through the gate
 gating: dict[str, dict[str, set[str]]] = {}
-# lockfile -> (site, step label) of each gate call of that lockfile that asks the registry, once per defining step
-asking: dict[str, list[tuple[tuple, str]]] = {}
+# lockfile -> (workflow, job, step label) of each gate call of that lockfile that asks the registry
+asking: dict[str, list[tuple[str, str, str]]] = {}
 gate_calls = 0
 bootstraps = 0
-seen_steps: set[tuple] = set()
-for rel, jobs_of_run in runs.items():
-    for job_id, job in jobs_of_run.items():
-        site_file, site_job = job[SITE]
+for rel, doc in workflows.items():
+    for job_id, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
         for index, step in enumerate(job.get("steps") or []):
             if not isinstance(step, dict) or not isinstance(step.get("run"), str):
                 continue
-            step_site = (site_file, site_job, index)
-            first = step_site not in seen_steps
-            seen_steps.add(step_site)
             run = step["run"].replace("\\\n", " ")
-            label = f"{site_file}: job `{site_job}`, step {index + 1} ({step.get('name', 'unnamed')!r})"
-            for line in (run.splitlines() if first else []):
+            label = f"{rel}: job `{job_id}`, step {index + 1} ({step.get('name', 'unnamed')!r})"
+            for line in run.splitlines():
                 for tool, sub, args in installs(line):
                     if check_bootstrap(label, tool, args):
                         bootstraps += 1
@@ -316,7 +284,7 @@ for rel, jobs_of_run in runs.items():
                         f"gate never sees."
                     )
             if GATE_CALL.search(run):
-                gate_calls += first
+                gate_calls += 1
                 if not literally_off(step) and not literally_off(job):
                     for line in run.splitlines():
                         if not GATE_CALL.search(line):
@@ -324,8 +292,8 @@ for rel, jobs_of_run in runs.items():
                         lockfile = gated_lockfile(line)
                         gating.setdefault(lockfile, {}).setdefault(rel, set()).add(job_id)
                         asking.setdefault(lockfile, [])
-                        if first and SKIP_REGISTRY not in tokens_of(line):
-                            asking[lockfile].append(((site_file, site_job), label))
+                        if SKIP_REGISTRY not in tokens_of(line):
+                            asking[lockfile].append((rel, job_id, label))
 if workflows and gate_calls == 0:
     errors.append(f"no workflow step calls `{GATE}` — either every install vanished or the gate was renamed; "
                   f"re-anchor this guard")
@@ -412,13 +380,14 @@ for rel in sorted(dockerfiles):
                 if not lock_copied:
                     errors.append(f"{where} runs `pnpm {sub}` in a stage that has not copied the root `{LOCKFILE}` "
                                   f"before it — so it is not the lockfile the gate scanned")
-                builders = [(wf, job_id) for wf, jobs_of_run in runs.items()
-                            for job_id, job in jobs_of_run.items() if rel in scalars(job)]
+                builders = [(wf, job_id) for wf, doc in workflows.items()
+                            for job_id, job in (doc.get("jobs") or {}).items()
+                            if isinstance(job, dict) and rel in scalars(job)]
                 if not builders:
                     errors.append(f"{where} runs `pnpm {sub}`, but no workflow job builds `{rel}` — so no gated job "
                                   f"runs before it and nothing covers this install")
                 for wf, job_id in builders:
-                    jobs = runs[wf]
+                    jobs = workflows[wf].get("jobs") or {}
                     if not gated_before_published(jobs, job_id, gating.get(LOCKFILE, {}).get(wf, set())):
                         errors.append(
                             f"{where} runs `pnpm {sub}`, and `{wf}` job `{job_id}` builds it without running "
@@ -455,18 +424,11 @@ for lockfile in sorted(asking):
         else:
             errors.append(f"{len(calls)} gated installs of `{lockfile}` ask the registry, but its answer depends only "
                           f"on that lockfile — pass `{SKIP_REGISTRY}` on all but one: "
-                          + "; ".join(label for _, label in calls))
+                          + "; ".join(label for _, _, label in calls))
         continue
-    asking_site, asking_label = calls[0]
-    # The runs that carry the asking step — one workflow, or every caller of the pipeline that holds it — and what
-    # starts them, together.
-    asking_ids = {wf: {j for j, job in jobs.items() if job[SITE] == asking_site} for wf, jobs in runs.items()}
-    asking_wfs = sorted(wf for wf, ids in asking_ids.items() if ids)
-    asking_on: dict = {}
-    for wf in asking_wfs:
-        for event, spec in triggers(workflows[wf]).items():
-            asking_on.setdefault(event, spec)
-    for wf in sorted(w for w, jobs in gating[lockfile].items() if jobs and w not in asking_wfs):
+    asking_wf, asking_job, asking_label = calls[0]
+    asking_on = triggers(workflows[asking_wf])
+    for wf in sorted(w for w, jobs in gating[lockfile].items() if jobs and w != asking_wf):
         for event, spec in triggers(workflows[wf]).items():
             if event not in ("push", "pull_request"):
                 continue
@@ -483,15 +445,16 @@ for lockfile in sorted(asking):
                               f"fires on {mine}")
     for event in ("push", "pull_request"):
         if event in asking_on and not admits_lockfile(asking_on[event], lockfile):
-            errors.append(f"`{', '.join(asking_wfs)}`'s `{event}` path filter excludes `{lockfile}`, so the one registry-asking "
+            errors.append(f"`{asking_wf}`'s `{event}` path filter excludes `{lockfile}`, so the one registry-asking "
                           f"install of it ({asking_label}) does not run on the change that matters to it")
     if lockfile != LOCKFILE:
         continue  # only the root lockfile is installed by an image (section 2)
-    for wf, jobs in runs.items():
+    for wf, doc in workflows.items():
+        jobs = doc.get("jobs") or {}
         for job_id, job in jobs.items():
-            if not any(rel in scalars(job) for rel in pnpm_images):
+            if not isinstance(job, dict) or not any(rel in scalars(job) for rel in pnpm_images):
                 continue
-            if not asking_ids.get(wf) or not gated_before_published(jobs, job_id, asking_ids[wf]):
+            if wf != asking_wf or not gated_before_published(jobs, job_id, {asking_job}):
                 errors.append(f"`{wf}` job `{job_id}` builds an image, and neither it nor every job that publishes "
                               f"its build `needs:` the one registry-asking install ({asking_label}) — the locked "
                               f"packages that image installs are then unasked before it ships")
@@ -517,7 +480,7 @@ if errors:
         print("  -", e)
     sys.exit(1)
 
-askers = "; ".join(f"{lockfile} by {calls[0][1]}" for lockfile, calls in sorted(asking.items()))
+askers = "; ".join(f"{lockfile} by {calls[0][0]} job `{calls[0][1]}`" for lockfile, calls in sorted(asking.items()))
 print(f"pnpm installs gated OK: pnpm@{pinned} pinned, and the {bootstraps} place(s) that install pnpm install it; "
       f"{gate_calls} workflow step(s) install through {GATE} and none bypasses it; {image_installs} Dockerfile "
       f"`pnpm install --frozen-lockfile` install the scanned lockfile, published only behind a gated job; every tracked "

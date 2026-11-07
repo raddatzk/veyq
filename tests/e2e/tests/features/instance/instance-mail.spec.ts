@@ -8,7 +8,7 @@
 // off.
 //
 // The notices need a release-stamped instance (`veyq.release.version`; a `-SNAPSHOT` or unstamped build has no release
-// line and makes no request), and the lane's candidate is stamped `<major>.<minor>` (pipeline.yml's `version` job) without
+// line and makes no request), and the lane's candidate is stamped `<major>.<minor>` (checks.yml's `version` job) without
 // any published release around it. So the run stamps its own instance and serves releases newer than the stamp — a test double like Pebble, decided by the owner
 // (inbox #464, option (a)): tests/e2e/stack/docker-compose.e2e.yml's `release-mirror` and `app`, the files written by the
 // publish's own producer (scripts/run_stack_e2e.py, stage `release mirror`), named for the suite in `stack.json`.

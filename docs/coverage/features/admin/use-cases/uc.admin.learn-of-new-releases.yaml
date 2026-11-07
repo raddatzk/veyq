@@ -89,6 +89,6 @@ gaps:
     major's mail carrying its window end as an `.ics` whose `DTSTART` is that day; then the check switched off. Not
     covered there: `the-instance-checks-by-default-and-names-no-version` (the request is the app's, which no browser
     sees) and `a-failed-check-blocks-nothing` beyond the GitHub source failing offline while every other scenario runs.
-    Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`pipeline.yml` → `stack`) awaits the first CI
+    Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`checks.yml` → `stack`) awaits the first CI
     run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On that run each
     file becomes a ref on the criteria its tests are tagged with, and this gap goes.

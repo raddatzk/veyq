@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Prove that a published image's labels name the commit it was built at, whatever the build cache held (ADR 0057).
 
-`scripts/validate_release_identity.py` assertion 12 holds the Dockerfiles and `pipeline.yml` to setting the identity labels
+`scripts/validate_release_identity.py` assertion 12 holds the Dockerfiles and `checks.yml` to setting the identity labels
 from the stamps in the target stage, and to passing no label of their own. That is sound only on BuildKit's premise
 that a `LABEL` is image config and never a cached layer. This proof measures the premise, with the host's Docker and
-no registry: for each image of `pipeline.yml`'s `build` matrix (or the ones `--image` names) it builds the target three
+no registry: for each image of `checks.yml`'s `build` matrix (or the ones `--image` names) it builds the target three
 times, as the `build` job's local step does, at two revisions — the parent commit's and HEAD's `sha-<sha>`, the same
 tree, so the second and third build find every layer in the cache:
 
@@ -42,7 +42,7 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the guards
     sys.exit(2)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github/workflows/pipeline.yml"
+WORKFLOW = ROOT / ".github/workflows/checks.yml"
 OCI = "org.opencontainers.image."
 FROM_LINE = re.compile(r"^FROM\s+\S+(?:\s+--\S+)*(?:\s+AS\s+(\S+))?\s*$", re.IGNORECASE)
 ARG_LINE = re.compile(r"^ARG\s+(.+?)\s*$", re.IGNORECASE)
