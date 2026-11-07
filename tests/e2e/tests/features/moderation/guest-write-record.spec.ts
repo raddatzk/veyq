@@ -114,7 +114,7 @@ test(
     await page.getByRole('menuitem', { name: 'New folder' }).click()
     const naming = page.getByRole('dialog', { name: 'What is your name?' })
     await expect(naming.getByText(
-      'When you add something here, your IP address, your source port and the time are kept for 7 days, longer only if a report or an authority’s order concerns what you added.',
+      'When you add something here, your IP address, your source port, the time and the website it came from are kept for 7 days, longer only if a report or an authority’s order concerns what you added.',
     )).toBeVisible()
     await expect(naming.getByText('You can object to this at any time on grounds relating to your particular situation', { exact: false })).toBeVisible()
     await naming.getByLabel('Your name').fill(recordTyped(guestName))
