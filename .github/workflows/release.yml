@@ -361,9 +361,13 @@ jobs:
             echo "refs/tags/v${VERSION} names ${existing}, not ${COMMIT}" >&2
             exit 1
           fi
+          # Through the REST API, never `git push`: GitHub refuses a GITHUB_TOKEN push of a ref whose commit's
+          # .github/workflows/ differs from every branch head ("refusing to allow a GitHub App to create or update
+          # workflow"), and a promoted snapshot's commit is behind main as a rule (ci.yml's snapshot-tag met it first,
+          # 2026-11-07). Exists already → 422.
           if [[ -z "$existing" ]]; then
-            git tag "v${VERSION}" "$COMMIT"
-            git push origin "refs/tags/v${VERSION}"
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              --raw-field "ref=refs/tags/v${VERSION}" --raw-field "sha=${COMMIT}" > /dev/null
           fi
           echo "tagged=true" >> "$GITHUB_OUTPUT"
 

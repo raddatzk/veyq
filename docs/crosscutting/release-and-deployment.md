@@ -75,7 +75,11 @@ sees the earlier one's tag.
    (`https://veyq.app/attestations/stack-lane/v1`: lane, architecture, outcome, shards, the digests, and the inputs —
    the asset set; a predecessor and backups once lanes L2 and L3 exist) to the app and admin images. No GitHub Release.
 4. `snapshot-tag`, a job that holds `contents: write` and nothing else, sets the git tag `snapshot-<major>.<minor>` on
-   the commit, so GitHub's release page offers the snapshots that can be promoted. Never `v…`.
+   the commit, so GitHub's release page offers the snapshots that can be promoted. Never `v…`. It creates the tag
+   through the REST API (`git/refs`), as `release.yml` creates `v<major>.<minor>`, never by `git push`: GitHub refuses a
+   `GITHUB_TOKEN` push of a ref whose commit's `.github/workflows/` differs from every branch head, which is every
+   tag on a commit main has since moved past with a workflow change (0.2347's tag, 2026-11-07). That the API is not held
+   to that rule is reported by others, not documented by GitHub; the next such run proves it.
 5. **The image carries `<major>.<minor>`, never `-SNAPSHOT`**: a release is the snapshot's bytes, so the two carry
    one name, and a snapshot reports the release it may become. Whether a digest *is* a release is the release
    signature's fact. Images published before this carry `<major>.<minor>-SNAPSHOT`.

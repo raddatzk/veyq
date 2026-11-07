@@ -1298,8 +1298,8 @@ jobs:
   # The git tag `snapshot-<major>.<minor>` on the snapshot's commit (ADR 0091 decision 5), so GitHub's release page offers
   # exactly the snapshots that can be promoted; the retention job deletes it with the snapshot's images. A job of its
   # own because it is the one that writes to the repository, and it holds that and nothing else. Never `v…`: that name
-  # says "released" (ADR 0057 §2), and every tag watcher would read a snapshot as a release. Pushed with
-  # `GITHUB_TOKEN`, which starts no workflow, and not forced: a tag on another commit is red.
+  # says "released" (ADR 0057 §2), and every tag watcher would read a snapshot as a release. Created with
+  # `GITHUB_TOKEN`, which starts no workflow, through the REST API, and never moved: a tag on another commit is red.
   snapshot-tag:
     name: Tag the snapshot's commit
     runs-on: ubuntu-latest
@@ -1321,6 +1321,7 @@ jobs:
         id: snapshot-tag
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="snapshot-${VERSION}"
@@ -1333,5 +1334,11 @@ jobs:
             echo "refs/tags/${tag} names ${existing}, not ${GITHUB_SHA} — a snapshot is written once per commit" >&2
             exit 1
           fi
-          git tag "$tag" "$GITHUB_SHA"
-          git push origin "refs/tags/${tag}"
+          # Through the REST API, never `git push`: GitHub refuses a GITHUB_TOKEN push of a ref whose commit's
+          # .github/workflows/ differs from every branch head ("refusing to allow a GitHub App to create or update
+          # workflow"), so a tag was red whenever main had moved past the snapshot with a workflow change (0.2347,
+          # 2026-11-07, run 42377299125). A ref created by the API writes no file; that it is not held to the rule is
+          # reported by others (GitHub's docs say nothing), so the next such run is its proof. Exists already → 422.
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            --raw-field "ref=refs/tags/${tag}" --raw-field "sha=${GITHUB_SHA}" > /dev/null
+          echo "refs/tags/${tag} now names ${GITHUB_SHA}"

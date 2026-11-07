@@ -30,8 +30,8 @@ snapshot happens:
      job or its push input, so a pull request (Dependabot's included) and a local run write nothing.
      `workflow_dispatch` takes no input: a dispatch is a snapshot now, by hand, and a release is a promotion in a
      workflow of its own. The `snapshot` job holds `packages: write` and `id-token: write` and never `contents: write`; the
-     `snapshot-tag` job needs it, is gated the same way and holds exactly `contents: write`; `git push` runs in that
-     job alone, as `snapshot-${VERSION}` and never a `v…` name, and no step writes a GitHub Release. The `snapshot` job's
+     `snapshot-tag` job needs it, is gated the same way and holds exactly `contents: write`; a ref write (`git push`, or
+     `gh api … git/refs`, the way the tag is created) runs in that job alone, as `snapshot-${VERSION}` and never a `v…` name, and no step writes a GitHub Release. The `snapshot` job's
      refusal (`scripts/snapshot.py check-unpublished`) and the tag step are keyed on the *tree-derived* version, force
      nothing, and the refusal comes before the job's first write. The `build` job stamps the same value
      into the image as `VEYQ_VERSION`, which is what the running instance later reports — and every build-arg it
@@ -434,8 +434,11 @@ PUBLISHES = "needs.version.outputs.kind == 'snapshot'"
 REGISTRY_WRITE_RUN = re.compile(
     r"\b(?:helm\s+push|helm\s+registry\s+login|cosign\s+sign|cosign\s+attest|imagetools\s+create|docker\s+push|docker\s+login"
     r"|git\s+push|oras\s+push|gh\s+release\s+(?:create|upload|edit|delete|delete-asset))\b"
+    r"|\bgh\s+api\b[^\n]*\bgit/refs\b"
 )
-GIT_PUSH = re.compile(r"\bgit\s+push\b")
+# A write to the repository's refs: a `git push`, or a ref created or moved through the REST API (`gh api … git/refs`),
+# which is how the tag job writes — a GITHUB_TOKEN `git push` of a tag is refused once main moved a workflow file.
+GIT_PUSH = re.compile(r"\bgit\s+push\b|\bgh\s+api\b[^\n]*\bgit/refs\b")
 # A GitHub Release, or anything else that writes to one: a snapshot gets none (ADR 0096 decision 3), and a release is a
 # promotion in a workflow of its own.
 GH_RELEASE_CREATE = re.compile(r"\bgh\s+release\s+create\b")
@@ -448,7 +451,8 @@ NEW_BUNDLE_FORMAT = "--new-bundle-format"
 COSIGN_INSTALLER = "sigstore/cosign-installer"
 COSIGN_RUN = re.compile(r"(?:^|[\s;&|(])cosign\s")
 EXACT_VERSION = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$")
-FIRST_PUBLISH_WRITE = re.compile(r"\b(?:imagetools\s+create|cosign\s+sign|cosign\s+attest|helm\s+push|git\s+push|gh\s+release)\b")
+FIRST_PUBLISH_WRITE = re.compile(r"\b(?:imagetools\s+create|cosign\s+sign|cosign\s+attest|helm\s+push|git\s+push|gh\s+release)\b"
+                                 r"|\bgh\s+api\b[^\n]*\bgit/refs\b")
 COSIGN_ATTEST = re.compile(r"\bcosign\s+attest\b")
 
 
@@ -1086,7 +1090,7 @@ if workflow_doc:
         ),
         (
             SNAPSHOT_TAG_JOB, TAG_STEP,
-            ('tag="snapshot-${VERSION}"', 'refs/tags/${tag}', "git push"),
+            ('tag="snapshot-${VERSION}"', 'refs/tags/${tag}', '"repos/${GITHUB_REPOSITORY}/git/refs"', "--method POST"),
             "every snapshot gets the git tag `snapshot-<major>.<minor>` on its commit, from the tree-derived version "
             "(ADR 0091 decision 5)",
         ),
@@ -1125,7 +1129,7 @@ if workflow_doc:
     for job_name in sorted(jobs):
         for step in job_steps(workflow_doc, job_name):
             if GIT_PUSH.search(str(step.get("run") or "")) and job_name != SNAPSHOT_TAG_JOB:
-                fail(f"job `{job_name}`, step `{step.get('name') or step.get('id')}` runs `git push` — the one write to "
+                fail(f"job `{job_name}`, step `{step.get('name') or step.get('id')}` writes a git ref — the one write to "
                      f"the repository is the `{SNAPSHOT_TAG_JOB}` job's, which holds `contents: write` and nothing else")
             if GH_RELEASE_CREATE.search(str(step.get("run") or "")) or RELEASE_ASSET_WRITE.search(str(step.get("run") or "")) \
                     or RELEASE_ACTION.search(str(step.get("uses") or "").split("@", 1)[0]):
@@ -1998,7 +2002,7 @@ else:
     publish_steps = rsteps("publish")
     at = {k: [i for i, s in enumerate(publish_steps) if pattern.search(str(s.get("run") or ""))] for k, pattern in (
         ("publish", PUBLISH_DRAFT), ("upload", re.compile(r"\bgh\s+release\s+upload\b")),
-        ("verify", re.compile(r"\bcosign\s+verify-blob\b")), ("tag", re.compile(r"refs/tags/v\$\{VERSION\}")),
+        ("verify", re.compile(r"\bcosign\s+verify-blob\b")), ("tag", re.compile(r"\bgh\s+api\s+--method\s+POST\s+\"repos/\$\{GITHUB_REPOSITORY\}/git/refs\"\s*\\?\s*--raw-field\s+\"ref=refs/tags/v\$\{VERSION\}\"")),
         ("move", re.compile(r"tag_name=\"v\$\{VERSION\}\"")))}
     if len(at["publish"]) != 1:
         fail(f"{RELEASE_WORKFLOW}: `publish` publishes the draft in {len(at['publish'])} step(s), not one")
