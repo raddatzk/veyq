@@ -231,13 +231,13 @@ REPO = Path(__file__).resolve().parents[2]
 DEFAULT_COMPOSE = REPO / "infra/docker/docker-compose.yml"
 DEFAULT_BACKUP_ROOT = REPO / "infra/backups"
 
-# Pinned by tag AND multi-arch index digest, like every other moving part of the bundled stack (mariadb:11.4,
+# Pinned by tag AND multi-arch index digest, like every other moving part of the bundled stack (mariadb:12.3,
 # dxflrs/garage:v2.0.0, traefik:v3.6, axllent/mailpit:v1.20.0) — and DB_IMAGE to the very digest the compose files
 # run, which scripts/validate_image_pins.py holds (one `repo:tag`, one digest). Pinning is what makes an OLD backup's restorability independent of whatever the
 # host happens to carry years later — and neither tool is installed on a typical dev host anyway, so a host
 # install would be a new prerequisite for the runbook and for CI.
 RCLONE_IMAGE = "rclone/rclone:1.75.0@sha256:b06aed988cf5967de7c25be5925240983981c757f4ed1ac9d2fa659d51d60548"
-DB_IMAGE = "mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b"
+DB_IMAGE = "mariadb:12.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9"
 
 # The rclone remote's name. Only ever appears in `RCLONE_CONFIG_<NAME>_*` and in `<name>:<bucket>` — never in a
 # config file, because none is written. rclone logs `NOTICE: Config file ... not found - using defaults` on

@@ -20,7 +20,9 @@ Dockerfile, `scratch`, or one of veyq's own published images (read out of `.gith
 build matrix). Every external reference must be written `repo:tag@sha256:<64 hex>` — the tag so a person can
 still read the version, the digest so what runs is what was pinned — and one `repo:tag` must carry one digest
 everywhere it appears, so the dev stack, the release recipe, the chart and the backup tool cannot quietly run
-different bits under the same name. The digest is the **multi-arch index** digest: a platform manifest's digest
+different bits under the same name — and one repository one tag everywhere (2026-11-07), because Dependabot reaches
+the compose files and the Dockerfiles but not the chart or the backup tool, so a tag bump it proposes would
+otherwise leave those on the old version unremarked. The digest is the **multi-arch index** digest: a platform manifest's digest
 would pin one architecture, and the publish builds amd64 and arm64. That is not checkable offline and is not
 checked here (limit below).
 
@@ -175,6 +177,24 @@ for where, kind, ref in sites:
     key = f"{match.group('repo')}:{match.group('tag')}"
     digest_of.setdefault(key, {}).setdefault(ref.split("@", 1)[1], []).append(where)
 
+# One repository, one tag. Since 2026-11-07 Dependabot reaches the compose files and the Dockerfiles but not the chart
+# (its helm updater skips digest pins) nor the backup tool's constants, so a bump it proposes moves only some of a
+# repository's sites. A digest-only move is caught above (one `repo:tag`, one digest); a TAG move would leave the chart
+# on the old tag under a different name, which the digest rule cannot see. So every site of a repository names the same
+# tag, and the pull request is red until the sites Dependabot does not reach follow.
+tags_of: dict[str, dict[str, list[str]]] = {}
+for key, digests in digest_of.items():
+    repo, tag = key.rsplit(":", 1)
+    tags_of.setdefault(repo, {}).setdefault(tag, []).extend(w for ws in digests.values() for w in ws)
+for repo, tags in sorted(tags_of.items()):
+    if len(tags) > 1:
+        listing = "; ".join(f"`{t}` at {', '.join(w)}" for t, w in sorted(tags.items()))
+        fail(
+            f"`{repo}` is pinned under {len(tags)} different tags ({listing}). One image, one version everywhere: "
+            f"a bump that reaches only the compose files (Dependabot reaches neither the chart nor the backup tool) "
+            f"must be followed by hand at every other site in the same change."
+        )
+
 for key, digests in sorted(digest_of.items()):
     if len(digests) > 1:
         listing = "; ".join(f"{d[:19]}… at {', '.join(w)}" for d, w in sorted(digests.items()))
@@ -198,5 +218,6 @@ if errors:
 
 print(
     f"image pins OK: {external} third-party image reference(s) across {len({w.split(':')[0].split(' ')[0] for w, _, _ in sites})} "
-    f"file(s) are each `repo:tag@sha256:…`, and {len(digest_of)} distinct `repo:tag` carry one digest each"
+    f"file(s) are each `repo:tag@sha256:…`, {len(tags_of)} repositories are each pinned under one tag, and "
+    f"{len(digest_of)} distinct `repo:tag` carry one digest each"
 )

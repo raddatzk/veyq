@@ -221,7 +221,7 @@ example `tar -C /opt/veyq/backups -c <stamp> | age -r <recipient> > veyq-<stamp>
 `--docker-network` is the network the pinned `rclone` container joins, and it must be one the store is on; list
 them with `docker network ls`. An operator with their own `rclone` install can pass `--rclone-binary rclone` instead, and
 one whose database is not this compose service passes `--db-host`/`--db-port` (the client then runs from `PATH`
-if installed, else in the pinned `mariadb:11.4` image on `--docker-network`).
+if installed, else in the pinned `mariadb:12.3` image on `--docker-network`).
 
 No credential ever reaches `argv`: the store remote is defined entirely through `RCLONE_CONFIG_*` and the
 database password through `MYSQL_PWD`, both handed to the child as bare `-e NAME`. `rclone` logs

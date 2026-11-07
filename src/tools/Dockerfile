@@ -6,10 +6,10 @@
 #
 # Built from the repository root, like the other two: `docker build -f src/tools/Dockerfile --target runtime-tools .`
 
-# The client binaries of the server's own version (`mariadb:11.4`, the pin validate_image_pins.py holds): Ubuntu's
+# The client binaries of the server's own version (`mariadb:12.3`, the pin validate_image_pins.py holds): Ubuntu's
 # archive carries 10.11, so they are copied from the pinned server image, which is Ubuntu 24.04 like the base below
 # — the same C library, measured with `ldd`.
-FROM mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b AS mariadb-client
+FROM mariadb:12.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9 AS mariadb-client
 
 # The rclone the tool already runs as a container (`RCLONE_IMAGE`), as a binary: a static Go build.
 FROM rclone/rclone:1.75.0@sha256:b06aed988cf5967de7c25be5925240983981c757f4ed1ac9d2fa659d51d60548 AS rclone

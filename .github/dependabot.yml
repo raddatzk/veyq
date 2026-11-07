@@ -147,25 +147,41 @@ updates:
     patterns:
       - "*"
     multi-ecosystem-group: "images"
+    # src/tools/Dockerfile copies the client from the server's own image (`FROM mariadb:…`): the same LTS bound as the
+    # compose entry below, or this entry proposes the rolling releases the compose one holds back.
+    ignore:
+      - dependency-name: "mariadb"
+        versions:
+          - ">= 12.4"
 
   # `docker-compose` matches `(docker-)?compose(-\w+)?(.<suffix>)?.ya?ml`, so both infra/docker/docker-compose.yml
   # and the release recipe infra/docker/docker-compose.prod.yml.
+  # MariaDB on its LTS line only (owner 2026-11-07: "only LTS makes sense"): 12.3 is the LTS, and the releases after
+  # it are rolling ones (13.0's community support ends with 2026), so nothing from 12.4 on is proposed. 12.3's own
+  # digest moves still arrive. The next LTS is moved to by hand, the bound below with it — a database major is a
+  # migration step of its own, never one bump in a group. Whether a member of a multi-ecosystem group may carry
+  # `ignore` the docs leave unsaid (remembered from the options reference: `ignore` is a per-entry key); the first run
+  # after this edit proves it was accepted.
   - package-ecosystem: "docker-compose"
     directory: "/infra/docker"
     patterns:
       - "*"
     multi-ecosystem-group: "images"
+    ignore:
+      - dependency-name: "mariadb"
+        versions:
+          - ">= 12.4"
 
-  # `helm` reads Chart.yaml dependencies (the chart has none) AND every `image:` string in values*.yaml — the
-  # chart's mariadb and garage pins. The ci/ values files sit one directory down and name no third-party image.
-  - package-ecosystem: "helm"
-    directory: "/infra/kubernetes/charts/veyq"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "images"
-
-  # Reached by no ecosystem: the backup tool's `*_IMAGE` constants in src/tools/instance_backup.py. Its mariadb pin
-  # shares a `repo:tag` with the compose files, so a bump there turns validate_image_pins.py red until the constant
+  # Reached by no ecosystem: the chart's mariadb and garage pins (infra/kubernetes/charts/veyq/values.yaml). There was
+  # a `helm` entry, and it could never update them: Dependabot's helm updater skips every digest-pinned image on
+  # purpose ("digest-pinned images resolve by digest, so a tag-only bump would silently keep the old image",
+  # helm/lib/dependabot/helm/file_updater/image_updater.rb, read on main 2026-11-07), then fails "Expected content to
+  # change!" — red on every run since 2026-11-05. The `images` group's pull request never appeared either (the compose
+  # job logged "created"), most likely because of that failure — inferred, not shown. Removed 2026-11-07. Each pin shares its `repo:tag` with
+  # the compose files, so the group's pull request is red at validate_image_pins.py until the chart's line follows, by
+  # hand, in that same pull request.
+  # Reached by no ecosystem either: the backup tool's `*_IMAGE` constants in src/tools/instance_backup.py. Its mariadb
+  # pin shares a `repo:tag` with the compose files, so a bump there turns validate_image_pins.py red until the constant
   # follows by hand; its rclone pin appears nowhere else and is bumped by hand, deliberately, at a release.
 
   # Every action is pinned `owner/repo@<commit sha> # v<major>.<minor>.<patch>` (scripts/validate_action_pins.py).
