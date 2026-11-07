@@ -8,7 +8,7 @@ description: >-
   under per-domain TLS, ListenerSets) by the backend itself, and certificates are obtained through cert-manager.
 type: application
 # A placeholder no publish uses. A publish packages the chart with its own name as BOTH `version` and `appVersion`
-# (`<major>.<minor>-SNAPSHOT` for every green commit's snapshot, `<major>.<minor>` for a release — the same images
+# (`<major>.<minor>-SNAPSHOT` for a green commit's snapshot, `<major>.<minor>` for a release — the same images
 # under a release's tag; ADR 0057 §1, ADR 0064, ADR 0091 decision 5), and the minor is a commit
 # count — so no tree can hold the real value, and writing one here would be a number that is wrong on the next
 # commit. `appVersion` is the image tag the values default to, so an install from a checkout sets `image.tag` and

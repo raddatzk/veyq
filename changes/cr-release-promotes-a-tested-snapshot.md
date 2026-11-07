@@ -1,11 +1,12 @@
 ---
 id: cr-release-promotes-a-tested-snapshot
-title: Every green push publishes a signed, attested snapshot; a release promotes one, and nothing is rebuilt
+title: A green run publishes a signed, attested snapshot, weekly or by dispatch; a release promotes one, and nothing is rebuilt
 status: in-progress
 satisfies: []
 adrs: ["0091", "0057", "0096", "0064", "0090", "0085"]
 invariants:
   - a pull request (Dependabot's included) and a local run (`scripts/run_pipeline.py`) never write to a registry, never sign, never tag
+  - a push runs the whole pipeline and writes nothing; only the weekly schedule and a dispatch publish, never a HEAD that already has its `snapshot-` tag (amended 2026-11-07)
   - a published name is written once: a snapshot is never replaced, a release is never republished, a snapshot tag is never `v…`
   - a release is the snapshot's bytes; no promotion runs a build (images), and every promoted file is checked against what the lanes installed
   - the identity that signs a release is not the identity that signs a snapshot, so `cosign verify` with the release identity is the answer to "is this digest a release"
@@ -16,15 +17,18 @@ invariants:
 
 Inbox #460, [ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
 decision 5. Today a push to `main` is a dry run and only a `workflow_dispatch` publishes — a snapshot that the next
-dispatch of the commit replaces, or a release built by its own run. After this CR, **every green push to `main` or
-`release/<major>.x` publishes its snapshot** — the three images on exactly the digests lane L1 installed, the chart —
+dispatch of the commit replaces, or a release built by its own run. After this CR, **a green run on `main` or
+`release/<major>.x` publishes its snapshot** — since the amendment of 2026-11-07 (§ Amendment) the weekly schedule
+and a dispatch only, never a push — the three images on exactly the digests lane L1 installed, the chart —
 signed, with one signed attestation per lane and architecture, and sets the git tag `snapshot-<major>.<minor>` on its
 commit. A scheduled job keeps the 20 newest unpromoted snapshots per branch and every promoted one. **A release is a
 promotion** of one snapshot, started from the draft the owner saves in GitHub's release page: it verifies the
 snapshot's signature and attestations, gives the same digests the release names and the release signature, attaches
 the asset set and publishes the draft last. Nothing is rebuilt.
 
-**The trigger is decided** (§ Open question, owner 2026-11-06: option 1): GitHub starts no workflow for a draft
+**The publish trigger was amended** (owner 2026-11-07, § Amendment): phase 1 shipped "every green push publishes", and
+with Dependabot's pull requests that was a snapshot and a tag per dependency bump. **The trigger is decided** (§ Open
+question, owner 2026-11-06: option 1): GitHub starts no workflow for a draft
 release, so the owner saves the draft and then presses *Run workflow* on `release.yml`. Phases 1 and 3 are built;
 phase 2 (retention) waits until after V1 (owner 2026-11-06).
 
@@ -154,12 +158,15 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
    promotion compares every recorded input with the current one and **refuses** on a difference, naming the lane;
    the rerun (calling a lane from `release.yml`) is built by #453's CR, with the first lane that can need it.
 8. **`ci.yml` keeps `workflow_dispatch`, with no inputs**, as a by-hand snapshot of a commit that has none (a run that
-   was superseded while pending, a docs-only tip). `release` and `unscheduled_major` leave `ci.yml` with the release
+   was superseded while pending, a docs-only tip). *Amended 2026-11-07: with the weekly `schedule` it is now one of the
+   two events that publish at all, the only one on a `release/<major>.x` branch (§ Amendment).* `release` and `unscheduled_major` leave `ci.yml` with the release
    path; `unscheduled_major` moves to the promotion.
 9. **Off GitHub's hosted runners nothing publishes.** The version step's kind is `snapshot` only for a push or dispatch
    on `main`/`release/<major>.x` **and** `runner.environment == 'github-hosted'`; `none` on a pull request and in
    `run_pipeline.py`. Every write in `ci.yml` is gated on that one output. A push to a `release/**` branch that is not
    `release/<VERSION>.x` is red at the version step (a green push without a snapshot would contradict the rule).
+   *Amended 2026-11-07: `snapshot` for a `schedule` or a dispatch only, and only when HEAD carries no `snapshot-` tag;
+   a push is `none` and stays red on a wrong branch (§ Amendment).*
 10. **Write-once with an idempotent re-run.** The snapshot job refuses when `<v>-SNAPSHOT`, `sha-<commit>` or
     `snapshot-<v>` already name *another* digest or commit, and continues when they name this run's — so "re-run
     failed jobs" can finish a half-done snapshot, and a second build of the same commit (a dispatch after a push) is
@@ -180,8 +187,42 @@ Each was mine to take (technical), with its reason; the owner's decisions are ab
 13. **A promotion refuses a version that is not newer than every release of its major**, so `latest` and `<major>`
     never move backwards (ADR 0057: "release a later commit").
 14. **Concurrency:** `ci.yml` keeps one group per ref for every event (the separate `veyq-publish` group goes: a
-    dispatch is now a snapshot like a push); `release.yml` and the retention workflow share `veyq-release`, so a sweep
+    dispatch is now a snapshot like a push); *amended 2026-11-07: two groups per ref, one for the schedule and a
+    dispatch, one for pushes and pull requests (§ Amendment)*; `release.yml` and the retention workflow share `veyq-release`, so a sweep
     never runs during a promotion.
+
+## Amendment 2026-11-07: a snapshot weekly or by dispatch, not per push
+
+Owner decision of 2026-11-07, recorded in ADR 0091 decision 5's amendment. Phase 1 made every green push publish; once
+Dependabot opened its pull requests every merged bump became a snapshot — three images, a chart, signatures,
+attestations and a `snapshot-` tag. Now:
+
+- **Every run still runs the whole pipeline** (ADR 0091 decision 2). The `version` job's `kind` is `snapshot` for a
+  `schedule` (`17 3 * * 1`, Monday 03:17 UTC; GitHub runs it on the default branch only) or a `workflow_dispatch`, on
+  `main` or `release/<major>.x`, on GitHub's runners, **when `git tag --list 'snapshot-*' --points-at HEAD` is empty**;
+  `none` for a push, a pull request, a local run, and a scheduled or dispatched HEAD that has its tag (a `::notice::`
+  says so). Every publishing job is unchanged: still gated on `kind == 'snapshot'`, so a push cannot reach one.
+- **The already-published check is the tag, not the registry.** The tag is the last write of a complete publish and
+  what `release.yml` promotes from, and the `version` job reads it from its own `fetch-depth: 0` checkout with no
+  network and no token — the job is held to reaching no network (validate_release_identity.py assertion 2). A registry
+  probe of `sha-<commit>` would need `packages: read`, a login and a network read in that job, and would call a
+  half-done publish (images without a tag) "published". A publish that lost its tag is therefore red at the next
+  run's write-once refusal, the signal to re-run the old run's `snapshot-tag`.
+- **A dispatch on a published commit publishes nothing** rather than being red: a republish could only be the
+  refusal's red after a full build, and a green test run with the notice tells the owner the same thing.
+- **No commit-message rule** (owner: too weak a source).
+- **`release/<major>.x`:** the schedule never reaches it; a fix there is published by a dispatch on the branch
+  (`infra/README.md` § Cutting a release). A push to it tests the fix.
+- **Concurrency:** `veyq-ci-<publish|test>-<ref>`. A push no longer queues behind a publishing run (or the reverse),
+  and a push arriving while a scheduled run waits cannot cancel it; two publishing runs of a ref still go one after
+  the other, so the later one sees the earlier one's tag.
+- **Guards:** `validate_release_identity.py` assertion 2's scenarios (a push → `none`; schedule and dispatch →
+  `snapshot`; the same on a tagged HEAD → `none`; the parent's tag does not count) and a new assertion 17 (the
+  publishing events derived from the executed scenarios are exactly `schedule` and `workflow_dispatch`; the `schedule`
+  trigger exists; the concurrency group, evaluated per event and ref). `validate_pipeline_shape.py` is unchanged: it
+  holds budgets and the guard-gap trigger, neither of which the publish trigger touches.
+- **First run on GitHub (owner):** added to #471 — a push's run green with `snapshot`/`snapshot-tag` skipped, the first
+  dispatch publishing, a second dispatch of the same commit publishing nothing, the first scheduled run.
 
 ## Phases
 

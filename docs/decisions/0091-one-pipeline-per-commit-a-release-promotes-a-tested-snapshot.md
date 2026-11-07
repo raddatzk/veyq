@@ -2,8 +2,10 @@
 
 - Status: Accepted
 - Built: partly (not built: decision 3's lanes L2 and L3, decision 5's rerun of moved lanes — a promotion refuses an
-  input it cannot compare instead — and the retention job, decision 6, decision 7; decision 5's snapshot per green
-  push, its attestations, its `snapshot-` tag and the promotion `release.yml` are built, none of them run on GitHub yet)
+  input it cannot compare instead — and the retention job, decision 6, decision 7; decision 5's snapshot — weekly and
+  by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-` tag and the
+  promotion `release.yml` are built; one snapshot of a push was published on GitHub, the weekly and the dispatched one
+  have not run yet)
 - Date: 2026-10-16
 - Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 
@@ -93,7 +95,8 @@ Three structural costs sat on top of what a run took:
      product commit changes no guard.
    - **Release**: decision 5's promotion; the tests it needs already ran.
 
-5. **Build once, promote.** A green push publishes its images as a **snapshot** — `<major>.<minor>-SNAPSHOT` and
+5. **Build once, promote.** A green run of the pipeline publishes its images as a **snapshot** — weekly and by
+   dispatch, never per push (amended 2026-11-07, below) — `<major>.<minor>-SNAPSHOT` and
    `sha-<commit>` on the exact digests the lanes tested — signed, with each lane's result attached as a signed
    attestation (lane, architecture, outcome, and its **inputs**: the predecessor digest for L2, the list of backups
    for L3, and the hash of the release-asset set it installed). A snapshot is written once per commit and never
@@ -101,7 +104,7 @@ Three structural costs sat on top of what a run took:
    are verified, and the same digests get `<major>.<minor>`, `<major>`, `latest` (from `main`), a release signature
    and the git ref `v<major>.<minor>`; then the **immutable GitHub Release** is created from the asset set
    ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §3). Nothing is rebuilt.
-   - **A release is started from GitHub's release page, not by a dispatch** (owner 2026-11-06). Every green push also
+   - **A release is started from GitHub's release page, not by a dispatch** (owner 2026-11-06). Every snapshot also
      sets the git tag `snapshot-<major>.<minor>` on its commit, from a job of its own that holds `contents: write` and
      does nothing else; the retention job below deletes a snapshot's tag with its images, so the release page's tag
      list offers exactly the snapshots that can still be promoted. The owner saves a **draft** release on one of them,
@@ -132,6 +135,29 @@ Three structural costs sat on top of what a run took:
      ones and runs **only the missing lanes** on the snapshot's digest before it promotes.
    - **Retention**: the 20 newest unpromoted snapshots per branch and every promoted one; a scheduled job deletes the
      rest.
+   - **Amended 2026-11-07 (owner): a snapshot is published weekly and by dispatch, no longer per push.** Once
+     Dependabot opened its pull requests, every merged bump was a green push, so every one became a snapshot — three
+     images, a chart, signatures, attestations and a `snapshot-` tag — far more than anyone would promote or try. Every
+     push still runs the whole pipeline (decision 2) and writes nothing; `ci.yml` publishes on two events only:
+     - its **weekly `schedule`** (Monday 03:17 UTC). GitHub runs a schedule on the default branch alone, so it
+       publishes `main`'s HEAD and never reaches a `release/<major>.x` branch;
+     - a **`workflow_dispatch`** — the owner's *Run workflow* in Actions, "a snapshot now" — on `main` or
+       `release/<major>.x` (red on any other branch). A fix on a release branch gets its snapshot this way.
+
+     Both run the whole pipeline on the ref's HEAD and publish only when it is green, with the same jobs, conditions,
+     signing identity (`ci.yml`) and attestations a push published with before. **Neither publishes a HEAD that
+     already carries a `snapshot-` tag**: such a run tests the commit again and writes nothing, with a notice saying
+     so — for a dispatch too, because a snapshot is written once and never replaced, so a republish could only be the
+     refusal's red after a full build. The `version` job reads the tag from its own checkout (`fetch-depth: 0` fetches
+     every tag): no registry, no token, no network, and the tag is the last write of a complete publish, so it is
+     exactly "this commit has a promotable snapshot". A publish that lost its tag (its `snapshot` green, its
+     `snapshot-tag` failed) is not seen as published: the next run builds again and is refused by the registry's
+     write-once check — red, which is the signal to re-run the old run's failed `snapshot-tag`. A rule read from commit
+     messages was rejected: a message is a weak source of what a commit is. The publishing runs share a concurrency
+     group per ref, apart from pushes and pull requests, so two of them go one after the other and the later one sees
+     the earlier one's tag, and a push neither delays a snapshot nor cancels a pending scheduled run. A snapshot is
+     therefore "the newest green `main` of that week, or the commit the owner asked for" — no longer "every green
+     commit". `release.yml`'s promotion is unchanged.
 
 6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) **with its
    object pool** (`--objects-to`: a capture's store leg is only its index, ADR 0056 §3) as a signed OCI artifact
@@ -207,7 +233,8 @@ Three structural costs sat on top of what a run took:
 
 - **The critical path per push is `max(surface checks, build + lanes)`**, against the sum when the build waited on a
   second copy of the tests; a release is a promotion, minutes. Its estimate is the stage map's.
-- **ADR 0057 § 1 and § 7 are replaced in part** (its header): a green push publishes an immutable snapshot, a release
+- **ADR 0057 § 1 and § 7 are replaced in part** (its header): a green run publishes an immutable snapshot (weekly or
+  by dispatch, decision 5's amendment), a release
   is its promotion, the image carries no `-SNAPSHOT`, and lanes L2 and L3 succeed the jar-level upgrade proof.
   **ADR 0090** follows: the gate is the push, the release verifies; no tiers, the lanes of decision 3. What is built
   and what is not is [release-and-deployment](../crosscutting/release-and-deployment.md) § Decided, not built.
@@ -218,8 +245,8 @@ Three structural costs sat on top of what a run took:
   only run is local, by one command that reads the pipeline's workflow itself and names every job and step it did not
   run; where a stage's work sits in an action only GitHub runs, the workflow carries the host's stand-in. Local wall
   times say little about a CI runner's, so every budget stays an estimate until the first CI run.
-- **Registry growth** is bounded by the retention rule; a snapshot per `main` commit is otherwise one image set per
-  commit.
+- **Registry growth** is bounded by the retention rule and, since decision 5's amendment, by the trigger: about one
+  snapshot a week of `main`, plus the ones the owner dispatches, instead of one per green commit.
 
 ### Rejected
 

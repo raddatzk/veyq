@@ -25,7 +25,7 @@ title: Know which release an instance runs, and which release a backup came from
 #     other legal home (docs/coverage/README.md § Rules). How it is proven instead is on the criterion.
 #
 # And what is NOT claimable here even after a CI run: the publish half of ADR 0057 and ADR 0091 decision 5 — a
-# tree-derived version, a snapshot per green push that is never replaced, a release that promotes one under its own
+# tree-derived version, a snapshot of a green commit that is never replaced, a release that promotes one under its own
 # signature and `v<major>.<minor>` ref — is GitHub Actions workflows, and a workflow is not a coverage surface either.
 # What holds it is `scripts/validate_release_identity.py`, which *executes* the version step offline inside a
 # history it builds and asserts what a publish would stamp; that guard is in the trust chain, not in this model.
