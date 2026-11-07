@@ -37,19 +37,19 @@ dependencies {
     // `veyq.openapi` runs the default, Mustache, so the 4.3 -> 4.5 jump is not on a path the build takes (nor is the
     // generator's `handlebars-jackson2` 4.3.1, a helper module with no release after 4.3.1 to move with it).
     constraints {
-        implementation("com.fasterxml.jackson.core:jackson-core:2.22.3") {
+        implementation("com.fasterxml.jackson.core:jackson-core:2.22.4") {
             because("GHSA-7hhh-6rmp-j9qf, GHSA-p6pp-m3f8-5c89: 2.21.1 (generator) and 2.22.2 (Quarkus plugin), fixed in 2.22.3")
         }
-        implementation("com.fasterxml.jackson.core:jackson-databind:2.22.3") {
+        implementation("com.fasterxml.jackson.core:jackson-databind:2.22.4") {
             because("GHSA-cxp5-3px4-pw24, GHSA-wv8q-qhhj-9h54 and the other 2.21.x ones, fixed in 2.22.3")
         }
         implementation("com.google.guava:guava:${libs.versions.guava.get()}") {
             because("GHSA-xxph-c9ww-hj94: 32.1.3-jre (generator) and 33.6.0-jre (Quarkus plugin), fixed in 33.7.2")
         }
-        implementation("com.github.jknack:handlebars:4.5.2") {
+        implementation("com.github.jknack:handlebars:4.5.8") {
             because("GHSA-r4gv-qr8j-p3pg: 4.3.1 (generator), fixed in 4.5.2")
         }
-        implementation("org.codehaus.plexus:plexus-utils:4.0.3") {
+        implementation("org.codehaus.plexus:plexus-utils:4.1.0") {
             because("GHSA-6fmv-xxpf-w3cw: 4.0.2 (Quarkus plugin), fixed in 4.0.3")
         }
     }

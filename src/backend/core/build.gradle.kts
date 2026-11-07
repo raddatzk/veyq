@@ -49,7 +49,7 @@ dependencies {
     api("io.quarkus:quarkus-jdbc-mariadb") // the store of every profile but `%test` (prod, dev, e2e)
     api("io.quarkus:quarkus-flyway")
     api("org.flywaydb:flyway-mysql") // Flyway 12 keeps MariaDB/MySQL support out of flyway-core
-    api("software.amazon.awssdk:s3:2.31.78") // S3 blob store: vendor-neutral S3 client + presigner (ADR 0013)
+    api("software.amazon.awssdk:s3:2.57.8") // S3 blob store: vendor-neutral S3 client + presigner (ADR 0013)
     api("io.quarkus:quarkus-mailer") // generic SMTP transport (transitive Vert.x MailClient), no vendor SDK (ADR 0048)
     // ADR 0064's Kubernetes (Gateway API) sink. Chosen over a bare fabric8 client for `@WithKubernetesTestServer`
     // (the root's tests) as much as for the client itself: this repository has no cluster and no CI that could get
@@ -68,7 +68,7 @@ dependencies {
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))
     testImplementation("io.quarkus:quarkus-test-kubernetes-client") // @WithKubernetesTestServer: a fabric8 mock API server in-JVM
-    testImplementation("com.icegreen:greenmail:2.1.2") // hermetic in-JVM SMTP server: assert the real sent mail (ADR 0048/0049)
+    testImplementation("com.icegreen:greenmail:2.1.15") // hermetic in-JVM SMTP server: assert the real sent mail (ADR 0048/0049)
 
     // PIT's JUnit-5 runner (our tests are JUnit Platform). 1.2.3 requires PIT >= 1.19.4 — pinned together below.
     pitest("org.pitest:pitest-junit5-plugin:1.2.3")
@@ -79,7 +79,7 @@ dependencies {
     // does not re-measure the gate. 3.20.0 is the version the rest of the build already resolves. **Drop it with the
     // PIT bump that brings commons-lang3 3.18.0 or later.**
     constraints {
-        pitest("org.apache.commons:commons-lang3:3.20.0") {
+        pitest("org.apache.commons:commons-lang3:3.21.0") {
             because("GHSA-j288-q9x7-2f5v: 3.14.0 via PIT's commons-text 1.12.0, fixed in 3.18.0")
         }
     }
