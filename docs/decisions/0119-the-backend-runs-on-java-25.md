@@ -40,7 +40,7 @@ What had to move, measured on this tree (Gradle 9.8.2, Kotlin 2.4.10, Quarkus 3.
    digest, amd64 and arm64 in each (`docker buildx imagetools inspect`, 2026-11-05). The build stage carries Temurin
    `25.0.5+8`, the runtime the same build, `java.version.date` 2026-10-20 (`java -XshowSettings:properties` in both).
 2. **CodeQL sets up the JDK too.** Its `java-kotlin` autobuild ran on whatever JDKs the runner image preinstalls; it
-   now runs `setup-java` 25 like `ci.yml`'s jobs, so the toolchain does not depend on the runner image's list.
+   now runs `setup-java` 25 like `pipeline.yml`'s jobs, so the toolchain does not depend on the runner image's list.
 3. **Compact Object Headers stay off** (`-XX:+UseCompactObjectHeaders`, a product flag in 25, off by default — `java
    -XX:+PrintFlagsFinal` in the image). Measured on lane L1, one whole run per side (172 tests, green both), the image's
    own entrypoint plus the flag and a GC log, the app container read once the suite had ended: the heap after a

@@ -672,11 +672,11 @@ Confirm the commit path works **before** phase 1 — it is one throwaway commit,
 discovering it at the point where you have the most to lose.
 **Where a CR's done-when says "green in CI", know which jobs can even run.** Two independent gates, and both bit
 during cr-e2e-orchestrator:
-- **Branch filters.** [`ci.yml`](../.github/workflows/ci.yml) triggers only on `main`, `release/**` and PRs
+- **Branch filters.** [`checks.yml`](../.github/workflows/checks.yml) triggers only on `main`, `release/**` and PRs
   *targeting* them, so pushing a feature branch runs **nothing**. That CR's Phase 5 said "push the branch so the job
-  runs"; the push produced zero runs. A pull request is how a branch gets a real run: `ci.yml`'s `workflow_dispatch`
-  is the **publish** since it absorbed `container.yml` (ADR 0091), and its version step refuses a dispatch on any
-  branch but `main` and `release/<major>.x`.
+  runs"; the push produced zero runs. A pull request is how a branch gets a real run: the one dispatch of the
+  pipeline is `publish.yml`'s, the **publish** (ADR 0091), and its version step refuses a dispatch on any branch but
+  `main` and `release/<major>.x`.
 - **`workflow_dispatch` resolves against the DEFAULT branch.** A workflow file that exists only on the feature
   branch cannot be dispatched at all — `HTTP 404: not found on the default branch`. This once described
   `trust-chain.yml`, `mutation*.yml` and `wiki-sync.yml`, which lived on a feature branch and not on `main`; that
@@ -690,11 +690,11 @@ during cr-e2e-orchestrator:
   and `admin-web` are not among them, is ADR 0040's note on what a row is.) No branch filter and no dispatch
   trick changes that; only publishing the repository does, which is the owner's
   call and tracked as inbox **#26** item (1). Until then, a local run over the **committed** tree is the
-  strongest available proof — `python3 scripts/run_pipeline.py` runs `ci.yml`'s jobs on a commit and names every
+  strongest available proof — `python3 scripts/run_pipeline.py` runs the pipeline's jobs on a commit and names every
   job and step it did not run — and a done-when must say exactly that rather than "green in CI". The two gates
   above stay because they are what bites *after* the remote exists.
 - **With no remote, a check only one CI job runs is a check nobody runs — so a done-when names that job.** The
-  surface checks and the glob do not cover `ci.yml`'s `web-e2e`, and that job carries more than the API suites: the
+  surface checks and the glob do not cover the pipeline's `web-e2e`, and that job carries more than the API suites: the
   tool self-tests of the backup, `veyqctl` and the upgrade proof, which read the backend's migrations and
   `scripts/`. On 2026-10-16 two migrations that seed rows each landed green past `./gradlew check` and the glob, and
   each made every restore onto a fresh install refuse; the first `run_pipeline.py --job web-e2e` was red in its
@@ -1882,7 +1882,7 @@ removed the lock one commit before implementation began, and only the brief's wa
 pull `build-<sha>-<arch>` by digest "on a push" — ADR 0091 decision 5's snapshot-per-push, decided and not built: the
 workflow pushed images on a dispatch only, so on a push there was nothing to pull, and the implementer re-cut the job
 (pull on the dispatch, build in the job on a push). A phase that wires into the pipeline measures what the workflow
-does today, per event (`grep -n "push:" .github/workflows/ci.yml`), and says which half of its sentence waits on
+does today, per event (the triggers of `.github/workflows/checks.yml` and `publish.yml`), and says which half of its sentence waits on
 which unbuilt decision.
 
 ### An owner's answer that reverses a decision is edited into every phase it reverses

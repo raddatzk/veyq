@@ -8,7 +8,7 @@ over every service the file declares — the set is the file's, never a list her
      `no-new-privileges:true`, and `read_only` is true. No service adds a capability back, with the one exception
      in 2.
   2. **Every service whose image is not built from this repository sets a non-root `user:`.** An image is this
-     repository's when it names one `.github/workflows/ci.yml` publishes (the same derivation as
+     repository's when it names one `.github/workflows/pipeline.yml` publishes (the same derivation as
      `validate_release_identity.py` assertion 5); those declare their `USER` in their Dockerfile, which
      `validate_images_run_unprivileged.py` holds, so a second copy here would only drift. The one service allowed
      to run as root is the **ownership step**, and only in that shape: it adds back `CHOWN` and nothing else,
@@ -115,7 +115,7 @@ import repo_layout  # noqa: E402 - where the deployment files and the test harne
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPOSE = repo_layout.PROD_COMPOSE
 DEV_COMPOSE = repo_layout.DEV_COMPOSE
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+WORKFLOW = ROOT / ".github" / "workflows" / "pipeline.yml"
 BUILD_JOB = "build"
 
 # A veyq-namespaced image name where an image reference carries one — validate_release_identity.py's pattern, for

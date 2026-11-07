@@ -140,7 +140,7 @@ acceptanceCriteria:
       - surface: backend
         reason: >-
           "Any restore restarts every grace period" is the restore tool's half: `instance_backup.py restore` empties the
-          reconcile's tables after its load, pinned by `src/tools/instance_backup_selftest.py` (G5, `ci.yml`'s `web-e2e`
+          reconcile's tables after its load, pinned by `src/tools/instance_backup_selftest.py` (G5, `pipeline.yml`'s `web-e2e`
           job) and shown on a real rollback in cr-bucket-reconcile's live proof — neither a coverage surface. The backend
           proves the gap rule, its other detector. That the reclaim sweep then deletes what was recorded is
           `StoreReclaimSweepSliceTest`'s.
@@ -150,7 +150,7 @@ gaps:
     `veyq-admin store show | set | check | discard | reconcile` live
     in `admin-web` (ADR 0065), and their suites (`StorePanel.test.ts`, `StoreReconcilePanel.test.ts`, `store.test.ts`,
     `cli.test.ts`, `CreateTenantDialog.test.ts`, `AdminConsoleView.test.ts`) exist and pass locally, but `admin-web`'s job
-    (`ci.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR 0040 admits none of them. They
+    (`pipeline.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR 0040 admits none of them. They
     are mocked-client tests that pin the call and the rendering, never the server's answer. On the first run of that
     job they flip to refs on the criteria above.
   web: >-
@@ -159,7 +159,7 @@ gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/setup/first-run.setup.ts`) drives `the-bundled-store-is-adopted-and-checked-without-a-click`
     in Chromium against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged
-    with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`ci.yml` →
+    with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`pipeline.yml` →
     `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the
     suite executed. On that run each file becomes a ref on the criteria its tests are tagged with, and this gap
     goes.

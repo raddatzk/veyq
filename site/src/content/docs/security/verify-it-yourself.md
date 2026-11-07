@@ -128,7 +128,7 @@ pnpm run mutation
 Stryker mutates the source files **in place** and restores them on exit, so do nothing else in the tree while a
 run is live. Mutation sees functional behaviour only. It cannot see timing, so a constant-time comparison is not
 protected by it. It also raises trust in how *strong* an assertion is, not in whether the assertion is *right*
-(ADR 0045 § Consequences). Its CI job, `mutation.yml`, has never run either.
+(ADR 0045 § Consequences). In CI it is the `crypto` job of `mutation.yml`, green on GitHub since 2026-11-07 (`gh run list --workflow mutation.yml`).
 
 ## The wire sweep
 

@@ -36,7 +36,7 @@ predecessor with a chart at neither path is said and skipped - nothing to upgrad
 
 **The verdict** is [verdict]'s alone, on the same `release:` line the upgrade proof reads: while it is `none` the
 findings are printed with their reasons and the run exits 0, "information only" - a chart before the first release
-has no installation to break; from the release on it exits 1, and since `ci.yml`'s `chart` job runs it, a red
+has no installation to break; from the release on it exits 1, and since `pipeline.yml`'s `chart` job runs it, a red
 gates `publish`, which needs every stage.
 
 **The defect that bought it - none yet.** No release exists, so no upgrade has ever been made. inbox #428 measured
@@ -56,7 +56,7 @@ against one predecessor, so an operator upgrading across several releases is che
 sees what the chart renders, not what the cluster holds: an object an operator edited by hand is out of reach.
 
 **Why it sits OUTSIDE the `validate_*` glob.** It shells out to `helm` and reads git history, neither of which the
-buildless trust chain has (`chart_meta_check.py` says the same for itself). `ci.yml`'s `chart` job runs it after
+buildless trust chain has (`chart_meta_check.py` says the same for itself). `pipeline.yml`'s `chart` job runs it after
 "Chart checks", on a checkout with the whole history (`fetch-depth: 0`) - a job no run has executed yet (this
 repository has no remote). Run it locally with `helm` on the PATH; without `helm` it exits 2, never 0:
 

@@ -39,7 +39,7 @@ COPY src/admin-web/package.json src/admin-web/openapitools.json ./
 # This is also the proof that admin-web declares what it imports: pnpm links only a package's declared dependencies
 # into its node_modules, so an undeclared import fails `vite build` here.
 # Not run through scripts/pnpm_install_no_deprecated.py, and covered anyway: this installs the root lockfile that
-# ci.yml's `frontend` job scans through it on the same commit, and every job that publishes the image needs that
+# pipeline.yml's `frontend` job scans through it on the same commit, and every job that publishes the image needs that
 # job (ADR 0091 decision 2: the build itself no longer waits for the tests, so the premise is "before published").
 # scripts/validate_pnpm_installs_gated.py holds both premises — keep `--frozen-lockfile` and the COPY.
 RUN pnpm install --frozen-lockfile

@@ -88,7 +88,7 @@ Four documented gaps sit **outside** that guard, on purpose:
 
 - **the release-identity guard's two ends**
   ([ADR 0057](../../../docs/decisions/0057-release-identity-and-deployment-recipe.md)).
-  `validate_release_identity.py` goes further than the rest of the glob — it *executes* `ci.yml`'s
+  `validate_release_identity.py` goes further than the rest of the glob — it *executes* the pipeline's
   version step offline and asserts what a publish would stamp — and still stops at two places no file-forging
   meta-guard can reach. It holds the release producer (`release_assets.py`) to **its own derivation** of the
   files the recipe reads, so a way of reading a file that derivation does not know is missed by both — the
@@ -149,11 +149,11 @@ each has a canonical home — point there, don't try to build past it:
 - **Three CI runs, three triggers.** `trust-chain.yml` — unfiltered, buildless, runs the guard glob minus
   `validate_guard_gaps.py` (`:16-26`, no paths filter); that one is its `guard-gaps` job (`:101-119`), gated
   by a `dorny/paths-filter` on `scripts/**` and `.claude/skills/trust-chain/**` (`:74-99`) plus a nightly
-  `schedule` (`:24-25`) — ADR 0091 decision 4, held by `validate_pipeline_shape.py` assertion 2. `ci.yml` —
-  the one pipeline per commit (ADR 0091); its `guards` job runs the same glob minus `validate_guard_gaps.py`,
-  and `paths-ignore` includes `docs/**` (`:28-31`, `:36-39`), so a docs-only change is validated *only* by
-  trust-chain. `mutation.yml` / `mutation-backend.yml` — path-gated onto their scope files (`:16-49` /
-  `:17-73`).
+  `schedule` (`:24-25`) — ADR 0091 decision 4, held by `validate_pipeline_shape.py` assertion 2. `pipeline.yml` —
+  the one pipeline per commit (ADR 0091), run by `checks.yml` on every push and pull request and by
+  `publish.yml` weekly and on a dispatch; its `guards` job runs the same glob minus `validate_guard_gaps.py`,
+  and checks.yml's `paths-ignore` includes `docs/**`, so a docs-only change is validated *only* by trust-chain. `mutation.yml` — started on the union of both gates' scope files, its `changes` job's
+  `dorny/paths-filter` picks `crypto` and/or `backend` (`validate_mutation_trigger_paths.py` holds the lists).
 - **The glob is the registry.** `trust-chain.yml:48-70` runs `for f in scripts/validate_*.py` with a
   `count == 0` backstop — a new `validate_*.py` runs automatically, no registration. The
   `mutation_meta_check*.py` sit **outside** that glob (filename prefix) and run only from the mutation jobs.

@@ -48,7 +48,7 @@ gaps:
     first-run setup moved to the admin surface with the rest of Server-Owner administration, which is what lets
     an operator bootstrap over `http://localhost:<admin-port>` before `VEYQ_DOMAIN` resolves anywhere. The
     surface suite exists and passes locally (`src/features/setup/setupServer.test.ts`), but `admin-web`'s job
-    (`ci.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR 0040 admits it nowhere — a
+    (`pipeline.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR 0040 admits it nowhere — a
     declared run is enough only on a job a run has already executed; every admin use-case holds its admin-web
     suites here for that one reason. On the first run whose log shows admin-web's suites executed, the suite
     goes under `create-owner-and-complete` alone: it pins that the surface issues a valid Model-B request
@@ -64,6 +64,6 @@ gaps:
     Lane L1's browser suite (`tests/e2e/tests/setup/first-run.setup.ts`) drives `create-owner-and-complete`, `status-
     required-when-fresh` in Chromium against the release candidate's two images, installed through `veyqctl` (ADR
     0090), each test tagged with its criterion. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's
-    CI job (`ci.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a
+    CI job (`pipeline.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only once a
     run's log shows the suite executed. On that run each file becomes a ref on the criteria its tests are tagged
     with, and this gap goes.

@@ -88,7 +88,7 @@ acceptanceCriteria:
           - ScopesSliceTest.clearScopeIconOnAGroupIsIdempotentAndRefusedDuringGrace
 gaps:
   crypto: >-
-    `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
+    `packages/crypto`'s job (`pipeline.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
     admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
     which rows a run has admitted). `src/valueKey.conformance.test.ts` pins the icon's value key for
     `icon-sealed-under-current-epoch`: the `space-icon` address of `value-key` (`#value_key`), a wrap of another

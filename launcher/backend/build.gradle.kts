@@ -39,7 +39,7 @@ tasks.register<Exec>("build") {
 tasks.register<Exec>("image") {
     group = "veyq"
     description = "Builds the app image veyq:local from src/backend/Dockerfile (backend with web's SPA baked in), " +
-        "context the repo root as ci.yml builds it."
+        "context the repo root as pipeline.yml builds it."
     workingDir = rootDir
     commandLine("docker", "build", "-f", "src/backend/Dockerfile", "-t", "veyq:local", ".")
 }

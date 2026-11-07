@@ -57,11 +57,11 @@ members from this tree, which keeps the pair working between proofs. Its pure pa
 `scripts/upgrade_proof_selftest.py`.
 
 **Why a fresh instance per file.** Every suite cold-births its own Server Owner and asserts
-`setupRequired === true`, and a server is single-owner-per-instance. `ci.yml` used to call this "a fresh in-mem
+`setupRequired === true`, and a server is single-owner-per-instance. `pipeline.yml` used to call this "a fresh in-mem
 DB per file", which does not work: `quarkus.datasource.db-kind` is a BUILD-TIME property baked at augmentation
 under `%prod`, so a runtime `QUARKUS_DATASOURCE_DB_KIND=h2` is ignored and the *MariaDB* driver rejects the H2
 URL. One MariaDB with a fresh `veyq_e2e_<n>` database per file is a fresh instance in the only sense the suites
-care about — at one container, and with `ci.yml`'s "build the jar once" intact.
+care about — at one container, and with `pipeline.yml`'s "build the jar once" intact.
 
 **Why the store cannot be a GH Actions service container.** Garage bind-mounts `/etc/garage.toml` from the repo
 (service containers start before checkout) and its bootstrap is a mandatory multi-step sequence a service
@@ -2091,7 +2091,7 @@ def keep_runs() -> int:
 
 def main(argv: list[str]) -> int:
     # `--resolve`: name the predecessor this proof would run from, as its last line `predecessor=<ref>` (empty: no run),
-    # and start nothing — `ci.yml`'s `upgrade-proof` asks it before it builds anything, one leg per predecessor.
+    # and start nothing — `pipeline.yml`'s `upgrade-proof` asks it before it builds anything, one leg per predecessor.
     resolve = RESOLVE_REQUEST in argv
     argv = [a for a in argv if a != RESOLVE_REQUEST]
     try:

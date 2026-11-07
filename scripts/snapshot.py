@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The decisions of a snapshot's publish (ADR 0091 decision 5): what each lane leg ran, the attestation per lane and
-architecture, and whether the snapshot's names are still free. `ci.yml`'s `stack` and `snapshot` jobs run it; the
+architecture, and whether the snapshot's names are still free. `pipeline.yml`'s `stack` and `publish.yml`'s `snapshot` jobs run it; the
 writes themselves — `imagetools create`, `cosign`, `helm push`, `git push` — stay in the workflow, where
 `scripts/validate_release_identity.py` sees and gates them.
 
@@ -45,7 +45,7 @@ import subprocess
 import sys
 
 # The attestation every stack lane writes, per architecture; the promotion verifies it by this type. A name, not a URL
-# anything fetches. `scripts/validate_release_identity.py` holds `ci.yml`'s attest step to it.
+# anything fetches. `scripts/validate_release_identity.py` holds `publish.yml`'s attest step to it.
 PREDICATE_TYPE = "https://veyq.app/attestations/stack-lane/v1"
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")

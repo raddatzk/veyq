@@ -160,5 +160,5 @@ gaps:
     against the release candidate's two images, installed through `veyqctl` (ADR 0090), tagged with its criterion: a
     read-only link's open gallery answers its polls 304, then shows the owner's second photo without a reload (a marker
     on the document survives), in separate browser contexts. Not yet run — written with inbox #497, whose rule ran no L1.
-    The lane's CI job (`ci.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only
+    The lane's CI job (`pipeline.yml` → `stack`) awaits the first CI run (no remote), and ADR 0040 admits `stack` refs only
     once a run's log shows the suite executed. On that run the file becomes a ref on the criterion, and this gap goes.

@@ -132,7 +132,7 @@ caught inside the refine that wrote 0045, and its corrections are in the doc):
 | tool choice (Stryker/PIT, no kotlin-plugin, no arcmutate) + why | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 1 |
 | backend three-layer split, what is mutated | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 2 |
 | what is in scope + the discriminator | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 2–3 + the two `stryker.mutate.json` manifests (`src/web/`, `src/packages/crypto/`), `src/backend/core/pitest.scope.json` |
-| CI shape: PR, path-gated, report-before-gate | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 4 + `mutation.yml`, `mutation-backend.yml` |
+| CI shape: PR, path-gated, report-before-gate | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 4 + `mutation.yml` |
 | the total-vs-per-glob meta-check asymmetry | `scripts/mutation_meta_check.py` + `scripts/mutation_meta_check_backend.py` docstrings |
 | KAT-beats-mutation finding; blind spots | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Context + Consequences |
 | operational: `pnpm run mutation` PR-only; in-place footgun | [`src/web/CLAUDE.md`](../../src/web/CLAUDE.md) |

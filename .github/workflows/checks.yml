@@ -1,0 +1,50 @@
+name: Checks
+
+# Every pull request and every push to `main` or `release/<major>.x` runs the whole pipeline (pipeline.yml, ADR 0091
+# decisions 2 and 4) and writes nothing: it calls the pipeline with `publish: false`, so the `version` job's `kind` is
+# `none` and every registry write there is skipped — a pull request (Dependabot's included) builds and tests the images
+# and keeps them in the runner. A push runs here too, because the owner works on `main` directly: a merge is tested as
+# a pull request is. The snapshot is publish.yml's (weekly and by dispatch), from a run of the same pipeline.
+#
+# Docs are ignored *here* on purpose: a doc change cannot break a surface check or an image. The guards that do
+# validate docs run in trust-chain.yml, which is unfiltered (and in the pipeline's `guards`, for every commit this runs on).
+on:
+  push:
+    branches:
+      - main
+      - "release/**"
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "site/**"
+  pull_request:
+    branches:
+      - main
+      - "release/**"
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "site/**"
+
+# One group per ref, apart from publish.yml's, so a run in progress neither delays a snapshot nor gets a pending
+# scheduled run cancelled. Not cancelled in progress: GitHub keeps one pending run per group, so a push superseded
+# while it waited goes untested, and one already running finishes.
+concurrency:
+  group: veyq-checks-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The grant is what the pipeline's jobs ask for: `build` declares `packages: write` (to stage a snapshot's images,
+  # which only a publishing run does), and a called job asking above its call's grant fails the run at startup. With
+  # `publish: false` no step of this run uses it.
+  pipeline:
+    name: Pipeline
+    uses: ./.github/workflows/pipeline.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      publish: false
