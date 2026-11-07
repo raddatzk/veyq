@@ -5,12 +5,16 @@ name: CI
 # cr-one-pipeline-per-commit phase 2 this was two workflows — this one, and `container.yml`, whose `test` ran the
 # surface checks a second time and whose `build` waited for that second copy. `container.yml` was folded in here.
 #
-# Every green push to `main` or `release/<major>.x` publishes its SNAPSHOT (ADR 0091 decision 5): the images on exactly
-# the digests lane L1 installed, as `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, the chart, a signature, an
-# attestation per lane and architecture, and the git tag `snapshot-<major>.<minor>`. A snapshot is written once and
-# never replaced. A dispatch does the same, by hand, for a commit that has none (a run superseded while pending, a
-# docs-only tip). A pull request (Dependabot's included) and a local run (scripts/run_pipeline.py) build and test the
-# same and write nothing: the `version` job's `kind` is `none` for them, and every write in this file is gated on it.
+# Every run runs the whole pipeline; only two kinds of run PUBLISH a SNAPSHOT (ADR 0091 decision 5, owner 2026-11-07):
+# the weekly `schedule` (on `main` only: GitHub runs a schedule on the default branch alone) and a `workflow_dispatch`
+# (Actions → CI → Run workflow, on `main` or `release/<major>.x`) — each on its branch's HEAD, once every stage is green,
+# and only when HEAD carries no `snapshot-` tag yet. A snapshot is the images on exactly the digests lane L1 installed,
+# as `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, the chart, a signature, an attestation per lane and architecture,
+# and the git tag `snapshot-<major>.<minor>`; it is written once and never replaced. A push to `main` or
+# `release/<major>.x`, a pull request (Dependabot's included), a scheduled or dispatched run of a commit that already
+# has its snapshot, and a local run (scripts/run_pipeline.py) build and test the same and write nothing: the `version`
+# job's `kind` is `none` for them, and every write in this file is gated on it. Until 2026-11-07 every green push
+# published, and Dependabot's merges turned that into a snapshot and a tag per dependency bump.
 #
 # This file signs SNAPSHOTS. Keyless signing names the workflow that signed, so a snapshot's identity is
 # `.github/workflows/ci.yml` on `main` or `release/<major>.x`; a release is a promotion of a snapshot, signed by another
@@ -42,14 +46,24 @@ on:
       - "**/*.md"
       - "docs/**"
       - "site/**"
-  # A snapshot by hand, exactly as a push makes one; no inputs, because there is no other kind any more.
+  # The weekly snapshot: Monday 03:17 UTC, off the full hour GitHub's scheduler is busiest at. GitHub runs a schedule
+  # on the default branch only, so this publishes `main`'s HEAD and never a `release/<major>.x` branch — a fix there
+  # gets its snapshot by a dispatch on that branch. No `paths-ignore` reaches it: a docs-only HEAD is published too.
+  schedule:
+    - cron: "17 3 * * 1"
+  # A snapshot now, by hand (Actions → CI → Run workflow), of the chosen branch's HEAD: `main` or `release/<major>.x`,
+  # red on any other branch. No inputs, because there is no other kind any more; a commit that already has its
+  # snapshot is tested again and publishes nothing.
   workflow_dispatch:
 
-# One group per ref, for every event: two runs of one branch publish in the order they were started, so the write-once
-# refusal sees the earlier one's names. GitHub keeps one run pending per group and cancels an older pending one, so a
-# commit superseded while it waited gets no snapshot — the next one does.
+# Two groups per ref. The publishing runs (schedule, dispatch) share one, so two of them publish in the order they were
+# started and the later one's `version` job sees the earlier one's `snapshot-` tag. Pushes and pull requests, which
+# write nothing, have the other — so a push run in progress neither delays a snapshot nor, by queueing behind it, gets
+# the pending scheduled run cancelled: GitHub keeps one run pending per group and cancels an older pending one. Within
+# a group that still holds: a dispatch while another publishing run of the ref waits replaces the waiting one (it
+# publishes the same HEAD, or a newer one), and a push superseded while it waited goes untested by CI.
 concurrency:
-  group: ${{ format('veyq-ci-{0}', github.ref) }}
+  group: ${{ format('veyq-ci-{0}-{1}', (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'publish' || 'test', github.ref) }}
   cancel-in-progress: false
 
 # Helm for the `chart` job and the chart packaging in `snapshot`: the official release tarball, checked against this
@@ -450,7 +464,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The minor is a commit count, and a shallow clone counts 1 — the step below refuses one rather than
-          # stamping it, so this is what makes the job pass at all.
+          # stamping it, so this is what makes the job pass at all. It also fetches every tag, which is how the step
+          # sees that HEAD already carries a `snapshot-` tag.
           fetch-depth: 0
 
       # This script is EXECUTED, offline, by scripts/validate_release_identity.py — which is the whole reason
@@ -495,16 +510,28 @@ jobs:
           if [[ "$RUNNER_ENVIRONMENT" != "github-hosted" ]]; then
             # scripts/run_pipeline.py simulates a push: a local run builds and tests, and writes to no registry or remote.
             :
-          elif [[ "$EVENT_NAME" == "push" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
+          elif [[ "$EVENT_NAME" == "push" || "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
             # Whatever publishes also signs, and a release is promoted from these two branch shapes only — the release
             # identity site/src/content/docs/run/verify-a-release.md pins accepts them, and
-            # scripts/validate_release_identity.py holds the two to each other. A push to another `release/**` branch
-            # is red rather than a green run without a snapshot.
+            # scripts/validate_release_identity.py holds the two to each other. A push to another `release/**` branch,
+            # and a dispatch on any other branch, is red rather than a green run that looks like a publishing one.
             if [[ "$REF_NAME" != "main" && "$REF_NAME" != "release/${major}.x" ]]; then
               echo "Unsupported publish branch: $REF_NAME (VERSION ${major} publishes from main or release/${major}.x)" >&2
               exit 1
             fi
-            kind=snapshot
+            # A push tests and publishes nothing (owner 2026-11-07: a snapshot per push flooded the registry and the
+            # tags once Dependabot opened its pull requests). Only the weekly schedule and a dispatch publish, and
+            # neither on a commit that already carries a snapshot: a snapshot is written once and never replaced, and
+            # its `snapshot-<major>.<minor>` tag is the last thing a complete publish writes. The tag is read from this
+            # checkout (fetch-depth: 0 fetches every tag), so the answer needs no registry, no token and no network.
+            if [[ "$EVENT_NAME" != "push" ]]; then
+              published="$(git tag --list 'snapshot-*' --points-at HEAD | paste -sd ' ' -)"
+              if [[ -n "$published" ]]; then
+                echo "::notice::HEAD already carries its snapshot (${published}): this run tests and publishes nothing"
+              else
+                kind=snapshot
+              fi
+            fi
           fi
           # Otherwise a pull request: it builds and tests the images and publishes nothing.
 
@@ -519,9 +546,10 @@ jobs:
     # Only the version, not the tests (ADR 0091 decision 2): the build starts beside the surface checks instead of
     # after them. The Docker build compiles but runs no tests (-x test), and that is safe only because nothing it
     # builds becomes a published name until `snapshot`, which needs every stage green. When the run publishes (`kind`
-    # `snapshot`: a push or a dispatch on `main` or `release/<major>.x`) it pushes the per-arch `build-<sha>-<arch>`
-    # staging tags before the tests finish — unsigned, carrying no published name, pulled by digest by lane L1 and
-    # turned into the snapshot by `snapshot` alone. A pull request and a local run push nothing.
+    # `snapshot`: the weekly schedule or a dispatch on `main` or `release/<major>.x`, of a HEAD with no snapshot yet) it
+    # pushes the per-arch `build-<sha>-<arch>` staging tags before the tests finish — unsigned, carrying no published
+    # name, pulled by digest by lane L1 and turned into the snapshot by `snapshot` alone. Every other run — a push, a
+    # pull request, a local run — pushes nothing.
     needs:
       - version
     permissions:
@@ -749,10 +777,11 @@ jobs:
   # pulled by the digest `build` handed over and given a local name, because `veyqctl --unsigned-local` takes only a
   # local build's bare `name:tag` — the snapshot waits on this job and is made of those digests, so it names nothing
   # this lane did not install. A green leg then records what it ran (`scripts/snapshot.py lane-result`: the digests, the
-  # asset set it installed) for the snapshot's attestation; the leg itself signs nothing. A pull request and a local
-  # run write to no registry, so there is nothing to pull: the lane builds the two images in its own job, with
-  # `build`'s arguments and from its cache, and pushes nothing. A pull request runs the amd64 leg only; a push and a
-  # dispatch run both architectures, since nothing else ever starts the arm64 image.
+  # asset set it installed) for the snapshot's attestation; the leg itself signs nothing. Every run that does not
+  # publish — a push, a pull request, a local run — writes to no registry, so there is nothing to pull: the lane builds
+  # the two images in its own job, with `build`'s arguments and from its cache, records nothing and pushes nothing. A
+  # pull request runs the amd64 leg only; every other run runs both architectures, since nothing else ever starts the
+  # arm64 image.
   stack:
     name: Stack lane L1 (${{ matrix.arch }}, ${{ matrix.domain }})
     runs-on: ${{ matrix.runner }}
@@ -821,7 +850,7 @@ jobs:
         if: needs.version.outputs.kind != 'snapshot'
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # A push or a pull request: the candidate is built here, as `build` built it (same Dockerfile, target, platform
+      # A run that does not publish: the candidate is built here, as `build` built it (same Dockerfile, target, platform
       # and arguments), from the cache `build` wrote for this image and architecture, loaded into this runner's Docker
       # and never pushed. The app and admin images only: the lane installs through Compose, which never runs the third
       # image, `veyq-tools` (a cluster's backup gate does, ADR 0098; `build` runs its self-test inside it).

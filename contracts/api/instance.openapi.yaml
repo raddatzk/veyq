@@ -2673,7 +2673,7 @@ components:
           description: >
             The release version the running image was stamped with when it was built (ADR 0057 §1): `<major>.<minor>`,
             the release that commit is or can become. The major is this repository's VERSION file at that commit, the
-            minor the number of commits since VERSION last changed. Every green commit is published as a snapshot
+            minor the number of commits since VERSION last changed. A green commit is published as a snapshot
             and a release is a snapshot promoted, the same image (ADR 0091 decision 5), so the stamp does not say
             whether the image IS a release — the release signature does (the Run area's Verify a release). An image
             built before that carries `<major>.<minor>-SNAPSHOT` for a snapshot, reported as stamped.

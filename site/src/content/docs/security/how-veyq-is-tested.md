@@ -171,7 +171,8 @@ run* column was measured on the development machine (a 14-core arm64 Mac) on 202
 whatever load other work put on it, so it says little about a CI runner's time.
 
 `ci.yml` is the pipeline. It runs on every push to `main` or a `release/<major>.x` branch and on every pull request
-into one, unless the change touches only docs, Markdown or the site, and once more when a snapshot is started by hand.
+into one, unless the change touches only docs, Markdown or the site, and once more each week and whenever a snapshot is
+started by hand — the two runs that publish one.
 Its stages start together; only lane L1 waits for others: the image build, and the frontend's surface check, the one
 install that asks the package registry about the lockfile the images install. *Every commit* below means those
 triggers.
@@ -184,8 +185,8 @@ triggers.
 | Races on MariaDB | `ci.yml › backend-races`, every commit | 20 min | 9.5 min beside the backend's check, 7.0 alone; once, under a heavier load, over its budget beside it. Locally the jobs share one machine; in CI each has its own runner. The first CI run (2026-11-05, cold) outran its first budget of 10 with three of its four projects green, inside `:core`'s; each of the three took about 17 s plus at most 1.24 times its classes' local time (a local run of 2026-11-02), which puts `:core`'s at 6 min and the job at 13–17 min cold |
 | API end-to-end | `ci.yml › web-e2e`, every commit | 40 min | 9.2 min for its 26 suites, run directly (2026-10-15); 13.8 min in the local pipeline, all 27 suites green, run alone while other work kept the machine busy (2026-10-16); on GitHub (2026-11-05) the suites 14.2 min green and 20.7 with two red, after 3.5 min of jar and install warm and 6.7 cold; one job took 27.5 min |
 | API fuzzing | `ci.yml › api-fuzz`, every commit | 20 min | 5.7 to 7.3 min for a whole run with the image already built, the jar and the dependency install not counted (2026-10-19, with writes, sequences and the second member); on GitHub's first run (2026-11-05) a cold cache added 5.1 min of jar and install before it |
-| Image build | `ci.yml › build`, every image (app, admin, tools) on amd64 and arm64, every commit; it writes to a registry on a push to `main` or a `release/<major>.x` branch, never on a pull request | 15 min | the app image 2.5–4.6 min uncached on arm64; on GitHub's first run (2026-11-05) 6.4 min on amd64 and 7.1 on arm64 |
-| Stack lane L1 | `ci.yml › stack`, per architecture after the image build, in one leg per domain of the suite (account, Depot, Expenses, Memories, moderation, platform), each with an instance of its own: a push on both architectures, a pull request on amd64 only; on a push it installs the images the build pushed, pulled by digest, and each green leg records what it ran for the snapshot's attestation | 15 min per leg | 2026-10-26, the images built, arm64: the slowest leg 4.0 min (Depot, its browser 3.5 min), the fastest 2.9 min (Memories), 20.9 min for the six together — each runs first run, the round trip and the instance-wide scenarios; the whole suite in one run 14.0 min (13.3, 165 tests); **the local pipeline cannot run this job** (below) |
+| Image build | `ci.yml › build`, every image (app, admin, tools) on amd64 and arm64, every commit; it writes to a registry only in a run that publishes a snapshot (weekly, or started by hand), never on a push or a pull request | 15 min | the app image 2.5–4.6 min uncached on arm64; on GitHub's first run (2026-11-05) 6.4 min on amd64 and 7.1 on arm64 |
+| Stack lane L1 | `ci.yml › stack`, per architecture after the image build, in one leg per domain of the suite (account, Depot, Expenses, Memories, moderation, platform), each with an instance of its own: a pull request on amd64 only, every other run on both architectures; in a run that publishes a snapshot it installs the images the build pushed, pulled by digest, and each green leg records what it ran for the snapshot's attestation | 15 min per leg | 2026-10-26, the images built, arm64: the slowest leg 4.0 min (Depot, its browser 3.5 min), the fastest 2.9 min (Memories), 20.9 min for the six together — each runs first run, the round trip and the instance-wide scenarios; the whole suite in one run 14.0 min (13.3, 165 tests); **the local pipeline cannot run this job** (below) |
 | Mutation | `mutation.yml` when a push or pull request to `main` changes the crypto package or web's sources, `mutation-backend.yml` when one changes a scoped backend file or its test; both when their own configuration changes, and by hand | 45 min for `mutation.yml`'s one job (both web-side gates), 30 for the backend's | a full run of the crypto package's gate 3.6 min and of web's 16.7 min, under load (2026-11-05); an incremental run on a pull request is estimated at 1–3 min |
 | Upgrade proof | `ci.yml › upgrade-proof`, switched off until the first release, one leg per predecessor: the default one, and the release's major entry where it is another | 15 min per leg, an estimate | 3.5 min for one leg, run directly (2026-10-15) |
 | Stack lanes L2, L3 | no job | — | — |
@@ -221,8 +222,9 @@ passed, and it named what it did not run:
 - the amd64 legs of the image build, since the machine is arm64;
 - the steps only GitHub runs: the check of the Gradle wrapper against Gradle's published checksums, and the image
   build's own action with its provenance and SBOM;
-- `upgrade-proof` and `publish`, skipped by their own conditions on a push, as they were in CI then. (Since a push
-  publishes a snapshot, the publishing jobs are skipped in a local run because the run is not on GitHub's runners.)
+- `upgrade-proof` and `publish`, skipped by their own conditions on a push, as they were in CI then. (A local run
+  publishes nothing either way: the publishing jobs are skipped because the run is not on GitHub's runners, and a push
+  no longer publishes on GitHub.)
 
 The `stack` job came after that run. The local pipeline cannot run it on any one machine: it waits for every leg of the
 image build, and one machine builds only its own architecture.
@@ -233,14 +235,17 @@ writes, sequences and second member were added the same day, which made the run 
 
 ## How a release will be gated
 
-Every push to `main` or a `release/<major>.x` branch publishes a **snapshot** once every stage is green. The image
-build pushes each image to the registry under a staging tag, unsigned and carrying no published name; lane L1 installs
+A **snapshot** is published once a week — the newest commit of `main`, if it has none yet — and whenever the
+maintainer starts one by hand, on `main` or a `release/<major>.x` branch; a push runs every stage and publishes
+nothing (since 2026-11-07: with a dependency bot opening pull requests, a snapshot per push was a flood). In a run that
+publishes, the image build pushes each image to the registry under a staging tag, unsigned and carrying no published name; lane L1 installs
 exactly those images, pulled by digest, and each green leg records what it ran; and the `snapshot` job runs only when
 every stage of that run is green (the switched-off upgrade proof excepted). It names those same digests
 `<major>.<minor>-SNAPSHOT` — written once, never replaced — signs them and the Helm chart keylessly, and attaches each
 stack lane's result per architecture as a signed attestation naming what it ran on: the images and the hash of the
-release files it installed. A job of its own then tags the commit `snapshot-<major>.<minor>`. A pull request publishes
-nothing. All of that is a workflow file, and its first run on GitHub is still to be observed.
+release files it installed. A job of its own then tags the commit `snapshot-<major>.<minor>`, and a commit with that tag
+is never published again. A pull request publishes nothing. One snapshot of a push was published on GitHub before the
+change (2026-11-06); the weekly and the hand-started run are still to be observed.
 
 A release does not build again (ADR 0091). It is started by hand from a draft on a snapshot's tag, by a workflow of
 its own, `release.yml`, which refuses unless that snapshot is signed as one and every stack lane attested a pass on

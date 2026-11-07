@@ -148,9 +148,9 @@ accepts anything a fork signs checks nothing. The upstream is written out rather
 same reason. If you deploy your own fork's images, verify them against **your** fork's identity, knowingly.
 `scripts/validate_release_identity.py` holds every command above, and `veyqctl`'s own pair, to that identity.
 
-**A release, never a snapshot.** Every green commit of `main` or a `release/<major>.x` branch is published as a
-snapshot: its images as `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, written once and never replaced, signed by
-`ci.yml`. A release is a snapshot promoted: the **same digests** get `<major>.<minor>`, `<major>` and `latest`, and a
+**A release, never a snapshot.** A green commit of `main` is published as a snapshot once a week, and any green
+commit of `main` or a `release/<major>.x` branch when the maintainer asks for one: its images as
+`<major>.<minor>-SNAPSHOT` and `sha-<commit>`, written once and never replaced, signed by `ci.yml`. A release is a snapshot promoted: the **same digests** get `<major>.<minor>`, `<major>` and `latest`, and a
 second signature, by `release.yml`. So the image's own version says nothing about which one you have — a snapshot
 reports the release it may become — and the name says little more, because a tag can move; **the release identity
 above is the answer**: a digest that verifies under it is a release, and one that does not is not. A snapshot has no

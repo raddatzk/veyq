@@ -195,21 +195,32 @@ release model itself — the version, snapshot and release, the assets, both tar
 decided — is [`docs/crosscutting/release-and-deployment.md`](../docs/crosscutting/release-and-deployment.md); this
 section keeps the commands.
 
-**Every green push publishes a snapshot** ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
-decision 5). A push to `main` or `release/<major>.x` runs `.github/workflows/ci.yml` — the one pipeline per commit,
-every stage listed once in the stage map of
-[How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs) — and when
-every stage is green, its `snapshot` job publishes the three images on exactly the digests lane L1 installed, as
+**A snapshot is published weekly, or when you ask for one** ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+decision 5, amended 2026-11-07). Every push to `main` or `release/<major>.x` and every pull request (Dependabot's
+included) runs `.github/workflows/ci.yml` — the one pipeline per commit, every stage listed once in the stage map of
+[How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs) — and
+**publishes nothing**. Two runs publish: the **weekly schedule** (Monday 03:17 UTC, `main` only — GitHub runs a schedule
+on the default branch alone) and a **dispatch**. Each runs the same pipeline on its branch's HEAD and, when every stage
+is green, its `snapshot` job publishes the three images on exactly the digests lane L1 installed, as
 `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, and the chart as `<major>.<minor>-SNAPSHOT`, signs them, attests each
 lane's result per architecture, and `snapshot-tag` sets the git tag `snapshot-<major>.<minor>` on the commit. A snapshot
-is **written once and never replaced**: a second build of a commit that has one is refused. A pull request
-(Dependabot's included) and a local run (`scripts/run_pipeline.py`) build and test the same and publish nothing. A
-commit whose run was superseded while it waited, or a docs-only tip (which `ci.yml` does not run on), gets its snapshot
-by hand:
+is **written once and never replaced**: a scheduled or dispatched run of a HEAD that already carries a `snapshot-` tag
+tests it again and publishes nothing (its `version` job leaves a notice saying so). A local run
+(`scripts/run_pipeline.py`) publishes nothing either.
+
+**A snapshot now:** GitHub → **Actions → CI → Run workflow**, branch `main` (or `release/<major>.x` for a fix of a
+previous major, which the schedule never reaches; any other branch is red at `version`). From a terminal:
 
 ```sh
-gh workflow run ci.yml --ref main                    # the tip's snapshot, exactly as a push makes it
+gh workflow run ci.yml --ref main                    # the tip's snapshot now, as the weekly run makes it
 ```
+
+- **The weekly run and a dispatch queue behind each other** (one concurrency group per ref for the two), never behind a
+  push: pushes and pull requests have a group of their own, so a dispatch starts at once beside a running push. A
+  second dispatch while one waits replaces the waiting one. A publish that lost its tag (`snapshot` green,
+  `snapshot-tag` failed) is not seen as published: the next run is red at the write-once refusal — re-run the old
+  run's failed `snapshot-tag` instead. GitHub disables a public repository's scheduled workflow after 60 days without
+  activity in it (its docs, not measured here); Actions then offers to enable it again.
 
 - **A snapshot is signed by `ci.yml`, a release by `release.yml`**, both on `main` or `release/<major>.x`. The two are
   the same digests, so the identity is what tells them apart: Verify a release and `veyqctl` accept only the release
@@ -292,11 +303,13 @@ git fetch --tags && git branch release/<old>.x v<old>.<n> && git push origin rel
 ```
 
 **A fix for the previous major** is one decision 4 keeps inside a major. It never carries a migration. It lands on
-`main` first, then on the branch, whose push publishes the fix's snapshot, and the branch is released **before** the
-current major's next release, because that release is the one the new major is entered from after it:
+`main` first, then on the branch, whose push tests the fix; a dispatch on the branch publishes its snapshot (the weekly
+schedule runs on `main` only), and the branch is released **before** the current major's next release, because that
+release is the one the new major is entered from after it:
 
 ```sh
-git switch release/<old>.x && git cherry-pick -x <fix-commit-on-main> && git push   # snapshot-<old>.<m>
+git switch release/<old>.x && git cherry-pick -x <fix-commit-on-main> && git push   # tested, not published
+gh workflow run ci.yml --ref release/<old>.x                                         # snapshot-<old>.<m>
 # then promote snapshot-<old>.<m> from release/<old>.x (<old> moves, latest does not), then the current major's release
 ```
 
@@ -310,8 +323,9 @@ bakes the entry when it is built, so a release of major N promotes a snapshot bu
 that release exists, an instance on the fix release cannot enter the new major. Not built is lane L3's archive holding
 that release (ADR 0096, inbox #461).
 
-**What a run on GitHub has shown, and what it still must,** is inbox #471: the first snapshot of a push, its
-signatures, attestations and tag, and later the first promotion. Until each has run, the statements above are about a
+**What a run on GitHub has shown, and what it still must,** is inbox #471: the first snapshot (of a push, before
+2026-11-07), its signatures and attestations; still owed, the first dispatched and the first weekly snapshot with
+their tag, and later the first promotion. Until each has run, the statements above are about a
 file, held by `scripts/validate_release_identity.py`.
 
 ## The migration history starts at three baselines (once per dev database)

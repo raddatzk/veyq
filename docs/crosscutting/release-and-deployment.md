@@ -37,21 +37,27 @@ A release is `<major>.<minor>`, a function of the commit ([ADR 0057](../decision
 
 `ci.yml` is the one pipeline per commit ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
 decision 2). It runs on a push to `main` or `release/**` and on a pull request into one (a change to docs, Markdown or
-the site only is left to `trust-chain.yml`, which is unfiltered), and on a `workflow_dispatch`. Its stages start
+the site only is left to `trust-chain.yml`, which is unfiltered), on a weekly `schedule` and on a `workflow_dispatch`
+(those two publish, below). Its stages start
 together; the image build needs only the version, and lane L1 needs the build. Every job has a budget
 (`timeout-minutes`, held by `scripts/validate_pipeline_shape.py`). **The stages themselves are listed once**, in
 [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
-**A pull request and a local run publish nothing.** They run every stage and build every image (app, admin, tools;
-amd64 and arm64 — a pull request's lane on amd64 only) and write to no registry and no remote: the `version` job's
-`kind` is `none` for them, and every write of the file is gated on `kind == 'snapshot'`.
+**A push, a pull request and a local run publish nothing.** They run every stage and build every image (app, admin,
+tools; amd64 and arm64 — a pull request's lane on amd64 only) and write to no registry and no remote: the `version`
+job's `kind` is `none` for them, and every write of the file is gated on `kind == 'snapshot'`.
 
-## Publishing: every green push is a snapshot
+## Publishing: a snapshot weekly, or by dispatch
 
-A push to `main` or `release/<major>.x` publishes its **snapshot** when every stage is green (ADR 0091 decision 5). A
-`workflow_dispatch` on one of those branches does the same by hand, for a commit that has none — a run superseded while
-it waited, a docs-only tip, which `ci.yml` does not run on. A push to any other `release/**` branch is red at the
-`version` job.
+Two runs publish a **snapshot** when every stage is green (ADR 0091 decision 5, amended 2026-11-07): the weekly
+`schedule` (Monday 03:17 UTC; GitHub runs it on the default branch only, so it publishes `main`'s HEAD) and a
+`workflow_dispatch` — Actions → CI → *Run workflow* — on `main` or `release/<major>.x`, the one way a release branch's
+fix gets a snapshot. Neither publishes a HEAD that already carries a `snapshot-` tag: the `version` job reads the tags
+of its own full checkout, and such a run tests the commit again and writes nothing. Until 2026-11-07 every green push
+published; once Dependabot opened its pull requests that was a snapshot and a tag per dependency bump. A push, a
+schedule or a dispatch on any other branch is red at the `version` job. The two publishing events share a concurrency
+group per ref, apart from pushes and pull requests, so two publishing runs go one after the other and the later one
+sees the earlier one's tag.
 
 1. `build` pushes each image under a staging tag, `build-<sha>-<arch>` — unsigned, carrying no published name.
 2. Lane L1 (`stack`) installs exactly those images, pulled by the digests `build` handed over
