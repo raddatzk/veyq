@@ -16,6 +16,14 @@ Node, Python and Docker, evaluating the GitHub expressions in them (`github`, `r
 `steps`, `inputs`; the status functions) against a simulated `push` (or `--event pull_request`) to the current
 branch. `GITHUB_OUTPUT`, `GITHUB_ENV`, `GITHUB_PATH` and `RUNNER_TEMP` behave as on a runner, and `CI=true` is set.
 
+**A job that calls a reusable workflow is run as the jobs it calls** (`workflow_calls.py`, the one reading of a call
+the guards share): read from the same commit, named `<call job>/<job>` (`--job backend` finds `pipeline/backend`
+when that name is unique), with the called workflow's inputs (its defaults, then the call's `with:`), its own
+workflow-level `env` and `defaults`, and its expressions' names for its needs; a job that needs the call job reads
+`needs.<call job>.outputs` from the called workflow's `on.workflow_call.outputs`. One level of call, and only a
+`./.github/workflows/…` one — what GitHub allows beyond that is refused, not guessed. A call job's own `if:` is not
+evaluated: the jobs it calls are reported `not run` with that reason.
+
 **A `uses:` step is not re-implemented.** Four are things the host already provides — `actions/checkout` (the
 job's clone is its checkout), `actions/setup-java` (the host's JDK of that major, by `java_home` on macOS),
 `actions/setup-node` (the host's Node), `docker/setup-buildx-action` (the host's Buildx) — and two only keep or
@@ -87,6 +95,7 @@ import threading
 import time
 
 import repo_layout  # where the Compose directory lives (ADR 0106)
+import workflow_calls  # a job that calls a reusable workflow is run as the jobs it calls
 
 try:
     import yaml
@@ -653,7 +662,7 @@ class Run:
 
     def contexts(self, job: Job, needs: dict, env: dict, steps: dict, temp: str = "") -> dict:
         return {"github": self.github(), "runner": self.runner(temp), "env": env, "matrix": job.matrix or {},
-                "needs": needs, "steps": steps, "inputs": {}, "secrets": Unknown("secrets.*, which only GitHub has"),
+                "needs": needs, "steps": steps, "inputs": job.spec.get(CALL_INPUTS) or {}, "secrets": Unknown("secrets.*, which only GitHub has"),
                 "vars": Unknown("vars.*, which only GitHub has"), "job": {"status": "success"}, "strategy": {}}
 
     # --- one job -----------------------------------------------------------------------------------------
@@ -690,7 +699,7 @@ class Run:
                     "RUNNER_ARCH": self.runner()["arch"], "VEYQ_INFRA_DIR": self.infra})
         steps_ctx: dict = {}
         exposed: dict = {}  # the `env` context: workflow, job and GITHUB_ENV values
-        for scope in (self.workflow.get("env") or {}, spec.get("env") or {}):
+        for scope in (spec.get(CALL_ENV, self.workflow.get("env")) or {}, spec.get("env") or {}):
             for key, value in scope.items():
                 ctx = Context(self.contexts(job, needs, exposed, steps_ctx, str(temp)), self.status(True))
                 v, unknown = substitute(value, ctx)
@@ -698,7 +707,7 @@ class Run:
                     job.status, job.reason = "not-run", f"its env `{key}` needs {unknown[0]}"
                     return
                 exposed[key] = v
-        defaults = dict(((self.workflow.get("defaults") or {}).get("run") or {}))
+        defaults = dict(((spec.get(CALL_DEFAULTS, self.workflow.get("defaults")) or {}).get("run") or {}))
         defaults.update(((spec.get("defaults") or {}).get("run") or {}))
         deadline = started + job.budget * 60 if job.budget else None
         failed = False
@@ -833,10 +842,38 @@ def needs_of(spec: dict) -> list[str]:
     return [n] if isinstance(n, str) else list(n)
 
 
+def needs_context(spec: dict, groups: dict) -> dict:
+    """The `needs` context a job's expressions read. A job inside a called workflow names its needs as that file
+    does (`needs.version`, not `needs.pipeline/version`); a job that needs a call job reads it as one need, whose
+    result is the called jobs' together and whose outputs are the called workflow's `on.workflow_call.outputs`."""
+    names = spec.get(CALL_NAMES)
+    ctx: dict = {}
+    for n in needs_of(spec):
+        if n not in groups:
+            continue
+        name = names.get(n, n) if names is not None else n
+        if name:
+            ctx[name] = aggregate(groups[n])
+    for alias, call in (spec.get(CALL_ALIASES) or {}).items():
+        legs = [leg for q in call["jobs"] if q in groups for leg in groups[q]]
+        jobs_ctx = {q.split("/", 1)[1]: aggregate(groups[q]) for q in call["jobs"] if q in groups}
+        outputs: dict = {}
+        for name, value in call["outputs"].items():
+            try:
+                v, unknown = substitute(value, Context({"jobs": jobs_ctx}, Run.status(True)))
+            except ExprError as e:
+                v, unknown = "", [str(e)]
+            outputs[name] = Unknown(unknown[0]) if unknown else v
+        ctx[alias] = {"result": aggregate(legs)["result"], "outputs": outputs}
+    return ctx
+
+
 def plan_job(run: Run, job: Job, groups: dict) -> tuple[str, str]:
     """Decide, before running, whether a job runs: ('run'|'skipped'|'not-run', reason)."""
     spec = job.spec
-    needs_ctx = {n: aggregate(groups[n]) for n in needs_of(spec) if n in groups}
+    needs_ctx = needs_context(spec, groups)
+    if spec.get(CALL_IF) is not None:
+        return "not-run", "its call job has an `if:`, which this runner does not evaluate for the jobs it calls"
     if job.matrix is not None:
         arch = leg_arch(job.matrix)
         if arch and arch != host_arch():
@@ -869,6 +906,33 @@ def plan_job(run: Run, job: Job, groups: dict) -> tuple[str, str]:
     budget = spec.get("timeout-minutes")
     job.budget = float(budget) if isinstance(budget, (int, float)) and not isinstance(budget, bool) else None
     return "run", ""
+
+
+# What a job of a called workflow carries besides its own YAML (workflow_calls.py reads the call): the called
+# file's inputs, workflow-level env and defaults (a caller's are not propagated), its expressions' names for its
+# needs, its call job's `if:`, and — on a caller job that needs a call job — that call's jobs and outputs.
+CALL_INPUTS, CALL_ENV, CALL_DEFAULTS, CALL_NAMES, CALL_IF, CALL_ALIASES = (
+    "__inputs__", "__env__", "__defaults__", "__needs_names__", "__call_if__", "__calls__")
+
+
+def flatten(workflow: dict, read) -> dict:
+    """The workflow as its run has it: every call job replaced by the jobs it calls, `<call job>/<job>` each."""
+    calls = workflow_calls.calls(workflow, read)
+    called = {info["file"]: workflow_calls.load(info["file"], read) for info in calls.values()}
+    jobs: dict = {}
+    for ej in workflow_calls.expand(workflow, read):
+        spec = dict(ej.job)
+        spec["needs"] = list(ej.needs)
+        spec[CALL_NAMES] = dict(ej.needs_names)
+        aliases = {n: calls[n] for n in workflow_calls.needs_list(ej.job) if ej.call is None and n in calls}
+        if aliases:
+            spec[CALL_ALIASES] = aliases
+        if ej.call is not None:
+            spec[CALL_INPUTS], spec[CALL_ENV] = ej.inputs, ej.env
+            spec[CALL_DEFAULTS] = called[ej.file].get("defaults")
+            spec[CALL_IF] = ej.call_if
+        jobs[ej.id] = spec
+    return {**workflow, "jobs": jobs}
 
 
 def build_jobs(workflow: dict) -> dict:
@@ -927,8 +991,7 @@ def dry_run(run: Run, groups: dict) -> None:
                 job.status, job.reason = decision, reason
                 say(f"- {job.label}: {decision.upper()} — {reason}")
                 continue
-            ctx = Context(run.contexts(job, {n: aggregate(groups[n]) for n in needs_of(job.spec)}, {}, {}),
-                          Run.status(True))
+            ctx = Context(run.contexts(job, needs_context(job.spec, groups), {}, {}), Run.status(True))
             lines, runnable = [], 0
             for step in job.spec.get("steps") or []:
                 name = step_name(step)
@@ -985,7 +1048,7 @@ def execute(run: Run, groups: dict) -> None:
                         continue
                     job.status = "running"
                     say(f"[queued] {job.label} (budget {text(job.budget)} min)")
-                    needs_ctx = {n: aggregate(groups[n]) for n in needs if n in groups}
+                    needs_ctx = needs_context(groups[job_id][0].spec, groups)
                     running[pool.submit(run.run_job, job, needs_ctx)] = job
             if not running and not progressed:
                 break
@@ -1073,10 +1136,20 @@ def main(argv: list[str]) -> int:
     if args.workflow == DEFAULT_WORKFLOW or not pathlib.Path(args.workflow).exists():
         source = git("show", f"{sha}:{args.workflow}")
         where = f"{args.workflow} at {sha[:12]}"
+
+        def read(rel: str) -> str:
+            return git("show", f"{sha}:{rel}")
     else:
         source = pathlib.Path(args.workflow).read_text()
         where = f"{args.workflow} (from disk)"
-    workflow = yaml.safe_load(source) or {}
+
+        def read(rel: str) -> str:
+            return (ROOT / rel).read_text()
+    try:
+        workflow = flatten(yaml.safe_load(source) or {}, read)
+    except (workflow_calls.CallError, subprocess.CalledProcessError, OSError) as e:
+        say(f"run_pipeline: {where} calls a workflow this runner cannot read: {e}")
+        return 2
     if git("status", "--porcelain", "--untracked-files=no"):
         say("note: the working tree has uncommitted changes; they are not in this run (it runs the commit)")
     run = Run(args, workflow, sha, branch)
@@ -1085,6 +1158,11 @@ def main(argv: list[str]) -> int:
     if not groups:
         say(f"run_pipeline: {where} has no jobs")
         return 1
+    # A called job may be named by its own id (`backend`) when that is unique, as well as `pipeline/backend`.
+    def resolve(name: str) -> str:
+        found = [g for g in groups if g.split("/")[-1] == name]
+        return name if name in groups or len(found) != 1 else found[0]
+    args.job, args.skip_job = [resolve(j) for j in args.job], [resolve(j) for j in args.skip_job]
     unknown = [j for j in args.job + args.skip_job if j not in groups]
     if unknown:
         say(f"run_pipeline: no job {unknown} in {where} (it has {', '.join(groups)})")

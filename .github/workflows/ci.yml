@@ -124,6 +124,11 @@ jobs:
       - name: Promotion self-test
         run: .venv/bin/python scripts/promote_selftest.py
 
+      # The one reading of a reusable-workflow call (scripts/workflow_calls.py), which the coverage, install and
+      # release-identity guards and scripts/run_pipeline.py read every caller through.
+      - name: Workflow-call reader self-test
+        run: .venv/bin/python scripts/workflow_calls_selftest.py
+
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
