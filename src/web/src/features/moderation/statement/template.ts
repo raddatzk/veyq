@@ -3,7 +3,7 @@
 // (`core/moderation/statement/StatementTemplate.kt`), and `template.test.ts` here and its conformance test there hold
 // both copies equal to it, so the placeholder and the mail render one text. It names the host, never the moderator.
 export const TEMPLATE = {
-  version: 4,
+  version: 1,
   measures: {
     SHARE: {
       en: { measure: 'a link was blocked', reach: 'Everyone who opens it is told the link does not exist; nothing was deleted, and the link cannot be reactivated or issued again while the block stands.' },
