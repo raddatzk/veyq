@@ -784,7 +784,7 @@ jobs:
   # arm64 image.
   stack:
     name: Stack lane L1 (${{ matrix.arch }}, ${{ matrix.domain }})
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 15
     # `frontend` too: it is the one install of the lockfile that asks the registry about its locked packages
     # (inbox #312), and the images this lane builds or pulls install that lockfile — so nothing is booted here
@@ -804,15 +804,11 @@ jobs:
         # One leg per domain folder of tests/e2e/tests/features/ (ADR 0090 decision 7): each boots its own instance and runs
         # `setup`, `scenarios`, `instance` and that domain. tests/e2e/shards.test.mjs holds this list equal to the folders.
         domain: [account, depot, expenses, memories, moderation, platform]
+        # No `include` here: on a pull request the exclude drops every arm64 leg, and an include that matches no leg is
+        # ADDED as one — `arch: arm64` with no domain, so `--project ""` red on every pull request (PR #5, 2026-11-07).
+        # The runner and the platform therefore follow from `matrix.arch` by expression.
         exclude:
           - arch: ${{ github.event_name == 'pull_request' && 'arm64' || 'none' }}
-        include:
-          - arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-latest
-          - arch: arm64
-            platform: linux/arm64
-            runner: ubuntu-24.04-arm
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -861,7 +857,7 @@ jobs:
           context: .
           file: src/backend/Dockerfile
           target: runtime-jvm
-          platforms: ${{ matrix.platform }}
+          platforms: linux/${{ matrix.arch }}
           push: false
           load: true
           provenance: false
@@ -879,7 +875,7 @@ jobs:
           context: .
           file: src/admin-web/Dockerfile
           target: runtime-nginx
-          platforms: ${{ matrix.platform }}
+          platforms: linux/${{ matrix.arch }}
           push: false
           load: true
           provenance: false
@@ -895,7 +891,7 @@ jobs:
       - name: Build the candidate images (the host's Docker)
         if: runner.environment != 'github-hosted' && needs.version.outputs.kind != 'snapshot'
         env:
-          PLATFORM: ${{ matrix.platform }}
+          PLATFORM: linux/${{ matrix.arch }}
           ARCH: ${{ matrix.arch }}
           VEYQ_VERSION: ${{ needs.version.outputs.version }}
         run: |
