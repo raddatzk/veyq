@@ -100,3 +100,6 @@ A Gradle build of its own, run through its own wrapper.
   (`fetchOutside`): no bearer, no cookie, no header of the app's own.
 - SwiftUI attaches a modifier on a `Form`'s or `List`'s `Section` to every row of it: a `.sheet` there is presented by
   none, an `.onChange` runs once a row. Presentations of a section go on the `Form` (`ReceiptPresenters`).
+- On iOS what the share extension needs is shared (ADR 0124): defaults go through `Shared.defaults` (the app group's
+  suite), never `UserDefaults.standard`, and a Keychain item through `KeychainStore` (the entitlements' first group is the
+  shared one). A value only the app reads may stay its own, but nothing the session or the device trust reads.

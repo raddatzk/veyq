@@ -78,13 +78,15 @@ final class AppModel {
         #else
         let label = Host.current().localizedName ?? "Mac"
         #endif
-        let keychain = KeychainStore()
+        let keychain = KeychainStore(movesLegacy: true)
+        // What the share extension reads too lives in the app group (ADR 0124); an earlier installation's move there.
+        Shared.moveIntoGroup()
         // A first start after an installation: the Keychain may still hold an earlier installation's items.
-        if !UserDefaults.standard.bool(forKey: "veyq.installed") {
+        if !Shared.defaults.bool(forKey: "veyq.installed") {
             keychain.removeAll()
-            UserDefaults.standard.set(true, forKey: "veyq.installed")
+            Shared.defaults.set(true, forKey: "veyq.installed")
         }
-        return AppleSessions.shared.device(keychain: keychain, label: label, prompt: String(localized: "Open your spaces"))
+        return AppleSessions.shared.device(keychain: keychain, label: label, prompt: String(localized: "Open your spaces"), defaults: Shared.defaults)
     }()
     private var started = false
     private let recent: RecentUses
@@ -98,10 +100,10 @@ final class AppModel {
     private var managedSpaces: [String: [SpaceRef]] = [:]
 
     init() {
-        let stored = UserDefaults.standard.stringArray(forKey: "veyq.recent") ?? []
+        let stored = Shared.defaults.stringArray(forKey: "veyq.recent") ?? []
         recent = RecentUses(
             persist: { keys in
-                UserDefaults.standard.set(keys.map { "\($0.scopeId)\t\($0.nodeId)\t\($0.lastUsedEpochMs)" }, forKey: "veyq.recent")
+                Shared.defaults.set(keys.map { "\($0.scopeId)\t\($0.nodeId)\t\($0.lastUsedEpochMs)" }, forKey: "veyq.recent")
             },
             initial: stored.compactMap { line in
                 let p = line.split(separator: "\t").map(String.init)
@@ -111,8 +113,8 @@ final class AppModel {
             keep: 50
         )
         hidden = Hidden(
-            persist: { keys in UserDefaults.standard.set(Array(keys), forKey: "veyq.hidden") },
-            initial: Set(UserDefaults.standard.stringArray(forKey: "veyq.hidden") ?? [])
+            persist: { keys in Shared.defaults.set(Array(keys), forKey: "veyq.hidden") },
+            initial: Set(Shared.defaults.stringArray(forKey: "veyq.hidden") ?? [])
         )
     }
 

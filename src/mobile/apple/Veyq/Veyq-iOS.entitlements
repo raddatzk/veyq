@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists-1.0.dtd">
+<!-- What the app shares with its share extension (ADR 0124): the app group's defaults, and the Keychain items of the
+     shared access group, which is listed first so every new item goes there. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.me.raddatz.veyq</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)me.raddatz.veyq.shared</string>
+	</array>
+</dict>
+</plist>

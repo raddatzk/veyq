@@ -16,9 +16,11 @@ import platform.Foundation.NSUserDefaults
 import platform.Foundation.create
 import platform.posix.memcpy
 
-/** The device's trust marks and records in UserDefaults: no secret (`TrustMarks`), kept across launches, gone with the app. */
-object UserDefaultsStore : DeviceStore {
-    private val defaults get() = NSUserDefaults.standardUserDefaults
+/**
+ * The device's trust marks and records in UserDefaults: no secret (`TrustMarks`), kept across launches, gone with the app.
+ * On iOS they are the app group's ([defaults] its suite), which the share extension reads too (ADR 0124).
+ */
+class UserDefaultsStore(private val defaults: NSUserDefaults) : DeviceStore {
     override fun read(key: String): String? = defaults.stringForKey(key)
     override fun write(key: String, value: String) = defaults.setObject(value, key)
     override fun remove(key: String) = defaults.removeObjectForKey(key)
@@ -119,9 +121,9 @@ private fun NSData.toByteArray(): ByteArray {
 object AppleSessions {
     private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(Darwin, block) }
 
-    /** This installation: UserDefaults for its records and marks, the Keychain for its keys. */
-    fun device(keychain: KeychainBridge, label: String, prompt: String): ThisDevice =
-        ThisDevice(UserDefaultsStore, AppleDeviceKeys(keychain, prompt), label, LibsodiumPrimitives)
+    /** This installation: [defaults] for its records and marks (the app group's on iOS), the Keychain for its keys. */
+    fun device(keychain: KeychainBridge, label: String, prompt: String, defaults: NSUserDefaults): ThisDevice =
+        ThisDevice(UserDefaultsStore(defaults), AppleDeviceKeys(keychain, prompt), label, LibsodiumPrimitives)
 
     @Throws(SignInFailure::class, kotlin.coroutines.cancellation.CancellationException::class)
     suspend fun signIn(server: String, email: String, password: String, secretKey: String, device: ThisDevice): VeyqAccount =
