@@ -201,7 +201,7 @@ async function copy(text: string, id: string) {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="t('depot.dropBox.shareTitle')" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="t('depot.dropBox.shareTitle')" :keep-on-outside="busy" @update:visible="emit('close')">
     <div class="veyq-form">
       <p>{{ t('depot.dropBox.shareHint') }}</p>
       <div v-if="fresh" class="dropbox-link">

@@ -87,6 +87,7 @@ async function submit() {
     :visible="true"
     :header="t('node.move.many.title', { count: nodes.length })"
     :closable="!busy"
+    keep-on-outside
     :close-on-escape="!busy"
     class="move-dialog"
     @update:visible="emit('close')"

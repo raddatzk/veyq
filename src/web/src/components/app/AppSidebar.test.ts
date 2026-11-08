@@ -49,10 +49,7 @@ const PopoverStub = { template: '<div class="popover-stub"><slot /></div>', meth
 
 // The mobile sheet's teleporting VeyqDialog is stubbed with a pass-through that renders its slot only when visible
 // (also lets the mobile-sheet test drive it).
-const DialogStub = {
-  props: { visible: Boolean, closeOnOutside: Boolean },
-  template: '<div v-if="visible" class="dialog-stub" :data-close-on-outside="String(!!closeOnOutside)"><slot /></div>',
-}
+const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dialog-stub"><slot /></div>' }
 
 /** The name of the icon drawn inside `el`, or undefined when none is. */
 const iconIn = (wrapper: VueWrapper, el: { element: Element }) =>
@@ -142,8 +139,8 @@ describe('AppSidebar space list', () => {
     await wrapper.get('.mobile-navigation-button').trigger('click')
     await flushPromises()
 
-    // A menu, not a form: a tap beside the sheet closes it (VeyqDialog's `closeOnOutside`).
-    expect(wrapper.get('.dialog-stub').attributes('data-close-on-outside')).toBe('true')
+    // A menu, not a form: it holds no field, so a tap beside the sheet closes it (VeyqDialog).
+    expect(wrapper.get('.dialog-stub').find('input, textarea, select, [role="combobox"], [role="checkbox"]').exists()).toBe(false)
     const items = wrapper.findAll('.mobile-nav-item')
     const texts = items.map((i) => i.text())
     expect(texts.some((s) => s.includes('Familie Muster'))).toBe(true) // the active tenant row

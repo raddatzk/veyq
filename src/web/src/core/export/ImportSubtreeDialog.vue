@@ -127,7 +127,7 @@ function close() {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="t('export.importTitle')" class="import-dialog" :closable="step !== 'running'" @update:visible="close">
+  <VeyqDialog :visible="true" :header="t('export.importTitle')" class="import-dialog" :closable="step !== 'running'" keep-on-outside @update:visible="close">
     <form class="veyq-form" data-testid="import-dialog" @submit.prevent="run">
       <p v-if="step === 'reading'" class="veyq-form-copy" role="status">{{ t('export.reading') }}</p>
       <template v-else-if="plan && step !== 'invalid'">

@@ -131,7 +131,7 @@ async function submit() {
 </script>
 
 <template>
-  <VeyqDialog v-model:visible="visible" :header="t('members.invite')" class="tenant-dialog" :closable="!loading" :close-on-escape="!loading">
+  <VeyqDialog v-model:visible="visible" :header="t('members.invite')" class="tenant-dialog" :closable="!loading" :close-on-escape="!loading" keep-on-outside>
     <form v-if="!sentTo" class="veyq-form" @submit.prevent="submit">
       <p class="dialog-intro">{{ t('members.inviteIntro') }}</p>
       <label>

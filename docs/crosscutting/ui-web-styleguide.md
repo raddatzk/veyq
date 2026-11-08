@@ -252,9 +252,14 @@ or a one-off `1rem` label sitting in them.
   surface's `shared/ui/layer.css`): unsized, a dialog takes its text's natural width, and one long sentence stretched it
   across the screen. A dialog that needs more sets `--veyq-dialog-max-width: none` beside its own width (the expenses
   entry, the space's trash, the localized markdown editor) — never a rule that out-ranks the default.
-- **A tap beside a dialog closes only a menu** (owner 2026-11-08): `VeyqDialog` stays open on a press outside, so a
-  stray tap never loses what a form holds; a dialog that only offers places to go — the mobile navigation sheet — sets
-  `closeOnOutside` and closes on it, beside its × and Escape.
+- **A tap beside a dialog closes it only while it holds no field** (owner 2026-11-08; `VeyqDialog` in both surfaces): a
+  menu, a confirmation or a notice — the mobile navigation sheet among them — closes as Cancel would; a dialog with a
+  field to type into, pick, tick or toggle (native, or a layer component by its role or `aria-pressed`) stays open,
+  whether or not anything was entered, so a stray tap never loses what a form holds; and none closes while it may not
+  be closed (`closable: false`). A dialog that holds no field but would lose something sets `keepOnOutside` in that
+  state: a result shown once (an invite code, a report's reference), a running operation a close would abort or drop
+  (an export, a row's re-issue or restore), a destination chosen by browsing (move, copy, import) — the eleven audited
+  on 2026-11-08 are pinned in `shared/ui/dialogsKeptOnOutside.test.ts`. × and Escape close every closable one.
 - **Dialog footers use the one shared `.veyq-dialog-action-row`** (a `space-between` row; never a
   per-component `.dialog-actions` copy): **cancel/secondary anchored left, submit/confirm anchored right**;
   source order matches visual order. A **destructive tertiary** action that coexists with the primary confirm

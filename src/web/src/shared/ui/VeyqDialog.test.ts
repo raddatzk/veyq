@@ -16,8 +16,11 @@ function open(body: () => unknown, props: Record<string, unknown> = {}) {
   return Object.assign(mount(Host, { attachTo: document.body, global: { plugins: [realI18n()] } }), { visible })
 }
 
-/** A press outside the box, as Reka's dismissable layer listens for it (`pointerdown` on the document, then `click`). */
+/** A press outside the box, as Reka's dismissable layer listens for it (`pointerdown` on the document, then `click`).
+ *  The layer adds that listener a macrotask after it opened (so the press that opened it cannot close it), which
+ *  `flushPromises` does not wait for: without the timer a press lands before the listener and proves nothing. */
 async function pressOutside() {
+  await new Promise((resolve) => setTimeout(resolve, 0))
   const outside = document.querySelector<HTMLElement>('.veyq-dialog__frame')!
   outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }))
   outside.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -43,7 +46,8 @@ describe('VeyqDialog', () => {
     w.unmount()
   })
 
-  it('stays open on a press outside - a stray tap must not lose what a dialog holds', async () => {
+  // owner 2026-11-08: a tap beside a dialog closes it only while it holds no field
+  it('stays open on a press outside while it holds a field - a stray tap must not lose what a form holds', async () => {
     const w = open(() => h('input', { class: 'name' }))
     await flushPromises()
     await pressOutside()
@@ -52,12 +56,43 @@ describe('VeyqDialog', () => {
     w.unmount()
   })
 
-  it('closes on a press outside with closeOnOutside, as the mobile navigation sheet does', async () => {
-    const w = open(() => h('a', { href: '#' }, 'Home'), { closeOnOutside: true, position: 'bottom' })
+  it('counts a layer field by its role, not only a native one', async () => {
+    const w = open(() => h('button', { type: 'button', role: 'combobox' }, 'Pick'))
     await flushPromises()
-    expect(document.querySelector('.veyq-dialog')).not.toBeNull()
+    await pressOutside()
+    expect(w.visible.value).toBe(true)
+    w.unmount()
+  })
+
+  it('closes on a press outside when it holds no field, as Cancel would', async () => {
+    const w = open(() => [h('p', 'Delete it?'), h('a', { href: '#' }, 'Home')], { position: 'bottom' })
+    await flushPromises()
     await pressOutside()
     expect(w.visible.value).toBe(false)
+    w.unmount()
+  })
+
+  it('stays open on a press outside while it may not be closed', async () => {
+    const w = open(() => h('p', 'Uploading…'), { closable: false })
+    await flushPromises()
+    await pressOutside()
+    expect(w.visible.value).toBe(true)
+    w.unmount()
+  })
+
+  it('stays open on a press outside with keepOnOutside, though it holds no field - a result shown once', async () => {
+    const w = open(() => h('code', 'K7Q2-P9XM'), { keepOnOutside: true })
+    await flushPromises()
+    await pressOutside()
+    expect(w.visible.value).toBe(true)
+    w.unmount()
+  })
+
+  it('counts a toggle (aria-pressed) as a field', async () => {
+    const w = open(() => h('button', { type: 'button', 'aria-pressed': 'false' }, 'Auto'))
+    await flushPromises()
+    await pressOutside()
+    expect(w.visible.value).toBe(true)
     w.unmount()
   })
 })

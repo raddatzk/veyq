@@ -530,6 +530,7 @@ function onDialogVisible(visible: boolean) {
     class="share-dialog folder-share-dialog"
     :closable="!creating"
     :close-on-escape="!creating"
+    :keep-on-outside="busyId !== null"
     @update:visible="onDialogVisible"
   >
     <!-- The freshly-minted link (after a create or a renew). -->
