@@ -39,7 +39,126 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         fieldSeal()
         grantSignature()
         secretKeyText()
+        keyChain()
+        identityPin()
+        scopeSuccession()
         return failures.toList()
+    }
+
+    private val trust = Trust(suite)
+
+    private fun JsonObject.hexOrNull(k: String) = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content?.let { unhex(it) }
+
+    private fun link(o: JsonObject) = Trust.KeyChainLink(
+        o.long("index"), o.hexOrNull("previous_head"), o.hex("identity_public_key"), o.hex("secret_key_proof_public_key"),
+        o.hexOrNull("identity_signature"), o.hexOrNull("proof_signature"),
+    )
+
+    private fun keyChain() {
+        val k = v.obj("key_chain")
+        val userId = k.str("user_id")
+        val raw = k["links"]!!.jsonArray.map { it.jsonObject }
+        val links = raw.map(::link)
+        raw.forEachIndexed { i, o ->
+            check("key_chain.links[$i] statement and head") {
+                val stmt = if (i == 0) trust.keyChainGenesisStatement(userId, links[0])
+                else trust.keyChainStepStatement(userId, i.toLong(), links[i].previousHead!!, links[i - 1], links[i])
+                eqHex(stmt, o.str("statement"))
+                eqHex(trust.keyChainHead(stmt), o.str("head"))
+            }
+        }
+        check("key_chain verifies") {
+            val ok = trust.verifyKeyChain(userId, links, null) as? Trust.KeyChainVerdict.Ok ?: fail("refused")
+            eqHex(ok.head, raw.last().str("head"))
+            eq(ok.index, links.size - 1)
+            val from = trust.verifyKeyChain(userId, links, unhex(raw[1].str("head"))) as? Trust.KeyChainVerdict.Ok ?: fail("refused from step 1")
+            eq(from.fromIndex, 1)
+        }
+        check("key_chain refuses a head not on it") {
+            val r = trust.verifyKeyChain(userId, links, ByteArray(32)) as? Trust.KeyChainVerdict.Refused ?: fail("accepted")
+            eq(r.reason, Trust.KeyChainRefusal.HEAD_NOT_IN_CHAIN)
+        }
+        check("key_chain refuses another account's chain") {
+            if (trust.verifyKeyChain("c0ffee00-0000-4000-8000-0000000000ff", links, null) !is Trust.KeyChainVerdict.Refused) fail("accepted")
+        }
+        for ((name, el) in k.obj("failures")) {
+            val f = el.jsonObject
+            check("key_chain.failures.$name") {
+                val r = trust.verifyKeyChain(userId, links.take(2) + link(f), null) as? Trust.KeyChainVerdict.Refused ?: fail("accepted")
+                eq(r.step, 2)
+                eq(r.reason.name.lowercase(), f.str("reason"))
+            }
+        }
+        check("fingerprint hash") {
+            val fp = v.obj("fingerprint")
+            eqHex(trust.fingerprintHash(IdentityPublic(fp.hex("kem"), fp.hex("sign")).serialize()), fp.str("hash"))
+        }
+    }
+
+    private fun identityPin() {
+        val ip = v.obj("identity_pin")
+        val mk = ip.hex("master_key")
+        check("identity_pin index key") { eqHex(trust.identityPinIndexKey(mk), ip.str("k_pin_index")) }
+        ip["pin_ids"]!!.jsonArray.forEachIndexed { i, e ->
+            check("identity_pin.pin_ids[$i]") { eqHex(trust.identityPinId(ip.hex("k_pin_index"), e.jsonObject.str("userId")), e.jsonObject.str("pinId")) }
+        }
+        check("identity_pin entry bytes") { eq(ip.int("entry_bytes"), Trust.PIN_ENTRY_BYTES) }
+        for (which in listOf("empty", "two")) {
+            val s = ip.obj("set").obj(which)
+            check("identity_pin.set.$which") {
+                val entries = s["entries"]!!.jsonArray.map { it.jsonObject.hex("pinId") to it.jsonObject.hex("entry") }
+                eqHex(trust.identityPinSetDigest(entries), s.str("digest"))
+            }
+        }
+        check("identity_pin set refuses one id twice") {
+            val e = ip.obj("set").obj("two")["entries"]!!.jsonArray[0].jsonObject
+            if (runCatching { trust.identityPinSetDigest(listOf(e.hex("pinId") to e.hex("entry"), e.hex("pinId") to ByteArray(1))) }.isSuccess) fail("accepted")
+        }
+        val sym = v.obj("seal").obj("sym")
+        check("identity_pin entry codec") {
+            val plain = sym.obj("identity-pin").hex("plaintext")
+            val (userId, pin) = trust.decodePinEntry(plain) ?: fail("did not decode")
+            eqHex(trust.encodePinEntry(userId, pin), hex(plain))
+            if (trust.decodePinEntry(plain.copyOf(plain.size - 1)) != null) fail("a short entry decoded")
+            val negative = trust.encodePinEntry(userId, pin).decodeToString().trimEnd().replace("\"i\":${pin.index}", "\"i\":-1").let { utf8(it) }
+            if (trust.decodePinEntry(negative.copyOf(Trust.PIN_ENTRY_BYTES).also { it.fill(0x20, negative.size) }) != null) fail("a negative index decoded")
+        }
+        check("identity_pin head codec") {
+            val plain = sym.obj("identity-pins").hex("plaintext")
+            val (count, digest) = trust.decodePinHead(plain) ?: fail("did not decode")
+            eqHex(trust.encodePinHead(count, digest), hex(plain))
+            if (trust.decodePinHead(utf8(plain.decodeToString().replace("\"version\":2", "\"version\":1"))) != null) fail("version 1 decoded")
+        }
+    }
+
+    private fun scopeSuccession() {
+        val s = v.obj("scope_succession")
+        check("scope_succession keys") {
+            val (pk, seed) = trust.successionKeyPair(s.hex("scope_key"))
+            eqHex(seed, s.str("succession_seed"))
+            eqHex(pk, s.str("succession_public_key"))
+            val (nextPk, nextSeed) = trust.successionKeyPair(s.hex("next_scope_key"))
+            eqHex(nextSeed, s.str("next_succession_seed"))
+            eqHex(nextPk, s.str("next_succession_public_key"))
+        }
+        check("scope_succession statement") {
+            val stmt = trust.scopeSuccessionStatement(s.str("scope_id"), s.long("next_epoch"), s.hex("next_succession_public_key"))
+            eqHex(stmt, s.str("statement"))
+            eqHex(p.ed25519Sign(s.hex("succession_seed"), stmt), s.str("signature"))
+        }
+        val link = Trust.SuccessionLink(s.long("next_epoch"), s.hex("next_succession_public_key"), s.hex("signature"))
+        check("scope_succession path") {
+            if (!trust.verifySuccessionPath(s.str("scope_id"), s.long("epoch"), s.hex("succession_public_key"), listOf(link), s.long("next_epoch"), s.hex("next_succession_public_key"))) fail("refused")
+        }
+        check("scope_succession path refuses a gap, a duplicate and another target") {
+            val sc = s.str("scope_id")
+            val held = s.hex("succession_public_key")
+            val target = s.hex("next_succession_public_key")
+            if (trust.verifySuccessionPath(sc, s.long("epoch") - 1, held, listOf(link), s.long("next_epoch"), target)) fail("a gap passed")
+            if (trust.verifySuccessionPath(sc, s.long("epoch"), held, listOf(link, link), s.long("next_epoch"), target)) fail("a duplicate passed")
+            if (trust.verifySuccessionPath(sc, s.long("epoch"), held, listOf(link), s.long("next_epoch"), held)) fail("another target passed")
+            if (trust.verifySuccessionPath(sc, s.long("epoch"), target, listOf(link), s.long("next_epoch"), target)) fail("another held key passed")
+        }
     }
 
     private fun primitives() {

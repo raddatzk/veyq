@@ -78,6 +78,11 @@ object Purposes {
             "scopeId" to ID, "scopeKind" to FieldKind.SCOPE_KIND, "epoch" to UINT, "recipientUserId" to ID,
             "recipientIdentityDigest" to FieldKind.DIGEST, "wrappedGrantDigest" to FieldKind.DIGEST,
         ),
+        "key-chain-genesis" to s("userId" to ID, "identityPublicKey" to FieldKind.BYTES, "secretKeyProofPublicKey" to FieldKind.BYTES),
+        "key-chain-step" to s(
+            "userId" to ID, "index" to UINT, "previousHead" to FieldKind.DIGEST, "previousIdentityDigest" to FieldKind.DIGEST,
+            "previousProofKeyDigest" to FieldKind.DIGEST, "identityPublicKey" to FieldKind.BYTES, "secretKeyProofPublicKey" to FieldKind.BYTES,
+        ),
         "scope-succession" to s("scopeId" to ID, "epoch" to UINT, "successionPublicKey" to FieldKind.BYTES),
     )
 }
