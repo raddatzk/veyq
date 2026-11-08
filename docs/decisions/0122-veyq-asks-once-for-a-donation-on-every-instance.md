@@ -1,7 +1,7 @@
 # ADR 0122 — veyq asks once for a donation, on every instance
 
 - Status: Accepted
-- Built: no
+- Built: yes
 - Date: 2026-11-08
 - Model: [uc.platform.support-the-project](../features/platform/use-cases/uc.platform.support-the-project.md)
 

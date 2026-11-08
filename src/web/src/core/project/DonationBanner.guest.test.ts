@@ -76,6 +76,8 @@ describe('DonationBanner as a guest (uc.platform.support-the-project)', () => {
 
   it('shows when the stored dismissal cannot be read (A3)', async () => {
     localStorage.setItem('veyq.donationBannerDismissed', '1')
+    // Spied on the instance, not on `Storage.prototype` (happy-dom's localStorage does not reach the prototype's methods,
+    // so that spy changed nothing), and restored by hand: `vi.restoreAllMocks` left this one in place for the next test.
     const getItem = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
       throw new Error('blocked')
     })

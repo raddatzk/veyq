@@ -60,5 +60,7 @@ learn once that they can support it, are never asked twice, and are never held u
   instance, with no switch); [ADR 0087](../../../decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)
   (the website the links point to)
 - [uc.admin.operator-details](../../admin/use-cases/uc.admin.operator-details.md) (the footer the links sit in)
-- Docs site: [Support veyq](../../../../site/src/content/docs/donate.md) (the donation page),
-  [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md) (where "Why is veyq secure?" leads)
+- Docs site: [Support veyq](../../../../site/src/content/docs/donate.md) (the donation page, and the banner in the
+  app), [What a guest sees](../../../../site/src/content/docs/sharing/what-guests-see.mdx) (the banner and the footer
+  links on a share page), [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md) (where "Why
+  is veyq secure?" leads)

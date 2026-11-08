@@ -156,6 +156,9 @@ rates' date.
   shares; scope and membership (who belongs to which tenant/group); a member's **per-tenant username,
   identity public key, and group-add-consent flag** — visible to, and effectively **enumerable by**, any
   fellow tenant member (anyone can create a group to run the member-resolve, [ADR 0014](../decisions/0014-group-scopes-and-governance.md) §5);
+  per account, whether its holder **dismissed the donation banner** (`donation_banner_dismissed`, served only to the
+  holder, [ADR 0122](../decisions/0122-veyq-asks-once-for-a-donation-on-every-instance.md)); a guest's dismissal never
+  leaves the browser;
   whether a member **has a profile picture** and how often it changed (`avatar_revision`; the picture itself is a
   constant-size sealed blob, [ADR 0084](../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md); contract, crypto and backend built, the web client not yet);
   server timestamps (created, changed, trashed, last rotated) for ordering — stored as written, to the millisecond (a

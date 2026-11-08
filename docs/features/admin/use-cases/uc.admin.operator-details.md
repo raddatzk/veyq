@@ -41,7 +41,8 @@
    the signed-in shell, beside a link to the public terms of the instance (the operator section of the terms,
    [ADR 0035](../../../decisions/0035-server-terms-of-service.md) decision 6) and to its privacy notice
    ([uc.admin.privacy-notice](uc.admin.privacy-notice.md)), which the same values fill; the recipients and the
-   officer are public only through that notice.
+   officer are public only through that notice. The same footer carries veyq's own two links, "Why is veyq secure?"
+   and "Donate" ([uc.platform.support-the-project](../../platform/use-cases/uc.platform.support-the-project.md)).
 
 ## Alternate / exception flows
 
