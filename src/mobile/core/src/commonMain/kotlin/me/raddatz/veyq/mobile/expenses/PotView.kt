@@ -36,7 +36,11 @@ class PotView internal constructor(session: Source) {
     )
 
     /** One balance row; [settled] what transfers moved (positive: sent, negative: received). */
-    class PersonRow(val id: String, val name: String?, val paid: Long, val share: Long, val balance: Long, val active: Boolean, val settled: Long = 0)
+    class PersonRow(
+        val id: String, val name: String?, val paid: Long, val share: Long, val balance: Long, val active: Boolean, val settled: Long = 0,
+        /** A listed member's user id, whose picture the row shows; null for a name, a former member and the erased (the letter). */
+        val userId: String? = null,
+    )
     class SettleRow(val from: String?, val to: String?, val amount: Long, val fromId: String = "", val toId: String = "")
     class CategoryRow(val id: String, val ownName: String?, val amount: Long)
     class Person(val id: String, val name: String)
@@ -76,6 +80,9 @@ class PotView internal constructor(session: Source) {
         if (p.erased) return null
         return p.member?.let { directory?.get(it)?.displayName } ?: p.name
     }
+
+    /** [p]'s member id while the space lists them (`standingOf` is `member`): only they show a picture. */
+    private fun listedMember(p: Ledger.Participant): String? = p.member?.takeIf { directory?.containsKey(it) == true }
 
     private val names: Map<String, String?> = ledger?.participants?.associate { it.id to shownName(it) }.orEmpty()
 
@@ -148,7 +155,7 @@ class PotView internal constructor(session: Source) {
         for (p in l.participants) {
             val (paid, share) = l.overview.byPerson[p.id] ?: (Big.ZERO to Big.ZERO)
             val balance = l.balances[p.id] ?: Big.ZERO
-            val row = PersonRow(p.id, shownName(p), paid.toLong(), share.toLong(), balance.toLong(), p.active, (balance - paid + share).toLong())
+            val row = PersonRow(p.id, shownName(p), paid.toLong(), share.toLong(), balance.toLong(), p.active, (balance - paid + share).toLong(), listedMember(p))
             if (p.erased) {
                 erased = PersonRow("erased", null, erased.paid + row.paid, erased.share + row.share, erased.balance + row.balance, false, erased.settled + row.settled)
                 if (row.balance != 0L || row.paid != 0L || row.share != 0L) anyErased = true
@@ -234,6 +241,8 @@ class PotView internal constructor(session: Source) {
     class PersonEntry(
         val id: String, val name: String, val standing: Standing, val active: Boolean, val balance: Long,
         val renamable: Boolean, val canToggle: Boolean, val canErase: Boolean, val named: Boolean,
+        /** A listed member's user id (their picture); null otherwise (the letter). */
+        val userId: String? = null,
     ) {
         val settled: Boolean get() = balance == 0L
     }
@@ -257,6 +266,7 @@ class PotView internal constructor(session: Source) {
                 canToggle = canWrite && (settled || !p.active),
                 canErase = canWrite && settled,
                 named = p.id in named,
+                userId = listedMember(p),
             )
         }
     }.orEmpty()

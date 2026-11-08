@@ -658,6 +658,9 @@ class TenantSession internal constructor(
 
     fun applicationsOff(): Set<String> = applicationsOff
 
+    /** The members' profile pictures, synced from [people]'s revisions (`MemberAvatars`). */
+    val avatars: MemberAvatars by lazy { MemberAvatars(this) }
+
     override suspend fun spaces(): List<SpaceRef> = scopes.map { SpaceRef(it.summary.id, it.summary.kind.value, it.name) }
 
     private var tree: Map<String, List<OpenNode>>? = null

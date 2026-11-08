@@ -164,7 +164,8 @@ struct PotSettings: View {
     }
 
     private func row(_ p: PotView.PersonEntry) -> some View {
-        HStack {
+        HStack(spacing: 12) {
+            PersonAvatar(name: p.name, userId: p.userId)
             VStack(alignment: .leading, spacing: 2) {
                 Text(p.name).fontWeight(.semibold)
                 Text(facts(p)).font(.caption).foregroundStyle(Role.muted)

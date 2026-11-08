@@ -115,6 +115,11 @@ class PotViewPeopleTest {
         // Everywhere a name shows, the same rule.
         assertTrue(v.people.any { it.name == "Anna Adler" })
         assertEquals("Anna Adler", v.balances.first { it.id == anna }.name)
+        // Only a listed member shows a picture: a name, a former member and the erased show the letter.
+        assertEquals(listOf(userA, null, null), listOf(anna, ben, cleo).map { id -> byId.getValue(id).userId })
+        assertEquals(userA, v.balances.first { it.id == anna }.userId)
+        assertTrue(v.balances.filter { it.id != anna }.all { it.userId == null })
+        assertTrue(view(pot, null).balances.all { it.userId == null })
         // Without a directory a member is sealed, by the name sealed at adding.
         val sealed = view(pot, null).personEntries.first { it.id == anna }
         assertEquals(PotView.Standing.SEALED, sealed.standing)

@@ -333,6 +333,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _pot.value = null
         raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff())
         readRowDetails(t)
+        syncAvatars(t)
         rebuild(start = true)
     }
 
@@ -350,6 +351,19 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`). */
     private val _rowDetails = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     val rowDetails: StateFlow<Map<String, List<String>>> = _rowDetails.asStateFlow()
+
+    /** The members' pictures this device opened, by user id (core's `MemberAvatars`): the letter for everyone else. */
+    private val _avatars = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
+    val avatars: StateFlow<Map<String, ByteArray>> = _avatars.asStateFlow()
+
+    /** Fetches the pictures the tenant's directory names a revision for, in the background; the letters show meanwhile. */
+    private fun syncAvatars(t: me.raddatz.veyq.mobile.session.TenantSession) {
+        _avatars.value = emptyMap()
+        viewModelScope.launch {
+            runCatching { t.avatars.sync(t.people.values) }
+            if (tenantSession === t) _avatars.value = t.avatars.pictures()
+        }
+    }
 
     private suspend fun readRowDetails(t: me.raddatz.veyq.mobile.session.TenantSession) {
         _rowDetails.value = runCatching { me.raddatz.veyq.mobile.expenses.PotRows.details(t) }.getOrDefault(emptyMap())

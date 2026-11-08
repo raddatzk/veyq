@@ -170,6 +170,16 @@ class PotLiveTest {
             assertTrue("expenses" !in account.open(tenant.tenant).applicationsOff())
             println("[$potName] switched off: read only, every entry opens, a write refused; switched back on")
         }
+        if (System.getenv("VEYQ_LIVE_AVATARS") == "1") {
+            // The tenant's profile pictures: every member with a revision fetched and opened, the rest the letter; a second
+            // sync asks nothing new (each revision settled).
+            val withPicture = tenant.people.values.filter { it.avatarRevision > 0 }
+            tenant.avatars.sync(tenant.people.values)
+            val opened = tenant.avatars.pictures()
+            println("[avatars] ${tenant.people.size} members, ${withPicture.size} with a revision, ${opened.size} opened: ${opened.mapValues { it.value.size }}")
+            assertTrue(opened.keys.all { id -> withPicture.any { it.userId == id } }, "a picture for a member without a revision")
+            assertTrue(!tenant.avatars.sync(tenant.people.values), "a second sync moved")
+        }
         if (System.getenv("VEYQ_LIVE_RATES") == "1") {
             // The tenant's exchange-rate service, asked once for today's table (a request to that third party).
             val pot = PotSession.open(tenant, pots.first().scopeId, pots.first().nodeId)!!

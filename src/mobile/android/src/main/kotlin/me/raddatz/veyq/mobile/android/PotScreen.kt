@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -237,6 +238,8 @@ private fun Overview(view: PotView, state: AppModel.PotState, model: AppModel) {
         item { Section(stringResource(R.string.pot_balances)) }
         items(view.balances, key = { it.id }) { p ->
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                PersonAvatar(personName(p.name), p.userId)
+                androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(personName(p.name), fontWeight = FontWeight.SemiBold)
                     // What makes the balance: paid and consumed always, the transfers only where there were any.

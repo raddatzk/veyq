@@ -21,6 +21,7 @@ struct ShellView: View {
         }
         .tint(Role.accent)
         .environment(\.rowDetails, model.rowDetails)
+        .environment(\.avatars, model.avatars)
         .sheet(isPresented: Binding(get: { model.managing != nil }, set: { if !$0 { model.managing = nil } })) {
             ManageView(model: model)
         }

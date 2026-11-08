@@ -242,7 +242,8 @@ private struct OverviewList: View {
         List {
             Section {
                 ForEach(view.balances, id: \.id) { p in
-                    HStack {
+                    HStack(spacing: 12) {
+                        PersonAvatar(name: personName(p.name), userId: p.userId)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(personName(p.name)).fontWeight(.semibold)
                             Text("paid \(money(p.paid, view.currency, view.minorUnits)) · consumed \(money(p.share, view.currency, view.minorUnits))" + transfers(p))

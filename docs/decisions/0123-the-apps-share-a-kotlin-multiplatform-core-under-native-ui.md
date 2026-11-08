@@ -173,7 +173,12 @@ implementation exists but what holds it to the first.
   (what each paid, consumed and settled by transfer; a deactivated person while something is open, the erased as one
   row while they have costs; `PotViewPeopleTest`), an open Pot says its currency under its name, and a Pot's row in the
   shell's lists names its currency (`expenses/PotRows.kt`, the web's `levelRows.ts`): Expenses' answer, which the app's
-  composition root asks and hands to the shell's rows, since core's lists know no application.
+  composition root asks and hands to the shell's rows, since core's lists know no application. A listed member shows
+  their profile picture there and in the Pot's people, everyone else the letter, as the web's `PersonAvatar` draws them:
+  core's `session/MemberAvatars.kt` (the web's `avatarCache.ts` over `openMemberAvatar`, ADR 0084) fetches a picture only
+  for a revision the directory names and this device has not settled, at most six at once, and opens it on the device —
+  its value key under the tenant's key, the one 16 KiB pad, an image by its bytes, else the letter (`MemberAvatarsTest`;
+  a picture the web set opens in both apps, measured 2026-11-08).
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

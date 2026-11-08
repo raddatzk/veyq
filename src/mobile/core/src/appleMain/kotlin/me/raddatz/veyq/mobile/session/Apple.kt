@@ -165,6 +165,13 @@ object AppleSessions {
     suspend fun openReceipt(pot: me.raddatz.veyq.mobile.expenses.PotSession, receiptId: String): NSData? =
         pot.openReceipt(receiptId)?.toNSData()
 
+    /** The members' pictures of [tenant] after syncing them with its directory (`MemberAvatars`), by user id. */
+    @Throws(Exception::class)
+    suspend fun syncAvatars(tenant: TenantSession): Map<String, NSData> {
+        tenant.avatars.sync(tenant.people.values)
+        return tenant.avatars.pictures().mapValues { it.value.toNSData() }
+    }
+
     /** A file picked as a receipt, to be uploaded when its entry is saved; [id] a fresh UUID. */
     fun pendingReceipt(id: String, data: NSData, type: String, name: String?, modifiedAt: Long?): me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt =
         me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt(id, data.toByteArray(), type, name, modifiedAt)

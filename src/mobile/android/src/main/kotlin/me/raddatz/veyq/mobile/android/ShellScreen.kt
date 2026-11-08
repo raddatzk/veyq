@@ -103,6 +103,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val shell = s.shell
     val potState by model.pot.collectAsStateWithLifecycle()
     val rowDetails by model.rowDetails.collectAsStateWithLifecycle()
+    val avatars by model.avatars.collectAsStateWithLifecycle()
     val palette = LocalPalette.current
     fun closeDrawerThen(f: () -> Unit) { f(); scope.launch { drawer.close() } }
 
@@ -110,7 +111,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         if (shell.searching) model.search(false) else model.goBack()
     }
 
-    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars) {
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {

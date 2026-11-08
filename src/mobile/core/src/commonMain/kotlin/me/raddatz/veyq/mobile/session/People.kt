@@ -9,7 +9,7 @@ import me.raddatz.veyq.mobile.crypto.JoinRecords
 import me.raddatz.veyq.mobile.crypto.unb64
 
 /** One person as the interface shows them: the real name when it opens, else the username (ADR 0083 decision 9). */
-data class Person(val userId: String, val username: String, val displayName: String)
+data class Person(val userId: String, val username: String, val displayName: String, val avatarRevision: Int = 0)
 
 /**
  * The people of a tenant, a port of `src/web/src/core/people/directory.ts`: a member's real name is sealed under a value
@@ -32,5 +32,5 @@ internal object People {
 
     /** Every member of the tenant by user id, named by the display rule. */
     fun of(joins: JoinRecords, tenantId: String, tenantKey: ByteArray, epoch: Long, members: List<ScopeMember>): Map<String, Person> =
-        members.associate { m -> m.userId to Person(m.userId, m.username, realName(joins, tenantId, tenantKey, epoch, m) ?: m.username) }
+        members.associate { m -> m.userId to Person(m.userId, m.username, realName(joins, tenantId, tenantKey, epoch, m) ?: m.username, m.avatarRevision) }
 }

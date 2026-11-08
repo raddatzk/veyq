@@ -347,6 +347,12 @@ final class AppModel {
         rawFavorites = try await t.favorites()
         rawOff = t.applicationsOff()
         rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? [:]
+        // The pictures the directory names a revision for, in the background; the letters show meanwhile.
+        avatars = [:]
+        Task {
+            let pictures = (try? await AppleSessions.shared.syncAvatars(tenant: t)) ?? [:]
+            if tenantSession === t { avatars = pictures }
+        }
         self.tenant = tenant
         server = account.label
         rebuild(start: true)
@@ -394,6 +400,9 @@ final class AppModel {
 
     /// What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`).
     private(set) var rowDetails: [String: [String]] = [:]
+
+    /// The members' pictures this device opened, by user id (core's `MemberAvatars`): the letter for everyone else.
+    private(set) var avatars: [String: Data] = [:]
 
     /// Opens and reads the Pot `ref` unless it is the one shown.
     func loadPot(_ ref: ObjectRef) {
