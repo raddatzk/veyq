@@ -78,6 +78,13 @@ object Purposes {
             "scopeId" to ID, "scopeKind" to FieldKind.SCOPE_KIND, "epoch" to UINT, "recipientUserId" to ID,
             "recipientIdentityDigest" to FieldKind.DIGEST, "wrappedGrantDigest" to FieldKind.DIGEST,
         ),
+        "invite-key" to s("tenantId" to ID, "inviteId" to ID, "inviteKeyDigest" to FieldKind.DIGEST, "expiresAt" to UINT),
+        "join-endorsement" to s("tenantId" to ID, "userId" to ID, "signerUserId" to ID, "recordDigest" to FieldKind.DIGEST),
+        "join-record" to s(
+            "tenantId" to ID, "userId" to ID, "identityDigest" to FieldKind.DIGEST, "secretKeyProofPublicKey" to FieldKind.BYTES,
+            "inviteId" to ID, "inviteKeyDigest" to FieldKind.DIGEST, "inviteKeySignature" to FieldKind.BYTES, "inviteExpiresAt" to UINT,
+            "signerUserId" to ID, "signerIdentityDigest" to FieldKind.DIGEST,
+        ),
         "key-chain-genesis" to s("userId" to ID, "identityPublicKey" to FieldKind.BYTES, "secretKeyProofPublicKey" to FieldKind.BYTES),
         "key-chain-step" to s(
             "userId" to ID, "index" to UINT, "previousHead" to FieldKind.DIGEST, "previousIdentityDigest" to FieldKind.DIGEST,

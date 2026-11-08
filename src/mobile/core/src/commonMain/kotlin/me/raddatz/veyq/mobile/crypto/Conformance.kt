@@ -42,7 +42,74 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         keyChain()
         identityPin()
         scopeSuccession()
+        joinRecords()
+        valueKeys()
         return failures.toList()
+    }
+
+    private val joins = JoinRecords(suite)
+
+    private fun joinRecords() {
+        val ik = v.obj("invite_key")
+        val owner = ik.obj("owner")
+        check("invite_key statement and owner signature") {
+            val c = ik.obj("context")
+            val stmt = joins.inviteKeyStatement(c.str("tenantId"), c.str("inviteId"), ik.hex("bundle"), c.long("expiresAt"))
+            eqHex(stmt, ik.str("statement"))
+            eqHex(p.ed25519Sign(v.obj("grant_signature").hex("sign_seed"), stmt), ik.str("signature"))
+            eqHex(trust.fingerprintHash(owner.hex("bundle")), owner.str("fingerprint_hash"))
+        }
+        val jr = v.obj("join_record")
+        val at = jr.obj("context")
+        check("join_record decodes, verifies and encodes back") {
+            val rec = joins.decode(jr.hex("record")) ?: fail("did not decode")
+            eqHex(rec.identityPublicKey, jr.str("joiner_bundle"))
+            eqHex(rec.secretKeyProofPublicKey, jr.str("secret_key_proof_public_key"))
+            eqHex(rec.inviteSignature, jr.str("invite_signature"))
+            eqHex(rec.identitySignature, jr.str("identity_signature"))
+            eqHex(joins.joinRecordStatement(at.str("tenantId"), at.str("userId"), rec), jr.str("statement"))
+            eqHex(joins.encode(rec), jr.str("record"))
+            if (!joins.verifies(at.str("tenantId"), at.str("userId"), rec)) fail("the vector's record does not verify")
+        }
+        check("join_record refuses another address and a broken signature") {
+            val rec = joins.decode(jr.hex("record")) ?: fail("did not decode")
+            if (joins.verifies(at.str("tenantId"), "c0ffee00-0000-4000-8000-0000000000ff", rec)) fail("verified for another member")
+            for (i in 0 until 3) {
+                val broken = joins.decode(jr.hex("record"))!!
+                val sig = listOf(broken.inviteKeySignature, broken.inviteSignature, broken.identitySignature)[i]
+                sig[0] = (sig[0] + 1).toByte()
+                if (joins.verifies(at.str("tenantId"), at.str("userId"), broken)) fail("signature $i was not checked")
+            }
+            if (joins.decode(jr.hex("record").copyOfRange(0, 40)) != null) fail("a truncated record decoded")
+        }
+        val je = v.obj("join_endorsement")
+        check("join_endorsement") {
+            val c = je.obj("context")
+            val opened = je.hex("sealed_join_record")
+            eqHex(p.sha256(opened), je.str("record_digest"))
+            val stmt = joins.endorsementStatement(c.str("tenantId"), c.str("userId"), c.str("signerUserId"), opened)
+            eqHex(stmt, je.str("statement"))
+            val ownerSign = owner.hex("sign_public")
+            if (!joins.endorsementVerifies(ownerSign, c.str("tenantId"), c.str("userId"), c.str("signerUserId"), opened, je.hex("signature"))) fail("does not verify")
+            if (joins.endorsementVerifies(ownerSign, c.str("tenantId"), c.str("userId"), c.str("signerUserId"), opened + byteArrayOf(0), je.hex("signature"))) fail("another record verified")
+        }
+    }
+
+    private fun valueKeys() {
+        val vk = v.obj("value_key")
+        val sym = v.obj("seal").obj("sym")
+        val fields = v.obj("field_seal")
+        for ((purpose, el) in vk.obj("addresses")) {
+            check("value_key.addresses.$purpose") {
+                val (schema, ctx) = when {
+                    sym[purpose] != null -> Purposes.SEAL to context(purpose, Purposes.SEAL, sym.obj(purpose).obj("context"))
+                    else -> Purposes.FIELD to context(purpose, Purposes.FIELD, fields.obj(purpose).obj("context"))
+                }
+                eqHex(joins.valueAddress(schema, ctx), (el as JsonPrimitive).content)
+            }
+        }
+        check("value_key covers exactly the value purposes") { eq(vk.obj("addresses").keys, JoinRecords.VALUE_PURPOSES) }
+        check("value_key opens a field top-down") { eqHex(sym.obj("value-key").hex("plaintext"), fields.obj("member-name").str("parent_key")) }
     }
 
     private val trust = Trust(suite)

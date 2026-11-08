@@ -40,5 +40,7 @@ class ConformanceTest {
         assertTrue(failures.any { it.startsWith("key_chain.failures.identity_signature") }, all)
         assertTrue(failures.any { it.startsWith("key_chain.failures.proof_signature") }, all)
         assertTrue(failures.any { it.startsWith("scope_succession path refuses") }, all)
+        assertTrue(failures.any { it.startsWith("join_record refuses") }, all)
+        assertTrue(failures.any { it.startsWith("join_endorsement") }, all)
     }
 }
