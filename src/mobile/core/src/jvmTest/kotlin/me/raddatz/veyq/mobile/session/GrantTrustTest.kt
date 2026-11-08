@@ -14,6 +14,8 @@ import me.raddatz.veyq.mobile.api.models.ScopeSummary
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.IdentityPrivate
+import me.raddatz.veyq.mobile.crypto.JoinRecords
+import me.raddatz.veyq.mobile.crypto.Purposes
 import me.raddatz.veyq.mobile.crypto.Trust
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.crypto.b64
@@ -132,6 +134,47 @@ class GrantTrustTest {
 
     private fun reason(o: GrantOutcome) = assertIs<GrantOutcome.Refused>(o).reason
 
+    private val tenantKey = p.randomBytes(32)
+    private val joins = JoinRecords(suite)
+
+    /** The tenant as this device reads it: [members] listed, their join records opened with the tenant key at epoch 0. */
+    private fun view(vararg members: ScopeMember) =
+        TenantView.of(tenantId, members.toList(), tenantKey, 0, suite, Anchoring(suite, trust, server, pins()) { 1_760_000_000_000 })
+
+    /**
+     * [joiner]'s membership as the server lists it: a join record [signer] rooted with its key [signerAt] (an invite key
+     * the signer signed, which signs the record beside the joiner's key [joinerAt]), sealed under a value key wrapped
+     * under the tenant key, and — with [endorsedBy] — the signer's endorsement by that key of theirs.
+     */
+    private fun joinedMember(
+        joiner: Person, signer: Person, signerAt: Int = signer.identities.lastIndex, joinerAt: Int = joiner.identities.lastIndex,
+        endorsedBy: Int? = null, breakInviteSignature: Boolean = false,
+    ): ScopeMember {
+        val invite = IdentityPrivate(p.randomBytes(32), p.randomBytes(32))
+        val invitePublic = suite.identityPublic(invite).serialize()
+        val inviteId = UUID.randomUUID().toString()
+        val expiresAt = 1_784_635_200L
+        val inviteKeySignature = p.ed25519Sign(signer.identities[signerAt].signSeed, joins.inviteKeyStatement(tenantId, inviteId, invitePublic, expiresAt))
+            .also { if (breakInviteSignature) it[0] = (it[0] + 1).toByte() }
+        fun record(inviteSignature: ByteArray, identitySignature: ByteArray) = JoinRecords.JoinRecord(
+            joiner.bundle(joinerAt), p.ed25519Public(joiner.proofs[joinerAt]), inviteId, invitePublic, inviteKeySignature, expiresAt,
+            signer.userId, signer.bundle(signerAt), inviteSignature, identitySignature,
+        )
+        val stmt = joins.joinRecordStatement(tenantId, joiner.userId, record(ByteArray(64), ByteArray(64)))
+        val rec = record(p.ed25519Sign(invite.signSeed, stmt), p.ed25519Sign(joiner.identities[joinerAt].signSeed, stmt))
+        val ctx = joins.recordContext(tenantId, joiner.userId)
+        val valueKey = p.randomBytes(32)
+        val wrapped = suite.seal(joins.valueKeyContext(tenantId, 0, joins.valueAddress(Purposes.FIELD, ctx)), tenantKey, valueKey)
+        val endorsement = endorsedBy?.let {
+            p.ed25519Sign(signer.identities[it].signSeed, joins.endorsementStatement(tenantId, joiner.userId, signer.userId, joins.encode(rec)))
+        }
+        return member(joiner, ScopeMember.Role.MEMBER).copy(
+            sealedJoinRecord = b64(suite.sealField(ctx, valueKey, joins.encode(rec))),
+            wrappedJoinRecordValueKey = b64(wrapped),
+            joinEndorsement = endorsement?.let(::b64),
+        )
+    }
+
     @Test
     fun aSelfGrantOpensAndIsHeld() = runTest {
         val m = marks()
@@ -209,22 +252,112 @@ class GrantTrustTest {
     fun aGroupGrantIsJudgedByTheGranterStandingInTheTenant() = runTest {
         val owner = Person().also { server.chains[it.userId] = it.chain() }
         val other = Person().also { server.chains[it.userId] = it.chain() }
-        val view = TenantView(
-            mapOf(
-                owner.userId to member(owner, ScopeMember.Role.OWNER),
-                other.userId to member(other, ScopeMember.Role.MEMBER),
-            ),
-        )
+        val view = view(member(owner, ScopeMember.Role.OWNER), member(other, ScopeMember.Role.MEMBER))
         assertIs<GrantOutcome.Opened>(opener().open(grant(p.randomBytes(32), owner, ScopeKind.GROUP), view))
         assertEquals(GrantOutcome.Reason.GRANTER_KEY_UNANCHORED, reason(opener().open(grant(p.randomBytes(32), other, ScopeKind.GROUP), view)))
         val fetches = server.chainFetches
-        val joined = TenantView(mapOf(other.userId to member(other, ScopeMember.Role.MEMBER, joinRecord = "AAAA")))
-        assertEquals(GrantOutcome.Reason.GRANTER_KEY_UNANCHORED, reason(opener().open(grant(p.randomBytes(32), other, ScopeKind.GROUP), joined)))
-        val pending = TenantView(mapOf(owner.userId to member(owner, ScopeMember.Role.OWNER, pendingConsent = true)))
+        // A join record that does not open (no wrap of its value key) is no record: unanchored, never another's.
+        val junk = view(member(other, ScopeMember.Role.MEMBER, joinRecord = "AAAA"))
+        assertEquals(GrantOutcome.Reason.GRANTER_KEY_UNANCHORED, reason(opener().open(grant(p.randomBytes(32), other, ScopeKind.GROUP), junk)))
+        val pending = view(member(owner, ScopeMember.Role.OWNER, pendingConsent = true))
         assertEquals(GrantOutcome.Reason.GRANTER_KEY_UNANCHORED, reason(opener().open(grant(p.randomBytes(32), owner, ScopeKind.GROUP), pending)))
         assertEquals(fetches, server.chainFetches, "an unanchored granter's chain was read")
         // A tenant this device could not read: the pin alone decides, as on the web.
-        assertIs<GrantOutcome.Opened>(opener().open(grant(p.randomBytes(32), other, ScopeKind.GROUP), TenantView(null)))
+        assertIs<GrantOutcome.Opened>(opener().open(grant(p.randomBytes(32), other, ScopeKind.GROUP), TenantView.unavailable(tenantId, suite)))
+    }
+
+    @Test
+    fun aGroupGrantFromAMemberWhoJoinedThroughAnOwnersInviteOpens() = runTest {
+        val owner = Person().also { server.chains[it.userId] = it.chain() }
+        val joiner = Person().also { server.chains[it.userId] = it.chain() }
+        val v = view(member(owner, ScopeMember.Role.OWNER), joinedMember(joiner, owner))
+        assertIs<Standing.Joined>(v.standing(joiner.userId))
+        assertIs<GrantOutcome.Opened>(opener().open(grant(p.randomBytes(32), joiner, ScopeKind.GROUP), v))
+        assertEquals(setOf(owner.userId, joiner.userId), pins().load().pins.keys, "the owner and the member were not both pinned")
+    }
+
+    @Test
+    fun aJoinRecordThatDoesNotHoldAnchorsNobody() = runTest {
+        val owner = Person().also { server.chains[it.userId] = it.chain() }
+        val other = Person().also { server.chains[it.userId] = it.chain() }
+        val joiner = Person().also { server.chains[it.userId] = it.chain() }
+        val o = member(owner, ScopeMember.Role.OWNER)
+        val cases = mapOf(
+            "the invite key's signature is broken" to view(o, joinedMember(joiner, owner, breakInviteSignature = true)),
+            // A member the tenant anchors, but no owner: only an owner roots a record.
+            "the signer is no owner" to view(o, joinedMember(other, owner), joinedMember(joiner, other)),
+            "the signer is not listed" to view(joinedMember(joiner, owner)),
+            "the signer is pending" to view(member(owner, ScopeMember.Role.OWNER, pendingConsent = true), joinedMember(joiner, owner)),
+            "the member signed their own record" to view(o, joinedMember(joiner, joiner).copy(role = ScopeMember.Role.OWNER)),
+        )
+        for ((why, v) in cases) {
+            assertEquals(Standing.Unanchored, v.standing(joiner.userId), why)
+            assertEquals(GrantOutcome.Reason.GRANTER_KEY_UNANCHORED, reason(opener().open(grant(p.randomBytes(32), joiner, ScopeKind.GROUP), v)), why)
+        }
+    }
+
+    @Test
+    fun aRecordRootedByAKeyNotOnTheOwnersChainAnchorsNobody() = runTest {
+        val owner = Person().also { server.chains[it.userId] = it.chain() }
+        val joiner = Person().also { server.chains[it.userId] = it.chain() }
+        // The server lists the owner with a key of its own and roots the record with it; the chain it serves does not hold it.
+        val forged = Person(owner.userId)
+        val v = view(member(owner, ScopeMember.Role.OWNER).copy(identityPublicKey = b64(forged.bundle())), joinedMember(joiner, forged))
+        assertEquals(Standing.Unanchored, v.standing(joiner.userId))
+    }
+
+    @Test
+    fun ownersWhoRootedEachOtherAnchorNobody() = runTest {
+        val a = Person().also { server.chains[it.userId] = it.chain() }
+        val b = Person().also { server.chains[it.userId] = it.chain() }
+        val v = view(joinedMember(a, b).copy(role = ScopeMember.Role.OWNER), joinedMember(b, a).copy(role = ScopeMember.Role.OWNER))
+        assertEquals(Standing.Unanchored, v.standing(a.userId))
+        assertEquals(Standing.Unanchored, v.standing(b.userId))
+    }
+
+    @Test
+    fun aJoinedMembersKeyCountsOnlyOnTheirChainAndFromTheStepTheyJoinedWith() = runTest {
+        val owner = Person().also { server.chains[it.userId] = it.chain() }
+        // Joined with their second key: a grant their first one signed is from before they were in the tenant.
+        val joiner = Person().apply { rotate() }.also { server.chains[it.userId] = it.chain() }
+        val v = view(member(owner, ScopeMember.Role.OWNER), joinedMember(joiner, owner))
+        assertEquals(GrantOutcome.Reason.GRANTER_KEY_UNANCHORED, reason(opener().open(grant(p.randomBytes(32), joiner, ScopeKind.GROUP, at = 0), v)))
+        assertIs<GrantOutcome.Opened>(opener().open(grant(p.randomBytes(32), joiner, ScopeKind.GROUP), v))
+        // The server serves another chain for them, which does not hold the keys their record names (longer than the
+        // pinned one, so it is no rollback: the record's keys are what refuses it).
+        val impostor = Person(joiner.userId).apply { rotate(); rotate() }.also { server.chains[it.userId] = it.chain() }
+        assertEquals(GrantOutcome.Reason.GRANTER_KEY_UNANCHORED, reason(opener().open(grant(p.randomBytes(32), impostor, ScopeKind.GROUP), view(member(owner, ScopeMember.Role.OWNER), joinedMember(joiner, owner)))))
+    }
+
+    @Test
+    fun aRecordTheOwnersRetiredKeySignedCountsOnlyWithTheirCurrentKeysEndorsement() = runTest {
+        val owner = Person().apply { rotate() }.also { server.chains[it.userId] = it.chain() }
+        val joiner = Person().also { server.chains[it.userId] = it.chain() }
+        // Rooted by the owner's first key, which their securing then retired.
+        val signedBefore = { endorsedBy: Int? -> joinedMember(joiner, owner, signerAt = 0, endorsedBy = endorsedBy) }
+        val records = listOf(signedBefore(null), signedBefore(0), signedBefore(1))
+        val o = member(owner, ScopeMember.Role.OWNER)
+        assertEquals(Standing.Unanchored, view(o, records[0]).standing(joiner.userId), "no endorsement")
+        assertEquals(Standing.Unanchored, view(o, records[1]).standing(joiner.userId), "endorsed by the retired key")
+        assertIs<Standing.Joined>(view(o, records[2]).standing(joiner.userId), "endorsed by the current key")
+    }
+
+    @Test
+    fun aPinOffTheJoinedChainIsReplacedUnlessItWasLonger() = runTest {
+        val owner = Person().also { server.chains[it.userId] = it.chain() }
+        val joiner = Person().also { server.chains[it.userId] = it.chain() }
+        val operators = Person(joiner.userId)
+        val store = pins()
+        store.mutate(store.load()) { it[joiner.userId] = Trust.Pin(b64(trust.fingerprintHash(operators.bundle())), operators.chain().head, 0, 1, false) }
+        val v = view(member(owner, ScopeMember.Role.OWNER), joinedMember(joiner, owner))
+        assertIs<GrantOutcome.Opened>(opener().open(grant(p.randomBytes(32), joiner, ScopeKind.GROUP), v))
+        val replaced = pins().load().pins.getValue(joiner.userId)
+        assertTrue(replaced.replaced, "the pin was not marked replaced")
+        assertEquals(joiner.chain().head, replaced.head)
+
+        // A pinned head off the chain at a later step than the chain has: a rollback, not a replacement.
+        store.mutate(pins().load()) { it[joiner.userId] = Trust.Pin(b64(trust.fingerprintHash(operators.bundle())), operators.chain().head, 3, 1, false) }
+        assertEquals(GrantOutcome.Reason.GRANTER_KEY_UNANCHORED, reason(opener().open(grant(p.randomBytes(32), joiner, ScopeKind.GROUP), view(member(owner, ScopeMember.Role.OWNER), joinedMember(joiner, owner)))))
     }
 
     @Test

@@ -1,6 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import me.raddatz.veyq.mobile.api.models.ScopeMember
 import me.raddatz.veyq.mobile.api.models.ScopeSuccession
 import me.raddatz.veyq.mobile.api.models.ScopeSummary
 import me.raddatz.veyq.mobile.crypto.Context
@@ -10,22 +9,6 @@ import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.crypto.XWingKey
 import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.unb64
-
-/**
- * One tenant's standings as its member list serves them (`tenantTrust.ts` § `loadTenantView`, ADR 0111 decisions 12
- * and 15), read once per opening of the tenant. [members] is null when this device could not open the tenant or list its
- * members: every standing is then UNAVAILABLE, and a group's granter is judged by the pin alone, as on the web.
- */
-internal class TenantView(private val members: Map<String, ScopeMember>?) {
-    fun standing(userId: String): Standing {
-        val m = (members ?: return Standing.UNAVAILABLE)[userId] ?: return Standing.UNANCHORED
-        if (m.pendingConsent == true) return Standing.UNANCHORED
-        if (m.sealedJoinRecord == null) return if (m.role == ScopeMember.Role.OWNER) Standing.ROOT else Standing.UNANCHORED
-        // A join record: the web opens it and walks the chain from the step it names (the JOINED standing). Not built
-        // here, so it is refused rather than trusted (see [Standing]).
-        return Standing.UNANCHORED
-    }
-}
 
 /** What opening a grant came to: its key, or why it stays closed. A closed scope waits for a current grant. */
 sealed interface GrantOutcome {
@@ -114,8 +97,10 @@ internal class GrantOpener(
         val granterKey = s.granterIdentityPublicKey ?: return GrantOutcome.Reason.UNSIGNED
         val granterSign = runCatching { suite.deserializeIdentityPublic(unb64(granterKey)).sign }.getOrNull() ?: return GrantOutcome.Reason.BAD_SIGNATURE
         if (!verifies(granterSign, statement, signature)) return GrantOutcome.Reason.BAD_SIGNATURE
-        val standing = if (s.kind.value == "GROUP") (view ?: TenantView(null)).standing(granter) else null
-        val judged = anchoring.anchorChainKey(granter, granterKey, standing)
+        // A GROUP's granter stands in the group's tenant; the TENANT scope's own grant is judged by the pin alone (its
+        // standings are read with the very key it carries).
+        val tenant = if (s.kind.value == "GROUP") view ?: TenantView.unavailable(s.tenantId, suite) else null
+        val judged = anchoring.anchorChainKey(granter, granterKey, tenant)
         if (judged.anchor == Anchor.ANOMALY) return GrantOutcome.Reason.GRANTER_KEY_UNANCHORED
         if (judged.retired && epoch > marks.floor(s.id)) return GrantOutcome.Reason.GRANTER_KEY_RETIRED
         return null

@@ -160,12 +160,13 @@ class VeyqAccount private constructor(
         }
         val (tenantScopes, others) = summaries.partition { it.kind.value == "TENANT" }
         tenantScopes.forEach { openOne(it, null) }
-        val tenantOpened = open.any { it.summary.kind.value == "TENANT" && it.summary.id == tenant.tenantId }
-        val members = if (!tenantOpened) null else {
+        val tenantScope = open.firstOrNull { it.summary.kind.value == "TENANT" && it.summary.id == tenant.tenantId }
+        val members = tenantScope?.let {
             val r = respond { ScopesApi(base, http).listScopeMembers(tenant.tenantId) }
-            if (r.success) r.body().associateBy { it.userId } else null
+            if (r.success) r.body() else null
         }
-        val view = TenantView(members)
+        val view = if (tenantScope == null || members == null) TenantView.unavailable(tenant.tenantId, suite)
+        else TenantView.of(tenant.tenantId, members, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), suite, anchoring)
         others.forEach { openOne(it, view) }
         return TenantSession(this, tenant, base, open, off, closed)
     }
