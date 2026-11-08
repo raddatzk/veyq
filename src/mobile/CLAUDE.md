@@ -29,7 +29,7 @@ A Gradle build of its own, run through its own wrapper.
   by `ExpensesVectorsTest` (`contracts/expenses/v1-vectors.json`, the crypto vectors' `expense-entry`) and
   `LedgerRulesTest`; `BigTest` holds `expenses/Big.kt` to `java.math.BigInteger`. A rule of `expenses/Ledger.kt` or
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
-  (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `PotView.kt`'s people and entries (`PotViewPeopleTest`, `PotViewEntriesTest`) and of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`).
+  (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `PotView.kt`'s people and entries (`PotViewPeopleTest`, `PotViewEntriesTest`) and of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`).
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
@@ -45,6 +45,7 @@ A Gradle build of its own, run through its own wrapper.
   currency and back and adds an own category ("App category renamed", which stays: categories are never removed).
   `VEYQ_LIVE_POT_CREATE=1` creates a Pot ("App pot <time>") with a name and a member, checks its name is taken then, and
   that a Pot the web created collides with the app's of its name (the slug token is the web's), and moves it to the trash.
+  `VEYQ_LIVE_RATES=1` asks the tenant's exchange-rate service (a third party: Frankfurter on a dev instance) for today's table once.
 - `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_SEED_TENANT="verein.localhost|Turnverein" ./gradlew :core:jvmTest --tests
   '*DevSecondTenantTest*'` — dev seeding, not a check: gives the seeded principal a second tenant (the seeder births only
   one), through the app's own suite, so the switcher has two to switch between. Skipped when it already exists.
@@ -76,3 +77,6 @@ A Gradle build of its own, run through its own wrapper.
 - The emulator reaches the developer's machine at 10.0.2.2; the debug build maps every `*.localhost` name there and
   keeps the name in the Host header, since the backend picks the tenant from it. Use the tenant's name
   (`veyq.localhost:8080`), never `10.0.2.2:8080`, as the server.
+- `VeyqAccount.http` puts the account's bearer on EVERY request it sends, whatever the host (the generated clients reach
+  every tenant of the server through it). A request to anyone else — an external service the tenant names, the day's
+  exchange rates — goes through `VeyqAccount.outside` (`fetchOutside`): no bearer, no cookie, no header of the app's own.

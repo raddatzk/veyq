@@ -112,6 +112,9 @@ struct EntryEditor: View {
     let people: [PotView.Person]
     @State var form: FormState
     @State private var tried = false
+    /// What is said under a filled or missing rate.
+    enum RateNote: Equatable { case loading, filled(String), missing(String) }
+    @State private var rateNote: RateNote?
     @Environment(\.dismiss) private var dismiss
 
     private static let currencies: [String] = Array(Set(Locale.commonISOCurrencyCodes.filter { $0.count == 3 && $0 == $0.uppercased() })).sorted()
@@ -188,6 +191,24 @@ struct EntryEditor: View {
             }
         }
         .tint(Role.accent)
+        // Another currency with an empty rate: the day's table fills it (one request a device and day, at most).
+        .task(id: form.currency) {
+            let code = form.currency
+            guard view.ratesOffered, code != view.currency, form.rate.trimmingCharacters(in: .whitespaces).isEmpty else {
+                rateNote = nil
+                return
+            }
+            rateNote = .loading
+            let filled = await model.rateFor(code)
+            guard form.currency == code else { return }
+            if let filled, form.rate.trimmingCharacters(in: .whitespaces).isEmpty {
+                let sep = Locale.current.decimalSeparator ?? "."
+                form.rate = filled.rate.replacingOccurrences(of: ".", with: sep)
+                rateNote = .filled(filled.date)
+            } else {
+                rateNote = filled == nil ? .missing(code) : nil
+            }
+        }
     }
 
     @ViewBuilder private func problem(_ p: String?) -> some View {
@@ -209,7 +230,12 @@ struct EntryEditor: View {
                     .keyboardType(.decimalPad)
                 #endif
                 if let p = shown("rate") { problem(p) } else {
-                    Text("The entry keeps this rate; a later rate never changes it.").font(.caption).foregroundStyle(Role.muted)
+                    switch rateNote {
+                    case .loading: Text("Fetching the day’s rate…").font(.caption).foregroundStyle(Role.muted)
+                    case .filled(let day): Text("Computed from the ECB’s euro reference rates of \(localDay(day)).").font(.caption).foregroundStyle(Role.muted)
+                    case .missing(let code): Text("No rate found for \(code): type it.").font(.caption).foregroundStyle(Role.muted)
+                    case nil: Text("The entry keeps this rate; a later rate never changes it.").font(.caption).foregroundStyle(Role.muted)
+                    }
                 }
             }
         }

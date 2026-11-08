@@ -26,6 +26,7 @@ import me.raddatz.veyq.mobile.api.apis.TenantsApi
 import me.raddatz.veyq.mobile.api.apis.TokenApi
 import me.raddatz.veyq.mobile.api.infrastructure.ApiClient
 import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
+import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.JsonObject
 import me.raddatz.veyq.mobile.api.models.AccountKeyMaterial
@@ -88,6 +89,12 @@ class VeyqAccount private constructor(
     internal val suite: V1,
     internal val primitives: Primitives,
     internal val http: HttpClient,
+    /**
+     * A client for a request to anyone but this server — an external service the tenant names (the day's exchange
+     * rates): no bearer, no cookie, no header of the app's own. [http] puts this account's bearer on every request it
+     * sends, so a request to a third party never goes through it.
+     */
+    internal val outside: HttpClient,
     /** The origin the account signed in at: its scheme and port are every tenant's on this server. */
     val server: String,
     private val tokens: Tokens,
@@ -108,6 +115,16 @@ class VeyqAccount private constructor(
 
     private val trust = Trust(suite)
     private val marks = TrustMarks(device.store, primitives, masterKey)
+
+    /** This device's own store: what an application keeps per device and not per account (the day's exchange rates). */
+    internal val deviceStore: DeviceStore get() = device.store
+
+    /** The body of a plain `GET` of [url] through the [outside] client (no bearer, no cookie), or null for anything but
+     *  a 2xx answer or a failure to reach it. */
+    internal suspend fun fetchOutside(url: String): String? = runCatching {
+        val r = outside.get(url)
+        if (r.status.value in 200..299) r.bodyAsText() else null
+    }.getOrNull()
 
     /** How this device trusts the account, if it does: what the next start unlocks with. */
     var trusted: TrustedDevice? = device.trusted("${Url(server).host}#$userId")
@@ -170,7 +187,10 @@ class VeyqAccount private constructor(
     suspend fun open(tenant: TenantRef): TenantSession {
         val base = originOf(tenant)
         val summaries = call { ScopesApi(base, http).listMyScopes() }.filter { it.deletedAt == null }
-        val on = runCatching { call { TenantsApi(base, http).getTenantCapabilities(tenant.tenantId) }.capabilities.map { it.id }.toSet() }.getOrNull()
+        val capabilities = runCatching { call { TenantsApi(base, http).getTenantCapabilities(tenant.tenantId) }.capabilities }.getOrNull()
+        val on = capabilities?.map { it.id }?.toSet()
+        // The external services' addresses the tenant's set names (ADR 0088 decision 7): none when the set did not read.
+        val services = capabilities.orEmpty().mapNotNull { c -> c.serviceUrl?.let { c.id to it } }.toMap()
         val off = on?.let { KNOWN_APPLICATIONS - it } ?: emptySet()
         val grants = grants(base)
         val open = mutableListOf<TenantSession.OpenScope>()
@@ -193,7 +213,7 @@ class VeyqAccount private constructor(
         others.forEach { openOne(it, view) }
         val people = if (tenantScope == null || members == null) emptyMap()
         else People.of(JoinRecords(suite), tenant.tenantId, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), members)
-        return TenantSession(this, tenant, base, open, off, closed, people)
+        return TenantSession(this, tenant, base, open, off, closed, people, services)
     }
 
     /** A grant of a scope key to this account itself, as a scope's birth posts it (ADR 0028 decision 6), all base64. */
@@ -219,6 +239,7 @@ class VeyqAccount private constructor(
         runCatching { call { SessionApi(server, http).logout() } }
         masterKey.fill(0)
         http.close()
+        outside.close()
     }
 
     /** What enrolling this device came to: password-trusted, remembered, or not offered by this server (switched off). */
@@ -362,7 +383,7 @@ class VeyqAccount private constructor(
         private val DEVICE_KEY_AAD = utf8("veyq/v1/device-key-wrap")
 
         /** An HTTP client with the bearer of [tokens], and the server checked for its major and suite. */
-        private class Connected(val suite: V1, val base: String, val tokens: Tokens, val http: HttpClient)
+        private class Connected(val suite: V1, val base: String, val tokens: Tokens, val http: HttpClient, val outside: HttpClient)
 
         private suspend fun connect(
             primitives: Primitives,
@@ -379,7 +400,7 @@ class VeyqAccount private constructor(
                 install(ContentNegotiation) { json(json) }
                 install(bearer)
             }
-            val c = Connected(V1(primitives), server.trimEnd('/'), tokens, http)
+            val c = Connected(V1(primitives), server.trimEnd('/'), tokens, http, client { expectSuccess = false })
             try {
                 val setup = try {
                     SetupApi(c.base, http).getSetupStatus()
@@ -393,6 +414,7 @@ class VeyqAccount private constructor(
                 return c
             } catch (e: Throwable) {
                 http.close()
+                c.outside.close()
                 throw e
             }
         }
@@ -441,7 +463,7 @@ class VeyqAccount private constructor(
             }.map { TenantRef(it.tenantId, it.name, it.domain) }
             if (tenants.isEmpty()) throw SignInFailure(SignInFailure.Reason.NO_TENANT)
             val account = VeyqAccount(
-                suite, primitives, c.http, c.base, c.tokens, material.userId, email.trim(), masterKey, identity, kem,
+                suite, primitives, c.http, c.outside, c.base, c.tokens, material.userId, email.trim(), masterKey, identity, kem,
                 mine.serialize(), mine.sign, tenants, device,
             )
             account.trusted?.let { device.touch(it.key) }
@@ -454,6 +476,7 @@ class VeyqAccount private constructor(
             f()
         } catch (e: Throwable) {
             c.http.close()
+            c.outside.close()
             throw if (e is SignInFailure) e else SignInFailure(SignInFailure.Reason.PROTOCOL, e.message)
         }
 
@@ -596,7 +619,13 @@ class TenantSession internal constructor(
     /** The tenant's members by user id, named by the display rule, as read when the tenant was opened; empty when this
      *  account holds no tenant grant or the list did not read. A user it does not list is a former member. */
     val people: Map<String, Person> = emptyMap(),
+    /** The tenant's external services by capability id, each its configured address (`serviceUrl`): only while the
+     *  tenant's set has the capability on; empty when the set did not read, so nothing is fetched then. */
+    private val services: Map<String, String> = emptyMap(),
 ) : Library {
+    /** The address the tenant configured for external service [capabilityId], or null: off, or not read. */
+    fun serviceUrl(capabilityId: String): String? = services[capabilityId]
+
     internal class OpenScope(val summary: ScopeSummary, val key: ByteArray, val name: String)
 
     private fun <T : ApiClient> api(make: (String, HttpClient) -> T): T = make(base, account.http)

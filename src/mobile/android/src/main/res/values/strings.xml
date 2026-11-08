@@ -227,4 +227,7 @@
     <string name="entry_not_restorable">Its receipts are erased, so it can no longer be restored.</string>
     <string name="balances_record">Record</string>
     <string name="balances_record_all">Record all</string>
+    <string name="ed_rate_loading">Fetching the day’s rate…</string>
+    <string name="ed_rate_filled">Computed from the ECB’s euro reference rates of %1$s.</string>
+    <string name="ed_rate_missing">No rate found for %1$s: type it.</string>
 </resources>

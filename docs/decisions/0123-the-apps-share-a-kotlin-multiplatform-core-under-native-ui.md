@@ -115,7 +115,10 @@ implementation exists but what holds it to the first.
 
 - **Built of the applications: Expenses' open Pot** — its entries, overview and settings as the web's Pot shows them,
   its entries added and edited in the web's editor (an expense, a refund or a transfer; payers, items with their own
-  splits and the rest's split by shares, percent or amount, another currency at a typed rate, the shares in the base
+  splits and the rest's split by shares, percent or amount, another currency at a rate the day's table fills where the
+  tenant names the service (`expenses/ExchangeRates.kt`, the web's `exchangeRates.ts`: one table a device and day, kept in
+  the device's store, a day whose request failed not asked again, the cross rate exact; `ExchangeRatesTest`) or typed,
+  the shares in the base
   currency as the save seals them; an edit stated on the revision it was shown, so a concurrent one is read, not
   overwritten), whose every rule is core's (`expenses/EntryForm.kt`, the web's `entryForm.ts`: every vector entry
   survives the form unchanged and the Pot written from those forms computes the vectors' balances; `EntryFormTest`, each
@@ -147,7 +150,7 @@ implementation exists but what holds it to the first.
   app drives no re-key, so where the web's member pulls a Pot's path forward (ADR 0111 decision 11) it waits, as the web's
   guest does; and it re-opens no scope rotated after the tenant was read, so a Pot re-keyed past that read is not found
   again and the write is refused until the app reads the tenant anew.
-- **Not built yet:** every other write (another kind's node, receipts), an exchange rate fetched for an entry, the
+- **Not built yet:** every other write (another kind's node, receipts), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
   of signers, end unanchored through the signer's own judgment) — and by `v1.json#key_chain`, `#identity_pin`,

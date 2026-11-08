@@ -225,4 +225,7 @@
     <string name="entry_not_restorable">Seine Belege sind gelöscht, darum kann er nicht mehr wiederhergestellt werden.</string>
     <string name="balances_record">Eintragen</string>
     <string name="balances_record_all">Alle eintragen</string>
+    <string name="ed_rate_loading">Der Kurs des Tages wird geladen …</string>
+    <string name="ed_rate_filled">Berechnet aus den Euro-Referenzkursen der EZB vom %1$s.</string>
+    <string name="ed_rate_missing">Kein Kurs für %1$s gefunden: Trag ihn selbst ein.</string>
 </resources>

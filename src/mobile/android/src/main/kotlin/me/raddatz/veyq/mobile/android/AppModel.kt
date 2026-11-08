@@ -411,6 +411,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _creating.value = CreatingPot()
     }
 
+    /** One unit of [currency] in the open Pot's base from today's table, or null: the rate is typed then. */
+    suspend fun rateFor(currency: String): me.raddatz.veyq.mobile.expenses.ExchangeRates.Filled? =
+        potSession?.let { runCatching { it.rateFor(currency, java.time.LocalDate.now().toString()) }.getOrNull() }
+
     /** Forgets the open Pot's last refusal (a dialog closed). */
     fun clearPotMessage() {
         _pot.value = _pot.value?.copy(message = null)

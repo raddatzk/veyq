@@ -13,12 +13,13 @@ class PotView internal constructor(session: Source) {
         val members: List<me.raddatz.veyq.mobile.session.Person>?, val named: Set<String>, val canWrite: Boolean,
         val canChangeSettings: Boolean = canWrite, val currencyFixed: Boolean = false,
         val held: List<HeldRevision> = emptyList(), val directory: Map<String, String> = emptyMap(),
+        val ratesOffered: Boolean = false,
     )
 
     constructor(session: PotSession) : this(
         Source(
             session.name, session.meta, session.ledger, session.check, session.members, session.named, session.canWrite,
-            session.canChangeSettings, session.currencyFixed, session.heldRevisions(), session.directory,
+            session.canChangeSettings, session.currencyFixed, session.heldRevisions(), session.directory, session.ratesOffered,
         ),
     )
 
@@ -50,6 +51,9 @@ class PotView internal constructor(session: Source) {
 
     /** The base currency is fixed once the Pot holds any money entry, live or deleted. */
     val currencyFixed: Boolean = session.currencyFixed
+
+    /** Whether the tenant names an exchange-rate service: the editor fills another currency's empty rate from it. */
+    val ratesOffered: Boolean = session.ratesOffered
 
     private val ledger = session.ledger
     /** The space's current members by user id; null for no read (a member participant then reads by its sealed name). */

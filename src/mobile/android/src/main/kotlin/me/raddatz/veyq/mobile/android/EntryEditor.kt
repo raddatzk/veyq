@@ -128,7 +128,25 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
             )
             DateField(form.date, at("date")?.problem) { form = form.copy(date = it) }
             if (form.kind != Kind.TRANSFER) CategoryField(view, form.category) { form = form.copy(category = it) }
-            CurrencyField(view, form, at("rate")?.problem) { form = it }
+            // Another currency with an empty rate: the day's table fills it (one request a device and day, at most).
+            var rateNote by remember { mutableStateOf<RateNote?>(null) }
+            androidx.compose.runtime.LaunchedEffect(form.currency) {
+                val code = form.currency
+                if (!view.ratesOffered || code == view.currency || form.rate.isNotBlank()) {
+                    rateNote = null
+                    return@LaunchedEffect
+                }
+                rateNote = RateNote.Loading
+                val filled = model.rateFor(code)
+                if (form.currency != code) return@LaunchedEffect
+                if (filled != null && form.rate.isBlank()) {
+                    form = form.copy(rate = filled.rate.replace('.', sep))
+                    rateNote = RateNote.Filled(filled.date)
+                } else {
+                    rateNote = if (filled == null) RateNote.Missing(code) else null
+                }
+            }
+            CurrencyField(view, form, at("rate")?.problem, rateNote) { form = it }
 
             if (form.kind == Kind.TRANSFER) {
                 OutlinedTextField(
@@ -268,7 +286,7 @@ private fun CategoryField(view: PotView, selected: String, onSelect: (String) ->
 }
 
 @Composable
-private fun CurrencyField(view: PotView, form: EntryForm, problem: String?, onChange: (EntryForm) -> Unit) {
+private fun CurrencyField(view: PotView, form: EntryForm, problem: String?, note: RateNote?, onChange: (EntryForm) -> Unit) {
     val base = view.currency ?: return
     Row(verticalAlignment = Alignment.Top) {
         Dropdown(stringResource(R.string.ed_currency), currencies.map { it to it }, form.currency, Modifier.width(140.dp)) { code ->
@@ -278,7 +296,17 @@ private fun CurrencyField(view: PotView, form: EntryForm, problem: String?, onCh
             OutlinedTextField(
                 form.rate, { onChange(form.copy(rate = it)) }, singleLine = true, modifier = Modifier.weight(1f).padding(start = 8.dp),
                 label = { Text(stringResource(R.string.ed_rate, form.currency, base)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                isError = problem != null, supportingText = { Text(problem?.let { problemText(it) } ?: stringResource(R.string.ed_rate_hint)) },
+                isError = problem != null,
+                supportingText = {
+                    Text(
+                        problem?.let { problemText(it) } ?: when (note) {
+                            RateNote.Loading -> stringResource(R.string.ed_rate_loading)
+                            is RateNote.Filled -> stringResource(R.string.ed_rate_filled, localDay(note.date))
+                            is RateNote.Missing -> stringResource(R.string.ed_rate_missing, note.currency)
+                            null -> stringResource(R.string.ed_rate_hint)
+                        },
+                    )
+                },
             )
         }
     }
@@ -382,3 +410,14 @@ private fun Preview(view: PotView, form: EntryForm, nameOf: Map<String, String>)
         }
     }
 }
+
+/** What the editor says under a filled or missing rate. */
+internal sealed interface RateNote {
+    data object Loading : RateNote
+    data class Filled(val date: String) : RateNote
+    data class Missing(val currency: String) : RateNote
+}
+
+private fun localDay(iso: String): String = runCatching {
+    java.time.LocalDate.parse(iso).format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))
+}.getOrDefault(iso)

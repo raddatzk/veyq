@@ -271,6 +271,23 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         })
     }
 
+    /** Whether the tenant names an exchange-rate service: the editor then fills another currency's empty rate. */
+    val ratesOffered: Boolean get() = tenant.serviceUrl(ExchangeRates.CAPABILITY) != null
+
+    /**
+     * One unit of [currency] in the Pot's base from [day]'s table (`YYYY-MM-DD`, the device's date), and the day of the
+     * rows it is computed from; null when the tenant names no service, the day's one request failed, or the table lacks
+     * either currency — the rate is typed then.
+     */
+    @Throws(Exception::class)
+    suspend fun rateFor(currency: String, day: String): ExchangeRates.Filled? {
+        val base = meta?.base?.currency ?: return null
+        if (currency == base) return null
+        val template = tenant.serviceUrl(ExchangeRates.CAPABILITY) ?: return null
+        val table = ExchangeRates.dayTable(template, day, account.deviceStore) { account.fetchOutside(it) } ?: return null
+        return ExchangeRates.crossRate(table, currency, base)
+    }
+
     /** The tenant's members by user id, for the history's writers (a member's read carries `user:{id}`). */
     internal val directory: Map<String, String> get() = tenant.people.mapValues { it.value.displayName }
 

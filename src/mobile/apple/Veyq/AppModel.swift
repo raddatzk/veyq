@@ -457,6 +457,12 @@ final class AppModel {
 
     func clearCreatingPot() { creatingPot = CreatingPot() }
 
+    /// One unit of `currency` in the open Pot's base from today's table, or nil: the rate is typed then.
+    func rateFor(_ currency: String) async -> ExchangeRates.Filled? {
+        guard let session = potSession else { return nil }
+        return (try? await session.rateFor(currency: currency, day: FormState.dayString(Date()))) ?? nil
+    }
+
     /// Forgets the open Pot's last refusal (a sheet closed).
     func clearPotMessage() { pot?.message = nil }
 

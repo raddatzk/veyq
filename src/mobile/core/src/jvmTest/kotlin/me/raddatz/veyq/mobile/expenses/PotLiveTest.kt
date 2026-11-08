@@ -84,6 +84,17 @@ class PotLiveTest {
                 println("[${ref.name}] after the add: balances=${after.balances.mapValues { it.value.toString() }}")
             }
         }
+        if (System.getenv("VEYQ_LIVE_RATES") == "1") {
+            // The tenant's exchange-rate service, asked once for today's table (a request to that third party).
+            val pot = PotSession.open(tenant, pots.first().scopeId, pots.first().nodeId)!!
+            println("[rates] offered=${pot.ratesOffered} url=${tenant.serviceUrl(ExchangeRates.CAPABILITY)}")
+            if (pot.ratesOffered) {
+                val other = if (pot.meta?.base?.currency == "USD") "EUR" else "USD"
+                val filled = pot.rateFor(other, java.time.LocalDate.now().toString())
+                println("[rates] 1 $other in ${pot.meta?.base?.currency} = $filled")
+                assertTrue(filled != null && Money.RATE.matches(filled.rate), "no rate for $other")
+            }
+        }
         if (System.getenv("VEYQ_LIVE_POT_CREATE") == "1") {
             // A Pot created at the root of the first Pot's space, with a name and a member; the same name again is taken;
             // then it goes to the space's trash.
