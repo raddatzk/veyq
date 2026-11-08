@@ -84,6 +84,33 @@ class PotLiveTest {
                 println("[${ref.name}] after the add: balances=${after.balances.mapValues { it.value.toString() }}")
             }
         }
+        System.getenv("VEYQ_LIVE_RECEIPT")?.let { potName ->
+            // An entry saved with a receipt (uploaded to the store before the revision), read back to the byte, then dropped.
+            val ref = pots.first { it.name == potName }
+            val pot = PotSession.open(tenant, ref.scopeId, ref.nodeId)!!
+            val people = pot.ledger!!.participants.filter { it.active && !it.erased }
+            val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) + ByteArray(300_000) { (it % 7).toByte() }
+            val receiptId = pot.newId()
+            val form = PotView(pot).blankForm(java.time.LocalDate.now().toString())!!.copy(title = "Receipt check", payers = listOf(EntryForm.Payer(people.first().id, "1")))
+            val entryId = pot.newId()
+            assertEquals(
+                PotSession.WriteOutcome.WRITTEN,
+                pot.saveEntry(entryId, form, null, listOf(PotSession.PendingReceipt(receiptId, png, "image/png", "scan.png", 1_700_000_000_000))),
+            )
+            val held = pot.receipts.single { it.receiptId == receiptId }
+            assertEquals(entryId, held.entryId)
+            assertEquals("scan.png" to "image/png", held.name to held.type)
+            assertEquals(png.size.toLong(), held.size)
+            val back = pot.openReceipt(receiptId)!!
+            assertTrue(back.contentEquals(png), "the receipt's bytes came back changed")
+            assertEquals(Receipts.Kind.IMAGE, Receipts.kindOf(back))
+            assertEquals(listOf(receiptId), (pot.ledger!!.entries.single { it.id == entryId }.content as Expense).receipts)
+            // Saved without it: the revision drops it, and it is never held again.
+            val edited = PotView(pot).editing(entryId)!!
+            assertEquals(PotSession.WriteOutcome.WRITTEN, pot.saveEntry(entryId, edited.form.copy(receipts = emptyList()), edited.basedOn))
+            assertTrue(pot.receipts.single { it.receiptId == receiptId }.dropped)
+            println("[$potName] a receipt of ${png.size} bytes (${held.listed.chunkCount} frames) uploaded, read back and dropped")
+        }
         if (System.getenv("VEYQ_LIVE_RATES") == "1") {
             // The tenant's exchange-rate service, asked once for today's table (a request to that third party).
             val pot = PotSession.open(tenant, pots.first().scopeId, pots.first().nodeId)!!

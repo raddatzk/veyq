@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.raddatz.veyq.mobile.api.apis.ContentApi
+import me.raddatz.veyq.mobile.blob.ApplicationBlobs
 import me.raddatz.veyq.mobile.api.expenses.apis.ExpensesApi
 import me.raddatz.veyq.mobile.api.models.UpdateNodeRequest
 import me.raddatz.veyq.mobile.api.expenses.models.PotAppendRequest
@@ -229,17 +230,80 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         return true
     }
 
+    /** A receipt picked in the editor, uploaded only when the entry is saved (`EntryEditor.vue`): [id] minted at pick. */
+    class PendingReceipt(val id: String, internal val bytes: ByteArray, val type: String, val name: String?, val modifiedAt: Long?) {
+        val size: Long get() = bytes.size.toLong()
+    }
+
+    /** The names of the receipts the last save left out because the space's storage is full; the entry was saved. */
+    var skippedReceipts: List<String> = emptyList()
+        private set
+
     /**
-     * Saves the editor's [form]: a new entry (revision 1 of a fresh record) when [entryId] is null, else the next revision
-     * of [entryId] on [basedOn], the revision the editor showed — so a revision another device wrote meanwhile is a
-     * `409`, answered [WriteOutcome.STALE] and read again, never overwritten unseen. A form that forms no entry is
-     * [WriteOutcome.INVALID] and sends nothing.
+     * Saves the editor's [form] as entry [entryId]: revision 1 of a fresh record when [basedOn] is null, else the next
+     * revision on [basedOn], the revision the editor showed — so a revision another device wrote meanwhile is a `409`,
+     * answered [WriteOutcome.STALE] and read again, never overwritten unseen. [pending] receipts are uploaded first (one
+     * the storage has no room for is left out, [skippedReceipts]; any other failure stops the save); the revision lists
+     * the form's receipts and those uploaded, and names the ones it drops ([Receipts.toDrop]). A form that forms no entry
+     * is [WriteOutcome.INVALID] and sends nothing.
      */
     @Throws(Exception::class)
-    suspend fun saveEntry(entryId: String?, form: EntryForm, basedOn: Long?): WriteOutcome {
+    suspend fun saveEntry(entryId: String?, form: EntryForm, basedOn: Long?, pending: List<PendingReceipt> = emptyList()): WriteOutcome {
+        skippedReceipts = emptyList()
         val known = ledger?.participants?.map { it.id }?.toSet() ?: return WriteOutcome.INVALID
-        val content = form.contentOf { it in known }.content ?: return WriteOutcome.INVALID
-        return write(listOf(PotWrite(entryId ?: newId(), content, basedOn = basedOn.takeIf { entryId != null })))
+        if (form.contentOf { it in known }.content == null) return WriteOutcome.INVALID
+        if (pending.any { it.bytes.size > Receipts.MAX_BYTES }) return WriteOutcome.INVALID
+        if (form.receipts.size + pending.size > Receipts.MAX_PER_ENTRY) return WriteOutcome.INVALID
+        val id = entryId ?: newId()
+        val uploaded = ArrayList<String>()
+        val skipped = ArrayList<String>()
+        for (r in pending) {
+            try {
+                blobs.upload(
+                    node.scopeId, { node }, ::reopen, { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
+                    r.id, id, Receipts.ROLE, r.bytes, r.type, r.name, r.modifiedAt,
+                )
+                uploaded += r.id
+            } catch (e: ApplicationBlobs.UploadRefused) {
+                if (e.code == "quota_exceeded") skipped += r.name ?: Receipts.downloadName(null, r.type) else return WriteOutcome.REFUSED
+            }
+        }
+        skippedReceipts = skipped
+        val kept = form.receipts + uploaded
+        val content = form.copy(receipts = kept).contentOf { it in known }.content ?: return WriteOutcome.INVALID
+        if (uploaded.isNotEmpty()) readReceipts()
+        val shown = basedOn?.let { b -> held.values.firstOrNull { it.entryId == id && it.revision == b } }
+        val on = shown?.let { s -> ((s.body?.content as? MoneyContent)?.receipts.orEmpty()) to s.createdAt }
+        val dropped = Receipts.toDrop(receipts, id, kept, on, uploaded.toSet())
+        return write(listOf(PotWrite(id, content, basedOn = basedOn, droppedReceipts = dropped))).also { if (it == WriteOutcome.WRITTEN) readReceipts() }
+    }
+
+    private val blobs = ApplicationBlobs(tenant)
+    private var receiptsTag: String? = null
+
+    /** Every receipt the Pot holds, each with its sealed name and type where they opened, dropped ones included. */
+    var receipts: List<Receipts.Receipt> = emptyList()
+        private set
+
+    /** Reads the Pot's receipts again, conditional on the listing's tag. True when anything moved. */
+    @Throws(Exception::class)
+    suspend fun readReceipts(): Boolean {
+        val listing = runCatching { blobs.list(node.scopeId, node.id, receiptsTag) }.getOrElse { return false } ?: return false
+        receiptsTag = listing.etag
+        val n = node
+        receipts = listing.blobs.filter { it.role == Receipts.ROLE }.map { b ->
+            val meta = blobs.metaOf(n.scopeId, n, b)
+            Receipts.Receipt(b.id, b.ownerId, b, meta?.name, meta?.type, b.size, b.createdAt, b.dropped, b.blocked)
+        }
+        return true
+    }
+
+    /** A receipt's bytes, opened under the Pot's key; a blocked receipt opens nothing. */
+    @Throws(Exception::class)
+    suspend fun openReceipt(receiptId: String): ByteArray? {
+        val r = receipts.firstOrNull { it.receiptId == receiptId } ?: return null
+        if (r.blocked) return null
+        return runCatching { blobs.download(node.scopeId, node, r.listed) }.getOrNull()
     }
 
     /** Deletes entry [entryId] on [basedOn], the revision shown: a tombstone revision; it counts nowhere and stays in the
@@ -463,6 +527,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
             return PotSession(tenant, node).also {
                 it.refresh()
                 it.readMembers()
+                it.readReceipts()
             }
         }
 

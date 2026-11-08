@@ -74,6 +74,23 @@ class V1(val p: Primitives) {
         return guard(context) { p.aesGcmOpen(key, blob.copyOfRange(1, 13), blob.copyOfRange(13, blob.size), aad(SYM.toInt(), c)) }
     }
 
+    // ---- a blob's bytes: chunked AEAD frames (ADR 0013 §3) ----
+
+    /**
+     * One frame of a blob's chunk sequence: nonce(12) ‖ AES-256-GCM(K_blob, nonce, chunk, aad = u32be(index) ‖ u32be(total)).
+     * No type byte, purpose or suite marker: the key is the blob's own, and `total` in every frame binds where it ends.
+     */
+    fun sealFrame(blobKey: ByteArray, index: Int, total: Int, plaintext: ByteArray, nonce: ByteArray = p.randomBytes(FRAME_NONCE)): ByteArray =
+        concat(nonce, p.aesGcmSeal(blobKey, nonce, plaintext, concat(u32be(index), u32be(total))))
+
+    fun openFrame(blobKey: ByteArray, index: Int, total: Int, frame: ByteArray): ByteArray {
+        return try {
+            p.aesGcmOpen(blobKey, frame.copyOfRange(0, FRAME_NONCE), frame.copyOfRange(FRAME_NONCE, frame.size), concat(u32be(index), u32be(total)))
+        } catch (e: Exception) {
+            throw OpenRefused("chunk-frame")
+        }
+    }
+
     /** §5a asymmetric wrap: 0x01 ‖ ct(1120) ‖ nonce(12) ‖ aead. */
     fun sealTo(context: Context, publicKey: ByteArray, plaintext: ByteArray, eseed: ByteArray? = null, nonce: ByteArray = p.randomBytes(12)): ByteArray {
         val c = encodeContext(Purposes.SEAL_TO, context)
@@ -192,6 +209,16 @@ class V1(val p: Primitives) {
         private const val SYM: Byte = 0x02
         private const val ASYM: Byte = 0x01
         private const val FIELD: Byte = 0x03
+
+        /** `v1.json#chunk_frame_size`: every frame but the last carries exactly [FRAME_PLAINTEXT] bytes; an empty blob is
+         *  one frame carrying none. */
+        const val FRAME_PLAINTEXT = 262_144
+        const val FRAME_NONCE = 12
+        const val FRAME_TAG = 16
+        const val FRAME_OVERHEAD = FRAME_NONCE + FRAME_TAG
+
+        /** How many frames [size] plaintext bytes seal to (at least one). */
+        fun chunkCount(size: Long): Int = maxOf(1L, (size + FRAME_PLAINTEXT - 1) / FRAME_PLAINTEXT).toInt()
 
         /** X-Wing's label, `\.//^\`. */
         private val XWING_LABEL = byteArrayOf(0x5c, 0x2e, 0x2f, 0x2f, 0x5e, 0x5c)

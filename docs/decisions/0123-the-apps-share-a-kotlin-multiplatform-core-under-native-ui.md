@@ -149,8 +149,17 @@ implementation exists but what holds it to the first.
   altered (`expenses/LedgerCheck.kt`, the web's `checkLedger`, its notice above the Pot; a live Pot checks complete). This
   app drives no re-key, so where the web's member pulls a Pot's path forward (ADR 0111 decision 11) it waits, as the web's
   guest does; and it re-opens no scope rotated after the tenant was read, so a Pot re-keyed past that read is not found
-  again and the write is refused until the app reads the tenant anew.
-- **Not built yet:** every other write (another kind's node, receipts), the
+  again and the write is refused until the app reads the tenant anew. An entry's receipts are added, opened and taken off
+  as the web's editor does (`expenses/Receipts.kt`, the web's `receipts.ts`: images and PDFs up to 10 MiB, 100 an entry,
+  a receipt the save no longer names dropped; `ReceiptsTest`), each one an application blob of the Pot through core's
+  `blob/` package (the web's `applicationBlobs.ts`, ADR 0112): its key wrapped under the Pot's, its bytes sealed in
+  frames (`v1.json#chunk_frame`, `#chunk_frame_size`, `#file_blob` on both primitives), its name and type in a padded
+  `blob-meta` seal, uploaded before the entry that names it is written — a full space's quota skips the receipt and
+  saves the entry. What a receipt is, its bytes decide when it is opened (`blob/Sniff.kt`), never the type it was
+  stored under; a PDF is only drawn (Android's `PdfRenderer`, which reads a file, through one in the app's cache deleted
+  after the drawing; PDFKit from memory). The object store's presigned URLs are another host: they are sent through
+  `VeyqAccount.outside`, never with the account's bearer. The web opens a receipt the app uploaded (measured 2026-11-08).
+- **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
   of signers, end unanchored through the signer's own judgment) — and by `v1.json#key_chain`, `#identity_pin`,

@@ -100,6 +100,8 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
         mutableStateOf(editing?.second?.form ?: view.blankForm(java.time.LocalDate.now().toString(), sep)!!)
     }
     var tried by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf(emptyList<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>()) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val refusal = view.check(form)
     val shown = refusal.takeIf { tried }
     fun at(field: String, item: Int? = null) = shown?.takeIf { it.at == field && it.item == item }
@@ -194,6 +196,8 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
                 }
                 Preview(view, form, nameOf)
             }
+            HorizontalDivider()
+            EntryReceipts(view, model, form, pending, onForm = { form = it }, onPending = { pending = it })
             shown?.takeIf { it.at == null }?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
             state.message?.let { Text(entryRefusal(it), color = MaterialTheme.colorScheme.error) }
             if (editing != null) {
@@ -211,7 +215,16 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
                 Button(
                     onClick = {
                         tried = true
-                        if (refusal == null) model.potWrite({ it.saveEntry(editing?.first, form, editing?.second?.basedOn) }) { onClose() }
+                        if (refusal == null) {
+                            val picked = pending
+                            model.potWrite({ it.saveEntry(editing?.first, form, editing?.second?.basedOn, picked) }) {
+                                // A receipt the space's storage had no room for was left out; the entry is saved.
+                                model.skippedReceipts().takeIf { it.isNotEmpty() }?.let { names ->
+                                    android.widget.Toast.makeText(context, context.getString(R.string.receipts_no_room, names.joinToString()), android.widget.Toast.LENGTH_LONG).show()
+                                }
+                                onClose()
+                            }
+                        }
                     },
                     enabled = !state.saving,
                 ) { Text(stringResource(R.string.entry_save)) }

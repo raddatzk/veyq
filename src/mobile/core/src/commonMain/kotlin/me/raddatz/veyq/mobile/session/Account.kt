@@ -27,6 +27,13 @@ import me.raddatz.veyq.mobile.api.apis.TokenApi
 import me.raddatz.veyq.mobile.api.infrastructure.ApiClient
 import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
 import io.ktor.client.request.get
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.statement.readRawBytes
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import io.ktor.utils.io.discard
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.JsonObject
 import me.raddatz.veyq.mobile.api.models.AccountKeyMaterial
@@ -118,6 +125,25 @@ class VeyqAccount private constructor(
 
     /** This device's own store: what an application keeps per device and not per account (the day's exchange rates). */
     internal val deviceStore: DeviceStore get() = device.store
+
+    /** A presigned `PUT` of [bytes] to the object store through the [outside] client: exactly `Content-Type:
+     *  application/octet-stream` (it is part of the signature) and no bearer; the status, or 0 when the store was not
+     *  reached. The answer's body is read to its end. */
+    internal suspend fun putToStore(url: String, bytes: ByteArray): Int = runCatching {
+        val r = outside.put(url) {
+            contentType(ContentType.Application.OctetStream)
+            setBody(bytes)
+        }
+        r.bodyAsChannel().discard()
+        r.status.value
+    }.getOrDefault(0)
+
+    /** A presigned `GET` from the object store through the [outside] client: the status and, on a 2xx, the bytes; status
+     *  0 when the store was not reached. */
+    internal suspend fun getFromStore(url: String): Pair<Int, ByteArray?> = runCatching {
+        val r = outside.get(url)
+        r.status.value to (if (r.status.value in 200..299) r.readRawBytes() else null)
+    }.getOrDefault(0 to null)
 
     /** The body of a plain `GET` of [url] through the [outside] client (no bearer, no cookie), or null for anything but
      *  a 2xx answer or a failure to reach it. */

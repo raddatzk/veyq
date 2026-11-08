@@ -463,6 +463,15 @@ final class AppModel {
         return (try? await session.rateFor(currency: currency, day: FormState.dayString(Date()))) ?? nil
     }
 
+    /// A receipt of the open Pot opened to its bytes, or nil (blocked, or it did not read).
+    func openReceipt(_ receiptId: String) async -> Data? {
+        guard let session = potSession else { return nil }
+        return (try? await AppleSessions.shared.openReceipt(pot: session, receiptId: receiptId)) ?? nil
+    }
+
+    /// The receipts the last save left out for want of room (the entry was saved).
+    var skippedReceipts: [String] { potSession?.skippedReceipts ?? [] }
+
     /// Forgets the open Pot's last refusal (a sheet closed).
     func clearPotMessage() { pot?.message = nil }
 

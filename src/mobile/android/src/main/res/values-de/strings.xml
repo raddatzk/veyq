@@ -228,4 +228,14 @@
     <string name="ed_rate_loading">Der Kurs des Tages wird geladen …</string>
     <string name="ed_rate_filled">Berechnet aus den Euro-Referenzkursen der EZB vom %1$s.</string>
     <string name="ed_rate_missing">Kein Kurs für %1$s gefunden: Trag ihn selbst ein.</string>
+    <string name="receipts_title">Belege</string>
+    <string name="receipts_none">Keine Belege.</string>
+    <string name="receipts_add">Beleg hinzufügen</string>
+    <string name="receipts_remove">Beleg entfernen</string>
+    <string name="receipts_refused">Nur Bilder und PDFs bis 10 MB, höchstens 100 je Eintrag.</string>
+    <string name="receipts_close">Schließen</string>
+    <string name="receipts_save">Kopie speichern</string>
+    <string name="receipts_unreadable">Dieser Beleg ließ sich nicht öffnen.</string>
+    <string name="receipts_download_only">Diese Datei lässt sich hier nicht anzeigen; speichere eine Kopie, um sie zu öffnen.</string>
+    <string name="receipts_no_room">Ohne %1$s gespeichert: Der Speicher des Bereichs ist voll.</string>
 </resources>

@@ -45,7 +45,44 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         joinRecords()
         valueKeys()
         slugs()
+        blobs()
         return failures.toList()
+    }
+
+    /** `#chunk_frame`, `#chunk_frame_size`, `#file_blob`'s chain, and the blob-meta plaintext the layout writes. */
+    private fun blobs() {
+        val f = v.obj("chunk_frame")
+        check("chunk_frame") {
+            eqHex(suite.sealFrame(f.hex("contentKey"), f.int("index"), f.int("total"), f.hex("plaintext"), f.hex("nonce")), f.str("frame"))
+            eqHex(suite.openFrame(f.hex("contentKey"), f.int("index"), f.int("total"), f.hex("frame")), f.str("plaintext"))
+        }
+        check("chunk_frame bound to its place") {
+            val refused = runCatching { suite.openFrame(f.hex("contentKey"), f.int("index") + 1, f.int("total"), f.hex("frame")) }.isFailure &&
+                runCatching { suite.openFrame(f.hex("contentKey"), f.int("index"), f.int("total") + 1, f.hex("frame")) }.isFailure
+            if (!refused) fail("a frame opened at another index or total")
+        }
+        val size = v.obj("chunk_frame_size")
+        check("chunk_frame_size") {
+            eq(V1.FRAME_PLAINTEXT, size.int("plaintextBytes"))
+            eq(V1.FRAME_NONCE, size.int("nonceBytes"))
+            eq(V1.FRAME_TAG, size.int("tagBytes"))
+            eq(listOf(1, 1, 1, 2), listOf(0L, 1L, 262_144L, 262_145L).map { V1.chunkCount(it) })
+        }
+        val fb = v.obj("file_blob")
+        check("file_blob") {
+            val node = fb.obj("node")
+            val nodeCtx = context("content-key", Purposes.SEAL, node.obj("context"))
+            eqHex(suite.seal(nodeCtx, fb.hex("parentContentKey"), node.hex("plaintext"), node.hex("nonce")), node.str("blob"))
+            val key = fb.obj("blobKey")
+            val keyCtx = context("blob-key", Purposes.SEAL, key.obj("context"))
+            eqHex(encodeContext(Purposes.SEAL, keyCtx), key.str("context_bytes"))
+            eqHex(suite.seal(keyCtx, node.hex("plaintext"), key.hex("plaintext"), key.hex("nonce")), key.str("blob"))
+        }
+        val meta = v.obj("seal").obj("sym").obj("blob-meta")
+        check("blob-meta plaintext is the layout's") {
+            val opened = BlobMeta.decode(meta.hex("plaintext")) ?: fail("no meta")
+            eqHex(BlobMeta.encode(opened.type, opened.name, opened.modifiedAt), meta.str("plaintext"))
+        }
     }
 
     /** `#slug_token` (its own NFC step: the slug is stored decomposed) and `#name_folding` (both foldings). */

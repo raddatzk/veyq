@@ -159,4 +159,16 @@ object AppleSessions {
     @Throws(Exception::class)
     suspend fun openPot(tenant: TenantSession, scopeId: String, nodeId: String): me.raddatz.veyq.mobile.expenses.PotSession? =
         me.raddatz.veyq.mobile.expenses.PotSession.open(tenant, scopeId, nodeId)
+
+    /** A receipt of [pot] opened to its bytes, as Foundation data; null when blocked or unreadable. */
+    @Throws(Exception::class)
+    suspend fun openReceipt(pot: me.raddatz.veyq.mobile.expenses.PotSession, receiptId: String): NSData? =
+        pot.openReceipt(receiptId)?.toNSData()
+
+    /** A file picked as a receipt, to be uploaded when its entry is saved; [id] a fresh UUID. */
+    fun pendingReceipt(id: String, data: NSData, type: String, name: String?, modifiedAt: Long?): me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt =
+        me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt(id, data.toByteArray(), type, name, modifiedAt)
+
+    /** What the bytes of an opened receipt are (an image, a PDF, a download only). */
+    fun receiptKind(data: NSData): me.raddatz.veyq.mobile.expenses.Receipts.Kind = me.raddatz.veyq.mobile.expenses.Receipts.kindOf(data.toByteArray())
 }

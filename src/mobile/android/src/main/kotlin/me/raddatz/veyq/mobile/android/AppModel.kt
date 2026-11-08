@@ -415,6 +415,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     suspend fun rateFor(currency: String): me.raddatz.veyq.mobile.expenses.ExchangeRates.Filled? =
         potSession?.let { runCatching { it.rateFor(currency, java.time.LocalDate.now().toString()) }.getOrNull() }
 
+    /** A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read). */
+    suspend fun openReceipt(receiptId: String): ByteArray? = potSession?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }
+
+    /** The receipts the last save left out for want of room (the entry was saved). */
+    fun skippedReceipts(): List<String> = potSession?.skippedReceipts.orEmpty()
+
     /** Forgets the open Pot's last refusal (a dialog closed). */
     fun clearPotMessage() {
         _pot.value = _pot.value?.copy(message = null)

@@ -13,13 +13,14 @@ class PotView internal constructor(session: Source) {
         val members: List<me.raddatz.veyq.mobile.session.Person>?, val named: Set<String>, val canWrite: Boolean,
         val canChangeSettings: Boolean = canWrite, val currencyFixed: Boolean = false,
         val held: List<HeldRevision> = emptyList(), val directory: Map<String, String> = emptyMap(),
-        val ratesOffered: Boolean = false,
+        val ratesOffered: Boolean = false, val receipts: List<Receipts.Receipt> = emptyList(),
     )
 
     constructor(session: PotSession) : this(
         Source(
             session.name, session.meta, session.ledger, session.check, session.members, session.named, session.canWrite,
             session.canChangeSettings, session.currencyFixed, session.heldRevisions(), session.directory, session.ratesOffered,
+            session.receipts,
         ),
     )
 
@@ -51,6 +52,15 @@ class PotView internal constructor(session: Source) {
 
     /** The base currency is fixed once the Pot holds any money entry, live or deleted. */
     val currencyFixed: Boolean = session.currencyFixed
+
+    private val receiptsById = session.receipts.associateBy { it.receiptId }
+
+    /** A receipt the Pot holds, by id (its sealed name and type where they opened); null for one not (yet) listed. */
+    fun receipt(receiptId: String): Receipts.Receipt? = receiptsById[receiptId]
+
+    /** Whether a receipt of [size] bytes with [type] and [name] may be added to an entry holding [held] already. */
+    fun receiptAllowed(size: Long, type: String?, name: String?, held: Int): Boolean =
+        size <= Receipts.MAX_BYTES && held < Receipts.MAX_PER_ENTRY && Receipts.claims(type, name)
 
     /** Whether the tenant names an exchange-rate service: the editor fills another currency's empty rate from it. */
     val ratesOffered: Boolean = session.ratesOffered

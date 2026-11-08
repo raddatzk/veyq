@@ -230,4 +230,14 @@
     <string name="ed_rate_loading">Fetching the day’s rate…</string>
     <string name="ed_rate_filled">Computed from the ECB’s euro reference rates of %1$s.</string>
     <string name="ed_rate_missing">No rate found for %1$s: type it.</string>
+    <string name="receipts_title">Receipts</string>
+    <string name="receipts_none">No receipts.</string>
+    <string name="receipts_add">Add receipt</string>
+    <string name="receipts_remove">Remove receipt</string>
+    <string name="receipts_refused">Only images and PDFs up to 10 MB, at most 100 per entry.</string>
+    <string name="receipts_close">Close</string>
+    <string name="receipts_save">Save a copy</string>
+    <string name="receipts_unreadable">This receipt could not be opened.</string>
+    <string name="receipts_download_only">This file cannot be shown here; save a copy to open it.</string>
+    <string name="receipts_no_room">Saved without %1$s: the space’s storage is full.</string>
 </resources>

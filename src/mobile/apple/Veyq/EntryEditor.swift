@@ -115,6 +115,10 @@ struct EntryEditor: View {
     /// What is said under a filled or missing rate.
     enum RateNote: Equatable { case loading, filled(String), missing(String) }
     @State private var rateNote: RateNote?
+    @State private var pending: [PotSession.PendingReceipt] = []
+    /// The receipts a save left out for want of room: the entry was saved, the editor says so before it closes.
+    @State private var noRoom: [String] = []
+    @State private var receiptsUI = ReceiptsUI()
     @Environment(\.dismiss) private var dismiss
 
     private static let currencies: [String] = Array(Set(Locale.commonISOCurrencyCodes.filter { $0.count == 3 && $0 == $0.uppercased() })).sorted()
@@ -161,7 +165,9 @@ struct EntryEditor: View {
                     currencyFields
                 }
                 if form.kind == .transfer { transferFields } else { expenseFields }
+                EntryReceipts(view: view, kept: $form.receipts, pending: $pending, ui: $receiptsUI)
                 if let message = model.pot?.message { Section { Text(Self.explain(message)).foregroundStyle(Role.danger) } }
+                if !noRoom.isEmpty { Section { Text("Saved without \(noRoom.joined(separator: ", ")): the space’s storage is full.").foregroundStyle(Role.danger) } }
                 if tried, let r = refusal, r.at == nil { Section { problem(r.problem) } }
                 if let id = entryId, let based = basedOn {
                     Section { EntryHistory(view: view, entryId: id) }
@@ -174,6 +180,7 @@ struct EntryEditor: View {
                 }
             }
             .formStyle(.grouped)
+            .modifier(ReceiptPresenters(model: model, view: view, kept: $form.receipts, pending: $pending, ui: $receiptsUI))
             .navigationTitle(entryId == nil ? "Add entry" : "Edit entry")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { model.clearPotMessage(); dismiss() } }
@@ -184,7 +191,12 @@ struct EntryEditor: View {
                         let f = form.kotlin
                         let id = entryId
                         let based = basedOn.map { KotlinLong(value: $0) }
-                        Task { if await model.potWrite({ try await $0.saveEntry(entryId: id, form: f, basedOn: based) }) { dismiss() } }
+                        let picked = pending
+                        Task {
+                            if await model.potWrite({ try await $0.saveEntry(entryId: id, form: f, basedOn: based, pending: picked) }) {
+                                if model.skippedReceipts.isEmpty { dismiss() } else { noRoom = model.skippedReceipts; pending = [] }
+                            }
+                        }
                     }
                     .disabled(model.pot?.saving == true)
                 }
