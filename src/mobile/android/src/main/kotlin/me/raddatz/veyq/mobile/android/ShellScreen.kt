@@ -100,6 +100,7 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val drawer = rememberDrawerState(if (s.shell.isHome && s.shell.path.isEmpty() && s.shell.space == null) DrawerValue.Open else DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
     val shell = s.shell
     val potState by model.pot.collectAsStateWithLifecycle()
     val rowDetails by model.rowDetails.collectAsStateWithLifecycle()
@@ -126,6 +127,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     ) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
             topBar = {
                 if (!shell.searching) {
                     TopAppBar(
@@ -143,6 +145,12 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                        actions = {
+                            val open = shell.openObject
+                            if (open != null && open.kind == "EXPENSES_POT" && potState?.ref == open && potState?.view != null) {
+                                PotHeaderActions(open, model, snackbar, scope)
+                            }
+                        },
                         navigationIcon = {
                             if (shell.canGoBack) {
                                 IconButton(onClick = model::goBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
@@ -593,3 +601,51 @@ private fun tabLabel(tab: BarTab): String = stringResource(
 
 /** What each object's row says beside its name, by node id (`AppModel.rowDetails`). */
 internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<String, List<String>>> { emptyMap() }
+
+/** An open Pot's core actions (`NodeHeaderActions`): the heart and "Delete Pot", whose trash offers an undo for 6 s. */
+@Composable
+private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: androidx.compose.material3.SnackbarHostState, scope: kotlinx.coroutines.CoroutineScope) {
+    val favoriteFailed = stringResource(R.string.node_favorite_failed)
+    val moved = stringResource(R.string.trash_moved, open.name)
+    val undo = stringResource(R.string.trash_undo)
+    val undoFailed = stringResource(R.string.trash_undo_failed, open.name)
+    val refusals = mapOf(
+        me.raddatz.veyq.mobile.session.NodeTrash.Deleted.GONE to stringResource(R.string.delete_refused_gone),
+        me.raddatz.veyq.mobile.session.NodeTrash.Deleted.SCOPE_DELETING to stringResource(R.string.delete_refused_scope_deleting),
+        me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to stringResource(R.string.delete_refused_failed),
+    )
+    // The heart turns at once (the web's optimistic toggle) and turns back when the write did not land.
+    var pinned by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(model.isFavorite(open)) }
+    NodeHeaderActions(
+        open,
+        pinned = pinned,
+        canDelete = true,
+        deleteTitle = stringResource(R.string.pot_delete),
+        deleteQuestion = stringResource(R.string.pot_delete_confirm, open.name),
+        onPin = {
+            pinned = pinned?.not()
+            scope.launch {
+                if (!model.toggleFavorite(open)) {
+                    pinned = model.isFavorite(open)
+                    snackbar.showSnackbar(favoriteFailed)
+                }
+            }
+        },
+        onDelete = {
+            scope.launch {
+                val (deleted, before) = model.trash(open)
+                if (deleted != me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED) {
+                    snackbar.showSnackbar(refusals.getValue(deleted))
+                    return@launch
+                }
+                // The undo stays offered as long as the web's (`TRASH_UNDO_MS`); it restores the node as it was.
+                val answer = kotlinx.coroutines.withTimeoutOrNull(6_000) {
+                    snackbar.showSnackbar(moved, actionLabel = undo, duration = androidx.compose.material3.SnackbarDuration.Indefinite)
+                }
+                if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed && (before == null || !model.restore(before))) {
+                    snackbar.showSnackbar(undoFailed)
+                }
+            }
+        },
+    )
+}

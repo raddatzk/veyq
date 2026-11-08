@@ -170,6 +170,35 @@ class PotLiveTest {
             assertTrue("expenses" !in account.open(tenant.tenant).applicationsOff())
             println("[$potName] switched off: read only, every entry opens, a write refused; switched back on")
         }
+        System.getenv("VEYQ_LIVE_NODE_ACTIONS")?.let { potName ->
+            // Core's node actions on a Pot: pinned and unpinned (read back by a fresh session each time), and a fresh Pot
+            // moved to the trash, restored under its name and trashed again (it stays there).
+            val ref = pots.first { it.name == potName }
+            // No pin before the set is read: then it is refused.
+            if (tenant.isFavorite(ref.scopeId, ref.nodeId) == null) assertTrue(!tenant.setFavorite(ref.scopeId, ref.nodeId, true))
+            tenant.favorites()
+            val was = tenant.isFavorite(ref.scopeId, ref.nodeId)!!
+            assertTrue(tenant.setFavorite(ref.scopeId, ref.nodeId, !was))
+            val fresh = account.open(tenant.tenant).also { it.favorites() }
+            assertEquals(!was, fresh.isFavorite(ref.scopeId, ref.nodeId))
+            assertTrue(fresh.setFavorite(ref.scopeId, ref.nodeId, was))
+            assertEquals(was, account.open(tenant.tenant).also { it.favorites() }.isFavorite(ref.scopeId, ref.nodeId))
+            val name = "App trash ${System.currentTimeMillis() % 100_000}"
+            val created = PotCreate.create(tenant, ref.scopeId, null, name, Ledger.BaseCurrency("EUR", 2), emptyList())
+            val nodeId = created.nodeId!!
+            tenant.forgetTree()
+            val before = tenant.trees()[ref.scopeId]!!.single { it.id == nodeId }
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, ref.scopeId, nodeId))
+            assertTrue(tenant.objects().none { it.nodeId == nodeId }, "a trashed Pot is still listed")
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Restored.RESTORED, me.raddatz.veyq.mobile.session.NodeTrash.restore(tenant, before, PotCreate.tokenInput(name)))
+            assertEquals(name, tenant.objects().single { it.nodeId == nodeId }.name)
+            // Its name is taken again: its token was derived as a create derives it.
+            assertEquals(PotCreate.Outcome.NAME_TAKEN, PotCreate.create(tenant, ref.scopeId, null, name, Ledger.BaseCurrency("EUR", 2), emptyList()).outcome)
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, ref.scopeId, nodeId))
+            // Deleting what is in the trash already is no error (the contract's 204), nor a second entry there.
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, ref.scopeId, nodeId))
+            println("[$potName] pinned and unpinned; \"$name\" trashed, restored, its name taken, trashed again")
+        }
         if (System.getenv("VEYQ_LIVE_AVATARS") == "1") {
             // The tenant's profile pictures: every member with a revision fetched and opened, the rest the letter; a second
             // sync asks nothing new (each revision settled).

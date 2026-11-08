@@ -337,6 +337,60 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         rebuild(start = true)
     }
 
+    // ---- core's actions on a node ----
+
+    /** Whether [ref] is pinned; null while its space's pin set is not loaded (no heart is offered then). */
+    fun isFavorite(ref: ObjectRef): Boolean? = tenantSession?.isFavorite(ref.scopeId, ref.nodeId)
+
+    /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */
+    suspend fun toggleFavorite(ref: ObjectRef): Boolean {
+        val t = tenantSession ?: return false
+        val now = t.isFavorite(ref.scopeId, ref.nodeId) ?: return false
+        val stored = runCatching { t.setFavorite(ref.scopeId, ref.nodeId, !now) }.getOrDefault(false)
+        refreshLists(t)
+        return stored
+    }
+
+    private suspend fun refreshLists(t: me.raddatz.veyq.mobile.session.TenantSession) {
+        runCatching { raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff()) }
+        readRowDetails(t)
+        rebuild()
+    }
+
+    /**
+     * Moves [ref] with everything under it to the space's trash; a page whose node went leaves for its parent. What came of
+     * it, and the node as it was before (what an undo restores).
+     */
+    suspend fun trash(ref: ObjectRef): Pair<me.raddatz.veyq.mobile.session.NodeTrash.Deleted, me.raddatz.veyq.mobile.session.OpenNode?> {
+        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to null
+        val before = runCatching { t.node(ref.scopeId, ref.nodeId) }.getOrNull()
+        val deleted = runCatching { me.raddatz.veyq.mobile.session.NodeTrash.delete(t, ref.scopeId, ref.nodeId) }.getOrDefault(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED)
+        if (deleted == me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED || deleted == me.raddatz.veyq.mobile.session.NodeTrash.Deleted.GONE) {
+            if ((_screen.value as? Screen.Signed)?.shell?.openObject == ref) goBack()
+            if (_pot.value?.ref == ref) {
+                _pot.value = null
+                potSession = null
+            }
+        }
+        refreshLists(t)
+        return deleted to before
+    }
+
+    /** Brings [node] back from the trash under its name (the undo of [trash]); false when it could not be. */
+    suspend fun restore(node: me.raddatz.veyq.mobile.session.OpenNode): Boolean {
+        val t = tenantSession ?: return false
+        val tokenInput = tokenInputFor(node.kind, node.name) ?: return false
+        val restored = runCatching { me.raddatz.veyq.mobile.session.NodeTrash.restore(t, node, tokenInput) }.getOrNull()
+        refreshLists(t)
+        return restored == me.raddatz.veyq.mobile.session.NodeTrash.Restored.RESTORED
+    }
+
+    /** How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`). */
+    private fun tokenInputFor(kind: String, name: String): String? = when (kind) {
+        PotSession.KIND -> PotCreate.tokenInput(name)
+        else -> null
+    }
+
     // ---- an open Pot (Expenses) ----
 
     /** The tenant the shell shows, opened: where an object's own view reads from. */

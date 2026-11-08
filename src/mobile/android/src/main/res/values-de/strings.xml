@@ -244,4 +244,16 @@
     <string name="receipts_unreadable">Dieser Beleg ließ sich nicht öffnen.</string>
     <string name="receipts_download_only">Diese Datei lässt sich hier nicht anzeigen; speichere eine Kopie, um sie zu öffnen.</string>
     <string name="receipts_no_room">Ohne %1$s gespeichert: Der Speicher des Bereichs ist voll.</string>
+    <string name="node_favorite">Favorit</string>
+    <string name="node_unfavorite">Favorit entfernen</string>
+    <string name="node_favorite_failed">Der Favorit konnte nicht gespeichert werden. Versuche es noch einmal.</string>
+    <string name="node_more">Mehr</string>
+    <string name="pot_delete">Kasse löschen</string>
+    <string name="pot_delete_confirm">„%1$s“ und alle ihre Einträge kommen in den Papierkorb.</string>
+    <string name="trash_moved">„%1$s“ liegt jetzt im Papierkorb.</string>
+    <string name="trash_undo">Rückgängig</string>
+    <string name="trash_undo_failed">„%1$s“ konnte nicht wiederhergestellt werden. Du kannst es aus dem Papierkorb wiederherstellen.</string>
+    <string name="delete_refused_gone">Es ist nicht mehr da.</string>
+    <string name="delete_refused_scope_deleting">Dieser Bereich wird gelöscht.</string>
+    <string name="delete_refused_failed">Das Löschen hat nicht geklappt. Bitte versuche es erneut.</string>
 </resources>

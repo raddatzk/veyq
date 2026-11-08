@@ -179,6 +179,14 @@ implementation exists but what holds it to the first.
   for a revision the directory names and this device has not settled, at most six at once, and opens it on the device —
   its value key under the tenant's key, the one 16 KiB pad, an image by its bytes, else the letter (`MemberAvatarsTest`;
   a picture the web set opens in both apps, measured 2026-11-08).
+- **Built of core's node actions, on an open Pot's header** (the web's `coreNodeActions.ts` and `standardNodeActions`,
+  ADR 0110): the heart — the space's pin set sealed under the Master Key, the whole set stored again on a toggle, refused
+  until the set is read, its ids kept whether they resolve or not (a trashed node's pin survives its restore), the heart
+  turning at once and back when the write did not land — and the delete to the space's trash in its kind's words, with
+  the web's undo for 6 s: a restore under the live parent, the slug token derived anew from the name folded by the
+  node's application (`session/NodeTrash.kt`; both measured live by `PotLiveTest`, the web's trash showing what the app
+  deleted). Rename, move, share, cover, copy, download and report are not built; a rename waits for the sharing client,
+  since the web seals a renamed node's name anew into its open links.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

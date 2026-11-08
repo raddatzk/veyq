@@ -700,18 +700,67 @@ class TenantSession internal constructor(
 
     override suspend fun objects(): List<ObjectRef> = trees().flatMap { (_, nodes) -> nodes.mapNotNull { it.asObject() } }
 
+    /**
+     * Each scope's pin set as read (core's `favorites.ts`, ADR 0068 § 10): the node ids in the member's order, sealed under
+     * the Master Key per scope. Only a scope whose read answered is here: a set that does not open or parse is loaded and
+     * empty, one whose request failed is not loaded, and a pin there is refused. Ids that do not resolve are kept — a
+     * trashed node's pin survives its restore.
+     */
+    private val pinSets = HashMap<String, LinkedHashSet<String>>()
+
     override suspend fun favorites(): List<ObjectRef> {
         val all = objects().associateBy { it.scopeId to it.nodeId }
         return scopes.flatMap { s ->
-            val f = account.call { api(::FavoritesApi).getFavorites(s.summary.id) }
-            val ct = f.ciphertext ?: return@flatMap emptyList()
-            val ids = try {
-                Json.parseToJsonElement(account.suite.open(Context("favorites", "scopeId" to s.summary.id), account.masterKey, unb64(ct)).decodeToString())
-                    .jsonArray.map { it.jsonPrimitive.content }
-            } catch (e: OpenRefused) {
-                emptyList()
-            }
+            val ids = readPins(s.summary.id) ?: return@flatMap emptyList()
             ids.mapNotNull { all[s.summary.id to it] }
         }
+    }
+
+    private suspend fun readPins(scopeId: String): Set<String>? {
+        val f = runCatching { account.call { api(::FavoritesApi).getFavorites(scopeId) } }.getOrElse {
+            if (it is kotlin.coroutines.cancellation.CancellationException) throw it
+            return pinSets[scopeId]
+        }
+        val ids = f.ciphertext?.let { ct ->
+            runCatching {
+                Json.parseToJsonElement(account.suite.open(favoritesContext(scopeId), account.masterKey, unb64(ct)).decodeToString())
+                    .jsonArray.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+            }.getOrDefault(emptyList())
+        }.orEmpty()
+        return LinkedHashSet(ids).also { pinSets[scopeId] = it }
+    }
+
+    private fun favoritesContext(scopeId: String) = Context("favorites", "scopeId" to scopeId)
+
+    /** Node [nodeId] of [scopeId] as the tree holds it now (what an undo of its delete restores); null when not there. */
+    @Throws(Exception::class)
+    suspend fun node(scopeId: String, nodeId: String): OpenNode? = trees()[scopeId]?.firstOrNull { it.id == nodeId }
+
+    /** Whether [nodeId] of [scopeId] is pinned; null while that scope's set is not loaded (no pin is offered then). */
+    fun isFavorite(scopeId: String, nodeId: String): Boolean? = pinSets[scopeId]?.contains(nodeId)
+
+    /**
+     * Pins [nodeId] of [scopeId] ([on]) or takes the pin off: the whole set sealed anew and stored (last writer wins, as the
+     * contract says). Refused while the set is not loaded; a failed write puts the set back as it was. True when stored.
+     */
+    @Throws(Exception::class)
+    suspend fun setFavorite(scopeId: String, nodeId: String, on: Boolean): Boolean {
+        val set = pinSets[scopeId] ?: return false
+        if (set.contains(nodeId) == on) return true
+        val before = LinkedHashSet(set)
+        if (on) set.add(nodeId) else set.remove(nodeId)
+        val json = kotlinx.serialization.json.JsonArray(set.map { kotlinx.serialization.json.JsonPrimitive(it) }).toString()
+        val stored = runCatching {
+            val ciphertext = b64(account.suite.seal(favoritesContext(scopeId), account.masterKey, json.encodeToByteArray()))
+            account.respond { api(::FavoritesApi).putFavorites(scopeId, me.raddatz.veyq.mobile.api.models.PutFavoritesRequest(ciphertext)) }.success
+        }.getOrElse {
+            if (it is kotlin.coroutines.cancellation.CancellationException) throw it
+            false
+        }
+        if (!stored) {
+            set.clear()
+            set.addAll(before)
+        }
+        return stored
     }
 }

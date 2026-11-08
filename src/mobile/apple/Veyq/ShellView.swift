@@ -20,6 +20,8 @@ struct ShellView: View {
             #endif
         }
         .tint(Role.accent)
+        // A delete's notice and its Undo over the whole shell: a page under a tab bar draws no overlay above it.
+        .overlay(alignment: .bottom) { TrashNotice(model: model) }
         .environment(\.rowDetails, model.rowDetails)
         .environment(\.avatars, model.avatars)
         .sheet(isPresented: Binding(get: { model.managing != nil }, set: { if !$0 { model.managing = nil } })) {
@@ -221,6 +223,12 @@ struct Bar: View {
                 Button { model.goBack() } label: { Image(systemName: "chevron.backward") }
             } else if let onMenu {
                 Button(action: onMenu) { Image(systemName: "line.3.horizontal") }
+            }
+        }
+        // An open Pot's core actions: the heart and "Delete Pot" (core's, on every node page; here the one kind built).
+        ToolbarItem(placement: .primaryAction) {
+            if let ref = model.shell.openObject, ref.kind == "EXPENSES_POT", model.pot?.ref == ref, model.pot?.view != nil {
+                PotHeaderActions(model: model, ref: ref).id(ref.nodeId)
             }
         }
     }

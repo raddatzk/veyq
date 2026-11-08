@@ -381,6 +381,75 @@ final class AppModel {
         refreshDrawer()
     }
 
+    // MARK: Core's actions on a node
+
+    /// Whether `ref` is pinned; nil while its space's pin set is not loaded (no heart is offered then).
+    func isFavorite(_ ref: ObjectRef) -> Bool? { tenantSession?.isFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId)?.boolValue }
+
+    /// Pins or unpins `ref`, then the lists are read anew; false when it was not stored (the heart goes back).
+    func toggleFavorite(_ ref: ObjectRef) async -> Bool {
+        guard let t = tenantSession, let now = t.isFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId)?.boolValue else { return false }
+        let stored = (try? await t.setFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId, on: !now))?.boolValue ?? false
+        await refreshLists(t)
+        return stored
+    }
+
+    private func refreshLists(_ t: TenantSession) async {
+        rawNodes = (try? await t.nodes()) ?? rawNodes
+        rawFavorites = (try? await t.favorites()) ?? rawFavorites
+        rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? rowDetails
+        rebuild(start: false)
+    }
+
+    /// What a delete says at the bottom of the shell: moved to the trash, with the node as it was for its Undo; or why not.
+    struct TrashNotice: Identifiable {
+        let id = UUID()
+        let message: String
+        let node: OpenNode?
+    }
+
+    private(set) var trashNotice: TrashNotice?
+
+    /// Moves `ref` with everything under it to the space's trash; a page whose node went leaves for its parent.
+    func trash(_ ref: ObjectRef) async {
+        guard let t = tenantSession else { return }
+        let before = try? await t.node(scopeId: ref.scopeId, nodeId: ref.nodeId)
+        let deleted = (try? await NodeTrash.shared.delete(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId)) ?? .failed
+        if deleted == .trashed || deleted == .gone {
+            if shell.openObject == ref { goBack() }
+            if pot?.ref == ref { pot = nil; potSession = nil }
+        }
+        await refreshLists(t)
+        switch deleted {
+        case .trashed: trashNotice = TrashNotice(message: String(localized: "“\(ref.name)” moved to the trash."), node: before ?? nil)
+        case .gone: trashNotice = TrashNotice(message: String(localized: "It is no longer there."), node: nil)
+        case .scopeDeleting: trashNotice = TrashNotice(message: String(localized: "This space is being deleted."), node: nil)
+        default: trashNotice = TrashNotice(message: String(localized: "Deleting didn’t work. Please try again."), node: nil)
+        }
+    }
+
+    /// The Undo of the last delete: the node back from the trash under its name, as it was.
+    func undoTrash() async {
+        guard let notice = trashNotice, let node = notice.node, let t = tenantSession else { return }
+        trashNotice = nil
+        var restored = false
+        if let tokenInput = tokenInputFor(kind: node.kind, name: node.name) {
+            let r = try? await NodeTrash.shared.restore(tenant: t, node: node, tokenInput: tokenInput, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS)
+            restored = r == .restored
+        }
+        await refreshLists(t)
+        if !restored {
+            trashNotice = TrashNotice(message: String(localized: "“\(node.name)” could not be restored. You can restore it from the trash."), node: nil)
+        }
+    }
+
+    func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
+
+    /// How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`).
+    private func tokenInputFor(kind: String, name: String) -> String? {
+        kind == PotSession.companion.KIND ? PotCreate.shared.tokenInput(name: name) : nil
+    }
+
     // MARK: An open Pot (Expenses)
 
     /// The tenant the shell shows, opened: where an object's own view reads from.

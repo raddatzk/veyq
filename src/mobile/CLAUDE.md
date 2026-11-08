@@ -54,7 +54,9 @@ A Gradle build of its own, run through its own wrapper.
   (its owner's switch), checks the Pot reads read only and a write is refused, and switches it back on — with
   `VEYQ_LIVE_SWITCH_HOLD_S=<s>` it stays off that long first, for a UI pass (re-open each app: a tenant's set is read
   when it opens). `VEYQ_LIVE_AVATARS=1` syncs the tenant's profile pictures and checks a second sync asks nothing; a
-  picture to open is set on the web's Settings > Your profile. Gradle does not count an environment variable as an
+  picture to open is set on the web's Settings > Your profile. `VEYQ_LIVE_NODE_ACTIONS=<pot name>` pins and unpins the
+  Pot (each read back by a fresh session), and creates a Pot ("App trash <n>") that it trashes, restores under its name
+  and trashes again — it stays in the space's trash. Gradle does not count an environment variable as an
   input: a run that changes only these needs `--rerun`, else the test is "up to date" and nothing runs.
 - `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_SEED_TENANT="verein.localhost|Turnverein" ./gradlew :core:jvmTest --tests
   '*DevSecondTenantTest*'` — dev seeding, not a check: gives the seeded principal a second tenant (the seeder births only
@@ -62,6 +64,8 @@ A Gradle build of its own, run through its own wrapper.
 - `./gradlew :android:assembleDebug` — the Android app; on an emulator, `python3 android/devlogin.py` signs it in
   (`--remember` staying signed in, `--unlock` with only the password for the unlock screen of a trusted account; a
   fresh start, since Android hands a running task no new extras). Apple's `devlogin.py <device>` takes the same flags.
+  Neither stops a running app (an install does): one still running keeps the tree it read, so what the web changed
+  meanwhile is not there — `adb shell am force-stop me.raddatz.veyq` first.
 - `xcodebuild -project apple/Veyq.xcodeproj -target Veyq -sdk macosx build CODE_SIGNING_ALLOWED=NO` (or
   `-sdk iphonesimulator`) — the Apple app compiles. On a fresh checkout run `./gradlew :core:assembleVeyqCoreDebugXCFramework`
   once first: Xcode looks for the framework before the project's own pre-build step can make it.
