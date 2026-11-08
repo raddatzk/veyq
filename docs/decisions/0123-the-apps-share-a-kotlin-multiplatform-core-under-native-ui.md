@@ -51,6 +51,11 @@ implementation exists but what holds it to the first.
    another member is refused** until the app anchors other members' keys (the web's key-chain pin): refusing hides a
    space, accepting would trust a key nobody vouched for. Keys and tokens live in memory only; keeping a device
    trusted (a `DEVICE` or `DEVICE_KEY` wrap under a Keystore or Keychain key) is the next decision on this line.
+   **An account is one server's; a tenant is a domain of it** (owner 2026-11-08: one server gives several tenants, and
+   the app connects to several servers). A session is the account's, not a tenant's (ADR 0004), so one sign-in opens
+   every tenant the account holds there (`listMyTenants`), each at its own domain on the sign-in's scheme and port,
+   since the server picks the tenant from the Host; another server is another sign-in, held beside the first. The same
+   user on the same server is one connection however often it signs in. The connections live in memory with the keys.
 
 6. **A dev tenant is reached by its name.** The tenant is picked from the Host ([scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)),
    and a dev tenant is a `*.localhost` name: the Android debug build resolves such a name to the emulator's view of
