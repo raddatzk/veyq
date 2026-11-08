@@ -42,7 +42,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory location e2e (live, operator-blin
 
     // --- a Memory with a date, then a location set on it ---
     const { nodeId, memoryKey } = await createMemory(scopeId, epochsOf(scopeKey), `E2E place ${Date.now()}`)
-    const date = { mode: 'range' as const, from: '2026-05-01', to: '2026-05-09' }
+    // A date far from today on purpose: it is a canary, and the server writes 'now minus a retention' as a date
+    // literal (the six-month contact purge's cutoff was 2026-05-09 on 2026-11-08 and failed the statement-log sweep).
+    const date = { mode: 'range' as const, from: '1987-05-01', to: '1987-05-09' }
     let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaRevision: 0, nodeEpoch: 0 })
 
     const medoid = computeMedoid([TENERIFE_A, TENERIFE_B])!
@@ -78,7 +80,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory location e2e (live, operator-blin
     const plain = new TextDecoder('utf-8', { fatal: false }).decode(fromB64std(fetched.wrappedMeta!))
     expect(plain).not.toContain(name)
     expect(plain).not.toContain('28.') // no latitude fragment
-    expect(plain).not.toContain('2026-05-01') // no date either
+    expect(plain).not.toContain('1987-05-01') // no date either
 
     // --- remove the location: place gone, date intact ---
     const { wrappedMeta: removed } = await setMemoryLocation(scopeId, nodeId, memoryKey, null, { ...meta, nodeEpoch: 0 })

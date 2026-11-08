@@ -46,7 +46,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
 
     // Build up the shared blob one sub-object at a time (each is a real updateNode; each chains the prior blob AND
     // the version it is at, exactly as the UI's read-modify-write does — ADR 0077).
-    const date = { mode: 'range' as const, from: '2026-05-01', to: '2026-05-09' }
+    // A date far from today on purpose: it is a canary, and the server writes 'now minus a retention' as a date
+    // literal (the six-month contact purge's cutoff was 2026-05-09 on 2026-11-08 and failed the statement-log sweep).
+    const date = { mode: 'range' as const, from: '1987-05-01', to: '1987-05-09' }
     // Not plain 'Teneriffa': nine base64-alphabet letters are a canary random ciphertext can contain (inbox #323)
     const location = { name: 'Teneriffa Süd', nameSource: 'manual' as const, derivedMode: 'fixed' as const }
     const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }

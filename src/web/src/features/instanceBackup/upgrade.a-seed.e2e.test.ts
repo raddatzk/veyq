@@ -47,7 +47,9 @@ import { testKind } from '../../test/testApplication'
 const MEMORY_NAME = 'Lofoten Überfahrt Hamnøy'
 const CHAPTER_NAME = 'Etappe Reine Fjord'
 const PLACE = 'Lofoten Süd'
-const DATE = { mode: 'range' as const, from: '2026-03-02', to: '2026-03-11' }
+// A date far from today on purpose: it is a canary, and the server writes 'now minus a retention' as a date
+// literal (the six-month contact purge's cutoff was 2026-05-09 on 2026-11-08 and failed the statement-log sweep).
+const DATE = { mode: 'range' as const, from: '1987-03-02', to: '1987-03-11' }
 const CROP = { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }
 const FOLDER_NAME = 'Unterlagen Umzug Nordstadt'
 const FILE_A = 'Mietvertrag Nordstadt Ü.pdf'
