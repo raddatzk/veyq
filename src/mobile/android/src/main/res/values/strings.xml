@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">veyq</string>
+
+    <string name="drawer_open">Open menu</string>
+    <string name="drawer_new">New</string>
+    <string name="drawer_favorites">Favorites</string>
+    <string name="drawer_recent">Recent</string>
+    <string name="drawer_applications">Applications</string>
+    <string name="drawer_spaces">Spaces</string>
+    <string name="drawer_settings">Settings</string>
+    <string name="drawer_sign_out">Sign out</string>
+    <string name="drawer_nothing_yet">Nothing yet</string>
+
+    <string name="app_memories">Memories</string>
+    <string name="app_depot">Depot</string>
+    <string name="app_expenses">Expenses</string>
+
+    <string name="tab_memories_all">Memories</string>
+    <string name="tab_memories_map">Map</string>
+    <string name="tab_depot_files">Files</string>
+    <string name="tab_expenses_entries">Entries</string>
+    <string name="tab_expenses_overview">Overview</string>
+    <string name="tab_expenses_settings">Settings</string>
+    <string name="tab_search">Search</string>
+
+    <string name="search_hint">Search names</string>
+    <string name="search_close">Close search</string>
+    <string name="back">Back</string>
+    <string name="list_empty">Nothing here yet</string>
+    <string name="not_built">This view is not built in the app yet.</string>
+
+    <string name="signin_title">Sign in</string>
+    <string name="signin_server">Server</string>
+    <string name="signin_email">Email</string>
+    <string name="signin_password">Password</string>
+    <string name="signin_secret_key">Secret Key</string>
+    <string name="signin_submit">Sign in</string>
+    <string name="signin_working">Signing in…</string>
+    <string name="signin_error_unreachable">The server could not be reached.</string>
+    <string name="signin_error_incompatible">This server runs a version this app does not speak.</string>
+    <string name="signin_error_credentials">Email or password is not right.</string>
+    <string name="signin_error_secret_key">The Secret Key is not right.</string>
+    <string name="signin_error_no_tenant">This server has no space at this address.</string>
+    <string name="signin_error_other">Signing in did not work.</string>
+</resources>

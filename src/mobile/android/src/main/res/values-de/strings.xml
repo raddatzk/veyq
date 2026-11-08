@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="drawer_open">Menü öffnen</string>
+    <string name="drawer_new">Neu</string>
+    <string name="drawer_favorites">Favoriten</string>
+    <string name="drawer_recent">Zuletzt</string>
+    <string name="drawer_applications">Anwendungen</string>
+    <string name="drawer_spaces">Spaces</string>
+    <string name="drawer_settings">Einstellungen</string>
+    <string name="drawer_sign_out">Abmelden</string>
+    <string name="drawer_nothing_yet">Noch nichts</string>
+
+    <string name="app_memories">Erinnerungen</string>
+    <string name="app_depot">Depot</string>
+    <string name="app_expenses">Ausgaben</string>
+
+    <string name="tab_memories_all">Erinnerungen</string>
+    <string name="tab_memories_map">Karte</string>
+    <string name="tab_depot_files">Dateien</string>
+    <string name="tab_expenses_entries">Einträge</string>
+    <string name="tab_expenses_overview">Übersicht</string>
+    <string name="tab_expenses_settings">Einstellungen</string>
+    <string name="tab_search">Suche</string>
+
+    <string name="search_hint">Namen suchen</string>
+    <string name="search_close">Suche schließen</string>
+    <string name="back">Zurück</string>
+    <string name="list_empty">Hier ist noch nichts</string>
+    <string name="not_built">Diese Ansicht ist in der App noch nicht gebaut.</string>
+
+    <string name="signin_title">Anmelden</string>
+    <string name="signin_server">Server</string>
+    <string name="signin_email">E-Mail</string>
+    <string name="signin_password">Passwort</string>
+    <string name="signin_secret_key">Secret Key</string>
+    <string name="signin_submit">Anmelden</string>
+    <string name="signin_working">Anmeldung läuft…</string>
+    <string name="signin_error_unreachable">Der Server ist nicht erreichbar.</string>
+    <string name="signin_error_incompatible">Dieser Server läuft in einer Version, die diese App nicht spricht.</string>
+    <string name="signin_error_credentials">E-Mail oder Passwort stimmen nicht.</string>
+    <string name="signin_error_secret_key">Der Secret Key stimmt nicht.</string>
+    <string name="signin_error_no_tenant">Unter dieser Adresse gibt es auf dem Server keinen Bereich.</string>
+    <string name="signin_error_other">Die Anmeldung hat nicht geklappt.</string>
+</resources>
