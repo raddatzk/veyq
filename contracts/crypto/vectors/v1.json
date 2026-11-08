@@ -723,6 +723,11 @@
         "exercises": "a precomposed accent is stripped after NFKD"
       },
       {
+        "name": "Crème brûlée",
+        "slug": "creme-brulee",
+        "exercises": "an accent inside a word is dropped, never turned into a dash"
+      },
+      {
         "name": "  spaced  out  ",
         "slug": "spaced-out",
         "exercises": "runs of non-alphanumerics collapse to one dash, edges trimmed"
