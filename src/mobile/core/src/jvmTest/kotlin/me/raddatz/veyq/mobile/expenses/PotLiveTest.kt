@@ -74,7 +74,9 @@ class PotLiveTest {
                 val people = ledger.participants.filter { it.active && !it.erased }
                 assertTrue(people.isNotEmpty(), "${ref.name} has no participant to pay")
                 val before = ledger.entries.size
-                val outcome = pot.addExpense("App check", 1234, people.first().id, people.map { it.id }, "2026-11-08", "other")
+                // Through the editor's form, as the apps save: 12.34 paid by the first person, split equally.
+                val form = PotView(pot).blankForm("2026-11-08")!!.copy(title = "App check", payers = listOf(EntryForm.Payer(people.first().id, "12.34")))
+                val outcome = pot.saveEntry(null, form, null)
                 assertEquals(PotSession.WriteOutcome.WRITTEN, outcome)
                 val after = pot.ledger!!
                 assertEquals(before + 1, after.entries.size)

@@ -122,7 +122,7 @@ private fun localDate(iso: String): String = runCatching {
 }.getOrDefault(iso)
 
 @Composable
-private fun categoryName(id: String?, view: PotView): String = when (id) {
+internal fun categoryName(id: String?, view: PotView): String = when (id) {
     "food" -> stringResource(R.string.cat_food)
     "groceries" -> stringResource(R.string.cat_groceries)
     "accommodation" -> stringResource(R.string.cat_accommodation)
@@ -140,12 +140,18 @@ private fun personName(name: String?) = name ?: stringResource(R.string.pot_dele
 @Composable
 private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
     var adding by rememberSaveable { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Pair<String, PotView.Editing>?>(null) }
     val palette = LocalPalette.current
     Box(Modifier.fillMaxSize()) {
         if (view.entries.isEmpty()) Note(stringResource(R.string.pot_no_entries))
         LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)) {
             items(view.entries, key = { it.id }) { e ->
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val canEdit = view.canWrite && e.kind != null
+                Row(
+                    Modifier.fillMaxWidth().clickable(enabled = canEdit) { view.editing(e.id, separator())?.let { editing = e.id to it } }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Column(Modifier.weight(1f)) {
                         Text(e.title ?: stringResource(R.string.pot_transfer), fontWeight = FontWeight.SemiBold)
                         val who = e.who.map { personName(it.ifEmpty { null }) }
@@ -185,78 +191,8 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
             )
         }
     }
-    if (adding) AddEntrySheet(view, state, model) { adding = false }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AddEntrySheet(view: PotView, state: AppModel.PotState, model: AppModel, onClose: () -> Unit) {
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var title by rememberSaveable { mutableStateOf("") }
-    var amount by rememberSaveable { mutableStateOf("") }
-    var payer by rememberSaveable { mutableStateOf(view.people.first().id) }
-    var forIds by remember { mutableStateOf(view.people.map { it.id }.toSet()) }
-    var category by rememberSaveable { mutableStateOf("other") }
-    val palette = LocalPalette.current
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = sheet) {
-        Column(
-            Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(stringResource(R.string.pot_add), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            OutlinedTextField(title, { title = it }, label = { Text(stringResource(R.string.entry_title)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(
-                amount, { amount = it }, label = { Text(stringResource(R.string.entry_amount)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                suffix = { Text(view.currency ?: "") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            )
-            Choice(stringResource(R.string.entry_paid_by), view.people.map { it.id to it.name }, payer) { payer = it }
-            Choice(
-                stringResource(R.string.entry_category),
-                RevisionFormat.DEFAULT_CATEGORIES.map { it to categoryName(it, view) } + view.ownCategories, category,
-            ) { category = it }
-            Text(stringResource(R.string.entry_for), style = MaterialTheme.typography.titleSmall)
-            view.people.forEach { p ->
-                Row(Modifier.fillMaxWidth().clickable { forIds = if (p.id in forIds) forIds - p.id else forIds + p.id }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = p.id in forIds, onCheckedChange = { forIds = if (it) forIds + p.id else forIds - p.id })
-                    Text(p.name)
-                }
-            }
-            state.message?.let {
-                Text(
-                    stringResource(when (it) { "STALE" -> R.string.entry_stale; "REFUSED" -> R.string.entry_refused; else -> R.string.entry_invalid }),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onClose, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.entry_cancel)) }
-                Button(
-                    onClick = { model.addExpense(title, amount, payer, view.people.map { it.id }.filter { it in forIds }, category) { onClose() } },
-                    enabled = !state.saving,
-                    shape = MaterialTheme.shapes.small,
-                    colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
-                    modifier = Modifier.weight(1f).height(44.dp),
-                ) {
-                    if (state.saving) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(R.string.entry_save))
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun Choice(label: String, options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
-        OutlinedTextField(
-            value = options.firstOrNull { it.first == selected }?.second ?: "", onValueChange = {}, readOnly = true,
-            label = { Text(label) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
-        )
-        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            options.forEach { (id, name) -> DropdownMenuItem(text = { Text(name) }, onClick = { onSelect(id); open = false }) }
-        }
-    }
+    if (adding) EntryEditor(view, state, model, null) { adding = false }
+    editing?.let { EntryEditor(view, state, model, it) { editing = null } }
 }
 
 @Composable

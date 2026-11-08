@@ -230,20 +230,16 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     }
 
     /**
-     * Adds a plain expense in the Pot's base currency: [amount] minor units paid by [payer], split equally among
-     * [beneficiaries], at [date] (`YYYY-MM-DD`, the person's local day), as revision 1 of a fresh record.
+     * Saves the editor's [form]: a new entry (revision 1 of a fresh record) when [entryId] is null, else the next revision
+     * of [entryId] on [basedOn], the revision the editor showed — so a revision another device wrote meanwhile is a
+     * `409`, answered [WriteOutcome.STALE] and read again, never overwritten unseen. A form that forms no entry is
+     * [WriteOutcome.INVALID] and sends nothing.
      */
     @Throws(Exception::class)
-    suspend fun addExpense(title: String, amount: Long, payer: String, beneficiaries: List<String>, date: String, category: String): WriteOutcome {
-        val base = meta?.base ?: return WriteOutcome.INVALID
-        val order = ledger?.participants?.map { it.id } ?: return WriteOutcome.INVALID
-        val split = Split.Equal(order.filter { it in beneficiaries })
-        if (split.participants.isEmpty()) return WriteOutcome.INVALID
-        val content = Expense(
-            title.trim(), category, date, base.currency, base.minorUnits, "1", amount, emptyList(),
-            listOf(Contribution(payer, amount)), Allocation(emptyList(), split),
-        )
-        return write(listOf(PotWrite(newId(), content)))
+    suspend fun saveEntry(entryId: String?, form: EntryForm, basedOn: Long?): WriteOutcome {
+        val known = ledger?.participants?.map { it.id }?.toSet() ?: return WriteOutcome.INVALID
+        val content = form.contentOf { it in known }.content ?: return WriteOutcome.INVALID
+        return write(listOf(PotWrite(entryId ?: newId(), content, basedOn = basedOn.takeIf { entryId != null })))
     }
 
     /** The base currency is fixed once the Pot holds any money entry, live or deleted: every entry carries its rate to it. */

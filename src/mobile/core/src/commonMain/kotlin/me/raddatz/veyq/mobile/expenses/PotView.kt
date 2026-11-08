@@ -94,6 +94,54 @@ class PotView internal constructor(session: Source) {
     /** Who may be named on a new entry: the active people, in join order. */
     val people: List<Person> = ledger?.participants.orEmpty().filter { it.active && !it.erased }.map { Person(it.id, shownName(it) ?: "") }
 
+    // ---- the entry editor ----
+
+    private val base: Ledger.BaseCurrency? = session.meta?.base
+
+    /** The Pot's join order, erased people included: the order every rounding ranks people by. */
+    private val joinOrder: List<String> = ledger?.participants.orEmpty().map { it.id }
+
+    private val isParticipant: (String) -> Boolean = { id -> ledger?.participants?.any { it.id == id && !it.erased } == true }
+
+    /** The people an entry may name (`people.ts` `offeredPeople`): every active one, then those [named] already (a
+     *  deactivated person stays on an old entry, never offered for a new one), in join order. */
+    fun offered(named: List<String>): List<Person> = ledger?.participants.orEmpty()
+        .filter { !it.erased && (it.active || it.id in named) }
+        .map { Person(it.id, shownName(it) ?: "") }
+
+    /** A new entry's form on [date] (`YYYY-MM-DD`, the person's local day), paid by the first person offered. */
+    fun blankForm(date: String, separator: Char = '.'): EntryForm? = base?.let { EntryForm.empty(it, people.map { p -> p.id }, date) }
+
+    /** An entry's form as its latest revision holds it, to edit it, and the revision it is based on; null for none. */
+    class Editing(val form: EntryForm, val basedOn: Long, val people: List<Person>)
+
+    fun editing(entryId: String, separator: Char = '.'): Editing? {
+        val b = base ?: return null
+        val e = ledger?.entries?.firstOrNull { it.id == entryId && it.status != Ledger.Status.DELETED } ?: return null
+        val c = e.content ?: return null
+        val offered = offered(Ledger.namedParticipants(c))
+        return Editing(EntryForm.of(c, b, offered.map { it.id }, separator), e.revision, offered)
+    }
+
+    /** Why [form] cannot be saved, at which field; null when it can. */
+    fun check(form: EntryForm): EntryForm.Refusal? = form.contentOf(isParticipant).refusal
+
+    /** One person of the editor's preview: what they gave and their share, in the base currency's minor units. */
+    class ShareRow(val id: String, val name: String, val given: Long, val share: Long)
+
+    /** The entry's effect in the base currency as the save would seal it (`sharesPreview`); empty for a transfer or a
+     *  form that forms no entry (a missing title aside), and [previewTotal] its converted total. */
+    fun preview(form: EntryForm): List<ShareRow> {
+        val b = base ?: return emptyList()
+        val effect = form.preview(b, joinOrder, isParticipant) ?: return emptyList()
+        val given = if (form.kind == EntryForm.Kind.REFUND) effect.received else effect.paid
+        return joinOrder.filter { it in given || it in effect.shares }.map {
+            ShareRow(it, names[it] ?: "", (given[it] ?: Big.ZERO).toLong(), (effect.shares[it] ?: Big.ZERO).toLong())
+        }
+    }
+
+    fun previewTotal(form: EntryForm): Long? = base?.let { b -> form.preview(b, joinOrder, isParticipant)?.base?.toLong() }
+
     /** How a participant stands to the space's members: a name, a member the directory lists, one it lists no more
      *  (`FORMER`), or a member this device could not look up (`SEALED`). */
     enum class Standing { NAME, MEMBER, FORMER, SEALED }
@@ -189,13 +237,25 @@ object Amounts {
      * decimals, above zero and at most 2⁵³−1; null for anything else.
      */
     fun parse(text: String, minorUnits: Int): Long? {
-        val t = text.trim().replace(',', '.')
-        val m = Regex("^([0-9]+)(?:\\.([0-9]*))?$").matchEntire(t) ?: return null
+        val t = text.trim().replace(Regex("\\s"), "")
+        val m = Regex("^([0-9]+)(?:[.,]([0-9]*))?$").matchEntire(t) ?: return null
         val frac = m.groupValues[2]
         if (frac.length > minorUnits) return null
         val digits = (m.groupValues[1] + frac.padEnd(minorUnits, '0')).trimStart('0').ifEmpty { "0" }
         if (digits.length > 16) return null
         val v = digits.toLongOrNull() ?: return null
         return v.takeIf { it in 1..RevisionFormat.MAX_SAFE }
+    }
+
+    /** A typed rate as the format seals it (a decimal with a dot, the schema's `rate`), or null (`amounts.ts` `parseRate`). */
+    fun parseRate(text: String): String? = text.trim().replace(',', '.').takeIf { Money.RATE.matches(it) }
+
+    /** [amount] minor units as a decimal string to be typed over, with [separator] (`amounts.ts` `amountText`). */
+    fun text(amount: Long, minorUnits: Int, separator: Char = '.'): String {
+        val neg = amount < 0
+        val digits = (if (neg) -amount else amount).toString().padStart(minorUnits + 1, '0')
+        val whole = digits.dropLast(minorUnits)
+        val out = if (minorUnits == 0) whole else whole + separator + digits.takeLast(minorUnits)
+        return if (neg) "-$out" else out
     }
 }

@@ -54,7 +54,16 @@ object Ledger {
     fun joinOrder(participants: List<Pair<String, Long>>): List<String> =
         participants.sortedWith(compareBy<Pair<String, Long>> { it.second }.thenBy { it.first }).map { it.first }
 
-    private fun rankOf(order: List<String>): Map<String, Int> = order.withIndex().associate { (i, id) -> id to i }
+    fun rankOf(order: List<String>): Map<String, Int> = order.withIndex().associate { (i, id) -> id to i }
+
+    /** Whether split [s] breaks [rule] (`named-twice`, `percent-unbalanced`, `amounts-unbalanced`), [part] what an amounts
+     *  split must add up to (null: none, a rest of zero) — where the editor says a ledger problem is. */
+    fun splitBreaks(rule: Problem, s: Split, part: Big?): Boolean = when (rule) {
+        Problem.NAMED_TWICE -> twice(splitPeople(s))
+        Problem.PERCENT_UNBALANCED -> s is Split.Percent && s.percents.sumOf { it.second } != RevisionFormat.PERCENT_WHOLE
+        Problem.AMOUNTS_UNBALANCED -> s is Split.Amounts && part != null && total(s.amounts.map { it.second }) != part
+        else -> false
+    }
 
     private fun splitWeights(s: Split): List<Pair<String, Big>> = when (s) {
         is Split.Equal -> s.participants.map { it to Big.ONE }

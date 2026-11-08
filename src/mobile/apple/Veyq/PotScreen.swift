@@ -7,7 +7,16 @@ struct PotScreen: View {
     @Bindable var model: AppModel
     let ref: ObjectRef
     let tab: String
-    @State private var adding = false
+    /// The editor's sheet: a new entry (`entryId` nil) or one being edited.
+    struct Editing: Identifiable {
+        let id = UUID()
+        let entryId: String?
+        let basedOn: Int64?
+        let people: [PotView.Person]
+        let form: EntryForm
+    }
+
+    @State private var editing: Editing?
 
     var body: some View {
         Group {
@@ -20,7 +29,15 @@ struct PotScreen: View {
                         switch tab {
                         case "expenses.overview": OverviewList(view: view)
                         case "expenses.settings": PotSettings(model: model, view: view)
-                        default: EntriesList(view: view, onAdd: { adding = true })
+                        default: EntriesList(view: view, onAdd: {
+                            if let f = view.blankForm(date: FormState.dayString(Date()), separator: decimalSeparator) {
+                                editing = Editing(entryId: nil, basedOn: nil, people: view.people, form: f)
+                            }
+                        }, onOpen: { id in
+                            if let e = view.editing(entryId: id, separator: decimalSeparator) {
+                                editing = Editing(entryId: id, basedOn: e.basedOn, people: e.people, form: e.form)
+                            }
+                        })
                         }
                     }
                 }
@@ -32,8 +49,10 @@ struct PotScreen: View {
         }
         .navigationTitle(ref.name)
         .task(id: ref.nodeId) { model.loadPot(ref) }
-        .sheet(isPresented: $adding) {
-            if let view = model.pot?.view { AddEntrySheet(model: model, view: view) }
+        .sheet(item: $editing) { e in
+            if let view = model.pot?.view {
+                EntryEditor(model: model, view: view, entryId: e.entryId, basedOn: e.basedOn, people: e.people, form: FormState(e.form))
+            }
         }
     }
 }
@@ -102,6 +121,7 @@ private struct LedgerNotice: View {
 private struct EntriesList: View {
     let view: PotView
     let onAdd: () -> Void
+    let onOpen: (String) -> Void
 
     var body: some View {
         List {
@@ -119,6 +139,8 @@ private struct EntriesList: View {
                     if let amount = e.amount { Text(money(amount.int64Value, view.currency, view.minorUnits)).fontWeight(.semibold) }
                 }
                 .listRowBackground(Role.surface)
+                .contentShape(Rectangle())
+                .onTapGesture { if view.canWrite && e.kind != nil { onOpen(e.id) } }
             }
         }
         .scrollContentBackground(.hidden)
@@ -209,81 +231,5 @@ private struct OverviewList: View {
             }
         }
         .scrollContentBackground(.hidden)
-    }
-}
-
-/// A plain expense in the Pot's base currency: title, amount, who paid, the category, and who it is for (equally).
-private struct AddEntrySheet: View {
-    @Bindable var model: AppModel
-    let view: PotView
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var title = ""
-    @State private var amount = ""
-    @State private var payer = ""
-    @State private var category = "other"
-    @State private var forIds: Set<String> = []
-
-    private static let defaults = ["food", "groceries", "accommodation", "transport", "leisure", "household", "other"]
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                TextField("Title", text: $title)
-                TextField("Amount", text: $amount)
-                #if os(iOS)
-                    .keyboardType(.decimalPad)
-                #endif
-                Picker("Paid by", selection: $payer) {
-                    ForEach(view.people, id: \.id) { Text($0.name).tag($0.id) }
-                }
-                Picker("Category", selection: $category) {
-                    ForEach(Self.defaults, id: \.self) { Text(categoryName($0, view)).tag($0) }
-                    ForEach(Array(view.ownCategories.enumerated()), id: \.offset) { _, c in
-                        Text(c.second as String? ?? "").tag(c.first as String? ?? "")
-                    }
-                }
-                Section {
-                    ForEach(view.people, id: \.id) { p in
-                        Toggle(p.name, isOn: Binding(
-                            get: { forIds.contains(p.id) },
-                            set: { if $0 { forIds.insert(p.id) } else { forIds.remove(p.id) } }
-                        ))
-                    }
-                } header: { Text("For") }
-                if let message = model.pot?.message {
-                    Section {
-                        Text(Self.explain(message)).foregroundStyle(.red)
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .navigationTitle("Add entry")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        Task {
-                            let ids = view.people.map(\.id).filter { forIds.contains($0) }
-                            if await model.addExpense(title: title, amount: amount, payer: payer, beneficiaries: ids, category: category) { dismiss() }
-                        }
-                    }
-                    .disabled(model.pot?.saving == true)
-                }
-            }
-            .onAppear {
-                payer = view.people.first?.id ?? ""
-                forIds = Set(view.people.map(\.id))
-            }
-        }
-        .tint(Role.accent)
-    }
-
-    static func explain(_ outcome: String) -> LocalizedStringKey {
-        switch outcome {
-        case "STALE": "Someone else changed the pot meanwhile. It was read again; save once more."
-        case "REFUSED": "The server did not take the entry."
-        default: "Check the title, the amount and who it is for."
-        }
     }
 }

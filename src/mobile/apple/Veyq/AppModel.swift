@@ -460,27 +460,6 @@ final class AppModel {
     /// Forgets the open Pot's last refusal (a sheet closed).
     func clearPotMessage() { pot?.message = nil }
 
-    /// Adds an expense to the open Pot, paid by `payer`, split equally among `beneficiaries`, dated today; true once stored.
-    func addExpense(title: String, amount: String, payer: String, beneficiaries: [String], category: String) async -> Bool {
-        guard var state = pot, let session = potSession else { return false }
-        state.saving = true
-        state.message = nil
-        pot = state
-        let day = DateFormatter()
-        day.calendar = Calendar(identifier: .gregorian)
-        day.locale = Locale(identifier: "en_US_POSIX")
-        day.dateFormat = "yyyy-MM-dd"
-        let outcome = (try? await AppleSessions.shared.addExpense(
-            pot: session, title: title, amountText: amount, payer: payer, beneficiaries: beneficiaries,
-            date: day.string(from: Date()), category: category, minorUnits: Int32(state.view?.minorUnits ?? 2)
-        )) ?? .refused
-        state.view = PotView(session: session)
-        state.saving = false
-        state.message = outcome == .written ? nil : outcome.name
-        pot = state
-        return outcome == .written
-    }
-
     func choose(_ app: ApplicationId?) { shell = shell.choose(app: app); drawerOpen = false }
     func switchSpace(_ scopeId: String) { shell = shell.switchSpace(scopeId: scopeId) }
     func enter(_ folder: FolderRef) { shell = shell.enter(folder: folder) }

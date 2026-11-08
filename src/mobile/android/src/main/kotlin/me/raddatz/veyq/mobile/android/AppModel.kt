@@ -358,28 +358,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Adds an expense to the open Pot, paid wholly by [payer] and split equally among [beneficiaries], dated today; [done]
-     * runs once it was stored. A refusal is kept as the state's message (`INVALID`, `STALE`, `REFUSED`).
-     */
-    fun addExpense(title: String, amountText: String, payer: String, beneficiaries: List<String>, category: String, done: () -> Unit) {
-        val state = _pot.value ?: return
-        val session = potSession ?: return
-        val amount = Amounts.parse(amountText, state.view?.minorUnits ?: 2)
-        if (amount == null || title.isBlank() || beneficiaries.isEmpty()) {
-            _pot.value = state.copy(message = PotSession.WriteOutcome.INVALID.name)
-            return
-        }
-        _pot.value = state.copy(saving = true, message = null)
-        viewModelScope.launch {
-            val outcome = runCatching {
-                session.addExpense(title, amount, payer, beneficiaries, java.time.LocalDate.now().toString(), category)
-            }.getOrDefault(PotSession.WriteOutcome.REFUSED)
-            _pot.value = state.copy(view = PotView(session), saving = false, message = outcome.takeIf { it != PotSession.WriteOutcome.WRITTEN }?.name)
-            if (outcome == PotSession.WriteOutcome.WRITTEN) done()
-        }
-    }
-
-    /**
      * One write to the open Pot ([op] on its session): the state shows it saving, then the Pot as read after it, and a
      * refusal as its message (a [PotSession.WriteOutcome] name); [done] runs once it was stored.
      */

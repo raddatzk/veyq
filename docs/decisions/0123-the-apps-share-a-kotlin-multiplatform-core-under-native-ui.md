@@ -114,7 +114,12 @@ implementation exists but what holds it to the first.
 ## Consequences
 
 - **Built of the applications: Expenses' open Pot** — its entries, overview and settings as the web's Pot shows them,
-  a plain expense (one payer, split equally) added, and its people managed as the web's people panel does (a name or a
+  its entries added and edited in the web's editor (an expense, a refund or a transfer; payers, items with their own
+  splits and the rest's split by shares, percent or amount, another currency at a typed rate, the shares in the base
+  currency as the save seals them; an edit stated on the revision it was shown, so a concurrent one is read, not
+  overwritten), whose every rule is core's (`expenses/EntryForm.kt`, the web's `entryForm.ts`: every vector entry
+  survives the form unchanged and the Pot written from those forms computes the vectors' balances; `EntryFormTest`, each
+  rule killed by a mutation), and its people managed as the web's people panel does (a name or a
   space member added, a name renamed, a settled person deactivated, deleted or removed; `PotViewPeopleTest`), a member
   read by the current name core's directory opens (`session/People.kt`, the web's `core/people/directory.ts`: the
   `member-name` field under its value key, from the tenant's member list), and its settings written as the web's settings
@@ -139,7 +144,7 @@ implementation exists but what holds it to the first.
   app drives no re-key, so where the web's member pulls a Pot's path forward (ADR 0111 decision 11) it waits, as the web's
   guest does; and it re-opens no scope rotated after the tenant was read, so a Pot re-keyed past that read is not found
   again and the write is refused until the app reads the tenant anew.
-- **Not built yet:** every other write (another kind's node, a refund, a transfer, receipts), the
+- **Not built yet:** every other write (another kind's node, an entry's delete and restore, receipts), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
   of signers, end unanchored through the signer's own judgment) — and by `v1.json#key_chain`, `#identity_pin`,
