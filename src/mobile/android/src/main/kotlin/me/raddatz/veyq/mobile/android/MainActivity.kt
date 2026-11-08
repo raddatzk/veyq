@@ -12,7 +12,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) devLogin(intent) // a recreation (rotation, dark mode) keeps its session
+        if (savedInstanceState == null) {
+            devLogin(intent) // a recreation (rotation, dark mode) keeps its session
+            receive(intent)
+        }
         setContent { VeyqTheme { AppRoot(model) } }
     }
 
@@ -30,6 +33,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         devLogin(intent)
+        receive(intent)
+    }
+
+    /** What another app shared, read now (its permission is this intent's) and handed to the model to be placed. */
+    private fun receive(intent: android.content.Intent?) {
+        ShareIn.from(this, intent)?.let(model::receiveShare)
     }
 
     private fun devLogin(intent: android.content.Intent?) {

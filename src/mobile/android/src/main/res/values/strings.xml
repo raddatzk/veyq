@@ -267,4 +267,13 @@
     <string name="node_illegal_structure">That isn’t allowed here.</string>
     <string name="node_save_failed">That didn’t work. Please try again.</string>
     <string name="share_name_reseal_failed">Renamed. Some links to it could not be updated and still show the old name to their guests.</string>
+    <string name="share_nothing">Nothing shared can go here: only images and PDFs up to 10 MB.</string>
+    <plurals name="share_pick">
+        <item quantity="one">Choose a Pot for this file</item>
+        <item quantity="other">Choose a Pot for these %d files</item>
+    </plurals>
+    <plurals name="share_refused">
+        <item quantity="one">%d file was left out: only images and PDFs up to 10 MB.</item>
+        <item quantity="other">%d files were left out: only images and PDFs up to 10 MB.</item>
+    </plurals>
 </resources>

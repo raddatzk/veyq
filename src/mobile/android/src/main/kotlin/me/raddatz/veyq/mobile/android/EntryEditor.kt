@@ -96,7 +96,12 @@ internal fun problemText(problem: String): String = stringResource(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editing: Pair<String, PotView.Editing>?, onClose: () -> Unit) {
+fun EntryEditor(
+    view: PotView, state: AppModel.PotState, model: AppModel, editing: Pair<String, PotView.Editing>?,
+    /** Receipts it starts with: what another app shared to this Pot (ADR 0124). */
+    initialPending: List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt> = emptyList(),
+    onClose: () -> Unit,
+) {
     val sep = remember { separator() }
     val editable = view.canWrite
     val people = editing?.second?.people ?: view.people
@@ -105,7 +110,7 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
         mutableStateOf(editing?.second?.form ?: view.blankForm(java.time.LocalDate.now().toString(), sep)!!)
     }
     var tried by remember { mutableStateOf(false) }
-    var pending by remember { mutableStateOf(emptyList<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>()) }
+    var pending by remember { mutableStateOf(initialPending) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val refusal = view.check(form)
     val shown = refusal.takeIf { tried }

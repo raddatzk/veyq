@@ -265,4 +265,13 @@
     <string name="node_illegal_structure">Das ist hier nicht erlaubt.</string>
     <string name="node_save_failed">Das hat nicht geklappt. Bitte versuche es erneut.</string>
     <string name="share_name_reseal_failed">Umbenannt. Einige Links darauf konnten nicht aktualisiert werden und zeigen ihren Gästen noch den alten Namen.</string>
+    <string name="share_nothing">Nichts davon kann hier abgelegt werden: nur Bilder und PDFs bis 10 MB.</string>
+    <plurals name="share_pick">
+        <item quantity="one">Wähle eine Kasse für diese Datei</item>
+        <item quantity="other">Wähle eine Kasse für diese %d Dateien</item>
+    </plurals>
+    <plurals name="share_refused">
+        <item quantity="one">%d Datei wurde ausgelassen: nur Bilder und PDFs bis 10 MB.</item>
+        <item quantity="other">%d Dateien wurden ausgelassen: nur Bilder und PDFs bis 10 MB.</item>
+    </plurals>
 </resources>

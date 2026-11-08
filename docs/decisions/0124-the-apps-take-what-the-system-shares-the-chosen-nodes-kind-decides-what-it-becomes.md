@@ -1,7 +1,7 @@
 # ADR 0124 — The apps take what the system shares; the chosen node's kind decides what it becomes
 
 - Status: Accepted
-- Built: partly (the app group and the shared keychain group; not built: the pick mode, Android's share target, the iOS share extension)
+- Built: partly (Android's share target and pick mode, the app group and the shared keychain group; not built: the iOS share extension)
 - Date: 2026-11-08
 
 ## Context
@@ -55,6 +55,11 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   and the shared keychain group (`apple/Veyq/KeychainStore.swift`, the move of an item read from the app's own group;
   `apple/Veyq/Veyq-iOS.entitlements`); core's `UserDefaultsStore` takes the defaults it is handed. An installation from
   before keeps its trusted account across the move (measured 2026-11-08 in the iOS Simulator).
-- **Not built yet:** the pick mode, Android's share target and the iOS share extension (decisions 1–3 and 5–8).
+- **Built on Android:** decisions 1–3, 7 and 8 — the share target (`MainActivity`, `singleTask`, so a share reaches the
+  app's own task and session), the files read at once (`android/ShareIn.kt`; a HEIC re-encoded as a JPEG), the pick
+  mode's banner with the kinds that take nothing dimmed, and a writable Pot with people opening its new expense with
+  them as receipts; what a Pot takes is Expenses' answer in core (`expenses/PotShare.kt`, `PotShareTest`). A photo
+  shared from the Files app was saved as a receipt of a new expense and opened again (measured 2026-11-08).
+- **Not built yet:** the iOS share extension (decisions 1–3 and 5–7 on iOS).
 - App groups and keychain groups need the developer team's signing: a Simulator build is signed ad hoc with them; a device
   build needs the team's provisioning profile with the group.

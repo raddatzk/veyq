@@ -337,6 +337,23 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         rebuild(start = true)
     }
 
+    // ---- what another app shared (ADR 0124) ----
+
+    private val _incoming = MutableStateFlow<ShareIn.Incoming?>(null)
+    /** Files shared to veyq, waiting for the Pot they go to (the pick mode); null when none waits. */
+    val incoming: StateFlow<ShareIn.Incoming?> = _incoming.asStateFlow()
+
+    fun receiveShare(incoming: ShareIn.Incoming) {
+        _incoming.value = incoming
+    }
+
+    fun cancelShare() {
+        _incoming.value = null
+    }
+
+    /** The waiting files, taken by the Pot opened as their place: its new expense's receipts. */
+    fun takeShare(): List<PotSession.PendingReceipt>? = _incoming.value?.files?.takeIf { it.isNotEmpty() }?.also { _incoming.value = null }
+
     // ---- core's actions on a node ----
 
     /** Whether [ref] is pinned; null while its space's pin set is not loaded (no heart is offered then). */

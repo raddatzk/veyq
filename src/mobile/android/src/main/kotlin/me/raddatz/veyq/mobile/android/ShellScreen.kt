@@ -64,6 +64,9 @@ import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.draw.alpha
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.res.pluralStringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
@@ -105,6 +108,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val potState by model.pot.collectAsStateWithLifecycle()
     val rowDetails by model.rowDetails.collectAsStateWithLifecycle()
     val avatars by model.avatars.collectAsStateWithLifecycle()
+    val incoming by model.incoming.collectAsStateWithLifecycle()
     val palette = LocalPalette.current
     fun closeDrawerThen(f: () -> Unit) { f(); scope.launch { drawer.close() } }
 
@@ -112,7 +116,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         if (shell.searching) model.search(false) else model.goBack()
     }
 
-    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null)) {
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
@@ -129,6 +133,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
             topBar = {
+                Column {
                 if (!shell.searching) {
                     TopAppBar(
                         title = {
@@ -159,6 +164,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             }
                         },
                     )
+                }
+                incoming?.let { ShareBanner(it, onCancel = model::cancelShare) }
                 }
             },
             bottomBar = {
@@ -497,13 +504,15 @@ private fun ArrangedListScreen(list: ArrangedList, onOpen: (ObjectRef) -> Unit) 
 @Composable
 private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
+    // Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0124 decision 1).
+    val takes = !LocalPicking.current || ref.kind == me.raddatz.veyq.mobile.expenses.PotShare.KIND
     ListItem(
         headlineContent = { Text(ref.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
         // The application's facts about the object (a Pot: its currency), left out when it has none.
         supportingContent = details.takeIf { it.isNotEmpty() }?.let { { Text(it.joinToString(" · "), color = role(LocalPalette.current.muted)) } },
         leadingContent = { Tile(kindIcon(ref.kind)) },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-        modifier = Modifier.clip(MaterialTheme.shapes.medium).clickableRow { onOpen(ref) },
+        modifier = Modifier.clip(MaterialTheme.shapes.medium).alpha(if (takes) 1f else 0.38f).let { if (takes) it.clickableRow { onOpen(ref) } else it },
     )
 }
 
@@ -670,4 +679,29 @@ private fun renameProblem(context: android.content.Context, r: me.raddatz.veyq.m
     me.raddatz.veyq.mobile.session.NodeRename.Outcome.NOT_ALLOWED -> context.getString(R.string.node_illegal_structure)
     me.raddatz.veyq.mobile.session.NodeRename.Outcome.BUSY -> context.getString(R.string.pot_busy)
     me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED -> context.getString(R.string.node_save_failed)
+}
+
+/** Whether the shell is picking a place for what another app shared (ADR 0124). */
+internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false }
+
+/** The pick mode's banner: what waits and where it can go, with its cancel. */
+@Composable
+private fun ShareBanner(incoming: ShareIn.Incoming, onCancel: () -> Unit) {
+    val palette = LocalPalette.current
+    Row(
+        Modifier.fillMaxWidth().background(role(palette.accentSoft)).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (incoming.files.isEmpty()) stringResource(R.string.share_nothing)
+                else pluralStringResource(R.plurals.share_pick, incoming.files.size, incoming.files.size),
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            )
+            if (incoming.refused > 0) {
+                Text(pluralStringResource(R.plurals.share_refused, incoming.refused, incoming.refused), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+            }
+        }
+        TextButton(onClick = onCancel) { Text(stringResource(R.string.entry_cancel)) }
+    }
 }
