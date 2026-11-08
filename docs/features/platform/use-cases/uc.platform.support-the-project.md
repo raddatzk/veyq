@@ -56,9 +56,8 @@ learn once that they can support it, are never asked twice, and are never held u
 
 - **veyq is and stays open source** (owner 2026-11-08), and the donation page says why: AI models are as good as
   they are because they were trained on the work of countless people without asking or paying them, so the project
-  gives its own work back in the open. The one stated exception: if veyq is one day offered as a hosted service at
-  veyq.cloud, the platform that runs that service (billing, customer administration) may not be open source; veyq
-  itself, the server and the clients that hold and encrypt a user's content, stays under the AGPL (inbox #41).
+  gives its own work back in the open. A hosted service at veyq.cloud is not on the page: its licence is
+  added there when that service exists (inbox #41).
 
 ## Related
 

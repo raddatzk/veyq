@@ -16,10 +16,6 @@ criticism of it is fair: AI models are as good as they are because their provide
 countless people, mostly without asking them and without paying for it. I do not want to only take from that common
 pool. So I give back what I build, in the open: anyone may read veyq's code, use it and build on it.
 
-One exception may come later. If veyq is one day offered as a hosted service at veyq.cloud, the platform that runs that
-service — billing, customer administration and the like — may not be open source. veyq itself, the server and the
-apps that keep and encrypt what you store in it, stays open source under the AGPL.
-
 ## Why a donation helps
 
 veyq is an independent project. No company stands behind it and no investor expects a return. Its

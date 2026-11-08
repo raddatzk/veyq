@@ -17,11 +17,6 @@ trainiert haben, meist ohne zu fragen und ohne dafür zu bezahlen. Von diesem ge
 nehmen. Deshalb gebe ich, was ich baue, offen zurück: Den Code von veyq darf jede und jeder lesen, nutzen und
 weiterentwickeln.
 
-Eine Ausnahme kann es später geben: Wird veyq eines Tages als gehosteter Dienst unter veyq.cloud angeboten, ist die
-Plattform, die diesen Dienst betreibt – Abrechnung, Kundenverwaltung und Ähnliches –, unter Umständen nicht Open
-Source. veyq selbst, also der Server und die Apps, die aufbewahren und verschlüsseln, was du darin ablegst, bleibt Open
-Source unter der AGPL.
-
 ## Warum eine Spende hilft
 
 veyq ist ein unabhängiges Projekt. Keine Firma steht dahinter, und kein Investor erwartet eine
