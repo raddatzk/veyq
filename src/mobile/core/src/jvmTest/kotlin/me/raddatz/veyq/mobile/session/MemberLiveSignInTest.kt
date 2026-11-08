@@ -23,7 +23,7 @@ class MemberLiveSignInTest {
         val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val device = MemoryDeviceStore()
+        val device = testDevice(BouncyCastlePrimitives)
         repeat(2) { round ->
             val account = VeyqAccount.signIn(
                 BouncyCastlePrimitives, origin, env.getValue("VEYQ_USER2_EMAIL"), env.getValue("VEYQ_USER2_PASSWORD"), env.getValue("VEYQ_USER2_SECRET_KEY"), device,

@@ -49,7 +49,12 @@ data class HeldEpochKey(val epoch: Long, val commitment: String)
  */
 internal class TrustMarks(private val store: DeviceStore, primitives: Primitives, masterKey: ByteArray) {
     @Serializable
-    private data class Stored(val pins: Long = 0, val epochs: Map<String, Long> = emptyMap(), val held: Map<String, HeldEpochKey> = emptyMap())
+    private data class Stored(
+        val pins: Long = 0,
+        val register: Long = 0,
+        val epochs: Map<String, Long> = emptyMap(),
+        val held: Map<String, HeldEpochKey> = emptyMap(),
+    )
 
     private val key = "veyq.trust-marks." + b64(primitives.hkdfSha256(masterKey, ByteArray(0), utf8("veyq/v1/trust-marks-slot"), 16))
     private val lock = Mutex()
@@ -59,6 +64,7 @@ internal class TrustMarks(private val store: DeviceStore, primitives: Primitives
         // Read back defensively: anything that is not a mark counts as no mark.
         return Stored(
             pins = raw.pins.coerceAtLeast(0),
+            register = raw.register.coerceAtLeast(0),
             epochs = raw.epochs.filterValues { it > 0 },
             held = raw.held.filterValues { it.epoch >= 0 && COMMITMENT.matches(it.commitment) },
         )
@@ -69,6 +75,13 @@ internal class TrustMarks(private val store: DeviceStore, primitives: Primitives
     }
 
     suspend fun pins(): Long = lock.withLock { read().pins }
+
+    suspend fun register(): Long = lock.withLock { read().register }
+
+    suspend fun raiseRegister(revision: Long) = lock.withLock {
+        val s = read()
+        if (revision > s.register) write(s.copy(register = revision))
+    }
 
     /** The highest epoch this device has held for [scopeId], 0 when none. */
     suspend fun floor(scopeId: String): Long = lock.withLock { read().epochs[scopeId] ?: 0 }

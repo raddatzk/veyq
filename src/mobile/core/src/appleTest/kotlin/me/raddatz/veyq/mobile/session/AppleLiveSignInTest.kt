@@ -24,7 +24,7 @@ class AppleLiveSignInTest {
         val env = (NSString.stringWithContentsOfFile(envFile, NSUTF8StringEncoding, null) ?: error("cannot read $envFile"))
             .lines().mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val account = AppleSessions.signIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"))
+        val account = AppleSessions.signIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), testDevice(me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives))
         val session = account.open(account.defaultTenant ?: error("no tenant"))
         val spaces = session.spaces()
         val objects = session.objects()
