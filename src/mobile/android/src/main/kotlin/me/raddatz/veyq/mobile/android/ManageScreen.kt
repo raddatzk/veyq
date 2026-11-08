@@ -111,6 +111,21 @@ fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
                             Spacer(Modifier.size(6.dp))
                             Text(stringResource(R.string.manage_sign_out))
                         }
+                        // How this device trusts the account, and the way to end it (the next sign-in asks for the Secret Key).
+                        server.trusted?.let { method ->
+                            Text(
+                                stringResource(
+                                    if (method == me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY) R.string.manage_trusted_remembered
+                                    else R.string.manage_trusted_password,
+                                ),
+                                style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
+                            androidx.compose.material3.TextButton(
+                                onClick = { model.forgetDevice(server.account) },
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                            ) { Text(stringResource(R.string.manage_forget_device), color = role(palette.danger)) }
+                        }
                     }
                 }
             }

@@ -57,4 +57,20 @@
     <string name="manage_current">Gerade angezeigt</string>
     <string name="manage_sign_out">Von diesem Server abmelden</string>
     <string name="manage_hint">Ausgeblendete Tenants und Spaces bleiben auf dem Server und werden nur auf diesem Gerät weggelassen.</string>
+    <string name="manage_trusted_password">Dieses Gerät öffnet mit deinem Passwort.</string>
+    <string name="manage_trusted_remembered">Auf diesem Gerät bleibst du angemeldet.</string>
+    <string name="manage_forget_device">Diesem Gerät nicht mehr vertrauen</string>
+
+    <string name="signin_remember">Angemeldet bleiben</string>
+    <string name="signin_remember_hint">Öffnet mit Fingerabdruck, Gesicht oder dem Gerätecode. Wer dieses Handy entsperren kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key.</string>
+    <string name="signin_error_device_not_trusted">Dieses Gerät ist für dieses Konto nicht mehr vertraut. Melde dich mit deinem Secret Key an.</string>
+    <string name="signin_error_session_ended">Du wurdest abgemeldet. Bitte melde dich erneut an.</string>
+    <string name="starting">Wird geöffnet…</string>
+    <string name="unlock_title">Willkommen zurück</string>
+    <string name="unlock_password_hint">Dieses Gerät ist vertraut: Dein Passwort genügt.</string>
+    <string name="unlock_remembered_hint">Bestätige, dass du es bist, um deine Spaces zu öffnen.</string>
+    <string name="unlock_submit">Entsperren</string>
+    <string name="unlock_other">Anderes Konto verwenden</string>
+    <string name="unlock_prompt_title">veyq entsperren</string>
+    <string name="unlock_prompt_subtitle">Bestätige, dass du es bist</string>
 </resources>

@@ -35,16 +35,19 @@ fun AppRoot(model: AppModel) {
     val screen by model.screen.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val s = screen) {
+            Screen.Starting -> StartingScreen()
             is Screen.SignIn -> SignInScreen(s, model::signIn, model::cancelAdd)
+            is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount)
             is Screen.Signed -> s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
         }
     }
 }
 
 @Composable
-fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String) -> Unit, onCancel: () -> Unit = {}) {
-    var server by rememberSaveable { mutableStateOf(BuildDefaults.SERVER) }
-    var email by rememberSaveable { mutableStateOf("") }
+fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String, Boolean) -> Unit, onCancel: () -> Unit = {}) {
+    var server by rememberSaveable { mutableStateOf(state.server ?: BuildDefaults.SERVER) }
+    var email by rememberSaveable { mutableStateOf(state.email.orEmpty()) }
+    var remember by rememberSaveable { mutableStateOf(false) }
     var password by rememberSaveable { mutableStateOf("") }
     var secretKey by rememberSaveable { mutableStateOf("") }
     Column(
@@ -66,11 +69,19 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String
             visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
         OutlinedTextField(secretKey, { secretKey = it }, label = { Text(stringResource(R.string.signin_secret_key)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+        // Staying signed in is an explicit choice, never the default (ADR 0005 § 13): it says what it costs.
+        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.signin_remember), style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.signin_remember_hint), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+            }
+            androidx.compose.material3.Switch(checked = remember, onCheckedChange = { remember = it }, enabled = !state.working)
+        }
         state.error?.let { Text(signInError(it), color = MaterialTheme.colorScheme.error) }
         // Confirming is the web's green role (`--app-primary`), not the accent.
         val palette = LocalPalette.current
         Button(
-            onClick = { onSignIn(server, email, password, secretKey) },
+            onClick = { onSignIn(server, email, password, secretKey, remember) },
             enabled = !state.working,
             shape = MaterialTheme.shapes.small,
             colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
@@ -94,6 +105,64 @@ private fun signInError(reason: String): String = stringResource(
         "CREDENTIALS" -> R.string.signin_error_credentials
         "SECRET_KEY" -> R.string.signin_error_secret_key
         "NO_TENANT" -> R.string.signin_error_no_tenant
+        "DEVICE_NOT_TRUSTED" -> R.string.signin_error_device_not_trusted
+        "SESSION_ENDED" -> R.string.signin_error_session_ended
         else -> R.string.signin_error_other
     },
 )
+
+@Composable
+private fun StartingScreen() {
+    Column(
+        modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+    ) {
+        Brand()
+        Spacer(Modifier.height(24.dp))
+        CircularProgressIndicator()
+    }
+}
+
+/**
+ * An account this device trusts (ADR 0123 decision 8): the password alone for a password-trusted one, a button that
+ * asks for the person's authentication again for a remembered one; and the way to another account.
+ */
+@Composable
+fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -> Unit) {
+    var password by rememberSaveable { mutableStateOf("") }
+    val remembered = state.record.method == me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY
+    val palette = LocalPalette.current
+    Column(
+        modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Spacer(Modifier.height(32.dp))
+        Brand()
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.unlock_title), style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        Text(state.record.email, style = MaterialTheme.typography.bodyLarge)
+        Text(io.ktor.http.Url(state.record.server).host, style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+        Text(
+            stringResource(if (remembered) R.string.unlock_remembered_hint else R.string.unlock_password_hint),
+            style = MaterialTheme.typography.bodyMedium, color = role(palette.muted),
+        )
+        if (!remembered) {
+            OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.signin_password)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+        }
+        state.error?.let { Text(signInError(it), color = MaterialTheme.colorScheme.error) }
+        Button(
+            onClick = { onUnlock(password) },
+            enabled = !state.working,
+            shape = MaterialTheme.shapes.small,
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+        ) {
+            if (state.working) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(R.string.unlock_submit))
+        }
+        androidx.compose.material3.TextButton(onClick = onOther, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.unlock_other))
+        }
+    }
+}

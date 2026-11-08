@@ -16,12 +16,24 @@ class MainActivity : ComponentActivity() {
         setContent { VeyqTheme { AppRoot(model) } }
     }
 
+    override fun onResume() {
+        super.onResume()
+        model.attach(this) // the unlock key's prompt is shown over this activity
+        model.start()
+    }
+
+    override fun onPause() {
+        model.attach(null)
+        super.onPause()
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         devLogin(intent)
     }
 
     private fun devLogin(intent: android.content.Intent?) {
-        DevLogin.from(intent)?.let { model.signIn(it.server, it.email, it.password, it.secretKey) }
+        DevLogin.from(intent)?.let { model.signIn(it.server, it.email, it.password, it.secretKey, it.remember) }
+        DevLogin.unlockPassword(intent)?.let { model.devUnlock(it) }
     }
 }

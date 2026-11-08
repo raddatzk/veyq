@@ -1,6 +1,9 @@
 import Foundation
 import Observation
 import VeyqCore
+#if os(iOS)
+import UIKit
+#endif
 
 /// One server in the switcher: its account and the tenants the switcher lists there.
 struct ServerEntry: Identifiable {
@@ -29,6 +32,8 @@ struct ManagedSpace: Identifiable {
 struct ManagedServer: Identifiable {
     let account: VeyqAccount
     let tenants: [ManagedTenant]
+    /// How this device trusts the account, if it does.
+    let trusted: TrustedDevice.Method?
     var id: String { account.key }
     var label: String { account.label }
 }
@@ -40,11 +45,16 @@ struct ManagedServer: Identifiable {
 @Observable
 final class AppModel {
     enum ScreenState {
-        case signIn(working: Bool, error: String?, adding: Bool)
+        /// The remembered accounts resuming at start.
+        case starting
+        /// The full sign-in, with the Secret Key; server and email filled in where a trusted device's record knew them.
+        case signIn(working: Bool, error: String?, adding: Bool, server: String?, email: String?)
+        /// An account this device trusts: the password alone, or the person's authentication.
+        case unlock(record: TrustedDevice, working: Bool, error: String?)
         case signed
     }
 
-    private(set) var screen: ScreenState = .signIn(working: false, error: nil, adding: false)
+    private(set) var screen: ScreenState = .starting
     private(set) var shell: Shell = Shell.companion.start(lastUsed: nil, space: nil)
     private(set) var tenant: TenantRef?
     private(set) var server: String = ""
@@ -62,6 +72,21 @@ final class AppModel {
     var drawerOpen = false
 
     private let connections = AppleSessions.shared.connections()
+    private let device: ThisDevice = {
+        #if os(iOS)
+        let label = UIDevice.current.model
+        #else
+        let label = Host.current().localizedName ?? "Mac"
+        #endif
+        let keychain = KeychainStore()
+        // A first start after an installation: the Keychain may still hold an earlier installation's items.
+        if !UserDefaults.standard.bool(forKey: "veyq.installed") {
+            keychain.removeAll()
+            UserDefaults.standard.set(true, forKey: "veyq.installed")
+        }
+        return AppleSessions.shared.device(keychain: keychain, label: label, prompt: String(localized: "Open your spaces"))
+    }()
+    private var started = false
     private let recent: RecentUses
     private let hidden: Hidden
 
@@ -99,24 +124,110 @@ final class AppModel {
         return Home.shared.level(nodes: nodes, scopeId: s, parentId: shell.folder?.nodeId, filter: shell.filter)
     }
 
-    func signIn(server: String, email: String, password: String, secretKey: String) {
+    /// Where the app opens (ADR 0123 decision 8): every account the person stays signed in to resumes after one
+    /// authentication; with none, the most recent password-trusted account asks for its password; with no trusted
+    /// account, the sign-in. Once per process.
+    func start() {
+        guard !started else { return }
+        started = true
+        let records = device.trusted()
+        guard !records.isEmpty else {
+            screen = .signIn(working: false, error: nil, adding: false, server: nil, email: nil)
+            return
+        }
+        Task {
+            var stopped: TrustedDevice?
+            for record in records where record.method == .deviceKey {
+                do {
+                    try await add(AppleSessions.shared.resume(record: record, device: device))
+                } catch {
+                    // The person did not confirm: nothing more is asked of them this start.
+                    if Self.reason(of: error) == "DEVICE_AUTH_CANCELLED" { stopped = record; break }
+                }
+            }
+            if let current = connections.current, let held = current.first, let tenant = current.second {
+                try? await show(held, tenant)
+            } else {
+                showLocked(stopped)
+            }
+        }
+    }
+
+    /// The unlock for `preferred`, else the most recent account this device trusts, else the sign-in.
+    private func showLocked(_ preferred: TrustedDevice? = nil, error: String? = nil) {
+        if let record = preferred ?? device.trusted().first {
+            screen = .unlock(record: record, working: false, error: error)
+            if let password = pendingUnlock { pendingUnlock = nil; unlock(password: password) }
+        } else {
+            screen = .signIn(working: false, error: error, adding: false, server: nil, email: nil)
+        }
+    }
+
+    /// The debug build's unlock (`devlogin.py --unlock`): the password for the unlock screen, now or once it shows.
+    private var pendingUnlock: String?
+
+    func devUnlock(password: String) {
+        if case .unlock = screen { unlock(password: password) } else { pendingUnlock = password }
+    }
+
+    private func add(_ account: VeyqAccount) throws {
+        guard let tenant = account.defaultTenant else { throw NoTenant() }
+        let added = connections.add(connection: account, tenant: tenant)
+        if let duplicate = added.duplicate { Task { try? await duplicate.signOut() } }
+    }
+
+    private struct NoTenant: Error {}
+
+    /// The full sign-in, then this device trusted with the account: staying signed in when `remember` (which asks the
+    /// person to authenticate; declined, the password trust instead), else the password trust.
+    func signIn(server: String, email: String, password: String, secretKey: String, remember: Bool = false) {
+        started = true
         let adding = isAdding
-        screen = .signIn(working: true, error: nil, adding: adding)
+        screen = .signIn(working: true, error: nil, adding: adding, server: server, email: email)
         Task {
             do {
-                let account = try await AppleSessions.shared.signIn(server: origin(server), email: email, password: password, secretKey: secretKey)
-                guard let tenant = account.defaultTenant else {
-                    screen = .signIn(working: false, error: "NO_TENANT", adding: adding)
-                    return
-                }
-                let added = connections.add(connection: account, tenant: tenant)
-                if let duplicate = added.duplicate { Task { try? await duplicate.signOut() } }
+                let account = try await AppleSessions.shared.signIn(server: origin(server), email: email, password: password, secretKey: secretKey, device: device)
+                _ = try? await AppleSessions.shared.trust(account: account, password: password, remember: remember)
+                try add(account)
+                guard let current = connections.current, let held = current.first, let opened = current.second else { return }
+                try await show(held, opened)
+            } catch is NoTenant {
+                screen = .signIn(working: false, error: "NO_TENANT", adding: adding, server: server, email: email)
+            } catch {
+                screen = .signIn(working: false, error: Self.reason(of: error), adding: adding, server: server, email: email)
+            }
+        }
+    }
+
+    /// The trusted account's unlock: its password, or the person's authentication again.
+    func unlock(password: String) {
+        guard case .unlock(let record, _, _) = screen else { return }
+        screen = .unlock(record: record, working: true, error: nil)
+        Task {
+            do {
+                let account = record.method == .device
+                    ? try await AppleSessions.shared.unlockOnDevice(record: record, password: password, device: device)
+                    : try await AppleSessions.shared.resume(record: record, device: device)
+                try add(account)
                 guard let current = connections.current, let held = current.first, let opened = current.second else { return }
                 try await show(held, opened)
             } catch {
-                screen = .signIn(working: false, error: Self.reason(of: error), adding: adding)
+                let reason = Self.reason(of: error)
+                switch reason {
+                case "DEVICE_NOT_TRUSTED", "SESSION_ENDED":
+                    screen = .signIn(working: false, error: reason, adding: false, server: record.server, email: record.email)
+                case "DEVICE_AUTH_CANCELLED":
+                    screen = .unlock(record: record, working: false, error: nil)
+                default:
+                    screen = .unlock(record: record, working: false, error: reason)
+                }
             }
         }
+    }
+
+    /// From the unlock to the full sign-in, for another account.
+    func otherAccount() {
+        screen = .signIn(working: false, error: nil, adding: false, server: nil, email: nil)
     }
 
     /// A Kotlin exception reaches Swift as an NSError carrying it under "KotlinException"; a sign-in failure names its reason.
@@ -125,7 +236,7 @@ final class AppModel {
         return (kotlin as? SignInFailure)?.reason.name ?? "PROTOCOL"
     }
 
-    private var isAdding: Bool { if case .signIn(_, _, let adding) = screen { return adding } else { return false } }
+    private var isAdding: Bool { if case .signIn(_, _, let adding, _, _) = screen { return adding } else { return false } }
 
     /// The switcher: another tenant of the same server is the same session at another domain; another server is its own.
     func switchTo(_ account: VeyqAccount, _ tenant: TenantRef) {
@@ -142,7 +253,7 @@ final class AppModel {
     func addServer() {
         drawerOpen = false
         managing = nil
-        screen = .signIn(working: false, error: nil, adding: true)
+        screen = .signIn(working: false, error: nil, adding: true, server: nil, email: nil)
     }
 
     func cancelAdd() {
@@ -180,19 +291,31 @@ final class AppModel {
         rebuild(start: false)
     }
 
-    /// Signs out of one server; if it was current, another one held becomes current, else the sign-in shows.
+    /// Signs out of one server; if it was current, another one held becomes current, else the unlock of an account
+    /// this device still trusts with the password, or the sign-in. Staying signed in ends with the sign-out; the
+    /// password trust stays (as on the web).
     func signOut(_ account: VeyqAccount) {
         let wasCurrent = connections.current?.first == account
         connections.remove(connection: account)
-        Task { try? await account.signOut() }
-        if let next = connections.current, let held = next.first, let tenant = next.second {
-            if wasCurrent { managing = nil; Task { try? await show(held, tenant) } }
-            else if managing != nil { managing = managed() }
-        } else {
-            recent.clear() // the device forgets what was opened once no account is left on it
-            hidden.clear()
-            managing = nil
-            screen = .signIn(working: false, error: nil, adding: false)
+        Task {
+            try? await account.signOut()
+            if let next = connections.current, let held = next.first, let tenant = next.second {
+                if wasCurrent { managing = nil; try? await show(held, tenant) }
+                else if managing != nil { managing = managed() }
+            } else {
+                recent.clear() // the device forgets what was opened once no account is left on it
+                hidden.clear()
+                managing = nil
+                showLocked()
+            }
+        }
+    }
+
+    /// Ends this device's trust in `account`: the next sign-in here asks for the Secret Key again.
+    func forgetDevice(_ account: VeyqAccount) {
+        Task {
+            try? await account.forgetThisDevice()
+            if managing != nil { managing = managed() }
         }
     }
 
@@ -209,7 +332,7 @@ final class AppModel {
                         list.map { ManagedSpace(space: $0, hidden: hidden.isSpaceHidden(scopeId: $0.scopeId), canHide: hidden.canHideSpace(scopeId: $0.scopeId, spaces: list)) }
                     }
                 )
-            })
+            }, trusted: c.trusted?.method)
         }
     }
 

@@ -26,7 +26,10 @@ import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.navigation.UseKey
 import me.raddatz.veyq.mobile.navigation.arrange
 import me.raddatz.veyq.mobile.navigation.drawerApplications
+import me.raddatz.veyq.mobile.session.DeviceAuthFailed
 import me.raddatz.veyq.mobile.session.SignInFailure
+import me.raddatz.veyq.mobile.session.ThisDevice
+import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.session.VeyqAccount
 
 /** One server in the switcher: its account and the tenants the switcher lists there. */
@@ -38,11 +41,24 @@ data class ManagedSpace(val space: SpaceRef, val hidden: Boolean, val canHide: B
 /** A tenant on "Manage servers". [spaces] is null while they load. */
 data class ManagedTenant(val tenant: TenantRef, val hidden: Boolean, val current: Boolean, val spaces: List<ManagedSpace>?)
 
-data class ManagedServer(val account: VeyqAccount, val label: String, val tenants: List<ManagedTenant>)
+data class ManagedServer(val account: VeyqAccount, val label: String, val tenants: List<ManagedTenant>, val trusted: TrustedDevice.Method?)
 
 /** What the screen shows: the sign-in (first, or to add a server), or the shell over the current tenant. */
 sealed interface Screen {
-    data class SignIn(val working: Boolean = false, val error: String? = null, val adding: Boolean = false) : Screen
+    /** The remembered accounts resuming at start. */
+    data object Starting : Screen
+
+    /** The full sign-in, with the Secret Key; [server] and [email] filled in where a trusted device's record knew them. */
+    data class SignIn(
+        val working: Boolean = false,
+        val error: String? = null,
+        val adding: Boolean = false,
+        val server: String? = null,
+        val email: String? = null,
+    ) : Screen
+
+    /** An account this device trusts: the password alone (DEVICE), or the person's authentication (DEVICE_KEY). */
+    data class Unlock(val record: TrustedDevice, val working: Boolean = false, val error: String? = null) : Screen
 
     data class Signed(
         val shell: Shell,
@@ -76,29 +92,129 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private val recent = RecentUses(persist = ::persistRecent, initial = loadRecent())
     private val hidden = Hidden(persist = { prefs.edit().putStringSet("hidden", it).apply() }, initial = prefs.getStringSet("hidden", emptySet()).orEmpty())
     private val connections = Connections<VeyqAccount>()
-    private val trustStore = PreferencesStore(app)
+    private var host: java.lang.ref.WeakReference<android.app.Activity>? = null
+    private val device = ThisDevice(
+        PreferencesStore(app),
+        KeystoreDeviceKeys(app) { host?.get() },
+        android.os.Build.MODEL,
+        BouncyCastlePrimitives,
+    )
+    private var started = false
 
     /** The current tenant as read, before what this device hides is taken out. */
     private class Raw(val spaces: List<SpaceRef>, val nodes: List<NodeRef>, val favorites: List<ObjectRef>, val off: Set<String>)
     private var raw: Raw? = null
 
-    private val _screen = MutableStateFlow<Screen>(Screen.SignIn())
+    private val _screen = MutableStateFlow<Screen>(Screen.Starting)
     val screen: StateFlow<Screen> = _screen.asStateFlow()
 
-    fun signIn(server: String, email: String, password: String, secretKey: String) {
+    /** The activity a prompt for the unlock key is shown over, while one is resumed. */
+    fun attach(activity: android.app.Activity?) {
+        host = activity?.let { java.lang.ref.WeakReference(it) }
+    }
+
+    /**
+     * Where the app opens (ADR 0123 decision 8): every account the person stays signed in to resumes after one
+     * authentication; with none, the most recent password-trusted account asks for its password; with no trusted account,
+     * the sign-in. Once per process, from the first resumed activity (the prompt needs one).
+     */
+    fun start() {
+        if (started) return
+        started = true
+        val records = device.trusted()
+        if (records.isEmpty()) {
+            _screen.value = Screen.SignIn()
+            return
+        }
+        viewModelScope.launch {
+            var stopped: TrustedDevice? = null
+            for (r in records.filter { it.method == TrustedDevice.Method.DEVICE_KEY }) {
+                try {
+                    add(VeyqAccount.resume(BouncyCastlePrimitives, r, device) { block -> Network.client(block) })
+                } catch (e: SignInFailure) {
+                    // The person did not confirm: nothing more is asked of them this start.
+                    if (e.reason == SignInFailure.Reason.DEVICE_AUTH_CANCELLED) { stopped = r; break }
+                }
+            }
+            val current = connections.current
+            if (current != null) show(current.first, current.second) else showLocked(stopped)
+        }
+    }
+
+    /** The unlock for [preferred], else the most recent account this device trusts, else the sign-in. */
+    private fun showLocked(preferred: TrustedDevice? = null, error: String? = null) {
+        val record = preferred ?: device.trusted().firstOrNull()
+        _screen.value = if (record != null) Screen.Unlock(record, error = error) else Screen.SignIn(error = error)
+        pendingUnlock?.let { pendingUnlock = null; if (record != null) unlock(it) }
+    }
+
+    /** The debug build's unlock (`devlogin.py --unlock`): the password for the unlock screen, now or once it shows. */
+    private var pendingUnlock: String? = null
+
+    fun devUnlock(password: String) {
+        if (_screen.value is Screen.Unlock) unlock(password) else pendingUnlock = password
+    }
+
+    private suspend fun add(account: VeyqAccount) {
+        val tenant = account.defaultTenant ?: throw SignInFailure(SignInFailure.Reason.NO_TENANT)
+        connections.add(account, tenant).duplicate?.signOut()
+    }
+
+    /**
+     * The full sign-in, then this device trusted with the account: staying signed in when [remember] (which asks the
+     * person to authenticate; declined, the password trust instead), else the password trust. A trust that cannot be
+     * enrolled leaves the sign-in standing: the next start then asks for the Secret Key again.
+     */
+    fun signIn(server: String, email: String, password: String, secretKey: String, remember: Boolean = false) {
+        started = true // a sign-in (the dev login among them) decides where the app is; the start does not run after it
         val adding = (_screen.value as? Screen.SignIn)?.adding == true
-        _screen.value = Screen.SignIn(working = true, adding = adding)
+        _screen.value = Screen.SignIn(working = true, adding = adding, server = server, email = email)
         viewModelScope.launch {
             try {
-                val account = VeyqAccount.signIn(BouncyCastlePrimitives, origin(server), email, password, secretKey, trustStore) { block -> Network.client(block) }
-                val tenant = account.defaultTenant ?: throw SignInFailure(SignInFailure.Reason.NO_TENANT)
-                val added = connections.add(account, tenant)
-                added.duplicate?.signOut()
-                show(added.connection, connections.current!!.second)
+                val account = VeyqAccount.signIn(BouncyCastlePrimitives, origin(server), email, password, secretKey, device) { block -> Network.client(block) }
+                runCatching {
+                    if (!remember) account.trustThisDevice(password, stayingSignedIn = false)
+                    else try {
+                        account.trustThisDevice(null, stayingSignedIn = true)
+                    } catch (e: DeviceAuthFailed) {
+                        account.trustThisDevice(password, stayingSignedIn = false)
+                    }
+                }.onFailure { android.util.Log.w("veyq", "this device could not be trusted with the account", it) }
+                add(account)
+                show(account, connections.current!!.second)
             } catch (e: SignInFailure) {
-                _screen.value = Screen.SignIn(error = e.reason.name, adding = adding)
+                _screen.value = Screen.SignIn(error = e.reason.name, adding = adding, server = server, email = email)
             }
         }
+    }
+
+    /** The trusted account's unlock: its password (DEVICE), or the person's authentication again (DEVICE_KEY). */
+    fun unlock(password: String) {
+        val state = _screen.value as? Screen.Unlock ?: return
+        val record = state.record
+        _screen.value = state.copy(working = true, error = null)
+        viewModelScope.launch {
+            try {
+                val account = when (record.method) {
+                    TrustedDevice.Method.DEVICE -> VeyqAccount.unlockOnDevice(BouncyCastlePrimitives, record, password, device) { block -> Network.client(block) }
+                    TrustedDevice.Method.DEVICE_KEY -> VeyqAccount.resume(BouncyCastlePrimitives, record, device) { block -> Network.client(block) }
+                }
+                add(account)
+                show(account, connections.current!!.second)
+            } catch (e: SignInFailure) {
+                _screen.value = when (e.reason) {
+                    SignInFailure.Reason.DEVICE_NOT_TRUSTED, SignInFailure.Reason.SESSION_ENDED ->
+                        Screen.SignIn(error = e.reason.name, server = record.server, email = record.email)
+                    SignInFailure.Reason.DEVICE_AUTH_CANCELLED -> state.copy(working = false)
+                    else -> state.copy(working = false, error = e.reason.name)
+                }
+            }
+        }
+    }
+
+    /** From the unlock to the full sign-in, for another account. */
+    fun otherAccount() {
+        _screen.value = Screen.SignIn()
     }
 
     /** The switcher: another tenant of the same server is the same session at another domain; another server is its own. */
@@ -151,21 +267,35 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         rebuild()
     }
 
-    /** Signs out of one server; if it was current, another one held becomes current, else the sign-in shows. */
+    /**
+     * Signs out of one server; if it was current, another one held becomes current, else the unlock of an account this
+     * device still trusts with the password, or the sign-in. Staying signed in ends with the sign-out; the password trust
+     * stays (as on the web).
+     */
     fun signOut(account: VeyqAccount) {
         val wasCurrent = connections.current?.first == account
         connections.remove(account)
-        viewModelScope.launch { account.signOut() }
         val next = connections.current
-        when {
-            next == null -> {
-                recent.clear() // the device forgets what was opened once no account is left on it
-                hidden.clear()
-                raw = null
-                _screen.value = Screen.SignIn()
+        viewModelScope.launch {
+            account.signOut()
+            when {
+                next == null -> {
+                    recent.clear() // the device forgets what was opened once no account is left on it
+                    hidden.clear()
+                    raw = null
+                    showLocked()
+                }
+                wasCurrent -> show(next.first, next.second)
+                else -> refreshManaged()
             }
-            wasCurrent -> viewModelScope.launch { show(next.first, next.second) }
-            else -> refreshManaged()
+        }
+    }
+
+    /** Ends this device's trust in [account]: the next sign-in on this device asks for the Secret Key again. */
+    fun forgetDevice(account: VeyqAccount) {
+        viewModelScope.launch {
+            account.forgetThisDevice()
+            refreshManaged()
         }
     }
 
@@ -175,7 +305,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         managedSpaces = loaded
         val current = connections.current
         return connections.all.map { c ->
-            ManagedServer(c, c.label, c.tenants.map { t ->
+            ManagedServer(c, c.label, trusted = c.trusted?.method, tenants = c.tenants.map { t ->
                 val spaces = loaded[c.key + "#" + t.tenantId]
                 ManagedTenant(
                     tenant = t,

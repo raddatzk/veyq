@@ -59,4 +59,20 @@
     <string name="manage_current">Shown now</string>
     <string name="manage_sign_out">Sign out of this server</string>
     <string name="manage_hint">Hidden tenants and spaces stay on the server and are only left out on this device.</string>
+    <string name="manage_trusted_password">This device opens with your password.</string>
+    <string name="manage_trusted_remembered">You stay signed in on this device.</string>
+    <string name="manage_forget_device">Stop trusting this device</string>
+
+    <string name="signin_remember">Stay signed in</string>
+    <string name="signin_remember_hint">Opens with your fingerprint, face or the device code. Anyone who can unlock this phone can open your content. Off, the app asks for your password, never again for the Secret Key.</string>
+    <string name="signin_error_device_not_trusted">This device is no longer trusted with this account. Sign in with your Secret Key.</string>
+    <string name="signin_error_session_ended">You were signed out. Please sign in again.</string>
+    <string name="starting">Opening…</string>
+    <string name="unlock_title">Welcome back</string>
+    <string name="unlock_password_hint">This device is trusted: your password is enough.</string>
+    <string name="unlock_remembered_hint">Confirm it is you to open your spaces.</string>
+    <string name="unlock_submit">Unlock</string>
+    <string name="unlock_other">Use another account</string>
+    <string name="unlock_prompt_title">Unlock veyq</string>
+    <string name="unlock_prompt_subtitle">Confirm it is you</string>
 </resources>

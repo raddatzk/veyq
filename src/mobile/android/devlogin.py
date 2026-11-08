@@ -5,7 +5,9 @@ Reads VEYQ_EMAIL, VEYQ_PASSWORD, VEYQ_SECRET_KEY and VEYQ_TENANT_DOMAIN from the
 `./gradlew backend:seed`) and hands them to the debug build as launch extras; nothing is printed. The debug build
 resolves the `*.localhost` tenant to the developer's machine (DevDns), so the server is `<tenant domain>:<port>`.
 
-Usage: devlogin.py [port]   (default 8080, the dev backend)
+Usage: devlogin.py [port] [--remember] [--unlock]   (port default 8080, the dev backend)
+  --remember  sign in staying signed in (the DEVICE_KEY trust; the emulator asks for its screen lock)
+  --unlock    hand only the password, for the unlock screen of a password-trusted account
 """
 from __future__ import annotations
 
@@ -29,14 +31,20 @@ def env() -> dict[str, str]:
 
 
 def main() -> None:
-    port = sys.argv[1] if len(sys.argv) > 1 else "8080"
+    flags = {a for a in sys.argv[1:] if a.startswith("--")}
+    positional = [a for a in sys.argv[1:] if not a.startswith("--")]
+    port = positional[0] if positional else "8080"
     e = env()
-    extras = {
-        "veyq.devServer": f"{e['VEYQ_TENANT_DOMAIN']}:{port}",
-        "veyq.devEmail": e["VEYQ_EMAIL"],
-        "veyq.devPassword": e["VEYQ_PASSWORD"],
-        "veyq.devSecretKey": e["VEYQ_SECRET_KEY"],
-    }
+    if "--unlock" in flags:
+        extras = {"veyq.devUnlockPassword": e["VEYQ_PASSWORD"]}
+    else:
+        extras = {
+            "veyq.devServer": f"{e['VEYQ_TENANT_DOMAIN']}:{port}",
+            "veyq.devEmail": e["VEYQ_EMAIL"],
+            "veyq.devPassword": e["VEYQ_PASSWORD"],
+            "veyq.devSecretKey": e["VEYQ_SECRET_KEY"],
+            "veyq.devRemember": "1" if "--remember" in flags else "0",
+        }
     args = ["am", "start", "-n", "me.raddatz.veyq/me.raddatz.veyq.mobile.android.MainActivity"]
     for k, v in extras.items():
         args += ["--es", k, shlex.quote(v)]

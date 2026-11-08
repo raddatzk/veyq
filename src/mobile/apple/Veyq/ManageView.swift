@@ -33,8 +33,18 @@ struct ManageView: View {
                         Button(role: .destructive) { model.signOut(server.account) } label: {
                             Label("Sign out of this server", systemImage: "rectangle.portrait.and.arrow.right")
                         }
+                        if server.trusted != nil {
+                            Button(role: .destructive) { model.forgetDevice(server.account) } label: {
+                                Label("Stop trusting this device", systemImage: "lock.slash")
+                            }
+                        }
                     } header: {
                         Label(server.label, systemImage: "server.rack")
+                    } footer: {
+                        // How this device trusts the account; ending it means the next sign-in asks for the Secret Key.
+                        if let trusted = server.trusted {
+                            Text(trusted == .deviceKey ? "You stay signed in on this device." : "This device opens with your password.")
+                        }
                     }
                 }
                 Section {
