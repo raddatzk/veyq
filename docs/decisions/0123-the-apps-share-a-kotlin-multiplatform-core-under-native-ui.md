@@ -52,14 +52,15 @@ implementation exists but what holds it to the first.
    then for another member's grant that member's key chain anchored from the head this account pinned
    ([ADR 0028](0028-identity-authenticity-tofu-verification.md) decision 2) in the account's synced pin store, written byte for byte as the
    web writes it ([ADR 0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)); a group's granter judged by
-   their standing in the tenant's member list ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 12 and 15); a retired key only at or below this
-   device's floor; a later epoch only through the succession statements from the key this device held
+   their standing in the tenant's member list ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 12, 15 and 21, `session/Anchoring.kt`): an owner without a
+   join record by the pin, a member who joined by invite by their join record — opened with the tenant key, its
+   three signatures verified, its signer an owner anchored in turn (with that owner's endorsement where the key that
+   rooted it is retired), their chain walked from the step it names —, anyone else refused; a retired key only at or
+   below this device's floor; a later epoch only through the succession statements from the key this device held
    ([ADR 0115](0115-a-scope-key-is-replaced-never-chained.md) decision 5). The floor and the held keys are this device's
-   own trust marks, never synced, in the platform's preferences (no secret). **A granter who joined by invite is
-   refused for now:** the web opens their join record and walks their chain from it (the JOINED standing); the app
-   reads a member with a join record as unanchored, so such a group stays closed — refusing hides a space, accepting
-   would trust a key nobody vouched for. Keys and tokens live in memory only; keeping a device trusted (a `DEVICE` or
-   `DEVICE_KEY` wrap under a Keystore or Keychain key) is the next decision on this line.
+   own trust marks, never synced, in the platform's preferences (no secret). Keys and tokens live in memory only;
+   keeping a device trusted (a `DEVICE` or `DEVICE_KEY` wrap under a Keystore or Keychain key) is the next decision on
+   this line.
    **An account is one server's; a tenant is a domain of it** (owner 2026-11-08: one server gives several tenants, and
    the app connects to several servers). A session is the account's, not a tenant's (ADR 0004), so one sign-in opens
    every tenant the account holds there (`listMyTenants`), each at its own domain on the sign-in's scheme and port,
@@ -88,10 +89,11 @@ implementation exists but what holds it to the first.
 
 ## Consequences
 
-- **Not built yet:** stored device trust (decision 5); every write (a new node, an entry); each application's own views behind the bar; a
-  granter who joined by invite (decision 5's JOINED standing, with the join endorsement a retired owner key needs); a CI job for the apps.
-  The grant check is held by `GrantTrustTest` against a server the test plays, each refusal killed by a mutation of the
-  rule it pins, and by `v1.json#key_chain`, `#identity_pin` and `#scope_succession` on both primitives. `src/mobile/` verifies its dependencies as `src/backend/` does
+- **Not built yet:** stored device trust (decision 5); every write (a new node, an entry); each application's own views behind the bar; a CI
+  job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
+  a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
+  of signers, end unanchored through the signer's own judgment) — and by `v1.json#key_chain`, `#identity_pin`,
+  `#scope_succession`, `#invite_key`, `#join_record`, `#join_endorsement` and `#value_key` on both primitives. `src/mobile/` verifies its dependencies as `src/backend/` does
   (`gradle/verification-metadata.xml`, held by `scripts/validate_build_input_pins.py`): a new dependency or target
   owes a `./gradlew --write-verification-metadata sha256` run over the tasks that resolve it.
 - Two implementations of the suite now exist. A change to the suite changes the vectors first, and both the web's
