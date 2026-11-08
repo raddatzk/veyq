@@ -194,6 +194,16 @@ describe('a bookmark\'s page shows its share in place', () => {
     w.unmount()
   })
 
+  // uc.platform.support-the-project A2: the member's page already carries the banner (`AppShell.vue`), so the share in
+  // place brings no second one — it draws the share page's gates and views, not the share page.
+  it('brings no donation banner of its own: one banner per page', async () => {
+    const w = mountPage()
+    await flushPromises()
+    expect(w.findComponent(LevelView).findAll('.veyq-level-item-title').map((x) => x.text())).toEqual(['Briefe']) // the share is drawn
+    expect(w.find('[data-testid="donation-banner"]').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('the member\'s doors never reach it: a row opens inside the share, never the member\'s page', async () => {
     const w = mountPage()
     await flushPromises()

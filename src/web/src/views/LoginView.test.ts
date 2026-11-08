@@ -61,6 +61,8 @@ vi.mock('../features/account/deviceIdentity', () => ({
 }))
 vi.mock('../features/account/sessions/sessions', () => ({ revokeOtherSessionFamilies: vi.fn() }))
 vi.mock('../app/pendingRoute', () => ({ takeRoute: () => null }))
+// The footer's operator read (the one test that draws the card's footer): nothing published, no network.
+vi.mock('../core/operator/operatorDetails', () => ({ loadPublishedOperator: async () => ({ identification: null, contact: null }) }))
 // The locked sign-out this view renders confirms through the app's own dialog (cr-web-own-confirm-dialog),
 // which is mounted in App.vue — out of reach of a view-level mount, so its answer is mocked here.
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
@@ -210,6 +212,22 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
   afterEach(() => {
     mounted.splice(0).forEach((w) => w.unmount())
     session.accessToken = null
+  })
+
+  // uc.platform.support-the-project A1: signing in is never disturbed — no donation banner here — while the footer
+  // still carries veyq's own two links beside the instance's (the real OperatorIdentification, not a stub).
+  it('shows no donation banner, and its footer links "Why is veyq secure?" and "Donate"', async () => {
+    // The file's card stub drops the footer slot; this one keeps it, where the card draws the footer.
+    const card = { template: '<div><slot name="title" /><slot /><slot name="footer" /></div>' }
+    const w = mount(LoginView, { global: { plugins: [realI18n()], stubs: { ...stubs, VeyqCard: card } } })
+    mounted.push(w)
+    await flushPromises()
+    expect(w.find('.operator-identification__terms').exists()).toBe(true) // the footer is drawn: the positive control
+    expect(w.findAll('.operator-identification__project').map((l) => l.attributes('href'))).toEqual([
+      'https://veyq.app/privacy/is-my-data-safe/',
+      'https://veyq.app/donate/',
+    ])
+    expect(w.find('[data-testid="donation-banner"]').exists()).toBe(false)
   })
 
   it('offers the locked entry exactly where the Secret-Key field is', async () => {

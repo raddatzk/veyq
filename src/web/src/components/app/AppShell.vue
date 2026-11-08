@@ -6,7 +6,9 @@
 // router already gates app routes on session + unlocked, so this decides layout — and opens a scope for an app route
 // that is not the home (below). Below the workspace sits the
 // operator footer (uc.admin.operator-details): who runs the instance and its terms, reachable from every page of the
-// signed-in app as § 5 DDG asks of a provider identification and DSA Art. 14(1) of the terms.
+// signed-in app as § 5 DDG asks of a provider identification and DSA Art. 14(1) of the terms. Above the route sits the
+// donation banner as a member's (uc.platform.support-the-project, ADR 0122) — on the signed-in app only, never on the
+// public or plain layouts' login, invite, join and recovery pages.
 import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -21,6 +23,7 @@ import AppTopbar from './AppTopbar.vue'
 import IncompatibleScreen from './IncompatibleScreen.vue'
 import FinishProfilePrompt from '../../features/account/profile/FinishProfilePrompt.vue'
 import OperatorIdentification from '../../core/operator/OperatorIdentification.vue'
+import DonationBanner from '../../core/project/DonationBanner.vue'
 
 const route = useRoute()
 const { serverState } = useServerState()
@@ -63,6 +66,7 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
     </div>
     <div class="app-workspace">
       <main class="content">
+        <DonationBanner member />
         <FinishProfilePrompt />
         <RouterView />
       </main>

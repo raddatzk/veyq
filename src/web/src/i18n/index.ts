@@ -1288,6 +1288,18 @@ const en = {
     terms: 'Terms of this server',
     privacy: 'Privacy',
   },
+  // the veyq project's own links (core/project/, uc.platform.support-the-project, ADR 0122): the donation banner of the
+  // signed-in app and the share page, and the footer's two links beside the instance's own
+  project: {
+    banner: {
+      label: 'Support veyq',
+      text: 'veyq is free and open source. If it is useful to you, you can support its development.',
+      donate: 'Donate',
+      dismiss: 'Close and don’t show again',
+    },
+    security: 'Why is veyq secure?',
+    donate: 'Donate',
+  },
   operatorTerms: {
     title: 'Terms of this server',
     intro: 'This section applies to every space on this server. A space can add terms of its own, which you see when you join it or open one of its links.',
@@ -2063,7 +2075,6 @@ const en = {
     // the role badge of core's page (any kind; a folder's own wording is `folder.contributorBadge`)
     readonly: 'Shared with you · read-only',
     contributorBadge: 'Shared with you · you can contribute',
-    securityFooter: 'How safe is this?',
     // core's one guest-naming component (core/sharing/GuestNaming.vue, inbox #401): whose session this device holds on a
     // link and its "Not you?" — every application's page, so the words name none of them.
     guest: {
@@ -3395,6 +3406,18 @@ const de: typeof en = {
     terms: 'Bedingungen dieses Servers',
     privacy: 'Datenschutz',
   },
+  // the veyq project's own links (core/project/, uc.platform.support-the-project, ADR 0122): the donation banner of the
+  // signed-in app and the share page, and the footer's two links beside the instance's own
+  project: {
+    banner: {
+      label: 'veyq unterstützen',
+      text: 'veyq ist frei und quelloffen. Wenn es dir nützt, kannst du die Entwicklung unterstützen.',
+      donate: 'Spenden',
+      dismiss: 'Schließen und nicht mehr anzeigen',
+    },
+    security: 'Wieso ist veyq sicher?',
+    donate: 'Spenden',
+  },
   operatorTerms: {
     title: 'Bedingungen dieses Servers',
     intro: 'Dieser Abschnitt gilt für jeden Bereich auf diesem Server. Ein Bereich kann eigene Nutzungsbedingungen ergänzen; die siehst du, wenn du ihm beitrittst oder einen seiner Links öffnest.',
@@ -4093,7 +4116,6 @@ const de: typeof en = {
     },
     readonly: 'Mit dir geteilt · schreibgeschützt',
     contributorBadge: 'Mit dir geteilt · du kannst beitragen',
-    securityFooter: 'Wie sicher ist das?',
     guest: {
       as: 'Du bist hier als {name}.',
       asUnnamed: 'Du hast auf diesem Gerät deinen Namen angegeben.',

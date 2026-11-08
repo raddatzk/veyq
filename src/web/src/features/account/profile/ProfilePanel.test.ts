@@ -38,7 +38,7 @@ const TENANT = { epoch: 0, key: K_TENANT }
 /** The name the panel sent, opened as every reader opens it. */
 const nameOf = (u: { sealedName?: string; wrappedNameValueKey?: string }) => openMemberName(TENANT, ADDRESS, u.sealedName, u.wrappedNameValueKey)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000d1', userId: '5c09e000-0000-4000-8000-0000000000d2' }
-const STORED = { username: 'kevin', ...sealName(TENANT, ADDRESS, { firstName: 'Kevin', lastName: 'Raddatz' }), avatarRevision: 0, requireGroupAddConsent: false }
+const STORED = { username: 'kevin', ...sealName(TENANT, ADDRESS, { firstName: 'Kevin', lastName: 'Raddatz' }), avatarRevision: 0, requireGroupAddConsent: false, donationBannerDismissed: false }
 
 const stubs = {
   VeyqButton: { props: ['label', 'loading'], template: '<button type="submit">{{ label }}</button>' },
