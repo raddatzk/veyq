@@ -159,6 +159,13 @@ implementation exists but what holds it to the first.
   stored under; a PDF is only drawn (Android's `PdfRenderer`, which reads a file, through one in the app's cache deleted
   after the drawing; PDFKit from memory). The object store's presigned URLs are another host: they are sent through
   `VeyqAccount.outside`, never with the account's bearer. The web opens a receipt the app uploaded (measured 2026-11-08).
+  An open Pot is live as the web's is: core's `session/LivePoll.kt` (the web's `livePoller.ts` at `ITEMS_POLL`: 20 s ±
+  20 % after a tick settled, doubling to 2 min on errors, a catch-up when the screen comes back; `LivePollTest`, each rule
+  killed by a mutation) ticks the Pot's conditional delta read and its receipts, only while the Pot is on screen and the
+  app in front (Android: the screen's lifecycle started; Apple: the scene active — Swift drives the loop, since a Swift
+  task's cancellation does not reach a Kotlin coroutine), skipped while a write shows saving; a pull reads it at once. Two
+  reads of one Pot run one after the other. What one device writes, the other shows within a tick (measured 2026-11-08,
+  Android and iOS on one Pot).
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

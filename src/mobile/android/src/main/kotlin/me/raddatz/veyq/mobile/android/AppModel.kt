@@ -32,6 +32,7 @@ import me.raddatz.veyq.mobile.navigation.UseKey
 import me.raddatz.veyq.mobile.navigation.arrange
 import me.raddatz.veyq.mobile.navigation.drawerApplications
 import me.raddatz.veyq.mobile.session.DeviceAuthFailed
+import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.session.SignInFailure
 import me.raddatz.veyq.mobile.session.ThisDevice
 import me.raddatz.veyq.mobile.session.TrustedDevice
@@ -353,7 +354,36 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val session = tenantSession?.let { runCatching { PotSession.open(it, ref.scopeId, ref.nodeId) }.getOrNull() }
             potSession = session
+            potPoll = LivePoll(now = System::currentTimeMillis)
             if (_pot.value?.ref == ref) _pot.value = PotState(ref, session?.let(::PotView), failed = session == null)
+        }
+    }
+
+    private var potPoll: LivePoll? = null
+
+    /**
+     * The open Pot's live poll (core's `LivePoll`), for as long as the caller runs it — the Pot's screen while it is
+     * started, so nothing is asked in the background: skipped while a write shows saving; the view read anew when a
+     * tick moved what is held.
+     */
+    suspend fun livePot() {
+        val session = potSession ?: return
+        val cadence = potPoll ?: return
+        session.live(cadence, busy = { _pot.value?.saving != false }) {
+            if (potSession === session) _pot.update { it?.copy(view = PotView(session)) }
+        }
+    }
+
+    /** Reads the open Pot again now (pull to refresh); [done] when it settled, moved or not. */
+    fun refreshPot(done: () -> Unit) {
+        val session = potSession ?: return done()
+        viewModelScope.launch {
+            runCatching {
+                session.refresh()
+                session.readReceipts()
+            }
+            if (potSession === session) _pot.update { it?.copy(view = PotView(session)) }
+            done()
         }
     }
 

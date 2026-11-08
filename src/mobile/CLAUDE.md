@@ -29,7 +29,7 @@ A Gradle build of its own, run through its own wrapper.
   by `ExpensesVectorsTest` (`contracts/expenses/v1-vectors.json`, the crypto vectors' `expense-entry`) and
   `LedgerRulesTest`; `BigTest` holds `expenses/Big.kt` to `java.math.BigInteger`. A rule of `expenses/Ledger.kt` or
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
-  (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotView.kt`'s people and entries (`PotViewPeopleTest`, `PotViewEntriesTest`) and of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`).
+  (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of `PotView.kt`'s people and entries (`PotViewPeopleTest`, `PotViewEntriesTest`) and of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`).
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
@@ -48,7 +48,9 @@ A Gradle build of its own, run through its own wrapper.
   `VEYQ_LIVE_RATES=1` asks the tenant's exchange-rate service (a third party: Frankfurter on a dev instance) for today's table once.
   `VEYQ_LIVE_RECEIPT=<pot name>` adds an entry with a two-frame receipt there through the object store, reads it back
   to the byte and saves the entry without it, so the receipt is dropped (the entry stays). The dev backend's store
-  endpoint must be one this machine reaches (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`).
+  endpoint must be one this machine reaches (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`). `VEYQ_LIVE_POLL=<pot name>` opens
+  the Pot twice, writes an entry ("Poll check") on one and deletes it, and checks the other's live poll sees both (the
+  deleted entry stays in the Pot's deleted entries).
 - `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_SEED_TENANT="verein.localhost|Turnverein" ./gradlew :core:jvmTest --tests
   '*DevSecondTenantTest*'` — dev seeding, not a check: gives the seeded principal a second tenant (the seeder births only
   one), through the app's own suite, so the switcher has two to switch between. Skipped when it already exists.

@@ -1,6 +1,8 @@
 package me.raddatz.veyq.mobile.expenses
 
 import io.ktor.client.statement.bodyAsText
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -13,6 +15,7 @@ import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.hex
 import me.raddatz.veyq.mobile.crypto.unb64
 import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
+import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.session.NodeEpochWrite
 import me.raddatz.veyq.mobile.session.NodeMetaWrite
 import me.raddatz.veyq.mobile.session.OpenNode
@@ -72,10 +75,40 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     /**
      * Reads what changed since the last read (the first one reads everything): the first page conditional on the held
      * ledger revision, later pages by cursor; a page after an erasure names the revisions still held. True when anything
-     * moved.
+     * moved. One read at a time: two at once would each set the cursor and revisions they ended at, and an older one
+     * finishing last would set them back — or, after an erasure, drop what the newer one added.
      */
     @Throws(Exception::class)
-    suspend fun refresh(): Boolean {
+    suspend fun refresh(): Boolean = reading.withLock { read() }
+
+    /**
+     * One tick of the live poll (the web's `potSession.ts` poll): a delta read, and the receipts read again when it moved
+     * or the last receipt read failed. Whether anything moved; null when skipped, while another read runs (a write's
+     * re-read): that one brings it all. A failed read throws, which backs the poll off.
+     */
+    @Throws(Exception::class)
+    suspend fun poll(): Boolean? {
+        if (reading.isLocked) return null
+        val moved = refresh()
+        val receiptsMoved = (moved || receiptsDue) && readReceipts()
+        return moved || receiptsMoved
+    }
+
+    /** [poll] as one tick of [cadence]'s loop: skipped while [busy] (a write the screen shows saving); [moved] after a
+     *  tick that changed what is held. For a platform whose tasks cancel Kotlin's coroutines (Android). */
+    suspend fun live(cadence: LivePoll, busy: () -> Boolean, moved: () -> Unit) = cadence.run {
+        when (if (busy()) null else poll()) {
+            null -> LivePoll.Tick.SKIP
+            true -> LivePoll.Tick.DONE.also { moved() }
+            false -> LivePoll.Tick.DONE
+        }
+    }
+
+    private val reading = Mutex()
+    private val receiptsReading = Mutex()
+    private var receiptsDue = false
+
+    private suspend fun read(): Boolean {
         var since = cursor
         var first = true
         var firstLedger = ledgerRevision
@@ -287,8 +320,15 @@ class PotSession private constructor(private val tenant: TenantSession, private 
 
     /** Reads the Pot's receipts again, conditional on the listing's tag. True when anything moved. */
     @Throws(Exception::class)
-    suspend fun readReceipts(): Boolean {
-        val listing = runCatching { blobs.list(node.scopeId, node.id, receiptsTag) }.getOrElse { return false } ?: return false
+    suspend fun readReceipts(): Boolean = receiptsReading.withLock { readReceiptsOnce() }
+
+    private suspend fun readReceiptsOnce(): Boolean {
+        val listing = runCatching { blobs.list(node.scopeId, node.id, receiptsTag) }.getOrElse {
+            receiptsDue = true
+            return false
+        }
+        receiptsDue = false
+        if (listing == null) return false
         receiptsTag = listing.etag
         val n = node
         receipts = listing.blobs.filter { it.role == Receipts.ROLE }.map { b ->

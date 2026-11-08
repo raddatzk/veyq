@@ -18,6 +18,7 @@ struct PotScreen: View {
 
     @State private var editing: Editing?
     @State private var viewing: PotView.EntryRow?
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
         Group {
@@ -50,6 +51,11 @@ struct PotScreen: View {
         }
         .navigationTitle(ref.name)
         .task(id: ref.nodeId) { model.loadPot(ref) }
+        // Live while the Pot is on screen and the app active: what another device writes shows up (core's `LivePoll`).
+        .task(id: LiveKey(nodeId: ref.nodeId, loaded: model.pot?.view != nil, active: phase == .active)) {
+            if model.pot?.view != nil, phase == .active { await model.livePot() }
+        }
+        .refreshable { await model.refreshPot() }
         .sheet(item: $editing) { e in
             if let view = model.pot?.view {
                 EntryEditor(model: model, view: view, entryId: e.entryId, basedOn: e.basedOn, people: e.people, form: FormState(e.form))
@@ -59,6 +65,13 @@ struct PotScreen: View {
             if let view = model.pot?.view { DeletedEntrySheet(model: model, view: view, row: row) }
         }
     }
+}
+
+/// What restarts a Pot's live poll: another Pot, its first read, the app becoming active or not.
+private struct LiveKey: Equatable {
+    let nodeId: String
+    let loaded: Bool
+    let active: Bool
 }
 
 /// Minor units of `currency` as the person's locale writes money.

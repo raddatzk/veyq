@@ -399,8 +399,45 @@ final class AppModel {
         Task {
             let session = (try? await AppleSessions.shared.openPot(tenant: tenant, scopeId: ref.scopeId, nodeId: ref.nodeId)) ?? nil
             potSession = session
+            potPoll = LivePoll(cadence: LivePoll.companion.ITEMS, now: { KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) }, random: { KotlinDouble(value: Double.random(in: 0..<1)) })
             if pot?.ref == ref { pot = PotState(ref: ref, view: session.map { PotView(session: $0) }, failed: session == nil) }
         }
+    }
+
+    private var potPoll: LivePoll?
+
+    /// The open Pot's live poll (core's `LivePoll`) for as long as the calling task runs — the Pot's screen while the app
+    /// is active, so nothing is asked in the background. Swift drives the loop: a Swift task's cancellation does not reach a
+    /// Kotlin coroutine, so it sleeps here and stops at once when cancelled. A tick is skipped while a write shows saving;
+    /// the view is read anew when one moved what is held.
+    func livePot() async {
+        guard let session = potSession, let cadence = potPoll else { return }
+        var wait = cadence.firstDelay()
+        while !Task.isCancelled {
+            if wait > 0 { try? await Task.sleep(for: .milliseconds(wait)) }
+            guard !Task.isCancelled, potSession === session else { return }
+            cadence.started()
+            var outcome = LivePoll.Tick.skip
+            if pot?.saving == false {
+                do {
+                    if let moved = try await session.poll() {
+                        outcome = .done
+                        if moved.boolValue, potSession === session { pot?.view = PotView(session: session) }
+                    }
+                } catch {
+                    outcome = .failed
+                }
+            }
+            wait = cadence.next(outcome: outcome)
+        }
+    }
+
+    /// Reads the open Pot again now (pull to refresh), moved or not.
+    func refreshPot() async {
+        guard let session = potSession else { return }
+        _ = try? await session.refresh()
+        _ = try? await session.readReceipts()
+        if potSession === session { pot?.view = PotView(session: session) }
     }
 
     /// One write to the open Pot (`op` on its session): it shows saving, then the Pot as read after it, and a refusal as its

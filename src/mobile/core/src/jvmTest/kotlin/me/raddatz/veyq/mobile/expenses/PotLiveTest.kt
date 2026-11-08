@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.expenses
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.session.VeyqAccount
@@ -110,6 +111,33 @@ class PotLiveTest {
             assertEquals(PotSession.WriteOutcome.WRITTEN, pot.saveEntry(entryId, edited.form.copy(receipts = emptyList()), edited.basedOn))
             assertTrue(pot.receipts.single { it.receiptId == receiptId }.dropped)
             println("[$potName] a receipt of ${png.size} bytes (${held.listed.chunkCount} frames) uploaded, read back and dropped")
+        }
+        System.getenv("VEYQ_LIVE_POLL")?.let { potName ->
+            // Two devices on one Pot: what one writes, the other's live poll picks up — a new entry, then its delete.
+            val ref = pots.first { it.name == potName }
+            val watcher = PotSession.open(tenant, ref.scopeId, ref.nodeId)!!
+            val writer = PotSession.open(tenant, ref.scopeId, ref.nodeId)!!
+            val count = watcher.ledger!!.entries.size
+            assertEquals(false, watcher.poll(), "a poll of an unchanged Pot moved it")
+            assertEquals(count, watcher.ledger!!.entries.size)
+            val people = writer.ledger!!.participants.filter { it.active && !it.erased }
+            val form = PotView(writer).blankForm(java.time.LocalDate.now().toString())!!.copy(title = "Poll check", payers = listOf(EntryForm.Payer(people.first().id, "2")))
+            val entryId = writer.newId()
+            assertEquals(PotSession.WriteOutcome.WRITTEN, writer.saveEntry(entryId, form, null))
+            assertEquals(true, watcher.poll())
+            val seen = watcher.ledger!!.entries.single { it.id == entryId }
+            assertEquals(Ledger.Status.LIVE, seen.status)
+            assertEquals(PotSession.WriteOutcome.WRITTEN, writer.deleteEntry(entryId, PotView(writer).editing(entryId)!!.basedOn))
+            assertEquals(true, watcher.poll())
+            assertEquals(Ledger.Status.DELETED, watcher.ledger!!.entries.single { it.id == entryId }.status)
+            // Two reads at once are one after the other: both end where the server is.
+            kotlinx.coroutines.coroutineScope {
+                val a = async { watcher.refresh() }
+                val b = async { watcher.refresh() }
+                a.await(); b.await()
+            }
+            assertEquals(writer.ledger!!.entries.map { it.id to it.status }.toSet(), watcher.ledger!!.entries.map { it.id to it.status }.toSet())
+            println("[$potName] the watcher's poll saw the entry written and deleted on the other session")
         }
         if (System.getenv("VEYQ_LIVE_RATES") == "1") {
             // The tenant's exchange-rate service, asked once for today's table (a request to that third party).

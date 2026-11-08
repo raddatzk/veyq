@@ -53,6 +53,9 @@ import me.raddatz.veyq.mobile.expenses.Ledger
 import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.expenses.RevisionFormat
 import me.raddatz.veyq.mobile.navigation.BarTab
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import java.math.BigDecimal
 import java.text.NumberFormat
@@ -62,19 +65,33 @@ import java.util.Currency
  * An open Pot (ADR 0122 decision 4: Expenses' bar is its open Pot's Entries, Overview and Settings, as the web's Pot has
  * them). What it shows comes from core's [PotView]; this only lays it out and formats money.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PotScreen(ref: ObjectRef, tab: BarTab?, model: AppModel) {
     val state by model.pot.collectAsStateWithLifecycle()
     LaunchedEffect(ref) { model.loadPot(ref) }
     val s = state?.takeIf { it.ref == ref }
     val view = s?.view
+    // Live while the Pot is on screen and the app started: what another device writes shows up (core's `LivePoll`).
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(ref, view != null) {
+        if (view != null) owner.repeatOnLifecycle(Lifecycle.State.STARTED) { model.livePot() }
+    }
+    var refreshing by remember { mutableStateOf(false) }
     when {
         s == null || (view == null && !s.failed) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         view == null -> Note(stringResource(R.string.list_empty))
         !view.ready -> PotSettings(view, s, model)
         else -> Column(Modifier.fillMaxSize()) {
             if (view.missing.isNotEmpty()) LedgerNotice(view)
-            Box(Modifier.weight(1f)) {
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = {
+                    refreshing = true
+                    model.refreshPot { refreshing = false }
+                },
+                modifier = Modifier.weight(1f),
+            ) {
                 when (tab?.key) {
                     "expenses.overview" -> Overview(view, s, model)
                     "expenses.settings" -> PotSettings(view, s, model)
