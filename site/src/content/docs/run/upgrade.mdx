@@ -247,6 +247,10 @@ run and the version clients check already share one major; no train has left yet
   so after your major stops being current you have about two years to upgrade before an app asks you to. Apps that
   speak a new major ship before the server's major does. The web client and the admin console come from the server's
   own image and always match it.
+- **The bundled database upgrades itself.** When a release moves the bundled MariaDB to a newer version, its first
+  start backs up the database's system tables and upgrades them, on Compose and Kubernetes alike. An upgraded database
+  does not go back to the older MariaDB: the backup taken before the upgrade is the way back. A database you run
+  yourself is yours to upgrade.
 - **The precise release is for you.** The sign-in page shows only the major; the release you run is in the console's
   **Server → Release**.
 

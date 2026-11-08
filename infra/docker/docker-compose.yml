@@ -25,6 +25,9 @@ services:
     container_name: veyq-mariadb
     restart: unless-stopped
     environment:
+      # A data directory an older MariaDB wrote is upgraded on start: the image backs up the system tables into the data
+      # directory and runs mariadb-upgrade (a major bump such as 11.4 -> 12.3 left them on the old layout otherwise).
+      MARIADB_AUTO_UPGRADE: "1"
       MARIADB_DATABASE: veyq
       MARIADB_USER: veyq
       # Local throwaway only — matches application-dev.properties. Change both together for a non-default.

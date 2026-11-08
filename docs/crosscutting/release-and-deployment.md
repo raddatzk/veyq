@@ -194,6 +194,13 @@ fails on a change to a field Kubernetes refuses to change, or an operator's valu
 none or it is the default predecessor. It renders, never installs; until the first release it informs and gates
 nothing.
 
+**The bundled database upgrades its own data directory.** When a release moves the bundled MariaDB to a newer version
+(2026-11-07: 11.4 to 12.3), its first start on the older directory backs the system tables up into that directory and
+runs `mariadb-upgrade`: the chart's StatefulSet and both Compose files set the image's `MARIADB_AUTO_UPGRADE=1`, and
+`scripts/validate_database_auto_upgrade.py` holds all three to it. Without it the newer server starts on the old system
+tables. An upgraded directory does not go back to the older MariaDB; the backup taken before the release change does. A
+database the operator runs (`mariadb.enabled: false`) is theirs to upgrade.
+
 **The config-secret key** ([ADR 0050](../decisions/0050-operator-config-secret-encryption.md)) is a file the app
 generates at its first start onto its own persistent volume (a named volume under Compose, a claim of its own under
 Kubernetes), never in the database — or the operator's own: under Kubernetes a `Secret` the chart mounts read-only, the

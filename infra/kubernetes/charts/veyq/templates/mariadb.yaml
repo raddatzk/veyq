@@ -54,6 +54,10 @@ spec:
             - name: mysql
               containerPort: 3306
           env:
+            # A data directory an older MariaDB wrote is upgraded on start: the image backs up the system tables into the data
+            # directory and runs mariadb-upgrade (a major bump such as 11.4 -> 12.3 left them on the old layout otherwise).
+            - name: MARIADB_AUTO_UPGRADE
+              value: "1"
             - name: MARIADB_DATABASE
               value: veyq
             - name: MARIADB_USER
