@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // A modal dialog (ADR 0107), on Reka's Dialog: focus moves in and stays in, Escape and the close button close it, and
-// focus returns to what had it before. A click outside never closes it. `closable: false` hides the close button and
+// focus returns to what had it before. A click outside closes it only with `closeOnOutside` — a menu such as the mobile
+// navigation sheet, never a dialog that holds input a stray tap would lose. `closable: false` hides the close button and
 // `closeOnEscape: false` ignores Escape, so a busy dialog cannot be closed mid-write. `position="bottom"` is the mobile
 // sheet. A dialog does not move: there is no dragging (ADR 0107 § Behaviour changed on purpose). The caller's classes,
 // style and attributes land on the dialog box; sheets reach the parts by `veyq-dialog__header`, `__title`,
@@ -26,14 +27,19 @@ const props = withDefaults(
     closable?: boolean
     closeOnEscape?: boolean
     position?: 'center' | 'bottom'
+    closeOnOutside?: boolean
   }>(),
-  { closable: true, closeOnEscape: true, position: 'center' },
+  { closable: true, closeOnEscape: true, position: 'center', closeOnOutside: false },
 )
 const emit = defineEmits<{ show: [] }>()
 const { t } = useI18n()
 
 function onEscape(event: KeyboardEvent) {
   if (!props.closeOnEscape) event.preventDefault()
+}
+// A press or a focus outside the box: Reka closes unless prevented, so only a dialog that opted in lets it through.
+function onOutside(event: Event) {
+  if (!props.closeOnOutside) event.preventDefault()
 }
 function onOpenFocus(event: Event) {
   const marked = (event.target as HTMLElement | null)?.querySelector<HTMLElement>('[autofocus]')
@@ -56,8 +62,8 @@ function onOpenFocus(event: Event) {
           :aria-describedby="undefined"
           aria-modal="true"
           @escape-key-down="onEscape"
-          @pointer-down-outside.prevent
-          @interact-outside.prevent
+          @pointer-down-outside="onOutside"
+          @interact-outside="onOutside"
           @open-auto-focus="onOpenFocus"
         >
           <div class="veyq-dialog__header">

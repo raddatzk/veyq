@@ -464,7 +464,7 @@ function closeMobileMenu() {
       <VeyqIcon name="bars" />
     </button>
 
-    <VeyqDialog v-model:visible="mobileMenuOpen" position="bottom" class="tenant-dialog mobile-nav-dialog" :header="t('shell.menu')">
+    <VeyqDialog v-model:visible="mobileMenuOpen" position="bottom" close-on-outside class="tenant-dialog mobile-nav-dialog" :header="t('shell.menu')">
       <div class="mobile-nav-sheet">
         <!-- One BEREICHE group (cr-0108): the active tenant row enters the shared Tenant home (the old separate
              "Gemeinsam" entry, folded in), other tenants switch, and Personal follows — mirroring the desktop

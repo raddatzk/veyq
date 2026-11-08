@@ -252,6 +252,9 @@ or a one-off `1rem` label sitting in them.
   surface's `shared/ui/layer.css`): unsized, a dialog takes its text's natural width, and one long sentence stretched it
   across the screen. A dialog that needs more sets `--veyq-dialog-max-width: none` beside its own width (the expenses
   entry, the space's trash, the localized markdown editor) — never a rule that out-ranks the default.
+- **A tap beside a dialog closes only a menu** (owner 2026-11-08): `VeyqDialog` stays open on a press outside, so a
+  stray tap never loses what a form holds; a dialog that only offers places to go — the mobile navigation sheet — sets
+  `closeOnOutside` and closes on it, beside its × and Escape.
 - **Dialog footers use the one shared `.veyq-dialog-action-row`** (a `space-between` row; never a
   per-component `.dialog-actions` copy): **cancel/secondary anchored left, submit/confirm anchored right**;
   source order matches visual order. A **destructive tertiary** action that coexists with the primary confirm
