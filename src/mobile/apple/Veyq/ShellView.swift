@@ -24,6 +24,7 @@ struct ShellView: View {
         .overlay(alignment: .bottom) { TrashNotice(model: model) }
         .environment(\.rowDetails, model.rowDetails)
         .environment(\.avatars, model.avatars)
+        .environment(\.picking, model.incoming != nil)
         .sheet(isPresented: Binding(get: { model.managing != nil }, set: { if !$0 { model.managing = nil } })) {
             ManageView(model: model)
         }
@@ -208,11 +209,11 @@ struct Bar: View {
         TabView(selection: selection) {
             ForEach(tabs, id: \.self) { key in
                 Tab(Names.tab(key, app: model.shell.application), systemImage: Names.tabSymbol(key, app: model.shell.application), value: key) {
-                    NavigationStack { content(key).toolbar { toolbar }.background(Role.bg) }
+                    NavigationStack { content(key).modifier(Picking(model: model)).toolbar { toolbar }.background(Role.bg) }
                 }
             }
             Tab(value: Self.search, role: .search) {
-                NavigationStack { SearchList(model: model).toolbar { toolbar } }
+                NavigationStack { SearchList(model: model).modifier(Picking(model: model)).toolbar { toolbar } }
             }
         }
     }
@@ -334,6 +335,10 @@ struct ObjectRow: View {
     let ref: ObjectRef
     let onOpen: (ObjectRef) -> Void
     @Environment(\.rowDetails) private var details
+    @Environment(\.picking) private var picking
+
+    /// Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0124 decision 1).
+    private var takes: Bool { !picking || ref.kind == PotShare.shared.KIND }
 
     var body: some View {
         Button { onOpen(ref) } label: {
@@ -349,6 +354,49 @@ struct ObjectRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!takes)
+        .opacity(takes ? 1 : 0.38)
+    }
+}
+
+extension EnvironmentValues {
+    /// Whether the shell is picking a place for what another app shared (ADR 0124).
+    @Entry var picking = false
+}
+
+/// Picking a place for what another app shared (ADR 0124): its banner below a page's navigation bar, which an inset on
+/// the shell would slide under.
+struct Picking: ViewModifier {
+    let model: AppModel
+
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .top, spacing: 0) {
+            if let incoming = model.incoming { ShareBanner(incoming: incoming, onCancel: model.cancelShare) }
+        }
+    }
+}
+
+/// The pick mode's banner: what waits and where it can go, with its cancel.
+struct ShareBanner: View {
+    let incoming: AppModel.Incoming
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(incoming.files.isEmpty ? String(localized: "Nothing shared can go here: only images and PDFs up to 10 MB.")
+                     : incoming.files.count == 1 ? String(localized: "Choose a Pot for this file") : String(localized: "Choose a Pot for these \(incoming.files.count) files"))
+                    .fontWeight(.semibold)
+                if incoming.refused > 0 {
+                    Text("\(incoming.refused) left out: only images and PDFs up to 10 MB.").font(.caption).foregroundStyle(Role.muted)
+                }
+            }
+            Spacer()
+            Button("Cancel", action: onCancel)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Role.accentSoft, ignoresSafeAreaEdges: [])
     }
 }
 

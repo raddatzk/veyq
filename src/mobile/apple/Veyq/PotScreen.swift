@@ -15,9 +15,14 @@ struct PotScreen: View {
         let people: [PotView.Person]
         let form: EntryForm
         var invalid = false
+        /// What another app shared, as the new expense's receipts (ADR 0124).
+        var pending: [PotSession.PendingReceipt] = []
+        var fromShare = false
     }
 
     @State private var editing: Editing?
+    /// The editor shows what another app shared: its close ends the share.
+    @State private var sharing = false
     @State private var viewing: PotView.EntryRow?
     @Environment(\.scenePhase) private var phase
 
@@ -59,15 +64,35 @@ struct PotScreen: View {
             if model.pot?.view != nil, phase == .active { await model.livePot() }
         }
         .refreshable { await model.refreshPot() }
-        .sheet(item: $editing) { e in
+        // Files shared to veyq and placed here: a new expense with them as its receipts, where entries may be added.
+        .task(id: ShareKey(waiting: model.incoming != nil, loaded: model.pot?.ref == ref && model.pot?.view != nil)) {
+            // Only while the shell still shows this Pot: files given back (its editor closed unsaved) move the shell Home first.
+            guard model.incoming != nil, model.shell.openObject == ref, model.pot?.ref == ref, let view = model.pot?.view, view.canWrite, !view.people.isEmpty,
+                  let f = view.blankForm(date: FormState.dayString(Date()), separator: decimalSeparator), let files = model.takeShare() else { return }
+            editing = Editing(entryId: nil, basedOn: nil, people: view.people, form: f, pending: files, fromShare: true)
+            sharing = true
+        }
+        .sheet(item: $editing, onDismiss: {
+            // A share's editor closed without its save: its files wait again in the pick mode (a save ended the share).
+            if sharing { sharing = false; model.returnShare() }
+        }) { e in
             if let view = model.pot?.view {
-                EntryEditor(model: model, view: view, entryId: e.entryId, basedOn: e.basedOn, people: e.people, form: FormState(e.form), invalid: e.invalid)
+                EntryEditor(
+                    model: model, view: view, entryId: e.entryId, basedOn: e.basedOn, people: e.people, form: FormState(e.form), invalid: e.invalid,
+                    initialPending: e.pending, onSaved: e.fromShare ? { sharing = false; model.shareSaved() } : nil
+                )
             }
         }
         .sheet(item: $viewing) { row in
             if let view = model.pot?.view { DeletedEntrySheet(model: model, view: view, row: row) }
         }
     }
+}
+
+/// What starts a shared file's new expense: files waiting, and this Pot read.
+private struct ShareKey: Equatable {
+    let waiting: Bool
+    let loaded: Bool
 }
 
 /// What restarts a Pot's live poll: another Pot, its first read, the app becoming active or not.

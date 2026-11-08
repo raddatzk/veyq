@@ -1,7 +1,7 @@
 # ADR 0124 — The apps take what the system shares; the chosen node's kind decides what it becomes
 
 - Status: Accepted
-- Built: partly (Android's share target and pick mode, the app group and the shared keychain group; not built: the iOS share extension)
+- Built: yes (Android's share target, iOS's share extension, the pick mode on both, the app group and the shared keychain group)
 - Date: 2026-11-08
 
 ## Context
@@ -16,7 +16,10 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
 
 1. **One flow on both platforms.** The system's share sheet hands veyq what was shared; veyq opens its own navigation
    (ADR 0122: the spaces, the folders, the objects) in a pick mode, in which a node can be chosen only where its kind
-   takes what is shared and this member may write there; anything else is shown and cannot be chosen.
+   takes what is shared and this member may write there; anything else is shown and cannot be chosen. The pick mode
+   starts at the space's Home, never in the object last open (where the app otherwise opens, ADR 0122), so the person
+   chooses the place; a target's flow closed without its save gives the files back to the pick mode, for this node or
+   another, and only the pick mode's own cancel ends the share.
 
 2. **The chosen node's kind decides what the shared thing becomes** — each application's answer, as a kind's slug token
    input is (core never knows an application's rules). **Expenses** (owner 2026-11-08): a Pot takes images and PDFs within
@@ -40,8 +43,9 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
    in memory only, as the app's are (ADR 0123 decision 8); the Master Key is never stored.
 
 6. **What a share extension holds whole is bounded by its target.** A share extension has a fixed memory limit (on the
-   order of 120 MB): a receipt is at most 10 MiB, so a Pot's flow holds its files in memory as the app does; a target
-   with larger files (a folder's, a Memory's) seals and uploads them in frames from disk.
+   order of 120 MB): a receipt is at most 10 MiB, so a Pot's flow holds its files in memory as the app does, at most
+   64 MiB of them in one share — a file beyond that is left out, as a too large one is, and the banner counts it. A
+   target with larger files (a folder's, a Memory's) seals and uploads them in frames from disk.
 
 7. **An image is taken in a representation every client draws.** iOS offers a photo as HEIC and as JPEG; the share
    takes the JPEG, so a receipt reads in every browser, as the web's own uploads do.
@@ -60,6 +64,12 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   mode's banner with the kinds that take nothing dimmed, and a writable Pot with people opening its new expense with
   them as receipts; what a Pot takes is Expenses' answer in core (`expenses/PotShare.kt`, `PotShareTest`). A photo
   shared from the Files app was saved as a receipt of a new expense and opened again (measured 2026-11-08).
-- **Not built yet:** the iOS share extension (decisions 1–3 and 5–7 on iOS).
+- **Built on iOS:** decisions 1–3 and 5–7 — the share extension `VeyqShare` (`apple/VeyqShare/`): the app's own views
+  and model (`AppModel(inExtension: true)`) under its `ShareViewController`, which reads the attachments once (a JPEG
+  where the sender offers one, a HEIC re-encoded, a PDF as it is) and ends the request on the save or the cancel. With
+  no trusted account it says to open veyq first (`.needsApp`); it never moves or removes what the app keeps. A photo
+  shared from the Photos app was placed in a Pot after Face ID, saved as a new expense's receipt, and opened on the web
+  (measured 2026-11-08 in the iOS Simulator); the editor closed unsaved returned to the pick mode, and the pick mode's
+  cancel ended the request — on Android likewise (measured the same day on the emulator).
 - App groups and keychain groups need the developer team's signing: a Simulator build is signed ad hoc with them; a device
   build needs the team's provisioning profile with the group.

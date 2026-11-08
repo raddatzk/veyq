@@ -12,7 +12,9 @@ A Gradle build of its own, run through its own wrapper.
   principal (`.run/.env`).
 - `apple/` — the Apple app (SwiftUI, iOS and macOS). `xcodegen` in that directory writes `Veyq.xcodeproj` from
   `project.yml`; the project builds `VeyqCore.xcframework` itself before it compiles. `devlogin.py <device>`
-  relaunches the installed debug app in a booted simulator, signed in as the seeded dev principal.
+  relaunches the installed debug app in a booted simulator, signed in as the seeded dev principal. `VeyqShare/` is the
+  iOS share extension (ADR 0124), embedded in the app: it compiles every file of `Veyq/` but `VeyqApp.swift` (the
+  entry point) and `DevLogin.swift`, under its own `ShareViewController`.
 
 - `theme/generate_theme.py` — the web's colour roles and brand mark for every platform (ADR 0123 decision 7): the
   builds run it (`:core:generateTheme`, `:android:generateThemeRes`, the Apple project's pre-build step); its output
@@ -70,7 +72,9 @@ A Gradle build of its own, run through its own wrapper.
   Neither stops a running app (an install does): one still running keeps the tree it read, so what the web changed
   meanwhile is not there — `adb shell am force-stop me.raddatz.veyq` first.
   A share to veyq (ADR 0124) is tried from a real sender — the Files app (`com.google.android.documentsui`): long-press,
-  Share, veyq. `adb shell am start -a android.intent.action.SEND --grant-read-uri-permission` with a MediaStore URI reaches
+  Share, veyq. On iOS from the Photos app: `xcrun simctl addmedia <udid> <image>`, the photo, Share, veyq; the extension
+  resumes only an account the app left staying signed in (`devlogin.py <device> --remember`; answer its Face ID) or
+  password-trusted, else it says to open veyq first. `adb shell am start -a android.intent.action.SEND --grant-read-uri-permission` with a MediaStore URI reaches
   the app but grants nothing (the shell may not), so the stream does not read (`veyq-share` in logcat).
 - `xcodebuild -project apple/Veyq.xcodeproj -target Veyq -sdk macosx build CODE_SIGNING_ALLOWED=NO` (or
   `-sdk iphonesimulator`) — the Apple app compiles. On a fresh checkout run `./gradlew :core:assembleVeyqCoreDebugXCFramework`
@@ -103,6 +107,9 @@ A Gradle build of its own, run through its own wrapper.
   (`fetchOutside`): no bearer, no cookie, no header of the app's own.
 - SwiftUI attaches a modifier on a `Form`'s or `List`'s `Section` to every row of it: a `.sheet` there is presented by
   none, an `.onChange` runs once a row. Presentations of a section go on the `Form` (`ReceiptPresenters`).
+- Every file of `apple/Veyq/` but `VeyqApp.swift` and `DevLogin.swift` is also compiled into the share extension, which
+  builds with `APPLICATION_EXTENSION_API_ONLY`: no `UIApplication.shared` or other API an extension may not use there,
+  and nothing the app alone may do (moving or removing what it keeps) without `AppModel.inExtension` guarding it.
 - On iOS what the share extension needs is shared (ADR 0124): defaults go through `Shared.defaults` (the app group's
   suite), never `UserDefaults.standard`, and a Keychain item through `KeychainStore` (the entitlements' first group is the
   shared one). A value only the app reads may stay its own, but nothing the session or the device trust reads.

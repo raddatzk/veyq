@@ -51,6 +51,8 @@ final class AppModel {
         case signIn(working: Bool, error: String?, adding: Bool, server: String?, email: String?)
         /// An account this device trusts: the password alone, or the person's authentication.
         case unlock(record: TrustedDevice, working: Bool, error: String?)
+        /// In the share extension with no account this device trusts: the app signs in, not the extension (ADR 0124).
+        case needsApp
         case signed
     }
 
@@ -72,22 +74,28 @@ final class AppModel {
     var drawerOpen = false
 
     private let connections = AppleSessions.shared.connections()
-    private let device: ThisDevice = {
+    private let device: ThisDevice
+    /// The share extension's model (ADR 0124): it signs in only from what the app left and moves nothing of the app's.
+    let inExtension: Bool
+
+    private static func makeDevice(inExtension: Bool) -> ThisDevice {
         #if os(iOS)
         let label = UIDevice.current.model
         #else
         let label = Host.current().localizedName ?? "Mac"
         #endif
-        let keychain = KeychainStore(movesLegacy: true)
-        // What the share extension reads too lives in the app group (ADR 0124); an earlier installation's move there.
-        Shared.moveIntoGroup()
-        // A first start after an installation: the Keychain may still hold an earlier installation's items.
-        if !Shared.defaults.bool(forKey: "veyq.installed") {
-            keychain.removeAll()
-            Shared.defaults.set(true, forKey: "veyq.installed")
+        let keychain = KeychainStore(movesLegacy: !inExtension)
+        if !inExtension {
+            // What the share extension reads too lives in the app group (ADR 0124); an earlier installation's move there.
+            Shared.moveIntoGroup()
+            // A first start after an installation: the Keychain may still hold an earlier installation's items.
+            if !Shared.defaults.bool(forKey: "veyq.installed") {
+                keychain.removeAll()
+                Shared.defaults.set(true, forKey: "veyq.installed")
+            }
         }
         return AppleSessions.shared.device(keychain: keychain, label: label, prompt: String(localized: "Open your spaces"), defaults: Shared.defaults)
-    }()
+    }
     private var started = false
     private let recent: RecentUses
     private let hidden: Hidden
@@ -99,7 +107,9 @@ final class AppModel {
     private var rawOff: Set<String> = []
     private var managedSpaces: [String: [SpaceRef]] = [:]
 
-    init() {
+    init(inExtension: Bool = false) {
+        self.inExtension = inExtension
+        device = Self.makeDevice(inExtension: inExtension)
         let stored = Shared.defaults.stringArray(forKey: "veyq.recent") ?? []
         recent = RecentUses(
             persist: { keys in
@@ -134,7 +144,7 @@ final class AppModel {
         started = true
         let records = device.trusted()
         guard !records.isEmpty else {
-            screen = .signIn(working: false, error: nil, adding: false, server: nil, email: nil)
+            screen = inExtension ? .needsApp : .signIn(working: false, error: nil, adding: false, server: nil, email: nil)
             return
         }
         Task {
@@ -229,7 +239,7 @@ final class AppModel {
 
     /// From the unlock to the full sign-in, for another account.
     func otherAccount() {
-        screen = .signIn(working: false, error: nil, adding: false, server: nil, email: nil)
+        screen = inExtension ? .needsApp : .signIn(working: false, error: nil, adding: false, server: nil, email: nil)
     }
 
     /// A Kotlin exception reaches Swift as an NSError carrying it under "KotlinException"; a sign-in failure names its reason.
@@ -375,12 +385,59 @@ final class AppModel {
         }
         let defaultSpace = Home.shared.defaultSpace(spaces: spaces)?.scopeId
         if start {
-            shell = Shell.companion.start(lastUsed: recent.lastUsed(objects: objects), space: defaultSpace)
+            shell = Shell.companion.start(lastUsed: incoming == nil ? recent.lastUsed(objects: objects) : nil, space: defaultSpace)
             drawerOpen = shell.isHome && shell.space == nil
         } else if let s = shell.space, !spaces.contains(where: { $0.scopeId == s }) {
             shell = shell.switchSpace(scopeId: defaultSpace ?? "")
         }
         refreshDrawer()
+    }
+
+    // MARK: What another app shared (ADR 0124)
+
+    /// Files shared to veyq, waiting for the Pot they go to (the pick mode), and how many were left out.
+    struct Incoming {
+        let files: [PotSession.PendingReceipt]
+        let refused: Int
+    }
+
+    private(set) var incoming: Incoming?
+    /// What a Pot took, until its new expense is saved: its editor closed unsaved gives it back to the pick mode.
+    private var taken: Incoming?
+    /// How the share ends: true once its files were saved where they went, false when it was cancelled.
+    var onShareDone: ((Bool) -> Void)?
+
+    /// Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
+    /// they go (ADR 0124 decision 1) — the start does the same while the session is still opening.
+    func receiveShare(_ incoming: Incoming) {
+        shell = Shell.companion.start(lastUsed: nil, space: shell.space)
+        self.incoming = incoming
+    }
+
+    func cancelShare() {
+        incoming = nil
+        onShareDone?(false)
+    }
+
+    /// The waiting files, taken by the Pot opened as their place: its new expense's receipts.
+    func takeShare() -> [PotSession.PendingReceipt]? {
+        guard let waiting = incoming, !waiting.files.isEmpty else { return nil }
+        taken = waiting
+        incoming = nil
+        return waiting.files
+    }
+
+    /// The new expense's editor closed unsaved: the files wait again, for this Pot or another.
+    func returnShare() {
+        guard let t = taken else { return }
+        taken = nil
+        receiveShare(t)
+    }
+
+    /// The new expense the shared files went into was saved: the share is done.
+    func shareSaved() {
+        taken = nil
+        onShareDone?(true)
     }
 
     // MARK: Core's actions on a node

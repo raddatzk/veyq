@@ -113,6 +113,10 @@ struct EntryEditor: View {
     @State var form: FormState
     /// The entry does not add up (core's `Ledger.Status.INVALID`): said above it, as the web's editor says it.
     var invalid = false
+    /// Receipts it starts with: what another app shared to this Pot (ADR 0124).
+    var initialPending: [PotSession.PendingReceipt] = []
+    /// Runs once the entry was saved (a share's new expense hands back that it landed).
+    var onSaved: (() -> Void)? = nil
     @State private var tried = false
     /// What is said under a filled or missing rate.
     enum RateNote: Equatable { case loading, filled(String), missing(String) }
@@ -204,6 +208,7 @@ struct EntryEditor: View {
                         let picked = pending
                         Task {
                             if await model.potWrite({ try await $0.saveEntry(entryId: id, form: f, basedOn: based, pending: picked) }) {
+                                onSaved?()
                                 if model.skippedReceipts.isEmpty { dismiss() } else { noRoom = model.skippedReceipts; pending = [] }
                             }
                         }
@@ -214,6 +219,7 @@ struct EntryEditor: View {
             }
         }
         .tint(Role.accent)
+        .onAppear { if pending.isEmpty && !initialPending.isEmpty { pending = initialPending } }
         // Another currency with an empty rate: the day's table fills it (one request a device and day, at most).
         .task(id: form.currency) {
             let code = form.currency
