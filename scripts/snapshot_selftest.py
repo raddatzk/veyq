@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Self-test of a snapshot's pure decisions (ADR 0091 decision 5), offline and Docker-free: the asset-set hash
 (`release_assets.asset_set_digest`) and `scripts/snapshot.py`'s lane records, predicates, write-once verdicts, and
-which Checks run a snapshot is made from and that its staged bytes are that run's (on recorded API shapes).
+which commit and Checks run a snapshot is made from (a docs-only HEAD's walk to its tested ancestor included, on a
+throwaway git history) and that its staged bytes are that run's (on recorded API shapes).
 `checks.yml`'s `guards` job runs it.
 
     python3 scripts/snapshot_selftest.py
@@ -11,7 +12,9 @@ What it cannot see: the registry. Whether Buildx words a missing tag the way `sn
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import pathlib
 import sys
@@ -171,6 +174,151 @@ check(refused(snapshot.checks_verdict, run_of(), jobs_of(**{lane: "cancelled"}),
 stale = [dict(j, run_attempt=1) for j in jobs_of()]
 check(refused(snapshot.checks_verdict, run_of(), stale, ARCHS, DOMAINS), "an older attempt's jobs are read")
 
+# ---- the publishable commit: a docs-only HEAD publishes its newest tested ancestor -----------------------------------
+PATTERNS = ["**/*.md", "docs/**", "site/**"]
+ignored = snapshot.ignored_by(PATTERNS)
+for path, want in (("README.md", True), ("src/web/README.md", True), ("a/b/c/d.md", True), ("docs/x/y.png", True),
+                   ("site/src/pages/index.astro", True), ("README.mdx", False), ("src/docs/a.kt", False),
+                   ("sites/a.txt", False), ("docs", False), ("VERSION", False), (".github/workflows/checks.yml", False),
+                   ("scripts/snapshot.py", False)):
+    check(ignored(path) is want, f"`{path}` is {'not ' if want else ''}ignored by {PATTERNS}, as GitHub reads them")
+negated = snapshot.ignored_by(["docs/**", "!docs/api/**"])
+check(negated("docs/a.md") and not negated("docs/api/openapi.yaml"), "a later `!` pattern does not re-include its path")
+check(refused(snapshot.ignored_by, ["docs/?.md"]), "a glob this reader cannot match like GitHub is guessed at")
+check(refused(snapshot.ignored_by, ["src/{a,b}/**"]), "a brace glob is guessed at")
+real = snapshot.push_paths_ignore(pathlib.Path(__file__).resolve().parent.parent)
+check(bool(real) and all(snapshot.ignored_by([p]) for p in real), f"checks.yml's push paths-ignore is not read: {real}")
+with tempfile.TemporaryDirectory(prefix="snapshot_filter_") as tmp:
+    fake = pathlib.Path(tmp)
+    (fake / ".github/workflows").mkdir(parents=True)
+    workflow = fake / snapshot.CHECKS_WORKFLOW
+    workflow.write_text('on:\n  push:\n    paths-ignore:\n      - "x/**"\n  pull_request:\n    paths-ignore:\n      - "y/**"\n')
+    check(snapshot.push_paths_ignore(fake) == ["x/**"], "the push filter is not the one read from checks.yml's file")
+    workflow.write_text('on:\n  push:\n    paths:\n      - "src/**"\n')
+    check(refused(snapshot.push_paths_ignore, fake), "a `paths:` push filter is read as if it were `paths-ignore`")
+    workflow.write_text('on:\n  pull_request: {}\n')
+    check(refused(snapshot.push_paths_ignore, fake), "a checks.yml with no push trigger explains a missing run")
+
+H, M, C, OLD = ("1" * 40), ("2" * 40), ("3" * 40), ("4" * 40)
+
+
+def world(runs: dict[str, list[dict]], files: dict[str, list[str] | None], tags: dict[str, str] | None = None):
+    return (lambda c: (tags or {}).get(c, ""), lambda c: runs.get(c, []), lambda c: files.get(c, ["src/x.kt"]))
+
+
+def walk(chain: list[str], runs, files, tags=None, bound: int = snapshot.WALK_BOUND, head: str = H) -> dict:
+    """The walk's verdict, or `{"refused": <message>}` — a refusal where a commit was expected is a failed check here,
+    never a crash of the selftest."""
+    tags_of, runs_of, files_of = world(runs, files, tags)
+    try:
+        return snapshot.publishable(head, "main", chain, tags_of, runs_of, files_of, ignored, bound)
+    except snapshot.Refused as e:
+        return {"refused": str(e) or "refused"}
+
+
+def walk_refused(*args, **kwargs) -> str:
+    """The refusal's message, or '' when the walk was not refused."""
+    return walk(*args, **kwargs).get("refused", "")
+
+
+got = walk([H, M, C], {H: [run_of(head_sha=H)], C: [run_of(head_sha=C)]}, {})
+check(got.get("commit") == H and got.get("skipped") == [] and (got.get("run") or {}).get("head_sha") == H,
+      f"a HEAD with its own Checks run is not the one published: {got}")
+got = walk([H, M, C, OLD], {C: [run_of(head_sha=C, id=9)], OLD: [run_of(head_sha=OLD)]},
+           {H: ["site/src/pages/donate.astro"], M: ["docs/decisions/0091.md", "README.md"]})
+check(got.get("commit") == C and got.get("skipped") == [H, M] and (got.get("run") or {}).get("id") == 9,
+      f"a docs-only HEAD does not publish its newest tested ancestor: {got}")
+check(walk_refused([H, M, C], {C: [run_of(head_sha=C)]}, {H: ["docs/a.md"], M: ["docs/b.md", "scripts/x.py"]}),
+      "a code commit with no Checks run between HEAD and the tested ancestor is skipped")
+check(walk_refused([H, C], {C: [run_of(head_sha=C)]}, {H: ["src/web/src/main.ts"]}),
+      "a code HEAD with no Checks run publishes its ancestor")
+check(walk_refused([H, M, C], {C: [run_of(head_sha=C, head_branch="release/0.x")]}, {H: ["docs/a.md"], M: ["docs/b.md"],
+      C: ["docs/c.md"]}), "another branch's run is taken for the ancestor")
+chain = [H] + [f"{n:040x}" for n in range(5, 5 + 60)]
+docs = {c: ["docs/a.md"] for c in chain}
+check(walk_refused(chain, {chain[-1]: [run_of(head_sha=chain[-1])]}, docs, bound=50),
+      "a walk past its bound finds a tested commit")
+check(walk([H, M, C], {C: [run_of(head_sha=C)]}, {H: [], M: ["docs/a.md"]}, bound=3).get("commit") == C,
+      "an empty commit (it changes no path) stops the walk")
+check(walk_refused([H, M, C], {C: [run_of(head_sha=C)]}, {H: ["docs/a.md"], M: ["docs/a.md"]}, bound=2),
+      "the walk reads past its bound")
+check("the first commit of the history" in walk_refused([H, M], {}, {H: ["docs/a.md"], M: None}),
+      "the walk passes the first commit of the history, or does not say it stopped there")
+got = walk([H, M, C], {C: [run_of(head_sha=C)]}, {H: ["docs/a.md"], M: ["docs/b.md"]}, tags={C: "snapshot-0.12"})
+check(got.get("published") == "snapshot-0.12" and got.get("commit") == C and got.get("run") is None,
+      f"a docs-only HEAD over a published snapshot publishes again: {got}")
+check(walk([H, C], {H: [run_of(head_sha=H)]}, {}, tags={H: "snapshot-0.13"}).get("published") == "snapshot-0.13",
+      "a HEAD that carries its snapshot publishes again")
+check(walk_refused([M, C], {C: [run_of(head_sha=C)]}, {M: ["docs/a.md"]}), "a walk that does not start at HEAD is taken")
+
+
+# The wiring, on a throwaway history: `checks_run` walks git, reads checks.yml's filter, counts C's version, names C.
+def git(cwd: pathlib.Path, *args: str) -> str:
+    import subprocess
+    return subprocess.run(["git", "-c", "user.name=selftest", "-c", "user.email=selftest@invalid", "-c",
+                           "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args], cwd=cwd, check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+with tempfile.TemporaryDirectory(prefix="snapshot_walk_") as tmp:
+    repo = pathlib.Path(tmp)
+    root_repo = pathlib.Path(__file__).resolve().parent.parent
+    git(repo, "init", "-q", "-b", "main")
+    (repo / ".github/workflows").mkdir(parents=True)
+    (repo / snapshot.CHECKS_WORKFLOW).write_text((root_repo / snapshot.CHECKS_WORKFLOW).read_text())
+    (repo / "VERSION").write_text("0\n")
+    (repo / "docs").mkdir()
+    (repo / "docs/a.md").write_text("a\n")
+    git(repo, "add", "VERSION", "docs/a.md", snapshot.CHECKS_WORKFLOW)
+    git(repo, "commit", "-q", "-m", "root")
+    check(snapshot.changed_files(repo, git(repo, "rev-parse", "HEAD")) is None, "a root commit has a first parent")
+    (repo / "src.kt").write_text("x\n")
+    git(repo, "add", "src.kt")
+    git(repo, "commit", "-q", "-m", "code, tested")
+    tested = git(repo, "rev-parse", "HEAD")
+    (repo / "README.md").write_text("r\n")
+    git(repo, "add", "README.md")
+    git(repo, "commit", "-q", "-m", "docs")
+    (repo / "docs/a.md").write_text("b\n")
+    git(repo, "add", "docs/a.md")
+    git(repo, "commit", "-q", "-m", "docs again")
+    head = git(repo, "rev-parse", "HEAD")
+    check(snapshot.changed_files(repo, head) == ["docs/a.md"], f"{snapshot.changed_files(repo, head)}")
+    green = {"workflow_runs": [run_of(head_sha=tested, id=11)]}
+    # The stack matrix the commit's own checks.yml names: the fake run must carry a leg for each.
+    archs, domains = snapshot.stack_matrix(repo)
+    jobs = {"jobs": [{"name": n, "run_attempt": 2, "conclusion": "success"} for n in
+                     [snapshot.GATE_JOB_NAME] + [snapshot.LANE_JOB_NAME.format(arch=a, domain=d)
+                                                 for a in archs for d in domains]]}
+    real_gh = snapshot._gh_json
+    snapshot._gh_json = lambda url: (jobs if "/jobs?" in url else green if f"head_sha={tested}" in url
+                                     else {"workflow_runs": []})
+    def quiet(commit: str) -> dict:
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                return snapshot.checks_run("o/veyq", commit, "main", repo)
+        except snapshot.Refused as e:
+            return {"refused": str(e)}
+
+    try:
+        found = quiet(head)
+        check(found == {"kind": "snapshot", "commit": tested, "run_id": "11", "attempt": "2", "version": "0.1",
+                        "run_url": "https://github.com/o/veyq/actions/runs/7"},
+              f"a docs-only HEAD's publish does not name its tested ancestor and that commit's version: {found}")
+        git(repo, "tag", "snapshot-0.1", tested)
+        found = quiet(head)
+        check(found.get("kind") == "none" and found.get("commit") == tested,
+              f"a docs-only HEAD over a tested ancestor that has its snapshot publishes again: {found}")
+        git(repo, "mv", "docs/a.md", "a.kt")
+        git(repo, "commit", "-q", "-m", "a doc becomes code")
+        moved = git(repo, "rev-parse", "HEAD")
+        check(sorted(snapshot.changed_files(repo, moved) or []) == ["a.kt", "docs/a.md"],
+              "a rename out of docs is read as its new path alone, or not at all")
+        check(refused(snapshot.checks_run, "o/veyq", moved, "main", repo),
+              "a commit that moves a doc into code is skipped as docs-only")
+    finally:
+        snapshot._gh_json = real_gh
+
 # ---- the staged bytes are the run's -------------------------------------------------------------------------------
 staged_digests = {(i, a): ("sha256:" + (str(n) * 64)) for n, (i, a) in enumerate(
     ((i, a) for i in snapshot.BUILD_IMAGES for a in ARCHS), start=1)}
@@ -197,4 +345,6 @@ if failures:
     sys.exit(1)
 print("snapshot selftest OK: the asset-set hash ignores what differs between productions and sees a changed file; "
       "the predicates refuse a missing, extra, failed, foreign or inconsistent leg; a snapshot name holds only its build; "
-      "only HEAD's newest, wholly green push run of Checks is published from, and only the bytes it staged and tested")
+      "only the newest, wholly green push run of Checks of HEAD — or of its newest tested ancestor, when every commit after "
+      "it changes only what Checks ignores, within the walk's bound — is published from, under that commit's name and "
+      "version, and only the bytes it staged and tested")

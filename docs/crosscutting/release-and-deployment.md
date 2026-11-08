@@ -54,11 +54,14 @@ install exactly those (below). What a push stages is what Publish may sign.
 **Publish** (`publish.yml`) publishes a **snapshot** (ADR 0091 decision 5, amended 2026-11-07) on two triggers: the
 weekly `schedule` (Monday 03:17 UTC; GitHub runs it on the default branch only, so it publishes `main`'s HEAD) and a
 `workflow_dispatch` — Actions → Publish → *Run workflow* — on `main` or `release/<major>.x`, the one way a release
-branch's fix gets a snapshot. It runs no pipeline and builds nothing: it publishes **HEAD's newest Checks push run**,
-and only when that run concluded `success` with its gate and every lane leg on both architectures green; a run still
-going, red, or cancelled by hand is refused, named, and Publish never starts Checks. It takes minutes. It publishes
-nothing for a HEAD that already carries a `snapshot-` tag (its own full checkout's tags), and is red on any other
-branch. Until 2026-11-07 every green push published, then for a few hours a Publish ran the pipeline itself; both are
+branch's fix gets a snapshot. It runs no pipeline and builds nothing: it publishes the **publishable commit's newest
+Checks push run**, and only when that run concluded `success` with its gate and every lane leg on both architectures
+green; a run still going, red, or cancelled by hand is refused, named, and Publish never starts Checks. The publishable
+commit is HEAD, or — Checks skips a commit that changes only what its push `paths-ignore` names (docs, Markdown, the
+site), so a docs-only HEAD has no run — the newest first-parent ancestor with a run, provided every commit after it is
+docs-only (amended 2026-11-08; within 50 commits, refused and named otherwise); every name the snapshot writes, its
+version and its `snapshot-` tag are that commit's. It takes minutes. It publishes nothing for a publishable commit that
+already carries a `snapshot-` tag (its own full checkout's tags), and is red on any other branch. Until 2026-11-07 every green push published, then for a few hours a Publish ran the pipeline itself; both are
 gone. Publish has its own concurrency group per ref, so two publishing runs go one after the other and the later one
 sees the earlier one's tag.
 
@@ -70,8 +73,9 @@ sees the earlier one's tag.
    (`release_assets.py --asset-set`, the manifest's asset map: what a promotion produces again from the same commit),
    kept as an artifact of the run too. The gate `green` needs every stage (the disabled `upgrade-proof`'s and the
    other event's build's *skipped* tolerated); `validate_release_identity.py` holds its `needs` to every job of the file.
-3. Publish's `checks-run` finds that run (`scripts/snapshot.py checks-run`: the API's runs and jobs of the commit), and
-   `snapshot` downloads its digests and lane records by its run id and refuses unless every lane record names exactly
+3. Publish's `checks-run` finds the publishable commit and its run (`scripts/snapshot.py checks-run`: the first-parent
+   history and each commit's changed paths, then the API's runs and jobs of the commit), and `snapshot` checks that
+   commit out and downloads its digests and lane records by its run id and refuses unless every lane record names exactly
    those digests and every staging tag still resolves to its digest (`snapshot.py staged`). It refuses next: a snapshot is
    **written once per commit and never replaced**, so each image's `<major>.<minor>-SNAPSHOT` and `sha-<commit>` must
    be free or already name exactly this build (a re-run of a half-done snapshot continues; a second build of the commit,

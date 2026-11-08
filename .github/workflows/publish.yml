@@ -1,14 +1,17 @@
 name: Publish
 
-# The SNAPSHOT (ADR 0091 decision 5, amended 2026-11-07): the bytes HEAD's Checks run (checks.yml) staged and tested,
-# signed and named — the images on exactly the digests lane L1 installed in that run, as `<major>.<minor>-SNAPSHOT` and
-# `sha-<commit>`, the chart, a signature, an attestation per lane and architecture carrying that run, and the git tag
-# `snapshot-<major>.<minor>`. This file runs no pipeline and builds nothing: it publishes HEAD only when HEAD's newest
-# Checks push run concluded `success` with its gate and every lane leg on both architectures green, and refuses,
-# red and named, otherwise — a run still going, red, or cancelled by hand included (re-run it, or push again; this file
-# never starts Checks). Written once, never replaced: a HEAD that already carries its `snapshot-` tag publishes nothing,
-# with a notice. Two triggers, and no other: the weekly `schedule` (on `main` only: GitHub runs a schedule on the
-# default branch alone) and a `workflow_dispatch` (Actions → Publish → Run workflow, on `main` or `release/<major>.x`).
+# The SNAPSHOT (ADR 0091 decision 5, amended 2026-11-07 and 2026-11-08): the bytes the publishable commit's Checks run
+# (checks.yml) staged and tested, signed and named — the images on exactly the digests lane L1 installed in that run, as
+# `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, the chart, a signature, an attestation per lane and architecture
+# carrying that run, and the git tag `snapshot-<major>.<minor>`. The publishable commit is HEAD, or — when HEAD changes
+# only what checks.yml's push `paths-ignore` skips, and so has no Checks run — its newest first-parent ancestor that has
+# one, every commit after it docs-only (scripts/snapshot.py checks-run): every name below is that commit's, never
+# `$GITHUB_SHA`'s. This file runs no pipeline and builds nothing: it publishes only when that commit's newest Checks
+# push run concluded `success` with its gate and every lane leg on both architectures green, and refuses, red and named,
+# otherwise — a run still going, red, or cancelled by hand included (re-run it, or push again; this file never starts
+# Checks). Written once, never replaced: a commit that already carries its `snapshot-` tag publishes nothing, with a
+# notice. Two triggers, and no other: the weekly `schedule` (on `main` only: GitHub runs a schedule on the default
+# branch alone) and a `workflow_dispatch` (Actions → Publish → Run workflow, on `main` or `release/<major>.x`).
 # The weekly run also deletes old staging images (`staging-retention`).
 #
 # This file signs SNAPSHOTS. Keyless signing names the workflow file that holds the signing job, so a snapshot's
@@ -24,12 +27,13 @@ name: Publish
 # `assert-snapshot-unpublished` step refuses by design.
 on:
   # The weekly snapshot: Monday 03:17 UTC, off the full hour GitHub's scheduler is busiest at. GitHub runs a schedule
-  # on the default branch only, so this publishes `main`'s HEAD and never a `release/<major>.x` branch — a fix there
-  # gets its snapshot by a dispatch on that branch.
+  # on the default branch only, so this publishes `main`'s HEAD (its publishable commit) and never a `release/<major>.x`
+  # branch — a fix there gets its snapshot by a dispatch on that branch.
   schedule:
     - cron: "17 3 * * 1"
-  # A snapshot now, by hand (Actions → Publish → Run workflow), of the chosen branch's HEAD: `main` or
-  # `release/<major>.x`, red on any other branch. No inputs; a commit that already has its snapshot publishes nothing.
+  # A snapshot now, by hand (Actions → Publish → Run workflow), of the chosen branch's HEAD (its publishable commit):
+  # `main` or `release/<major>.x`, red on any other branch. No inputs; a commit that already has its snapshot publishes
+  # nothing.
   workflow_dispatch:
 
 # One group per ref: two publishing runs of a ref go one after the other, and the later one's `checks-run` sees the
@@ -50,19 +54,22 @@ permissions:
   contents: read
 
 jobs:
-  # Which run a snapshot of HEAD is made from (scripts/snapshot.py checks-run, its refusals selftested): the branch,
-  # HEAD's `snapshot-` tag, then HEAD's newest Checks push run and its latest attempt's jobs, read through the API, and
-  # the version the tree counts. It reads and writes nothing else. PyYAML as exact, hashed wheels only
+  # Which commit and run a snapshot is made from (scripts/snapshot.py checks-run, its refusals selftested): the branch,
+  # then the publishable commit — HEAD, or the newest first-parent ancestor with a Checks push run when every commit
+  # after it changes only paths checks.yml's push filter ignores (a docs-only HEAD gets no Checks run) — its `snapshot-`
+  # tag, its newest Checks push run and that run's latest attempt's jobs, read through the API, and the version its tree
+  # counts. It reads and writes nothing else; `commit` is what every later job names. PyYAML as exact, hashed wheels only
   # (scripts/requirements-release.txt), as in every job of a run that publishes (validate_release_identity.py).
   checks-run:
-    name: Find HEAD's green Checks run
+    name: Find the publishable commit and its green Checks run
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
-      actions: read # the Checks run and its jobs, through the API
+      actions: read # the Checks runs and their jobs, through the API
     outputs:
       kind: ${{ steps.checks-run.outputs.kind }}
+      commit: ${{ steps.checks-run.outputs.commit }}
       run_id: ${{ steps.checks-run.outputs.run_id }}
       run_url: ${{ steps.checks-run.outputs.run_url }}
       version: ${{ steps.checks-run.outputs.version }}
@@ -70,11 +77,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The version counts the commits since VERSION last changed, and HEAD's `snapshot-` tag is read from this
-          # checkout: the whole history and every tag.
+          # The walk reads each commit's changed paths, the version counts the commits since VERSION last changed, and
+          # the commit's `snapshot-` tag is read from this checkout: the whole history and every tag.
           fetch-depth: 0
 
-      - name: Find HEAD's green Checks run
+      # Starts at HEAD (`$GITHUB_SHA`, the one place this file reads it) and writes the commit it resolved.
+      - name: Find the publishable commit and its green Checks run
         id: checks-run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,8 +97,8 @@ jobs:
     name: Publish the snapshot (the images, the chart, their signatures and the lanes' attestations)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only once `checks-run` found HEAD's wholly green Checks push run (ADR 0091 decision 5, amended 2026-11-07): its
-    # `kind` is `snapshot` then, and its outputs name the run whose staging this job signs.
+    # Only once `checks-run` found the publishable commit's wholly green Checks push run (ADR 0091 decision 5, amended
+    # 2026-11-07): its `kind` is `snapshot` then, and its outputs name the commit and the run whose staging this job signs.
     needs:
       - checks-run
     if: needs.checks-run.outputs.kind == 'snapshot'
@@ -100,8 +108,11 @@ jobs:
       id-token: write # keyless cosign signing and attesting via GitHub OIDC
       actions: read # the Checks run's artifacts: its digests and lane records
     steps:
+      # The publishable commit's tree, not HEAD's: the chart is packaged and the lane matrix read from what was tested.
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.checks-run.outputs.commit }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -141,11 +152,12 @@ jobs:
         id: assert-staged
         env:
           REGISTRY: ghcr.io/${{ github.repository_owner }}
+          COMMIT: ${{ needs.checks-run.outputs.commit }}
         run: |
           set -euo pipefail
           python3 -m venv "${RUNNER_TEMP}/snapshot-venv"
           "${RUNNER_TEMP}/snapshot-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
-          "${RUNNER_TEMP}/snapshot-venv/bin/python" scripts/snapshot.py staged --registry "$REGISTRY" --commit "$GITHUB_SHA" \
+          "${RUNNER_TEMP}/snapshot-venv/bin/python" scripts/snapshot.py staged --registry "$REGISTRY" --commit "$COMMIT" \
             --digests "${RUNNER_TEMP}/digests" --results "${RUNNER_TEMP}/lane-results"
 
       # The pinned Helm (workflow-level env above): verified against the pin BEFORE it is extracted, so a
@@ -179,10 +191,11 @@ jobs:
         env:
           REGISTRY: ghcr.io/${{ github.repository_owner }}
           VERSION: ${{ needs.checks-run.outputs.version }}
+          COMMIT: ${{ needs.checks-run.outputs.commit }}
         run: |
           set -euo pipefail
           python3 scripts/snapshot.py check-unpublished --registry "$REGISTRY" --version "$VERSION" \
-            --commit "$GITHUB_SHA" --digests "${RUNNER_TEMP}/digests" \
+            --commit "$COMMIT" --digests "${RUNNER_TEMP}/digests" \
             --image veyq --image veyq-admin --image veyq-tools --chart charts/veyq
 
       # One predicate per lane and architecture, refused unless every leg of the matrix left a green record, with one
@@ -192,11 +205,12 @@ jobs:
         env:
           # The Checks run the lanes ran in — what the attestation says it records — not this run, which ran none.
           RUN_URL: ${{ needs.checks-run.outputs.run_url }}
+          COMMIT: ${{ needs.checks-run.outputs.commit }}
         run: |
           set -euo pipefail
           python3 scripts/snapshot.py predicates --lane L1 --arch amd64 --arch arm64 \
             --shard account --shard depot --shard expenses --shard memories --shard moderation --shard platform \
-            --commit "$GITHUB_SHA" --run "$RUN_URL" --results "${RUNNER_TEMP}/lane-results" --out "${RUNNER_TEMP}/predicates"
+            --commit "$COMMIT" --run "$RUN_URL" --results "${RUNNER_TEMP}/lane-results" --out "${RUNNER_TEMP}/predicates"
 
       # The snapshot's names on the digests `build` pushed: `<version>-SNAPSHOT` and `sha-<commit>`, nothing else — no
       # `<major>`, no `latest`, no `<major>.<minor>`, which are a release's and only a promotion gives them. No metadata
@@ -205,6 +219,7 @@ jobs:
         env:
           REGISTRY: ghcr.io/${{ github.repository_owner }}
           VERSION: ${{ needs.checks-run.outputs.version }}
+          COMMIT: ${{ needs.checks-run.outputs.commit }}
         run: |
           set -euo pipefail
           for name in veyq veyq-admin veyq-tools; do
@@ -217,7 +232,7 @@ jobs:
               fi
               sources+=("${REGISTRY}/${name}@${digest}")
             done
-            docker buildx imagetools create -t "${REGISTRY}/${name}:${VERSION}-SNAPSHOT" -t "${REGISTRY}/${name}:sha-${GITHUB_SHA}" "${sources[@]}"
+            docker buildx imagetools create -t "${REGISTRY}/${name}:${VERSION}-SNAPSHOT" -t "${REGISTRY}/${name}:sha-${COMMIT}" "${sources[@]}"
           done
 
       - name: Sign the snapshot's images (keyless)
@@ -227,13 +242,14 @@ jobs:
           # is told to pin together — and it is the higher-privilege half (ADR 0065); an unsigned tools image would be
           # an unverified program reading the database and the store's admin token in a cluster (ADR 0098).
           IMAGES: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin ghcr.io/${{ github.repository_owner }}/veyq-tools
+          COMMIT: ${{ needs.checks-run.outputs.commit }}
         run: |
           set -euo pipefail
           # Resolve each manifest-list digest from the sha- tag and sign THAT, so both names pointing at it are
           # covered. The identity this produces is this file on the branch that ran it — the SNAPSHOT identity, which
           # the release identity (verify-a-release.md, `veyqctl`) rejects: a promotion signs again, as `release.yml`.
           for image in $IMAGES; do
-            digest="sha256:$(docker buildx imagetools inspect --raw "$image:sha-${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)"
+            digest="sha256:$(docker buildx imagetools inspect --raw "$image:sha-${COMMIT}" | sha256sum | cut -d' ' -f1)"
             echo "Signing $image@${digest}"
             cosign sign --yes "$image@${digest}"
             echo "${image##*/}=${digest}" >> "$GITHUB_OUTPUT"
@@ -320,22 +336,26 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.checks-run.outputs.commit }}
 
+      # The tag names the publishable commit — the tested one — never a docs-only HEAD above it.
       - name: Tag the commit
         id: snapshot-tag
         env:
           VERSION: ${{ needs.checks-run.outputs.version }}
+          COMMIT: ${{ needs.checks-run.outputs.commit }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="snapshot-${VERSION}"
           existing="$(git ls-remote origin "refs/tags/${tag}" | cut -f1)"
           if [[ -n "$existing" ]]; then
-            if [[ "$existing" == "$GITHUB_SHA" ]]; then
-              echo "refs/tags/${tag} already names ${GITHUB_SHA}"
+            if [[ "$existing" == "$COMMIT" ]]; then
+              echo "refs/tags/${tag} already names ${COMMIT}"
               exit 0
             fi
-            echo "refs/tags/${tag} names ${existing}, not ${GITHUB_SHA} — a snapshot is written once per commit" >&2
+            echo "refs/tags/${tag} names ${existing}, not ${COMMIT} — a snapshot is written once per commit" >&2
             exit 1
           fi
           # Through the REST API, never `git push`: GitHub refuses a GITHUB_TOKEN push of a ref whose commit's
@@ -344,8 +364,8 @@ jobs:
           # 2026-11-07, run 42377299125). A ref created by the API writes no file; that it is not held to the rule is
           # reported by others (GitHub's docs say nothing), so the next such run is its proof. Exists already → 422.
           gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-            --raw-field "ref=refs/tags/${tag}" --raw-field "sha=${GITHUB_SHA}" > /dev/null
-          echo "refs/tags/${tag} now names ${GITHUB_SHA}"
+            --raw-field "ref=refs/tags/${tag}" --raw-field "sha=${COMMIT}" > /dev/null
+          echo "refs/tags/${tag} now names ${COMMIT}"
 
   # The staging images Checks pushes (`build-<sha>-<arch>`, one per push, image and architecture) are deleted 30 days
   # after their push, unless the commit is a branch tip — far beyond the week between two scheduled snapshots, and the

@@ -11,17 +11,22 @@ run it; the writes themselves — `imagetools create`, `cosign`, `helm push`, th
         --commit <sha> --run <url> --results <dir> --out <dir>
     python3 scripts/snapshot.py check-unpublished --registry ghcr.io/<owner> --version <v> --commit <sha> \\
         --digests <dir> --image veyq --image veyq-admin --image veyq-tools --chart charts/veyq
-    python3 scripts/snapshot.py checks-run --repository <owner>/<repo> --commit <sha> --branch <branch>
+    python3 scripts/snapshot.py checks-run --repository <owner>/<repo> --commit <HEAD sha> --branch <branch>
     python3 scripts/snapshot.py staged --registry ghcr.io/<owner> --commit <sha> --digests <dir> --results <dir>
 
 **checks-run** — which run a snapshot is made from (ADR 0091 decision 5, amended 2026-11-07: Publish runs no pipeline,
-it signs a Checks run's staging). The branch must be `main` or `release/<major>.x` of the tree's major; a HEAD that
-already carries a `snapshot-` tag publishes nothing (`kind=none`, a notice). Otherwise HEAD's Checks run is the newest
-`push` run of `.github/workflows/checks.yml` for exactly that commit and branch, and it is refused, red and named,
-unless it is completed and `success`, and in its latest attempt the gate job (`Pipeline green`) and one lane L1 leg per
-architecture and domain of the commit's own `stack` matrix concluded `success`. A run cancelled by hand, still running,
-or red is refused with that reason; Publish never starts Checks itself (owner 2026-11-07). Writes `kind`, `run_id`,
-`run_url`, `attempt` and `version` (the tree's, `release_assets.tree_release`) to `$GITHUB_OUTPUT`.
+it signs a Checks run's staging). The branch must be `main` or `release/<major>.x` of the tree's major. It resolves the
+**publishable commit** C (amended 2026-11-08): HEAD when HEAD has a `push` run of `.github/workflows/checks.yml` on that
+branch; otherwise the newest first-parent ancestor that has one, accepted only if every commit after it up to HEAD
+changes nothing but paths checks.yml's own `on.push.paths-ignore` ignores (read from the checkout, matched as GitHub
+matches them) — a docs-only HEAD gets no Checks run of its own, and its tested ancestor's bytes are the ones it ships. A
+commit without a run that changes another path is refused, named; so is a walk that finds no run within `WALK_BOUND`
+commits. A C that already carries a `snapshot-` tag publishes nothing (`kind=none`, a notice). Otherwise C's run is its
+newest such run, refused, red and named, unless it is completed and `success`, and in its latest attempt the gate job
+(`Pipeline green`) and one lane L1 leg per architecture and domain of the commit's own `stack` matrix concluded
+`success`. A run cancelled by hand, still running, or red is refused with that reason; Publish never starts Checks
+itself (owner 2026-11-07). Writes `kind`, `commit` (C — every later name of the publish is C's), `run_id`, `run_url`,
+`attempt` and `version` (C's tree release, `release_assets.tree_release`) to `$GITHUB_OUTPUT`.
 
 **staged** — that the bytes to be named are the ones that run tested: every image and architecture of the build has a
 digest artifact from that run, every lane record names exactly those digests for its architecture, and every
@@ -45,8 +50,11 @@ error read as "nothing published yet" is the silent republish ADR 0057 § Contex
 `present` or `absent`, and refused when present while no image tag of this commit is — a chart without its images is
 another run's. Writes `chart=<state>` and `chart_digest=<digest>` to `$GITHUB_OUTPUT` when it is set.
 
-Its limit: what "not found" looks like is Docker Buildx's message, matched loosely (`NOT_FOUND`, a lower-case
-`not found`, `MANIFEST_UNKNOWN`, `404`); a registry that words it otherwise is refused, never overwritten.
+Its limits: what "not found" looks like is Docker Buildx's message, matched loosely (`NOT_FOUND`, a lower-case
+`not found`, `MANIFEST_UNKNOWN`, `404`); a registry that words it otherwise is refused, never overwritten. The walk of
+**checks-run** judges each commit by its own diff against its first parent, where GitHub's filter judges a push's whole
+diff: stricter, never wider (a push of a code commit and a docs commit has its run on the docs one, its HEAD). It
+matches `*` and `**` only, and refuses a pattern with any other glob syntax rather than guess how GitHub reads it.
 `scripts/snapshot_selftest.py` holds the pure halves.
 """
 from __future__ import annotations  # `X | None` — the repo's scripts run on Python 3.9
@@ -216,17 +224,111 @@ BUILD_IMAGES = ("veyq", "veyq-admin", "veyq-tools")  # checks.yml's build matrix
 LANE_IMAGES = ("veyq", "veyq-admin")  # what lane L1 installs, and so what each lane record names
 
 
-def pick_run(runs: list[dict], commit: str, branch: str) -> dict:
-    """HEAD's Checks run: the newest `push` run of checks.yml for exactly `commit` on `branch` (the API's list,
-    filtered again here — a filter the API ignored must not hand over another commit's run)."""
+def push_runs(runs: list[dict], commit: str, branch: str) -> list[dict]:
+    """The `push` runs of checks.yml for exactly `commit` on `branch` (the API's list, filtered again here — a filter
+    the API ignored must not hand over another commit's run)."""
     if not COMMIT.match(commit):
         raise Refused(f"`{commit}` is not a full commit hash")
-    mine = [r for r in runs if r.get("head_sha") == commit and r.get("event") == "push"
+    return [r for r in runs if r.get("head_sha") == commit and r.get("event") == "push"
             and r.get("head_branch") == branch and str(r.get("path") or "").split("@", 1)[0] == CHECKS_WORKFLOW]
+
+
+def pick_run(runs: list[dict], commit: str, branch: str) -> dict:
+    """A commit's Checks run: the newest `push` run of checks.yml for exactly `commit` on `branch`."""
+    mine = push_runs(runs, commit, branch)
     if not mine:
         raise Refused(f"no push run of {CHECKS_WORKFLOW} for {commit} on {branch} — a snapshot is made only from the "
                       f"Checks run that staged it; push the commit (or re-run its Checks run) first")
     return max(mine, key=lambda r: (int(r.get("run_number") or 0), str(r.get("created_at") or "")))
+
+
+# How far back a docs-only HEAD may reach for its tested ancestor: HEAD and at most this many commits before it, all
+# first parents. A main that has gone this long without a Checks run is a question for a person, not for a walk.
+WALK_BOUND = 50
+# The filter-glob syntax this reader matches as GitHub does; any other (`?`, `+`, `[…]`, `{…}`, a leading `\`) is
+# refused, never guessed — a pattern read too wide would let a code commit pass for docs.
+UNREAD_GLOB = re.compile(r"[?+\[\]{}\\]")
+
+
+def glob_regex(pattern: str) -> re.Pattern[str]:
+    """A `paths-ignore` glob as GitHub matches it: `**/` any directories or none (so `**/*.md` takes a root `.md`),
+    `**` anything, `*` anything within one path segment. validate_workflow_paths.py reads the same subset."""
+    if UNREAD_GLOB.search(pattern):
+        raise Refused(f"`{pattern}` in {CHECKS_WORKFLOW}'s push `paths-ignore` uses glob syntax this reader does not "
+                      f"match (only `*` and `**`) — it cannot say which commits Checks skipped")
+    out, i = "", 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out, i = out + "(?:.*/)?", i + 3
+        elif pattern.startswith("**", i):
+            out, i = out + ".*", i + 2
+        elif pattern[i] == "*":
+            out, i = out + "[^/]*", i + 1
+        else:
+            out, i = out + re.escape(pattern[i]), i + 1
+    return re.compile(out + r"\Z")
+
+
+def ignored_by(patterns: list[str]):
+    """Whether Checks' push filter ignores a path: the last pattern that matches decides, a `!` one re-including it
+    (GitHub's order rule for path filters)."""
+    compiled = [(p.startswith("!"), glob_regex(p[1:] if p.startswith("!") else p)) for p in patterns]
+
+    def ignored(path: str) -> bool:
+        verdict = False
+        for negated, rx in compiled:
+            if rx.match(path):
+                verdict = not negated
+        return verdict
+    return ignored
+
+
+def push_paths_ignore(root: pathlib.Path) -> list[str]:
+    """checks.yml's `on.push.paths-ignore`, from the checked-out file — never a copy."""
+    import yaml
+    doc = yaml.safe_load((root / CHECKS_WORKFLOW).read_text()) or {}
+    on = doc.get("on", doc.get(True)) or {}  # PyYAML reads a bare `on:` key as the boolean True (YAML 1.1)
+    push = on.get("push") if isinstance(on, dict) else None
+    if not isinstance(push, dict):
+        raise Refused(f"{CHECKS_WORKFLOW} has no `on.push` mapping, so no commit's missing Checks run can be explained")
+    if "paths" in push:
+        raise Refused(f"{CHECKS_WORKFLOW}'s push filter is `paths:`; this reads `paths-ignore` only")
+    return [str(p) for p in push.get("paths-ignore") or []]
+
+
+def publishable(head: str, branch: str, chain: list[str], tags_of, runs_of, files_of, ignored,
+                bound: int = WALK_BOUND) -> dict:
+    """The commit a snapshot of `head` is made from, walking `chain` (`head` and its first parents, newest first):
+    the first that already carries a `snapshot-` tag (`published`: nothing to publish) or has a Checks push run
+    (`run`), provided every commit before it in the walk changes nothing but paths Checks' push filter ignores
+    (`skipped`). Refused, naming the commit, when one with no run changes another path, and when none is found within
+    `bound` commits. `tags_of(c)`, `runs_of(c)` (the API's runs for c) and `files_of(c)` (the paths c changes against
+    its first parent, None for a root commit) are the world; `ignored(path)` is `ignored_by(…)`."""
+    if not chain or chain[0] != head:
+        raise Refused(f"the walk does not start at {head}")
+    skipped: list[str] = []
+    for commit in chain[:bound]:
+        published = tags_of(commit)
+        if published:
+            return {"commit": commit, "published": published, "run": None, "skipped": skipped}
+        mine = push_runs(runs_of(commit), commit, branch)
+        if mine:
+            run = max(mine, key=lambda r: (int(r.get("run_number") or 0), str(r.get("created_at") or "")))
+            return {"commit": commit, "published": "", "run": run, "skipped": skipped}
+        files = files_of(commit)
+        if files is None:
+            raise Refused(f"no push run of {CHECKS_WORKFLOW} for {commit} on {branch}, the first commit of the history "
+                          f"— a snapshot is made only from the Checks run that staged it")
+        others = [f for f in files if not ignored(f)]
+        if others:
+            where = "HEAD" if commit == head else f"between {head} (HEAD) and its newest tested ancestor"
+            shown = ", ".join(others[:5]) + (f" and {len(others) - 5} more" if len(others) > 5 else "")
+            raise Refused(f"no push run of {CHECKS_WORKFLOW} for {commit} on {branch} ({where}), and it changes "
+                          f"{shown}, which Checks does not ignore — its bytes were never tested; push the commit (or "
+                          f"re-run its Checks run) first")
+        skipped.append(commit)
+    raise Refused(f"no push run of {CHECKS_WORKFLOW} on {branch} for {head} or any of the {len(skipped) - 1} docs-only "
+                  f"commits before it (the walk stops at {bound}) — re-run Checks on a commit, or push")
 
 
 def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[str]) -> dict:
@@ -294,22 +396,51 @@ def stack_matrix(root: pathlib.Path) -> tuple[list[str], list[str]]:
     return sorted(map(str, matrix.get("arch") or [])), sorted(map(str, matrix.get("domain") or []))
 
 
-def checks_run(repository: str, commit: str, branch: str, root: pathlib.Path) -> dict:
+def _git_out(root: pathlib.Path, *args: str) -> str:
+    proc = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise Refused(f"`git {' '.join(args)}` failed: {(proc.stderr or proc.stdout).strip()[-300:]}")
+    return proc.stdout
+
+
+def changed_files(root: pathlib.Path, commit: str) -> list[str] | None:
+    """The paths `commit` changes against its first parent — a rename as both its paths — or None for a root commit."""
+    if subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{commit}^1"], cwd=root,
+                      capture_output=True).returncode != 0:
+        return None
+    return [p for p in _git_out(root, "diff", "--name-only", "--no-renames", "-z", f"{commit}^1", commit).split("\0") if p]
+
+
+def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, bound: int = WALK_BOUND) -> dict:
     sys.path.insert(0, str(root / "scripts"))
     import release_assets
+    if not COMMIT.match(head):
+        raise Refused(f"`{head}` is not a full commit hash")
     major = (root / "VERSION").read_text().strip()
     if branch not in ("main", f"release/{major}.x"):
         raise Refused(f"`{branch}` is no branch a snapshot is published from (VERSION {major}: main or release/{major}.x)")
-    git = subprocess.run(["git", "tag", "--list", "snapshot-*", "--points-at", commit], cwd=root, capture_output=True,
-                         text=True, check=True)
-    published = " ".join(git.stdout.split())
-    if published:
-        print(f"::notice::{commit} already carries its snapshot ({published}): nothing to publish")
-        return {"kind": "none", "run_id": "", "run_url": "", "attempt": "", "version": ""}
-    runs = _gh_json(f"repos/{repository}/actions/workflows/checks.yml/runs?head_sha={commit}&event=push"
-                    f"&branch={branch}&per_page=100").get("workflow_runs") or []
+    chain = _git_out(root, "rev-list", "--first-parent", f"--max-count={bound}", head).split()
+
+    def tags_of(commit: str) -> str:
+        return " ".join(_git_out(root, "tag", "--list", "snapshot-*", "--points-at", commit).split())
+
+    def runs_of(commit: str) -> list[dict]:
+        return _gh_json(f"repos/{repository}/actions/workflows/checks.yml/runs?head_sha={commit}&event=push"
+                        f"&branch={branch}&per_page=100").get("workflow_runs") or []
+
+    found = publishable(head, branch, chain, tags_of, runs_of, lambda c: changed_files(root, c),
+                        ignored_by(push_paths_ignore(root)), bound)
+    commit = found["commit"]
+    if found["skipped"]:
+        print(f"::notice::HEAD {head} and the commit(s) before it down to {commit} — {' '.join(found['skipped'])} — "
+              f"have no Checks push run and change only paths Checks ignores: the snapshot is made from {commit}, "
+              f"the newest tested commit, and names it")
+    if found["published"]:
+        print(f"::notice::{commit} already carries its snapshot ({found['published']}): nothing to publish")
+        return {"kind": "none", "commit": commit, "run_id": "", "run_url": "", "attempt": "", "version": ""}
+    # The matrix is HEAD's checks.yml, and C's: the walk accepts no commit that changes it (it is no ignored path).
     archs, domains = stack_matrix(root)
-    run = pick_run(runs, commit, branch)
+    run = found["run"]
     jobs: list[dict] = []
     page = 1
     while True:
@@ -319,9 +450,9 @@ def checks_run(repository: str, commit: str, branch: str, root: pathlib.Path) ->
             break
         page += 1
     verdict = checks_verdict(run, jobs, archs, domains)
-    version = release_assets.tree_release(root)
-    print(f"publishing {version} from {verdict['run_url']} (attempt {verdict['attempt']})")
-    return {"kind": "snapshot", **verdict, "version": version}
+    version = release_assets.tree_release(root, commit)
+    print(f"publishing {version} of {commit} from {verdict['run_url']} (attempt {verdict['attempt']})")
+    return {"kind": "snapshot", "commit": commit, **verdict, "version": version}
 
 
 def staged(registry: str, commit: str, digests_dir: pathlib.Path, results_dir: pathlib.Path,

@@ -174,7 +174,9 @@ whatever load other work put on it, so it says little about a CI runner's time.
 pull request into one, unless the change touches only docs, Markdown or the site. It publishes nothing; a push stages
 its images, and **Publish** (`publish.yml`, once a week and whenever a snapshot is started by hand) signs and names
 exactly what HEAD's Checks push run staged — only when every stage below, and every lane leg on both architectures,
-passed in that run. Publish runs no stage of its own and takes minutes.
+passed in that run. A HEAD that changed only docs, Markdown or the site has no Checks run, so Publish takes the newest
+commit before it that has one, provided everything after it changed only those, and names that tested commit, never
+the HEAD above it. Publish runs no stage of its own and takes minutes.
 Its stages start together; only lane L1 waits for others: the image build, and the frontend's surface check, the one
 install that asks the package registry about the lockfile the images install. *Every commit* below means those
 triggers.

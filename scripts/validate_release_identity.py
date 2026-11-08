@@ -6,8 +6,8 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
 snapshot happens. **Two files, one path of bytes** (ADR 0091 decisions 2 and 5, amended 2026-11-07,
 cr-workflows-split-pipeline-callers): `checks.yml` is the pipeline — every push and pull request — and a push to `main`
 or `release/<major>.x` STAGES its images (`kind == 'stage'`); `publish.yml` runs no pipeline and builds nothing, and
-signs and names what HEAD's wholly green Checks push run staged (`needs.checks-run.outputs.kind == 'snapshot'`).
-"The file" below is both files' jobs read together, each job answering to its own file's gate; what is one file's
+signs and names what the publishable commit's wholly green Checks push run staged
+(`needs.checks-run.outputs.kind == 'snapshot'`). "The file" below is both files' jobs read together, each job answering to its own file's gate; what is one file's
 says so. What the split holds besides: no job of a pull request's run writes (`build`, the one job with `packages:
 write`, runs on a push alone; `build-local` is its matrix and steps for a pull request); no job of checks.yml asks for
 `id-token`; `snapshot`, `snapshot-tag` and `checks-run` are publish.yml's own (keyless signing names the file holding
@@ -15,7 +15,12 @@ the signing job); publish.yml calls no workflow, builds nothing, downloads artif
 verified, runs `scripts/snapshot.py checks-run` (exactly `contents: read`, `actions: read`) before its snapshot and
 `snapshot.py staged` before the snapshot's first write, names the Checks run in each attestation, and deletes staging
 images only from its schedule-only `staging-retention` through `scripts/staging_retention.py`; and the names
-`snapshot.py` reads a Checks run by (the gate's, the lane's, the build matrix's images) are checks.yml's.
+`snapshot.py` reads a Checks run by (the gate's, the lane's, the build matrix's images) are checks.yml's. And every
+name a snapshot writes is the **publishable commit**'s (amended 2026-11-08): `checks-run` starts at `$GITHUB_SHA` and
+outputs the commit it checked (HEAD, or a docs-only HEAD's newest tested ancestor); no step of `snapshot` or
+`snapshot-tag` reads `$GITHUB_SHA`, each checks out `needs.checks-run.outputs.commit`, each `$COMMIT` it uses is set
+from it, every `sha-` name and `--commit` is `$COMMIT`, and the staged-bytes check, the write-once refusal, the
+manifests, the image signatures, the predicates and the tag each name it.
 
   1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
      identity (ADR 0057 §1): the minor is the number of commits since `VERSION` last changed, so a checkout
@@ -265,6 +270,11 @@ write. No incident: each new hold was bitten once (a stage dropped from the gate
 build or a pipeline call in Publish, an artifact from another run, the staged-bytes check dropped or moved after a
 write, the version step staging a pull request, a tag pushed by git, a Helm pin that drifts).
 
+The publishable commit's hold was bought by a live defect (2026-11-08, Publish run 42484798393): main's HEAD
+`3ae1ae01c` and its parent changed only `site/**` and `docs/**`, which checks.yml's push filter ignores, so HEAD had no
+Checks run and Publish was red — weekly and on a dispatch — whenever main's tip was docs-only. Publish now publishes
+the newest tested ancestor, and the hold keeps a later edit from naming HEAD again anywhere a name is written.
+
 Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
 The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
 Ubuntu base's `version` 22.04 and no revision; the admin image showed nginx's `licenses` (Apache-2.0), `source`,
@@ -396,13 +406,13 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / "VERSION"
 # Two workflows (ADR 0091 decisions 2 and 5, amended 2026-11-07; cr-workflows-split-pipeline-callers): `checks.yml` is
 # the pipeline — every push and pull request — and a push to a publishing branch STAGES its images; `publish.yml`
-# (weekly, and on a dispatch) runs no pipeline and builds nothing: it signs and names what HEAD's green Checks run
-# staged. WORKFLOW is the file that publishes — its keyless identity is the snapshot's.
+# (weekly, and on a dispatch) runs no pipeline and builds nothing: it signs and names what the publishable commit's
+# green Checks run staged. WORKFLOW is the file that publishes — its keyless identity is the snapshot's.
 CHECKS = ROOT / ".github/workflows/checks.yml"
 WORKFLOW = ROOT / ".github/workflows/publish.yml"
 # checks.yml's job that needs every stage; publish.yml reads its result through the API (scripts/snapshot.py).
 GATE_JOB = "green"
-# publish.yml's job that finds HEAD's green Checks run, and the weekly one that deletes old staging images.
+# publish.yml's job that finds the publishable commit and its green Checks run, and the weekly one that deletes old staging images.
 CHECKS_RUN_JOB, RETENTION_JOB = "checks-run", "staging-retention"
 # The tracked files whose written-down image tags assertion 4 scans: the deployment, and the two harnesses that run
 # the deployment (lane L1's overlay, the API fuzzer) - named, so a move of either does not quietly change the scan.
@@ -439,6 +449,9 @@ RELEASE_WORKFLOW = ".github/workflows/release.yml"
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
 VERSION_EXPR = "${{ needs.checks-run.outputs.version }}"  # publish.yml's: the version checks-run counted
+# publish.yml's publishable commit: HEAD, or a docs-only HEAD's newest tested ancestor (ADR 0091 decision 5, amended
+# 2026-11-08). Every name a snapshot writes is this commit's; `$GITHUB_SHA` is read by `checks-run` alone, as the start.
+COMMIT_EXPR = "${{ needs.checks-run.outputs.commit }}"
 STAGE_VERSION_EXPR = "${{ needs.version.outputs.version }}"  # checks.yml's: what the build stamps
 
 # A veyq image reference with a literal tag: `…/veyq:<tag>` or a bare `veyq:<tag>`. The character after `veyq`
@@ -1116,13 +1129,14 @@ if workflow_doc:
     for job_name, step_id, must_contain, why in (
         (
             PUBLISH_JOB, REFUSE_STEP,
-            (f"{SNAPSHOT_SCRIPT} check-unpublished", '--version "$VERSION"', '--commit "$GITHUB_SHA"'),
+            (f"{SNAPSHOT_SCRIPT} check-unpublished", '--version "$VERSION"', '--commit "$COMMIT"'),
             "a snapshot is written once per commit and never replaced: a name that holds another build must FAIL the "
             "publish, and a registry error must not read as `nothing published yet` (ADR 0091 decision 5, ADR 0057 §1)",
         ),
         (
             SNAPSHOT_TAG_JOB, TAG_STEP,
-            ('tag="snapshot-${VERSION}"', 'refs/tags/${tag}', '"repos/${GITHUB_REPOSITORY}/git/refs"', "--method POST"),
+            ('tag="snapshot-${VERSION}"', 'refs/tags/${tag}', '"repos/${GITHUB_REPOSITORY}/git/refs"', "--method POST",
+             '"sha=${COMMIT}"'),
             "every snapshot gets the git tag `snapshot-<major>.<minor>` on its commit, from the tree-derived version "
             "(ADR 0091 decision 5)",
         ),
@@ -1137,6 +1151,9 @@ if workflow_doc:
                 f"the `{step_id}` step's `VERSION` is not `{VERSION_EXPR}` — it must key on the version the tree "
                 f"derived, never on a registry query or a hand-typed literal"
             )
+        if (step.get("env") or {}).get("COMMIT") != COMMIT_EXPR:
+            fail(f"the `{step_id}` step's `COMMIT` is not `{COMMIT_EXPR}` — it must name the commit `{CHECKS_RUN_JOB}` "
+                 f"checked, which a docs-only HEAD is not")
         for needle in must_contain:
             if needle not in body:
                 fail(f"the `{step_id}` step does not contain `{needle}` — {why}")
@@ -1241,8 +1258,8 @@ if workflow_doc:
     # publish.yml runs no pipeline and builds nothing: no call of another workflow, no image build, no Gradle or pnpm.
     for name, job in sorted((publish_doc.get("jobs") or {}).items()):
         if isinstance(job, dict) and "uses" in job:
-            fail(f"{rel_of(WORKFLOW)}: job `{name}` calls `{job['uses']}` — Publish runs no pipeline; it signs what HEAD's "
-                 f"Checks run staged and tested (ADR 0091 decision 5, amended 2026-11-07)")
+            fail(f"{rel_of(WORKFLOW)}: job `{name}` calls `{job['uses']}` — Publish runs no pipeline; it signs what the "
+                 f"publishable commit's Checks run staged and tested (ADR 0091 decision 5, amended 2026-11-07)")
         for step in job_steps(publish_doc, name):
             body = str(step.get("run") or "")
             if str(step.get("uses") or "").startswith("docker/build-push-action@") or re.search(
@@ -1268,10 +1285,44 @@ if workflow_doc:
                           and '--branch "$GITHUB_REF_NAME"' in str(s.get("run") or "")
                           for s in job_steps(publish_doc, CHECKS_RUN_JOB)):
         fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}` does not run `{SNAPSHOT_SCRIPT} checks-run` on this commit and "
-             f"branch — nothing finds HEAD's green Checks run before the snapshot signs")
+             f"branch — nothing finds the publishable commit's green Checks run before the snapshot signs")
     if str((finder.get("outputs") or {}).get("kind") or "").replace(" ", "") != "${{steps.checks-run.outputs.kind}}":
         fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}`'s `kind` output is not its `checks-run` step's — the gate every "
              f"write of the snapshot answers to would come from somewhere else")
+    # The publishable commit (ADR 0091 decision 5, amended 2026-11-08): a docs-only HEAD has no Checks run, so
+    # `checks-run` resolves the tested commit, and every job after it checks that commit out and names it — never
+    # `$GITHUB_SHA`, which would put a tested run's bytes under an untested commit's name (and its tag on it).
+    if str((finder.get("outputs") or {}).get("commit") or "").replace(" ", "") != "${{steps.checks-run.outputs.commit}}":
+        fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}`'s `commit` output is not its `checks-run` step's — the commit the "
+             f"snapshot names would come from somewhere else than the one whose run was checked")
+    commit_ref = re.compile(r"\$\{?COMMIT\b")
+    for name in (PUBLISH_JOB, SNAPSHOT_TAG_JOB):
+        for step in job_steps(publish_doc, name):
+            label = f"{rel_of(WORKFLOW)}: job `{name}`, step `{step.get('name') or step.get('id')}`"
+            if re.search(r"GITHUB_SHA|github\.sha", yaml.safe_dump(step)):
+                fail(f"{label} reads `$GITHUB_SHA` — HEAD, which may be a docs-only commit no Checks run tested; it "
+                     f"names `{COMMIT_EXPR}`")
+            body = str(step.get("run") or "")
+            if commit_ref.search(body) and (step.get("env") or {}).get("COMMIT") != COMMIT_EXPR:
+                fail(f"{label} uses `$COMMIT` without `COMMIT: {COMMIT_EXPR}` in its env")
+            code = "\n".join(line for line in body.splitlines() if not line.lstrip().startswith("#"))
+            if re.search(r"\bsha-(?!\$\{COMMIT\})", code):
+                fail(f"{label} writes a `sha-` name of something other than `${{COMMIT}}`")
+            if re.search(r"--commit(?!\s+\"\$COMMIT\")\s", body):
+                fail(f"{label} passes a `--commit` other than `\"$COMMIT\"`")
+            if str(step.get("uses") or "").startswith("actions/checkout@") \
+                    and str((step.get("with") or {}).get("ref") or "") != COMMIT_EXPR:
+                fail(f"{label} checks out `{(step.get('with') or {}).get('ref') or 'HEAD'}`, not `{COMMIT_EXPR}` — the "
+                     f"chart and the lane matrix would be read from another tree than the one tested")
+    for step_id, needle in ((STAGED_STEP, f'{SNAPSHOT_SCRIPT} staged'), (REFUSE_STEP, "check-unpublished")):
+        body = str((step_by_id(publish_doc, PUBLISH_JOB, step_id) or {}).get("run") or "")
+        if needle not in body or '--commit "$COMMIT"' not in body:
+            fail(f"{rel_of(WORKFLOW)}: step `{step_id}` does not run `{needle}` with `--commit \"$COMMIT\"`")
+    for needle in ("imagetools create", "cosign sign --yes \"$image@", f"{SNAPSHOT_SCRIPT} predicates"):
+        steps = [s for s in job_steps(publish_doc, PUBLISH_JOB) if needle in str(s.get("run") or "")]
+        if not steps or not all(commit_ref.search(str(s.get("run"))) for s in steps):
+            fail(f"{rel_of(WORKFLOW)}: no `{PUBLISH_JOB}` step running `{needle}` names `$COMMIT` — the snapshot's "
+                 f"names, signatures and attestations are the publishable commit's")
     publish_needs_raw = publish_job.get("needs") or []
     if CHECKS_RUN_JOB not in ([publish_needs_raw] if isinstance(publish_needs_raw, str) else publish_needs_raw):
         fail(f"the `{PUBLISH_JOB}` job does not need `{CHECKS_RUN_JOB}` — it would sign before anything found a green "

@@ -202,13 +202,16 @@ stage map of [How veyq is tested](../site/src/content/docs/security/how-veyq-is-
 — and **publishes nothing**; a push to `main` or `release/<major>.x` also **stages** the images (`build-<sha>-<arch>`,
 unsigned) that its lane L1 installs. **Publish** (`.github/workflows/publish.yml`) is what publishes, on two triggers:
 the **weekly schedule** (Monday 03:17 UTC, `main` only — GitHub runs a schedule on the default branch alone) and a
-**dispatch**. It runs no pipeline: it takes **HEAD's newest Checks push run**, refuses unless that run is wholly green
-(its gate and every lane leg on both architectures), and its `snapshot` job publishes the three images on exactly the
-digests that run staged and its lanes installed, as `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, and the chart as
-`<major>.<minor>-SNAPSHOT`, signs them, attests each lane's result per architecture (naming the Checks run), and
-`snapshot-tag` sets the git tag `snapshot-<major>.<minor>` on the commit — in minutes. A snapshot is **written once
-and never replaced**: a run for a HEAD that already carries a `snapshot-` tag publishes nothing (a notice says so). A
-local run (`scripts/run_pipeline.py`) publishes and stages nothing. If HEAD's Checks run is still going, red, or was
+**dispatch**. It runs no pipeline: it takes the **publishable commit's newest Checks push run** — HEAD's, or, when HEAD
+and the commits before it change only docs, Markdown or the site (which Checks skips), the newest tested ancestor's (a
+notice names HEAD, that commit and the commits skipped; a code commit without a run in between is red, named) —
+refuses unless that run is wholly green (its gate and every lane leg on both architectures), and its `snapshot` job
+publishes the three images on exactly the digests that run staged and its lanes installed, as
+`<major>.<minor>-SNAPSHOT` and `sha-<commit>`, and the chart as `<major>.<minor>-SNAPSHOT`, signs them, attests each
+lane's result per architecture (naming the Checks run), and `snapshot-tag` sets the git tag `snapshot-<major>.<minor>`
+on that commit — the tested one, never a docs-only HEAD above it — in minutes. A snapshot is **written once and never
+replaced**: a run whose publishable commit already carries a `snapshot-` tag publishes nothing (a notice says so). A
+local run (`scripts/run_pipeline.py`) publishes and stages nothing. If that Checks run is still going, red, or was
 cancelled by hand, Publish is red and says so: re-run that Checks run (or push again), then publish. The weekly run
 also deletes staging images older than 30 days that are no branch tip.
 
