@@ -69,7 +69,7 @@ two apps, and a store listing, review and signing setup per app for one maintain
   reads Favorites from every scope. The API serves a scope's tree and a scope's favorites, not a kind across scopes,
   so the app reads every scope (`listNodes` answers `304` for an unchanged tree). Whether that stays enough for a
   member of many spaces is measured once there are such members.
-- The web keeps its navigation. Giving it the same start (Favorites, then Recent) is inbox #831, not V2.
+- The web keeps its navigation. Giving it the same start (Favorites, then Recent) is inbox #832, not V2.
 
 ## Alternatives considered
 

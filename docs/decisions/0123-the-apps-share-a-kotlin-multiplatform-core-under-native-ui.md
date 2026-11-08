@@ -59,11 +59,25 @@ implementation exists but what holds it to the first.
    platform, in debug builds only: `android/devlogin.py` hands the seeded principal from `.run/.env` to the app as
    launch extras, `apple/devlogin.py` as the environment of a simulator launch; a release build has no such door.
 
+7. **The apps wear the web's theme on their platforms' own controls** (owner 2026-11-08: native UI and UX, the web's
+   theming). The web's colour roles ([ui-web-styleguide](../crosscutting/ui-web-styleguide.md)) and its brand mark
+   are read, never copied: `src/mobile/theme/generate_theme.py` turns `src/web/src/styles/base.css` (light and dark)
+   and `src/web/src/assets/brand/logo-{light,dark}.svg` into a Kotlin palette (`core`), Android resources (window,
+   splash, adaptive launcher icon with its monochrome layer) and an asset catalog (a colour set per role, the mark,
+   the app icon for iOS and macOS, rendered by macOS' own Quick Look), each at build time; its CSS reader is
+   `scripts/validate_web_contrast.py`'s, so the WCAG floors the web's roles are held to hold for the apps' too. The
+   roles keep the styleguide's meanings: the accent is the brand, the selection and the tint (Material's primary, the
+   Apple tint); the green `primary` is creating and confirming only (Material's tertiary). The type stays the
+   platform's (the web bundles no font); the web's weights, its section label, its radii (6, 10, 12) and its leading
+   tile are taken. Icons are each platform's own symbols drawn with the web's motifs (`images`, `file`, `inbox`,
+   `wallet`, `folder`), not Lucide.
+
 ## Consequences
 
 - **Not built yet:** stored device trust (decision 5); every write (a new node, an entry); each application's own views behind the bar; anchoring
-  another member's grant; dependency verification metadata for `src/mobile/`, as `src/backend/` has it; a CI job for
-  the apps.
+  another member's grant; a CI job for the apps. `src/mobile/` verifies its dependencies as `src/backend/` does
+  (`gradle/verification-metadata.xml`, held by `scripts/validate_build_input_pins.py`): a new dependency or target
+  owes a `./gradlew --write-verification-metadata sha256` run over the tasks that resolve it.
 - Two implementations of the suite now exist. A change to the suite changes the vectors first, and both the web's
   package and `core` must meet them; `src/mobile/`'s `./gradlew :core:jvmTest :core:macosArm64Test` is the app's half
   of that proof — the same `Conformance` over BouncyCastle and over libsodium.
