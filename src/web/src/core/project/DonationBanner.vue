@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The donation banner (uc.platform.support-the-project, ADR 0122): one line at the top of the signed-in app
+// The donation banner (uc.platform.support-the-project, ADR 0124): one line at the top of the signed-in app
 // (`AppShell.vue`) and of a share page (`ShareView.vue`) — never on the login, invite, join or recovery pages, and never
 // twice on one page (a bookmark's share shown in place draws `ShareGates`, not the share page, so it brings none).
 //

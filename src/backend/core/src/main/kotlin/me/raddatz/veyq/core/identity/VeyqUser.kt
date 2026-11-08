@@ -55,7 +55,7 @@ class VeyqUser : PanacheEntityBase {
     @Column(name = "require_group_add_consent", nullable = false)
     var requireGroupAddConsent: Boolean = false
 
-    /** Whether the account holder dismissed veyq's donation banner (uc.platform.support-the-project, ADR 0122) —
+    /** Whether the account holder dismissed veyq's donation banner (uc.platform.support-the-project, ADR 0124) —
      *  default false, account-global like [requireGroupAddConsent], so a dismissal holds in every tenant and on every
      *  device. Low-sensitivity server-visible operational metadata, never content; served only to the holder. */
     @Column(name = "donation_banner_dismissed", nullable = false)

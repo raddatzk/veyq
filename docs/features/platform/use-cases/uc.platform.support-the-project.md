@@ -4,7 +4,7 @@
 - **Primary actor:** A **member** in the signed-in app, or a **link guest** on a share page
 - **Goal:** Learn once, without being held up, that veyq is free software whose development can be supported, and
   find the way to the project's donation page and to why veyq is secure from every page's footer
-  ([ADR 0122](../../../decisions/0122-veyq-asks-once-for-a-donation-on-every-instance.md)).
+  ([ADR 0124](../../../decisions/0124-veyq-asks-once-for-a-donation-on-every-instance.md)).
 - **Preconditions:** None beyond opening a page of the signed-in app or a share page.
 - **Postconditions (success):** The banner was shown until it was dismissed; a dismissal holds forever — in this
   browser, and for a member on their account too, so it stays gone on every device they sign in on.
@@ -56,7 +56,7 @@ learn once that they can support it, are never asked twice, and are never held u
 
 ## Related
 
-- [ADR 0122](../../../decisions/0122-veyq-asks-once-for-a-donation-on-every-instance.md) (the ask, once, on every
+- [ADR 0124](../../../decisions/0124-veyq-asks-once-for-a-donation-on-every-instance.md) (the ask, once, on every
   instance, with no switch); [ADR 0087](../../../decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)
   (the website the links point to)
 - [uc.admin.operator-details](../../admin/use-cases/uc.admin.operator-details.md) (the footer the links sit in)

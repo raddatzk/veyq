@@ -5,7 +5,7 @@
 //    DSA Art. 14(1) asks the terms to be publicly available and easily accessible). It needs no read, so it is there
 //    even while the operator's values cannot be read; it opens in a tab of its own, so a share page keeps its key;
 //  - the instance privacy notice, always, the same way (ADR 0035 decision 8, GDPR Art. 13: one click from every page);
-//  - the veyq project's own two links, always (uc.platform.support-the-project, ADR 0122): "Why is veyq secure?" and
+//  - the veyq project's own two links, always (uc.platform.support-the-project, ADR 0124): "Why is veyq secure?" and
 //    "Donate", to the project's website in the reader's language (`core/project/projectLinks.ts`, their one home), each
 //    in a tab of its own so a share page keeps its key;
 //  - behind "Legal notice", the provider identification (ADR 0035 decision 7, § 5 DDG) and the single point of contact

@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 /**
- * The account's donation-banner dismissal (uc.platform.support-the-project, ADR 0122): a boolean on the account,
+ * The account's donation-banner dismissal (uc.platform.support-the-project, ADR 0124): a boolean on the account,
  * served on the caller's own profile and written through the profile update — omitted, it is left as it is; set, it
  * holds in every tenant of the account and for that account alone. Fresh tenants and accounts per test, so the
  * JVM-lived H2 database cannot bleed state between classes.

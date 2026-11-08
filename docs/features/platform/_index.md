@@ -40,7 +40,7 @@ an application owns and how the two meet — is [Applications](../../apps/README
   (an application left off for the window, `veyq.application.off.retention`, is erased in the tenant on a day every member is told by banner and mail;
   switched on before the day, nothing is lost.)
 - [uc.platform.support-the-project](use-cases/uc.platform.support-the-project.md) — **built (web, backend, contracts)**
-  (ADR 0122: a member in the signed-in app and a guest on a share page see a donation banner once, dismissed forever —
+  (ADR 0124: a member in the signed-in app and a guest on a share page see a donation banner once, dismissed forever —
   in the browser, and on the account for a member; every page's footer links "Why is veyq secure?" and "Donate".)
 
 ## Enablers

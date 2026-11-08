@@ -1288,7 +1288,7 @@ const en = {
     terms: 'Terms of this server',
     privacy: 'Privacy',
   },
-  // the veyq project's own links (core/project/, uc.platform.support-the-project, ADR 0122): the donation banner of the
+  // the veyq project's own links (core/project/, uc.platform.support-the-project, ADR 0124): the donation banner of the
   // signed-in app and the share page, and the footer's two links beside the instance's own
   project: {
     banner: {
@@ -3406,7 +3406,7 @@ const de: typeof en = {
     terms: 'Bedingungen dieses Servers',
     privacy: 'Datenschutz',
   },
-  // the veyq project's own links (core/project/, uc.platform.support-the-project, ADR 0122): the donation banner of the
+  // the veyq project's own links (core/project/, uc.platform.support-the-project, ADR 0124): the donation banner of the
   // signed-in app and the share page, and the footer's two links beside the instance's own
   project: {
     banner: {

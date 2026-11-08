@@ -1,4 +1,4 @@
-# ADR 0122 — veyq asks once for a donation, on every instance
+# ADR 0124 — veyq asks once for a donation, on every instance
 
 - Status: Accepted
 - Built: yes

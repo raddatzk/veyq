@@ -2039,7 +2039,7 @@ components:
           x-veyq-visibility: flag
           type: boolean
           description: >
-            Whether the caller dismissed veyq's donation banner (uc.platform.support-the-project, ADR 0122) — default
+            Whether the caller dismissed veyq's donation banner (uc.platform.support-the-project, ADR 0124) — default
             `false`. **Account-global**, like `requireGroupAddConsent`: a dismissal holds in every tenant and on every
             device. Low-sensitivity server-visible operational metadata (never a key or content): the operator learns
             that the account holder dismissed the banner, nothing else. Served only to the account holder.
@@ -2124,7 +2124,7 @@ components:
           x-veyq-visibility: flag
           type: [boolean, "null"]
           description: >
-            The account-global donation-banner dismissal (uc.platform.support-the-project, ADR 0122). `true` records
+            The account-global donation-banner dismissal (uc.platform.support-the-project, ADR 0124). `true` records
             that the caller dismissed the banner; omit (`null`) to leave it unchanged.
           example: true
 

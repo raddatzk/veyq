@@ -1,4 +1,4 @@
-// This browser's dismissal of the donation banner (uc.platform.support-the-project, ADR 0122): one flag for the whole
+// This browser's dismissal of the donation banner (uc.platform.support-the-project, ADR 0124): one flag for the whole
 // browser, not per audience — a guest's dismissal also holds when the same browser later signs in, which is what "the
 // first time anyone opens veyq" means. A member's dismissal is ALSO stored on the account (`donationBannerDismissed`,
 // the profile update), which `DonationBanner.vue` reads; this module is only the browser's half and never calls a client.

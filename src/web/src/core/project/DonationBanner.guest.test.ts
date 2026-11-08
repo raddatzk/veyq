@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// uc.platform.support-the-project, a guest's banner (ADR 0122 decisions 1-2): a fresh browser sees it — a labelled region
+// uc.platform.support-the-project, a guest's banner (ADR 0124 decisions 1-2): a fresh browser sees it — a labelled region
 // with the donation page's link in a tab of its own and a labelled ×; the × hides it, and it stays hidden on the next
 // mount because this browser keeps the dismissal; storage that cannot be read shows it (A3), storage that cannot be
 // written still hides it for the visit. A guest-mode mount: the profile module is the REAL one and every authenticated

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// uc.platform.support-the-project, a member's banner (ADR 0122 decision 2): it shows only while neither the account
+// uc.platform.support-the-project, a member's banner (ADR 0124 decision 2): it shows only while neither the account
 // (`donationBannerDismissed` on the profile) nor this browser holds a dismissal; dismissing writes the account's flag
 // through the profile update AND the browser's; an account flag found set is copied into the browser; a profile that
 // cannot be read shows the banner (A4), and a write that fails keeps the browser's dismissal.

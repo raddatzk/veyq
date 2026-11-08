@@ -11,7 +11,7 @@ import me.raddatz.veyq.core.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
 
 /** Result of a profile read/update (cr-0083). `requireGroupAddConsent` (the consent preference, cr-0094) and
- *  `donationBannerDismissed` (ADR 0122) are account-global flags surfaced here — the caller's own settings surface. */
+ *  `donationBannerDismissed` (ADR 0124) are account-global flags surfaced here — the caller's own settings surface. */
 sealed interface ProfileOutcome {
     data class Found(
         val username: String, val name: SealedValue?, val avatarRevision: Int, val requireGroupAddConsent: Boolean,
@@ -98,7 +98,7 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
             if (norm != existing.username && profiles.usernameTaken(tenantId, norm)) return ProfileOutcome.UsernameTaken
         }
         profiles.update(userId, tenantId, username, name)
-        // The consent preference (cr-0094) and the banner's dismissal (ADR 0122) are account-global — they live on the
+        // The consent preference (cr-0094) and the banner's dismissal (ADR 0124) are account-global — they live on the
         // user, not the per-tenant profile. An omitted one is left as it is.
         val user = VeyqUser.findById(userId)
         if (user != null) {
