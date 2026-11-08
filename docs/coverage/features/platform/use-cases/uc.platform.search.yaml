@@ -1,0 +1,20 @@
+useCase: uc.platform.search
+feature: platform
+title: Search every space for a node, a Memory or a photo of the open Memory
+status: planned
+acceptanceCriteria:
+  - id: every-space-of-the-tenant
+    text: The first focus of the search field opens the tree of every space the member belongs to in this tenant (personal, the tenant's, every group) without changing the active space; each tree's keys are zeroed once its documents are built, and a later focus revalidates each tree by its ETag (a 304 keeps the documents, a moved tree is opened again, a tree that no longer fetches or opens loses its documents).
+  - id: chips-and-text
+    text: A token that reads as a year (a Memory matches when its date range overlaps it, a photo when captured in it), a member's name, a place a document carries, a space's name or a kind's word is offered as a chip; a document matches when it satisfies every chip and the remaining text matches its name or place, ignoring case and diacritics.
+  - id: grouped-by-context
+    text: Results are grouped In this Memory (when one is open), In this space, Other spaces, ranked only within a group (an exact or prefix name match above a match inside a word, a name above a place); an empty group is not shown.
+  - id: memories-contributes-through-the-registry
+    text: Memories contributes a Memory's date range, place and participants and the photos and videos of the open Memory's opened listing (capture time, place) through the registry; core imports no application.
+  - id: open-a-result
+    text: Choosing a result opens it where it lives - a node in its space (switching the active space when it lies in another), a photo in the open Memory's lightbox.
+  - id: nothing-leaves-or-persists
+    text: No query, document or result is sent to the server or written to IndexedDB, localStorage, sessionStorage or Cache Storage; no endpoint is added; a share view has no search field.
+gaps:
+  web: "Not built yet (ADR 0125); the CR cr-search-across-spaces builds it, with unit tests beside core/search and the Memories contribution."
+  backend: "No backend part: search runs in the client over trees and listings the backend already serves (ADR 0125 decision 1); no endpoint is added."
