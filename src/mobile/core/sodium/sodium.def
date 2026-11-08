@@ -1,0 +1,5 @@
+# libsodium for the Apple targets (ADR 0123): headers and the static library come from build_libsodium.py's output,
+# one slice per target, handed in by core/build.gradle.kts (includeDirs, -libraryPath).
+package = me.raddatz.veyq.mobile.sodium
+headers = sodium.h
+staticLibraries = libsodium.a

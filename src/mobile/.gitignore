@@ -1,0 +1,7 @@
+.gradle/
+build/
+local.properties
+.kotlin/
+# The Xcode project is generated from apple/project.yml (XcodeGen); the yml is the source.
+apple/*.xcodeproj/
+apple/build/
