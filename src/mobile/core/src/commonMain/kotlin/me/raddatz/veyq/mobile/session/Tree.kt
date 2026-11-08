@@ -16,6 +16,11 @@ class OpenNode(
     val kind: String,
     val name: String,
     internal val key: ByteArray,
+    /** The node's own key epoch: what a write into it states (`nodeEpoch`). */
+    val epoch: Int = 0,
+    /** The node's sealed meta (`node-meta` under its key), base64, and the revision it is stored at. */
+    internal val wrappedMeta: String? = null,
+    val metaRevision: Long = 0,
 ) {
     fun asNode(): NodeRef = NodeRef(scopeId, id, parentId, kind, name)
     fun asObject(): ObjectRef? = asNode().asObject()
@@ -39,7 +44,7 @@ object Tree {
                 val node = try {
                     val name = suite.openField(Context("node-name", *binding), parentKey, unb64(row.encryptedName)).decodeToString()
                     val key = suite.open(Context("content-key", *binding), parentKey, unb64(row.wrappedContentKey))
-                    OpenNode(scopeId, row.id, row.parentId, row.kind, name, key)
+                    OpenNode(scopeId, row.id, row.parentId, row.kind, name, key, row.epoch, row.wrappedMeta, row.metaRevision)
                 } catch (e: OpenRefused) {
                     null
                 } catch (e: IllegalArgumentException) {

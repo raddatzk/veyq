@@ -585,7 +585,7 @@ class VeyqAccount private constructor(
 class TenantSession internal constructor(
     val account: VeyqAccount,
     val tenant: TenantRef,
-    private val base: String,
+    internal val base: String,
     private val scopes: List<OpenScope>,
     private val applicationsOff: Set<String>,
     /** The scopes this tenant serves the account that stay closed, by id, and why (a grant refused or awaiting a key). */
@@ -601,7 +601,7 @@ class TenantSession internal constructor(
 
     private var tree: Map<String, List<OpenNode>>? = null
 
-    private suspend fun trees(): Map<String, List<OpenNode>> = tree ?: scopes.associate { s ->
+    internal suspend fun trees(): Map<String, List<OpenNode>> = tree ?: scopes.associate { s ->
         val rows = account.call { api(::ContentApi).listNodes(s.summary.id) }
         s.summary.id to Tree.open(account.suite, s.summary.id, s.key, rows)
     }.also { tree = it }

@@ -28,26 +28,30 @@ plugins {
 // ones a member's app calls; an application's specs join with that application's screens.
 val contracts = rootDir.resolve("../../contracts/api").canonicalFile
 val coreSpecs = listOf("setup", "auth", "account", "scopes", "content", "favorites", "tenants")
+
+/** An application's spec, generated into packages of its own (`api.<application>`), so its models never meet core's. */
+val applicationSpecs = listOf("expenses/expenses")
 val generatedApi = layout.buildDirectory.dir("generated/openapi")
 
 val generateApi = tasks.register("generateApi") {
     group = "veyq"
     description = "Generates the Kotlin Multiplatform API client from contracts/api (openapi-generator, kotlin/multiplatform)."
-    val specs = coreSpecs.map { contracts.resolve("$it.openapi.yaml") }
-    inputs.files(specs + contracts.resolve("_common.openapi.yaml")).withPropertyName("specs")
+    val specs = coreSpecs.map { contracts.resolve("$it.openapi.yaml") to "" } +
+        applicationSpecs.map { contracts.resolve("$it.openapi.yaml") to "." + it.substringBefore('/') }
+    inputs.files(specs.map { it.first } + contracts.resolve("_common.openapi.yaml")).withPropertyName("specs")
     outputs.dir(generatedApi)
     doLast {
         val out = generatedApi.get().asFile
         out.deleteRecursively()
-        specs.forEach { spec ->
+        specs.forEach { (spec, application) ->
             val config = CodegenConfigurator()
                 .setGeneratorName("kotlin")
                 .setLibrary("multiplatform")
                 .setInputSpec(spec.absolutePath)
                 .setOutputDir(out.absolutePath)
                 .setPackageName("me.raddatz.veyq.mobile.api")
-                .setApiPackage("me.raddatz.veyq.mobile.api.apis")
-                .setModelPackage("me.raddatz.veyq.mobile.api.models")
+                .setApiPackage("me.raddatz.veyq.mobile.api$application.apis")
+                .setModelPackage("me.raddatz.veyq.mobile.api$application.models")
                 .addAdditionalProperty("dateLibrary", "string")
                 .addAdditionalProperty("enumUnknownDefaultCase", "true")
                 .addAdditionalProperty("hideGenerationTimestamp", "true")
@@ -63,9 +67,9 @@ val generateApi = tasks.register("generateApi") {
         // deserializers): the server's checks, which a client neither has nor needs. A line that is nothing but such
         // an annotation is dropped; anything else naming the backend's packages fails the build rather than ship.
         out.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
-            val serverOnly = listOf("@field:", "@jakarta.", "@me.raddatz.veyq.core.")
+            val serverOnly = listOf("@field:", "@jakarta.", "@me.raddatz.veyq.")
             val kept = f.readLines().filterNot { line -> serverOnly.any { line.trimStart().startsWith(it) } }
-            kept.firstOrNull { "jakarta." in it || "fasterxml" in it || "me.raddatz.veyq.core" in it }?.let {
+            kept.firstOrNull { "jakarta." in it || "fasterxml" in it || Regex("""me\.raddatz\.veyq\.(?!mobile\b)""").containsMatchIn(it) }?.let {
                 throw GradleException("${f.name}: a server-side annotation survived the strip: ${it.trim().take(120)}")
             }
             f.writeText(kept.joinToString("\n", postfix = "\n"))
