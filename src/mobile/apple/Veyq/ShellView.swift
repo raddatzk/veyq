@@ -224,7 +224,9 @@ struct Bar: View {
     }
 
     @ViewBuilder private func content(_ key: String) -> some View {
-        if let ref = model.shell.openObject {
+        if let ref = model.shell.openObject, ref.kind == "EXPENSES_POT" {
+            PotScreen(model: model, ref: ref, tab: key)
+        } else if let ref = model.shell.openObject {
             ObjectPlaceholder(ref: ref, tab: key)
         } else if let app = model.shell.application {
             ArrangedListView(list: model.applicationList(app), onOpen: model.open)

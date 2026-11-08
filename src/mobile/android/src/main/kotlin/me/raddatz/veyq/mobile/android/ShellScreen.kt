@@ -172,6 +172,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when {
                     shell.searching -> SearchScreen(s.objects, onOpen = model::open, onClose = { model.search(false) })
+                    shell.openObject?.kind == "EXPENSES_POT" -> PotScreen(shell.openObject!!, shell.selectedTab, model)
                     shell.openObject != null -> ObjectScreen(shell.openObject!!, shell.selectedTab)
                     shell.application == null -> HomeScreen(s, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
                     else -> ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open)
@@ -391,7 +392,7 @@ fun Brand(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Section(title: String) {
+internal fun Section(title: String) {
     Text(
         title.uppercase(), style = VeyqType.sectionLabel, color = role(LocalPalette.current.muted),
         modifier = Modifier.padding(start = 8.dp, top = 18.dp, bottom = 6.dp),

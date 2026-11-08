@@ -340,6 +340,8 @@ final class AppModel {
 
     private func show(_ account: VeyqAccount, _ tenant: TenantRef) async throws {
         let t = try await AppleSessions.shared.open(account: account, tenant: tenant)
+        tenantSession = t
+        pot = nil
         rawSpaces = try await t.spaces()
         rawNodes = try await t.nodes()
         rawFavorites = try await t.favorites()
@@ -370,6 +372,56 @@ final class AppModel {
             shell = shell.switchSpace(scopeId: defaultSpace ?? "")
         }
         refreshDrawer()
+    }
+
+    // MARK: An open Pot (Expenses)
+
+    /// The tenant the shell shows, opened: where an object's own view reads from.
+    private var tenantSession: TenantSession?
+    private var potSession: PotSession?
+
+    /// An open Pot's views: `view` nil while it loads, `failed` when it did not open; `message` the last add's refusal.
+    struct PotState {
+        let ref: ObjectRef
+        var view: PotView?
+        var failed = false
+        var saving = false
+        var message: String?
+    }
+
+    private(set) var pot: PotState?
+
+    /// Opens and reads the Pot `ref` unless it is the one shown.
+    func loadPot(_ ref: ObjectRef) {
+        if let p = pot, p.ref == ref, !p.failed { return }
+        pot = PotState(ref: ref)
+        guard let tenant = tenantSession else { pot?.failed = true; return }
+        Task {
+            let session = (try? await AppleSessions.shared.openPot(tenant: tenant, scopeId: ref.scopeId, nodeId: ref.nodeId)) ?? nil
+            potSession = session
+            if pot?.ref == ref { pot = PotState(ref: ref, view: session.map { PotView(session: $0) }, failed: session == nil) }
+        }
+    }
+
+    /// Adds an expense to the open Pot, paid by `payer`, split equally among `beneficiaries`, dated today; true once stored.
+    func addExpense(title: String, amount: String, payer: String, beneficiaries: [String], category: String) async -> Bool {
+        guard var state = pot, let session = potSession else { return false }
+        state.saving = true
+        state.message = nil
+        pot = state
+        let day = DateFormatter()
+        day.calendar = Calendar(identifier: .gregorian)
+        day.locale = Locale(identifier: "en_US_POSIX")
+        day.dateFormat = "yyyy-MM-dd"
+        let outcome = (try? await AppleSessions.shared.addExpense(
+            pot: session, title: title, amountText: amount, payer: payer, beneficiaries: beneficiaries,
+            date: day.string(from: Date()), category: category, minorUnits: Int32(state.view?.minorUnits ?? 2)
+        )) ?? .refused
+        state.view = PotView(session: session)
+        state.saving = false
+        state.message = outcome == .added ? nil : outcome.name
+        pot = state
+        return outcome == .added
     }
 
     func choose(_ app: ApplicationId?) { shell = shell.choose(app: app); drawerOpen = false }

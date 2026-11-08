@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
+import me.raddatz.veyq.mobile.expenses.Amounts
+import me.raddatz.veyq.mobile.expenses.PotSession
+import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.ArrangedList
 import me.raddatz.veyq.mobile.navigation.BarTab
@@ -323,8 +326,55 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun show(account: VeyqAccount, tenant: TenantRef) {
         val t = account.open(tenant)
+        tenantSession = t
+        _pot.value = null
         raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff())
         rebuild(start = true)
+    }
+
+    // ---- an open Pot (Expenses) ----
+
+    /** The tenant the shell shows, opened: where an object's own view reads from. */
+    private var tenantSession: me.raddatz.veyq.mobile.session.TenantSession? = null
+    private var potSession: PotSession? = null
+
+    /** An open Pot's views: [view] null while it loads, [failed] when it did not open; [message] the last add's refusal. */
+    data class PotState(val ref: ObjectRef, val view: PotView? = null, val failed: Boolean = false, val saving: Boolean = false, val message: String? = null)
+
+    private val _pot = MutableStateFlow<PotState?>(null)
+    val pot: StateFlow<PotState?> = _pot.asStateFlow()
+
+    /** Opens and reads the Pot [ref] unless it is the one shown. */
+    fun loadPot(ref: ObjectRef) {
+        if (_pot.value?.ref == ref && !_pot.value!!.failed) return
+        _pot.value = PotState(ref)
+        viewModelScope.launch {
+            val session = tenantSession?.let { runCatching { PotSession.open(it, ref.scopeId, ref.nodeId) }.getOrNull() }
+            potSession = session
+            if (_pot.value?.ref == ref) _pot.value = PotState(ref, session?.let(::PotView), failed = session == null)
+        }
+    }
+
+    /**
+     * Adds an expense to the open Pot, paid wholly by [payer] and split equally among [beneficiaries], dated today; [done]
+     * runs once it was stored. A refusal is kept as the state's message (`INVALID`, `STALE`, `REFUSED`).
+     */
+    fun addExpense(title: String, amountText: String, payer: String, beneficiaries: List<String>, category: String, done: () -> Unit) {
+        val state = _pot.value ?: return
+        val session = potSession ?: return
+        val amount = Amounts.parse(amountText, state.view?.minorUnits ?: 2)
+        if (amount == null || title.isBlank() || beneficiaries.isEmpty()) {
+            _pot.value = state.copy(message = PotSession.AddOutcome.INVALID.name)
+            return
+        }
+        _pot.value = state.copy(saving = true, message = null)
+        viewModelScope.launch {
+            val outcome = runCatching {
+                session.addExpense(title, amount, payer, beneficiaries, java.time.LocalDate.now().toString(), category)
+            }.getOrDefault(PotSession.AddOutcome.REFUSED)
+            _pot.value = state.copy(view = PotView(session), saving = false, message = outcome.takeIf { it != PotSession.AddOutcome.ADDED }?.name)
+            if (outcome == PotSession.AddOutcome.ADDED) done()
+        }
     }
 
     /** The shell's lists from what was read, less what this device hides; on [start], the shell where the app opens. */
