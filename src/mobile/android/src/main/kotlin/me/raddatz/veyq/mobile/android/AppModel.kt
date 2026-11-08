@@ -76,6 +76,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private val recent = RecentUses(persist = ::persistRecent, initial = loadRecent())
     private val hidden = Hidden(persist = { prefs.edit().putStringSet("hidden", it).apply() }, initial = prefs.getStringSet("hidden", emptySet()).orEmpty())
     private val connections = Connections<VeyqAccount>()
+    private val trustStore = PreferencesStore(app)
 
     /** The current tenant as read, before what this device hides is taken out. */
     private class Raw(val spaces: List<SpaceRef>, val nodes: List<NodeRef>, val favorites: List<ObjectRef>, val off: Set<String>)
@@ -89,7 +90,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _screen.value = Screen.SignIn(working = true, adding = adding)
         viewModelScope.launch {
             try {
-                val account = VeyqAccount.signIn(BouncyCastlePrimitives, origin(server), email, password, secretKey) { block -> Network.client(block) }
+                val account = VeyqAccount.signIn(BouncyCastlePrimitives, origin(server), email, password, secretKey, trustStore) { block -> Network.client(block) }
                 val tenant = account.defaultTenant ?: throw SignInFailure(SignInFailure.Reason.NO_TENANT)
                 val added = connections.add(account, tenant)
                 added.duplicate?.signOut()

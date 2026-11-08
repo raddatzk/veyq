@@ -22,7 +22,7 @@ class LiveSignInTest {
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val account = VeyqAccount.signIn(
-            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), MemoryDeviceStore(),
         ) { block -> HttpClient(OkHttp, block) }
         println("tenants: " + account.tenants.joinToString { "${it.name}@${it.domain}" })
         for (tenant in account.tenants) {

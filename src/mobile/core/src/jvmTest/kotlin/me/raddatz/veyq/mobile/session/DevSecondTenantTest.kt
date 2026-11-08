@@ -39,7 +39,7 @@ class DevSecondTenantTest {
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val account = VeyqAccount.signIn(
-            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), MemoryDeviceStore(),
         ) { block -> HttpClient(OkHttp, block) }
         if (account.tenants.any { it.domain == domain }) {
             println("seed: $domain already exists")
@@ -71,7 +71,7 @@ class DevSecondTenantTest {
         println("seed: $name ($domain) created and accepted, personal scope $personalId")
 
         val again = VeyqAccount.signIn(
-            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), MemoryDeviceStore(),
         ) { block -> HttpClient(OkHttp, block) }
         val opened = again.open(again.tenants.first { it.domain == domain })
         assertTrue(opened.spaces().map { it.kind }.containsAll(listOf("TENANT", "PERSONAL")), "the new tenant's grants did not open")

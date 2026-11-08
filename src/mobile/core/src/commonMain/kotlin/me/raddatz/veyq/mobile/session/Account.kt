@@ -12,6 +12,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import me.raddatz.veyq.mobile.api.apis.AccountApi
+import me.raddatz.veyq.mobile.api.apis.AccountIdentityPinsApi
+import me.raddatz.veyq.mobile.api.apis.KeyChainApi
 import me.raddatz.veyq.mobile.api.apis.ContentApi
 import me.raddatz.veyq.mobile.api.apis.FavoritesApi
 import me.raddatz.veyq.mobile.api.apis.LoginApi
@@ -22,6 +24,12 @@ import me.raddatz.veyq.mobile.api.apis.TenantsApi
 import me.raddatz.veyq.mobile.api.apis.TokenApi
 import me.raddatz.veyq.mobile.api.infrastructure.ApiClient
 import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import kotlinx.serialization.json.JsonObject
+import me.raddatz.veyq.mobile.api.models.IdentityPinEntryPage
+import me.raddatz.veyq.mobile.api.models.IdentityPins
+import me.raddatz.veyq.mobile.api.models.IdentityPinsWrite
+import me.raddatz.veyq.mobile.api.models.KeyChain
 import me.raddatz.veyq.mobile.api.models.LoginChallengeRequest
 import me.raddatz.veyq.mobile.api.models.LoginVerifyRequest
 import me.raddatz.veyq.mobile.api.models.MasterKeyWrap
@@ -33,6 +41,7 @@ import me.raddatz.veyq.mobile.crypto.OpenRefused
 import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.crypto.SecretKeyText
+import me.raddatz.veyq.mobile.crypto.Trust
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.crypto.XWingKey
 import me.raddatz.veyq.mobile.crypto.unb64
@@ -72,9 +81,46 @@ class VeyqAccount private constructor(
     internal val myPublic: ByteArray,
     internal val mySignPublic: ByteArray,
     override val tenants: List<TenantRef>,
+    deviceStore: DeviceStore,
 ) : Connection {
     internal class Tokens(var access: String, var refresh: String?) {
         val lock = Mutex()
+    }
+
+    private val trust = Trust(suite)
+    private val marks = TrustMarks(deviceStore, primitives, masterKey)
+
+    /** The server calls of the key check, on the account's own origin (the pin store and key chains are the account's). */
+    private val trustApi = object : TrustApi {
+        override suspend fun pinHead(): IdentityPins = call { AccountIdentityPinsApi(server, http).getIdentityPins() }
+        override suspend fun pinEntries(after: String?, limit: Int): IdentityPinEntryPage =
+            call { AccountIdentityPinsApi(server, http).listIdentityPinEntries(after, limit) }
+        override suspend fun writePins(write: IdentityPinsWrite): Boolean {
+            val r = respond { AccountIdentityPinsApi(server, http).writeIdentityPins(write) }
+            if (r.success) return true
+            if (r.status == 409 && errorCode(r) == "stale_revision") return false
+            throw SignInFailure(SignInFailure.Reason.PROTOCOL, "identity-pins write ${r.status}")
+        }
+        override suspend fun keyChain(userId: String): KeyChain? {
+            val r = respond { KeyChainApi(server, http).getKeyChain(userId) }
+            if (r.success) return r.body()
+            if (r.status == 404) return null
+            throw SignInFailure(SignInFailure.Reason.PROTOCOL, "key-chain ${r.status}")
+        }
+    }
+
+    private val pins = PinStore(suite, trust, trustApi, marks, masterKey)
+
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    private val anchoring = Anchoring(suite, trust, trustApi, pins) { kotlin.time.Clock.System.now().toEpochMilliseconds() }
+
+    private fun grants(base: String) = GrantOpener(suite, trust, primitives, userId, myPublic, mySignPublic, kem, marks, anchoring) { scopeId ->
+        val r = respond { ScopesApi(base, http).listScopeEpochs(scopeId) }
+        when {
+            r.success -> r.body()
+            r.status == 404 || r.status == 403 -> null
+            else -> throw SignInFailure(SignInFailure.Reason.PROTOCOL, "scope epochs ${r.status}")
+        }
     }
 
     /** One account per user per server: signing in to the same one twice is the same connection. */
@@ -93,16 +139,35 @@ class VeyqAccount private constructor(
         return "${u.protocol.name}://${tenant.domain}$port"
     }
 
-    /** Opens one tenant: its scopes (each grant verified before it is opened) and its switched-off applications. */
+    /**
+     * Opens one tenant: its scopes, each grant verified before it is opened ([GrantOpener]), and its switched-off
+     * applications. The TENANT scope opens first: its member list is what a group's granter is judged against
+     * ([TenantView]). A scope that stays closed is listed in [TenantSession.closed] with its reason.
+     */
     suspend fun open(tenant: TenantRef): TenantSession {
         val base = originOf(tenant)
-        val summaries = call { ScopesApi(base, http).listMyScopes() }
+        val summaries = call { ScopesApi(base, http).listMyScopes() }.filter { it.deletedAt == null }
         val on = runCatching { call { TenantsApi(base, http).getTenantCapabilities(tenant.tenantId) }.capabilities.map { it.id }.toSet() }.getOrNull()
         val off = on?.let { KNOWN_APPLICATIONS - it } ?: emptySet()
-        val open = summaries.filter { it.deletedAt == null }.mapNotNull { s ->
-            openGrant(s)?.let { key -> TenantSession.OpenScope(s, key, scopeName(s, tenant)) }
+        val grants = grants(base)
+        val open = mutableListOf<TenantSession.OpenScope>()
+        val closed = mutableMapOf<String, GrantOutcome.Reason>()
+        suspend fun openOne(s: ScopeSummary, view: TenantView?) {
+            when (val o = grants.open(s, view)) {
+                is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, o.key, scopeName(s, tenant))
+                is GrantOutcome.Refused -> closed[s.id] = o.reason
+            }
         }
-        return TenantSession(this, tenant, base, open, off)
+        val (tenantScopes, others) = summaries.partition { it.kind.value == "TENANT" }
+        tenantScopes.forEach { openOne(it, null) }
+        val tenantOpened = open.any { it.summary.kind.value == "TENANT" && it.summary.id == tenant.tenantId }
+        val members = if (!tenantOpened) null else {
+            val r = respond { ScopesApi(base, http).listScopeMembers(tenant.tenantId) }
+            if (r.success) r.body().associateBy { it.userId } else null
+        }
+        val view = TenantView(members)
+        others.forEach { openOne(it, view) }
+        return TenantSession(this, tenant, base, open, off, closed)
     }
 
     /** A grant of a scope key to this account itself, as a scope's birth posts it (ADR 0028 decision 6), all base64. */
@@ -126,9 +191,15 @@ class VeyqAccount private constructor(
 
     /** One API call with the current access token; a 401 refreshes once (single-flight, ADR 0004) and retries. */
     internal suspend fun <T : Any> call(f: suspend () -> HttpResponse<T>): T {
+        val r = respond(f)
+        if (!r.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "HTTP ${r.status}")
+        return r.body()
+    }
+
+    /** [call]'s refresh, the response handed back whatever its status, for a caller that tells statuses apart. */
+    internal suspend fun <T : Any> respond(f: suspend () -> HttpResponse<T>): HttpResponse<T> {
         val first = f()
-        if (first.success) return first.body()
-        if (first.status != 401 || tokens.refresh == null) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "HTTP ${first.status}")
+        if (first.status != 401 || tokens.refresh == null) return first
         val seen = tokens.access
         tokens.lock.withLock {
             if (tokens.access == seen) {
@@ -139,29 +210,13 @@ class VeyqAccount private constructor(
                 tokens.refresh = pair.refreshToken
             }
         }
-        val second = f()
-        if (!second.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "HTTP ${second.status}")
-        return second.body()
+        return f()
     }
 
-    /**
-     * Verifies a scope grant, then opens it (ADR 0028 decision 6). Only a self-signed grant is accepted: a grant from
-     * another member needs that member's key anchored (the key-chain pin), which the app does not do yet. A stale grant
-     * (below the scope's current epoch) is refused, as the web refuses it.
-     */
-    private fun openGrant(s: ScopeSummary): ByteArray? {
-        if (s.grantedEpoch < s.currentEpoch) return null
-        if (s.granterUserId != userId) return null
-        val signature = s.grantSignature ?: return null
-        val wrapped = unb64(s.wrappedGrant)
-        val statement = suite.grantStatement(s.id, s.kind.value, s.grantedEpoch.toLong(), userId, myPublic, wrapped)
-        if (!primitives.ed25519Verify(mySignPublic, statement, unb64(signature))) return null
-        return try {
-            suite.openAs(Context("scope-grant", "scopeId" to s.id, "epoch" to s.grantedEpoch.toLong()), kem, wrapped)
-        } catch (e: OpenRefused) {
-            null
-        }
-    }
+    /** The `code` of an error response's body (`ErrorResponse`), or null. */
+    private suspend fun errorCode(r: HttpResponse<*>): String? = runCatching {
+        (Json.parseToJsonElement(r.response.bodyAsText()) as? JsonObject)?.get("code")?.jsonPrimitive?.content
+    }.getOrNull()
 
     companion object {
         /** The platform major this app speaks (ADR 0085): the one hard gate before sign-in. */
@@ -185,6 +240,7 @@ class VeyqAccount private constructor(
             email: String,
             password: String,
             secretKey: String,
+            deviceStore: DeviceStore,
             client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
         ): VeyqAccount {
             val suite = V1(primitives)
@@ -254,7 +310,7 @@ class VeyqAccount private constructor(
                     it.body()
                 }.map { TenantRef(it.tenantId, it.name, it.domain) }
                 if (tenants.isEmpty()) throw SignInFailure(SignInFailure.Reason.NO_TENANT)
-                return VeyqAccount(suite, primitives, http, base, tokens, material.userId, masterKey, identity, kem, mine.serialize(), mine.sign, tenants)
+                return VeyqAccount(suite, primitives, http, base, tokens, material.userId, masterKey, identity, kem, mine.serialize(), mine.sign, tenants, deviceStore)
             } catch (e: Throwable) {
                 http.close()
                 throw if (e is SignInFailure) e else SignInFailure(SignInFailure.Reason.PROTOCOL, e.message)
@@ -270,6 +326,8 @@ class TenantSession internal constructor(
     private val base: String,
     private val scopes: List<OpenScope>,
     private val applicationsOff: Set<String>,
+    /** The scopes this tenant serves the account that stay closed, by id, and why (a grant refused or awaiting a key). */
+    val closed: Map<String, GrantOutcome.Reason> = emptyMap(),
 ) : Library {
     internal class OpenScope(val summary: ScopeSummary, val key: ByteArray, val name: String)
 
