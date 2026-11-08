@@ -8,6 +8,9 @@ fun utf8(s: String): ByteArray = nfc(s).encodeToByteArray()
 /** Unicode NFC normalisation, supplied by each platform's own text library. */
 expect fun nfc(s: String): String
 
+/** Unicode NFKD normalisation (`slugify`'s accent strip), supplied by each platform's own text library. */
+expect fun nfkd(s: String): String
+
 fun concat(vararg parts: ByteArray): ByteArray {
     val out = ByteArray(parts.sumOf { it.size })
     var o = 0

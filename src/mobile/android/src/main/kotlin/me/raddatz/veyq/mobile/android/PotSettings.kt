@@ -73,12 +73,12 @@ internal fun PotSettings(view: PotView, state: AppModel.PotState, model: AppMode
 }
 
 /** The currencies this device knows, by code (`java.util.Currency`; the web asks `Intl` the same). */
-private val currencies: List<String> by lazy {
+internal val currencies: List<String> by lazy {
     java.util.Currency.getAvailableCurrencies().map { it.currencyCode }.filter { RevisionFormat.CURRENCY.matches(it) }.distinct().sorted()
 }
 
 /** The minor-unit digits of [code] (the euro 2, the yen 0, the dinar 3), within the format's 0..4. */
-private fun minorUnitsOf(code: String): Int =
+internal fun minorUnitsOf(code: String): Int =
     runCatching { java.util.Currency.getInstance(code).defaultFractionDigits }.getOrDefault(2).let { if (it < 0) 2 else it.coerceIn(0, 4) }
 
 /** The base currency: chosen while the Pot holds no money entry, fixed from its first one on. */

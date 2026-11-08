@@ -150,4 +150,12 @@
     <string name="settings_category_name">Category name</string>
     <string name="settings_add_category">Add category</string>
     <string name="settings_rename_category">Rename %1$s</string>
+    <string name="create_pot">New pot</string>
+    <string name="create_pot_name">Name</string>
+    <string name="create_pot_space">Space</string>
+    <string name="create_pot_create">Create</string>
+    <string name="create_pot_name_taken">There is already a pot with this name here.</string>
+    <string name="create_pot_people_failed">The pot was created, its people were not. Add them in its settings.</string>
+    <string name="create_pot_invalid">Check the name and the people: 1 to 100 characters each.</string>
+    <string name="create_pot_failed">The pot was not created. Please try again.</string>
 </resources>

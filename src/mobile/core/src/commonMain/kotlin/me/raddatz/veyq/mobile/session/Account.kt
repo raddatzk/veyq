@@ -611,14 +611,15 @@ class TenantSession internal constructor(
      * The CURRENT members of [scopeId] (a proposed member who has not accepted is none yet), named by the tenant's
      * directory; null when the list does not read.
      */
+    @Throws(Exception::class)
     suspend fun scopeMembers(scopeId: String): List<Person>? {
         val r = account.respond { api(::ScopesApi).listScopeMembers(scopeId) }
         if (!r.success) return null
         return r.body().filter { it.pendingConsent != true }.map { people[it.userId] ?: Person(it.userId, it.username, it.username) }
     }
 
-    /** Drops the read tree: the next [trees] reads every scope's again (a write met a re-keyed node). */
-    internal fun forgetTree() {
+    /** Drops the read tree: the next read of it (a list, [trees]) reads every scope again — after a node was created, or a write met a re-keyed node. */
+    fun forgetTree() {
         tree = null
     }
 
@@ -627,6 +628,10 @@ class TenantSession internal constructor(
      * was minted below it is not re-keyed since the rotation, and nothing is sealed under its key. Null for a scope not open.
      */
     internal fun scopeEpoch(scopeId: String): Int? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.grantedEpoch
+
+    /** The scope key this device holds [scopeId] at, with its epoch; null for a scope not open. */
+    internal fun scopeKey(scopeId: String): Pair<ByteArray, Int>? =
+        scopes.firstOrNull { it.summary.id == scopeId }?.let { it.key to it.summary.grantedEpoch }
 
     internal suspend fun trees(): Map<String, List<OpenNode>> = tree ?: scopes.associate { s ->
         val rows = account.call { api(::ContentApi).listNodes(s.summary.id) }

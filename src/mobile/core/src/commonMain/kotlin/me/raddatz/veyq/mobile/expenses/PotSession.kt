@@ -365,7 +365,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     @Throws(Exception::class)
     suspend fun addPerson(name: String): WriteOutcome {
         val n = name.trim().takeIf { RevisionFormat.codePoints(it) in 1..MAX_NAME } ?: return WriteOutcome.INVALID
-        return write(listOf(PotWrite(newId(), ParticipantBody(n, true, now()))))
+        return write(listOf(PotWrite(newId(), ParticipantBody(n, true, nowMs()))))
     }
 
     /**
@@ -375,7 +375,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     @Throws(Exception::class)
     suspend fun addMember(userId: String): WriteOutcome {
         val m = members?.firstOrNull { it.userId == userId } ?: return WriteOutcome.INVALID
-        return write(listOf(PotWrite(newId(), ParticipantBody(cut(m.displayName, MAX_NAME), true, now(), m.userId))))
+        return write(listOf(PotWrite(newId(), ParticipantBody(cut(m.displayName, MAX_NAME), true, nowMs(), m.userId))))
     }
 
     /** Renames a person added by name (a member's name is the member's own and is never renamed). */
@@ -435,7 +435,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         }
 
         @OptIn(kotlin.time.ExperimentalTime::class)
-        private fun now(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        internal fun nowMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
         private suspend fun codeOf(r: HttpResponse<*>): String? = codeIn(runCatching { r.response.bodyAsText() }.getOrDefault(""))
 

@@ -82,6 +82,30 @@ class PotLiveTest {
                 println("[${ref.name}] after the add: balances=${after.balances.mapValues { it.value.toString() }}")
             }
         }
+        if (System.getenv("VEYQ_LIVE_POT_CREATE") == "1") {
+            // A Pot created at the root of the first Pot's space, with a name and a member; the same name again is taken;
+            // then it goes to the space's trash.
+            val scopeId = pots.first().scopeId
+            val name = "App pot ${System.currentTimeMillis()}"
+            val member = PotSession.open(tenant, scopeId, pots.first().nodeId)!!.members!!.first()
+            val people = listOf(PotCreate.NewPerson.name("Zoë"), PotCreate.NewPerson.member(member.userId, member.displayName))
+            val made = PotCreate.create(tenant, scopeId, null, name, Ledger.BaseCurrency("EUR", 2), people)
+            assertEquals(PotCreate.Outcome.CREATED, made.outcome)
+            tenant.forgetTree()
+            val pot = PotSession.open(tenant, scopeId, made.nodeId!!)!!
+            assertEquals(name, pot.name)
+            assertEquals(Ledger.BaseCurrency("EUR", 2), pot.meta?.base)
+            assertEquals(listOf("Zoë", member.displayName), pot.ledger!!.participants.map { it.name })
+            assertEquals(member.userId, pot.ledger!!.participants[1].member)
+            assertTrue(pot.check.complete)
+            // The token folds the name: another spelling of the same slug collides too.
+            assertEquals(PotCreate.Outcome.NAME_TAKEN, PotCreate.create(tenant, scopeId, null, name.uppercase(), Ledger.BaseCurrency("EUR", 2), emptyList()).outcome)
+            assertTrue(account.respond { me.raddatz.veyq.mobile.api.apis.ContentApi(tenant.base, account.http).deleteNode(scopeId, made.nodeId!!) }.success)
+            // A Pot the WEB created at the root collides too: the app's token is the web's, byte for byte.
+            val webPot = tenant.trees()[scopeId]!!.first { it.kind == PotSession.KIND && it.parentId == null && it.id != made.nodeId }
+            assertEquals(PotCreate.Outcome.NAME_TAKEN, PotCreate.create(tenant, scopeId, null, webPot.name, Ledger.BaseCurrency("EUR", 2), emptyList()).outcome)
+            println("[$name] created with ${pot.ledger!!.participants.size} people, its name refused again, and deleted")
+        }
         account.signOut()
     }
 }

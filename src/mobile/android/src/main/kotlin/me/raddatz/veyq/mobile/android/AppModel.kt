@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.expenses.Amounts
+import me.raddatz.veyq.mobile.expenses.Ledger
+import me.raddatz.veyq.mobile.expenses.PotCreate
 import me.raddatz.veyq.mobile.expenses.PotSession
 import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.navigation.ApplicationId
@@ -390,6 +392,45 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             _pot.value = state.copy(view = PotView(session), saving = false, message = outcome.takeIf { it != PotSession.WriteOutcome.WRITTEN }?.name)
             if (outcome == PotSession.WriteOutcome.WRITTEN) done()
         }
+    }
+
+    /** The "New pot" sheet: saving while it creates, and its refusal ([PotCreate.Outcome] name). */
+    data class CreatingPot(val saving: Boolean = false, val message: String? = null)
+
+    private val _creating = MutableStateFlow(CreatingPot())
+    val creating: StateFlow<CreatingPot> = _creating.asStateFlow()
+
+    /** The current members of [scopeId], for the "New pot" sheet's people; null when they do not read. */
+    suspend fun membersOf(scopeId: String): List<me.raddatz.veyq.mobile.session.Person>? =
+        tenantSession?.let { runCatching { it.scopeMembers(scopeId) }.getOrNull() }
+
+    /**
+     * Creates a Pot named [name] at the root of [scopeId] with [currency] ([minorUnits] its digits) and [people], reads the
+     * tenant's lists again and opens it; [done] runs once it exists (its people may still have failed: then the Pot opens
+     * and says so on its Settings, where they can be added).
+     */
+    fun createPot(scopeId: String, name: String, currency: String, minorUnits: Int, people: List<PotCreate.NewPerson>, done: () -> Unit) {
+        val t = tenantSession ?: return
+        _creating.value = CreatingPot(saving = true)
+        viewModelScope.launch {
+            val r = runCatching { PotCreate.create(t, scopeId, null, name, Ledger.BaseCurrency(currency, minorUnits), people) }
+                .getOrDefault(PotCreate.Result(PotCreate.Outcome.REFUSED))
+            val nodeId = r.nodeId
+            if (nodeId == null) {
+                _creating.value = CreatingPot(message = r.outcome.name)
+                return@launch
+            }
+            t.forgetTree()
+            raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff())
+            rebuild()
+            _creating.value = CreatingPot(message = r.outcome.takeIf { it != PotCreate.Outcome.CREATED }?.name)
+            done()
+            t.objects().firstOrNull { it.nodeId == nodeId }?.let(::open)
+        }
+    }
+
+    fun clearCreating() {
+        _creating.value = CreatingPot()
     }
 
     /** Forgets the open Pot's last refusal (a dialog closed). */

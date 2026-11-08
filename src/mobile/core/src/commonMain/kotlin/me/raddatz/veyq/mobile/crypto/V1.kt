@@ -95,6 +95,14 @@ class V1(val p: Primitives) {
     fun fieldKey(parentKey: ByteArray, salt: ByteArray, purpose: String): ByteArray =
         p.hkdfSha256(parentKey, salt, utf8("veyq/v1/field/$purpose"), 32)
 
+    /**
+     * The blinded slug token (ADR 0080 decision 2, AD-26): HMAC-SHA256(HKDF(K_entry, ∅, "veyq/v1/slug-token:" ‖ parentSlot),
+     * NFC(slug)) — [parentSlot] the parent's id, the scope id at the root; [slug] the name already folded by its kind
+     * ([Naming]). Unique per parent, stable per parent key: the server compares tokens among siblings, never names.
+     */
+    fun slugToken(entryKey: ByteArray, parentSlot: String, slug: String): ByteArray =
+        p.hmacSha256(p.hkdfSha256(entryKey, ByteArray(0), utf8("veyq/v1/slug-token:$parentSlot"), 32), utf8(slug))
+
     /** The field envelope (ADR 0093 § 9): 0x03 ‖ salt(16) ‖ nonce(12) ‖ aead, under HKDF(K_parent, salt, purpose). */
     fun sealField(
         context: Context, parentKey: ByteArray, plaintext: ByteArray,

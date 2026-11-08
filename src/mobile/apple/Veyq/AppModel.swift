@@ -419,6 +419,44 @@ final class AppModel {
         return outcome == .written
     }
 
+    /// The "New pot" sheet: saving while it creates, and its refusal (a `PotCreate.Outcome` name).
+    struct CreatingPot {
+        var saving = false
+        var message: String?
+    }
+
+    private(set) var creatingPot = CreatingPot()
+
+    /// The current members of `scopeId`, for the "New pot" sheet's people; empty when they do not read.
+    func membersOf(_ scopeId: String) async -> [Person] {
+        guard let t = tenantSession else { return [] }
+        return ((try? await t.scopeMembers(scopeId: scopeId)) ?? nil) ?? []
+    }
+
+    /// Creates a Pot named `name` at the root of `scopeId` with `currency` and `people`, reads the tenant's lists again and
+    /// opens it; true once it exists (its people may still have failed: then it opens and says so on Settings).
+    func createPot(scopeId: String, name: String, currency: String, minorUnits: Int32, people: [PotCreate.NewPerson]) async -> Bool {
+        guard let t = tenantSession else { return false }
+        creatingPot = CreatingPot(saving: true)
+        let r = try? await PotCreate.shared.create(
+            tenant: t, scopeId: scopeId, parentId: nil, name: name,
+            base: Ledger.BaseCurrency(currency: currency, minorUnits: minorUnits), people: people
+        )
+        guard let r, let nodeId = r.nodeId else {
+            creatingPot = CreatingPot(message: r?.outcome.name ?? "REFUSED")
+            return false
+        }
+        t.forgetTree()
+        rawNodes = (try? await t.nodes()) ?? rawNodes
+        rawFavorites = (try? await t.favorites()) ?? rawFavorites
+        rebuild(start: false)
+        creatingPot = CreatingPot(message: r.outcome == .created ? nil : r.outcome.name)
+        if let ref = ((try? await t.objects()) ?? []).first(where: { $0.nodeId == nodeId }) { open(ref) }
+        return true
+    }
+
+    func clearCreatingPot() { creatingPot = CreatingPot() }
+
     /// Forgets the open Pot's last refusal (a sheet closed).
     func clearPotMessage() { pot?.message = nil }
 

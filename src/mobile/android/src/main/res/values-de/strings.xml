@@ -148,4 +148,12 @@
     <string name="settings_category_name">Name der Kategorie</string>
     <string name="settings_add_category">Kategorie hinzufügen</string>
     <string name="settings_rename_category">%1$s umbenennen</string>
+    <string name="create_pot">Neue Kasse</string>
+    <string name="create_pot_name">Name</string>
+    <string name="create_pot_space">Bereich</string>
+    <string name="create_pot_create">Erstellen</string>
+    <string name="create_pot_name_taken">Hier gibt es schon eine Kasse mit diesem Namen.</string>
+    <string name="create_pot_people_failed">Die Kasse wurde erstellt, ihre Personen nicht. Füge sie in ihren Einstellungen hinzu.</string>
+    <string name="create_pot_invalid">Prüfe den Namen und die Personen: je 1 bis 100 Zeichen.</string>
+    <string name="create_pot_failed">Die Kasse wurde nicht erstellt. Bitte versuche es erneut.</string>
 </resources>

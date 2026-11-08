@@ -122,7 +122,12 @@ implementation exists but what holds it to the first.
   categories added and renamed) through core's sealed-meta write (`session/NodeMetaWrite.kt`, the web's
   `writeSealedMeta`: only an absent blob is fresh, a `409 stale_revision` re-runs only the writer's own change on what the
   server holds; `NodeMetaWriteTest`). A currency's minor units are the platform's (`java.util.Currency`,
-  `NumberFormatter`) where the web asks `Intl`; the Pot stores them, so a disagreement is never read twice differently. `core/…/expenses` ports the web's domain (the revision codec and
+  `NumberFormatter`) where the web asks `Intl`; the Pot stores them, so a disagreement is never read twice differently.
+  A Pot is created from Expenses' list (at the root of a space the member picks; a folder's "New" menu is Home's, not
+  built) through core's node create (`session/NodeCreate.kt`, the web's `createContentNode`: a fresh key wrapped under the
+  parent's, the name and the blinded slug token sealed under it, bound to the id the client mints), its token input
+  folded as the web folds it (`crypto/Naming.kt`, held to `v1.json#name_folding` and `#slug_token` on both primitives; a
+  Pot the web created collides with the app's of the same name, measured live by `PotLiveTest`). `core/…/expenses` ports the web's domain (the revision codec and
   its pad, the v1 format, the exact arithmetic on an integer type of its own, `Big`, held to `java.math.BigInteger`,
   the ledger, the heads), held to `contracts/expenses/v1-vectors.json` and the rules the vectors do not reach
   (`ExpensesVectorsTest`, `LedgerRulesTest`, each rule killed by a mutation); the web and the app read and write the
@@ -134,11 +139,11 @@ implementation exists but what holds it to the first.
   app drives no re-key, so where the web's member pulls a Pot's path forward (ADR 0111 decision 11) it waits, as the web's
   guest does; and it re-opens no scope rotated after the tenant was read, so a Pot re-keyed past that read is not found
   again and the write is refused until the app reads the tenant anew.
-- **Not built yet:** every other write (a new node, a refund, a transfer, receipts), the
+- **Not built yet:** every other write (another kind's node, a refund, a transfer, receipts), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
   of signers, end unanchored through the signer's own judgment) — and by `v1.json#key_chain`, `#identity_pin`,
-  `#scope_succession`, `#invite_key`, `#join_record`, `#join_endorsement` and `#value_key` on both primitives. `src/mobile/` verifies its dependencies as `src/backend/` does
+  `#scope_succession`, `#invite_key`, `#join_record`, `#join_endorsement`, `#value_key`, `#slug_token` and `#name_folding` on both primitives. `src/mobile/` verifies its dependencies as `src/backend/` does
   (`gradle/verification-metadata.xml`, held by `scripts/validate_build_input_pins.py`): a new dependency or target
   owes a `./gradlew --write-verification-metadata sha256` run over the tasks that resolve it.
 - Two implementations of the suite now exist. A change to the suite changes the vectors first, and both the web's

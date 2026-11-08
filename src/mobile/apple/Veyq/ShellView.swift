@@ -228,6 +228,8 @@ struct Bar: View {
             PotScreen(model: model, ref: ref, tab: key)
         } else if let ref = model.shell.openObject {
             ObjectPlaceholder(ref: ref, tab: key)
+        } else if let app = model.shell.application, app == .expenses {
+            ExpensesList(model: model)
         } else if let app = model.shell.application {
             ArrangedListView(list: model.applicationList(app), onOpen: model.open)
                 .navigationTitle(Names.application(app))
@@ -377,6 +379,30 @@ struct ObjectPlaceholder: View {
             Text("This view is not built in the app yet.")
         }
         .navigationTitle(ref.name)
+    }
+}
+
+/// Expenses' own list (its Pots), with "New pot" (uc.expenses.create-pot).
+struct ExpensesList: View {
+    @Bindable var model: AppModel
+    @State private var creating = false
+
+    var body: some View {
+        ArrangedListView(list: model.applicationList(.expenses), onOpen: model.open)
+            .navigationTitle(Names.application(.expenses))
+            .overlay(alignment: .bottomTrailing) {
+                if !model.spaces.isEmpty {
+                    // Creating is the web's green role (`--app-primary`).
+                    Button { creating = true } label: { Label("New pot", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                        .tint(Role.primary)
+                        .foregroundStyle(Role.onFill)
+                        .padding()
+                }
+            }
+            .sheet(isPresented: $creating) { PotCreateSheet(model: model) }
     }
 }
 

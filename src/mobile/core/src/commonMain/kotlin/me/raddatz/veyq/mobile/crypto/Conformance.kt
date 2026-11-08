@@ -44,7 +44,21 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         scopeSuccession()
         joinRecords()
         valueKeys()
+        slugs()
         return failures.toList()
+    }
+
+    /** `#slug_token` (its own NFC step: the slug is stored decomposed) and `#name_folding` (both foldings). */
+    private fun slugs() {
+        val t = v.obj("slug_token")
+        check("slug_token") { eqHex(suite.slugToken(t.hex("contentKey"), t.str("parentSlot"), t.str("slug")), t.str("token")) }
+        val folding = v.obj("name_folding")
+        for ((section, fold) in listOf<Pair<String, (String) -> String>>("slugify" to Naming::slugify, "fileNameSlug" to Naming::fileNameSlug)) {
+            for (case in folding[section]!!.jsonArray) {
+                val o = case.jsonObject
+                check("name_folding $section ${o.str("exercises")}") { eq(fold(o.str("name")), o.str("slug")) }
+            }
+        }
     }
 
     private val joins = JoinRecords(suite)

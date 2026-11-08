@@ -70,6 +70,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -175,6 +177,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     shell.openObject?.kind == "EXPENSES_POT" -> PotScreen(shell.openObject!!, shell.selectedTab, model)
                     shell.openObject != null -> ObjectScreen(shell.openObject!!, shell.selectedTab)
                     shell.application == null -> HomeScreen(s, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
+                    shell.application == ApplicationId.EXPENSES -> ExpensesList(s, model)
                     else -> ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open)
                 }
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -206,7 +209,7 @@ private fun SpaceSwitcher(s: Screen.Signed, onSwitch: (String) -> Unit) {
 }
 
 @Composable
-private fun spaceName(space: me.raddatz.veyq.mobile.navigation.SpaceRef?): String = when (space?.kind) {
+internal fun spaceName(space: me.raddatz.veyq.mobile.navigation.SpaceRef?): String = when (space?.kind) {
     null -> stringResource(R.string.drawer_home)
     "PERSONAL" -> stringResource(R.string.space_personal)
     "GROUP" -> stringResource(R.string.space_group)
@@ -437,6 +440,26 @@ private fun ObjectItems(refs: List<ObjectRef>, open: ObjectRef?, onOpen: (Object
     for (ref in refs) {
         Row(app = kindIcon(ref.kind), label = ref.name, selected = open?.nodeId == ref.nodeId && open.scopeId == ref.scopeId) { onOpen(ref) }
     }
+}
+
+/** Expenses' own list (its Pots), with "New pot" (uc.expenses.create-pot). */
+@Composable
+private fun ExpensesList(s: Screen.Signed, model: AppModel) {
+    var creating by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize()) {
+        ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = model::open)
+        if (s.spaces.isNotEmpty()) {
+            ExtendedFloatingActionButton(
+                onClick = { creating = true },
+                icon = { Icon(Icons.Outlined.Add, null) },
+                text = { Text(stringResource(R.string.create_pot)) },
+                containerColor = role(LocalPalette.current.primary),
+                contentColor = role(LocalPalette.current.onFill),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            )
+        }
+    }
+    if (creating) PotCreateSheet(s, model) { creating = false }
 }
 
 @Composable
