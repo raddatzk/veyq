@@ -42,7 +42,7 @@
 
 ## User impact
 
-veyq is built by an independent, non-commercial project that pays for its own development; the people who use it
+veyq is built by an independent project that pays for its own development; the people who use it
 learn once that they can support it, are never asked twice, and are never held up on their way in.
 
 ## Quality notes
@@ -53,6 +53,12 @@ learn once that they can support it, are never asked twice, and are never held u
   A guest's dismissal never leaves the browser.
 - **Nothing is loaded from a third party.** The banner and the footer are plain links; the donation page itself
   links the ways to donate and embeds nothing.
+
+- **veyq is and stays open source** (owner 2026-11-08), and the donation page says why: AI models are as good as
+  they are because they were trained on the work of countless people without asking or paying them, so the project
+  gives its own work back in the open. The one stated exception: if veyq is one day offered as a hosted service at
+  veyq.cloud, the platform that runs that service (billing, customer administration) may not be open source; veyq
+  itself, the server and the clients that hold and encrypt a user's content, stays under the AGPL (inbox #41).
 
 ## Related
 

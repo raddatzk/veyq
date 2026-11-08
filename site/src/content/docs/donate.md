@@ -9,14 +9,25 @@ veyq is free and open source software under the GNU AGPL 3.0: anyone may run it 
 and change it. What you keep in it is locked on your own device, so nobody who runs a server can look inside:
 [Is my data safe?](/privacy/is-my-data-safe/)
 
+## Open source, and it stays that way
+
+veyq is open source and will stay open source. I enjoy working with AI, and veyq is built with its help too. But one
+criticism of it is fair: AI models are as good as they are because their providers trained them on the work of
+countless people, mostly without asking them and without paying for it. I do not want to only take from that common
+pool. So I give back what I build, in the open: anyone may read veyq's code, use it and build on it.
+
+One exception may come later. If veyq is one day offered as a hosted service at veyq.cloud, the platform that runs that
+service — billing, customer administration and the like — may not be open source. veyq itself, the server and the
+apps that keep and encrypt what you store in it, stays open source under the AGPL.
+
 ## Why a donation helps
 
-veyq is an independent, non-commercial project. No company stands behind it and no investor expects a return. Its
+veyq is an independent project. No company stands behind it and no investor expects a return. Its
 development — new applications, security work, keeping what it is built on up to date, these pages — is time someone
 gives to it.
 
 A donation pays for that time and for what the project needs to run: the servers it is tested on and its domain. It
-keeps veyq independent and non-commercial.
+keeps veyq independent.
 
 ## Ways to donate
 

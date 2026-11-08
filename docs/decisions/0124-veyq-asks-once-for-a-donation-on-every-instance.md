@@ -7,7 +7,7 @@
 
 ## Context
 
-veyq is an independent, non-commercial project. Whoever uses it — on the project's own instance or on one somebody
+veyq is an independent project. Whoever uses it — on the project's own instance or on one somebody
 runs for their family or club — never meets the project itself: the client shows the instance's name, its terms
 and its operator. The owner wants the people who use veyq to learn that its development can be supported, without a
 nag and without standing between anyone and their content.

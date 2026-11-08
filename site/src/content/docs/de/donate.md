@@ -9,14 +9,27 @@ veyq ist freie und quelloffene Software unter der GNU AGPL 3.0: Jede und jeder d
 betreiben, seinen Code lesen und ändern. Was du darin aufbewahrst, wird auf deinem eigenen Gerät verschlossen, also
 kann niemand, der einen Server betreibt, hineinschauen: [Sind meine Daten sicher?](/de/privacy/is-my-data-safe/)
 
+## Open Source – und das bleibt so
+
+veyq ist Open Source und bleibt es. Ich arbeite gerne mit KI, und auch veyq entsteht mit ihrer Hilfe. Ein Kritikpunkt
+an ihr ist aber berechtigt: KI-Modelle sind nur so gut, weil ihre Anbieter sie mit den Werken unzähliger Menschen
+trainiert haben, meist ohne zu fragen und ohne dafür zu bezahlen. Von diesem gemeinsamen Schatz möchte ich nicht nur
+nehmen. Deshalb gebe ich, was ich baue, offen zurück: Den Code von veyq darf jede und jeder lesen, nutzen und
+weiterentwickeln.
+
+Eine Ausnahme kann es später geben: Wird veyq eines Tages als gehosteter Dienst unter veyq.cloud angeboten, ist die
+Plattform, die diesen Dienst betreibt – Abrechnung, Kundenverwaltung und Ähnliches –, unter Umständen nicht Open
+Source. veyq selbst, also der Server und die Apps, die aufbewahren und verschlüsseln, was du darin ablegst, bleibt Open
+Source unter der AGPL.
+
 ## Warum eine Spende hilft
 
-veyq ist ein unabhängiges, nicht kommerzielles Projekt. Keine Firma steht dahinter, und kein Investor erwartet eine
+veyq ist ein unabhängiges Projekt. Keine Firma steht dahinter, und kein Investor erwartet eine
 Rendite. Seine Entwicklung — neue Anwendungen, Arbeit an der Sicherheit, das Aktuellhalten dessen, worauf es aufbaut,
 diese Seiten — ist Zeit, die ihm jemand schenkt.
 
 Eine Spende bezahlt diese Zeit und das, was das Projekt zum Laufen braucht: die Server, auf denen es getestet wird, und
-seine Domain. Sie hält veyq unabhängig und nicht kommerziell.
+seine Domain. Sie hält veyq unabhängig.
 
 ## So kannst du spenden
 
