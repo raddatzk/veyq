@@ -1,7 +1,7 @@
 # ADR 0123 — The apps share a Kotlin Multiplatform core under a native UI per platform
 
 - Status: Accepted
-- Built: partly (not built: decision 5's stored device trust, writes, the applications' own screens)
+- Built: partly (not built: writes, the applications' own screens)
 - Date: 2026-11-08
 
 ## Context
@@ -58,9 +58,7 @@ implementation exists but what holds it to the first.
    rooted it is retired), their chain walked from the step it names —, anyone else refused; a retired key only at or
    below this device's floor; a later epoch only through the succession statements from the key this device held
    ([ADR 0115](0115-a-scope-key-is-replaced-never-chained.md) decision 5). The floor and the held keys are this device's
-   own trust marks, never synced, in the platform's preferences (no secret). Keys and tokens live in memory only;
-   keeping a device trusted (a `DEVICE` or `DEVICE_KEY` wrap under a Keystore or Keychain key) is the next decision on
-   this line.
+   own trust marks, never synced, in the platform's preferences (no secret). What a start may skip is decision 8.
    **An account is one server's; a tenant is a domain of it** (owner 2026-11-08: one server gives several tenants, and
    the app connects to several servers). A session is the account's, not a tenant's (ADR 0004), so one sign-in opens
    every tenant the account holds there (`listMyTenants`), each at its own domain on the sign-in's scheme and port,
@@ -87,9 +85,33 @@ implementation exists but what holds it to the first.
    tile are taken. Icons are each platform's own symbols drawn with the web's motifs (`images`, `file`, `inbox`,
    `wallet`, `folder`), not Lucide.
 
+8. **A device is trusted as the web trusts one, and staying signed in waits behind the person** (owner 2026-11-08:
+   the web's two tiers, plus the platform's biometrics). After a sign-in with the Secret Key the app enrols one of the
+   web's two device wraps of the Master Key ([ADR 0005](0005-unlock-methods-and-device-trust.md), `POST /api/account/wraps`),
+   one per account per device, the new one recorded before the old one is deleted:
+   - **By default a `DEVICE` wrap:** the KEK is Argon2id over the device factor and the password, the factor the HMAC
+     of `veyq/v1/device-bind` under a key the Android Keystore or the Keychain holds and never hands out. The next
+     start needs the password, never again the Secret Key. A signed-in session is not kept: each start logs in.
+   - **"Stay signed in" is an explicit choice** (ADR 0005 § 13, said with what it costs): a `DEVICE_KEY` wrap, the
+     Master Key AES-256-GCM sealed under one unlock key of the app that opens only after the person authenticated —
+     a strong biometric or the device's code (Android: `setUserAuthenticationParameters`, a new biometric enrolment
+     voids it; Apple: `.userPresence`, asked through LocalAuthentication first) — with the iv as the wrap's
+     `kdfParams` and the web's associated data. The refresh token, which reaches the server and nothing sealed, is
+     kept without asking (Keystore-sealed preferences, the Keychain), and each rotated one at once. One
+     authentication within a short window resumes every remembered account of a start.
+   What a device keeps per account is a record (server, email, account, method, the wrap's id, its key's alias): the
+   wrap is found among the served ones by its id, and a wrap the server withholds is no reason to forget it (the
+   person signs in with the Secret Key instead). A refresh the server refuses ends the remembered session on the
+   device; one it cannot answer keeps it. Signing out ends staying signed in (its wrap deleted, its token and key
+   gone) and keeps the password trust, as on the web; "Stop trusting this device" ends either. Every unlock and every
+   enrolment names the device in the account's device register (write moments 1 and 2 of en.account.device-register,
+   its label the device's model), so a person's other device can find this one's saved key and remove it
+   ([ADR 0058](0058-revoke-never-takes-key-material.md)). iOS keeps Keychain items when an app is deleted: a first start
+   after an installation removes them.
+
 ## Consequences
 
-- **Not built yet:** stored device trust (decision 5); every write (a new node, an entry); each application's own views behind the bar; a CI
+- **Not built yet:** every write (a new node, an entry); each application's own views behind the bar; a CI
   job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
   of signers, end unanchored through the signer's own judgment) — and by `v1.json#key_chain`, `#identity_pin`,

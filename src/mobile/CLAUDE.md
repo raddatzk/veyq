@@ -29,11 +29,14 @@ A Gradle build of its own, run through its own wrapper.
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
   `--tests '*MemberLiveSignInTest*'` signs in as the seeded second member (`VEYQ_USER2_*`), whose TENANT grant the
   owner signed, so it opens only through the key check; the owner starts that run, since that password may be one a
-  person chose.
+  person chose. `--tests '*DeviceTrustLiveTest*'` walks the device trust (ADR 0123 decision 8) as the seeded principal:
+  password-trusted, staying signed in, the register's join, sign-out; it removes what it enrolled.
 - `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_SEED_TENANT="verein.localhost|Turnverein" ./gradlew :core:jvmTest --tests
   '*DevSecondTenantTest*'` — dev seeding, not a check: gives the seeded principal a second tenant (the seeder births only
   one), through the app's own suite, so the switcher has two to switch between. Skipped when it already exists.
-- `./gradlew :android:assembleDebug` — the Android app; on an emulator, `python3 android/devlogin.py` signs it in.
+- `./gradlew :android:assembleDebug` — the Android app; on an emulator, `python3 android/devlogin.py` signs it in
+  (`--remember` staying signed in, `--unlock` with only the password for the unlock screen of a trusted account; a
+  fresh start, since Android hands a running task no new extras). Apple's `devlogin.py <device>` takes the same flags.
 - `xcodebuild -project apple/Veyq.xcodeproj -target Veyq -sdk macosx build CODE_SIGNING_ALLOWED=NO` (or
   `-sdk iphonesimulator`) — the Apple app compiles. On a fresh checkout run `./gradlew :core:assembleVeyqCoreDebugXCFramework`
   once first: Xcode looks for the framework before the project's own pre-build step can make it.
@@ -49,6 +52,13 @@ A Gradle build of its own, run through its own wrapper.
 - The trust marks (the pin store's revision, each scope's floor and held key, `session/TrustMarks.kt`) are the device's
   own, in SharedPreferences / UserDefaults, keyed by a derivation of the Master Key; clearing the app's data is the
   web's no-mark case (a fresh device), never a lockout.
+- Staying signed in needs a screen lock: the unlock key cannot exist without one. On the emulator `adb shell
+  locksettings set-pin <pin>` sets one and the prompt takes it by `adb shell input text`; it also needs the
+  `USE_BIOMETRIC` permission, without which the prompt throws a `SecurityException`. The iOS Simulator stores a
+  `.userPresence` item but does not enforce it (measured 2026-11-08), which is why `KeychainStore` asks through
+  LocalAuthentication first; enrol and answer Face ID with `xcrun simctl spawn <udid> notifyutil -p
+  com.apple.BiometricKit.enrollmentChanged` (after `-s … 1`) and `notifyutil -p com.apple.BiometricKit_Sim.pearl.match`.
+  The Simulator keeps the Keychain across an uninstall: `xcrun simctl keychain <udid> reset` starts it empty.
 - The emulator reaches the developer's machine at 10.0.2.2; the debug build maps every `*.localhost` name there and
   keeps the name in the Host header, since the backend picks the tenant from it. Use the tenant's name
   (`veyq.localhost:8080`), never `10.0.2.2:8080`, as the server.
