@@ -251,9 +251,11 @@
   font-size: 0.72rem;
 }
 
+/* Groups are shared scopes, so their tile takes the warning roles the styleguide gives group/shared badges; danger is
+   for destructive actions and errors only. dark.css repeats the rule because it first resets every scope tile to accent. */
 .sidebar-scope-icon[data-icon='users'] {
-  background: var(--app-danger-soft);
-  color: var(--app-danger);
+  background: var(--app-warning-soft);
+  color: var(--app-warning-text);
 }
 
 .sidebar-scope-icon[data-icon='user'] {
