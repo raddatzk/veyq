@@ -1,7 +1,8 @@
 # veyq
 
-Self-hostable, end-to-end-encrypted **platform** for sealed, shareable objects; its first **application**
-is **Memories** — memory-sharing, the product center today ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
+Self-hostable, end-to-end-encrypted **platform** for sealed, shareable objects, used through its **applications** —
+Memories, Expenses, Depot and more, none of them the product's center; Memories was only the first
+([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
 The server is **operator-blind**: it stores and serves only ciphertext.
 
 ## Hard invariants — never violate

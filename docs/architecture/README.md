@@ -12,10 +12,10 @@ Kept current as work lands; a map, not a satisfiable record (no CR `satisfies:` 
 
 ## 1. Introduction and Goals
 
-veyq is a **self-hostable, end-to-end-encrypted platform** for sealed, shareable objects; its first application,
-**Memories**, is the product center ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
-the **Memory** (nested into **Chapters**); folders only organize. People keep photos, dates, places and journal entries in
-private spaces and share them deliberately — with a person, a group, or a link.
+veyq is a **self-hostable, end-to-end-encrypted platform** for sealed, shareable objects, used through its applications —
+Memories, Expenses, Depot and more, none of them the center ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
+People keep what they own in private spaces — a Memory's photos and journal, a Pot's shared expenses, a Depot's files — and
+share it deliberately: with a person, a group, or a link; folders only organize.
 
 The three goals that outrank every other quality, in order:
 

@@ -2,8 +2,9 @@
 
 <sub>Pronounced **/veɪk/**.</sub>
 
-A self-hostable, end-to-end-encrypted app for keeping and sharing memories — trips, events, the small
-moments. The product center is the **Memory** (nested into **Chapters**); folders only organize.
+A self-hostable, end-to-end-encrypted platform for keeping and sharing what belongs to a few people — through
+its applications: **Memories** (trips, events, the small moments), **Expenses** (a shared Pot), **Depot** (files) and
+more. None of them is the center; folders only organize.
 
 **The server is operator-blind.** It stores and serves ciphertext and opaque metadata, and nothing else. Your
 unshared personal space is confidential even from whoever runs the server — including when that is you. This

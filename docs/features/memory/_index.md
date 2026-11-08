@@ -1,6 +1,6 @@
 # Feature: Memory
 
-The product center: a **Memory** (photos, media, a journal, places & tracks — added in later slices),
+The Memories application's object: a **Memory** (photos, media, a journal, places & tracks — added in later slices),
 organized in an **encrypted tree** of **folders** (organization only) and **Memories** (nested into
 **Chapters**). Everything content lives inside a [scope](../spaces/_index.md) and is **end-to-end encrypted**
 — the server stores only ciphertext, opaque node ids/parents/kinds/ordering/timestamps, and blinded slug

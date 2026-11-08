@@ -24,7 +24,8 @@ or once per product.
 ## Decision
 
 **1. veyq is a platform; an application is a set of node kinds with its own domain data and its own client
-screens.** **Memories** is the first one. The product language **Memory / Chapter** is unchanged and now belongs
+screens.** **Memories** is the first one — first built, not the center: no application is the product's center, each
+stands beside the others on the same platform. The product language **Memory / Chapter** is unchanged and now belongs
 to Memories ([CLAUDE.md](../../CLAUDE.md)); a folder organizes — it holds no content, and like every node it carries
 a key and can be the root of a share ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)).
 The term is "application" (German *Anwendung*), not "plugin" — it is first-party code, not something installed.

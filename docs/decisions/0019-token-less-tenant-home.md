@@ -17,7 +17,7 @@ could open at the time — the shared `TENANT` scope, though born at activation
 Making the `TENANT` scope enterable ([en.spaces.tenant-scope](../features/spaces/enablers/en.spaces.tenant-scope.md))
 forced the question ADR 0015 left open: with
 **three** openable kinds, which one owns the **token-less** default — the clean `family.example.com/` with no
-bare `#`? veyq's product center is **memory-sharing**; a tenant *is* a domain, and its shared root scope is the
+bare `#`? veyq is for **sharing** among a domain's people; a tenant *is* a domain, and its shared root scope is the
 commons that domain exists to serve. Two candidates:
 
 - **Personal as the token-less home** (today's implicit default). Keeps the first-slice behaviour; but it makes
