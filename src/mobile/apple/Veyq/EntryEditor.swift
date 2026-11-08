@@ -160,6 +160,15 @@ struct EntryEditor: View {
                 if form.kind == .transfer { transferFields } else { expenseFields }
                 if let message = model.pot?.message { Section { Text(Self.explain(message)).foregroundStyle(Role.danger) } }
                 if tried, let r = refusal, r.at == nil { Section { problem(r.problem) } }
+                if let id = entryId, let based = basedOn {
+                    Section { EntryHistory(view: view, entryId: id) }
+                    Section {
+                        Button("Delete", role: .destructive) {
+                            Task { if await model.potWrite({ try await $0.deleteEntry(entryId: id, basedOn: based) }) { dismiss() } }
+                        }
+                        .disabled(model.pot?.saving == true)
+                    }
+                }
             }
             .formStyle(.grouped)
             .navigationTitle(entryId == nil ? "Add entry" : "Edit entry")

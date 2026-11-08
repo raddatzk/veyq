@@ -212,4 +212,19 @@
         <item quantity="one">Only one person</item>
         <item quantity="other">All %1$d people, equally</item>
     </plurals>
+    <string name="history_show">History</string>
+    <string name="history_hide">Hide history</string>
+    <string name="history_deleted">Deleted</string>
+    <string name="history_other">Changed</string>
+    <string name="history_unreadable">A version this pot cannot read</string>
+    <string name="history_unknown_writer">Someone</string>
+    <string name="entries_deleted_title">Deleted entries</string>
+    <string name="entries_deleted_badge">deleted</string>
+    <string name="entry_delete">Delete</string>
+    <string name="entry_restore">Restore</string>
+    <string name="entry_deleted_hint">This entry is deleted and counts nowhere. Restoring it counts it again.</string>
+    <string name="entry_restorable_until">It can be restored until %1$s; then its receipts are erased.</string>
+    <string name="entry_not_restorable">Its receipts are erased, so it can no longer be restored.</string>
+    <string name="balances_record">Record</string>
+    <string name="balances_record_all">Record all</string>
 </resources>

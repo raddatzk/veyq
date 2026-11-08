@@ -210,4 +210,19 @@
         <item quantity="one">Nur eine Person</item>
         <item quantity="other">Alle %1$d Personen zu gleichen Teilen</item>
     </plurals>
+    <string name="history_show">Verlauf</string>
+    <string name="history_hide">Verlauf ausblenden</string>
+    <string name="history_deleted">Gelöscht</string>
+    <string name="history_other">Geändert</string>
+    <string name="history_unreadable">Eine Fassung, die diese Kasse nicht lesen kann</string>
+    <string name="history_unknown_writer">Jemand</string>
+    <string name="entries_deleted_title">Gelöschte Einträge</string>
+    <string name="entries_deleted_badge">gelöscht</string>
+    <string name="entry_delete">Löschen</string>
+    <string name="entry_restore">Wiederherstellen</string>
+    <string name="entry_deleted_hint">Dieser Eintrag ist gelöscht und zählt nirgends. Wiederhergestellt zählt er wieder.</string>
+    <string name="entry_restorable_until">Er kann bis %1$s wiederhergestellt werden; dann werden seine Belege gelöscht.</string>
+    <string name="entry_not_restorable">Seine Belege sind gelöscht, darum kann er nicht mehr wiederhergestellt werden.</string>
+    <string name="balances_record">Eintragen</string>
+    <string name="balances_record_all">Alle eintragen</string>
 </resources>

@@ -12,12 +12,13 @@ class PotView internal constructor(session: Source) {
         val name: String, val meta: PotMeta?, val ledger: Ledger.Pot?, val check: LedgerCheck,
         val members: List<me.raddatz.veyq.mobile.session.Person>?, val named: Set<String>, val canWrite: Boolean,
         val canChangeSettings: Boolean = canWrite, val currencyFixed: Boolean = false,
+        val held: List<HeldRevision> = emptyList(), val directory: Map<String, String> = emptyMap(),
     )
 
     constructor(session: PotSession) : this(
         Source(
             session.name, session.meta, session.ledger, session.check, session.members, session.named, session.canWrite,
-            session.canChangeSettings, session.currencyFixed,
+            session.canChangeSettings, session.currencyFixed, session.heldRevisions(), session.directory,
         ),
     )
 
@@ -33,7 +34,7 @@ class PotView internal constructor(session: Source) {
     )
 
     class PersonRow(val id: String, val name: String?, val paid: Long, val share: Long, val balance: Long, val active: Boolean)
-    class SettleRow(val from: String?, val to: String?, val amount: Long)
+    class SettleRow(val from: String?, val to: String?, val amount: Long, val fromId: String = "", val toId: String = "")
     class CategoryRow(val id: String, val ownName: String?, val amount: Long)
     class Person(val id: String, val name: String)
 
@@ -74,6 +75,50 @@ class PotView internal constructor(session: Source) {
         )
         .map(::row)
 
+    /** The Pot's deleted entries (a deleted entry stays inside its Pot, ADR 0108 decision 6), as their last content
+     *  read, newest first: each opened to read, its history, or a restore. */
+    val deletedEntries: List<EntryRow> = ledger?.entries.orEmpty()
+        .filter { it.status == Ledger.Status.DELETED }
+        .sortedWith(compareByDescending<Ledger.Entry> { it.content?.date ?: "" }.thenByDescending { it.recordedAt }.thenBy { it.id })
+        .map(::row)
+
+    private val heldById = session.held.groupBy { it.entryId }
+    private val writerNames = session.directory
+
+    /** The latest revision of [entryId] (what a delete or a restore is based on); 0 for none. */
+    fun latestRevision(entryId: String): Long = heldById[entryId]?.maxOfOrNull { it.revision } ?: 0
+
+    /** When deleted entry [entryId]'s receipts are erased (its tombstone's `purgeAfter`, epoch ms), or null: a live entry,
+     *  or one the server served no time for (`receiptRules.ts` `purgeAfterOf`). */
+    fun purgeAfter(entryId: String): Long? =
+        heldById[entryId]?.maxByOrNull { it.revision }?.takeIf { it.body?.content == Deleted }?.purgeAfter
+
+    /** Whether deleted entry [entryId] is still offered a restore at [nowMs]: until its tombstone's `purgeAfter`, then it
+     *  stays a line in the history (uc.expenses.entry-history E2). No time served: offered. */
+    fun restorable(entryId: String, nowMs: Long): Boolean =
+        canWrite && heldById[entryId]?.maxByOrNull { it.revision }?.body?.content == Deleted &&
+            (purgeAfter(entryId)?.let { it > nowMs } ?: true)
+
+    /** One revision of an entry's history: what it said ([kind]; a money revision its title and base amount), when the
+     *  server stored it (epoch ms), and who wrote it — a member by the directory's name, null for no one known. */
+    class HistoryRow(val revision: Long, val kind: HistoryKind, val title: String?, val amount: Long?, val at: Long, val writer: String?)
+    enum class HistoryKind { MONEY, DELETED, OTHER, UNREADABLE }
+
+    /** Every revision the Pot holds of [entryId], newest first (`EntryHistory.vue`). */
+    fun history(entryId: String): List<HistoryRow> = heldById[entryId].orEmpty().sortedByDescending { it.revision }.map { r ->
+        val writer = r.writer?.takeIf { it.startsWith("user:") }?.let { writerNames[it.removePrefix("user:")] }
+        when (val c = r.body?.content) {
+            null -> HistoryRow(r.revision, HistoryKind.UNREADABLE, null, null, r.createdAt, writer)
+            Deleted -> HistoryRow(r.revision, HistoryKind.DELETED, null, null, r.createdAt, writer)
+            is MoneyContent -> {
+                val title = when (c) { is Expense -> c.title; is Refund -> c.title; is Transfer -> c.title }
+                val amount = base?.let { Money.convertToBase(Big.of(c.amount), c.minorUnits, c.rate, it.minorUnits).toLong() }
+                HistoryRow(r.revision, HistoryKind.MONEY, title, amount, r.createdAt, writer)
+            }
+            else -> HistoryRow(r.revision, HistoryKind.OTHER, null, null, r.createdAt, writer)
+        }
+    }
+
     /** Every person with a balance or a cost, in join order; erased people as one row (name null). */
     val balances: List<PersonRow> = ledger?.let { l ->
         val rows = l.participants.filter { !it.erased }.map { p ->
@@ -85,7 +130,7 @@ class PotView internal constructor(session: Source) {
         rows + if (erased.isNotEmpty() && erasedBalance.signum != 0) listOf(PersonRow("erased", null, 0, 0, erasedBalance.toLong(), false)) else emptyList()
     }.orEmpty()
 
-    val settleUp: List<SettleRow> = ledger?.settleUp.orEmpty().map { SettleRow(names[it.from], names[it.to], it.amount.toLong()) }
+    val settleUp: List<SettleRow> = ledger?.settleUp.orEmpty().map { SettleRow(names[it.from], names[it.to], it.amount.toLong(), it.from, it.to) }
 
     val byCategory: List<CategoryRow> = ledger?.overview?.byCategory.orEmpty().map { (id, v) -> CategoryRow(id, session.meta?.ownName(id), v.toLong()) }
 
@@ -220,7 +265,8 @@ class PotView internal constructor(session: Source) {
 
     private fun row(e: Ledger.Entry): EntryRow {
         val c = e.content
-        val base = e.effect?.base?.toLong()
+        // A deleted or invalid entry has no effect: its amount is its content's, converted as a live one's would be.
+        val base = e.effect?.base?.toLong() ?: c?.let { Money.convertToBase(Big.of(it.amount), it.minorUnits, it.rate, minorUnits).toLong() }
         val foreign = c?.takeIf { it.currency != currency }
         return when (c) {
             is Expense -> EntryRow(e.id, Kind.EXPENSE, c.title, c.date, c.category, c.payers.map { nameIn(it.participant) }, base, foreign?.amount, foreign?.currency, c.minorUnits, e.status, e.edited)

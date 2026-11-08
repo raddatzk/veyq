@@ -79,6 +79,8 @@ class ServedRevision(
     val createdAt: Long,
     /** `user:{id}` or `share:{identityId}` on a member's read. */
     val writer: String? = null,
+    /** A tombstone's: when the entry's receipts are erased and it can no longer be restored, epoch ms. */
+    val purgeAfter: Long? = null,
 )
 
 /** One revision as held: the row, its body's digest, and what it opened to — or why it did not. */
@@ -90,6 +92,7 @@ class HeldRevision(
     val body: RevisionBody?,
     val unreadable: RevisionUnreadable.Reason?,
     val writer: String? = null,
+    val purgeAfter: Long? = null,
 ) {
     /** The one id of a revision in a Pot's list. */
     val id: String get() = "$entryId:$revision"
@@ -102,9 +105,9 @@ object Revisions {
             val digest = codec.digest(row.sealed.sealedBody)
             try {
                 val body = codec.open(RevisionAddress(scopeId, nodeId, row.entryId, row.revision), potKey, row.sealed)
-                HeldRevision(row.entryId, row.revision, row.createdAt, digest, body, null, row.writer)
+                HeldRevision(row.entryId, row.revision, row.createdAt, digest, body, null, row.writer, row.purgeAfter)
             } catch (e: RevisionUnreadable) {
-                HeldRevision(row.entryId, row.revision, row.createdAt, digest, null, e.reason, row.writer)
+                HeldRevision(row.entryId, row.revision, row.createdAt, digest, null, e.reason, row.writer, row.purgeAfter)
             }
         }
 

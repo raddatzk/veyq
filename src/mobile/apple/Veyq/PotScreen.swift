@@ -17,6 +17,7 @@ struct PotScreen: View {
     }
 
     @State private var editing: Editing?
+    @State private var viewing: PotView.EntryRow?
 
     var body: some View {
         Group {
@@ -27,7 +28,7 @@ struct PotScreen: View {
                     VStack(spacing: 0) {
                         if !view.missing.isEmpty { LedgerNotice(view: view) }
                         switch tab {
-                        case "expenses.overview": OverviewList(view: view)
+                        case "expenses.overview": OverviewList(model: model, view: view)
                         case "expenses.settings": PotSettings(model: model, view: view)
                         default: EntriesList(view: view, onAdd: {
                             if let f = view.blankForm(date: FormState.dayString(Date()), separator: decimalSeparator) {
@@ -37,7 +38,7 @@ struct PotScreen: View {
                             if let e = view.editing(entryId: id, separator: decimalSeparator) {
                                 editing = Editing(entryId: id, basedOn: e.basedOn, people: e.people, form: e.form)
                             }
-                        })
+                        }, onOpenDeleted: { viewing = $0 })
                         }
                     }
                 }
@@ -53,6 +54,9 @@ struct PotScreen: View {
             if let view = model.pot?.view {
                 EntryEditor(model: model, view: view, entryId: e.entryId, basedOn: e.basedOn, people: e.people, form: FormState(e.form))
             }
+        }
+        .sheet(item: $viewing) { row in
+            if let view = model.pot?.view { DeletedEntrySheet(model: model, view: view, row: row) }
         }
     }
 }
@@ -122,6 +126,7 @@ private struct EntriesList: View {
     let view: PotView
     let onAdd: () -> Void
     let onOpen: (String) -> Void
+    let onOpenDeleted: (PotView.EntryRow) -> Void
 
     var body: some View {
         List {
@@ -141,6 +146,24 @@ private struct EntriesList: View {
                 .listRowBackground(Role.surface)
                 .contentShape(Rectangle())
                 .onTapGesture { if view.canWrite && e.kind != nil { onOpen(e.id) } }
+            }
+            if !view.deletedEntries.isEmpty {
+                Section {
+                    ForEach(view.deletedEntries, id: \.id) { e in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(e.title ?? String(localized: "Transfer"))
+                                Text("deleted").font(.caption2)
+                            }
+                            Spacer()
+                            if let amount = e.amount { Text(money(amount.int64Value, view.currency, view.minorUnits)) }
+                        }
+                        .foregroundStyle(Role.muted)
+                        .listRowBackground(Role.surface)
+                        .contentShape(Rectangle())
+                        .onTapGesture { onOpenDeleted(e) }
+                    }
+                } header: { SectionLabel(title: "Deleted entries") }
             }
         }
         .scrollContentBackground(.hidden)
@@ -183,7 +206,13 @@ private struct EntriesList: View {
 }
 
 private struct OverviewList: View {
+    @Bindable var model: AppModel
     let view: PotView
+
+    private func record(_ payments: [PotView.SettleRow]) {
+        let day = FormState.dayString(Date())
+        Task { await model.potWrite { try await $0.recordPayments(payments: payments, date: day) } }
+    }
 
     var body: some View {
         List {
@@ -214,10 +243,20 @@ private struct OverviewList: View {
                             Text("\(personName(t.from)) pays \(personName(t.to))")
                             Spacer()
                             Text(money(t.amount, view.currency, view.minorUnits)).fontWeight(.semibold)
+                            if view.canWrite {
+                                Button("Record") { record([t]) }.buttonStyle(.borderless).disabled(model.pot?.saving == true)
+                            }
                         }
                         .listRowBackground(Role.surface)
                     }
-                } header: { SectionLabel(title: "Settle up") }
+                    if view.canWrite && view.settleUp.count > 1 {
+                        Button("Record all") { record(view.settleUp) }.disabled(model.pot?.saving == true).listRowBackground(Role.surface)
+                    }
+                } header: {
+                    SectionLabel(title: "Settle up")
+                } footer: {
+                    if let message = model.pot?.message { Text(potRefusal(message)).foregroundStyle(Role.danger) }
+                }
             }
             if !view.byCategory.isEmpty {
                 Section {

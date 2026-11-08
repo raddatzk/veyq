@@ -100,7 +100,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
                 keep = page.revisionIds?.map { "${it.entryId}:${it.revision}" }?.toSet()
             }
             rows += page.revisions.map {
-                ServedRevision(it.entryId, it.revision, SealedRevision(unb64(it.sealedBody), unb64(it.wrappedRevisionKey)), epochMs(it.createdAt), it.writer)
+                ServedRevision(it.entryId, it.revision, SealedRevision(unb64(it.sealedBody), unb64(it.wrappedRevisionKey)), epochMs(it.createdAt), it.writer, it.purgeAfter?.let(::epochMs))
             }
             if (!page.more) {
                 cursor = page.cursor ?: since
@@ -241,6 +241,38 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         val content = form.contentOf { it in known }.content ?: return WriteOutcome.INVALID
         return write(listOf(PotWrite(entryId ?: newId(), content, basedOn = basedOn.takeIf { entryId != null })))
     }
+
+    /** Deletes entry [entryId] on [basedOn], the revision shown: a tombstone revision; it counts nowhere and stays in the
+     *  Pot's list of deleted entries, restorable until its receipts are erased. */
+    @Throws(Exception::class)
+    suspend fun deleteEntry(entryId: String, basedOn: Long): WriteOutcome =
+        write(listOf(PotWrite(entryId, Deleted, basedOn = basedOn)))
+
+    /** Restores deleted entry [entryId] on [basedOn]: its last content written again as the next revision, while it is
+     *  still restorable ([PotView.restorable]). */
+    @Throws(Exception::class)
+    suspend fun restoreEntry(entryId: String, basedOn: Long): WriteOutcome {
+        val revisions = held.values.filter { it.entryId == entryId }.sortedBy { it.revision }
+        if (revisions.lastOrNull()?.body?.content != Deleted) return WriteOutcome.INVALID
+        val content = revisions.asReversed().firstNotNullOfOrNull { it.body?.content as? MoneyContent } ?: return WriteOutcome.INVALID
+        return write(listOf(PotWrite(entryId, content, basedOn = basedOn)))
+    }
+
+    /**
+     * Records settle-up suggestions as paid (the overview's "record payment"): one transfer each, in the base currency at
+     * rate 1, dated [date] (`YYYY-MM-DD`), all in one batch.
+     */
+    @Throws(Exception::class)
+    suspend fun recordPayments(payments: List<PotView.SettleRow>, date: String): WriteOutcome {
+        val base = meta?.base ?: return WriteOutcome.INVALID
+        if (payments.isEmpty()) return WriteOutcome.INVALID
+        return write(payments.map {
+            PotWrite(newId(), Transfer(null, date, base.currency, base.minorUnits, "1", it.amount, emptyList(), it.fromId, it.toId))
+        })
+    }
+
+    /** The tenant's members by user id, for the history's writers (a member's read carries `user:{id}`). */
+    internal val directory: Map<String, String> get() = tenant.people.mapValues { it.value.displayName }
 
     /** The base currency is fixed once the Pot holds any money entry, live or deleted: every entry carries its rate to it. */
     val currencyFixed: Boolean get() = held.values.any { it.body?.content is MoneyContent }

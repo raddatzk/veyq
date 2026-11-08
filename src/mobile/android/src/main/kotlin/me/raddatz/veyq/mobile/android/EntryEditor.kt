@@ -178,7 +178,17 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
             }
             shown?.takeIf { it.at == null }?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
             state.message?.let { Text(entryRefusal(it), color = MaterialTheme.colorScheme.error) }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            if (editing != null) {
+                HorizontalDivider()
+                EntryHistory(view, editing.first)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                if (editing != null) {
+                    TextButton(onClick = { model.potWrite({ it.deleteEntry(editing.first, editing.second.basedOn) }) { onClose() } }, enabled = !state.saving) {
+                        Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error)
+                    }
+                    androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                }
                 TextButton(onClick = { model.clearPotMessage(); onClose() }) { Text(stringResource(R.string.entry_cancel)) }
                 Button(
                     onClick = {

@@ -76,7 +76,7 @@ fun PotScreen(ref: ObjectRef, tab: BarTab?, model: AppModel) {
             if (view.missing.isNotEmpty()) LedgerNotice(view)
             Box(Modifier.weight(1f)) {
                 when (tab?.key) {
-                    "expenses.overview" -> Overview(view)
+                    "expenses.overview" -> Overview(view, s, model)
                     "expenses.settings" -> PotSettings(view, s, model)
                     else -> Entries(view, s, model)
                 }
@@ -141,6 +141,7 @@ private fun personName(name: String?) = name ?: stringResource(R.string.pot_dele
 private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
     var adding by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Pair<String, PotView.Editing>?>(null) }
+    var viewing by remember { mutableStateOf<PotView.EntryRow?>(null) }
     val palette = LocalPalette.current
     Box(Modifier.fillMaxSize()) {
         if (view.entries.isEmpty()) Note(stringResource(R.string.pot_no_entries))
@@ -178,6 +179,22 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
                 }
                 HorizontalDivider(color = role(palette.line))
             }
+            if (view.deletedEntries.isNotEmpty()) {
+                item { Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { Section(stringResource(R.string.entries_deleted_title)) } }
+                items(view.deletedEntries, key = { "deleted:" + it.id }) { e ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { viewing = e }.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(e.title ?: stringResource(R.string.pot_transfer), color = role(palette.muted))
+                            Text(stringResource(R.string.entries_deleted_badge), style = MaterialTheme.typography.labelSmall, color = role(palette.muted))
+                        }
+                        e.amount?.let { Text(money(it, view.currency, view.minorUnits), color = role(palette.muted)) }
+                    }
+                    HorizontalDivider(color = role(palette.line))
+                }
+            }
         }
         if (view.canWrite && view.people.isNotEmpty()) {
             // Creating is the web's green role (`--app-primary`).
@@ -193,10 +210,11 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
     }
     if (adding) EntryEditor(view, state, model, null) { adding = false }
     editing?.let { EntryEditor(view, state, model, it) { editing = null } }
+    viewing?.let { DeletedEntrySheet(view, state, model, it) { viewing = null } }
 }
 
 @Composable
-private fun Overview(view: PotView) {
+private fun Overview(view: PotView, state: AppModel.PotState, model: AppModel) {
     val palette = LocalPalette.current
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
         item { Section(stringResource(R.string.pot_balances)) }
@@ -222,11 +240,24 @@ private fun Overview(view: PotView) {
         if (view.settleUp.isNotEmpty()) {
             item { Section(stringResource(R.string.pot_settle_up)) }
             items(view.settleUp) { t ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.pot_pays, personName(t.from), personName(t.to)), Modifier.weight(1f))
                     Text(money(t.amount, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold)
+                    if (view.canWrite) {
+                        TextButton(onClick = { model.potWrite({ it.recordPayments(listOf(t), java.time.LocalDate.now().toString()) }) }, enabled = !state.saving) {
+                            Text(stringResource(R.string.balances_record))
+                        }
+                    }
                 }
             }
+            if (view.canWrite && view.settleUp.size > 1) {
+                item {
+                    TextButton(onClick = { model.potWrite({ it.recordPayments(view.settleUp, java.time.LocalDate.now().toString()) }) }, enabled = !state.saving) {
+                        Text(stringResource(R.string.balances_record_all))
+                    }
+                }
+            }
+            state.message?.let { m -> item { Text(potRefusal(m), color = MaterialTheme.colorScheme.error) } }
         }
         if (view.byCategory.isNotEmpty()) {
             item { Section(stringResource(R.string.pot_by_category)) }
