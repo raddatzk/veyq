@@ -5,7 +5,9 @@ a Kotlin Multiplatform base under each platform's own UI ([ADR 0123](../../docs/
 A Gradle build of its own, run through its own wrapper.
 
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
-  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`).
+  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), and each
+  application's own package (`expenses/`: the web's Expenses domain, a Pot's session and what its views show), which
+  uses core's session and is never used by it; an application's spec is generated into `api.<application>`.
 - `android/` — the Android app (Compose). `devlogin.py` signs a debug build on a running emulator in as the seeded dev
   principal (`.run/.env`).
 - `apple/` — the Apple app (SwiftUI, iOS and macOS). `xcodegen` in that directory writes `Veyq.xcodeproj` from
@@ -23,7 +25,10 @@ A Gradle build of its own, run through its own wrapper.
   `openOwnGrant`/`verifyOwnGrant` rules against a server the test plays). Any change under
   `core/src/commonMain/kotlin/me/raddatz/veyq/mobile/crypto` runs both. The first Apple build compiles libsodium
   (`buildLibsodium`, a few minutes, once). A change to a rule in `session/Grants.kt`, `session/IdentityPins.kt` or `session/Anchoring.kt` needs
-  the case that refuses it: remove the rule and `GrantTrustTest` must go red.
+  the case that refuses it: remove the rule and `GrantTrustTest` must go red. Expenses' arithmetic and format are held
+  by `ExpensesVectorsTest` (`contracts/expenses/v1-vectors.json`, the crypto vectors' `expense-entry`) and
+  `LedgerRulesTest`; `BigTest` holds `expenses/Big.kt` to `java.math.BigInteger`. A rule of `expenses/Ledger.kt` or
+  `Money.kt` changes only with the case that pins it.
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
@@ -31,6 +36,9 @@ A Gradle build of its own, run through its own wrapper.
   owner signed, so it opens only through the key check; the owner starts that run, since that password may be one a
   person chose. `--tests '*DeviceTrustLiveTest*'` walks the device trust (ADR 0123 decision 8) as the seeded principal:
   password-trusted, staying signed in, the register's join, sign-out; it removes what it enrolled.
+  `--tests '*PotLiveTest*'` opens every seeded Pot and checks its revisions open and its balances sum to zero; with
+  `VEYQ_LIVE_POT_WRITE=<pot name>` it adds one expense there ("App check"), which the web's Pot page then shows — the
+  check that both clients read and write one format. It leaves that entry behind in the dev instance.
 - `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_SEED_TENANT="verein.localhost|Turnverein" ./gradlew :core:jvmTest --tests
   '*DevSecondTenantTest*'` — dev seeding, not a check: gives the seeded principal a second tenant (the seeder births only
   one), through the app's own suite, so the switcher has two to switch between. Skipped when it already exists.

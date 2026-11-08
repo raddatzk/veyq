@@ -1,7 +1,7 @@
 # ADR 0123 — The apps share a Kotlin Multiplatform core under a native UI per platform
 
 - Status: Accepted
-- Built: partly (not built: writes, the applications' own screens)
+- Built: partly (not built: most writes, the applications' own screens but Expenses' open Pot)
 - Date: 2026-11-08
 
 ## Context
@@ -40,8 +40,10 @@ implementation exists but what holds it to the first.
 4. **The API client is generated** from `contracts/api` by the generator version the repository pins
    (`scripts/validate_build_input_pins.py`), `kotlin` with the `multiplatform` library, into `core`'s build. The
    specs' server-side annotations (`x-*-extra-annotation`: Jakarta validation, Jackson) are dropped after generation;
-   any trace of a backend package left in the output fails the build. Core's specs only, the ones a member's app
-   calls; an application's specs join with that application's screens.
+   any trace of a backend package left in the output fails the build. Core's specs, the ones a member's app calls;
+   an application's spec joins with that application's screens, into packages of its own (`api.expenses`), so its
+   models never meet core's. An application's code in `core` is a package of its own too (`expenses`), which uses
+   core's session and is never used by it, as on the web ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)).
 
 5. **The session is the web's flow, call for call:** `/api/setup` and its major (the one hard gate before sign-in,
    [ADR 0085](0085-one-major-moved-on-a-yearly-train.md), compiled from `VERSION`), the login challenge answered by the
@@ -111,8 +113,14 @@ implementation exists but what holds it to the first.
 
 ## Consequences
 
-- **Not built yet:** every write (a new node, an entry); each application's own views behind the bar; a CI
-  job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
+- **Built of the applications: Expenses' open Pot** — its entries, overview and settings as the web's Pot shows them,
+  and a plain expense (one payer, split equally) added. `core/…/expenses` ports the web's domain (the revision codec and
+  its pad, the v1 format, the exact arithmetic on an integer type of its own, `Big`, held to `java.math.BigInteger`,
+  the ledger, the heads), held to `contracts/expenses/v1-vectors.json` and the rules the vectors do not reach
+  (`ExpensesVectorsTest`, `LedgerRulesTest`, each rule killed by a mutation); the web and the app read and write the
+  same Pot to the cent (measured 2026-11-08, `PotLiveTest` beside the web's own page).
+- **Not built yet:** every other write (a new node, a refund, a transfer, people, the Pot's settings, receipts), the
+  other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
   of signers, end unanchored through the signer's own judgment) — and by `v1.json#key_chain`, `#identity_pin`,
   `#scope_succession`, `#invite_key`, `#join_record`, `#join_endorsement` and `#value_key` on both primitives. `src/mobile/` verifies its dependencies as `src/backend/` does
