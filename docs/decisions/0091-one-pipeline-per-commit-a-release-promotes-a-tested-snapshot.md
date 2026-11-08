@@ -102,7 +102,8 @@ Three structural costs sat on top of what a run took:
    - **Push to `main` or `release/<major>.x`** (Checks): everything, all three lanes on **both** architectures (what is
      published for an architecture must have passed on it), its images staged; nothing published since decision 5's
      amendment of 2026-11-07.
-   - **The weekly schedule and a dispatch** (Publish): the snapshot of HEAD's green Checks push run (decision 5), in
+   - **The weekly schedule and a dispatch** (Publish): the snapshot of HEAD's green Checks push run — of a docs-only
+     HEAD's newest tested ancestor's (decision 5, amended 2026-11-08) — in
      minutes, and on the schedule the deletion of staging images older than 30 days.
    - **Guard gaps** run when what the guards are made of changes, and nightly on `main` — they test the guards, and a
      product commit changes no guard.
@@ -174,7 +175,28 @@ Three structural costs sat on top of what a run took:
      or the commit the owner asked for" — no longer "every green commit". **Staging images** are deleted by the weekly
      run 30 days after their push unless their commit is a branch tip; a staging index whose commit has a snapshot goes
      alone, the snapshot's own index naming its children (owner: on from the first run). `release.yml`'s promotion is
-     unchanged.commit". `release.yml`'s promotion is unchanged.
+     unchanged.
+   - **Amended 2026-11-08: a docs-only HEAD publishes its newest tested ancestor.** Checks skips a push that changes
+     only what its `on.push.paths-ignore` names (`**/*.md`, `docs/**`, `site/**`, decision 2: a doc change cannot break
+     a surface check or an image), so such a commit has no Checks run — and Publish, which demanded a run for exactly
+     HEAD, was red, weekly and on a dispatch, whenever `main`'s tip was docs-only (measured: Publish run 42484798393 on
+     `3ae1ae01c`, whose two newest commits changed only `site/**` and `docs/**`, above `865ba64e0` and its green Checks
+     run 42481494616). Now Publish resolves the **publishable commit** C (`scripts/snapshot.py checks-run`): HEAD when
+     HEAD has a Checks push run; otherwise the newest first-parent ancestor that has one, accepted only if every commit
+     after it up to HEAD changes nothing but paths that filter ignores — read from the checked-out `checks.yml`, never a
+     copy, each commit judged by its own diff — and refused, named, when a commit in between changes anything else or
+     no run is found within 50 commits. C's run is held to the verdict above, unchanged. The snapshot is then **C's,
+     wholly**: its version is C's tree release, its images are named `sha-<C>`, the staging tags read are C's, the
+     attestations name C, the tree the chart is packaged from is C's, and the git tag `snapshot-<major>.<minor>` is set
+     on **C, the tested commit** — never on the docs-only HEAD above it, which no run tested. Every name says what was
+     tested, so this holds even if a docs-only commit could change shipped bytes; today it cannot (measured 2026-11-08:
+     `git ls-files '*.md'` outside `docs/` and `site/` lists only READMEs, agent and contributor notes and `changes/`,
+     and no Dockerfile copies a `.md`, `docs/` or `site/`). A C that already carries its `snapshot-` tag publishes
+     nothing, as HEAD did. Rejected: running Checks on
+     every commit (the filter is what keeps a doc change from costing a full pipeline), and tagging HEAD (the tag would
+     name a commit that no attestation names, and the promotion counts the version from the tagged commit). The cost:
+     a snapshot can lag `main`'s tip by its docs-only commits, and a C older than the 30 days its run's artifacts are
+     kept cannot be published — re-run its Checks run, or push.
 
 6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) **with its
    object pool** (`--objects-to`: a capture's store leg is only its index, ADR 0056 §3) as a signed OCI artifact
