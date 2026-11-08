@@ -254,21 +254,26 @@ def _git(root: pathlib.Path, *args: str) -> str:
     return proc.stdout.strip()
 
 
-def tree_release(root: pathlib.Path = ROOT) -> str:
-    """`<major>.<minor>` exactly as `checks.yml`'s `veyq-version` step counts it (ADR 0057 §1).
+def tree_release(root: pathlib.Path = ROOT, commit: str = "HEAD") -> str:
+    """`<major>.<minor>` exactly as `checks.yml`'s `veyq-version` step counts it (ADR 0057 §1), of `commit`: the
+    checkout's HEAD unless one is named (Publish counts the tested ancestor of a docs-only HEAD, `snapshot.py
+    checks-run`).
 
     That step is the authority; validate_release_identity.py runs both against one throwaway history and holds
     them to the same answer, so this copy cannot drift from it unnoticed.
     """
-    major = (root / "VERSION").read_text().strip() if (root / "VERSION").is_file() else ""
+    if commit == "HEAD":
+        major = (root / "VERSION").read_text().strip() if (root / "VERSION").is_file() else ""
+    else:
+        major = _git(root, "show", f"{commit}:VERSION").strip()
     if not re.fullmatch(r"[0-9]+", major):
         raise ReleaseError(f"VERSION must contain the major alone (the minor is counted from the history), got: {major!r}")
     if _git(root, "rev-parse", "--is-shallow-repository") != "false":
         raise ReleaseError("shallow checkout: the minor counts commits since VERSION last changed and needs the full history")
-    base = _git(root, "log", "-1", "--format=%H", "--", "VERSION")
+    base = _git(root, "log", "-1", "--format=%H", commit, "--", "VERSION")
     if not base:
         raise ReleaseError("no commit touches VERSION, so there is no point to count the minor from")
-    return f"{major}.{_git(root, 'rev-list', '--count', f'{base}..HEAD')}"
+    return f"{major}.{_git(root, 'rev-list', '--count', f'{base}..{commit}')}"
 
 
 def check_image(role: str, ref: str) -> None:
