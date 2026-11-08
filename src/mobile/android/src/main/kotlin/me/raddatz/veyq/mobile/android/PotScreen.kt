@@ -239,8 +239,14 @@ private fun Overview(view: PotView, state: AppModel.PotState, model: AppModel) {
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(personName(p.name), fontWeight = FontWeight.SemiBold)
+                    // What makes the balance: paid and consumed always, the transfers only where there were any.
+                    val transfers = when {
+                        p.settled > 0 -> " · " + stringResource(R.string.pot_sent, money(p.settled, view.currency, view.minorUnits))
+                        p.settled < 0 -> " · " + stringResource(R.string.pot_received, money(-p.settled, view.currency, view.minorUnits))
+                        else -> ""
+                    }
                     Text(
-                        stringResource(R.string.pot_paid_consumed, money(p.paid, view.currency, view.minorUnits), money(p.share, view.currency, view.minorUnits)),
+                        stringResource(R.string.pot_paid_consumed, money(p.paid, view.currency, view.minorUnits), money(p.share, view.currency, view.minorUnits)) + transfers,
                         style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
                     )
                 }

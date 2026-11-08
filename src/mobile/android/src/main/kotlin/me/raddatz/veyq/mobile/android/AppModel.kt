@@ -332,6 +332,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         tenantSession = t
         _pot.value = null
         raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff())
+        readRowDetails(t)
         rebuild(start = true)
     }
 
@@ -345,6 +346,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     data class PotState(val ref: ObjectRef, val view: PotView? = null, val failed: Boolean = false, val saving: Boolean = false, val message: String? = null)
 
     private val _pot = MutableStateFlow<PotState?>(null)
+
+    /** What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`). */
+    private val _rowDetails = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    val rowDetails: StateFlow<Map<String, List<String>>> = _rowDetails.asStateFlow()
+
+    private suspend fun readRowDetails(t: me.raddatz.veyq.mobile.session.TenantSession) {
+        _rowDetails.value = runCatching { me.raddatz.veyq.mobile.expenses.PotRows.details(t) }.getOrDefault(emptyMap())
+    }
     val pot: StateFlow<PotState?> = _pot.asStateFlow()
 
     /** Opens and reads the Pot [ref] unless it is the one shown. */
@@ -398,6 +407,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val outcome = runCatching { op(session) }.getOrDefault(PotSession.WriteOutcome.REFUSED)
             _pot.value = state.copy(view = PotView(session), saving = false, message = outcome.takeIf { it != PotSession.WriteOutcome.WRITTEN }?.name)
+            // A settings write may have set the base currency: the Pot's row says it at once.
+            _rowDetails.update { it + (state.ref.nodeId to me.raddatz.veyq.mobile.expenses.PotRows.detailsOf(session.meta)) }
             if (outcome == PotSession.WriteOutcome.WRITTEN) done()
         }
     }
@@ -430,6 +441,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             }
             t.forgetTree()
             raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff())
+            readRowDetails(t)
             rebuild()
             _creating.value = CreatingPot(message = r.outcome.takeIf { it != PotCreate.Outcome.CREATED }?.name)
             done()

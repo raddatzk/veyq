@@ -346,6 +346,7 @@ final class AppModel {
         rawNodes = try await t.nodes()
         rawFavorites = try await t.favorites()
         rawOff = t.applicationsOff()
+        rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? [:]
         self.tenant = tenant
         server = account.label
         rebuild(start: true)
@@ -390,6 +391,9 @@ final class AppModel {
     }
 
     private(set) var pot: PotState?
+
+    /// What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`).
+    private(set) var rowDetails: [String: [String]] = [:]
 
     /// Opens and reads the Pot `ref` unless it is the one shown.
     func loadPot(_ ref: ObjectRef) {
@@ -453,6 +457,8 @@ final class AppModel {
         state.saving = false
         state.message = outcome == .written ? nil : outcome.name
         pot = state
+        // A settings write may have set the base currency: the Pot's row says it at once.
+        rowDetails[state.ref.nodeId] = PotRows.shared.detailsOf(meta: session.meta)
         return outcome == .written
     }
 
@@ -486,6 +492,7 @@ final class AppModel {
         t.forgetTree()
         rawNodes = (try? await t.nodes()) ?? rawNodes
         rawFavorites = (try? await t.favorites()) ?? rawFavorites
+        rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? rowDetails
         rebuild(start: false)
         creatingPot = CreatingPot(message: r.outcome == .created ? nil : r.outcome.name)
         if let ref = ((try? await t.objects()) ?? []).first(where: { $0.nodeId == nodeId }) { open(ref) }

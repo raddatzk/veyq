@@ -64,6 +64,7 @@ import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -100,6 +101,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val drawer = rememberDrawerState(if (s.shell.isHome && s.shell.path.isEmpty() && s.shell.space == null) DrawerValue.Open else DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val shell = s.shell
+    val potState by model.pot.collectAsStateWithLifecycle()
+    val rowDetails by model.rowDetails.collectAsStateWithLifecycle()
     val palette = LocalPalette.current
     fun closeDrawerThen(f: () -> Unit) { f(); scope.launch { drawer.close() } }
 
@@ -107,6 +110,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         if (shell.searching) model.search(false) else model.goBack()
     }
 
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails) {
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
@@ -126,7 +130,12 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     TopAppBar(
                         title = {
                             when {
-                                shell.openObject != null -> Text(shell.openObject!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                shell.openObject != null -> Column {
+                                    Text(shell.openObject!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                    // An open Pot says its currency under its name (the web's header subtitle).
+                                    val currency = potState?.takeIf { it.ref == shell.openObject }?.view?.currency
+                                    if (currency != null) Text(stringResource(R.string.pot_in_currency, currency), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+                                }
                                 shell.application != null -> Text(appName(shell.application!!), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 shell.folder != null -> Text(shell.folder!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 else -> SpaceSwitcher(s, model::switchSpace)
@@ -183,6 +192,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }
+    }
     }
 }
 
@@ -477,8 +487,11 @@ private fun ArrangedListScreen(list: ArrangedList, onOpen: (ObjectRef) -> Unit) 
 
 @Composable
 private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
+    val details = LocalRowDetails.current[ref.nodeId].orEmpty()
     ListItem(
         headlineContent = { Text(ref.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+        // The application's facts about the object (a Pot: its currency), left out when it has none.
+        supportingContent = details.takeIf { it.isNotEmpty() }?.let { { Text(it.joinToString(" · "), color = role(LocalPalette.current.muted)) } },
         leadingContent = { Tile(kindIcon(ref.kind)) },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
         modifier = Modifier.clip(MaterialTheme.shapes.medium).clickableRow { onOpen(ref) },
@@ -576,3 +589,6 @@ private fun tabLabel(tab: BarTab): String = stringResource(
         else -> R.string.not_built
     },
 )
+
+/** What each object's row says beside its name, by node id (`AppModel.rowDetails`). */
+internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<String, List<String>>> { emptyMap() }

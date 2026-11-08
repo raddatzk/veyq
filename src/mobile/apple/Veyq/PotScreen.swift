@@ -51,6 +51,8 @@ struct PotScreen: View {
             }
         }
         .navigationTitle(ref.name)
+        // An open Pot says its currency under its name (the web's header subtitle).
+        .navigationSubtitle(model.pot?.ref == ref ? model.pot?.view?.currency.map { String(localized: "In \($0)") } ?? "" : "")
         .task(id: ref.nodeId) { model.loadPot(ref) }
         // Live while the Pot is on screen and the app active: what another device writes shows up (core's `LivePoll`).
         .task(id: LiveKey(nodeId: ref.nodeId, loaded: model.pot?.view != nil, active: phase == .active)) {
@@ -229,6 +231,13 @@ private struct OverviewList: View {
         Task { await model.potWrite { try await $0.recordPayments(payments: payments, date: day) } }
     }
 
+    /// What transfers moved, where there were any: " · transferred …" or " · received …".
+    private func transfers(_ p: PotView.PersonRow) -> String {
+        if p.settled > 0 { return " · " + String(localized: "transferred \(money(p.settled, view.currency, view.minorUnits))") }
+        if p.settled < 0 { return " · " + String(localized: "received \(money(-p.settled, view.currency, view.minorUnits))") }
+        return ""
+    }
+
     var body: some View {
         List {
             Section {
@@ -236,7 +245,7 @@ private struct OverviewList: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(personName(p.name)).fontWeight(.semibold)
-                            Text("paid \(money(p.paid, view.currency, view.minorUnits)) · consumed \(money(p.share, view.currency, view.minorUnits))")
+                            Text("paid \(money(p.paid, view.currency, view.minorUnits)) · consumed \(money(p.share, view.currency, view.minorUnits))" + transfers(p))
                                 .font(.caption).foregroundStyle(Role.muted)
                         }
                         Spacer()

@@ -20,6 +20,7 @@ struct ShellView: View {
             #endif
         }
         .tint(Role.accent)
+        .environment(\.rowDetails, model.rowDetails)
         .sheet(isPresented: Binding(get: { model.managing != nil }, set: { if !$0 { model.managing = nil } })) {
             ManageView(model: model)
         }
@@ -313,16 +314,26 @@ struct FolderTile: View {
     }
 }
 
-/// One object as a row of the web's lists: its kind's tile, its name in bold.
+/// What each object's row says beside its name, by node id (`AppModel.rowDetails`).
+extension EnvironmentValues {
+    @Entry var rowDetails: [String: [String]] = [:]
+}
+
+/// One object as a row of the web's lists: its kind's tile, its name in bold, and the application's facts about it (a
+/// Pot: its currency), left out when it has none.
 struct ObjectRow: View {
     let ref: ObjectRef
     let onOpen: (ObjectRef) -> Void
+    @Environment(\.rowDetails) private var details
 
     var body: some View {
         Button { onOpen(ref) } label: {
             HStack(spacing: 12) {
                 Tile(symbol: Names.kindSymbol(ref.kind))
-                Text(ref.name).fontWeight(.bold).foregroundStyle(Role.text)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ref.name).fontWeight(.bold).foregroundStyle(Role.text)
+                    if let d = details[ref.nodeId], !d.isEmpty { Text(d.joined(separator: " · ")).font(.caption).foregroundStyle(Role.muted) }
+                }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
             }

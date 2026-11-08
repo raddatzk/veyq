@@ -51,6 +51,58 @@ class PotViewPeopleTest {
 
     private val directory = listOf(Person(userA, "anna", "Anna Adler"), Person(userX, "xavier", "Xavier"))
 
+    private fun transfer(amount: Long, from: String, to: String) = Transfer(null, "2026-07-02", "EUR", 2, "1", amount, emptyList(), from, to)
+
+    @Test
+    fun aBalanceRowSaysWhatTransfersMovedAndTheErasedAreOneRowWhileTheyHaveCosts() {
+        val v = view(
+            listOf(
+                anna to ParticipantBody("Anna", true, 1),
+                ben to ParticipantBody("Ben", true, 2),
+                dora to ParticipantBody("Dora", false, 3),
+                eve to ParticipantBody("Eve", true, 4),
+                dinner to expense(300, anna, listOf(anna, ben, eve)),
+                cleo to transfer(100, ben, anna),
+                eve to Erasure(4),
+            ),
+            null,
+        )
+        // Anna paid 300, consumed 100 and received 100; Ben consumed 100 and sent 100 (settled, still shown: active);
+        // Dora, deactivated with nothing, is left out; Eve's erased share is the one "erased" row.
+        assertEquals(listOf(anna, ben, "erased"), v.balances.map { it.id })
+        val (a, b, e) = v.balances
+        assertEquals(listOf(300L, 100L, 100L, -100L), listOf(a.paid, a.share, a.balance, a.settled))
+        assertEquals(listOf(0L, 100L, 0L, 100L), listOf(b.paid, b.share, b.balance, b.settled))
+        assertEquals(listOf(0L, 100L, -100L, 0L), listOf(e.paid, e.share, e.balance, e.settled))
+        // An erased person whose balance is zero but who has costs is still shown, summed.
+        val settledErased = view(
+            listOf(
+                anna to ParticipantBody("Anna", true, 1),
+                eve to ParticipantBody("Eve", true, 2),
+                dinner to expense(200, eve, listOf(anna, eve)),
+                cleo to transfer(100, anna, eve),
+                eve to Erasure(2),
+            ),
+            null,
+        ).balances.single { it.id == "erased" }
+        assertEquals(listOf(200L, 100L, 0L, -100L), listOf(settledErased.paid, settledErased.share, settledErased.balance, settledErased.settled))
+        // A deactivated person stays while they have costs (or a balance), only one with nothing leaves.
+        val deactivated = view(
+            listOf(
+                anna to ParticipantBody("Anna", true, 1),
+                ben to ParticipantBody("Ben", true, 2),
+                dinner to expense(200, anna, listOf(anna, ben)),
+                cleo to transfer(100, ben, anna),
+                ben to ParticipantBody("Ben", false, 2),
+            ),
+            null,
+        ).balances
+        assertEquals(listOf(anna, ben), deactivated.map { it.id })
+        assertEquals(false to 0L, deactivated[1].active to deactivated[1].balance)
+        // Nobody erased with anything: no such row.
+        assertTrue(view(listOf(anna to ParticipantBody("Anna", true, 1), eve to ParticipantBody("Eve", true, 2), eve to Erasure(2)), null).balances.none { it.id == "erased" })
+    }
+
     @Test
     fun aMemberReadsByTheCurrentNameAndAFormerOneByTheSealed() {
         val v = view(pot, directory)

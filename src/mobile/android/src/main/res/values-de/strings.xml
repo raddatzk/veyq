@@ -89,6 +89,9 @@
     <string name="pot_is_owed">bekommt %1$s</string>
     <string name="pot_owes">schuldet %1$s</string>
     <string name="pot_settled">ausgeglichen</string>
+    <string name="pot_sent">überwiesen %1$s</string>
+    <string name="pot_received">erhalten %1$s</string>
+    <string name="pot_in_currency">In %1$s</string>
     <string name="pot_settle_up">Ausgleichen</string>
     <string name="pot_pays">%1$s zahlt an %2$s</string>
     <string name="pot_by_category">Nach Kategorie</string>

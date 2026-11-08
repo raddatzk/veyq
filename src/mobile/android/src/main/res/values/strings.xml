@@ -91,6 +91,9 @@
     <string name="pot_is_owed">is owed %1$s</string>
     <string name="pot_owes">owes %1$s</string>
     <string name="pot_settled">settled</string>
+    <string name="pot_sent">transferred %1$s</string>
+    <string name="pot_received">received %1$s</string>
+    <string name="pot_in_currency">In %1$s</string>
     <string name="pot_settle_up">Settle up</string>
     <string name="pot_pays">%1$s pays %2$s</string>
     <string name="pot_by_category">By category</string>

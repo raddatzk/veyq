@@ -41,6 +41,16 @@ data class PotMeta(val base: Ledger.BaseCurrency, val categories: List<Pair<Stri
         /** The `pot` object of an opened node-meta envelope, or null when it carries none that reads. */
         fun of(envelope: JsonObject): PotMeta? = runCatching { read(envelope[KEY]) }.getOrNull()
 
+        /** A Pot node's settings, its sealed meta opened under its key; null when it has none or it does not open here. */
+        internal fun opened(suite: me.raddatz.veyq.mobile.crypto.V1, node: me.raddatz.veyq.mobile.session.OpenNode): PotMeta? {
+            val wrapped = node.wrappedMeta ?: return null
+            return runCatching {
+                val context = me.raddatz.veyq.mobile.crypto.Context("node-meta", "scopeId" to node.scopeId, "nodeId" to node.id)
+                val plain = suite.openField(context, node.key, me.raddatz.veyq.mobile.crypto.unb64(wrapped))
+                of(kotlinx.serialization.json.Json.parseToJsonElement(plain.decodeToString()) as JsonObject)
+            }.getOrNull()
+        }
+
         fun read(raw: JsonElement?): PotMeta {
             val o = raw as? JsonObject ?: throw IllegalArgumentException("/")
             fun num(k: String) = (o[k] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toLongOrNull()

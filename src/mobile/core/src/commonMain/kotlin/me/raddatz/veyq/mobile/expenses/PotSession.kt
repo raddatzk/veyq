@@ -61,13 +61,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     /** The waits before each retry while the Pot is not re-keyed since a rotation (`REKEY_RETRY_DELAYS_MS`). */
     internal var rekeyWaitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS
 
-    private fun openMeta(): PotMeta? {
-        val wrapped = node.wrappedMeta ?: return null
-        return runCatching {
-            val plain = account.suite.openField(Context("node-meta", "scopeId" to node.scopeId, "nodeId" to node.id), node.key, unb64(wrapped))
-            PotMeta.of(Json.parseToJsonElement(plain.decodeToString()) as JsonObject)
-        }.getOrNull()
-    }
+    private fun openMeta(): PotMeta? = PotMeta.opened(account.suite, node)
 
     /** What is held, for a pure rule over it. */
     internal fun heldRevisions(): List<HeldRevision> = held.values.toList()

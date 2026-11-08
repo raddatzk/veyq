@@ -169,7 +169,11 @@ implementation exists but what holds it to the first.
   today a member while Expenses is switched off for the tenant — sees it read only (its fields disabled, no add, remove,
   save or delete; its receipts open, its history shows), an invalid entry says so above it, and an unreadable one opens
   as the web opens it, a blank form on the revision it cannot read (`PotViewEntriesTest`; switched off live, the server
-  refuses the write the app no longer offers, `PotLiveTest`).
+  refuses the write the app no longer offers, `PotLiveTest`). The overview's balances are the web's `shownBalances`
+  (what each paid, consumed and settled by transfer; a deactivated person while something is open, the erased as one
+  row while they have costs; `PotViewPeopleTest`), an open Pot says its currency under its name, and a Pot's row in the
+  shell's lists names its currency (`expenses/PotRows.kt`, the web's `levelRows.ts`): Expenses' answer, which the app's
+  composition root asks and hands to the shell's rows, since core's lists know no application.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

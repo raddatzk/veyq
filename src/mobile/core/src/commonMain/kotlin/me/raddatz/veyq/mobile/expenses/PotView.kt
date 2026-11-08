@@ -35,7 +35,8 @@ class PotView internal constructor(session: Source) {
         val status: Ledger.Status, val edited: Boolean,
     )
 
-    class PersonRow(val id: String, val name: String?, val paid: Long, val share: Long, val balance: Long, val active: Boolean)
+    /** One balance row; [settled] what transfers moved (positive: sent, negative: received). */
+    class PersonRow(val id: String, val name: String?, val paid: Long, val share: Long, val balance: Long, val active: Boolean, val settled: Long = 0)
     class SettleRow(val from: String?, val to: String?, val amount: Long, val fromId: String = "", val toId: String = "")
     class CategoryRow(val id: String, val ownName: String?, val amount: Long)
     class Person(val id: String, val name: String)
@@ -134,14 +135,30 @@ class PotView internal constructor(session: Source) {
     }
 
     /** Every person with a balance or a cost, in join order; erased people as one row (name null). */
+    /**
+     * The overview's balances (the web's `shownBalances`, `people.ts`): each person with what they paid, consumed and
+     * settled by transfer (`balance - paid + consumed`: positive sent, negative received), a deactivated one only while
+     * something is open or they have costs, and every erased participant summed into one row ("erased") when any of them
+     * has a balance or costs.
+     */
     val balances: List<PersonRow> = ledger?.let { l ->
-        val rows = l.participants.filter { !it.erased }.map { p ->
+        val rows = mutableListOf<PersonRow>()
+        var erased = PersonRow("erased", null, 0, 0, 0, false)
+        var anyErased = false
+        for (p in l.participants) {
             val (paid, share) = l.overview.byPerson[p.id] ?: (Big.ZERO to Big.ZERO)
-            PersonRow(p.id, shownName(p), paid.toLong(), share.toLong(), (l.balances[p.id] ?: Big.ZERO).toLong(), p.active)
-        }.filter { it.active || it.balance != 0L || it.paid != 0L || it.share != 0L }
-        val erased = l.participants.filter { it.erased }
-        val erasedBalance = erased.fold(Big.ZERO) { acc, p -> acc + (l.balances[p.id] ?: Big.ZERO) }
-        rows + if (erased.isNotEmpty() && erasedBalance.signum != 0) listOf(PersonRow("erased", null, 0, 0, erasedBalance.toLong(), false)) else emptyList()
+            val balance = l.balances[p.id] ?: Big.ZERO
+            val row = PersonRow(p.id, shownName(p), paid.toLong(), share.toLong(), balance.toLong(), p.active, (balance - paid + share).toLong())
+            if (p.erased) {
+                erased = PersonRow("erased", null, erased.paid + row.paid, erased.share + row.share, erased.balance + row.balance, false, erased.settled + row.settled)
+                if (row.balance != 0L || row.paid != 0L || row.share != 0L) anyErased = true
+                continue
+            }
+            if (!p.active && row.balance == 0L && row.paid == 0L && row.share == 0L) continue
+            rows += row
+        }
+        if (anyErased) rows += erased
+        rows
     }.orEmpty()
 
     val settleUp: List<SettleRow> = ledger?.settleUp.orEmpty().map { SettleRow(names[it.from], names[it.to], it.amount.toLong(), it.from, it.to) }
