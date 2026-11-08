@@ -6,7 +6,21 @@ package me.raddatz.veyq.mobile.expenses
  * format money. Amounts are minor units of the base currency; a name is null for an erased person (the platform says
  * "deleted person").
  */
-class PotView(session: PotSession) {
+class PotView internal constructor(session: Source) {
+    /** What a view is computed from: a session's state, or a test's. */
+    internal class Source(
+        val name: String, val meta: PotMeta?, val ledger: Ledger.Pot?, val check: LedgerCheck,
+        val members: List<me.raddatz.veyq.mobile.session.Person>?, val named: Set<String>, val canWrite: Boolean,
+        val canChangeSettings: Boolean = canWrite, val currencyFixed: Boolean = false,
+    )
+
+    constructor(session: PotSession) : this(
+        Source(
+            session.name, session.meta, session.ledger, session.check, session.members, session.named, session.canWrite,
+            session.canChangeSettings, session.currencyFixed,
+        ),
+    )
+
     enum class Kind { EXPENSE, REFUND, TRANSFER }
 
     /** One entry row: its title (a transfer may have none), date, category id (null for a transfer), who paid or received
@@ -27,11 +41,27 @@ class PotView(session: PotSession) {
     val currency: String? = session.meta?.base?.currency
     val minorUnits: Int = session.meta?.base?.minorUnits ?: 2
     val canWrite: Boolean = session.canWrite
-    /** Without settings the Pot shows no balance and takes no entry (a member sets a base currency on the web). */
+    /** Without settings the Pot shows no balance and takes no entry until a member sets a base currency. */
     val ready: Boolean = session.ledger != null
 
+    /** Whether this member may change the Pot's settings (its base currency, its own categories) — also while it has none. */
+    val canChangeSettings: Boolean = session.canChangeSettings
+
+    /** The base currency is fixed once the Pot holds any money entry, live or deleted. */
+    val currencyFixed: Boolean = session.currencyFixed
+
     private val ledger = session.ledger
-    private val names: Map<String, String?> = ledger?.participants?.associate { it.id to it.name }.orEmpty()
+    /** The space's current members by user id; null for no read (a member participant then reads by its sealed name). */
+    private val directory = session.members?.associateBy { it.userId }
+
+    /** The name [p] reads by: a listed member's current display name, else the record's own (the sealed one); null when
+     *  erased (`web/people.ts` `shownName`). */
+    private fun shownName(p: Ledger.Participant): String? {
+        if (p.erased) return null
+        return p.member?.let { directory?.get(it)?.displayName } ?: p.name
+    }
+
+    private val names: Map<String, String?> = ledger?.participants?.associate { it.id to shownName(it) }.orEmpty()
 
     /** A person's name in a list, "" for an erased one (a platform's list carries no null). */
     private fun nameIn(id: String): String = names[id] ?: ""
@@ -48,7 +78,7 @@ class PotView(session: PotSession) {
     val balances: List<PersonRow> = ledger?.let { l ->
         val rows = l.participants.filter { !it.erased }.map { p ->
             val (paid, share) = l.overview.byPerson[p.id] ?: (Big.ZERO to Big.ZERO)
-            PersonRow(p.id, p.name, paid.toLong(), share.toLong(), (l.balances[p.id] ?: Big.ZERO).toLong(), p.active)
+            PersonRow(p.id, shownName(p), paid.toLong(), share.toLong(), (l.balances[p.id] ?: Big.ZERO).toLong(), p.active)
         }.filter { it.active || it.balance != 0L || it.paid != 0L || it.share != 0L }
         val erased = l.participants.filter { it.erased }
         val erasedBalance = erased.fold(Big.ZERO) { acc, p -> acc + (l.balances[p.id] ?: Big.ZERO) }
@@ -62,7 +92,59 @@ class PotView(session: PotSession) {
     val total: Long = byCategory.sumOf { it.amount }
 
     /** Who may be named on a new entry: the active people, in join order. */
-    val people: List<Person> = ledger?.participants.orEmpty().filter { it.active && !it.erased }.map { Person(it.id, it.name ?: "") }
+    val people: List<Person> = ledger?.participants.orEmpty().filter { it.active && !it.erased }.map { Person(it.id, shownName(it) ?: "") }
+
+    /** How a participant stands to the space's members: a name, a member the directory lists, one it lists no more
+     *  (`FORMER`), or a member this device could not look up (`SEALED`). */
+    enum class Standing { NAME, MEMBER, FORMER, SEALED }
+
+    /** One person of the Settings tab's people (uc.expenses.manage-participants): their balance in short, and what may be
+     *  done to them — renamed (a name only, never a member), deactivated or activated, deleted (a revision names them) or
+     *  removed (none does; then they appear nowhere), the last two only once settled. */
+    class PersonEntry(
+        val id: String, val name: String, val standing: Standing, val active: Boolean, val balance: Long,
+        val renamable: Boolean, val canToggle: Boolean, val canErase: Boolean, val named: Boolean,
+    ) {
+        val settled: Boolean get() = balance == 0L
+    }
+
+    private val named = session.named
+
+    val personEntries: List<PersonEntry> = ledger?.let { l ->
+        l.participants.filter { !it.erased }.map { p ->
+            val balance = (l.balances[p.id] ?: Big.ZERO).toLong()
+            val standing = when {
+                p.member == null -> Standing.NAME
+                directory == null -> Standing.SEALED
+                p.member in directory -> Standing.MEMBER
+                else -> Standing.FORMER
+            }
+            val settled = balance == 0L
+            PersonEntry(
+                p.id, shownName(p) ?: "", standing, p.active, balance,
+                renamable = canWrite && p.member == null,
+                // An unsettled person may be activated again, never deactivated.
+                canToggle = canWrite && (settled || !p.active),
+                canErase = canWrite && settled,
+                named = p.id in named,
+            )
+        }
+    }.orEmpty()
+
+    /** How many deleted people the entries still show ("deleted person"): an erased one no revision names appears nowhere. */
+    val deletedPeople: Int = ledger?.participants.orEmpty().count { it.erased && it.id in named }
+
+    /** Whether someone still has a balance, so deactivating or deleting them waits for the settle-up. */
+    val anyUnsettled: Boolean = personEntries.any { !it.settled }
+
+    /** A member of the space who may be added: the space's current members not yet a participant (an erased participant
+     *  names nobody any more), in the directory's order. */
+    class Member(val userId: String, val name: String)
+
+    val addableMembers: List<Member> = run {
+        val taken = ledger?.participants.orEmpty().filter { !it.erased }.mapNotNull { it.member }.toSet()
+        session.members.orEmpty().filter { it.userId !in taken }.map { Member(it.userId, it.displayName) }
+    }
 
     /** A record the ledger check names (ADR 0108 decision 5): an entry by its title, a person by name, else what it was. */
     class Missing(val kind: MissingKind, val name: String)

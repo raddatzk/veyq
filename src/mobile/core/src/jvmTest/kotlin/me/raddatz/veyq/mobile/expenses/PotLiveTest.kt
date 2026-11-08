@@ -41,6 +41,35 @@ class PotLiveTest {
                 assertTrue(ledger.entries.none { it.status == Ledger.Status.UNREADABLE }, "a revision of ${ref.name} did not open")
             }
             assertTrue(pot.check.complete, "${ref.name}'s ledger check: missing ${pot.check.missing} altered ${pot.check.altered} unreadable ${pot.check.unreadable}")
+            println("[${ref.name}] members=${pot.members?.map { it.displayName }}")
+            assertTrue(pot.members?.isNotEmpty() == true, "${ref.name}: the space's members did not read")
+            if (pot.currencyFixed) assertEquals(PotSession.WriteOutcome.INVALID, pot.setBaseCurrency("CHF", 2), "${ref.name}: a fixed currency moved")
+            if (System.getenv("VEYQ_LIVE_POT_SETTINGS") == ref.name && !pot.currencyFixed) {
+                // The currency switched and back, an own category added and renamed (it stays: categories are not removed).
+                val before = pot.meta?.base
+                assertEquals(PotSession.WriteOutcome.WRITTEN, pot.setBaseCurrency("CHF", 2))
+                assertEquals("CHF", pot.meta?.base?.currency)
+                assertEquals(PotSession.WriteOutcome.WRITTEN, pot.setBaseCurrency(before?.currency ?: "EUR", before?.minorUnits ?: 2))
+                val count = pot.meta!!.categories.size
+                assertEquals(PotSession.WriteOutcome.WRITTEN, pot.addCategory("App category"))
+                val id = pot.meta!!.categories.last().first
+                assertEquals(count + 1, pot.meta!!.categories.size)
+                assertEquals(PotSession.WriteOutcome.WRITTEN, pot.renameCategory(id, "App category renamed"))
+                assertEquals("App category renamed", pot.meta!!.ownName(id))
+                println("[${ref.name}] the settings written: ${pot.meta}")
+            }
+            if (System.getenv("VEYQ_LIVE_POT_PEOPLE") == ref.name && ledger != null) {
+                // A person's life: added, renamed, deactivated (settled: no entry names them), removed by its erasure.
+                assertEquals(PotSession.WriteOutcome.WRITTEN, pot.addPerson("App person"))
+                val id = pot.ledger!!.participants.single { it.name == "App person" }.id
+                assertEquals(PotSession.WriteOutcome.WRITTEN, pot.rename(id, "App person renamed"))
+                assertEquals(PotSession.WriteOutcome.WRITTEN, pot.setActive(id, false))
+                assertEquals(false, pot.ledger!!.participants.single { it.id == id }.active)
+                assertEquals(PotSession.WriteOutcome.WRITTEN, pot.erase(id))
+                assertTrue(pot.ledger!!.participants.single { it.id == id }.erased)
+                assertTrue(pot.check.complete, "the check after the erasure: ${pot.check.missing}")
+                println("[${ref.name}] a person added, renamed, deactivated and removed")
+            }
             if (System.getenv("VEYQ_LIVE_POT_WRITE") == ref.name && ledger != null) {
                 val people = ledger.participants.filter { it.active && !it.erased }
                 assertTrue(people.isNotEmpty(), "${ref.name} has no participant to pay")

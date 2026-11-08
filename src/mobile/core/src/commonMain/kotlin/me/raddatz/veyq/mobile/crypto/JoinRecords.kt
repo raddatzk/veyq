@@ -82,11 +82,18 @@ class JoinRecords(private val suite: V1) {
      * Opens a member's record: its value key from [wrappedValueKey] with the tenant key of [epoch], the record under it.
      * Null for a wrap or a record that does not open: a wrap a rotator junked reads as no record, never as another's.
      */
-    fun open(tenantId: String, userId: String, tenantKey: ByteArray, epoch: Long, wrappedValueKey: ByteArray, sealed: ByteArray): JoinRecord? = runCatching {
-        val ctx = recordContext(tenantId, userId)
-        val valueKey = suite.open(valueKeyContext(tenantId, epoch, valueAddress(Purposes.FIELD, ctx)), tenantKey, wrappedValueKey)
+    fun open(tenantId: String, userId: String, tenantKey: ByteArray, epoch: Long, wrappedValueKey: ByteArray, sealed: ByteArray): JoinRecord? =
+        openValueField(tenantId, epoch, tenantKey, recordContext(tenantId, userId), wrappedValueKey, sealed)?.let(::decode)
+
+    /**
+     * A field sealed under a value key of its own (ADR 0115), as every reader opens it: the value key from its wrap under
+     * the scope key of [epoch], bound to the field's own address, then the field under it. Null for a wrap or a field that
+     * does not open — the wrong key, another member's wrap, a wrap a rotator junked: "nothing readable", never another's.
+     */
+    fun openValueField(scopeId: String, epoch: Long, scopeKey: ByteArray, ctx: Context, wrappedValueKey: ByteArray, sealed: ByteArray): ByteArray? = runCatching {
+        val valueKey = suite.open(valueKeyContext(scopeId, epoch, valueAddress(Purposes.FIELD, ctx)), scopeKey, wrappedValueKey)
         try {
-            decode(suite.openField(ctx, valueKey, sealed))
+            suite.openField(ctx, valueKey, sealed)
         } finally {
             valueKey.fill(0)
         }

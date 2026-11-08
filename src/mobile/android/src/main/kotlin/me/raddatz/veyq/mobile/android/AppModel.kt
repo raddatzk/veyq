@@ -377,6 +377,26 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * One write to the open Pot ([op] on its session): the state shows it saving, then the Pot as read after it, and a
+     * refusal as its message (a [PotSession.WriteOutcome] name); [done] runs once it was stored.
+     */
+    fun potWrite(op: suspend (PotSession) -> PotSession.WriteOutcome, done: () -> Unit = {}) {
+        val state = _pot.value ?: return
+        val session = potSession ?: return
+        _pot.value = state.copy(saving = true, message = null)
+        viewModelScope.launch {
+            val outcome = runCatching { op(session) }.getOrDefault(PotSession.WriteOutcome.REFUSED)
+            _pot.value = state.copy(view = PotView(session), saving = false, message = outcome.takeIf { it != PotSession.WriteOutcome.WRITTEN }?.name)
+            if (outcome == PotSession.WriteOutcome.WRITTEN) done()
+        }
+    }
+
+    /** Forgets the open Pot's last refusal (a dialog closed). */
+    fun clearPotMessage() {
+        _pot.value = _pot.value?.copy(message = null)
+    }
+
     /** The shell's lists from what was read, less what this device hides; on [start], the shell where the app opens. */
     private fun rebuild(start: Boolean = false) {
         val r = raw ?: return

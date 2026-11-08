@@ -29,7 +29,7 @@ A Gradle build of its own, run through its own wrapper.
   by `ExpensesVectorsTest` (`contracts/expenses/v1-vectors.json`, the crypto vectors' `expense-entry`) and
   `LedgerRulesTest`; `BigTest` holds `expenses/Big.kt` to `java.math.BigInteger`. A rule of `expenses/Ledger.kt` or
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
-  (`PotWritesTest`, over real seals) and of core's `session/NodeEpochWrite.kt` (`NodeEpochWriteTest`).
+  (`PotWritesTest`, over real seals), of `PotView.kt`'s people (`PotViewPeopleTest`) and of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`).
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
@@ -37,9 +37,12 @@ A Gradle build of its own, run through its own wrapper.
   owner signed, so it opens only through the key check; the owner starts that run, since that password may be one a
   person chose. `--tests '*DeviceTrustLiveTest*'` walks the device trust (ADR 0123 decision 8) as the seeded principal:
   password-trusted, staying signed in, the register's join, sign-out; it removes what it enrolled.
-  `--tests '*PotLiveTest*'` opens every seeded Pot and checks its revisions open and its balances sum to zero; with
-  `VEYQ_LIVE_POT_WRITE=<pot name>` it adds one expense there ("App check"), which the web's Pot page then shows — the
-  check that both clients read and write one format. It leaves that entry behind in the dev instance.
+  `--tests '*PotLiveTest*'` opens every seeded Pot and checks its revisions open, its ledger check passes, its balances
+  sum to zero and its space's members read by name; with `VEYQ_LIVE_POT_WRITE=<pot name>` it adds one expense there
+  ("App check"), which the web's Pot page then shows — the check that both clients read and write one format. It leaves
+  that entry behind in the dev instance. `VEYQ_LIVE_POT_PEOPLE=<pot name>` adds a person there, renames, deactivates and
+  removes them (only the erasure record stays); `VEYQ_LIVE_POT_SETTINGS=<pot name>` (a Pot without money entries) switches its
+  currency and back and adds an own category ("App category renamed", which stays: categories are never removed).
 - `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_SEED_TENANT="verein.localhost|Turnverein" ./gradlew :core:jvmTest --tests
   '*DevSecondTenantTest*'` — dev seeding, not a check: gives the seeded principal a second tenant (the seeder births only
   one), through the app's own suite, so the switcher has two to switch between. Skipped when it already exists.

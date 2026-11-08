@@ -42,6 +42,7 @@ import me.raddatz.veyq.mobile.api.models.LoginVerifyRequest
 import me.raddatz.veyq.mobile.api.models.MasterKeyWrap
 import me.raddatz.veyq.mobile.api.models.RefreshRequest
 import me.raddatz.veyq.mobile.api.models.ScopeSummary
+import me.raddatz.veyq.mobile.crypto.JoinRecords
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.IdentityPrivate
 import me.raddatz.veyq.mobile.crypto.OpenRefused
@@ -190,7 +191,9 @@ class VeyqAccount private constructor(
         val view = if (tenantScope == null || members == null) TenantView.unavailable(tenant.tenantId, suite)
         else TenantView.of(tenant.tenantId, members, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), suite, anchoring)
         others.forEach { openOne(it, view) }
-        return TenantSession(this, tenant, base, open, off, closed)
+        val people = if (tenantScope == null || members == null) emptyMap()
+        else People.of(JoinRecords(suite), tenant.tenantId, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), members)
+        return TenantSession(this, tenant, base, open, off, closed, people)
     }
 
     /** A grant of a scope key to this account itself, as a scope's birth posts it (ADR 0028 decision 6), all base64. */
@@ -590,6 +593,9 @@ class TenantSession internal constructor(
     private val applicationsOff: Set<String>,
     /** The scopes this tenant serves the account that stay closed, by id, and why (a grant refused or awaiting a key). */
     val closed: Map<String, GrantOutcome.Reason> = emptyMap(),
+    /** The tenant's members by user id, named by the display rule, as read when the tenant was opened; empty when this
+     *  account holds no tenant grant or the list did not read. A user it does not list is a former member. */
+    val people: Map<String, Person> = emptyMap(),
 ) : Library {
     internal class OpenScope(val summary: ScopeSummary, val key: ByteArray, val name: String)
 
@@ -600,6 +606,16 @@ class TenantSession internal constructor(
     override suspend fun spaces(): List<SpaceRef> = scopes.map { SpaceRef(it.summary.id, it.summary.kind.value, it.name) }
 
     private var tree: Map<String, List<OpenNode>>? = null
+
+    /**
+     * The CURRENT members of [scopeId] (a proposed member who has not accepted is none yet), named by the tenant's
+     * directory; null when the list does not read.
+     */
+    suspend fun scopeMembers(scopeId: String): List<Person>? {
+        val r = account.respond { api(::ScopesApi).listScopeMembers(scopeId) }
+        if (!r.success) return null
+        return r.body().filter { it.pendingConsent != true }.map { people[it.userId] ?: Person(it.userId, it.username, it.username) }
+    }
 
     /** Drops the read tree: the next [trees] reads every scope's again (a write met a re-keyed node). */
     internal fun forgetTree() {

@@ -77,7 +77,6 @@
     <string name="unlock_prompt_subtitle">Confirm it is you</string>
 
     <string name="pot_loading">Loading the pot…</string>
-    <string name="pot_not_ready">This pot has no base currency yet. Set one on the web.</string>
     <string name="pot_no_entries">No entries yet. Add the first one.</string>
     <string name="pot_add">Add entry</string>
     <string name="pot_expense_by">Expense by %1$s</string>
@@ -101,7 +100,6 @@
     <string name="pot_own_categories">Own categories</string>
     <string name="pot_ledger_missing">Changes to these entries are missing, so the balances may be wrong:</string>
     <string name="pot_ledger_unknown_entry">An entry this pot no longer shows</string>
-    <string name="pot_settings_hint">People and categories are changed on the web for now.</string>
     <string name="entry_title">Title</string>
     <string name="entry_amount">Amount</string>
     <string name="entry_paid_by">Paid by</string>
@@ -120,4 +118,36 @@
     <string name="cat_household">Household</string>
     <string name="cat_other">Other</string>
     <string name="cat_unknown">Unknown category</string>
+    <string name="people_name">Name</string>
+    <string name="people_add">Add person</string>
+    <string name="people_rename">Rename %1$s</string>
+    <string name="people_inactive">deactivated</string>
+    <string name="people_activate">Activate</string>
+    <string name="people_deactivate">Deactivate</string>
+    <string name="people_delete">Delete %1$s</string>
+    <string name="people_delete_accept">Delete</string>
+    <string name="people_delete_confirm">Their name is erased. Entries show them as “deleted people”. This can’t be undone.</string>
+    <string name="people_remove">Remove %1$s</string>
+    <string name="people_remove_accept">Remove</string>
+    <string name="people_remove_confirm">No entry names them, so they disappear from the pot. This can’t be undone.</string>
+    <string name="people_settle_first">A person can be deactivated or deleted once their balance is settled.</string>
+    <string name="people_choose_member">A member of this space</string>
+    <string name="people_add_member">Add member</string>
+    <string name="people_former_member">former member</string>
+    <string name="people_invalid">Check the name: 1 to 100 characters.</string>
+    <string name="people_failed">The change was not saved. Please try again.</string>
+    <string name="pot_busy">The pot’s key is being renewed. Try again in a moment.</string>
+    <string name="pot_blocked">The operator blocked this pot.</string>
+    <plurals name="people_deleted_summary">
+        <item quantity="one">One deleted person.</item>
+        <item quantity="other">%1$d deleted people.</item>
+    </plurals>
+    <string name="settings_missing">This pot has no base currency yet. Pick one to record entries.</string>
+    <string name="settings_missing_read_only">This pot has no base currency yet, so it shows no entries.</string>
+    <string name="settings_currency_fixed">Fixed: the pot holds entries.</string>
+    <string name="settings_currency_hint">Every balance is in this currency. It is fixed once the first entry is saved.</string>
+    <string name="settings_categories_hint">Added here, they can be picked for every entry of this pot. They can be renamed, not removed.</string>
+    <string name="settings_category_name">Category name</string>
+    <string name="settings_add_category">Add category</string>
+    <string name="settings_rename_category">Rename %1$s</string>
 </resources>

@@ -75,7 +75,6 @@
     <string name="unlock_prompt_subtitle">Bestätige, dass du es bist</string>
 
     <string name="pot_loading">Kasse wird geladen…</string>
-    <string name="pot_not_ready">Diese Kasse hat noch keine Basiswährung. Lege sie im Web fest.</string>
     <string name="pot_no_entries">Noch keine Einträge. Füge den ersten hinzu.</string>
     <string name="pot_add">Eintrag hinzufügen</string>
     <string name="pot_expense_by">Ausgabe von %1$s</string>
@@ -99,7 +98,6 @@
     <string name="pot_own_categories">Eigene Kategorien</string>
     <string name="pot_ledger_missing">Änderungen an diesen Einträgen fehlen, die Salden können also falsch sein:</string>
     <string name="pot_ledger_unknown_entry">Ein Eintrag, den diese Kasse nicht mehr zeigt</string>
-    <string name="pot_settings_hint">Personen und Kategorien änderst du vorerst im Web.</string>
     <string name="entry_title">Titel</string>
     <string name="entry_amount">Betrag</string>
     <string name="entry_paid_by">Bezahlt von</string>
@@ -118,4 +116,36 @@
     <string name="cat_household">Haushalt</string>
     <string name="cat_other">Sonstiges</string>
     <string name="cat_unknown">Unbekannte Kategorie</string>
+    <string name="people_name">Name</string>
+    <string name="people_add">Person hinzufügen</string>
+    <string name="people_rename">%1$s umbenennen</string>
+    <string name="people_inactive">deaktiviert</string>
+    <string name="people_activate">Aktivieren</string>
+    <string name="people_deactivate">Deaktivieren</string>
+    <string name="people_delete">%1$s löschen</string>
+    <string name="people_delete_accept">Löschen</string>
+    <string name="people_delete_confirm">Der Name wird gelöscht. Einträge zeigen die Person als „gelöschte Personen“. Das lässt sich nicht rückgängig machen.</string>
+    <string name="people_remove">%1$s entfernen</string>
+    <string name="people_remove_accept">Entfernen</string>
+    <string name="people_remove_confirm">Kein Eintrag nennt die Person, sie verschwindet also aus der Kasse. Das lässt sich nicht rückgängig machen.</string>
+    <string name="people_settle_first">Eine Person lässt sich deaktivieren oder löschen, sobald ihr Saldo ausgeglichen ist.</string>
+    <string name="people_choose_member">Ein Mitglied dieses Bereichs</string>
+    <string name="people_add_member">Mitglied hinzufügen</string>
+    <string name="people_former_member">ehemaliges Mitglied</string>
+    <string name="people_invalid">Prüfe den Namen: 1 bis 100 Zeichen.</string>
+    <string name="people_failed">Die Änderung wurde nicht gespeichert. Bitte versuche es erneut.</string>
+    <string name="pot_busy">Der Schlüssel der Kasse wird gerade erneuert. Versuche es gleich noch einmal.</string>
+    <string name="pot_blocked">Der Betreiber hat diese Kasse gesperrt.</string>
+    <plurals name="people_deleted_summary">
+        <item quantity="one">Eine gelöschte Person.</item>
+        <item quantity="other">%1$d gelöschte Personen.</item>
+    </plurals>
+    <string name="settings_missing">Diese Kasse hat noch keine Basiswährung. Wähle eine, um Einträge zu erfassen.</string>
+    <string name="settings_missing_read_only">Diese Kasse hat noch keine Basiswährung und zeigt deshalb keine Einträge.</string>
+    <string name="settings_currency_fixed">Steht fest: Die Kasse hat Einträge.</string>
+    <string name="settings_currency_hint">Alle Salden sind in dieser Währung. Sie steht fest, sobald der erste Eintrag gespeichert ist.</string>
+    <string name="settings_categories_hint">Hier hinzugefügt, lassen sie sich für jeden Eintrag dieser Kasse wählen. Sie lassen sich umbenennen, nicht entfernen.</string>
+    <string name="settings_category_name">Name der Kategorie</string>
+    <string name="settings_add_category">Kategorie hinzufügen</string>
+    <string name="settings_rename_category">%1$s umbenennen</string>
 </resources>

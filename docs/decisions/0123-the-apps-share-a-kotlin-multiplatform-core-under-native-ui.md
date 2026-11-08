@@ -114,7 +114,15 @@ implementation exists but what holds it to the first.
 ## Consequences
 
 - **Built of the applications: Expenses' open Pot** — its entries, overview and settings as the web's Pot shows them,
-  and a plain expense (one payer, split equally) added. `core/…/expenses` ports the web's domain (the revision codec and
+  a plain expense (one payer, split equally) added, and its people managed as the web's people panel does (a name or a
+  space member added, a name renamed, a settled person deactivated, deleted or removed; `PotViewPeopleTest`), a member
+  read by the current name core's directory opens (`session/People.kt`, the web's `core/people/directory.ts`: the
+  `member-name` field under its value key, from the tenant's member list), and its settings written as the web's settings
+  panel does (the base currency while the Pot holds no money entry — a Pot without settings gets one this way —, its own
+  categories added and renamed) through core's sealed-meta write (`session/NodeMetaWrite.kt`, the web's
+  `writeSealedMeta`: only an absent blob is fresh, a `409 stale_revision` re-runs only the writer's own change on what the
+  server holds; `NodeMetaWriteTest`). A currency's minor units are the platform's (`java.util.Currency`,
+  `NumberFormatter`) where the web asks `Intl`; the Pot stores them, so a disagreement is never read twice differently. `core/…/expenses` ports the web's domain (the revision codec and
   its pad, the v1 format, the exact arithmetic on an integer type of its own, `Big`, held to `java.math.BigInteger`,
   the ledger, the heads), held to `contracts/expenses/v1-vectors.json` and the rules the vectors do not reach
   (`ExpensesVectorsTest`, `LedgerRulesTest`, each rule killed by a mutation); the web and the app read and write the
@@ -126,7 +134,7 @@ implementation exists but what holds it to the first.
   app drives no re-key, so where the web's member pulls a Pot's path forward (ADR 0111 decision 11) it waits, as the web's
   guest does; and it re-opens no scope rotated after the tenant was read, so a Pot re-keyed past that read is not found
   again and the write is refused until the app reads the tenant anew.
-- **Not built yet:** every other write (a new node, a refund, a transfer, people, the Pot's settings, receipts), the
+- **Not built yet:** every other write (a new node, a refund, a transfer, receipts), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
   of signers, end unanchored through the signer's own judgment) — and by `v1.json#key_chain`, `#identity_pin`,

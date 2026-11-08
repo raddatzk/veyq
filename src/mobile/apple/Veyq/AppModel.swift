@@ -403,6 +403,25 @@ final class AppModel {
         }
     }
 
+    /// One write to the open Pot (`op` on its session): it shows saving, then the Pot as read after it, and a refusal as its
+    /// message (a `WriteOutcome` name); true once stored.
+    @discardableResult
+    func potWrite(_ op: @escaping @MainActor (PotSession) async throws -> PotSession.WriteOutcome) async -> Bool {
+        guard var state = pot, let session = potSession else { return false }
+        state.saving = true
+        state.message = nil
+        pot = state
+        let outcome = (try? await op(session)) ?? .refused
+        state.view = PotView(session: session)
+        state.saving = false
+        state.message = outcome == .written ? nil : outcome.name
+        pot = state
+        return outcome == .written
+    }
+
+    /// Forgets the open Pot's last refusal (a sheet closed).
+    func clearPotMessage() { pot?.message = nil }
+
     /// Adds an expense to the open Pot, paid by `payer`, split equally among `beneficiaries`, dated today; true once stored.
     func addExpense(title: String, amount: String, payer: String, beneficiaries: [String], category: String) async -> Bool {
         guard var state = pot, let session = potSession else { return false }

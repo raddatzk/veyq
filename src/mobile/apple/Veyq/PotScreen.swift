@@ -13,13 +13,13 @@ struct PotScreen: View {
         Group {
             if let state = model.pot, state.ref == ref, let view = state.view {
                 if !view.ready {
-                    ContentUnavailableView("No base currency yet", systemImage: "wallet.bifold", description: Text("Set one for this pot on the web."))
+                    PotSettings(model: model, view: view)
                 } else {
                     VStack(spacing: 0) {
                         if !view.missing.isEmpty { LedgerNotice(view: view) }
                         switch tab {
                         case "expenses.overview": OverviewList(view: view)
-                        case "expenses.settings": SettingsList(view: view)
+                        case "expenses.settings": PotSettings(model: model, view: view)
                         default: EntriesList(view: view, onAdd: { adding = true })
                         }
                     }
@@ -207,26 +207,6 @@ private struct OverviewList: View {
                         .listRowBackground(Role.surface)
                 } header: { SectionLabel(title: "By category") }
             }
-        }
-        .scrollContentBackground(.hidden)
-    }
-}
-
-private struct SettingsList: View {
-    let view: PotView
-
-    var body: some View {
-        List {
-            Section { Text(view.currency ?? "").listRowBackground(Role.surface) } header: { SectionLabel(title: "Base currency") }
-            Section {
-                ForEach(view.people, id: \.id) { Text($0.name).listRowBackground(Role.surface) }
-            } header: { SectionLabel(title: "People") }
-            if !view.ownCategories.isEmpty {
-                Section {
-                    ForEach(Array(view.ownCategories.enumerated()), id: \.offset) { _, c in Text(c.second as String? ?? "").listRowBackground(Role.surface) }
-                } header: { SectionLabel(title: "Own categories") }
-            }
-            Section { } footer: { Text("People and categories are changed on the web for now.") }
         }
         .scrollContentBackground(.hidden)
     }

@@ -4,6 +4,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * A Pot's settings — its base currency and its own categories — as the `pot` object of the node's sealed meta, a port of
@@ -14,10 +18,25 @@ data class PotMeta(val base: Ledger.BaseCurrency, val categories: List<Pair<Stri
     /** A category's name: a default's id (the platform translates it) or the Pot's own name, null for an unknown own id. */
     fun ownName(id: String): String? = categories.firstOrNull { it.first == id }?.second
 
+    /** The `pot` object a writer stores (`potMetaObject`), held to the reader first: a writer never seals what its
+     *  reader refuses ([IllegalArgumentException] then). */
+    fun toJson(): JsonObject {
+        val out = buildJsonObject {
+            put("v", 1)
+            put("baseCurrency", base.currency)
+            put("baseMinorUnits", base.minorUnits)
+            if (categories.isNotEmpty()) put("categories", buildJsonArray {
+                for ((id, name) in categories) add(buildJsonObject { put("id", id); put("name", name) })
+            })
+        }
+        read(out)
+        return out
+    }
+
     companion object {
         const val KEY = "pot"
-        private const val MAX_OWN = 200
-        private const val MAX_NAME = 100
+        const val MAX_OWN = 200
+        const val MAX_NAME = 100
 
         /** The `pot` object of an opened node-meta envelope, or null when it carries none that reads. */
         fun of(envelope: JsonObject): PotMeta? = runCatching { read(envelope[KEY]) }.getOrNull()

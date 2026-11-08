@@ -71,13 +71,13 @@ fun PotScreen(ref: ObjectRef, tab: BarTab?, model: AppModel) {
     when {
         s == null || (view == null && !s.failed) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         view == null -> Note(stringResource(R.string.list_empty))
-        !view.ready -> Note(stringResource(R.string.pot_not_ready))
+        !view.ready -> PotSettings(view, s, model)
         else -> Column(Modifier.fillMaxSize()) {
             if (view.missing.isNotEmpty()) LedgerNotice(view)
             Box(Modifier.weight(1f)) {
                 when (tab?.key) {
                     "expenses.overview" -> Overview(view)
-                    "expenses.settings" -> Settings(view)
+                    "expenses.settings" -> PotSettings(view, s, model)
                     else -> Entries(view, s, model)
                 }
             }
@@ -310,18 +310,3 @@ private fun Overview(view: PotView) {
     }
 }
 
-@Composable
-private fun Settings(view: PotView) {
-    val palette = LocalPalette.current
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Section(stringResource(R.string.pot_base_currency))
-        Text(view.currency ?: "")
-        Section(stringResource(R.string.pot_people))
-        view.people.forEach { Text(it.name) }
-        if (view.ownCategories.isNotEmpty()) {
-            Section(stringResource(R.string.pot_own_categories))
-            view.ownCategories.forEach { Text(it.second) }
-        }
-        Text(stringResource(R.string.pot_settings_hint), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(top = 16.dp))
-    }
-}
