@@ -20,8 +20,8 @@ export function getMyProfile(): Promise<MemberProfile> {
   return withRefresh(() => accountProfileApi().getMyProfile())
 }
 
-/** Update the caller's username, sealed name, and/or the account-global group-add consent preference (cr-0094) —
- *  each may be omitted to leave it unchanged. A sealed name comes with its value key's wrap ({@link sealName}, ADR 0115)
+/** Update the caller's username, sealed name, the account-global group-add consent preference (cr-0094) and/or the
+ *  account-global donation-banner dismissal (ADR 0124) — each may be omitted to leave it unchanged. A sealed name comes with its value key's wrap ({@link sealName}, ADR 0115)
  *  and states the tenant epoch that wrap is under (`epoch`, decision 3): another than the tenant's current one is `409
  *  stale_epoch`. */
 export function updateMyProfile(update: {
@@ -30,6 +30,7 @@ export function updateMyProfile(update: {
   wrappedNameValueKey?: string
   epoch?: number
   requireGroupAddConsent?: boolean
+  donationBannerDismissed?: boolean
 }): Promise<MemberProfile> {
   return withRefresh(() => accountProfileApi().updateMyProfile({ profileUpdateRequest: update }))
 }

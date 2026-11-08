@@ -93,6 +93,8 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
   decision 21).
 - **Per member, per tenant:** the username, the identity public key and the group-add-consent flag. Any fellow
   tenant member can enumerate these (concession 4 below).
+- **Per account:** whether its holder dismissed the donation banner. Only the holder is served it; a guest's dismissal
+  stays in their browser.
 - **Who verified whom:** per verification, its tenant, the verifying and the verified member and when it was written
   (its content is sealed, above), served to the tenant's members
   ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)

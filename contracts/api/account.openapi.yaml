@@ -1988,7 +1988,7 @@ components:
     MemberProfile:
       type: object
       description: The caller's per-tenant identity — a plaintext handle + the sealed real name (ADR 0023).
-      required: [username, avatarRevision, requireGroupAddConsent]
+      required: [username, avatarRevision, requireGroupAddConsent, donationBannerDismissed]
       properties:
         username:
           x-veyq-visibility: pii
@@ -2035,13 +2035,22 @@ components:
             metadata (never a key or content): a GroupOwner attempting an add learns *that* the caller wants to be
             asked, and their add becomes a consent proposal instead of a direct-add.
           example: false
+        donationBannerDismissed:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether the caller dismissed veyq's donation banner (uc.platform.support-the-project, ADR 0124) — default
+            `false`. **Account-global**, like `requireGroupAddConsent`: a dismissal holds in every tenant and on every
+            device. Low-sensitivity server-visible operational metadata (never a key or content): the operator learns
+            that the account holder dismissed the banner, nothing else. Served only to the account holder.
+          example: false
 
     ProfileUpdateRequest:
       type: object
       description: >
         A profile change — set the `username` (re-checked unique in the tenant), the `sealedName` blob with its value
-        key's wrap and the `epoch` that wrap is under, and/or the account-global `requireGroupAddConsent` preference.
-        Omit a field to leave it unchanged.
+        key's wrap and the `epoch` that wrap is under, and/or the account-global `requireGroupAddConsent` preference
+        and `donationBannerDismissed` flag. Omit a field to leave it unchanged.
       # A `sealedName` brings its `epoch` and its wrap, and a wrap its `sealedName` (AccountProfileHandler.update's shape
       # check, 400 before any answer about the instance's state). The server reads a `null` as the field's absence, so
       # a `null` brings nothing and is brought by nothing: `dependentSchemas` on a non-null value, never
@@ -2110,6 +2119,13 @@ components:
             The account-global "ask before adding me to groups" preference (uc.spaces.consent-group-add). `true`
             turns a GroupOwner's add into a consent proposal; `false` restores the default direct-add. Omit
             (`null`) to leave it unchanged.
+          example: true
+        donationBannerDismissed:
+          x-veyq-visibility: flag
+          type: [boolean, "null"]
+          description: >
+            The account-global donation-banner dismissal (uc.platform.support-the-project, ADR 0124). `true` records
+            that the caller dismissed the banner; omit (`null`) to leave it unchanged.
           example: true
 
     SetAvatarRequest:
