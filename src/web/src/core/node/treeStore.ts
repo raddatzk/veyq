@@ -37,6 +37,12 @@ let generation = 0
 let shown: string | null = null
 let shownTag: string | null = null
 
+/** The tree revision (`ETag`) the rows `treeStore.nodes` holds were read at, or null: the search keeps the active space's
+ *  documents with it, so a later read of that space after the member left it revalidates instead of reading it whole. */
+export function shownTreeTag(): string | null {
+  return shownTag
+}
+
 /** (Re)load the active scope's tree. No-op if no space is open. */
 export async function loadTree(): Promise<void> {
   const epochs = activeEpochKeys()

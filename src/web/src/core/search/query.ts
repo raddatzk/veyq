@@ -1,0 +1,173 @@
+// The query (ADR 0125 decision 4, uc.platform.search steps 4-5): one text, and chips - each a typed predicate over a
+// document's fields, never text. Pure functions over documents; nothing here reads the network, a key or any storage.
+//
+// **Chips from the typed text.** Every tail of the text that starts at a word - "rom anna sch", "anna sch", "sch" - is read
+// against what the index knows: four digits are a year; a prefix of a word of a member's name is that person; of a place a
+// document carries, that place; of a space's name, that space; of a kind's word, that kind. Choosing one turns that tail
+// into the chip and the rest stays text.
+//
+// **Matching and ranking.** A document matches when it satisfies every chip and the folded remaining text matches its name
+// (exact, prefix, the start of a word, anywhere - in that rank) or, ranked after every name match, one of its places. Equal
+// ranks are ordered by the name's collation.
+import { fold } from '../../shared/text/fold'
+import { yearsOf, type SearchDocument } from './model'
+
+export type SearchChip =
+  | { type: 'space'; scopeId: string; label: string }
+  | { type: 'year'; year: number }
+  /** `place` folded; `label` as a document names it. */
+  | { type: 'place'; place: string; label: string }
+  | { type: 'person'; userId: string; label: string }
+  /** Every kind whose word is `label`. */
+  | { type: 'kind'; kinds: readonly string[]; label: string }
+
+export interface SearchQuery {
+  chips: readonly SearchChip[]
+  text: string
+}
+
+/** A chip's identity: two chips of one key are the same predicate. */
+export function chipKey(chip: SearchChip): string {
+  switch (chip.type) {
+    case 'space':
+      return `space:${chip.scopeId}`
+    case 'year':
+      return `year:${chip.year}`
+    case 'place':
+      return `place:${chip.place}`
+    case 'person':
+      return `person:${chip.userId}`
+    case 'kind':
+      return `kind:${[...chip.kinds].sort().join(',')}`
+  }
+}
+
+/** What a chip may be suggested from. */
+export interface ChipSources {
+  documents: readonly SearchDocument[]
+  spaces: readonly { scopeId: string; label: string }[]
+  people: readonly { userId: string; name: string }[]
+  /** Each kind word with the kinds it names. */
+  kinds: readonly { label: string; kinds: readonly string[] }[]
+}
+
+/** A chip offered for the typed text: `text` is what stays once it is chosen. */
+export interface ChipSuggestion {
+  chip: SearchChip
+  text: string
+}
+
+const MIN_TAIL = 2
+const PER_TYPE = 3
+const YEAR = /^\d{4}$/
+
+/** Whether `name` (folded) has a word that starts with `prefix` (folded), the whole name included. */
+function wordPrefix(name: string, prefix: string): boolean {
+  if (name.startsWith(prefix)) return true
+  for (let i = name.indexOf(prefix); i > 0; i = name.indexOf(prefix, i + 1)) if (isBoundary(name, i)) return true
+  return false
+}
+
+const isBoundary = (s: string, i: number) => i === 0 || !/[\p{L}\p{N}]/u.test(s[i - 1])
+
+/** The tails of `text` that start at a word, longest first, each with what stays before it. */
+function tailsOf(text: string): { tail: string; rest: string }[] {
+  const out: { tail: string; rest: string }[] = []
+  const re = /\S+/g
+  for (let m = re.exec(text); m; m = re.exec(text)) out.push({ tail: text.slice(m.index).trim(), rest: text.slice(0, m.index).trimEnd() })
+  return out
+}
+
+/** The chips offered for `text` (see the header), none already among `chips`; at most a few per type. */
+export function suggestChips(text: string, chips: readonly SearchChip[], sources: ChipSources): ChipSuggestion[] {
+  const taken = new Set(chips.map(chipKey))
+  const seen = new Set<string>()
+  const byType: Record<SearchChip['type'], ChipSuggestion[]> = { year: [], person: [], place: [], space: [], kind: [] }
+  const offer = (s: ChipSuggestion) => {
+    const key = chipKey(s.chip)
+    if (taken.has(key) || seen.has(key) || byType[s.chip.type].length >= PER_TYPE) return
+    seen.add(key)
+    byType[s.chip.type].push(s)
+  }
+  const tails = tailsOf(text)
+  const last = tails.at(-1)
+  if (last && YEAR.test(last.tail)) offer({ chip: { type: 'year', year: Number(last.tail) }, text: last.rest })
+  const places = placesOf(sources.documents)
+  for (const { tail, rest } of tails) {
+    const t = fold(tail)
+    if (t.length < MIN_TAIL) continue
+    for (const p of sources.people) if (wordPrefix(fold(p.name), t)) offer({ chip: { type: 'person', userId: p.userId, label: p.name }, text: rest })
+    for (const [place, label] of places) if (wordPrefix(place, t)) offer({ chip: { type: 'place', place, label }, text: rest })
+    for (const s of sources.spaces) if (wordPrefix(fold(s.label), t)) offer({ chip: { type: 'space', scopeId: s.scopeId, label: s.label }, text: rest })
+    for (const k of sources.kinds) if (wordPrefix(fold(k.label), t)) offer({ chip: { type: 'kind', kinds: k.kinds, label: k.label }, text: rest })
+  }
+  return [...byType.year, ...byType.person, ...byType.place, ...byType.space, ...byType.kind]
+}
+
+/** Every place the documents name, folded → as first named. */
+function placesOf(docs: readonly SearchDocument[]): Map<string, string> {
+  const places = new Map<string, string>()
+  for (const d of docs) d.foldedPlaces.forEach((p, i) => {
+    if (p && !places.has(p)) places.set(p, d.facets.places![i])
+  })
+  return places
+}
+
+/** Whether `doc` satisfies `chip`. */
+export function satisfies(doc: SearchDocument, chip: SearchChip): boolean {
+  switch (chip.type) {
+    case 'space':
+      return doc.scopeId === chip.scopeId
+    case 'year': {
+      const years = yearsOf(doc)
+      return !!years && years.from <= chip.year && chip.year <= years.to
+    }
+    case 'place':
+      return doc.foldedPlaces.includes(chip.place)
+    case 'person':
+      return !!doc.facets.people?.includes(chip.userId)
+    case 'kind':
+      return chip.kinds.includes(doc.kind)
+  }
+}
+
+/** The ranks of a text match, best first. */
+export const Rank = { exact: 0, prefix: 1, wordStart: 2, inside: 3, place: 4 } as const
+
+/** How `doc` matches the folded text `t`, or null when it does not; an empty text matches every document at the best rank. */
+export function textRank(doc: SearchDocument, t: string): number | null {
+  if (!t) return Rank.exact
+  const name = doc.foldedName
+  if (name === t) return Rank.exact
+  if (name.startsWith(t)) return Rank.prefix
+  if (wordPrefix(name, t)) return Rank.wordStart
+  if (name.includes(t)) return Rank.inside
+  const words = t.split(/\s+/).filter(Boolean)
+  if (words.length > 1 && words.every((w) => name.includes(w))) return Rank.inside
+  if (doc.foldedPlaces.some((p) => p.includes(t))) return Rank.place
+  return null
+}
+
+/** A document that matched, with its rank. */
+export interface Match {
+  doc: SearchDocument
+  rank: number
+}
+
+/** The documents matching `query`, unordered. A query with neither a chip nor text matches nothing. */
+export function matchAll(docs: readonly SearchDocument[], query: SearchQuery): Match[] {
+  const t = fold(query.text.trim()).replace(/\s+/g, ' ')
+  if (!t && query.chips.length === 0) return []
+  const out: Match[] = []
+  for (const doc of docs) {
+    if (!query.chips.every((c) => satisfies(doc, c))) continue
+    const rank = textRank(doc, t)
+    if (rank !== null) out.push({ doc, rank })
+  }
+  return out
+}
+
+/** Order matches within a group: rank, then the name's collation, then the id (a stable answer for equal names). */
+export function byRank(collator: Intl.Collator): (a: Match, b: Match) => number {
+  return (a, b) => a.rank - b.rank || collator.compare(a.doc.name, b.doc.name) || (a.doc.id < b.doc.id ? -1 : a.doc.id > b.doc.id ? 1 : 0)
+}

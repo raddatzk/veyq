@@ -1,0 +1,60 @@
+// The results, grouped by where the member stands (ADR 0125 decision 5, uc.platform.search step 6): the open node first -
+// what its page contributed and the nodes below it -, then the rest of the active space, then every other space. Ranking
+// happens within a group only (`query.ts`); a group with nothing is left out, so its heading never says "none".
+import { byRank, matchAll, type Match, type SearchQuery } from './query'
+import type { SearchDocument } from './model'
+import type { TreeNode } from '../node/tree'
+
+export type SearchGroupId = 'open' | 'space' | 'other'
+
+export interface SearchGroup {
+  id: SearchGroupId
+  /** Every match of the group, ranked. */
+  results: readonly SearchDocument[]
+}
+
+/** Where the member stands. */
+export interface SearchContext {
+  /** The space on screen, or null (no space open). */
+  activeScopeId: string | null
+  /** The node whose page is on screen (not a folder level), in the active space, or null. */
+  openNodeId: string | null
+  /** The active space's tree, to tell what lies below the open node. */
+  activeTree: readonly TreeNode[]
+}
+
+/** The ids of every node below `nodeId` in `tree` (not the node itself). */
+export function descendantsOf(tree: readonly TreeNode[], nodeId: string): Set<string> {
+  const children = new Map<string, string[]>()
+  for (const n of tree) if (n.parentId) children.set(n.parentId, [...(children.get(n.parentId) ?? []), n.id])
+  const out = new Set<string>()
+  const stack = [...(children.get(nodeId) ?? [])]
+  while (stack.length) {
+    const id = stack.pop()!
+    if (out.has(id)) continue
+    out.add(id)
+    stack.push(...(children.get(id) ?? []))
+  }
+  return out
+}
+
+/**
+ * The matches of `query` in `docs`, grouped (see the header). A contributed document counts only for the node it was
+ * contributed for, and only while that node is the one open in the active space: a page left behind contributes nothing.
+ */
+export function searchGroups(docs: readonly SearchDocument[], query: SearchQuery, ctx: SearchContext, collator: Intl.Collator): SearchGroup[] {
+  const below = ctx.openNodeId ? descendantsOf(ctx.activeTree, ctx.openNodeId) : new Set<string>()
+  const groups: Record<SearchGroupId, Match[]> = { open: [], space: [], other: [] }
+  for (const m of matchAll(docs, query)) {
+    const d = m.doc
+    if (d.open) {
+      if (ctx.openNodeId && d.scopeId === ctx.activeScopeId && d.nodeId === ctx.openNodeId) groups.open.push(m)
+    } else if (d.scopeId !== ctx.activeScopeId) groups.other.push(m)
+    else if (below.has(d.id)) groups.open.push(m)
+    else groups.space.push(m)
+  }
+  const order = byRank(collator)
+  return (['open', 'space', 'other'] as const)
+    .filter((id) => groups[id].length > 0)
+    .map((id) => ({ id, results: groups[id].sort(order).map((m) => m.doc) }))
+}

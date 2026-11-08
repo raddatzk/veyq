@@ -143,6 +143,7 @@ import { slugify } from '../../shared/naming'
 import type { VeyqIconName } from '../../shared/ui/icons'
 import type { ExportContentHook, ImportContentHook } from '../export/hooks'
 import type { ManifestContent } from '../export/manifest'
+import type { SearchFacets } from '../search/model'
 
 // The platform's own share dialog for a FOLDER (uc.sharing.share-public-viewer:folder-share-root), FOLDER's
 // `shareDialog` since P4c. LAZY for a reason: the dialog's module graph reaches this registry again (measured:
@@ -246,6 +247,11 @@ export interface KindDescriptor {
    *  `cover` in `contracts/platform/kinds/<owner>.json` (`kindsContract.test.ts`). Omitted: no
    *  cover, no action. FOLDER's is core's own, pre-registered. */
   cover?: KindCover
+  /** What the search knows of a node of this kind beyond its name (ADR 0125 decision 6): the kind's word for a kind chip,
+   *  the facets core asks for while it holds the node's key, and the kinds of the documents the kind's page contributes for
+   *  the node on screen (`core/search/contribution.ts`). Omitted: the node is found by its name alone and offers no kind
+   *  chip. FOLDER's is core's own, pre-registered. */
+  search?: KindSearch
   /** Export and import of this kind's CONTENT (ADR 0082): core walks the subtree and writes / reads the archive; the kind
    *  says what its content is. A kind with neither is left out of an export (with its subtree) and reported. FOLDER needs
    *  neither: it has no content. */
@@ -303,6 +309,40 @@ export interface KindCover {
    *  image derived at core's cover spec (Memories: the PREVIEW of a gallery medium whose original equals the file). Null:
    *  none, and the cover is uploaded. Best-effort - a failure is null. Omitted: every cover is uploaded. */
   findStored?(ctx: CoverFindContext): Promise<StoredBlob | null>
+}
+
+/** A kind's part in the search (ADR 0125 decision 6; `KindDescriptor.search`). */
+export interface KindSearch {
+  /** The i18n key, of the application's own namespace, of the kind's noun ("Memory"): what a kind chip says and matches. */
+  label: string
+  /**
+   * The facets of one node of the kind - a Memory's date range, place and participants. Core calls it while it holds the
+   * tree's keys, once per sealed meta (a document whose `wrappedMeta` did not change keeps its facets), and zeroes the keys
+   * after the walk: the hook keeps none, and anything it returns is plaintext the search holds in memory only. A throw is
+   * no facets. Omitted: none.
+   */
+  facets?(ctx: SearchFacetContext): SearchFacets
+  /** The kinds of the documents the kind's page contributes for its node (Memories: a photo, a video): each one's word for a
+   *  kind chip and its icon in a result row. */
+  documents?: readonly SearchDocumentKind[]
+}
+
+/** A contributed document kind (`KindSearch.documents`). */
+export interface SearchDocumentKind {
+  /** The document's `kind` token, the application's own (`memories.photo`). */
+  kind: string
+  /** The i18n key of its noun, of the application's own namespace. */
+  label: string
+  icon: VeyqIconName
+}
+
+/** What a kind's `search.facets` is handed: the node and, for that call only, its key and its parent's (the scope key at the
+ *  scope root). */
+export interface SearchFacetContext {
+  scopeId: string
+  node: TreeNode
+  nodeKey: Uint8Array
+  parentKey: Uint8Array
 }
 
 /** What a kind's `cover.findStored` is handed: the node, its key and the picked file. */
@@ -691,7 +731,7 @@ export function createRegistry(): Registry {
       kind: FOLDER_KIND, icon: 'folder', header: { order: ['favorite', 'share', 'download', 'move', 'copy'] },
       shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
       placement: { root: true, parents: [FOLDER_KIND] }, cover: {}, copyLosses: ['node.copy.lossFolderCover'],
-      rekeyContent: nothingOfItsOwnToRekey,
+      rekeyContent: nothingOfItsOwnToRekey, search: { label: 'node.kindFolder' },
     }],
   ])
   const lifecycles = new Map<string, LifecycleHooks>()

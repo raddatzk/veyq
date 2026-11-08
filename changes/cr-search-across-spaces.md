@@ -1,7 +1,7 @@
 ---
 id: cr-search-across-spaces
 title: One search field across every space of the tenant, with chips, grouped by context
-status: planned
+status: in-progress
 satisfies: [uc.platform.search]
 adrs: ["0125", "0079", "0081", "0105", "0047"]
 invariants:
