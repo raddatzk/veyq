@@ -10,11 +10,12 @@ import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
 
-/** Result of a profile read/update (cr-0083). `requireGroupAddConsent` is the account-global consent preference
- *  (cr-0094) surfaced here — the caller's own settings surface. */
+/** Result of a profile read/update (cr-0083). `requireGroupAddConsent` (the consent preference, cr-0094) and
+ *  `donationBannerDismissed` (ADR 0122) are account-global flags surfaced here — the caller's own settings surface. */
 sealed interface ProfileOutcome {
     data class Found(
         val username: String, val name: SealedValue?, val avatarRevision: Int, val requireGroupAddConsent: Boolean,
+        val donationBannerDismissed: Boolean,
     ) : ProfileOutcome
     // no tenant for the Host, or no profile there → 404
     data object NoTenant : ProfileOutcome, HttpFailure by httpFailure("profile_not_found", NOT_FOUND)
@@ -57,13 +58,16 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
     fun get(userId: String, tenantId: String?): ProfileOutcome {
         tenantId ?: return ProfileOutcome.NoTenant
         val profile = profiles.find(userId, tenantId) ?: return ProfileOutcome.NoTenant
-        val consent = VeyqUser.findById(userId)?.requireGroupAddConsent ?: false
-        return ProfileOutcome.Found(profile.username, storedName(profile.sealedName, profile.wrappedNameValueKey), profile.wireAvatarRevision(), consent)
+        val user = VeyqUser.findById(userId)
+        return ProfileOutcome.Found(
+            profile.username, storedName(profile.sealedName, profile.wrappedNameValueKey), profile.wireAvatarRevision(),
+            user?.requireGroupAddConsent ?: false, user?.donationBannerDismissed ?: false,
+        )
     }
 
     fun update(
         userId: String, tenantId: String?, username: String?, sealedName: String?, wrappedNameValueKey: String?, epoch: Int?,
-        requireGroupAddConsent: Boolean?,
+        requireGroupAddConsent: Boolean?, donationBannerDismissed: Boolean? = null,
     ): ProfileOutcome {
         // The request's own shape first (the contract's `dependentRequired`): a sealed name brings its wrap and its epoch.
         if (!SealedValue.pairs(sealedName, wrappedNameValueKey) || (sealedName != null && epoch == null)) return ProfileOutcome.InvalidRequest
@@ -72,7 +76,7 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
         // `ux_tp_tenant_username` lets one of two concurrent claims to a handle through; the loser answers as its
         // replay does — the handle is someone else's now.
         return createOrConflict(conflict = { if (takenByAnother(userId, tenantId, username)) ProfileOutcome.UsernameTaken else null }) {
-            applyUpdate(userId, tenantId, username, name, epoch, requireGroupAddConsent)
+            applyUpdate(userId, tenantId, username, name, epoch, requireGroupAddConsent, donationBannerDismissed)
         }
     }
 
@@ -83,6 +87,7 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
 
     private fun applyUpdate(
         userId: String, tenantId: String, username: String?, name: SealedValue?, epoch: Int?, requireGroupAddConsent: Boolean?,
+        donationBannerDismissed: Boolean?,
     ): ProfileOutcome {
         if (name != null && !profiles.atCurrentEpoch(tenantId, epoch!!)) return ProfileOutcome.StaleEpoch
         val existing = profiles.find(userId, tenantId) ?: return ProfileOutcome.NoTenant
@@ -93,11 +98,18 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
             if (norm != existing.username && profiles.usernameTaken(tenantId, norm)) return ProfileOutcome.UsernameTaken
         }
         profiles.update(userId, tenantId, username, name)
-        // The consent preference is account-global (cr-0094) — it lives on the user, not the per-tenant profile.
-        if (requireGroupAddConsent != null) VeyqUser.findById(userId)?.let { it.requireGroupAddConsent = requireGroupAddConsent }
+        // The consent preference (cr-0094) and the banner's dismissal (ADR 0122) are account-global — they live on the
+        // user, not the per-tenant profile. An omitted one is left as it is.
+        val user = VeyqUser.findById(userId)
+        if (user != null) {
+            if (requireGroupAddConsent != null) user.requireGroupAddConsent = requireGroupAddConsent
+            if (donationBannerDismissed != null) user.donationBannerDismissed = donationBannerDismissed
+        }
         val updated = profiles.find(userId, tenantId)!!
-        val consent = VeyqUser.findById(userId)?.requireGroupAddConsent ?: false
-        return ProfileOutcome.Found(updated.username, storedName(updated.sealedName, updated.wrappedNameValueKey), updated.wireAvatarRevision(), consent)
+        return ProfileOutcome.Found(
+            updated.username, storedName(updated.sealedName, updated.wrappedNameValueKey), updated.wireAvatarRevision(),
+            user?.requireGroupAddConsent ?: false, user?.donationBannerDismissed ?: false,
+        )
     }
 
     /** Set (overwrite) the caller's picture; the revision bump is the store's one guarded UPDATE. */
