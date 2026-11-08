@@ -99,6 +99,8 @@
     <string name="pot_base_currency">Base currency</string>
     <string name="pot_people">People</string>
     <string name="pot_own_categories">Own categories</string>
+    <string name="pot_ledger_missing">Changes to these entries are missing, so the balances may be wrong:</string>
+    <string name="pot_ledger_unknown_entry">An entry this pot no longer shows</string>
     <string name="pot_settings_hint">People and categories are changed on the web for now.</string>
     <string name="entry_title">Title</string>
     <string name="entry_amount">Amount</string>

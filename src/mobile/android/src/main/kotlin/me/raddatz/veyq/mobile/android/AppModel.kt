@@ -364,16 +364,16 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val session = potSession ?: return
         val amount = Amounts.parse(amountText, state.view?.minorUnits ?: 2)
         if (amount == null || title.isBlank() || beneficiaries.isEmpty()) {
-            _pot.value = state.copy(message = PotSession.AddOutcome.INVALID.name)
+            _pot.value = state.copy(message = PotSession.WriteOutcome.INVALID.name)
             return
         }
         _pot.value = state.copy(saving = true, message = null)
         viewModelScope.launch {
             val outcome = runCatching {
                 session.addExpense(title, amount, payer, beneficiaries, java.time.LocalDate.now().toString(), category)
-            }.getOrDefault(PotSession.AddOutcome.REFUSED)
-            _pot.value = state.copy(view = PotView(session), saving = false, message = outcome.takeIf { it != PotSession.AddOutcome.ADDED }?.name)
-            if (outcome == PotSession.AddOutcome.ADDED) done()
+            }.getOrDefault(PotSession.WriteOutcome.REFUSED)
+            _pot.value = state.copy(view = PotView(session), saving = false, message = outcome.takeIf { it != PotSession.WriteOutcome.WRITTEN }?.name)
+            if (outcome == PotSession.WriteOutcome.WRITTEN) done()
         }
     }
 

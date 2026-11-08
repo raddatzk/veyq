@@ -118,7 +118,14 @@ implementation exists but what holds it to the first.
   its pad, the v1 format, the exact arithmetic on an integer type of its own, `Big`, held to `java.math.BigInteger`,
   the ledger, the heads), held to `contracts/expenses/v1-vectors.json` and the rules the vectors do not reach
   (`ExpensesVectorsTest`, `LedgerRulesTest`, each rule killed by a mutation); the web and the app read and write the
-  same Pot to the cent (measured 2026-11-08, `PotLiveTest` beside the web's own page).
+  same Pot to the cent (measured 2026-11-08, `PotLiveTest` beside the web's own page). Every write takes the web's path:
+  a batch sealed on what is held under the client's rules (`expenses/PotWrites.kt`, the web's `sealPotWrites` and
+  `eraseParticipant`; `PotWritesTest`), sent at the Pot's epoch through core's `session/NodeEpochWrite.kt` (the device
+  floor, `node_rekey_pending`, `stale_epoch`; `NodeEpochWriteTest`), and every read checked for a revision dropped or
+  altered (`expenses/LedgerCheck.kt`, the web's `checkLedger`, its notice above the Pot; a live Pot checks complete). This
+  app drives no re-key, so where the web's member pulls a Pot's path forward (ADR 0111 decision 11) it waits, as the web's
+  guest does; and it re-opens no scope rotated after the tenant was read, so a Pot re-keyed past that read is not found
+  again and the write is refused until the app reads the tenant anew.
 - **Not built yet:** every other write (a new node, a refund, a transfer, people, the Pot's settings, receipts), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

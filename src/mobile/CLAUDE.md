@@ -28,7 +28,8 @@ A Gradle build of its own, run through its own wrapper.
   the case that refuses it: remove the rule and `GrantTrustTest` must go red. Expenses' arithmetic and format are held
   by `ExpensesVectorsTest` (`contracts/expenses/v1-vectors.json`, the crypto vectors' `expense-entry`) and
   `LedgerRulesTest`; `BigTest` holds `expenses/Big.kt` to `java.math.BigInteger`. A rule of `expenses/Ledger.kt` or
-  `Money.kt` changes only with the case that pins it.
+  `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
+  (`PotWritesTest`, over real seals) and of core's `session/NodeEpochWrite.kt` (`NodeEpochWriteTest`).
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,

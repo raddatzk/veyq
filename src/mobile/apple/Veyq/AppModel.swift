@@ -419,9 +419,9 @@ final class AppModel {
         )) ?? .refused
         state.view = PotView(session: session)
         state.saving = false
-        state.message = outcome == .added ? nil : outcome.name
+        state.message = outcome == .written ? nil : outcome.name
         pot = state
-        return outcome == .added
+        return outcome == .written
     }
 
     func choose(_ app: ApplicationId?) { shell = shell.choose(app: app); drawerOpen = false }

@@ -72,10 +72,32 @@ fun PotScreen(ref: ObjectRef, tab: BarTab?, model: AppModel) {
         s == null || (view == null && !s.failed) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         view == null -> Note(stringResource(R.string.list_empty))
         !view.ready -> Note(stringResource(R.string.pot_not_ready))
-        else -> when (tab?.key) {
-            "expenses.overview" -> Overview(view)
-            "expenses.settings" -> Settings(view)
-            else -> Entries(view, s, model)
+        else -> Column(Modifier.fillMaxSize()) {
+            if (view.missing.isNotEmpty()) LedgerNotice(view)
+            Box(Modifier.weight(1f)) {
+                when (tab?.key) {
+                    "expenses.overview" -> Overview(view)
+                    "expenses.settings" -> Settings(view)
+                    else -> Entries(view, s, model)
+                }
+            }
+        }
+    }
+}
+
+/** The ledger check's notice (ADR 0108 decision 5): what the read found missing or altered, so the balances may be wrong. */
+@Composable
+private fun LedgerNotice(view: PotView) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(stringResource(R.string.pot_ledger_missing), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        for (m in view.missing) {
+            val name = when (m.kind) {
+                PotView.MissingKind.TRANSFER -> stringResource(R.string.pot_transfer)
+                PotView.MissingKind.ERASED_PERSON -> stringResource(R.string.pot_deleted_person)
+                PotView.MissingKind.UNKNOWN -> stringResource(R.string.pot_ledger_unknown_entry)
+                else -> m.name
+            }
+            Text("• $name", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

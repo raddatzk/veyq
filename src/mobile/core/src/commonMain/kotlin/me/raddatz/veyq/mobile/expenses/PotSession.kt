@@ -6,27 +6,28 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.raddatz.veyq.mobile.api.expenses.apis.ExpensesApi
 import me.raddatz.veyq.mobile.api.expenses.models.PotAppendRequest
-import me.raddatz.veyq.mobile.api.expenses.models.PotRevisionWrite
 import me.raddatz.veyq.mobile.crypto.Context
-import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.hex
 import me.raddatz.veyq.mobile.crypto.unb64
+import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
+import me.raddatz.veyq.mobile.session.NodeEpochWrite
 import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.session.SignInFailure
 import me.raddatz.veyq.mobile.session.TenantSession
 
 /**
- * One Pot opened by a member, a port of the read and the add of `src/web/src/features/expenses/potSession.ts`: its
- * settings from the node's sealed meta, its revisions read page by page and merged by id, each opened at the address it
- * was read by, and the ledger over them. Expenses is an application: it uses core's session, never the reverse.
+ * One Pot opened by a member, a port of `src/web/src/features/expenses/potSession.ts`: its settings from the node's
+ * sealed meta, its revisions read page by page and merged by id, each opened at the address it was read by, the ledger
+ * and the ledger check over them, and every write. Expenses is an application: it uses core's session, never the reverse.
  */
-class PotSession private constructor(private val tenant: TenantSession, private val node: OpenNode) {
+class PotSession private constructor(private val tenant: TenantSession, private var node: OpenNode) {
     private val account = tenant.account
     private val codec = RevisionCodec(account.suite)
     private val api get() = ExpensesApi(tenant.base, account.http)
 
     /** The Pot's settings, or null when its meta carries none that reads (no balances, no money entries then). */
-    val meta: PotMeta? = openMeta()
+    var meta: PotMeta? = openMeta()
+        private set
 
     val name: String get() = node.name
 
@@ -39,8 +40,15 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     var ledger: Ledger.Pot? = null
         private set
 
+    /** What the last read found wrong with the ledger (ADR 0108 decision 5); complete for an empty Pot. */
+    var check: LedgerCheck = LedgerCheck.of(emptyList())
+        private set
+
     /** Whether this member may write here: Expenses is on for the tenant (a space pending deletion is not opened). */
     val canWrite: Boolean get() = meta != null && "expenses" !in tenant.applicationsOff()
+
+    /** The waits before each retry while the Pot is not re-keyed since a rotation (`REKEY_RETRY_DELAYS_MS`). */
+    internal var rekeyWaitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS
 
     private fun openMeta(): PotMeta? {
         val wrapped = node.wrappedMeta ?: return null
@@ -49,6 +57,9 @@ class PotSession private constructor(private val tenant: TenantSession, private 
             PotMeta.of(Json.parseToJsonElement(plain.decodeToString()) as JsonObject)
         }.getOrNull()
     }
+
+    /** What is held, for a pure rule over it. */
+    internal fun heldRevisions(): List<HeldRevision> = held.values.toList()
 
     /**
      * Reads what changed since the last read (the first one reads everything): the first page conditional on the held
@@ -97,59 +108,135 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         Revisions.open(codec, node.scopeId, node.id, node.key, rows).forEach { held[it.id] = it }
         ledgerRevision = firstLedger
         deleteRevision = firstDelete
-        ledger = meta?.let { Ledger.build(held.values.toList(), it.base) }
+        val all = held.values.toList()
+        ledger = meta?.let { Ledger.build(all, it.base) }
+        check = LedgerCheck.of(all)
         return true
     }
 
-    /** What adding an entry came to. */
-    enum class AddOutcome {
-        ADDED,
-        /** Its sums do not add up, or it names someone who is no participant: nothing was sent. */
+    /** What a write came to. */
+    enum class WriteOutcome {
+        WRITTEN,
+        /** Its sums do not add up, it names someone who is no participant, or it breaks another rule: nothing was sent. */
         INVALID,
-        /** Another device wrote first: the Pot was read again, the entry may be added again. */
+        /** A person with a balance cannot be deactivated or deleted: nothing was sent. */
+        NOT_SETTLED,
+        /** Another device wrote first: the Pot was read again, the write may be made again on what it shows now. */
         STALE,
-        /** The server refused it (switched off, the Pot re-keyed meanwhile, blocked): nothing was stored. */
+        /** The Pot is not re-keyed since its space's key changed, and still was not after waiting: try again later. */
+        BUSY,
+        /** The operator blocked the Pot. */
+        BLOCKED,
+        /** The server refused it otherwise (switched off, removed, an id taken): nothing was stored. */
         REFUSED,
     }
 
     /**
-     * Adds a plain expense in the Pot's base currency: [amount] minor units paid by [payer], split equally among
-     * [beneficiaries], at [date] (`YYYY-MM-DD`, the person's local day). Its heads name the Pot's current heads; it is
-     * sealed for the address it is posted to, revision 1 of a fresh record.
+     * Appends [writes] in one batch, all or none ([PotWrites.seal] on what is held), then reads again. A `409
+     * stale_revision` re-reads and answers [WriteOutcome.STALE]; the rest is [atNodeEpoch]'s.
      */
-    suspend fun addExpense(title: String, amount: Long, payer: String, beneficiaries: List<String>, date: String, category: String): AddOutcome {
-        val base = meta?.base ?: return AddOutcome.INVALID
-        val pot = ledger ?: return AddOutcome.INVALID
-        val order = pot.participants.map { it.id }
-        val split = Split.Equal(order.filter { it in beneficiaries })
-        val content = Expense(
-            title.trim(), category, date, base.currency, base.minorUnits, "1", amount, emptyList(),
-            listOf(Contribution(payer, amount)), Allocation(emptyList(), split.takeIf { it.participants.isNotEmpty() }),
-        )
-        val known = order.toSet()
-        if (Ledger.entryProblem(content) { it in known } != null) return AddOutcome.INVALID
-        val entryId = uuid()
-        val body = RevisionBody(Revisions.headsToName(held.values.toList()), content)
-        val sealed = try {
-            codec.seal(RevisionAddress(node.scopeId, node.id, entryId, 1), node.key, body)
-        } catch (e: Exception) {
-            return AddOutcome.INVALID
+    suspend fun write(writes: List<PotWrite>): WriteOutcome {
+        val base = meta?.base ?: return WriteOutcome.INVALID
+        return atNodeEpoch { n ->
+            val revisions = PotWrites.seal(codec, n.scopeId, n.id, n.key, held.values.toList(), writes, base)
+            suspend { api.appendPotRevisions(n.scopeId, n.id, PotAppendRequest(n.epoch, revisions)) }
         }
-        val write = PotRevisionWrite(entryId, 1, false, b64(sealed.sealedBody), b64(sealed.wrappedRevisionKey), null)
-        val r = account.respond { api.appendPotRevisions(node.scopeId, node.id, PotAppendRequest(node.epoch, listOf(write))) }
-        if (r.success) {
-            refresh()
-            return AddOutcome.ADDED
-        }
-        val code = runCatching { (Json.parseToJsonElement(r.response.bodyAsText()) as JsonObject)["code"]?.jsonPrimitive?.content }.getOrNull()
-        if (r.status == 409 && code == "stale_revision") {
-            refresh()
-            return AddOutcome.STALE
-        }
-        return AddOutcome.REFUSED
     }
 
-    private fun uuid(): String {
+    /** Deletes or removes participant [participantId] by its sealed erasure (members only; settled people only). */
+    suspend fun erase(participantId: String): WriteOutcome {
+        val base = meta?.base ?: return WriteOutcome.INVALID
+        return atNodeEpoch { n ->
+            val request = PotWrites.erasure(codec, n.scopeId, n.id, n.key, n.epoch, held.values.toList(), participantId, base)
+            suspend { api.erasePotRecord(n.scopeId, n.id, request) }
+        }
+    }
+
+    /**
+     * A write at the Pot's epoch through core's [NodeEpochWrite] (the floor, `node_rekey_pending` and `stale_epoch`
+     * handled there); [prepare] seals on the node it is handed, so an attempt after a re-read seals under its key now.
+     */
+    private suspend fun atNodeEpoch(prepare: (OpenNode) -> (suspend () -> HttpResponse<Unit>)): WriteOutcome {
+        val result = try {
+            NodeEpochWrite.run(
+                waitsMs = rekeyWaitsMs,
+                belowFloor = { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
+                reread = ::reopen,
+                attempt = {
+                    val send = prepare(node)
+                    val r = account.respond { send() }
+                    val code = if (r.success) null else codeOf(r)
+                    val answer = when {
+                        r.success -> NodeEpochWrite.Answer.DONE
+                        r.status == 409 && code == NODE_REKEY_PENDING -> NodeEpochWrite.Answer.REKEY_PENDING
+                        r.status == 409 && code == STALE_EPOCH -> NodeEpochWrite.Answer.STALE_EPOCH
+                        else -> NodeEpochWrite.Answer.OTHER
+                    }
+                    answer to (r.status to code)
+                },
+            )
+        } catch (e: PotWriteRefused) {
+            return if (e.reason == PotWriteRefused.Reason.NOT_SETTLED) WriteOutcome.NOT_SETTLED else WriteOutcome.INVALID
+        } catch (e: RevisionFormatInvalid) {
+            return WriteOutcome.INVALID
+        } catch (e: IllegalArgumentException) {
+            return WriteOutcome.INVALID
+        }
+        return when (result) {
+            NodeEpochWrite.Result.Busy -> WriteOutcome.BUSY
+            NodeEpochWrite.Result.Gone, NodeEpochWrite.Result.StaleAgain -> WriteOutcome.REFUSED
+            is NodeEpochWrite.Result.Answered -> {
+                val (status, code) = result.value
+                when {
+                    status in 200..299 -> {
+                        refresh()
+                        WriteOutcome.WRITTEN
+                    }
+                    status == 409 && code == STALE_REVISION -> {
+                        runCatching { refresh() }
+                        WriteOutcome.STALE
+                    }
+                    status == 451 -> WriteOutcome.BLOCKED
+                    else -> WriteOutcome.REFUSED
+                }
+            }
+        }
+    }
+
+    /**
+     * Reads the tree again and takes the Pot's node as it is now (its key and epoch may have moved), its settings with it,
+     * and everything held read anew under that key. False when the Pot is no longer there to write to.
+     */
+    private suspend fun reopen(): Boolean {
+        tenant.forgetTree()
+        node = tenant.trees()[node.scopeId]?.firstOrNull { it.id == node.id && it.kind == KIND } ?: return false
+        meta = openMeta()
+        held.clear()
+        ledgerRevision = null
+        deleteRevision = 0
+        cursor = null
+        refresh()
+        return true
+    }
+
+    /**
+     * Adds a plain expense in the Pot's base currency: [amount] minor units paid by [payer], split equally among
+     * [beneficiaries], at [date] (`YYYY-MM-DD`, the person's local day), as revision 1 of a fresh record.
+     */
+    suspend fun addExpense(title: String, amount: Long, payer: String, beneficiaries: List<String>, date: String, category: String): WriteOutcome {
+        val base = meta?.base ?: return WriteOutcome.INVALID
+        val order = ledger?.participants?.map { it.id } ?: return WriteOutcome.INVALID
+        val split = Split.Equal(order.filter { it in beneficiaries })
+        if (split.participants.isEmpty()) return WriteOutcome.INVALID
+        val content = Expense(
+            title.trim(), category, date, base.currency, base.minorUnits, "1", amount, emptyList(),
+            listOf(Contribution(payer, amount)), Allocation(emptyList(), split),
+        )
+        return write(listOf(PotWrite(newId(), content)))
+    }
+
+    /** A fresh record id (a UUID v4), for an entry or a person this device adds. */
+    fun newId(): String {
         val b = account.primitives.randomBytes(16)
         b[6] = ((b[6].toInt() and 0x0f) or 0x40).toByte()
         b[8] = ((b[8].toInt() and 0x3f) or 0x80).toByte()
@@ -159,12 +246,20 @@ class PotSession private constructor(private val tenant: TenantSession, private 
 
     companion object {
         private const val PAGE = 1000
+        const val KIND = "EXPENSES_POT"
+        private const val NODE_REKEY_PENDING = "node_rekey_pending"
+        private const val STALE_EPOCH = "stale_epoch"
+        private const val STALE_REVISION = "stale_revision"
 
         /** Opens the Pot [nodeId] of [scopeId] in [tenant] and reads it; null when the tenant holds no such open Pot. */
         suspend fun open(tenant: TenantSession, scopeId: String, nodeId: String): PotSession? {
-            val node = tenant.trees()[scopeId]?.firstOrNull { it.id == nodeId && it.kind == "EXPENSES_POT" } ?: return null
+            val node = tenant.trees()[scopeId]?.firstOrNull { it.id == nodeId && it.kind == KIND } ?: return null
             return PotSession(tenant, node).also { it.refresh() }
         }
+
+        private suspend fun codeOf(r: HttpResponse<*>): String? = runCatching {
+            (Json.parseToJsonElement(r.response.bodyAsText()) as JsonObject)["code"]?.jsonPrimitive?.content
+        }.getOrNull()
 
         @OptIn(kotlin.time.ExperimentalTime::class)
         private fun epochMs(iso: String): Long = runCatching { kotlin.time.Instant.parse(iso).toEpochMilliseconds() }.getOrDefault(0)

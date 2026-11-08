@@ -64,6 +64,27 @@ class PotView(session: PotSession) {
     /** Who may be named on a new entry: the active people, in join order. */
     val people: List<Person> = ledger?.participants.orEmpty().filter { it.active && !it.erased }.map { Person(it.id, it.name ?: "") }
 
+    /** A record the ledger check names (ADR 0108 decision 5): an entry by its title, a person by name, else what it was. */
+    class Missing(val kind: MissingKind, val name: String)
+    enum class MissingKind { ENTRY, TRANSFER, PERSON, ERASED_PERSON, UNKNOWN }
+
+    /** What the last read found missing, altered or unreadable, by record: the notice above the Pot ("the balances may be
+     *  wrong"), empty when the ledger is complete. */
+    val missing: List<Missing> = session.check.entries.map { id ->
+        val entry = ledger?.entries?.firstOrNull { it.id == id }
+        val person = ledger?.participants?.firstOrNull { it.id == id }
+        when (val c = entry?.content) {
+            is Transfer -> c.title?.let { Missing(MissingKind.ENTRY, it) } ?: Missing(MissingKind.TRANSFER, "")
+            is Expense -> Missing(MissingKind.ENTRY, c.title)
+            is Refund -> Missing(MissingKind.ENTRY, c.title)
+            null -> when {
+                person == null -> Missing(MissingKind.UNKNOWN, "")
+                person.erased -> Missing(MissingKind.ERASED_PERSON, "")
+                else -> Missing(MissingKind.PERSON, person.name ?: "")
+            }
+        }
+    }
+
     /** The Pot's own categories, after the defaults. */
     val ownCategories: List<Pair<String, String>> = session.meta?.categories.orEmpty()
 

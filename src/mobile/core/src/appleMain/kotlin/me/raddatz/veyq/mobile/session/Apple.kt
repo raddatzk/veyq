@@ -165,9 +165,9 @@ object AppleSessions {
     suspend fun addExpense(
         pot: me.raddatz.veyq.mobile.expenses.PotSession, title: String, amountText: String, payer: String,
         beneficiaries: List<String>, date: String, category: String, minorUnits: Int,
-    ): me.raddatz.veyq.mobile.expenses.PotSession.AddOutcome {
+    ): me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome {
         val amount = me.raddatz.veyq.mobile.expenses.Amounts.parse(amountText, minorUnits)
-        if (amount == null || title.isBlank() || beneficiaries.isEmpty()) return me.raddatz.veyq.mobile.expenses.PotSession.AddOutcome.INVALID
+        if (amount == null || title.isBlank() || beneficiaries.isEmpty()) return me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.INVALID
         return pot.addExpense(title, amount, payer, beneficiaries, date, category)
     }
 }

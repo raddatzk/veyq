@@ -97,6 +97,8 @@
     <string name="pot_base_currency">Basiswährung</string>
     <string name="pot_people">Personen</string>
     <string name="pot_own_categories">Eigene Kategorien</string>
+    <string name="pot_ledger_missing">Änderungen an diesen Einträgen fehlen, die Salden können also falsch sein:</string>
+    <string name="pot_ledger_unknown_entry">Ein Eintrag, den diese Kasse nicht mehr zeigt</string>
     <string name="pot_settings_hint">Personen und Kategorien änderst du vorerst im Web.</string>
     <string name="entry_title">Titel</string>
     <string name="entry_amount">Betrag</string>

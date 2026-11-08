@@ -15,10 +15,13 @@ struct PotScreen: View {
                 if !view.ready {
                     ContentUnavailableView("No base currency yet", systemImage: "wallet.bifold", description: Text("Set one for this pot on the web."))
                 } else {
-                    switch tab {
-                    case "expenses.overview": OverviewList(view: view)
-                    case "expenses.settings": SettingsList(view: view)
-                    default: EntriesList(view: view, onAdd: { adding = true })
+                    VStack(spacing: 0) {
+                        if !view.missing.isEmpty { LedgerNotice(view: view) }
+                        switch tab {
+                        case "expenses.overview": OverviewList(view: view)
+                        case "expenses.settings": SettingsList(view: view)
+                        default: EntriesList(view: view, onAdd: { adding = true })
+                        }
                     }
                 }
             } else if let state = model.pot, state.ref == ref, state.failed {
@@ -67,6 +70,33 @@ func categoryName(_ id: String?, _ view: PotView) -> String {
 func personName(_ name: String?) -> String {
     guard let name, !name.isEmpty else { return String(localized: "deleted person") }
     return name
+}
+
+/// The ledger check's notice (ADR 0108 decision 5): what the read found missing or altered, so the balances may be wrong.
+private struct LedgerNotice: View {
+    let view: PotView
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Changes to these entries are missing, so the balances may be wrong:").font(.subheadline)
+            ForEach(Array(view.missing.enumerated()), id: \.offset) { _, m in
+                Text("• \(Self.name(m))").font(.caption)
+            }
+        }
+        .foregroundStyle(Role.danger)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    static func name(_ m: PotView.Missing) -> String {
+        switch m.kind {
+        case .transfer: String(localized: "Transfer")
+        case .erasedPerson: String(localized: "deleted person")
+        case .unknown: String(localized: "An entry this pot no longer shows")
+        default: m.name
+        }
+    }
 }
 
 private struct EntriesList: View {

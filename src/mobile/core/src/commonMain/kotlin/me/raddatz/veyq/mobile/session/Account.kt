@@ -601,6 +601,17 @@ class TenantSession internal constructor(
 
     private var tree: Map<String, List<OpenNode>>? = null
 
+    /** Drops the read tree: the next [trees] reads every scope's again (a write met a re-keyed node). */
+    internal fun forgetTree() {
+        tree = null
+    }
+
+    /**
+     * The scope epoch this device holds [scopeId] at — its floor for writes (ADR 0109 point 6, layer 2): a node whose key
+     * was minted below it is not re-keyed since the rotation, and nothing is sealed under its key. Null for a scope not open.
+     */
+    internal fun scopeEpoch(scopeId: String): Int? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.grantedEpoch
+
     internal suspend fun trees(): Map<String, List<OpenNode>> = tree ?: scopes.associate { s ->
         val rows = account.call { api(::ContentApi).listNodes(s.summary.id) }
         s.summary.id to Tree.open(account.suite, s.summary.id, s.key, rows)

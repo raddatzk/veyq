@@ -40,12 +40,13 @@ class PotLiveTest {
                 assertEquals(Big.ZERO, ledger.balances.values.fold(Big.ZERO) { a, b -> a + b })
                 assertTrue(ledger.entries.none { it.status == Ledger.Status.UNREADABLE }, "a revision of ${ref.name} did not open")
             }
+            assertTrue(pot.check.complete, "${ref.name}'s ledger check: missing ${pot.check.missing} altered ${pot.check.altered} unreadable ${pot.check.unreadable}")
             if (System.getenv("VEYQ_LIVE_POT_WRITE") == ref.name && ledger != null) {
                 val people = ledger.participants.filter { it.active && !it.erased }
                 assertTrue(people.isNotEmpty(), "${ref.name} has no participant to pay")
                 val before = ledger.entries.size
                 val outcome = pot.addExpense("App check", 1234, people.first().id, people.map { it.id }, "2026-11-08", "other")
-                assertEquals(PotSession.AddOutcome.ADDED, outcome)
+                assertEquals(PotSession.WriteOutcome.WRITTEN, outcome)
                 val after = pot.ledger!!
                 assertEquals(before + 1, after.entries.size)
                 assertTrue(after.entries.any { (it.content as? Expense)?.title == "App check" && it.status == Ledger.Status.LIVE })
