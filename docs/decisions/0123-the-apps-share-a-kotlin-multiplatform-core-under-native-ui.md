@@ -185,8 +185,13 @@ implementation exists but what holds it to the first.
   turning at once and back when the write did not land — and the delete to the space's trash in its kind's words, with
   the web's undo for 6 s: a restore under the live parent, the slug token derived anew from the name folded by the
   node's application (`session/NodeTrash.kt`; both measured live by `PotLiveTest`, the web's trash showing what the app
-  deleted). Rename, move, share, cover, copy, download and report are not built; a rename waits for the sharing client,
-  since the web seals a renamed node's name anew into its open links.
+  deleted). The rename is core's placement to the same parent (`session/NodeRename.kt`, the web's `renameMemberNode`): its
+  key re-wrapped and its name sealed at placement revision + 1, a `409 stale_placement` built once more on the tree read
+  anew, a sibling folding to the same name refused by name before anything is sent, every other `409` worded as the
+  web words it; then the name sealed anew into every open link rooted at it (`session/ShareNames.kt`, the web's
+  `resealShareNames`: `K_share` from its recovery copy under the scope key; `ShareNamesTest`, each binding killed by a
+  mutation) — a link the web minted shows its guests the name the app gave (measured 2026-11-08). Core's API client now
+  carries the sharing spec. Move, share, cover, copy, download and report are not built.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

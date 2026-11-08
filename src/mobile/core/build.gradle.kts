@@ -27,7 +27,7 @@ plugins {
 // The API client is generated from contracts/api, never written by hand (CLAUDE.md: API-first). Core's specs only, the
 // ones a member's app calls; an application's specs join with that application's screens.
 val contracts = rootDir.resolve("../../contracts/api").canonicalFile
-val coreSpecs = listOf("setup", "auth", "account", "scopes", "content", "favorites", "tenants", "blob")
+val coreSpecs = listOf("setup", "auth", "account", "scopes", "content", "favorites", "tenants", "blob", "sharing")
 
 /** An application's spec, generated into packages of its own (`api.<application>`), so its models never meet core's. */
 val applicationSpecs = listOf("expenses/expenses")
@@ -67,7 +67,8 @@ val generateApi = tasks.register("generateApi") {
         // deserializers): the server's checks, which a client neither has nor needs. A line that is nothing but such
         // an annotation is dropped; anything else naming the backend's packages fails the build rather than ship.
         out.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
-            val serverOnly = listOf("@field:", "@jakarta.", "@me.raddatz.veyq.")
+            // (sharing's `JsonInclude` is the server's serializer's choice, as a getter annotation)
+            val serverOnly = listOf("@field:", "@jakarta.", "@me.raddatz.veyq.", "@get:com.fasterxml.jackson.annotation.JsonInclude(")
             val kept = f.readLines().filterNot { line -> serverOnly.any { line.trimStart().startsWith(it) } }
             kept.firstOrNull { "jakarta." in it || "fasterxml" in it || Regex("""me\.raddatz\.veyq\.(?!mobile\b)""").containsMatchIn(it) }?.let {
                 throw GradleException("${f.name}: a server-side annotation survived the strip: ${it.trim().take(120)}")

@@ -199,6 +199,45 @@ class PotLiveTest {
             assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, ref.scopeId, nodeId))
             println("[$potName] pinned and unpinned; \"$name\" trashed, restored, its name taken, trashed again")
         }
+        System.getenv("VEYQ_LIVE_RENAME")?.let { potName ->
+            // A fresh Pot renamed (read back by a fresh session), its old name free and its new one taken, a sibling's name
+            // refused before anything is sent, then trashed (it stays in the trash).
+            val ref = pots.first { it.name == potName }
+            val fold = { kind: String, name: String -> if (kind == PotSession.KIND) PotCreate.tokenInput(name) else null }
+            val n = System.currentTimeMillis() % 100_000
+            val nodeId = PotCreate.create(tenant, ref.scopeId, null, "App rename $n", Ledger.BaseCurrency("EUR", 2), emptyList()).nodeId!!
+            tenant.forgetTree()
+            val renamed = me.raddatz.veyq.mobile.session.NodeRename.rename(tenant, ref.scopeId, nodeId, "  App renamed $n ", fold, System.currentTimeMillis())
+            assertEquals(me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED, renamed.outcome)
+            assertEquals(emptyList(), renamed.links!!.failed, "a link's name was not re-sealed")
+            assertEquals("App renamed $n", account.open(tenant.tenant).objects().single { it.nodeId == nodeId }.name)
+            assertEquals(PotCreate.Outcome.NAME_TAKEN, PotCreate.create(tenant, ref.scopeId, null, "App renamed $n", Ledger.BaseCurrency("EUR", 2), emptyList()).outcome)
+            // A second rename builds on the placement revision the first one left.
+            assertEquals(me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED, me.raddatz.veyq.mobile.session.NodeRename.rename(tenant, ref.scopeId, nodeId, "App renamed twice $n", fold, System.currentTimeMillis()).outcome)
+            // The name of a Pot beside it (folding the same) is refused by name before a request is sent.
+            val sibling = tenant.objects().first { it.scopeId == ref.scopeId && it.nodeId != nodeId && it.kind == PotSession.KIND && tenant.node(it.scopeId, it.nodeId)?.parentId == null }
+            val taken = me.raddatz.veyq.mobile.session.NodeRename.rename(tenant, ref.scopeId, nodeId, sibling.name.uppercase(), fold, System.currentTimeMillis())
+            assertEquals(me.raddatz.veyq.mobile.session.NodeRename.Outcome.NAME_TAKEN, taken.outcome)
+            assertEquals(sibling.nodeId, taken.taken?.id)
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, ref.scopeId, nodeId))
+            println("[$potName] \"App rename $n\" renamed twice, its name taken, a sibling's refused; trashed")
+        }
+        System.getenv("VEYQ_LIVE_RENAME_TARGET")?.let { target ->
+            // "<from>|<to>": the root Pot named <from> (created beside the first Pot when there is none) renamed to <to>,
+            // with what the re-seal of its links did — the web's link to it then shows <to> to its guests.
+            val (from, to) = target.split('|')
+            val fold = { kind: String, name: String -> if (kind == PotSession.KIND) PotCreate.tokenInput(name) else null }
+            val scopeId = pots.first().scopeId
+            val nodeId = tenant.objects().firstOrNull { it.scopeId == scopeId && it.name == from }?.nodeId
+                ?: PotCreate.create(tenant, scopeId, null, from, Ledger.BaseCurrency("EUR", 2), emptyList()).nodeId!!.also { tenant.forgetTree() }
+            if (from != to) {
+                val r = me.raddatz.veyq.mobile.session.NodeRename.rename(tenant, scopeId, nodeId, to, fold, System.currentTimeMillis())
+                assertEquals(me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED, r.outcome)
+                println("[rename] \"$from\" -> \"$to\": links resealed=${r.links?.resealed?.size} closed=${r.links?.closed?.size} skipped=${r.links?.skipped?.size} failed=${r.links?.failed?.size}")
+            } else {
+                println("[rename] \"$from\" is there ($nodeId)")
+            }
+        }
         if (System.getenv("VEYQ_LIVE_AVATARS") == "1") {
             // The tenant's profile pictures: every member with a revision fetched and opened, the rest the letter; a second
             // sync asks nothing new (each revision settled).

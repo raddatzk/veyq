@@ -23,6 +23,8 @@ class OpenNode(
     val metaRevision: Long = 0,
     /** The scope epoch the node's key was minted under: a write seals under it only at the scope's current epoch. */
     val scopeEpoch: Int = 0,
+    /** How often the node was placed (created, renamed, moved): its name and key wraps are bound to it, a placement states it. */
+    val placementRevision: Long = 0,
 ) {
     fun asNode(): NodeRef = NodeRef(scopeId, id, parentId, kind, name)
     fun asObject(): ObjectRef? = asNode().asObject()
@@ -46,7 +48,7 @@ object Tree {
                 val node = try {
                     val name = suite.openField(Context("node-name", *binding), parentKey, unb64(row.encryptedName)).decodeToString()
                     val key = suite.open(Context("content-key", *binding), parentKey, unb64(row.wrappedContentKey))
-                    OpenNode(scopeId, row.id, row.parentId, row.kind, name, key, row.epoch, row.wrappedMeta, row.metaRevision, row.scopeEpoch)
+                    OpenNode(scopeId, row.id, row.parentId, row.kind, name, key, row.epoch, row.wrappedMeta, row.metaRevision, row.scopeEpoch, row.placementRevision)
                 } catch (e: OpenRefused) {
                     null
                 } catch (e: IllegalArgumentException) {

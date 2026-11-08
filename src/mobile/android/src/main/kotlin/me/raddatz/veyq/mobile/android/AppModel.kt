@@ -385,6 +385,22 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return restored == me.raddatz.veyq.mobile.session.NodeTrash.Restored.RESTORED
     }
 
+    /**
+     * Renames [ref] to [name] (core's `NodeRename`: the placement, then its open links' names); the lists are read anew
+     * and an open page follows the node under its new name. What came of it.
+     */
+    suspend fun rename(ref: ObjectRef, name: String): me.raddatz.veyq.mobile.session.NodeRename.Result {
+        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeRename.Result(me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED)
+        val r = runCatching { me.raddatz.veyq.mobile.session.NodeRename.rename(t, ref.scopeId, ref.nodeId, name, ::tokenInputFor, System.currentTimeMillis()) }
+            .getOrDefault(me.raddatz.veyq.mobile.session.NodeRename.Result(me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED))
+        if (r.outcome == me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED) {
+            refreshLists(t)
+            val renamed = runCatching { t.objects() }.getOrDefault(emptyList()).firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }
+            if (renamed != null && (_screen.value as? Screen.Signed)?.shell?.openObject?.nodeId == ref.nodeId) updateShell { it.goBack().open(renamed) }
+        }
+        return r
+    }
+
     /** How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`). */
     private fun tokenInputFor(kind: String, name: String): String? = when (kind) {
         PotSession.KIND -> PotCreate.tokenInput(name)

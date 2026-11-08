@@ -10,6 +10,9 @@ struct PotHeaderActions: View {
     @State private var pinned: Bool?
     @State private var asking = false
     @State private var failed: String?
+    @State private var renaming = false
+    @State private var newName = ""
+    @State private var renameProblem: String?
 
     var body: some View {
         HStack {
@@ -28,6 +31,8 @@ struct PotHeaderActions: View {
                 .accessibilityLabel(pinned ? "Remove favorite" : "Favorite")
             }
             Menu {
+                // The rename first, the delete last and destructive (`splitRowActions`).
+                Button("Rename", systemImage: "pencil") { newName = ref.name; renameProblem = nil; renaming = true }
                 Button("Delete Pot", systemImage: "trash", role: .destructive) { asking = true }
             } label: {
                 Image(systemName: "ellipsis.circle")
@@ -40,6 +45,26 @@ struct PotHeaderActions: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("“\(ref.name)” and all its entries go to the trash.")
+        }
+        // Core's name dialog (`FolderNameDialog`): the name as it is, trimmed on save; a refusal says why and asks again.
+        .alert("Rename", isPresented: $renaming) {
+            TextField("Name", text: $newName)
+            Button("Save") {
+                let name = newName
+                Task {
+                    let (problem, linksFailed) = await model.rename(ref, to: name)
+                    if let problem {
+                        renameProblem = problem
+                        renaming = true
+                    } else if linksFailed {
+                        failed = String(localized: "Renamed. Some links to it could not be updated and still show the old name to their guests.")
+                    }
+                }
+            }
+            .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let renameProblem { Text(renameProblem) }
         }
         .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
             Button("OK", role: .cancel) {}

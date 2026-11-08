@@ -258,4 +258,13 @@
     <string name="delete_refused_gone">It is no longer there.</string>
     <string name="delete_refused_scope_deleting">This space is being deleted.</string>
     <string name="delete_refused_failed">Deleting didn’t work. Please try again.</string>
+    <string name="node_rename">Rename</string>
+    <string name="node_name">Name</string>
+    <string name="pot_a">a Pot</string>
+    <string name="node_an_item">an item</string>
+    <string name="node_name_taken_by">There is already %1$s named “%2$s” here. Choose another name.</string>
+    <string name="node_slug_taken">Something with a similar name already exists here.</string>
+    <string name="node_illegal_structure">That isn’t allowed here.</string>
+    <string name="node_save_failed">That didn’t work. Please try again.</string>
+    <string name="share_name_reseal_failed">Renamed. Some links to it could not be updated and still show the old name to their guests.</string>
 </resources>

@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 
 /**
@@ -30,14 +31,18 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 internal fun NodeHeaderActions(
     ref: ObjectRef,
     pinned: Boolean?,
+    canRename: Boolean,
     canDelete: Boolean,
     deleteTitle: String,
     deleteQuestion: String,
     onPin: () -> Unit,
+    /** Renames to the name typed; answers why not (the words to show), or null once it is renamed. */
+    onRename: suspend (String) -> String?,
     onDelete: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
     val palette = LocalPalette.current
     if (pinned != null) {
         IconButton(onClick = onPin) {
@@ -45,10 +50,18 @@ internal fun NodeHeaderActions(
             else Icon(Icons.Outlined.FavoriteBorder, stringResource(R.string.node_favorite))
         }
     }
-    if (canDelete) {
+    if (canRename || canDelete) {
         IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
         DropdownMenu(menu, { menu = false }) {
-            DropdownMenuItem(
+            // The rename first, the delete last and in the danger role (`splitRowActions`).
+            if (canRename) DropdownMenuItem(
+                text = { Text(stringResource(R.string.node_rename)) },
+                onClick = {
+                    menu = false
+                    renaming = true
+                },
+            )
+            if (canDelete) DropdownMenuItem(
                 text = { Text(deleteTitle, color = MaterialTheme.colorScheme.error) },
                 onClick = {
                     menu = false
@@ -71,4 +84,38 @@ internal fun NodeHeaderActions(
             dismissButton = { TextButton(onClick = { asking = false }) { Text(stringResource(R.string.entry_cancel)) } },
         )
     }
+    if (renaming) RenameDialog(ref.name, onRename) { renaming = false }
+}
+
+/** Core's name dialog for a rename (`FolderNameDialog`): the name as it is, trimmed on save; unchanged or empty writes nothing. */
+@Composable
+private fun RenameDialog(current: String, onRename: suspend (String) -> String?, onClose: () -> Unit) {
+    var name by remember { mutableStateOf(current) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = { if (!saving) onClose() },
+        title = { Text(stringResource(R.string.node_rename)) },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                name, { name = it; problem = null }, singleLine = true, label = { Text(stringResource(R.string.node_name)) },
+                isError = problem != null, supportingText = problem?.let { { Text(it) } }, enabled = !saving,
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    saving = true
+                    scope.launch {
+                        problem = onRename(name)
+                        saving = false
+                        if (problem == null) onClose()
+                    }
+                },
+                enabled = !saving && name.isNotBlank(),
+            ) { Text(stringResource(R.string.entry_save)) }
+        },
+        dismissButton = { TextButton(onClick = onClose, enabled = !saving) { Text(stringResource(R.string.entry_cancel)) } },
+    )
 }

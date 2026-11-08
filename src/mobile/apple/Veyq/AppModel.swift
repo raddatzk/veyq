@@ -445,6 +445,38 @@ final class AppModel {
 
     func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
 
+    /// Renames `ref` to `name` (core's `NodeRename`: the placement, then its open links' names); the lists are read anew
+    /// and an open page follows the node under its new name. Why it did not land, in core's words, or nil once renamed;
+    /// `linksFailed` says a link kept the old name (the rename stands).
+    func rename(_ ref: ObjectRef, to name: String) async -> (problem: String?, linksFailed: Bool) {
+        guard let t = tenantSession else { return (String(localized: "That didn’t work. Please try again."), false) }
+        let r = try? await NodeRename.shared.rename(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, name: name,
+            tokenInput: { [weak self] kind, name in self?.tokenInputFor(kind: kind, name: name) },
+            nowMs: Int64(Date().timeIntervalSince1970 * 1000), waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
+        )
+        guard let r else { return (String(localized: "That didn’t work. Please try again."), false) }
+        switch r.outcome {
+        case .renamed:
+            await refreshLists(t)
+            if shell.openObject?.nodeId == ref.nodeId,
+               let renamed = ((try? await t.objects()) ?? []).first(where: { $0.scopeId == ref.scopeId && $0.nodeId == ref.nodeId }) {
+                shell = shell.goBack().open(ref: renamed)
+            }
+            return (nil, !(r.links?.failed.isEmpty ?? true))
+        case .nameTaken:
+            if let sibling = r.taken {
+                // the colliding sibling's noun with its article: its kind's `nounWithArticle`, else "an item"
+                let kind = sibling.kind == "EXPENSES_POT" ? String(localized: "a Pot") : String(localized: "an item")
+                return (String(localized: "There is already \(kind) named “\(sibling.name)” here. Choose another name."), false)
+            }
+            return (String(localized: "Something with a similar name already exists here."), false)
+        case .notAllowed: return (String(localized: "That isn’t allowed here."), false)
+        case .busy: return (String(localized: "The pot’s key is being renewed. Try again in a moment."), false)
+        default: return (String(localized: "That didn’t work. Please try again."), false)
+        }
+    }
+
     /// How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`).
     private func tokenInputFor(kind: String, name: String) -> String? {
         kind == PotSession.companion.KIND ? PotCreate.shared.tokenInput(name: name) : nil

@@ -609,6 +609,7 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
     val moved = stringResource(R.string.trash_moved, open.name)
     val undo = stringResource(R.string.trash_undo)
     val undoFailed = stringResource(R.string.trash_undo_failed, open.name)
+    val context = androidx.compose.ui.platform.LocalContext.current
     val refusals = mapOf(
         me.raddatz.veyq.mobile.session.NodeTrash.Deleted.GONE to stringResource(R.string.delete_refused_gone),
         me.raddatz.veyq.mobile.session.NodeTrash.Deleted.SCOPE_DELETING to stringResource(R.string.delete_refused_scope_deleting),
@@ -619,6 +620,7 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
     NodeHeaderActions(
         open,
         pinned = pinned,
+        canRename = true,
         canDelete = true,
         deleteTitle = stringResource(R.string.pot_delete),
         deleteQuestion = stringResource(R.string.pot_delete_confirm, open.name),
@@ -630,6 +632,13 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
                     snackbar.showSnackbar(favoriteFailed)
                 }
             }
+        },
+        onRename = { name ->
+            val r = model.rename(open, name)
+            val problem = renameProblem(context, r)
+            // Renamed; a link that kept the old name is said (the rename stands).
+            if (problem == null && r.links?.failed?.isNotEmpty() == true) scope.launch { snackbar.showSnackbar(context.getString(R.string.share_name_reseal_failed)) }
+            problem
         },
         onDelete = {
             scope.launch {
@@ -648,4 +657,17 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
             }
         },
     )
+}
+
+/** Why a rename did not land, in core's words (`nodeNameErrorText`); null once renamed. */
+private fun renameProblem(context: android.content.Context, r: me.raddatz.veyq.mobile.session.NodeRename.Result): String? = when (r.outcome) {
+    me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED -> null
+    me.raddatz.veyq.mobile.session.NodeRename.Outcome.NAME_TAKEN -> r.taken?.let { sibling ->
+        // the colliding sibling's noun with its article: its kind's `nounWithArticle`, else "an item"
+        val kind = context.getString(if (sibling.kind == "EXPENSES_POT") R.string.pot_a else R.string.node_an_item)
+        context.getString(R.string.node_name_taken_by, kind, sibling.name)
+    } ?: context.getString(R.string.node_slug_taken)
+    me.raddatz.veyq.mobile.session.NodeRename.Outcome.NOT_ALLOWED -> context.getString(R.string.node_illegal_structure)
+    me.raddatz.veyq.mobile.session.NodeRename.Outcome.BUSY -> context.getString(R.string.pot_busy)
+    me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED -> context.getString(R.string.node_save_failed)
 }
