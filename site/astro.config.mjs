@@ -165,6 +165,7 @@ export default defineConfig({
                 'help/offline',
               ],
             },
+            { slug: 'donate', label: 'Support veyq', translations: { de: 'veyq unterstützen' } },
           ],
         },
         {

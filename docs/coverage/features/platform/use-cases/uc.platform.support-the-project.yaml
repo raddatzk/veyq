@@ -1,0 +1,12 @@
+useCase: uc.platform.support-the-project
+feature: platform
+title: Learn that veyq can be supported, once
+status: planned
+acceptanceCriteria:
+  - id: the-banner-shows-until-dismissed
+    text: >-
+      A member in the signed-in app and a guest on a share page see a donation banner at the top, a labelled region
+      with a link to the donation page and a labelled dismiss button.
+gaps:
+  web: "Not built yet (cr-donation-banner-and-project-links phase 4)."
+  backend: "Not built yet (cr-donation-banner-and-project-links phase 3)."

@@ -166,6 +166,7 @@ const en = {
     privacy: 'This page sets no cookies, tracks nothing and loads nothing from anyone else.',
     source: 'Source code',
     report: 'Report a vulnerability',
+    donate: 'Donate',
   },
   placeholder: 'Screenshot to come',
 };
@@ -319,6 +320,7 @@ const de: Strings = {
     privacy: 'Diese Seite setzt keine Cookies, verfolgt niemanden und lädt nichts von Dritten.',
     source: 'Quellcode',
     report: 'Eine Schwachstelle melden',
+    donate: 'Spenden',
   },
   placeholder: 'Screenshot folgt',
 };
