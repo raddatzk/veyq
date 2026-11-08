@@ -231,9 +231,18 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
     var shared by remember { mutableStateOf<List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>?>(null) }
     val incoming by model.incoming.collectAsStateWithLifecycle()
     LaunchedEffect(incoming, view.canWrite) {
-        if (incoming != null && view.canWrite && view.people.isNotEmpty()) shared = model.takeShare()
+        // Only while the shell still shows this Pot: files given back (its editor closed unsaved) move the shell Home first.
+        val open = (model.screen.value as? Screen.Signed)?.shell?.openObject == state.ref
+        if (incoming != null && open && view.canWrite && view.people.isNotEmpty()) shared = model.takeShare()
     }
-    shared?.let { files -> EntryEditor(view, state, model, null, initialPending = files) { shared = null } }
+    // Its editor closed unsaved: the files wait again in the pick mode, for this Pot or another.
+    shared?.let { files ->
+        var saved by remember { mutableStateOf(false) }
+        EntryEditor(view, state, model, null, initialPending = files, onSaved = { saved = true; model.shareSaved() }) {
+            shared = null
+            if (!saved) model.returnShare()
+        }
+    }
     editing?.let { EntryEditor(view, state, model, it) { editing = null } }
     viewing?.let { DeletedEntrySheet(view, state, model, it) { viewing = null } }
 }

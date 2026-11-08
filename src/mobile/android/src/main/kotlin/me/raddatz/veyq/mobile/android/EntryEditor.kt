@@ -100,6 +100,8 @@ fun EntryEditor(
     view: PotView, state: AppModel.PotState, model: AppModel, editing: Pair<String, PotView.Editing>?,
     /** Receipts it starts with: what another app shared to this Pot (ADR 0124). */
     initialPending: List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt> = emptyList(),
+    /** Runs once the entry was saved, before [onClose] (a share's new expense hands back that it landed). */
+    onSaved: () -> Unit = {},
     onClose: () -> Unit,
 ) {
     val sep = remember { separator() }
@@ -239,6 +241,7 @@ fun EntryEditor(
                                 model.skippedReceipts().takeIf { it.isNotEmpty() }?.let { names ->
                                     android.widget.Toast.makeText(context, context.getString(R.string.receipts_no_room, names.joinToString()), android.widget.Toast.LENGTH_LONG).show()
                                 }
+                                onSaved()
                                 onClose()
                             }
                         }

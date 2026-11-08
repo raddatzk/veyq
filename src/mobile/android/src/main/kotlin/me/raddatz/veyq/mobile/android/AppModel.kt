@@ -343,7 +343,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** Files shared to veyq, waiting for the Pot they go to (the pick mode); null when none waits. */
     val incoming: StateFlow<ShareIn.Incoming?> = _incoming.asStateFlow()
 
+    /** What a Pot took, until its new expense is saved: its editor closed unsaved gives it back to the pick mode. */
+    private var taken: ShareIn.Incoming? = null
+
+    /**
+     * Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
+     * they go (ADR 0124 decision 1) — the start does the same while the session is still opening.
+     */
     fun receiveShare(incoming: ShareIn.Incoming) {
+        updateShell { Shell.start(null, it.space) }
         _incoming.value = incoming
     }
 
@@ -352,7 +360,22 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The waiting files, taken by the Pot opened as their place: its new expense's receipts. */
-    fun takeShare(): List<PotSession.PendingReceipt>? = _incoming.value?.files?.takeIf { it.isNotEmpty() }?.also { _incoming.value = null }
+    fun takeShare(): List<PotSession.PendingReceipt>? {
+        val waiting = _incoming.value?.takeIf { it.files.isNotEmpty() } ?: return null
+        taken = waiting
+        _incoming.value = null
+        return waiting.files
+    }
+
+    /** The new expense's editor closed unsaved: the files wait again, for this Pot or another. */
+    fun returnShare() {
+        taken?.let { taken = null; receiveShare(it) }
+    }
+
+    /** The new expense the shared files went into was saved: the share is done. */
+    fun shareSaved() {
+        taken = null
+    }
 
     // ---- core's actions on a node ----
 
@@ -580,7 +603,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val prior = _screen.value as? Screen.Signed
         val defaultSpace = Home.defaultSpace(spaces)?.scopeId
         val shell = when {
-            start || prior == null -> Shell.start(recent.lastUsed(objects), defaultSpace)
+            start || prior == null -> Shell.start(if (_incoming.value == null) recent.lastUsed(objects) else null, defaultSpace)
             prior.shell.space != null && spaces.none { it.scopeId == prior.shell.space } -> prior.shell.switchSpace(defaultSpace ?: "")
             else -> prior.shell
         }
