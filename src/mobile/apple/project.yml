@@ -31,14 +31,21 @@ targets:
         script: |
           cd "$SRCROOT/.."
           ./gradlew :core:assembleVeyqCoreDebugXCFramework --console=plain
+      - name: Generate the theme
+        basedOnDependencyAnalysis: false
+        script: |
+          # The web's colour roles, its brand mark and the app icon into the asset catalog (ADR 0123 decision 7).
+          python3 "$SRCROOT/../theme/generate_theme.py" --apple-assets "$SRCROOT/Veyq/Assets.xcassets"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.raddatz.veyq
         PRODUCT_NAME: veyq
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: veyq
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # The web's accent is the app's tint: selection, controls, links (the styleguide's accent role).
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: veyq-accent
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         ENABLE_USER_SCRIPT_SANDBOXING: NO

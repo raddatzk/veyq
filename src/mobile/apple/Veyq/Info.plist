@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- The launch screen: the web's bg role behind the brand mark (both generated into the asset catalog). -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>veyq-bg</string>
+		<key>UIImageName</key>
+		<string>VeyqMark</string>
+	</dict>
 	<!-- App Transport Security stays on everywhere but the developer's own dev instance, a *.localhost tenant. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>

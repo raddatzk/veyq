@@ -88,6 +88,17 @@ val generateMajor = tasks.register("generateMajor") {
     }
 }
 
+// The web's colour roles and radii as Kotlin (ADR 0123 decision 7), from src/web/src/styles/base.css.
+val generatedTheme = layout.buildDirectory.dir("generated/theme")
+val generateTheme = tasks.register<Exec>("generateTheme") {
+    group = "veyq"
+    description = "Generates the web's palette as Kotlin (src/mobile/theme/generate_theme.py)."
+    inputs.file(rootDir.resolve("theme/generate_theme.py")).withPropertyName("script")
+    inputs.file(rootDir.resolve("../web/src/styles/base.css")).withPropertyName("tokens")
+    outputs.dir(generatedTheme)
+    commandLine("python3", rootDir.resolve("theme/generate_theme.py").absolutePath, "--kotlin", generatedTheme.get().asFile.absolutePath)
+}
+
 // libsodium for the Apple targets, built from its pinned release tarball (core/sodium/build_libsodium.py); the script
 // skips a slice already built, so this costs nothing after the first run.
 val libsodium = rootDir.resolve("build/libsodium")
@@ -124,6 +135,7 @@ kotlin {
         commonMain {
             kotlin.srcDir(generatedApi.map { it.dir("src/commonMain/kotlin") })
             kotlin.srcDir(generatedMajor)
+            kotlin.srcDir(generatedTheme)
         }
         commonMain.dependencies {
             implementation(libs.coroutines.core)
@@ -166,5 +178,5 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
     inputs.file(vectors).withPropertyName("vectors")
 }
 
-tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateApi, generateMajor) }
+tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateApi, generateMajor, generateTheme) }
 tasks.matching { it.name.startsWith("cinteropSodium") }.configureEach { dependsOn(buildLibsodium) }

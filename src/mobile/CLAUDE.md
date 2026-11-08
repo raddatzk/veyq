@@ -12,6 +12,10 @@ A Gradle build of its own, run through its own wrapper.
   `project.yml`; the project builds `VeyqCore.xcframework` itself before it compiles. `devlogin.py <device>`
   relaunches the installed debug app in a booted simulator, signed in as the seeded dev principal.
 
+- `theme/generate_theme.py` — the web's colour roles and brand mark for every platform (ADR 0123 decision 7): the
+  builds run it (`:core:generateTheme`, `:android:generateThemeRes`, the Apple project's pre-build step); its output
+  is never committed. A colour or the logo changes in `src/web/`, never here.
+
 ## Prove your work
 
 - `./gradlew :core:jvmTest :core:macosArm64Test` — the suite against `contracts/crypto/vectors/v1.json` (with its

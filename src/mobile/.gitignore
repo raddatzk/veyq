@@ -5,3 +5,6 @@ local.properties
 # The Xcode project is generated from apple/project.yml (XcodeGen); the yml is the source.
 apple/*.xcodeproj/
 apple/build/
+# Generated into the asset catalog from the web's tokens and brand mark (theme/generate_theme.py); only its root
+# Contents.json is tracked.
+apple/Veyq/Assets.xcassets/*/

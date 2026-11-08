@@ -13,9 +13,10 @@ struct SignInView: View {
     var body: some View {
         Form {
             Section {
-                Text("veyq").font(.largeTitle.bold())
-                Text("Sign in").font(.headline)
+                Brand()
+                Text("Sign in").font(.title2.bold()).foregroundStyle(Role.text)
             }
+            .listRowBackground(Color.clear)
             Section {
                 TextField("Server", text: $server)
                     .textContentType(.URL)
@@ -39,15 +40,25 @@ struct SignInView: View {
                 Section { Text(Self.message(error)).foregroundStyle(.red) }
             }
             Section {
+                // Confirming is the web's green role (`--app-primary`), not the accent.
                 Button {
                     onSignIn(server, email, password, secretKey)
                 } label: {
-                    if working { ProgressView() } else { Text("Sign in").frame(maxWidth: .infinity) }
+                    Group { if working { ProgressView() } else { Text("Sign in") } }.frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: Radius.control))
+                .controlSize(.large)
+                .tint(Role.primary)
+                .foregroundStyle(Role.onFill)
                 .disabled(working)
             }
+            .listRowBackground(Color.clear)
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Role.bg)
+        .tint(Role.accent)
         .frame(maxWidth: 520)
     }
 

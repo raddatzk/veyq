@@ -52,8 +52,9 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(32.dp))
-        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.displaySmall)
-        Text(stringResource(R.string.signin_title), style = MaterialTheme.typography.titleMedium)
+        Brand()
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.signin_title), style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
         OutlinedTextField(server, { server = it }, label = { Text(stringResource(R.string.signin_server)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
         OutlinedTextField(email, { email = it }, label = { Text(stringResource(R.string.signin_email)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -63,7 +64,15 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String
         OutlinedTextField(secretKey, { secretKey = it }, label = { Text(stringResource(R.string.signin_secret_key)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
         state.error?.let { Text(signInError(it), color = MaterialTheme.colorScheme.error) }
-        Button(onClick = { onSignIn(server, email, password, secretKey) }, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
+        // Confirming is the web's green role (`--app-primary`), not the accent.
+        val palette = LocalPalette.current
+        Button(
+            onClick = { onSignIn(server, email, password, secretKey) },
+            enabled = !state.working,
+            shape = MaterialTheme.shapes.small,
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+        ) {
             if (state.working) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(R.string.signin_submit))
         }
     }
