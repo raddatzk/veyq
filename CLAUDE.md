@@ -68,6 +68,11 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   else is shared: no UI, no router, no state. The workspace is **pnpm** ([ADR 0116](docs/decisions/0116-the-javascript-packages-are-installed-by-pnpm.md);
   `pnpm-workspace.yaml`, the version pinned in `package.json` `packageManager`): `pnpm install` runs from the repo root, and its strict `node_modules` links each package
   only what it declares; each package still proves itself with its own `pnpm run check`.
+- `src/mobile/` — the **veyq app** (V2): one app for every application ([ADR 0122](docs/decisions/0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md)),
+  a Gradle build of its own — `core` (Kotlin Multiplatform: the v1 suite ported once and held to
+  `contracts/crypto/vectors`, the API client generated from `contracts/api`, the session, the navigation model),
+  `android` (Compose) and `apple` (SwiftUI, iOS and macOS) ([ADR 0123](docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)).
+  The suite's second implementation answers to the same vectors as `@veyq/crypto`; the vectors are the one gate.
 - `src/tools/` — the two operator tools a release ships as assets: `veyqctl` (installs, upgrades and backs up a
   Compose instance from its releases, [ADR 0096](docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md))
   and `instance_backup.py` (the backup tool it runs, and the `veyq-tools` image's entrypoint, whose `Dockerfile` is

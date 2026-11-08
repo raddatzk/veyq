@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-10-15
 - Model: [Applications](../apps/README.md)
+- Replaced in part: § The shape of the apps by ADR 0122 (not built)
 
 ## Context
 
