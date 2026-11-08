@@ -17,8 +17,8 @@ struct RootView: View {
 
     var body: some View {
         switch model.screen {
-        case .signIn(let working, let error):
-            SignInView(working: working, error: error) { server, email, password, secretKey in
+        case .signIn(let working, let error, let adding):
+            SignInView(working: working, error: error, adding: adding, onCancel: model.cancelAdd) { server, email, password, secretKey in
                 model.signIn(server: server, email: email, password: password, secretKey: secretKey)
             }
         case .signed:

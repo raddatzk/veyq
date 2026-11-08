@@ -43,4 +43,20 @@
     <string name="signin_error_secret_key">The Secret Key is not right.</string>
     <string name="signin_error_no_tenant">This server has no space at this address.</string>
     <string name="signin_error_other">Signing in did not work.</string>
+    <string name="drawer_home">Home</string>
+    <string name="drawer_sign_out_of">Sign out of %1$s</string>
+    <string name="space_switch">Switch space</string>
+    <string name="space_personal">Personal</string>
+    <string name="space_group">Group</string>
+    <string name="filter_all">All</string>
+    <string name="switcher_open">Switch tenant or server</string>
+    <string name="switcher_add_server">Add server</string>
+    <string name="tab_depot_file">File</string>
+    <string name="signin_cancel">Cancel</string>
+    <string name="signin_add_title">Add a server</string>
+    <string name="switcher_manage">Manage servers</string>
+    <string name="manage_title">Servers</string>
+    <string name="manage_current">Shown now</string>
+    <string name="manage_sign_out">Sign out of this server</string>
+    <string name="manage_hint">Hidden tenants and spaces stay on the server and are only left out on this device.</string>
 </resources>

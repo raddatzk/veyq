@@ -24,6 +24,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.BarChart
@@ -89,30 +95,45 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShellScreen(s: Screen.Signed, model: AppModel) {
-    val drawer = rememberDrawerState(if (s.shell.application == null && s.shell.openObject == null) DrawerValue.Open else DrawerValue.Closed)
+    val drawer = rememberDrawerState(if (s.shell.isHome && s.shell.path.isEmpty() && s.shell.space == null) DrawerValue.Open else DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val shell = s.shell
     val palette = LocalPalette.current
     fun closeDrawerThen(f: () -> Unit) { f(); scope.launch { drawer.close() } }
 
-    BackHandler(enabled = shell.searching || shell.openObject != null) {
-        if (shell.searching) model.search(false) else model.close()
+    BackHandler(enabled = shell.searching || shell.canGoBack) {
+        if (shell.searching) model.search(false) else model.goBack()
     }
 
     ModalNavigationDrawer(
         drawerState = drawer,
-        drawerContent = { Drawer(s, onChoose = { closeDrawerThen { model.choose(it) } }, onOpen = { closeDrawerThen { model.open(it) } }, onSignOut = model::signOut) },
+        drawerContent = {
+            Drawer(
+                s,
+                onChoose = { closeDrawerThen { model.choose(it) } },
+                onOpen = { closeDrawerThen { model.open(it) } },
+                onSwitch = { account, tenant -> closeDrawerThen { model.switchTo(account, tenant) } },
+                onAddServer = { closeDrawerThen { model.openManage() } },
+            )
+        },
     ) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 if (!shell.searching) {
                     TopAppBar(
-                        title = { Text(shell.openObject?.name ?: shell.application?.let { appName(it) } ?: stringResource(R.string.drawer_spaces), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                        title = {
+                            when {
+                                shell.openObject != null -> Text(shell.openObject!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                shell.application != null -> Text(appName(shell.application!!), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                shell.folder != null -> Text(shell.folder!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                else -> SpaceSwitcher(s, model::switchSpace)
+                            }
+                        },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         navigationIcon = {
-                            if (shell.openObject != null) {
-                                IconButton(onClick = model::close) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
+                            if (shell.canGoBack) {
+                                IconButton(onClick = model::goBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
                             } else {
                                 IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, stringResource(R.string.drawer_open)) }
                             }
@@ -152,16 +173,174 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 when {
                     shell.searching -> SearchScreen(s.objects, onOpen = model::open, onClose = { model.search(false) })
                     shell.openObject != null -> ObjectScreen(shell.openObject!!, shell.selectedTab)
-                    shell.application == null -> SpacesScreen(s, onOpen = model::open)
+                    shell.application == null -> HomeScreen(s, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
                     else -> ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open)
                 }
+                if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+/** Home's title: the shown space, and the switcher to the member's other spaces (owner 2026-11-08: in Home's title). */
+@Composable
+private fun SpaceSwitcher(s: Screen.Signed, onSwitch: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        androidx.compose.material3.TextButton(onClick = { open = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) {
+            Text(spaceName(s.space), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Icon(Icons.Filled.ArrowDropDown, stringResource(R.string.space_switch), tint = MaterialTheme.colorScheme.onSurface)
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (space in s.spaces) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(spaceName(space)) },
+                    leadingIcon = { Icon(spaceIcon(space.kind), null, tint = role(LocalPalette.current.accent)) },
+                    trailingIcon = { if (space.scopeId == s.shell.space) Icon(Icons.Filled.Check, null) },
+                    onClick = { open = false; onSwitch(space.scopeId) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun Drawer(s: Screen.Signed, onChoose: (ApplicationId?) -> Unit, onOpen: (ObjectRef) -> Unit, onSignOut: () -> Unit) {
+private fun spaceName(space: me.raddatz.veyq.mobile.navigation.SpaceRef?): String = when (space?.kind) {
+    null -> stringResource(R.string.drawer_home)
+    "PERSONAL" -> stringResource(R.string.space_personal)
+    "GROUP" -> stringResource(R.string.space_group)
+    else -> space.name
+}
+
+private fun spaceIcon(kind: String): ImageVector = when (kind) {
+    "PERSONAL" -> Icons.Outlined.Person
+    "GROUP" -> Icons.Outlined.Groups
+    else -> Icons.Outlined.Home
+}
+
+/**
+ * Home (ADR 0122): the shown space's tree, one level at a time, as the web's level view lists it — the folders, then
+ * every application's objects mixed; the filters at the top keep one application's objects, the folders stay.
+ */
+@Composable
+private fun HomeScreen(s: Screen.Signed, onEnter: (me.raddatz.veyq.mobile.navigation.FolderRef) -> Unit, onOpen: (ObjectRef) -> Unit, onFilter: (ApplicationId?) -> Unit) {
+    val palette = LocalPalette.current
+    Column(Modifier.fillMaxSize()) {
+        if (s.filters.size > 1) {
+            val selected = s.filters.indexOf(s.shell.filter).coerceAtLeast(0)
+            androidx.compose.material3.PrimaryScrollableTabRow(
+                selectedTabIndex = selected,
+                containerColor = MaterialTheme.colorScheme.background,
+                contentColor = role(palette.accent),
+                edgePadding = 16.dp,
+                divider = { HorizontalDivider(color = role(palette.line)) },
+            ) {
+                s.filters.forEachIndexed { i, f ->
+                    androidx.compose.material3.Tab(
+                        selected = i == selected,
+                        onClick = { onFilter(f) },
+                        selectedContentColor = role(palette.accent),
+                        unselectedContentColor = role(palette.muted),
+                        text = { Text(f?.let { appName(it) } ?: stringResource(R.string.filter_all), fontWeight = if (i == selected) androidx.compose.ui.text.font.FontWeight.ExtraBold else androidx.compose.ui.text.font.FontWeight.SemiBold) },
+                    )
+                }
+            }
+        }
+        val level = s.level
+        if (level.isEmpty()) {
+            Empty()
+        } else {
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
+                items(level, key = { it.scopeId + it.nodeId }) { node ->
+                    val folder = node.asFolder()
+                    if (folder != null) {
+                        ListItem(
+                            headlineContent = { Text(node.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                            leadingContent = { FolderTile() },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+                            modifier = Modifier.clip(MaterialTheme.shapes.medium).clickableRow { onEnter(folder) },
+                        )
+                    } else {
+                        node.asObject()?.let { ObjectRow(it, onOpen) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The web's folder tile: the info role's soft fill and text (`ui.css` § folder). */
+@Composable
+private fun FolderTile() {
+    val palette = LocalPalette.current
+    Box(
+        Modifier.size(34.dp).clip(MaterialTheme.shapes.medium).background(role(palette.infoSoft)),
+        contentAlignment = Alignment.Center,
+    ) { Icon(Icons.Outlined.Folder, null, Modifier.size(18.dp), tint = role(palette.infoText)) }
+}
+
+/** The switcher at the drawer's top: the current tenant and server; every server's tenants, and adding a server. */
+@Composable
+private fun TenantSwitcher(s: Screen.Signed, onSwitch: (me.raddatz.veyq.mobile.session.VeyqAccount, me.raddatz.veyq.mobile.navigation.TenantRef) -> Unit, onAddServer: () -> Unit) {
+    val palette = LocalPalette.current
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).background(role(palette.hover)).clickableRow { open = true }.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            TenantAvatar(s.tenant.name)
+            Column(Modifier.weight(1f)) {
+                Text(s.tenant.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = role(palette.text), maxLines = 1)
+                Text(s.server, style = MaterialTheme.typography.bodySmall, color = role(palette.muted), maxLines = 1)
+            }
+            Icon(Icons.Filled.UnfoldMore, stringResource(R.string.switcher_open), tint = role(palette.muted))
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (server in s.servers) {
+                Text(server.label, style = VeyqType.sectionLabel, color = role(palette.muted), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                for (tenant in server.tenants) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(tenant.name) },
+                        leadingIcon = { TenantAvatar(tenant.name, small = true) },
+                        trailingIcon = { if (tenant == s.tenant && server.label == s.server) Icon(Icons.Filled.Check, null) },
+                        onClick = { open = false; onSwitch(server.account, tenant) },
+                    )
+                }
+            }
+            HorizontalDivider()
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(stringResource(R.string.switcher_manage)) },
+                leadingIcon = { Icon(Icons.Outlined.Settings, null) },
+                onClick = { open = false; onAddServer() },
+            )
+        }
+    }
+}
+
+/** The web's tenant avatar: the initial on the accent's gradient (`.sidebar-tenant-avatar`). */
+@Composable
+private fun TenantAvatar(name: String, small: Boolean = false) {
+    val palette = LocalPalette.current
+    val size = if (small) 26.dp else 34.dp
+    Box(
+        Modifier.size(size).clip(MaterialTheme.shapes.medium)
+            .background(Brush.linearGradient(listOf(role(palette.accent), role(palette.accent).copy(alpha = 0.72f)))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(name.take(1).uppercase(), color = role(palette.onFill), fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+private fun Drawer(
+    s: Screen.Signed,
+    onChoose: (ApplicationId?) -> Unit,
+    onOpen: (ObjectRef) -> Unit,
+    onSwitch: (me.raddatz.veyq.mobile.session.VeyqAccount, me.raddatz.veyq.mobile.navigation.TenantRef) -> Unit,
+    onAddServer: () -> Unit,
+) {
     val palette = LocalPalette.current
     // The web's sidebar: the surface, washed with a trace of the accent from the top (`--app-chrome-pattern`).
     val chrome = Brush.verticalGradient(listOf(role(palette.accentSoft), role(palette.surface)), endY = 900f)
@@ -172,7 +351,9 @@ private fun Drawer(s: Screen.Signed, onChoose: (ApplicationId?) -> Unit, onOpen:
         modifier = Modifier.background(chrome, shape),
     ) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
-            Brand(Modifier.padding(start = 8.dp, top = 20.dp, bottom = 16.dp))
+            Brand(Modifier.padding(start = 8.dp, top = 20.dp, bottom = 14.dp))
+            TenantSwitcher(s, onSwitch, onAddServer)
+            Spacer(Modifier.height(12.dp))
             Button(
                 onClick = {},
                 colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
@@ -183,6 +364,8 @@ private fun Drawer(s: Screen.Signed, onChoose: (ApplicationId?) -> Unit, onOpen:
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.drawer_new))
             }
+            Spacer(Modifier.height(6.dp))
+            Row(app = Icons.Outlined.Home, label = stringResource(R.string.drawer_home), selected = s.shell.isHome) { onChoose(null) }
             Section(stringResource(R.string.drawer_favorites))
             ObjectItems(s.drawer.favorites, s.shell.openObject, onOpen)
             Section(stringResource(R.string.drawer_recent))
@@ -191,10 +374,8 @@ private fun Drawer(s: Screen.Signed, onChoose: (ApplicationId?) -> Unit, onOpen:
             for (app in s.applications) {
                 Row(app = appIcon(app), label = appName(app), selected = s.shell.application == app && s.shell.openObject == null) { onChoose(app) }
             }
-            Row(app = Icons.Outlined.Layers, label = stringResource(R.string.drawer_spaces), selected = s.shell.application == null && s.shell.openObject == null) { onChoose(null) }
             HorizontalDivider(Modifier.padding(vertical = 12.dp), color = role(palette.line))
             Row(app = Icons.Outlined.Settings, label = stringResource(R.string.drawer_settings), selected = false) {}
-            Row(app = Icons.AutoMirrored.Outlined.Logout, label = stringResource(R.string.drawer_sign_out), selected = false, onClick = onSignOut)
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -286,21 +467,6 @@ private fun LazyListScope.group(title: Int?, refs: List<ObjectRef>, onOpen: (Obj
     items(refs, key = { "${title}-${it.scopeId}-${it.nodeId}" }) { ref -> ObjectRow(ref, onOpen) }
 }
 
-@Composable
-private fun SpacesScreen(s: Screen.Signed, onOpen: (ObjectRef) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
-        for (space in s.spaces) {
-            item(key = space.scopeId) { Section(space.name) }
-            val inSpace = s.objects.filter { it.scopeId == space.scopeId }
-            if (inSpace.isEmpty()) item(key = space.scopeId + "-empty") {
-                Text(stringResource(R.string.list_empty), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted),
-                    modifier = Modifier.padding(start = 8.dp))
-            }
-            items(inSpace, key = { it.scopeId + it.nodeId }) { ref -> ObjectRow(ref, onOpen) }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchScreen(objects: List<ObjectRef>, onOpen: (ObjectRef) -> Unit, onClose: () -> Unit) {
@@ -370,7 +536,7 @@ private fun tabIcon(tab: BarTab): ImageVector = when (tab.key) {
     "memories.map" -> Icons.Outlined.Map
     "expenses.overview" -> Icons.Outlined.BarChart
     "expenses.settings" -> Icons.Outlined.Settings
-    "depot.files" -> Icons.Outlined.InsertDriveFile
+    "depot.file" -> Icons.Outlined.InsertDriveFile
     else -> Icons.AutoMirrored.Outlined.List
 }
 
@@ -379,7 +545,7 @@ private fun tabLabel(tab: BarTab): String = stringResource(
     when (tab.key) {
         "memories.all" -> R.string.tab_memories_all
         "memories.map" -> R.string.tab_memories_map
-        "depot.files" -> R.string.tab_depot_files
+        "depot.file" -> R.string.tab_depot_file
         "expenses.entries" -> R.string.tab_expenses_entries
         "expenses.overview" -> R.string.tab_expenses_overview
         "expenses.settings" -> R.string.tab_expenses_settings

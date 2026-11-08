@@ -1,22 +1,35 @@
 package me.raddatz.veyq.mobile.navigation
 
 /**
- * Where the app is (ADR 0122): which application the drawer chose, which object is open in it, which of the bar's
- * places is selected, and whether Search has taken the screen. Both platforms render this one state; neither keeps a
- * navigation state of its own beside it.
+ * Where the app is (ADR 0122): Home (one space's tree) or an application the drawer chose, which object is open,
+ * which of the bar's places is selected, and whether Search has taken the screen. Both platforms render this one
+ * state; neither keeps a navigation state of its own beside it.
  */
 data class Shell(
-    /** null: Spaces (the tree) is chosen, which belongs to every application. */
+    /** null: Home is chosen — the space's tree, which belongs to every application. */
     val application: ApplicationId?,
     val openObject: ObjectRef? = null,
     val tab: BarTab? = null,
     val searching: Boolean = false,
+    /** The space Home shows; kept while the drawer chooses an application, so Home returns to it. */
+    val space: String? = null,
+    /** Home's folders below the space's root, outermost first. */
+    val path: List<FolderRef> = emptyList(),
+    /** Home's filter: one application's objects (the folders stay), or null for everything. */
+    val filter: ApplicationId? = null,
+    /**
+     * Where back leads from an open object: the screen it was opened from — Home, another application's list,
+     * Search, another object. Null for an object the app opened on, whose back is its own application's list.
+     */
+    val back: Shell? = null,
 ) {
     val shape: ApplicationShape? get() = application?.let { a -> APPLICATION_SHAPES.first { it.id == a } }
 
+    val isHome: Boolean get() = application == null && openObject == null
+
     /**
-     * The bar's places before Search. An application whose bar belongs to its object shows none until an object is
-     * open: its screen is then the list of its objects.
+     * The bar's places before Search. Home has none (its filters sit at the top, owner 2026-11-08); an application
+     * whose bar belongs to its object shows none until an object is open: its screen is then its objects' list.
      */
     val barTabs: List<BarTab>
         get() {
@@ -26,23 +39,48 @@ data class Shell(
 
     val selectedTab: BarTab? get() = tab?.takeIf { it in barTabs } ?: barTabs.firstOrNull()
 
-    /** The drawer chose an application: its list, nothing open. */
-    fun choose(app: ApplicationId?): Shell = Shell(application = app)
+    /** The folder Home shows: null is the space's root. */
+    val folder: FolderRef? get() = path.lastOrNull()
 
-    /** An object opens in its own application (from the drawer, a list, or Search), on its first place. */
-    fun open(ref: ObjectRef): Shell = Shell(application = ref.application, openObject = ref)
+    /** Whether back has somewhere to go inside the app: an open object, or a folder below the root. */
+    val canGoBack: Boolean get() = openObject != null || (isHome && path.isNotEmpty())
+
+    /** The drawer chose an application (null: Home): its list, nothing open, the same space kept for Home. */
+    fun choose(app: ApplicationId?): Shell = Shell(application = app, space = space)
+
+    /** Home on another space, at its root (the switcher in Home's title). */
+    fun switchSpace(scopeId: String): Shell = Shell(application = null, space = scopeId)
+
+    fun enter(folder: FolderRef): Shell = copy(path = path + folder)
+
+    fun filter(app: ApplicationId?): Shell = copy(filter = app)
+
+    /**
+     * An object opens in its own application (from the drawer, a list, Home or Search), on its first place; back
+     * returns to the screen it was opened from (ADR 0122 decision 7), not to that application's list.
+     */
+    fun open(ref: ObjectRef): Shell = Shell(application = ref.application, openObject = ref, space = space, back = this)
 
     fun select(tab: BarTab): Shell = copy(tab = tab, searching = false)
 
-    /** Back from an open object to its application's list. */
-    fun close(): Shell = copy(openObject = null, tab = null)
+    /** Back from an open object: to where it was opened from, or — opened on start — to its application's list. */
+    fun close(): Shell = back ?: copy(openObject = null, tab = null)
+
+    /** Back, whatever is shown: an object closes, a folder goes up to its parent. */
+    fun goBack(): Shell = when {
+        openObject != null -> close()
+        isHome && path.isNotEmpty() -> copy(path = path.dropLast(1))
+        else -> this
+    }
 
     fun search(on: Boolean): Shell = copy(searching = on)
 
     companion object {
         /**
-         * Where the app opens (ADR 0122 decision 4): the object used last, or — with none — Spaces with the drawer open.
+         * Where the app opens (ADR 0122 decision 5): the object used last, or — with none — Home on [space] with the
+         * drawer open.
          */
-        fun start(lastUsed: ObjectRef?): Shell = lastUsed?.let { Shell(application = it.application, openObject = it) } ?: Shell(application = null)
+        fun start(lastUsed: ObjectRef?, space: String?): Shell =
+            lastUsed?.let { Shell(application = it.application, openObject = it, space = space) } ?: Shell(application = null, space = space)
     }
 }

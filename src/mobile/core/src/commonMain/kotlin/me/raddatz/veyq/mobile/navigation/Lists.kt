@@ -12,10 +12,10 @@ data class ObjectRef(
     val name: String,
 )
 
-/** When this device last opened an object (ADR 0122 decision 5: Recent is per install, never synced). */
+/** When this device last opened an object (ADR 0122 decision 6: Recent is per install, never synced). */
 data class Use(val ref: ObjectRef, val lastUsedEpochMs: Long)
 
-/** One list arranged by ADR 0122 decision 4. */
+/** One list arranged by ADR 0122 decision 5. */
 data class ArrangedList(
     val favorites: List<ObjectRef>,
     val recent: List<ObjectRef>,
@@ -24,7 +24,7 @@ data class ArrangedList(
 
 /**
  * Every list follows one rule: Favorites, then Recent, then All, each ordered by last use, an object listed once
- * (ADR 0122 decision 4). An object never used on this device sorts after every used one, by name.
+ * (ADR 0122 decision 5). An object never used on this device sorts after every used one, by name.
  *
  * [favoritesLimit] and [recentLimit] cut the start's short lists; the application's own list passes none.
  */

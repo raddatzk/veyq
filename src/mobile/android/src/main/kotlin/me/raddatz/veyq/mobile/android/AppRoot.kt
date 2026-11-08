@@ -35,14 +35,14 @@ fun AppRoot(model: AppModel) {
     val screen by model.screen.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val s = screen) {
-            is Screen.SignIn -> SignInScreen(s, model::signIn)
-            is Screen.Signed -> ShellScreen(s, model)
+            is Screen.SignIn -> SignInScreen(s, model::signIn, model::cancelAdd)
+            is Screen.Signed -> s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
         }
     }
 }
 
 @Composable
-fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String) -> Unit) {
+fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String) -> Unit, onCancel: () -> Unit = {}) {
     var server by rememberSaveable { mutableStateOf(BuildDefaults.SERVER) }
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -54,7 +54,10 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String
         Spacer(Modifier.height(32.dp))
         Brand()
         Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.signin_title), style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        Text(
+            stringResource(if (state.adding) R.string.signin_add_title else R.string.signin_title),
+            style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+        )
         OutlinedTextField(server, { server = it }, label = { Text(stringResource(R.string.signin_server)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
         OutlinedTextField(email, { email = it }, label = { Text(stringResource(R.string.signin_email)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -74,6 +77,11 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String
             modifier = Modifier.fillMaxWidth().height(44.dp),
         ) {
             if (state.working) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(R.string.signin_submit))
+        }
+        if (state.adding) {
+            androidx.compose.material3.TextButton(onClick = onCancel, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.signin_cancel))
+            }
         }
     }
 }

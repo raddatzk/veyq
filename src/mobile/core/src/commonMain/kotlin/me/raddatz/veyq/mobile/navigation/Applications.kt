@@ -16,7 +16,7 @@ enum class ApplicationId(val id: String) {
 }
 
 /**
- * Whose views the bottom bar shows while an application is chosen (ADR 0122 decision 2): the application's own, or
+ * Whose views the bottom bar shows while an application is chosen (ADR 0122 decision 4): the application's own, or
  * those of the object open in it. Each application decides; the drawer and Search around it are the same for all.
  */
 enum class BarLevel { APPLICATION, OBJECT }
@@ -29,6 +29,11 @@ data class ApplicationShape(
     val barLevel: BarLevel,
     /** The bar's places before Search, which every bar ends with. */
     val tabs: List<BarTab>,
+    /**
+     * Whether the drawer lists it. Depot does not (owner 2026-11-08): its files are what Home's folders hold, so its
+     * own flat list would be Home without the folders; its bar still serves a file that is open.
+     */
+    val inDrawer: Boolean = true,
 )
 
 /**
@@ -38,7 +43,7 @@ data class ApplicationShape(
  */
 val APPLICATION_SHAPES: List<ApplicationShape> = listOf(
     ApplicationShape(ApplicationId.MEMORIES, BarLevel.APPLICATION, listOf(BarTab("memories.all"), BarTab("memories.map"))),
-    ApplicationShape(ApplicationId.DEPOT, BarLevel.APPLICATION, listOf(BarTab("depot.files"))),
+    ApplicationShape(ApplicationId.DEPOT, BarLevel.OBJECT, listOf(BarTab("depot.file")), inDrawer = false),
     ApplicationShape(
         ApplicationId.EXPENSES,
         BarLevel.OBJECT,
@@ -52,3 +57,6 @@ val APPLICATION_SHAPES: List<ApplicationShape> = listOf(
  */
 fun availableApplications(applicationsOff: Set<String>): List<ApplicationShape> =
     APPLICATION_SHAPES.filterNot { it.id.id in applicationsOff }
+
+/** The applications the drawer lists: the available ones it shows (ADR 0122 decision 2). */
+fun drawerApplications(applicationsOff: Set<String>): List<ApplicationShape> = availableApplications(applicationsOff).filter { it.inDrawer }

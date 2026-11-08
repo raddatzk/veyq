@@ -3,6 +3,9 @@ import SwiftUI
 struct SignInView: View {
     let working: Bool
     let error: String?
+    /// Opened by "Add server": titled so, and left again with Cancel.
+    var adding: Bool = false
+    var onCancel: () -> Void = {}
     let onSignIn: (String, String, String, String) -> Void
 
     @State private var server = "veyq.localhost:8080"
@@ -14,7 +17,7 @@ struct SignInView: View {
         Form {
             Section {
                 Brand()
-                Text("Sign in").font(.title2.bold()).foregroundStyle(Role.text)
+                Text(adding ? "Add a server" : "Sign in").font(.title2.bold()).foregroundStyle(Role.text)
             }
             .listRowBackground(Color.clear)
             Section {
@@ -52,6 +55,9 @@ struct SignInView: View {
                 .tint(Role.primary)
                 .foregroundStyle(Role.onFill)
                 .disabled(working)
+                if adding {
+                    Button("Cancel", action: onCancel).frame(maxWidth: .infinity).disabled(working)
+                }
             }
             .listRowBackground(Color.clear)
         }

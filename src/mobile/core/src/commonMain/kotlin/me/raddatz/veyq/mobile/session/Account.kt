@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.HttpHeaders
+import io.ktor.http.Url
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -24,20 +25,23 @@ import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
 import me.raddatz.veyq.mobile.api.models.LoginChallengeRequest
 import me.raddatz.veyq.mobile.api.models.LoginVerifyRequest
 import me.raddatz.veyq.mobile.api.models.MasterKeyWrap
-import me.raddatz.veyq.mobile.api.models.MyTenant
 import me.raddatz.veyq.mobile.api.models.RefreshRequest
 import me.raddatz.veyq.mobile.api.models.ScopeSummary
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.IdentityPrivate
 import me.raddatz.veyq.mobile.crypto.OpenRefused
+import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.crypto.SecretKeyText
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.crypto.XWingKey
 import me.raddatz.veyq.mobile.crypto.unb64
+import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Library
+import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.SpaceRef
+import me.raddatz.veyq.mobile.navigation.TenantRef
 
 /** Why a sign-in did not complete, in words a member can act on (the platform localizes by [reason]). */
 class SignInFailure(val reason: Reason, detail: String? = null) : Exception(detail ?: reason.name) {
@@ -45,79 +49,90 @@ class SignInFailure(val reason: Reason, detail: String? = null) : Exception(deta
 }
 
 /**
- * A signed-in, unlocked member of one tenant (ADR 0123): the session tokens, the Master Key and the identity, and the
- * scope keys of every scope whose grant verified. Built only by [signIn]; nothing in it is written to disk.
+ * A signed-in, unlocked account on one server (ADR 0123): the session tokens, the Master Key, the identity, and the
+ * tenants the account belongs to there. A session is the account's, not a tenant's (ADR 0004), so one account opens
+ * every tenant of its server ([open]); another server is another account. Built only by [signIn]; nothing in it is
+ * written to disk.
  *
  * The flow is the web client's (`src/web/src/features/account/login`, `unlock`), call for call: `/api/setup`, the login
  * challenge and its Ed25519 answer from the Argon2id auth seed, the PASSWORD wrap opened with password and Secret Key,
- * the identity, then each scope grant — verified before it is opened. A grant signed by another member is refused for
- * now: the app does not yet anchor another member's key (the web's key-chain pin, ADR 0111), and refusing is the safe
- * side of that gap.
+ * the identity.
  */
-class VeyqSession private constructor(
-    private val suite: V1,
-    private val http: HttpClient,
-    private val base: String,
+class VeyqAccount private constructor(
+    internal val suite: V1,
+    internal val primitives: Primitives,
+    internal val http: HttpClient,
+    /** The origin the account signed in at: its scheme and port are every tenant's on this server. */
+    val server: String,
     private val tokens: Tokens,
     val userId: String,
-    private val masterKey: ByteArray,
+    internal val masterKey: ByteArray,
     private val identity: IdentityPrivate,
-    private val identityKem: XWingKey,
-    val tenant: MyTenant?,
-    private val scopes: List<OpenScope>,
-    private val applicationsOff: Set<String>,
-) : Library {
-    private class OpenScope(val summary: ScopeSummary, val key: ByteArray, val name: String)
-
-    private class Tokens(var access: String, var refresh: String?) {
+    internal val kem: XWingKey,
+    internal val myPublic: ByteArray,
+    internal val mySignPublic: ByteArray,
+    override val tenants: List<TenantRef>,
+) : Connection {
+    internal class Tokens(var access: String, var refresh: String?) {
         val lock = Mutex()
     }
 
-    private fun <T : ApiClient> api(make: (String, HttpClient) -> T): T = make(base, http)
+    /** One account per user per server: signing in to the same one twice is the same connection. */
+    override val key: String get() = "${Url(server).host}#$userId"
 
-    fun applicationsOff(): Set<String> = applicationsOff
+    /** The server's name as the switcher shows it: its host, without a scheme or a port. */
+    override val label: String get() = Url(server).host
 
-    override suspend fun spaces(): List<SpaceRef> = scopes.map { SpaceRef(it.summary.id, it.summary.kind.value, it.name) }
+    /** The tenant the account opens on: the one whose domain the sign-in went to, else its first. */
+    val defaultTenant: TenantRef? get() = tenants.firstOrNull { it.domain.equals(Url(server).host, ignoreCase = true) } ?: tenants.firstOrNull()
 
-    private var tree: Map<String, List<OpenNode>>? = null
+    /** A tenant's own origin: the server picks the tenant from the Host it is called by, so each tenant is its domain. */
+    fun originOf(tenant: TenantRef): String {
+        val u = Url(server)
+        val port = if (u.port != u.protocol.defaultPort) ":${u.port}" else ""
+        return "${u.protocol.name}://${tenant.domain}$port"
+    }
 
-    private suspend fun trees(): Map<String, List<OpenNode>> = tree ?: scopes.associate { s ->
-        val rows = call { api(::ContentApi).listNodes(s.summary.id) }
-        s.summary.id to Tree.open(suite, s.summary.id, s.key, rows)
-    }.also { tree = it }
-
-    override suspend fun objects(): List<ObjectRef> = trees().flatMap { (_, nodes) -> nodes.mapNotNull { it.asObject() } }
-
-    override suspend fun favorites(): List<ObjectRef> {
-        val all = objects().associateBy { it.scopeId to it.nodeId }
-        return scopes.flatMap { s ->
-            val f = call { api(::FavoritesApi).getFavorites(s.summary.id) }
-            val ct = f.ciphertext ?: return@flatMap emptyList()
-            val ids = try {
-                Json.parseToJsonElement(suite.open(Context("favorites", "scopeId" to s.summary.id), masterKey, unb64(ct)).decodeToString())
-                    .jsonArray.map { it.jsonPrimitive.content }
-            } catch (e: OpenRefused) {
-                emptyList()
-            }
-            ids.mapNotNull { all[s.summary.id to it] }
+    /** Opens one tenant: its scopes (each grant verified before it is opened) and its switched-off applications. */
+    suspend fun open(tenant: TenantRef): TenantSession {
+        val base = originOf(tenant)
+        val summaries = call { ScopesApi(base, http).listMyScopes() }
+        val on = runCatching { call { TenantsApi(base, http).getTenantCapabilities(tenant.tenantId) }.capabilities.map { it.id }.toSet() }.getOrNull()
+        val off = on?.let { KNOWN_APPLICATIONS - it } ?: emptySet()
+        val open = summaries.filter { it.deletedAt == null }.mapNotNull { s ->
+            openGrant(s)?.let { key -> TenantSession.OpenScope(s, key, scopeName(s, tenant)) }
         }
+        return TenantSession(this, tenant, base, open, off)
+    }
+
+    /** A grant of a scope key to this account itself, as a scope's birth posts it (ADR 0028 decision 6), all base64. */
+    class SelfGrant(val wrappedGrant: String, val grantSignature: String, val recipientIdentityDigest: String)
+
+    /**
+     * Seals [scopeKey] to this account's own identity at ([scopeId], [epoch]) and signs the grant statement with its
+     * signing key: the grant a member posts for a scope it creates (the web's `sealGrant` to itself).
+     */
+    fun sealSelfGrant(scopeKey: ByteArray, scopeId: String, scopeKind: String, epoch: Long): SelfGrant {
+        val wrapped = suite.sealTo(Context("scope-grant", "scopeId" to scopeId, "epoch" to epoch), kem.publicKey, scopeKey)
+        val statement = suite.grantStatement(scopeId, scopeKind, epoch, userId, myPublic, wrapped)
+        return SelfGrant(b64(wrapped), b64(primitives.ed25519Sign(identity.signSeed, statement)), b64(primitives.sha256(myPublic)))
     }
 
     suspend fun signOut() {
-        runCatching { call { api(::SessionApi).logout() } }
+        runCatching { call { SessionApi(server, http).logout() } }
         masterKey.fill(0)
         http.close()
     }
 
     /** One API call with the current access token; a 401 refreshes once (single-flight, ADR 0004) and retries. */
-    private suspend fun <T : Any> call(f: suspend () -> HttpResponse<T>): T {
+    internal suspend fun <T : Any> call(f: suspend () -> HttpResponse<T>): T {
         val first = f()
         if (first.success) return first.body()
         if (first.status != 401 || tokens.refresh == null) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "HTTP ${first.status}")
         val seen = tokens.access
         tokens.lock.withLock {
             if (tokens.access == seen) {
-                val r = api(::TokenApi).refreshSession(RefreshRequest(tokens.refresh!!))
+                val r = TokenApi(server, http).refreshSession(RefreshRequest(tokens.refresh!!))
                 if (!r.success) throw SignInFailure(SignInFailure.Reason.CREDENTIALS, "refresh ${r.status}")
                 val pair = r.body()
                 tokens.access = pair.accessToken
@@ -129,13 +144,40 @@ class VeyqSession private constructor(
         return second.body()
     }
 
+    /**
+     * Verifies a scope grant, then opens it (ADR 0028 decision 6). Only a self-signed grant is accepted: a grant from
+     * another member needs that member's key anchored (the key-chain pin), which the app does not do yet. A stale grant
+     * (below the scope's current epoch) is refused, as the web refuses it.
+     */
+    private fun openGrant(s: ScopeSummary): ByteArray? {
+        if (s.grantedEpoch < s.currentEpoch) return null
+        if (s.granterUserId != userId) return null
+        val signature = s.grantSignature ?: return null
+        val wrapped = unb64(s.wrappedGrant)
+        val statement = suite.grantStatement(s.id, s.kind.value, s.grantedEpoch.toLong(), userId, myPublic, wrapped)
+        if (!primitives.ed25519Verify(mySignPublic, statement, unb64(signature))) return null
+        return try {
+            suite.openAs(Context("scope-grant", "scopeId" to s.id, "epoch" to s.grantedEpoch.toLong()), kem, wrapped)
+        } catch (e: OpenRefused) {
+            null
+        }
+    }
+
     companion object {
         /** The platform major this app speaks (ADR 0085): the one hard gate before sign-in. */
         const val MAJOR: Int = PLATFORM_MAJOR
 
+        private val KNOWN_APPLICATIONS = setOf("memories", "depot", "expenses")
+
+        private fun scopeName(s: ScopeSummary, tenant: TenantRef): String = when (s.kind.value) {
+            "TENANT" -> tenant.name
+            "PERSONAL" -> "Personal"
+            else -> "Group"
+        }
+
         /**
-         * Signs in and unlocks. [server] is the tenant's own origin (`https://family.example`), since the server picks
-         * the tenant from the Host it is called by. [client] builds the platform's HTTP client from a configuration.
+         * Signs in and unlocks. [server] is an origin of the server (`https://family.example`); any tenant's domain on
+         * it serves sign-in. [client] builds the platform's HTTP client from a configuration.
          */
         suspend fun signIn(
             primitives: Primitives,
@@ -144,7 +186,7 @@ class VeyqSession private constructor(
             password: String,
             secretKey: String,
             client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
-        ): VeyqSession {
+        ): VeyqAccount {
             val suite = V1(primitives)
             val base = server.trimEnd('/')
             val tokens = Tokens(access = "", refresh = null)
@@ -205,58 +247,61 @@ class VeyqSession private constructor(
                 val identity = suite.deserializeIdentityPrivate(suite.open(Context("identity-priv"), masterKey, unb64(material.wrappedIdentityPrivateKey)))
                 val kem = suite.xwingKey(identity.kemSeed)
                 val mine = suite.identityPublic(identity)
-                val myPublic = mine.serialize()
 
-                // The tenant this origin serves, and its applications that are switched off (ADR 0088).
-                val scopesApi = ScopesApi(base, http)
-                val tenants = scopesApi.listMyTenants().let { if (it.success) it.body() else emptyList() }
-                val summaries = scopesApi.listMyScopes().let {
-                    if (it.status == 404) throw SignInFailure(SignInFailure.Reason.NO_TENANT)
-                    if (!it.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "scopes ${it.status}")
+                // Every tenant the account belongs to on this server (answered whatever Host it is asked at).
+                val tenants = ScopesApi(base, http).listMyTenants().let {
+                    if (!it.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "my-tenants ${it.status}")
                     it.body()
-                }
-                val tenant = tenants.firstOrNull { t -> summaries.any { it.tenantId == t.tenantId } }
-                val off = tenant?.let { t ->
-                    TenantsApi(base, http).getTenantCapabilities(t.tenantId).takeIf { it.success }?.body()?.capabilities?.map { it.id }?.toSet()
-                }?.let { on -> KNOWN_APPLICATIONS - on } ?: emptySet()
-
-                val open = summaries.filter { it.deletedAt == null }.mapNotNull { s ->
-                    openGrant(suite, primitives, s, material.userId, myPublic, mine.sign, kem)?.let { key -> OpenScope(s, key, scopeName(s, tenant)) }
-                }
-                return VeyqSession(suite, http, base, tokens, material.userId, masterKey, identity, kem, tenant, open, off)
+                }.map { TenantRef(it.tenantId, it.name, it.domain) }
+                if (tenants.isEmpty()) throw SignInFailure(SignInFailure.Reason.NO_TENANT)
+                return VeyqAccount(suite, primitives, http, base, tokens, material.userId, masterKey, identity, kem, mine.serialize(), mine.sign, tenants)
             } catch (e: Throwable) {
                 http.close()
                 throw if (e is SignInFailure) e else SignInFailure(SignInFailure.Reason.PROTOCOL, e.message)
             }
         }
+    }
+}
 
-        private val KNOWN_APPLICATIONS = setOf("memories", "depot", "expenses")
+/** One tenant of an account, opened: what the shell lists (ADR 0122). */
+class TenantSession internal constructor(
+    val account: VeyqAccount,
+    val tenant: TenantRef,
+    private val base: String,
+    private val scopes: List<OpenScope>,
+    private val applicationsOff: Set<String>,
+) : Library {
+    internal class OpenScope(val summary: ScopeSummary, val key: ByteArray, val name: String)
 
-        private fun scopeName(s: ScopeSummary, tenant: MyTenant?): String = when (s.kind.value) {
-            "TENANT" -> tenant?.name ?: "Tenant"
-            "PERSONAL" -> "Personal"
-            else -> "Group"
-        }
+    private fun <T : ApiClient> api(make: (String, HttpClient) -> T): T = make(base, account.http)
 
-        /**
-         * Verifies a scope grant, then opens it (ADR 0028 decision 6). Only a self-signed grant is accepted: a grant from
-         * another member needs that member's key anchored (the key-chain pin), which the app does not do yet. A stale
-         * grant (below the scope's current epoch) is refused, as the web refuses it.
-         */
-        private fun openGrant(
-            suite: V1, p: Primitives, s: ScopeSummary, me: String, myPublic: ByteArray, mySignPublic: ByteArray, kem: XWingKey,
-        ): ByteArray? {
-            if (s.grantedEpoch < s.currentEpoch) return null
-            if (s.granterUserId != me) return null
-            val signature = s.grantSignature ?: return null
-            val wrapped = unb64(s.wrappedGrant)
-            val statement = suite.grantStatement(s.id, s.kind.value, s.grantedEpoch.toLong(), me, myPublic, wrapped)
-            if (!p.ed25519Verify(mySignPublic, statement, unb64(signature))) return null
-            return try {
-                suite.openAs(Context("scope-grant", "scopeId" to s.id, "epoch" to s.grantedEpoch.toLong()), kem, wrapped)
+    fun applicationsOff(): Set<String> = applicationsOff
+
+    override suspend fun spaces(): List<SpaceRef> = scopes.map { SpaceRef(it.summary.id, it.summary.kind.value, it.name) }
+
+    private var tree: Map<String, List<OpenNode>>? = null
+
+    private suspend fun trees(): Map<String, List<OpenNode>> = tree ?: scopes.associate { s ->
+        val rows = account.call { api(::ContentApi).listNodes(s.summary.id) }
+        s.summary.id to Tree.open(account.suite, s.summary.id, s.key, rows)
+    }.also { tree = it }
+
+    override suspend fun nodes(): List<NodeRef> = trees().flatMap { (_, nodes) -> nodes.map { it.asNode() } }
+
+    override suspend fun objects(): List<ObjectRef> = trees().flatMap { (_, nodes) -> nodes.mapNotNull { it.asObject() } }
+
+    override suspend fun favorites(): List<ObjectRef> {
+        val all = objects().associateBy { it.scopeId to it.nodeId }
+        return scopes.flatMap { s ->
+            val f = account.call { api(::FavoritesApi).getFavorites(s.summary.id) }
+            val ct = f.ciphertext ?: return@flatMap emptyList()
+            val ids = try {
+                Json.parseToJsonElement(account.suite.open(Context("favorites", "scopeId" to s.summary.id), account.masterKey, unb64(ct)).decodeToString())
+                    .jsonArray.map { it.jsonPrimitive.content }
             } catch (e: OpenRefused) {
-                null
+                emptyList()
             }
+            ids.mapNotNull { all[s.summary.id to it] }
         }
     }
 }

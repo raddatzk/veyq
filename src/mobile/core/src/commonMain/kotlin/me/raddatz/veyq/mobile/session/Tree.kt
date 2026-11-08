@@ -5,7 +5,7 @@ import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.OpenRefused
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.crypto.unb64
-import me.raddatz.veyq.mobile.navigation.ApplicationId
+import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 
 /** A node whose name and key opened. Its key stays in memory only. */
@@ -17,18 +17,8 @@ class OpenNode(
     val name: String,
     internal val key: ByteArray,
 ) {
-    fun asObject(): ObjectRef? = applicationOf(kind)?.let { ObjectRef(scopeId, id, kind, it, name) }
-}
-
-/**
- * The application whose object a kind is, as each application's kinds file names it (`contracts/platform/kinds/<application>.json`).
- * A folder or a kept link belongs to core and is no object of an application.
- */
-fun applicationOf(kind: String): ApplicationId? = when (kind) {
-    "MEMORY" -> ApplicationId.MEMORIES
-    "FILE", "DEPOT_DROPBOX" -> ApplicationId.DEPOT
-    "EXPENSES_POT" -> ApplicationId.EXPENSES
-    else -> null
+    fun asNode(): NodeRef = NodeRef(scopeId, id, parentId, kind, name)
+    fun asObject(): ObjectRef? = asNode().asObject()
 }
 
 /**

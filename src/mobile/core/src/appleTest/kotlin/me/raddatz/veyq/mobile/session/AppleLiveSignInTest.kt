@@ -24,7 +24,8 @@ class AppleLiveSignInTest {
         val env = (NSString.stringWithContentsOfFile(envFile, NSUTF8StringEncoding, null) ?: error("cannot read $envFile"))
             .lines().mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val session = AppleSessions.signIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"))
+        val account = AppleSessions.signIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"))
+        val session = account.open(account.defaultTenant ?: error("no tenant"))
         val spaces = session.spaces()
         val objects = session.objects()
         println("apple spaces: " + spaces.joinToString { "${it.kind}:${it.name}" })
@@ -32,6 +33,6 @@ class AppleLiveSignInTest {
         println("apple favorites: " + session.favorites().joinToString { it.name })
         assertTrue(spaces.any { it.kind == "TENANT" }, "the tenant scope did not open")
         assertTrue(objects.isNotEmpty(), "no object opened")
-        session.signOut()
+        account.signOut()
     }
 }

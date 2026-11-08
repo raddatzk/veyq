@@ -166,6 +166,8 @@ tasks.withType<Test>().configureEach {
     systemProperty("veyq.vectors", vectors.absolutePath)
     systemProperty("veyq.repoRoot", rootDir.resolve("../..").canonicalPath)
     System.getenv("VEYQ_LIVE")?.let { environment("VEYQ_LIVE", it) }
+    System.getenv("VEYQ_SEED_TENANT")?.let { environment("VEYQ_SEED_TENANT", it) }
+    System.getenv("VEYQ_ADMIN_BASE")?.let { environment("VEYQ_ADMIN_BASE", it) }
     testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null }
     inputs.file(vectors).withPropertyName("vectors")
 }

@@ -41,4 +41,20 @@
     <string name="signin_error_secret_key">Der Secret Key stimmt nicht.</string>
     <string name="signin_error_no_tenant">Unter dieser Adresse gibt es auf dem Server keinen Bereich.</string>
     <string name="signin_error_other">Die Anmeldung hat nicht geklappt.</string>
+    <string name="drawer_home">Home</string>
+    <string name="drawer_sign_out_of">Von %1$s abmelden</string>
+    <string name="space_switch">Space wechseln</string>
+    <string name="space_personal">Persönlich</string>
+    <string name="space_group">Gruppe</string>
+    <string name="filter_all">Alle</string>
+    <string name="switcher_open">Tenant oder Server wechseln</string>
+    <string name="switcher_add_server">Server hinzufügen</string>
+    <string name="tab_depot_file">Datei</string>
+    <string name="signin_cancel">Abbrechen</string>
+    <string name="signin_add_title">Server hinzufügen</string>
+    <string name="switcher_manage">Server verwalten</string>
+    <string name="manage_title">Server</string>
+    <string name="manage_current">Gerade angezeigt</string>
+    <string name="manage_sign_out">Von diesem Server abmelden</string>
+    <string name="manage_hint">Ausgeblendete Tenants und Spaces bleiben auf dem Server und werden nur auf diesem Gerät weggelassen.</string>
 </resources>

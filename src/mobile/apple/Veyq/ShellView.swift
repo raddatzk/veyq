@@ -1,10 +1,10 @@
 import SwiftUI
 import VeyqCore
 
-/// The shell (ADR 0122). The drawer chooses what the app is in; the bar at the bottom belongs to the chosen
-/// application — its own places, or those of its open object — and ends with Search, which on iOS is the system's
-/// search tab. On a wide screen (iPad, Mac) the drawer stays open as the sidebar. Its look is the web's (ADR 0123
-/// decision 7): the accent for selection, the green for creating, the web's tiles and section labels.
+/// The shell (ADR 0122). The drawer chooses what the app is in — Home (a space's tree) or an application; the bar at
+/// the bottom belongs to the chosen application — its own places, or those of its open object — and ends with Search,
+/// which on iOS is the system's search tab. On a wide screen (iPad, Mac) the drawer stays open as the sidebar. Its look
+/// is the web's (ADR 0123 decision 7).
 struct ShellView: View {
     @Bindable var model: AppModel
     #if os(iOS)
@@ -20,6 +20,9 @@ struct ShellView: View {
             #endif
         }
         .tint(Role.accent)
+        .sheet(isPresented: Binding(get: { model.managing != nil }, set: { if !$0 { model.managing = nil } })) {
+            ManageView(model: model)
+        }
     }
 
     private var wide: some View {
@@ -49,7 +52,8 @@ struct ShellView: View {
     #endif
 }
 
-/// The drawer: the brand, New, Favorites, Recent, the applications, Spaces, then account and settings.
+/// The drawer: the brand, the tenant and server switcher, New, Home, Favorites, Recent, the applications, then
+/// settings and signing out of the current server.
 struct DrawerList: View {
     @Bindable var model: AppModel
 
@@ -57,6 +61,7 @@ struct DrawerList: View {
         List {
             Section {
                 Brand().padding(.vertical, 6)
+                TenantSwitcher(model: model)
                 Button { } label: {
                     Label("New", systemImage: "plus").frame(maxWidth: .infinity)
                 }
@@ -64,6 +69,7 @@ struct DrawerList: View {
                 .tint(Role.primary)
                 .foregroundStyle(Role.onFill)
                 .buttonBorderShape(.roundedRectangle(radius: Radius.control))
+                row("Home", symbol: "house", selected: model.shell.isHome) { model.choose(nil) }
             }
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
@@ -74,11 +80,9 @@ struct DrawerList: View {
                 ForEach(model.applications, id: \.self) { app in
                     row(Names.application(app), symbol: Names.appSymbol(app), selected: model.shell.application == app && model.shell.openObject == nil) { model.choose(app) }
                 }
-                row("Spaces", symbol: "square.3.layers.3d", selected: model.shell.application == nil && model.shell.openObject == nil) { model.choose(nil) }
             } header: { SectionLabel(title: "Applications") }
             Section {
                 row("Settings", symbol: "gearshape", selected: false) { }
-                row("Sign out", symbol: "rectangle.portrait.and.arrow.right", selected: false) { model.signOut() }
             }
         }
         .listStyle(.sidebar)
@@ -114,7 +118,65 @@ struct DrawerList: View {
     }
 }
 
-/// The chosen application's bar: its places (or its open object's), then Search.
+/// The switcher: the current tenant and server; every server's tenants, and adding a server (owner 2026-11-08: one
+/// server can give several tenants, and the app connects to several servers).
+struct TenantSwitcher: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        Menu {
+            ForEach(model.servers) { server in
+                Section(server.label) {
+                    ForEach(server.tenants, id: \.tenantId) { tenant in
+                        Button {
+                            model.switchTo(server.account, tenant)
+                        } label: {
+                            if tenant.tenantId == model.tenant?.tenantId && server.label == model.server {
+                                Label(tenant.name, systemImage: "checkmark")
+                            } else {
+                                Text(tenant.name)
+                            }
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button { model.openManage() } label: { Label("Manage servers", systemImage: "server.rack") }
+        } label: {
+            HStack(spacing: 10) {
+                TenantAvatar(name: model.tenant?.name ?? "?")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(model.tenant?.name ?? "").fontWeight(.bold).foregroundStyle(Role.text).lineLimit(1)
+                    Text(model.server).font(.caption).foregroundStyle(Role.muted).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if model.switching { ProgressView().controlSize(.small) } else {
+                    Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
+                }
+            }
+            .padding(10)
+            .background(Role.hover, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Switch tenant or server")
+    }
+}
+
+/// The web's tenant avatar: the initial on the accent's gradient (`.sidebar-tenant-avatar`).
+struct TenantAvatar: View {
+    let name: String
+
+    var body: some View {
+        Text(String(name.prefix(1)).uppercased())
+            .font(.system(size: 15, weight: .heavy))
+            .foregroundStyle(Role.onFill)
+            .frame(width: 34, height: 34)
+            .background(LinearGradient(colors: [Role.accent, Role.accent.opacity(0.72)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+    }
+}
+
+/// The chosen application's bar: its places (or its open object's), then Search. Home has Search alone.
 struct Bar: View {
     @Bindable var model: AppModel
     var onMenu: (() -> Void)? = nil
@@ -153,8 +215,8 @@ struct Bar: View {
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            if model.shell.openObject != nil {
-                Button { model.close() } label: { Image(systemName: "chevron.backward") }
+            if model.shell.canGoBack {
+                Button { model.goBack() } label: { Image(systemName: "chevron.backward") }
             } else if let onMenu {
                 Button(action: onMenu) { Image(systemName: "line.3.horizontal") }
             }
@@ -168,8 +230,82 @@ struct Bar: View {
             ArrangedListView(list: model.applicationList(app), onOpen: model.open)
                 .navigationTitle(Names.application(app))
         } else {
-            SpacesView(model: model)
+            HomeView(model: model)
         }
+    }
+}
+
+/// Home (ADR 0122): the shown space's tree, one level at a time, as the web's level view lists it — the folders, then
+/// every application's objects; the filters at the top keep one application's objects, the folders stay. The space is
+/// switched from the title (owner 2026-11-08), iOS' own title menu.
+struct HomeView: View {
+    @Bindable var model: AppModel
+
+    private var title: String {
+        if let folder = model.shell.folder { return folder.name }
+        return Names.spaceName(model.space)
+    }
+
+    var body: some View {
+        List {
+            if model.filters.count > 1 {
+                Picker("Filter", selection: Binding(get: { model.shell.filter }, set: { model.setFilter($0) })) {
+                    ForEach(Array(model.filters.enumerated()), id: \.offset) { _, f in
+                        Text(f.map { Names.application($0) } ?? "All").tag(f)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+            }
+            let level = model.level
+            if level.isEmpty {
+                Text("Nothing here yet").foregroundStyle(Role.muted).listRowBackground(Color.clear)
+            }
+            ForEach(level, id: \.nodeId) { node in
+                if let folder = node.asFolder() {
+                    Button { model.enter(folder) } label: {
+                        HStack(spacing: 12) {
+                            FolderTile()
+                            Text(node.name).fontWeight(.bold).foregroundStyle(Role.text)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(Role.surface)
+                } else if let ref = node.asObject() {
+                    ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .navigationTitle(title)
+        #if os(iOS)
+        // The inline title is where iOS shows its title menu's chevron; a large title would hide the switcher.
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbarTitleMenu {
+            if model.shell.folder == nil {
+                ForEach(model.spaces, id: \.scopeId) { space in
+                    Button { model.switchSpace(space.scopeId) } label: {
+                        Label(Names.spaceName(space), systemImage: space.scopeId == model.shell.space ? "checkmark" : Names.spaceSymbol(space.kind))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The web's folder tile: the info role's soft fill and text.
+struct FolderTile: View {
+    var body: some View {
+        Image(systemName: "folder")
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(Color("veyq-info-text"))
+            .frame(width: 34, height: 34)
+            .background(Color("veyq-info-soft"), in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
     }
 }
 
@@ -211,24 +347,6 @@ struct ArrangedListView: View {
 
     private func rows(_ refs: [ObjectRef]) -> some View {
         ForEach(refs, id: \.nodeId) { ref in ObjectRow(ref: ref, onOpen: onOpen).listRowBackground(Role.surface) }
-    }
-}
-
-struct SpacesView: View {
-    @Bindable var model: AppModel
-
-    var body: some View {
-        List {
-            ForEach(model.spaces, id: \.scopeId) { space in
-                Section {
-                    let inSpace = model.objects.filter { $0.scopeId == space.scopeId }
-                    if inSpace.isEmpty { Text("Nothing here yet").foregroundStyle(Role.muted) }
-                    ForEach(inSpace, id: \.nodeId) { ref in ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface) }
-                } header: { SectionLabel(title: LocalizedStringKey(space.name)) }
-            }
-        }
-        .scrollContentBackground(.hidden)
-        .navigationTitle("Spaces")
     }
 }
 
@@ -291,15 +409,32 @@ enum Names {
         }
     }
 
+    static func spaceName(_ space: SpaceRef?) -> String {
+        switch space?.kind {
+        case nil: String(localized: "Home")
+        case "PERSONAL": String(localized: "Personal")
+        case "GROUP": String(localized: "Group")
+        default: space!.name
+        }
+    }
+
+    static func spaceSymbol(_ kind: String) -> String {
+        switch kind {
+        case "PERSONAL": "person"
+        case "GROUP": "person.2"
+        default: "house"
+        }
+    }
+
     static func tab(_ key: String, app: ApplicationId?) -> LocalizedStringKey {
         switch key {
         case "memories.all": "Memories"
         case "memories.map": "Map"
-        case "depot.files": "Files"
+        case "depot.file": "File"
         case "expenses.entries": "Entries"
         case "expenses.overview": "Overview"
         case "expenses.settings": "Settings"
-        default: app.map(application) ?? "Spaces"
+        default: app.map(application) ?? "Home"
         }
     }
 
@@ -310,8 +445,8 @@ enum Names {
         case "expenses.entries": "list.bullet"
         case "expenses.overview": "chart.bar"
         case "expenses.settings": "gearshape"
-        case "depot.files": "doc"
-        default: app.map(appSymbol) ?? "square.3.layers.3d"
+        case "depot.file": "doc"
+        default: app.map(appSymbol) ?? "house"
         }
     }
 }
