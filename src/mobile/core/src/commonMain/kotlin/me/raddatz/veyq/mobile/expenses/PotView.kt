@@ -171,15 +171,21 @@ class PotView internal constructor(session: Source) {
     /** A new entry's form on [date] (`YYYY-MM-DD`, the person's local day), paid by the first person offered. */
     fun blankForm(date: String, separator: Char = '.'): EntryForm? = base?.let { EntryForm.empty(it, people.map { p -> p.id }, date) }
 
-    /** An entry's form as its latest revision holds it, to edit it, and the revision it is based on; null for none. */
-    class Editing(val form: EntryForm, val basedOn: Long, val people: List<Person>)
+    /**
+     * An entry's form as its latest revision holds it, the revision it is based on, and its [status]: the editor's one
+     * dialog for every viewer (`EntryEditor.vue`), editable where [canWrite] says so, else read only. An unreadable entry
+     * opens as the web opens it, a blank form dated [today] on its revision, which a writer may save over it; an invalid
+     * one with its warning. Null for no live entry.
+     */
+    class Editing(val form: EntryForm, val basedOn: Long, val people: List<Person>, val status: Ledger.Status)
 
-    fun editing(entryId: String, separator: Char = '.'): Editing? {
+    fun editing(entryId: String, separator: Char = '.', today: String = ""): Editing? {
         val b = base ?: return null
         val e = ledger?.entries?.firstOrNull { it.id == entryId && it.status != Ledger.Status.DELETED } ?: return null
-        val c = e.content ?: return null
-        val offered = offered(Ledger.namedParticipants(c))
-        return Editing(EntryForm.of(c, b, offered.map { it.id }, separator), e.revision, offered)
+        val c = e.content
+        val offered = offered(c?.let(Ledger::namedParticipants).orEmpty())
+        val form = c?.let { EntryForm.of(it, b, offered.map { p -> p.id }, separator) } ?: EntryForm.empty(b, offered.map { it.id }, today)
+        return Editing(form, e.revision, offered, e.status)
     }
 
     /** Why [form] cannot be saved, at which field; null when it can. */

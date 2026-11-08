@@ -50,7 +50,10 @@ A Gradle build of its own, run through its own wrapper.
   to the byte and saves the entry without it, so the receipt is dropped (the entry stays). The dev backend's store
   endpoint must be one this machine reaches (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT`). `VEYQ_LIVE_POLL=<pot name>` opens
   the Pot twice, writes an entry ("Poll check") on one and deletes it, and checks the other's live poll sees both (the
-  deleted entry stays in the Pot's deleted entries).
+  deleted entry stays in the Pot's deleted entries). `VEYQ_LIVE_SWITCH=<pot name>` switches Expenses off for the tenant
+  (its owner's switch), checks the Pot reads read only and a write is refused, and switches it back on — with
+  `VEYQ_LIVE_SWITCH_HOLD_S=<s>` it stays off that long first, for a UI pass (re-open each app: a tenant's set is read
+  when it opens).
 - `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_SEED_TENANT="verein.localhost|Turnverein" ./gradlew :core:jvmTest --tests
   '*DevSecondTenantTest*'` — dev seeding, not a check: gives the seeded principal a second tenant (the seeder births only
   one), through the app's own suite, so the switcher has two to switch between. Skipped when it already exists.

@@ -57,6 +57,10 @@ import me.raddatz.veyq.mobile.expenses.RevisionFormat
 /** The reader's decimal separator, as amounts are typed over. */
 internal fun separator(): Char = java.text.DecimalFormatSymbols.getInstance().decimalSeparator
 
+/** Whether the editor's fields take input: false for a reader, who sees the same entry read only (inbox #401: rights
+ *  only remove functions, never a reader's own screen). */
+internal val LocalEditable = androidx.compose.runtime.staticCompositionLocalOf { true }
+
 /** A problem of the form or the write path in words (the web's `expenses.entry.problem.*`). */
 @Composable
 internal fun problemText(problem: String): String = stringResource(
@@ -94,6 +98,7 @@ internal fun problemText(problem: String): String = stringResource(
 @Composable
 fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editing: Pair<String, PotView.Editing>?, onClose: () -> Unit) {
     val sep = remember { separator() }
+    val editable = view.canWrite
     val people = editing?.second?.people ?: view.people
     val ids = people.map { it.id }
     var form by remember {
@@ -108,15 +113,22 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
     val nameOf = people.associate { it.id to it.name }
 
     ModalBottomSheet(onDismissRequest = { model.clearPotMessage(); onClose() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalEditable provides editable) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp).imePadding(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(stringResource(if (editing == null) R.string.ed_new_title else R.string.ed_edit_title), style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(when { editing == null -> R.string.ed_new_title; editable -> R.string.ed_edit_title; else -> R.string.ed_view_title }),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            if (editing?.second?.status == me.raddatz.veyq.mobile.expenses.Ledger.Status.INVALID) {
+                Text(stringResource(R.string.ed_invalid), color = MaterialTheme.colorScheme.error)
+            }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 Kind.entries.forEachIndexed { i, k ->
                     SegmentedButton(
-                        selected = form.kind == k, onClick = { form = form.withKind(k, sep) },
+                        selected = form.kind == k, onClick = { form = form.withKind(k, sep) }, enabled = editable,
                         shape = SegmentedButtonDefaults.itemShape(i, Kind.entries.size),
                     ) {
                         Text(stringResource(when (k) { Kind.EXPENSE -> R.string.ed_expense; Kind.REFUND -> R.string.ed_refund; Kind.TRANSFER -> R.string.pot_transfer }))
@@ -124,7 +136,7 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
                 }
             }
             OutlinedTextField(
-                form.title, { form = form.copy(title = it) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                form.title, { form = form.copy(title = it) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = editable,
                 label = { Text(stringResource(if (form.kind == Kind.TRANSFER) R.string.ed_note else R.string.entry_title)) },
                 isError = at("title") != null, supportingText = at("title")?.let { { Text(problemText(it.problem)) } },
             )
@@ -152,7 +164,7 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
 
             if (form.kind == Kind.TRANSFER) {
                 OutlinedTextField(
-                    form.amount, { form = form.copy(amount = it) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    form.amount, { form = form.copy(amount = it) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = editable,
                     label = { Text(stringResource(R.string.entry_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = at("amount") != null, supportingText = at("amount")?.let { { Text(problemText(it.problem)) } },
                 )
@@ -170,14 +182,14 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             item.label, { v -> form = form.copy(items = form.items.toMutableList().also { it[i] = item.copy(label = v) }) },
-                            singleLine = true, label = { Text(stringResource(R.string.ed_item)) }, modifier = Modifier.weight(1f),
+                            singleLine = true, label = { Text(stringResource(R.string.ed_item)) }, modifier = Modifier.weight(1f), enabled = editable,
                         )
                         OutlinedTextField(
                             item.amount, { v -> form = form.copy(items = form.items.toMutableList().also { it[i] = item.copy(amount = v) }) },
                             singleLine = true, label = { Text(stringResource(R.string.entry_amount)) }, modifier = Modifier.width(120.dp).padding(start = 8.dp),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), enabled = editable,
                         )
-                        IconButton(onClick = { form = form.copy(items = form.items.toMutableList().also { it.removeAt(i) }) }) {
+                        if (editable) IconButton(onClick = { form = form.copy(items = form.items.toMutableList().also { it.removeAt(i) }) }) {
                             Icon(Icons.Outlined.Close, stringResource(R.string.ed_remove_item))
                         }
                     }
@@ -186,7 +198,7 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
                     }
                     at("item", i)?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
                 }
-                TextButton(onClick = { form = form.copy(items = form.items + EntryForm.emptyItem(ids)) }) { Text(stringResource(R.string.ed_add_item)) }
+                if (editable) TextButton(onClick = { form = form.copy(items = form.items + EntryForm.emptyItem(ids)) }) { Text(stringResource(R.string.ed_add_item)) }
                 at("items")?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
                 if (form.items.isEmpty() || form.restLeft > 0) {
                     HorizontalDivider()
@@ -205,14 +217,14 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
                 EntryHistory(view, editing.first)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                if (editing != null) {
+                if (editing != null && editable) {
                     TextButton(onClick = { model.potWrite({ it.deleteEntry(editing.first, editing.second.basedOn) }) { onClose() } }, enabled = !state.saving) {
                         Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error)
                     }
                     androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
                 }
-                TextButton(onClick = { model.clearPotMessage(); onClose() }) { Text(stringResource(R.string.entry_cancel)) }
-                Button(
+                TextButton(onClick = { model.clearPotMessage(); onClose() }) { Text(stringResource(if (editable) R.string.entry_cancel else R.string.receipts_close)) }
+                if (editable) Button(
                     onClick = {
                         tried = true
                         if (refusal == null) {
@@ -229,6 +241,7 @@ fun EntryEditor(view: PotView, state: AppModel.PotState, model: AppModel, editin
                     enabled = !state.saving,
                 ) { Text(stringResource(R.string.entry_save)) }
             }
+        }
         }
     }
 }
@@ -251,11 +264,11 @@ private fun DateField(date: String, problem: String?, onPick: (String) -> Unit) 
     Box(Modifier.fillMaxWidth()) {
         OutlinedTextField(
             runCatching { java.time.LocalDate.parse(date).format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)) }.getOrDefault(date),
-            {}, readOnly = true, label = { Text(stringResource(R.string.ed_date)) }, modifier = Modifier.fillMaxWidth(),
+            {}, readOnly = true, label = { Text(stringResource(R.string.ed_date)) }, modifier = Modifier.fillMaxWidth(), enabled = LocalEditable.current,
             isError = problem != null, supportingText = problem?.let { { Text(problemText(it)) } },
         )
         // A read-only field takes no click: a transparent button over it opens the picker.
-        TextButton(onClick = { open = true }, modifier = Modifier.matchParentSize()) {}
+        TextButton(onClick = { open = true }, enabled = LocalEditable.current, modifier = Modifier.matchParentSize()) {}
     }
     if (open) {
         val picker = rememberDatePickerState(initialSelectedDateMillis = millis)
@@ -276,9 +289,10 @@ private fun DateField(date: String, problem: String?, onPick: (String) -> Unit) 
 @Composable
 private fun Dropdown(label: String, options: List<Pair<String, String>>, selected: String, modifier: Modifier = Modifier.fillMaxWidth(), onSelect: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(open, { open = it }, modifier) {
+    val editable = LocalEditable.current
+    ExposedDropdownMenuBox(open, { open = it && editable }, modifier) {
         OutlinedTextField(
-            options.firstOrNull { it.first == selected }?.second ?: "", {}, readOnly = true, label = { Text(label) },
+            options.firstOrNull { it.first == selected }?.second ?: "", {}, readOnly = true, label = { Text(label) }, enabled = editable,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
         )
@@ -307,7 +321,7 @@ private fun CurrencyField(view: PotView, form: EntryForm, problem: String?, note
         }
         if (form.currency != base) {
             OutlinedTextField(
-                form.rate, { onChange(form.copy(rate = it)) }, singleLine = true, modifier = Modifier.weight(1f).padding(start = 8.dp),
+                form.rate, { onChange(form.copy(rate = it)) }, singleLine = true, modifier = Modifier.weight(1f).padding(start = 8.dp), enabled = LocalEditable.current,
                 label = { Text(stringResource(R.string.ed_rate, form.currency, base)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 isError = problem != null,
                 supportingText = {
@@ -336,9 +350,9 @@ private fun Payers(form: EntryForm, people: List<PotView.Person>, problem: Strin
             OutlinedTextField(
                 p.amount, { v -> onChange(form.copy(payers = form.payers.toMutableList().also { it[i] = p.copy(amount = v) })) },
                 singleLine = true, label = { Text(stringResource(R.string.entry_amount)) }, modifier = Modifier.width(120.dp).padding(start = 8.dp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), enabled = LocalEditable.current,
             )
-            if (form.payers.size > 1) {
+            if (form.payers.size > 1 && LocalEditable.current) {
                 IconButton(onClick = { onChange(form.copy(payers = form.payers.toMutableList().also { it.removeAt(i) })) }) {
                     Icon(Icons.Outlined.Close, stringResource(R.string.ed_remove_payer, people.firstOrNull { it.id == p.participant }?.name ?: ""))
                 }
@@ -347,7 +361,7 @@ private fun Payers(form: EntryForm, people: List<PotView.Person>, problem: Strin
     }
     problem?.let { Text(problemText(it), color = MaterialTheme.colorScheme.error) }
     val unused = people.firstOrNull { pp -> form.payers.none { it.participant == pp.id } }
-    if (unused != null) {
+    if (unused != null && LocalEditable.current) {
         TextButton(onClick = { onChange(form.copy(payers = form.payers + EntryForm.Payer(unused.id, ""))) }) { Text(stringResource(R.string.ed_add_payer)) }
     }
 }
@@ -364,13 +378,13 @@ private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Lo
                 else pluralStringResource(R.plurals.ed_split_everyone, on.size, on.size),
                 Modifier.weight(1f),
             )
-            TextButton(onClick = { onChange(split.copy(expanded = true)) }) { Text(stringResource(R.string.ed_adjust)) }
+            if (LocalEditable.current) TextButton(onClick = { onChange(split.copy(expanded = true)) }) { Text(stringResource(R.string.ed_adjust)) }
         }
         return
     }
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         Mode.entries.forEachIndexed { i, m ->
-            SegmentedButton(selected = split.mode == m, onClick = { onChange(split.copy(mode = m)) }, shape = SegmentedButtonDefaults.itemShape(i, Mode.entries.size)) {
+            SegmentedButton(selected = split.mode == m, onClick = { onChange(split.copy(mode = m)) }, enabled = LocalEditable.current, shape = SegmentedButtonDefaults.itemShape(i, Mode.entries.size)) {
                 Text(stringResource(when (m) { Mode.SHARES -> R.string.ed_by_shares; Mode.PERCENT -> R.string.ed_by_percent; Mode.AMOUNTS -> R.string.ed_by_amount }))
             }
         }
@@ -380,7 +394,7 @@ private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Lo
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(row != null, { on ->
                 onChange(split.copy(rows = if (on) ids.mapNotNull { id -> split.rows.firstOrNull { it.participant == id } ?: EntryForm.SplitRow(id).takeIf { id == p.id } } else split.rows.filter { it.participant != p.id }))
-            })
+            }, enabled = LocalEditable.current)
             Text(p.name, Modifier.weight(1f))
             if (row != null) {
                 val value = when (split.mode) { Mode.SHARES -> row.shares; Mode.PERCENT -> row.percent; Mode.AMOUNTS -> row.amount }
@@ -389,7 +403,7 @@ private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Lo
                         val next = when (split.mode) { Mode.SHARES -> row.copy(shares = v); Mode.PERCENT -> row.copy(percent = v); Mode.AMOUNTS -> row.copy(amount = v) }
                         onChange(split.copy(rows = split.rows.map { if (it.participant == p.id) next else it }))
                     },
-                    singleLine = true, modifier = Modifier.width(110.dp),
+                    singleLine = true, modifier = Modifier.width(110.dp), enabled = LocalEditable.current,
                     keyboardOptions = KeyboardOptions(keyboardType = if (split.mode == Mode.SHARES) KeyboardType.Number else KeyboardType.Decimal),
                     suffix = { if (split.mode == Mode.PERCENT) Text("%") },
                 )
@@ -405,7 +419,7 @@ private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Lo
         }
         Mode.SHARES -> {}
     }
-    TextButton(onClick = { onChange(EntryForm.everyoneEqually(split, ids)) }) { Text(stringResource(R.string.ed_everyone_equally)) }
+    if (LocalEditable.current) TextButton(onClick = { onChange(EntryForm.everyoneEqually(split, ids)) }) { Text(stringResource(R.string.ed_everyone_equally)) }
 }
 
 /** The shares in the base currency as the save seals them (`sharesPreview`). */

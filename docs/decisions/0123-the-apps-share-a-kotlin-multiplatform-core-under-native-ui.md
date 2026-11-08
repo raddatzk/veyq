@@ -165,7 +165,11 @@ implementation exists but what holds it to the first.
   app in front (Android: the screen's lifecycle started; Apple: the scene active — Swift drives the loop, since a Swift
   task's cancellation does not reach a Kotlin coroutine), skipped while a write shows saving; a pull reads it at once. Two
   reads of one Pot run one after the other. What one device writes, the other shows within a tick (measured 2026-11-08,
-  Android and iOS on one Pot).
+  Android and iOS on one Pot). Every viewer opens an entry in the one editor (`EntryEditor.vue`, inbox #401): a reader —
+  today a member while Expenses is switched off for the tenant — sees it read only (its fields disabled, no add, remove,
+  save or delete; its receipts open, its history shows), an invalid entry says so above it, and an unreadable one opens
+  as the web opens it, a blank form on the revision it cannot read (`PotViewEntriesTest`; switched off live, the server
+  refuses the write the app no longer offers, `PotLiveTest`).
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

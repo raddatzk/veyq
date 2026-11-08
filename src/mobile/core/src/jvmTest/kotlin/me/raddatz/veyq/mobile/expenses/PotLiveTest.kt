@@ -20,7 +20,7 @@ import kotlin.time.Duration.Companion.minutes
  */
 class PotLiveTest {
     @Test
-    fun theSeededPotsReadAndOneExpenseIsAdded() = runTest(timeout = 2.minutes) {
+    fun theSeededPotsReadAndOneExpenseIsAdded() = runTest(timeout = 10.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
         val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
@@ -138,6 +138,37 @@ class PotLiveTest {
             }
             assertEquals(writer.ledger!!.entries.map { it.id to it.status }.toSet(), watcher.ledger!!.entries.map { it.id to it.status }.toSet())
             println("[$potName] the watcher's poll saw the entry written and deleted on the other session")
+        }
+        System.getenv("VEYQ_LIVE_SWITCH")?.let { potName ->
+            // Expenses switched off for the tenant (uc.platform.switch-application-off), then back on: off, a member reads
+            // the Pot read only — every entry still opens — and the server refuses a write, as the app no longer offers one.
+            val ref = pots.first { it.name == potName }
+            val switches = me.raddatz.veyq.mobile.api.apis.TenantsApi(tenant.base, account.http)
+            suspend fun switch(off: Boolean) = assertTrue(
+                account.respond { switches.setTenantCapabilitySwitch(tenant.tenant.tenantId, "expenses", me.raddatz.veyq.mobile.api.models.TenantCapabilitySwitchUpdate(off)) }.success,
+                "the switch did not move",
+            )
+            switch(true)
+            try {
+                val off = account.open(tenant.tenant)
+                assertTrue("expenses" in off.applicationsOff())
+                val pot = PotSession.open(off, ref.scopeId, ref.nodeId)!!
+                val view = PotView(pot)
+                assertTrue(!view.canWrite && !pot.canChangeSettings, "a switched-off Pot offered a write")
+                assertTrue(view.entries.all { view.editing(it.id, today = "2026-11-08") != null }, "an entry did not open for the reader")
+                val people = pot.ledger!!.participants.filter { it.active && !it.erased }
+                val form = view.blankForm("2026-11-08")!!.copy(title = "Switched off", payers = listOf(EntryForm.Payer(people.first().id, "1")))
+                assertEquals(PotSession.WriteOutcome.REFUSED, pot.saveEntry(null, form, null))
+                // A UI pass looks at the apps meanwhile (each re-opened, since a tenant's set is read when it opens).
+                System.getenv("VEYQ_LIVE_SWITCH_HOLD_S")?.toLongOrNull()?.let { s ->
+                    println("[$potName] Expenses stays off for $s s")
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Thread.sleep(s * 1000) }
+                }
+            } finally {
+                switch(false)
+            }
+            assertTrue("expenses" !in account.open(tenant.tenant).applicationsOff())
+            println("[$potName] switched off: read only, every entry opens, a write refused; switched back on")
         }
         if (System.getenv("VEYQ_LIVE_RATES") == "1") {
             // The tenant's exchange-rate service, asked once for today's table (a request to that third party).

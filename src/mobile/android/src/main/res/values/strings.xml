@@ -157,6 +157,9 @@
     <string name="create_pot_failed">The pot was not created. Please try again.</string>
     <string name="ed_new_title">Add entry</string>
     <string name="ed_edit_title">Edit entry</string>
+    <string name="ed_view_title">Entry</string>
+    <string name="ed_invalid">This entry does not add up, so it counts nowhere. Saving it corrected counts it again.</string>
+    <string name="pot_no_entries_readonly">No entries yet.</string>
     <string name="ed_expense">Expense</string>
     <string name="ed_refund">Refund</string>
     <string name="ed_note">Note (optional)</string>

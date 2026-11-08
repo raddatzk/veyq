@@ -89,6 +89,7 @@ internal fun EntryReceipts(view: PotView, model: AppModel, form: EntryForm, pend
         onPending(pending + added)
     }
     val palette = LocalPalette.current
+    val editable = LocalEditable.current
     Text(stringResource(R.string.receipts_title), fontWeight = FontWeight.SemiBold)
     if (form.receipts.isEmpty() && pending.isEmpty()) Text(stringResource(R.string.receipts_none), color = role(palette.muted))
     for (id in form.receipts) {
@@ -97,17 +98,17 @@ internal fun EntryReceipts(view: PotView, model: AppModel, form: EntryForm, pend
             TextButton(onClick = { viewing = id }, enabled = r != null && !r.blocked, modifier = Modifier.weight(1f)) {
                 Text(Receipts.downloadName(r?.name, r?.type), Modifier.fillMaxWidth())
             }
-            IconButton(onClick = { onForm(form.copy(receipts = form.receipts - id)) }) { Icon(Icons.Outlined.Close, stringResource(R.string.receipts_remove)) }
+            if (editable) IconButton(onClick = { onForm(form.copy(receipts = form.receipts - id)) }) { Icon(Icons.Outlined.Close, stringResource(R.string.receipts_remove)) }
         }
     }
     for (p in pending) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(Receipts.downloadName(p.name, p.type), Modifier.weight(1f).padding(start = 12.dp), color = role(palette.muted))
-            IconButton(onClick = { onPending(pending - p) }) { Icon(Icons.Outlined.Close, stringResource(R.string.receipts_remove)) }
+            if (editable) IconButton(onClick = { onPending(pending - p) }) { Icon(Icons.Outlined.Close, stringResource(R.string.receipts_remove)) }
         }
     }
     if (refused) Text(stringResource(R.string.receipts_refused), color = MaterialTheme.colorScheme.error)
-    if (form.receipts.size + pending.size < Receipts.MAX_PER_ENTRY) {
+    if (editable && form.receipts.size + pending.size < Receipts.MAX_PER_ENTRY) {
         TextButton(onClick = { pick.launch(arrayOf("image/*", "application/pdf")) }) { Text(stringResource(R.string.receipts_add)) }
     }
     viewing?.let { id -> ReceiptViewer(view, model, id) { viewing = null } }

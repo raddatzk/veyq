@@ -155,6 +155,9 @@
     <string name="create_pot_failed">Die Kasse wurde nicht erstellt. Bitte versuche es erneut.</string>
     <string name="ed_new_title">Eintrag hinzufügen</string>
     <string name="ed_edit_title">Eintrag bearbeiten</string>
+    <string name="ed_view_title">Eintrag</string>
+    <string name="ed_invalid">Dieser Eintrag geht nicht auf und zählt deshalb nirgends. Korrigiert gespeichert zählt er wieder.</string>
+    <string name="pot_no_entries_readonly">Noch keine Einträge.</string>
     <string name="ed_expense">Ausgabe</string>
     <string name="ed_refund">Erstattung</string>
     <string name="ed_note">Notiz (optional)</string>

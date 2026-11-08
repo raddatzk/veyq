@@ -161,12 +161,12 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
     var viewing by remember { mutableStateOf<PotView.EntryRow?>(null) }
     val palette = LocalPalette.current
     Box(Modifier.fillMaxSize()) {
-        if (view.entries.isEmpty()) Note(stringResource(R.string.pot_no_entries))
+        if (view.entries.isEmpty()) Note(stringResource(if (view.canWrite) R.string.pot_no_entries else R.string.pot_no_entries_readonly))
         LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)) {
             items(view.entries, key = { it.id }) { e ->
-                val canEdit = view.canWrite && e.kind != null
+                // Every viewer opens an entry: a writer to edit it, a reader to read it (one dialog, inbox #401).
                 Row(
-                    Modifier.fillMaxWidth().clickable(enabled = canEdit) { view.editing(e.id, separator())?.let { editing = e.id to it } }
+                    Modifier.fillMaxWidth().clickable { view.editing(e.id, separator(), java.time.LocalDate.now().toString())?.let { editing = e.id to it } }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

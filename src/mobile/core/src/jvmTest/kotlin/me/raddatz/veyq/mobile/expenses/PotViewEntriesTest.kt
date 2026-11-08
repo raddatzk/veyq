@@ -67,6 +67,30 @@ class PotViewEntriesTest {
     }
 
     @Test
+    fun anEntryOpensForEveryViewerAnUnreadableOneBlankOnItsRevisionAnInvalidOneMarked() {
+        val wrong = Expense("Wrong", "food", "2026-07-01", "EUR", 2, "1", 300, emptyList(), listOf(Contribution(anna, 200)), Allocation(emptyList(), Split.Equal(listOf(anna, ben))))
+        val revs = people + listOf(Rev(dinner, 1, expense("Dinner", 300)), Rev(taxi, 1, expense("Taxi", 100)), Rev(taxi, 2, null), Rev(taxi + "0", 1, wrong))
+        for (canWrite in listOf(true, false)) {
+            val v = view(revs, canWrite)
+            // A reader opens it too (read only: the editor's to say), never only a writer.
+            val live = v.editing(dinner, today = "2026-11-08")!!
+            assertEquals(Ledger.Status.LIVE to "Dinner", live.status to live.form.title)
+            assertEquals(1L, live.basedOn)
+            // Unreadable: a blank form dated today, on the revision it cannot read, so a save replaces that one.
+            val unreadable = v.editing(taxi, today = "2026-11-08")!!
+            assertEquals(Ledger.Status.UNREADABLE, unreadable.status)
+            assertEquals("" to "2026-11-08", unreadable.form.title to unreadable.form.date)
+            assertEquals(2L, unreadable.basedOn)
+            assertEquals(listOf(anna, ben), unreadable.people.map { it.id })
+            // Invalid: its content as held, marked.
+            val invalid = v.editing(taxi + "0", today = "2026-11-08")!!
+            assertEquals(Ledger.Status.INVALID to "Wrong", invalid.status to invalid.form.title)
+        }
+        // A deleted entry is no live one to open here (its own sheet shows it).
+        assertNull(view(revs + Rev(dinner, 2, Deleted)).editing(dinner))
+    }
+
+    @Test
     fun theHistoryIsNewestFirstWithTheBaseAmountAndTheWriter() {
         val v = view(
             people + listOf(

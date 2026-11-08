@@ -14,6 +14,7 @@ struct PotScreen: View {
         let basedOn: Int64?
         let people: [PotView.Person]
         let form: EntryForm
+        var invalid = false
     }
 
     @State private var editing: Editing?
@@ -36,8 +37,8 @@ struct PotScreen: View {
                                 editing = Editing(entryId: nil, basedOn: nil, people: view.people, form: f)
                             }
                         }, onOpen: { id in
-                            if let e = view.editing(entryId: id, separator: decimalSeparator) {
-                                editing = Editing(entryId: id, basedOn: e.basedOn, people: e.people, form: e.form)
+                            if let e = view.editing(entryId: id, separator: decimalSeparator, today: FormState.dayString(Date())) {
+                                editing = Editing(entryId: id, basedOn: e.basedOn, people: e.people, form: e.form, invalid: e.status == .invalid)
                             }
                         }, onOpenDeleted: { viewing = $0 })
                         }
@@ -58,7 +59,7 @@ struct PotScreen: View {
         .refreshable { await model.refreshPot() }
         .sheet(item: $editing) { e in
             if let view = model.pot?.view {
-                EntryEditor(model: model, view: view, entryId: e.entryId, basedOn: e.basedOn, people: e.people, form: FormState(e.form))
+                EntryEditor(model: model, view: view, entryId: e.entryId, basedOn: e.basedOn, people: e.people, form: FormState(e.form), invalid: e.invalid)
             }
         }
         .sheet(item: $viewing) { row in
@@ -144,7 +145,7 @@ private struct EntriesList: View {
     var body: some View {
         List {
             if view.entries.isEmpty {
-                Text("No entries yet. Add the first one.").foregroundStyle(Role.muted)
+                Text(view.canWrite ? "No entries yet. Add the first one." : "No entries yet.").foregroundStyle(Role.muted)
             }
             ForEach(view.entries, id: \.id) { e in
                 HStack(alignment: .firstTextBaseline) {
@@ -158,7 +159,8 @@ private struct EntriesList: View {
                 }
                 .listRowBackground(Role.surface)
                 .contentShape(Rectangle())
-                .onTapGesture { if view.canWrite && e.kind != nil { onOpen(e.id) } }
+                // Every viewer opens an entry: a writer to edit it, a reader to read it (one dialog, inbox #401).
+                .onTapGesture { onOpen(e.id) }
             }
             if !view.deletedEntries.isEmpty {
                 Section {

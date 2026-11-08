@@ -111,6 +111,8 @@ struct EntryEditor: View {
     let basedOn: Int64?
     let people: [PotView.Person]
     @State var form: FormState
+    /// The entry does not add up (core's `Ledger.Status.INVALID`): said above it, as the web's editor says it.
+    var invalid = false
     @State private var tried = false
     /// What is said under a filled or missing rate.
     enum RateNote: Equatable { case loading, filled(String), missing(String) }
@@ -132,6 +134,8 @@ struct EntryEditor: View {
     }
 
     private var ids: [String] { people.map(\.id) }
+    /// A reader sees the same entry read only: rights remove functions, never a reader's own screen (inbox #401).
+    private var editable: Bool { view.canWrite }
     private var refusal: EntryForm.Refusal? { view.check(form: form.kotlin) }
 
     private func shown(_ at: String, _ item: Int? = nil) -> String? {
@@ -144,12 +148,14 @@ struct EntryEditor: View {
     var body: some View {
         NavigationStack {
             Form {
+                if invalid { Section { Text("This entry does not add up, so it counts nowhere. Saving it corrected counts it again.").foregroundStyle(Role.danger) } }
                 Picker("Kind", selection: Binding(get: { form.kind }, set: { k in form = FormState(form.kotlin.withKind(kind: k, separator: decimalSeparator))  })) {
                     Text("Expense").tag(EntryForm.Kind.expense)
                     Text("Refund").tag(EntryForm.Kind.refund)
                     Text("Transfer").tag(EntryForm.Kind.transfer)
                 }
                 .pickerStyle(.segmented)
+                .disabled(!editable)
                 Section {
                     TextField(form.kind == .transfer ? "Note (optional)" : "Title", text: $form.title)
                     problem(shown("title"))
@@ -164,26 +170,30 @@ struct EntryEditor: View {
                     }
                     currencyFields
                 }
-                if form.kind == .transfer { transferFields } else { expenseFields }
-                EntryReceipts(view: view, kept: $form.receipts, pending: $pending, ui: $receiptsUI)
+                .disabled(!editable)
+                Group { if form.kind == .transfer { transferFields } else { expenseFields } }.disabled(!editable)
+                EntryReceipts(view: view, kept: $form.receipts, pending: $pending, ui: $receiptsUI, editable: editable)
                 if let message = model.pot?.message { Section { Text(Self.explain(message)).foregroundStyle(Role.danger) } }
                 if !noRoom.isEmpty { Section { Text("Saved without \(noRoom.joined(separator: ", ")): the space’s storage is full.").foregroundStyle(Role.danger) } }
                 if tried, let r = refusal, r.at == nil { Section { problem(r.problem) } }
                 if let id = entryId, let based = basedOn {
                     Section { EntryHistory(view: view, entryId: id) }
+                    if editable {
                     Section {
                         Button("Delete", role: .destructive) {
                             Task { if await model.potWrite({ try await $0.deleteEntry(entryId: id, basedOn: based) }) { dismiss() } }
                         }
                         .disabled(model.pot?.saving == true)
                     }
+                    }
                 }
             }
             .formStyle(.grouped)
             .modifier(ReceiptPresenters(model: model, view: view, kept: $form.receipts, pending: $pending, ui: $receiptsUI))
-            .navigationTitle(entryId == nil ? "Add entry" : "Edit entry")
+            .navigationTitle(entryId == nil ? "Add entry" : editable ? "Edit entry" : "Entry")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { model.clearPotMessage(); dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(editable ? "Cancel" : "Close") { model.clearPotMessage(); dismiss() } }
+                if editable {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         tried = true
@@ -199,6 +209,7 @@ struct EntryEditor: View {
                         }
                     }
                     .disabled(model.pot?.saving == true)
+                }
                 }
             }
         }
@@ -277,14 +288,14 @@ struct EntryEditor: View {
                     #if os(iOS)
                         .keyboardType(.decimalPad)
                     #endif
-                    if form.payers.count > 1 {
+                    if form.payers.count > 1 && editable {
                         Button { form.payers.remove(at: i) } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless)
                             .accessibilityLabel("Remove \(name(form.payers[i].participant))")
                     }
                 }
             }
-            if let unused = people.first(where: { p in !form.payers.contains { $0.participant == p.id } }) {
+            if editable, let unused = people.first(where: { p in !form.payers.contains { $0.participant == p.id } }) {
                 Button("Add a payer") { form.payers.append(.init(participant: unused.id, amount: "")) }
             }
             problem(shown("payers"))
@@ -305,11 +316,11 @@ struct EntryEditor: View {
                 }
                 SplitEditor(split: $form.items[i].split, people: people, part: form.kotlin.itemAmount(item: form.kotlin.items[i]), currency: form.currency, minorUnits: form.minorUnits)
                 problem(shown("item", i))
-                Button("Remove item", role: .destructive) { form.items.remove(at: i) }
+                if editable { Button("Remove item", role: .destructive) { form.items.remove(at: i) } }
             } header: { Text("Item") }
         }
         Section {
-            Button("Add item") { form.items.append(FormState.split(EntryForm.companion.emptyItem(people: ids).split).asItem) }
+            if editable { Button("Add item") { form.items.append(FormState.split(EntryForm.companion.emptyItem(people: ids).split).asItem) } }
             problem(shown("items"))
         }
         let restLeft = form.kotlin.restLeft
@@ -358,6 +369,8 @@ struct SplitEditor: View {
     let part: Int64
     let currency: String
     let minorUnits: Int32
+    /// False for a reader (the editor disables its fields): no Adjust, no "equally among all".
+    @Environment(\.isEnabled) private var editable
 
     var body: some View {
         if !split.expanded {
@@ -368,7 +381,7 @@ struct SplitEditor: View {
                     Text("All \(split.rows.count) people, equally")
                 }
                 Spacer()
-                Button("Adjust") { split.expanded = true }.buttonStyle(.borderless)
+                if editable { Button("Adjust") { split.expanded = true }.buttonStyle(.borderless) }
             }
         } else {
             Picker("Split", selection: $split.mode) {
@@ -410,8 +423,10 @@ struct SplitEditor: View {
                 Text("The amounts add up to \(money(EntryForm.companion.amountsTotal(split: k, minorUnits: minorUnits), currency, minorUnits)), not \(money(part, currency, minorUnits)).")
                     .font(.caption)
             }
-            Button("Split equally among all") {
-                split = FormState.split(EntryForm.companion.everyoneEqually(split: k, everyone: people.map(\.id)))
+            if editable {
+                Button("Split equally among all") {
+                    split = FormState.split(EntryForm.companion.everyoneEqually(split: k, everyone: people.map(\.id)))
+                }
             }
         }
     }

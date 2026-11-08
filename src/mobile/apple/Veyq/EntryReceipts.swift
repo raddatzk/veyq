@@ -22,6 +22,8 @@ struct EntryReceipts: View {
     @Binding var kept: [String]
     @Binding var pending: [PotSession.PendingReceipt]
     @Binding var ui: ReceiptsUI
+    /// False for a reader: receipts open and save, none is added or taken off.
+    var editable = true
 
     var body: some View {
         Section {
@@ -33,9 +35,11 @@ struct EntryReceipts: View {
                         .buttonStyle(.borderless)
                         .disabled(r == nil || r?.blocked == true)
                     Spacer()
-                    Button { kept.removeAll { $0 == id } } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Remove receipt")
+                    if editable {
+                        Button { kept.removeAll { $0 == id } } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Remove receipt")
+                    }
                 }
             }
             ForEach(Array(pending.enumerated()), id: \.offset) { _, p in
@@ -48,7 +52,7 @@ struct EntryReceipts: View {
                 }
             }
             if ui.refused { Text("Only images and PDFs up to 10 MB, at most 100 per entry.").font(.caption).foregroundStyle(Role.danger) }
-            if kept.count + pending.count < Int(Receipts.shared.MAX_PER_ENTRY) {
+            if editable && kept.count + pending.count < Int(Receipts.shared.MAX_PER_ENTRY) {
                 PhotosPicker(selection: $ui.photos, matching: .images) { Label("Add a photo", systemImage: "photo") }
                 Button { ui.importing = true } label: { Label("Add a file", systemImage: "doc") }
             }
