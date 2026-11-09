@@ -630,6 +630,24 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
     if (model.linkRules().on) androidx.compose.material3.IconButton(onClick = { sharing = true }) {
         androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, stringResource(R.string.share_title))
     }
+    var copying by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
+    val canCopy = model.pot.collectAsStateWithLifecycle().value?.view?.canWrite == true
+    if (copying) {
+        NodeMoveSheet(open, rootName, model, onMoved = { to, _ ->
+            scope.launch { snackbar.showSnackbar(context.getString(R.string.copy_done, open.name, to)) }
+        }, onClose = { copying = false }, copy = { to ->
+            val r = model.copyPot(open, to)
+            when (r.outcome) {
+                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.COPIED -> null
+                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.NAME_TAKEN -> context.getString(R.string.copy_name_taken)
+                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.NOTHING_TO_COPY -> context.getString(R.string.copy_nothing)
+                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.BUSY -> context.getString(R.string.move_refused_rekey_pending)
+                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.BLOCKED, me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.REFUSED ->
+                    context.getString(R.string.move_refused_illegal_structure)
+                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.FAILED -> context.getString(R.string.copy_failed)
+            }
+        })
+    }
     if (moving) {
         val movedText = { to: String -> context.getString(R.string.move_moved, open.name, to) }
         NodeMoveSheet(open, rootName, model, onMoved = { to, from ->
@@ -692,6 +710,7 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
             problem
         },
         onMove = { moving = true },
+        onCopy = if (canCopy) ({ copying = true }) else null,
         onDownload = { saveTo.launch(me.raddatz.veyq.mobile.export.NodeExport.fileName(open.name)) },
         onReport = if (reportOffered) ({ reporting = true }) else null,
         onDelete = {

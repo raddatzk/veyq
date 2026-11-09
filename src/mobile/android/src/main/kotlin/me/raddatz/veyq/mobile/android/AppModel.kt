@@ -582,6 +582,22 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return r
     }
 
+    /**
+     * Copies the open Pot [ref] to [to] (null: the space's root) in its space (uc.platform.copy-node): a new Pot under fresh
+     * keys with its people, live entries and receipts; the lists are read anew. A failed copy leaves nothing behind.
+     */
+    suspend fun copyPot(ref: ObjectRef, to: String?): me.raddatz.veyq.mobile.expenses.PotCopy.Copied {
+        val failed = me.raddatz.veyq.mobile.expenses.PotCopy.Copied(me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.FAILED)
+        val t = tenantSession ?: return failed
+        val session = potSession?.takeIf { _pot.value?.ref == ref } ?: return failed
+        val deleted = getApplication<Application>().getString(R.string.pot_deleted_person)
+        val r = runCatching {
+            me.raddatz.veyq.mobile.expenses.PotCopy.duplicate(session, t, ref.scopeId, to, deleted) { java.util.UUID.randomUUID().toString() }
+        }.getOrDefault(failed)
+        refreshLists(t)
+        return r
+    }
+
     // ---- the space's trash (core's NodeTrash) ----
 
     /** The trash of [scopeId] (the root of each deleted subtree); null when it could not be read. */

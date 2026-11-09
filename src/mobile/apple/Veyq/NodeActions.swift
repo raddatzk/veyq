@@ -14,6 +14,7 @@ struct PotHeaderActions: View {
     @State private var newName = ""
     @State private var renameProblem: String?
     @State private var moving = false
+    @State private var copying = false
     @State private var sharing = false
     @State private var reporting = false
     @State private var downloading = false
@@ -57,6 +58,10 @@ struct PotHeaderActions: View {
                 // The rename first, the delete last and destructive (`splitRowActions`).
                 Button("Rename", systemImage: "pencil") { newName = ref.name; renameProblem = nil; renaming = true }
                 Button("Move to…", systemImage: "folder") { moving = true }
+                // a copy writes a new Pot: offered where Expenses is on (the web's `canCopy`)
+                if model.pot?.view?.canWrite == true {
+                    Button("Copy to…", systemImage: "doc.on.doc") { copying = true }
+                }
                 Button("Download", systemImage: "arrow.down.circle") { Task { await download() } }
                     .disabled(downloading)
                 // the menu-only group, after a separator: report, then delete (`splitRowActions`)
@@ -72,6 +77,7 @@ struct PotHeaderActions: View {
         }
         .onAppear { pinned = model.isFavorite(ref) }
         .sheet(isPresented: $moving) { NodeMoveSheet(model: model, ref: ref) }
+        .sheet(isPresented: $copying) { NodeMoveSheet(model: model, ref: ref, copy: true) }
         .sheet(isPresented: $sharing) { PotShareSheet(model: model, ref: ref) }
         .sheet(isPresented: $reporting) { ReportSheet(model: model, ref: ref) }
         // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.

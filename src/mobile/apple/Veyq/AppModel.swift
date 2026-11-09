@@ -671,6 +671,22 @@ final class AppModel {
         return outcome
     }
 
+    /// Copies the open Pot `ref` to `to` (nil: the space's root) in its space (uc.platform.copy-node): a new Pot under fresh
+    /// keys with its people, live entries and receipts; the lists are read anew and the shell says where it went.
+    func copyPot(_ ref: ObjectRef, to: String?, toName: String) async -> PotCopy.Outcome {
+        guard let t = tenantSession, let session = potSession, pot?.ref == ref else { return .failed }
+        let r = try? await PotCopy.shared.duplicate(
+            source: session, tenant: t, scopeId: ref.scopeId, parentId: to, deletedName: String(localized: "deleted person"),
+            uuid: { @Sendable in UUID().uuidString.lowercased() }
+        )
+        await refreshLists(t)
+        let outcome = r?.outcome ?? .failed
+        if outcome == .copied {
+            trashNotice = TrashNotice(message: String(localized: "“\(ref.name)” is copied to “\(toName)”."), node: nil, moveBack: nil)
+        }
+        return outcome
+    }
+
     /// Renames `ref` to `name` (core's `NodeRename`: the placement, then its open links' names); the lists are read anew
     /// and an open page follows the node under its new name. Why it did not land, in core's words, or nil once renamed;
     /// `linksFailed` says a link kept the old name (the rename stands).
@@ -853,7 +869,7 @@ final class AppModel {
         creatingPot = CreatingPot(saving: true)
         let r = try? await PotCreate.shared.create(
             tenant: t, scopeId: scopeId, parentId: nil, name: name,
-            base: Ledger.BaseCurrency(currency: currency, minorUnits: minorUnits), people: people
+            base: Ledger.BaseCurrency(currency: currency, minorUnits: minorUnits), people: people, categories: []
         )
         guard let r, let nodeId = r.nodeId else {
             creatingPot = CreatingPot(message: r?.outcome.name ?? "REFUSED")

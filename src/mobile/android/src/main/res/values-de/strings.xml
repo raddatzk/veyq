@@ -391,4 +391,16 @@
     <string name="receipts_save_gallery">In Galerie speichern</string>
     <string name="receipts_saved_gallery">In der Galerie gespeichert.</string>
     <string name="receipts_not_saved_gallery">Das Bild konnte nicht in der Galerie gespeichert werden.</string>
+    <string name="copy_action">Kopieren nach …</string>
+    <string name="copy_title">„%1$s“ kopieren</string>
+    <string name="copy_hint">Öffne den Ort, an den die Kopie soll, und wähle „Hierher kopieren“.</string>
+    <string name="copy_submit">Hierher kopieren</string>
+    <string name="copy_losses">Was nicht mitkommt:</string>
+    <string name="copy_loss_always">Freigaben, Favoriten, der Papierkorb und die ursprünglichen Hochladezeiten. Die Kopie gehört dir.</string>
+    <string name="copy_loss_pot">Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.</string>
+    <string name="copy_loss_cover">Das Titelbild einer Kasse.</string>
+    <string name="copy_done">„%1$s“ ist nach „%2$s“ kopiert.</string>
+    <string name="copy_failed">Die Kopie ist nicht gelungen. Es blieb nichts zurück; bitte versuche es noch einmal.</string>
+    <string name="copy_name_taken">Dort ist kein freier Name für die Kopie mehr. Benenne sie zuerst um oder wähle einen anderen Ort.</string>
+    <string name="copy_nothing">Hier kann diese Version von veyq nichts kopieren.</string>
 </resources>

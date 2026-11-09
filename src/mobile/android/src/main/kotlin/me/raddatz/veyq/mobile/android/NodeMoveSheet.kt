@@ -50,7 +50,13 @@ import me.raddatz.veyq.mobile.session.NodeMove
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun NodeMoveSheet(ref: ObjectRef, rootName: String, model: AppModel, onMoved: (to: String, from: String?) -> Unit, onClose: () -> Unit) {
+internal fun NodeMoveSheet(
+    ref: ObjectRef, rootName: String, model: AppModel, onMoved: (to: String, from: String?) -> Unit,
+    /** The browser as "Copy to…" (the web's `CopyNodesDialog`): copies to the place chosen, answers why not or null once
+     *  copied; a copy may go where its original is. Null: the move. */
+    copy: (suspend (to: String?) -> String?)? = null,
+    onClose: () -> Unit,
+) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     var tree by remember { mutableStateOf<List<NodeRef>?>(null) }
@@ -65,9 +71,16 @@ internal fun NodeMoveSheet(ref: ObjectRef, rootName: String, model: AppModel, on
     }
     ModalBottomSheet(onDismissRequest = { if (!moving) onClose() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-            Text(stringResource(R.string.move_title, ref.name), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(if (copy != null) R.string.copy_title else R.string.move_title, ref.name), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.padding(4.dp))
-            Text(stringResource(R.string.move_hint), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
+            Text(stringResource(if (copy != null) R.string.copy_hint else R.string.move_hint), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
+            if (copy != null) {
+                // what a copy leaves behind, in the web's words (core's, then the kind's `copyLosses`)
+                Text(stringResource(R.string.copy_losses), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                listOf(R.string.copy_loss_always, R.string.copy_loss_pot, R.string.copy_loss_cover).forEach {
+                    Text("• " + stringResource(it), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                }
+            }
             val nodes = tree
             val moved = nodes?.firstOrNull { it.nodeId == ref.nodeId }
             if (nodes == null || moved == null) {
@@ -113,7 +126,7 @@ internal fun NodeMoveSheet(ref: ObjectRef, rootName: String, model: AppModel, on
                     HorizontalDivider()
                 }
             }
-            val block = NodeMove.hereBlock(nodes, moved, at, model.placement)
+            val block = NodeMove.hereBlock(nodes, moved, at, model.placement, copy = copy != null)
             val shown = problem ?: block?.let { stringResource(hereText(it)) }
             shown?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(if (problem != null) palette.danger else palette.muted), modifier = Modifier.padding(top = 10.dp)) }
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
@@ -125,6 +138,18 @@ internal fun NodeMoveSheet(ref: ObjectRef, rootName: String, model: AppModel, on
                         val to = at
                         val from = moved.parentId
                         scope.launch {
+                            val toName = to?.let { t -> nodes.firstOrNull { it.nodeId == t }?.name } ?: rootName
+                            if (copy != null) {
+                                val why = copy(to)
+                                moving = false
+                                if (why == null) {
+                                    onMoved(toName, null)
+                                    onClose()
+                                } else {
+                                    problem = why
+                                }
+                                return@launch
+                            }
                             val r = model.move(ref, to)
                             moving = false
                             if (r.outcome == NodeMove.Outcome.MOVED) {
@@ -136,7 +161,7 @@ internal fun NodeMoveSheet(ref: ObjectRef, rootName: String, model: AppModel, on
                         }
                     },
                     enabled = block == null && !moving,
-                ) { Text(stringResource(R.string.move_submit)) }
+                ) { Text(stringResource(if (copy != null) R.string.copy_submit else R.string.move_submit)) }
             }
         }
     }

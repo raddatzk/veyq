@@ -8,6 +8,8 @@ import VeyqCore
 struct NodeMoveSheet: View {
     let model: AppModel
     let ref: ObjectRef
+    /// The browser as "Copy to…" (the web's `CopyNodesDialog`): a copy may go where its original is.
+    var copy = false
     @Environment(\.dismiss) private var dismiss
     @State private var tree: [NodeRef]?
     @State private var at: String?
@@ -19,7 +21,7 @@ struct NodeMoveSheet: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Move “\(ref.name)”")
+                .navigationTitle(copy ? "Copy “\(ref.name)”" : "Move “\(ref.name)”")
                 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
                 #endif
@@ -37,12 +39,26 @@ struct NodeMoveSheet: View {
     @ViewBuilder private var content: some View {
         if let tree, let moved = tree.first(where: { $0.nodeId == ref.nodeId }) {
             let places = NodeMove.shared.places(tree: tree, moved: moved, at: at, allows: model.placement)
-            let block = NodeMove.shared.hereBlock(tree: tree, moved: moved, at: at, allows: model.placement)
+            let block = NodeMove.shared.hereBlock(tree: tree, moved: moved, at: at, allows: model.placement, copy: copy)
             List {
                 Section {
-                    Text("Open the place it should go to and choose “Move here”. Everything inside it moves along and stays readable.")
-                        .font(.subheadline).foregroundStyle(Role.muted)
-                        .listRowBackground(Color.clear)
+                    if copy {
+                        Text("Open the place the copy should go to and choose “Copy here”.")
+                            .font(.subheadline).foregroundStyle(Role.muted)
+                    } else {
+                        Text("Open the place it should go to and choose “Move here”. Everything inside it moves along and stays readable.")
+                            .font(.subheadline).foregroundStyle(Role.muted)
+                    }
+                }
+                .listRowBackground(Color.clear)
+                if copy {
+                    // what a copy leaves behind, in the web's words (core's, then the kind's `copyLosses`)
+                    Section("What does not come along") {
+                        Text("Shares, favourites, the trash and the original upload times. You become the owner of the copy.")
+                        Text("The history of each entry and the deleted entries: a copy starts every entry at its current version.")
+                        Text("A Pot’s cover.")
+                    }
+                    .font(.footnote).foregroundStyle(Role.muted)
                 }
                 Section {
                     // The trail: the space's root, then each folder down to the place on screen.
@@ -90,7 +106,7 @@ struct NodeMoveSheet: View {
                     Button {
                         Task { await move(to: at, from: moved.parentId) }
                     } label: {
-                        HStack { Spacer(); if moving { ProgressView() } else { Text("Move here").fontWeight(.semibold) }; Spacer() }
+                        HStack { Spacer(); if moving { ProgressView() } else { Text(copy ? "Copy here" : "Move here").fontWeight(.semibold) }; Spacer() }
                     }
                     .disabled(block != nil || moving)
                 }
@@ -104,9 +120,26 @@ struct NodeMoveSheet: View {
         moving = true
         problem = nil
         let toName = to.flatMap { t in tree?.first { $0.nodeId == t }?.name } ?? rootName
+        if copy {
+            let outcome = await model.copyPot(ref, to: to, toName: toName)
+            moving = false
+            if outcome == .copied { dismiss() } else { problem = Self.copyProblem(outcome) }
+            return
+        }
         let outcome = await model.move(ref, to: to, toName: toName, from: from)
         moving = false
         if outcome == .moved { dismiss() } else { problem = Self.problemText(outcome) }
+    }
+
+    /// Why a copy did not go through.
+    private static func copyProblem(_ outcome: PotCopy.Outcome) -> String {
+        switch outcome {
+        case .nameTaken: String(localized: "There is no free name for the copy there. Rename it first, or choose another place.")
+        case .nothingToCopy: String(localized: "Nothing here can be copied by this version of veyq.")
+        case .busy: problemText(.busy)
+        case .blocked, .refused: problemText(.notAllowed)
+        default: String(localized: "The copy did not go through. Nothing was left behind; please try again.")
+        }
     }
 
     private static func hereText(_ block: NodeMove.Block) -> String {
