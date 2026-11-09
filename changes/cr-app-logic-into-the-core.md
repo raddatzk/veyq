@@ -36,7 +36,7 @@ with both apps behaving as before on a device for what it touched, and commits o
 4. **Lists and navigation done 2026-11-09 (`ShellModel`); left: row details as data, the covers' index, "New", the link actions.** **Shell.** The lists (`Raw`, rebuild, row details as data), navigation, the drawer, refresh after a write, the
    covers' index (decoding stays native), search's name filter, "New", picking a place for shared files.
 5. **Done 2026-11-09** (`expenses/ShareInbox.kt`). **Share-in.** The incoming/taken state machine and the one fitting rule; readers stay native.
-6. **Pot.** Load, the live poll as a core watch (Swift's own loop goes), writes, creation (its parent from the shell),
+6. **Load, live poll (Swift's own loop gone), refresh, writes, creation, rates, receipts and copy done 2026-11-09 (`expenses/PotModel.kt`); left: the minor units table, entry rows as data.** **Pot.** Load, the live poll as a core watch (Swift's own loop goes), writes, creation (its parent from the shell),
    exchange rates, receipts, the minor units of a currency (one core table), entry rows as data.
 7. **Depot.** Files and their facts, uploader, the file view's decision and reads, uploads and their settling, drop
    boxes, send-a-copy's state.

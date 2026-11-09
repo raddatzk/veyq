@@ -61,7 +61,7 @@ internal fun EntryHistory(view: PotView, entryId: String) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun DeletedEntrySheet(view: PotView, state: AppModel.PotState, model: AppModel, row: PotView.EntryRow, onClose: () -> Unit) {
+internal fun DeletedEntrySheet(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel, row: PotView.EntryRow, onClose: () -> Unit) {
     val now = System.currentTimeMillis()
     val restorable = view.restorable(row.id, now)
     val purge = view.purgeAfter(row.id)

@@ -58,7 +58,7 @@ internal fun potRefusal(outcome: String): String = stringResource(
  * and its people, each with their balance in short and what may be done to them (`PotView.PersonEntry`).
  */
 @Composable
-internal fun PotSettings(view: PotView, state: AppModel.PotState, model: AppModel) {
+internal fun PotSettings(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         LocalNodeHero.current(0.dp)
         if (!view.ready) {
@@ -86,7 +86,7 @@ internal fun minorUnitsOf(code: String): Int =
 /** The base currency: chosen while the Pot holds no money entry, fixed from its first one on. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BaseCurrency(view: PotView, state: AppModel.PotState, model: AppModel) {
+private fun BaseCurrency(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
     val palette = LocalPalette.current
     Section(stringResource(R.string.pot_base_currency))
     if (!view.canChangeSettings || view.currencyFixed) {
@@ -113,7 +113,7 @@ private fun BaseCurrency(view: PotView, state: AppModel.PotState, model: AppMode
 
 /** The Pot's own categories beside the default set: added and renamed, never removed in the first cut. */
 @Composable
-private fun Categories(view: PotView, state: AppModel.PotState, model: AppModel) {
+private fun Categories(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
     if (!view.canChangeSettings && view.ownCategories.isEmpty()) return
     val palette = LocalPalette.current
     var renaming by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -156,7 +156,7 @@ private fun Categories(view: PotView, state: AppModel.PotState, model: AppModel)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun People(view: PotView, state: AppModel.PotState, model: AppModel) {
+private fun People(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
     val palette = LocalPalette.current
     var renaming by remember { mutableStateOf<PotView.PersonEntry?>(null) }
     var erasing by remember { mutableStateOf<PotView.PersonEntry?>(null) }

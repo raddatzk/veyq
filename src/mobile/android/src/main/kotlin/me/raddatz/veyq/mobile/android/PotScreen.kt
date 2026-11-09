@@ -155,7 +155,7 @@ internal fun categoryName(id: String?, view: PotView): String = when (id) {
 private fun personName(name: String?) = name ?: stringResource(R.string.pot_deleted_person)
 
 @Composable
-private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
+private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
     var adding by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Pair<String, PotView.Editing>?>(null) }
     var viewing by remember { mutableStateOf<PotView.EntryRow?>(null) }
@@ -238,7 +238,7 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
 }
 
 @Composable
-private fun Overview(view: PotView, state: AppModel.PotState, model: AppModel) {
+private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
     val palette = LocalPalette.current
     val hero = LocalNodeHero.current
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {

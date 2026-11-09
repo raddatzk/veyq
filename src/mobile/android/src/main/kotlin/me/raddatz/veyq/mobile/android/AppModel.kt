@@ -344,7 +344,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         tenantSession?.let { was -> if (was.account !== account || was.tenant.tenantId != tenant.tenantId) uploads.clear() }
         tenantSession = t
         resumeRekeys(t)
-        _pot.value = null
+        val pots = me.raddatz.veyq.mobile.expenses.PotModel(t, System::currentTimeMillis)
+        potWatch?.cancel()
+        potModel = pots
+        potWatch = viewModelScope.launch { pots.state.collect { _pot.value = it } }
+        creatingWatch?.cancel()
+        creatingWatch = viewModelScope.launch { pots.creating.collect { _creating.value = it } }
         readReportOffered()
         val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
@@ -413,10 +418,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     suspend fun trash(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<me.raddatz.veyq.mobile.session.NodeTrash.Deleted, me.raddatz.veyq.mobile.session.OpenNode?> {
         val m = shellModel ?: return me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to null
         val r = m.trash(ref)
-        if (r.gone && _pot.value?.ref?.nodeId == ref.nodeId) {
-            _pot.value = null
-            potSession = null
-        }
+        if (r.gone) _pot.value?.ref?.takeIf { it.nodeId == ref.nodeId }?.let { potModel?.close(it) }
         readRowDetails(m.tenant)
         return r.outcome to r.before
     }
@@ -552,11 +554,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * closed, or a scope's re-key finished in the background. A Pot the re-key did not reach reads the same.
      */
     private suspend fun potRekeyed() {
-        val session = potSession
-        if (session != null) {
-            runCatching { session.rekeyed() }
-            if (potSession === session) _pot.update { it?.copy(view = PotView(session)) }
-        }
+        potModel?.rekeyed()
     }
 
     // ---- a move (core's NodeMove) ----
@@ -579,14 +577,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      */
     suspend fun copyPot(ref: ObjectRef, to: String?): me.raddatz.veyq.mobile.expenses.PotCopy.Copied {
         val failed = me.raddatz.veyq.mobile.expenses.PotCopy.Copied(me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.FAILED)
-        val t = tenantSession ?: return failed
-        val session = potSession?.takeIf { _pot.value?.ref == ref } ?: return failed
+        val pots = potModel ?: return failed
+        val shell = shellModel ?: return failed
         val deleted = getApplication<Application>().getString(R.string.pot_deleted_person)
-        val r = runCatching {
-            me.raddatz.veyq.mobile.expenses.PotCopy.duplicate(session, t, ref.scopeId, to, deleted) { java.util.UUID.randomUUID().toString() }
-        }.getOrDefault(failed)
-        refreshLists(t)
-        return r
+        return pots.duplicate(shell, ref, to, deleted) { java.util.UUID.randomUUID().toString() }.also { readRowDetails(shell.tenant) }
     }
 
     // ---- the space's trash (core's NodeTrash) ----
@@ -611,12 +605,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** The tenant the shell shows, opened: where an object's own view reads from. */
     private var tenantSession: me.raddatz.veyq.mobile.session.TenantSession? = null
-    private var potSession: PotSession? = null
+    /** The Pot open in the app (core's `PotModel`): its views, its live poll, its writes. */
+    private var potModel: me.raddatz.veyq.mobile.expenses.PotModel? = null
+    private var potWatch: kotlinx.coroutines.Job? = null
+    private var creatingWatch: kotlinx.coroutines.Job? = null
+    private val potSession: PotSession? get() = potModel?.session
 
-    /** An open Pot's views: [view] null while it loads, [failed] when it did not open; [message] the last add's refusal. */
-    data class PotState(val ref: ObjectRef, val view: PotView? = null, val failed: Boolean = false, val saving: Boolean = false, val message: String? = null)
-
-    private val _pot = MutableStateFlow<PotState?>(null)
+    private val _pot = MutableStateFlow<me.raddatz.veyq.mobile.expenses.PotModel.State?>(null)
 
     /** What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`). */
     private val _rowDetails = MutableStateFlow<Map<String, List<String>>>(emptyMap())
@@ -1187,70 +1182,45 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         refreshLists(t)
         return done
     }
-    val pot: StateFlow<PotState?> = _pot.asStateFlow()
+    val pot: StateFlow<me.raddatz.veyq.mobile.expenses.PotModel.State?> = _pot.asStateFlow()
 
     /** Opens and reads the Pot [ref] unless it is the one shown. */
     fun loadPot(ref: ObjectRef) {
-        if (_pot.value?.ref == ref && !_pot.value!!.failed) return
-        _pot.value = PotState(ref)
-        viewModelScope.launch {
-            val session = tenantSession?.let { runCatching { PotSession.open(it, ref.scopeId, ref.nodeId) }.getOrNull() }
-            potSession = session
-            potPoll = LivePoll(now = System::currentTimeMillis)
-            if (_pot.value?.ref == ref) _pot.value = PotState(ref, session?.let(::PotView), failed = session == null)
-        }
+        val pots = potModel ?: return
+        viewModelScope.launch { pots.open(ref) }
     }
 
-    private var potPoll: LivePoll? = null
-
-    /**
-     * The open Pot's live poll (core's `LivePoll`), for as long as the caller runs it — the Pot's screen while it is
-     * started, so nothing is asked in the background: skipped while a write shows saving; the view read anew when a
-     * tick moved what is held.
-     */
+    /** The open Pot's live poll, for as long as the caller runs it (the Pot's screen while it is started). */
     suspend fun livePot() {
-        val session = potSession ?: return
-        val cadence = potPoll ?: return
-        session.live(cadence, busy = { _pot.value?.saving != false }) {
-            if (potSession === session) _pot.update { it?.copy(view = PotView(session)) }
-        }
+        potModel?.live()
     }
 
     /** Reads the open Pot again now (pull to refresh); [done] when it settled, moved or not. */
     fun refreshPot(done: () -> Unit) {
-        val session = potSession ?: return done()
+        val pots = potModel ?: return done()
         viewModelScope.launch {
-            runCatching {
-                session.refresh()
-                session.readReceipts()
-            }
-            if (potSession === session) _pot.update { it?.copy(view = PotView(session)) }
+            pots.refresh()
             done()
         }
     }
 
     /**
-     * One write to the open Pot ([op] on its session): the state shows it saving, then the Pot as read after it, and a
-     * refusal as its message (a [PotSession.WriteOutcome] name); [done] runs once it was stored.
+     * One write to the open Pot ([op] on its session): saving, then the Pot as read after it and a refusal as its message;
+     * [done] runs once it was stored.
      */
     fun potWrite(op: suspend (PotSession) -> PotSession.WriteOutcome, done: () -> Unit = {}) {
-        val state = _pot.value ?: return
-        val session = potSession ?: return
-        _pot.value = state.copy(saving = true, message = null)
+        val pots = potModel ?: return
+        val ref = _pot.value?.ref ?: return
         viewModelScope.launch {
-            val outcome = runCatching { op(session) }.getOrDefault(PotSession.WriteOutcome.REFUSED)
-            _pot.value = state.copy(view = PotView(session), saving = false, message = outcome.takeIf { it != PotSession.WriteOutcome.WRITTEN }?.name)
+            val stored = pots.write(op)
             // A settings write may have set the base currency: the Pot's row says it at once.
-            _rowDetails.update { it + (state.ref.nodeId to me.raddatz.veyq.mobile.expenses.PotRows.detailsOf(session.meta)) }
-            if (outcome == PotSession.WriteOutcome.WRITTEN) done()
+            pots.rowDetails()?.let { facts -> _rowDetails.update { it + (ref.nodeId to facts) } }
+            if (stored) done()
         }
     }
 
-    /** The "New pot" sheet: saving while it creates, and its refusal ([PotCreate.Outcome] name). */
-    data class CreatingPot(val saving: Boolean = false, val message: String? = null)
-
-    private val _creating = MutableStateFlow(CreatingPot())
-    val creating: StateFlow<CreatingPot> = _creating.asStateFlow()
+    private val _creating = MutableStateFlow(me.raddatz.veyq.mobile.expenses.PotModel.Creating())
+    val creating: StateFlow<me.raddatz.veyq.mobile.expenses.PotModel.Creating> = _creating.asStateFlow()
 
     /** The current members of [scopeId], for the "New pot" sheet's people; null when they do not read. */
     suspend fun membersOf(scopeId: String): List<me.raddatz.veyq.mobile.session.Person>? =
@@ -1262,31 +1232,23 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * and says so on its Settings, where they can be added).
      */
     fun createPot(scopeId: String, name: String, currency: String, minorUnits: Int, people: List<PotCreate.NewPerson>, parentId: String? = null, done: () -> Unit) {
-        val t = tenantSession ?: return
-        _creating.value = CreatingPot(saving = true)
+        val pots = potModel ?: return
+        val shell = shellModel ?: return
         viewModelScope.launch {
-            val r = runCatching { PotCreate.create(t, scopeId, parentId, name, Ledger.BaseCurrency(currency, minorUnits), people) }
-                .getOrDefault(PotCreate.Result(PotCreate.Outcome.REFUSED))
-            val nodeId = r.nodeId
-            if (nodeId == null) {
-                _creating.value = CreatingPot(message = r.outcome.name)
-                return@launch
+            if (pots.create(shell, scopeId, parentId, name, Ledger.BaseCurrency(currency, minorUnits), people)) {
+                readRowDetails(shell.tenant)
+                done()
             }
-            t.forgetTree()
-            refreshLists(t)
-            _creating.value = CreatingPot(message = r.outcome.takeIf { it != PotCreate.Outcome.CREATED }?.name)
-            done()
-            t.objects().firstOrNull { it.nodeId == nodeId }?.let(::open)
         }
     }
 
     fun clearCreating() {
-        _creating.value = CreatingPot()
+        potModel?.clearCreating()
     }
 
     /** One unit of [currency] in the open Pot's base from today's table, or null: the rate is typed then. */
     suspend fun rateFor(currency: String): me.raddatz.veyq.mobile.expenses.ExchangeRates.Filled? =
-        potSession?.let { runCatching { it.rateFor(currency, java.time.LocalDate.now().toString()) }.getOrNull() }
+        potModel?.rateFor(currency, java.time.LocalDate.now().toString())
 
     /** A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read). */
     /**
@@ -1369,14 +1331,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             ?.let { app.text(it) }.also { readRowDetails(m.tenant) }
     }
 
-    suspend fun openReceipt(receiptId: String): ByteArray? = potSession?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }
+    suspend fun openReceipt(receiptId: String): ByteArray? = potModel?.openReceipt(receiptId)
 
     /** The receipts the last save left out for want of room (the entry was saved). */
-    fun skippedReceipts(): List<String> = potSession?.skippedReceipts.orEmpty()
+    fun skippedReceipts(): List<String> = potModel?.skippedReceipts.orEmpty()
 
     /** Forgets the open Pot's last refusal (a dialog closed). */
     fun clearPotMessage() {
-        _pot.value = _pot.value?.copy(message = null)
+        potModel?.clearMessage()
     }
 
     /** The shell's lists from what was read, less what this device hides; on [start], the shell where the app opens. */

@@ -360,6 +360,12 @@ final class AppModel {
         watchUploads()
         tenantSession = t
         resumeRekeys(t)
+        let pots = PotModel(tenant: t, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
+        potWatch?.stop()
+        potModel = pots
+        potWatch = pots.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.syncPot() }
+        }
         pot = nil
         reportOffered = false
         Task { await readReportOffered() }
@@ -505,7 +511,7 @@ final class AppModel {
     /// Moves `ref` with everything under it to the space's trash; a page whose node went leaves for its parent.
     func trash(_ ref: NodeAt) async {
         guard let m = shellModel, let r = try? await m.trash(ref: ref) else { return }
-        if r.gone, pot?.ref.nodeId == ref.nodeId { pot = nil; potSession = nil }
+        if r.gone, let open = pot?.ref, open.nodeId == ref.nodeId { potModel?.close(ref: open); syncPot() }
         applyShell(start: false)
         await readDetails(m.tenant)
         trashNotice = TrashNotice(message: say(notice: r.notice), node: r.undoable ? r.before : nil)
@@ -650,10 +656,8 @@ final class AppModel {
     /// The open Pot read anew under its key, after a re-key that may have reached it: a link on it or on a folder above it
     /// closed, or a scope's re-key finished in the background. A Pot the re-key did not reach reads the same.
     private func potRekeyed() async {
-        if let session = potSession {
-            _ = try? await session.rekeyed()
-            if potSession === session { pot?.view = PotView(session: session) }
-        }
+        try? await potModel?.rekeyed()
+        syncPot()
     }
 
     // MARK: A move (core's NodeMove)
@@ -773,12 +777,10 @@ final class AppModel {
     /// Copies the open Pot `ref` to `to` (nil: the space's root) in its space (uc.platform.copy-node): a new Pot under fresh
     /// keys with its people, live entries and receipts; the lists are read anew and the shell says where it went.
     func copyPot(_ ref: NodeAt, to: String?, toName: String) async -> PotCopy.Outcome {
-        guard let t = tenantSession, let session = potSession, pot?.ref.nodeId == ref.nodeId else { return .failed }
-        let r = try? await PotCopy.shared.duplicate(
-            source: session, tenant: t, scopeId: ref.scopeId, parentId: to, deletedName: say(.potDeletedPerson),
-            uuid: { @Sendable in UUID().uuidString.lowercased() }
-        )
-        await refreshLists(t)
+        guard let pots = potModel, let shellModel, let open = pot?.ref, open.nodeId == ref.nodeId else { return .failed }
+        let r = try? await pots.duplicate(shell: shellModel, ref: open, to: to, deletedName: say(.potDeletedPerson), uuid: { @Sendable in UUID().uuidString.lowercased() })
+        applyShell(start: false)
+        await readDetails(shellModel.tenant)
         let outcome = r?.outcome ?? .failed
         if outcome == .copied {
             trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName), node: nil, moveBack: nil)
@@ -831,7 +833,15 @@ final class AppModel {
 
     /// The tenant the shell shows, opened: where an object's own view reads from.
     private var tenantSession: TenantSession?
-    private var potSession: PotSession?
+    /// The Pot open in the app (core's `PotModel`): its views, its live poll, its writes.
+    @ObservationIgnored private var potModel: PotModel?
+    @ObservationIgnored private var potWatch: PotModel.Watch?
+    private var potSession: PotSession? { potModel?.session }
+
+    /// The open Pot as core's model holds it now.
+    private func syncPot() {
+        pot = potModel?.current.map { PotState(ref: $0.ref, view: $0.view, failed: $0.failed, saving: $0.saving, message: $0.message) }
+    }
 
     /// An open Pot's views: `view` nil while it loads, `failed` when it did not open; `message` the last add's refusal.
     struct PotState {
@@ -1238,69 +1248,38 @@ final class AppModel {
 
     /// Opens and reads the Pot `ref` unless it is the one shown.
     func loadPot(_ ref: ObjectRef) {
-        if let p = pot, p.ref == ref, !p.failed { return }
-        pot = PotState(ref: ref)
-        guard let tenant = tenantSession else { pot?.failed = true; return }
+        guard let pots = potModel else { return }
         Task {
-            let session = (try? await AppleSessions.shared.openPot(tenant: tenant, scopeId: ref.scopeId, nodeId: ref.nodeId)) ?? nil
-            potSession = session
-            potPoll = LivePoll(cadence: LivePoll.companion.ITEMS, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) }, random: { @Sendable in KotlinDouble(value: Double.random(in: 0..<1)) })
-            if pot?.ref == ref { pot = PotState(ref: ref, view: session.map { PotView(session: $0) }, failed: session == nil) }
+            try? await pots.open(ref: ref)
+            syncPot()
         }
     }
 
-    private var potPoll: LivePoll?
-
-    /// The open Pot's live poll (core's `LivePoll`) for as long as the calling task runs — the Pot's screen while the app
-    /// is active, so nothing is asked in the background. Swift drives the loop: a Swift task's cancellation does not reach a
-    /// Kotlin coroutine, so it sleeps here and stops at once when cancelled. A tick is skipped while a write shows saving;
-    /// the view is read anew when one moved what is held.
+    /// The open Pot's live poll (core's `LivePoll`, run by core) for as long as the calling task runs — the Pot's screen
+    /// while the app is active, so nothing is asked in the background; its cancellation stops the poll.
     func livePot() async {
-        guard let session = potSession, let cadence = potPoll else { return }
-        var wait = cadence.firstDelay()
-        while !Task.isCancelled {
-            if wait > 0 { try? await Task.sleep(for: .milliseconds(wait)) }
-            guard !Task.isCancelled, potSession === session else { return }
-            cadence.started()
-            var outcome = LivePoll.Tick.skip
-            if pot?.saving == false {
-                do {
-                    if let moved = try await session.poll() {
-                        outcome = .done
-                        if moved.boolValue, potSession === session { pot?.view = PotView(session: session) }
-                    }
-                } catch {
-                    outcome = .failed
-                }
-            }
-            wait = cadence.next(outcome: outcome)
-        }
+        guard let live = potModel?.startLive() else { return }
+        while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+        live.stop()
     }
 
-    /// Reads the open Pot again now (pull to refresh), moved or not.
+    /// Reads the open Pot again now (pull to refresh).
     func refreshPot() async {
-        guard let session = potSession else { return }
-        _ = try? await session.refresh()
-        _ = try? await session.readReceipts()
-        if potSession === session { pot?.view = PotView(session: session) }
+        try? await potModel?.refresh()
+        syncPot()
     }
 
-    /// One write to the open Pot (`op` on its session): it shows saving, then the Pot as read after it, and a refusal as its
-    /// message (a `WriteOutcome` name); true once stored.
-    @discardableResult
+    /// One write to the open Pot (`op` on its session): saving, then the Pot as read after it and a refusal as its message;
+    /// true once it was stored.
     func potWrite(_ op: @escaping @MainActor (PotSession) async throws -> PotSession.WriteOutcome) async -> Bool {
-        guard var state = pot, let session = potSession else { return false }
-        state.saving = true
-        state.message = nil
-        pot = state
+        guard let pots = potModel, let ref = pot?.ref, let session = pots.beginWrite() else { return false }
+        syncPot()
         let outcome = (try? await op(session)) ?? .refused
-        state.view = PotView(session: session)
-        state.saving = false
-        state.message = outcome == .written ? nil : outcome.name
-        pot = state
+        let stored = pots.endWrite(outcome: outcome)
+        syncPot()
         // A settings write may have set the base currency: the Pot's row says it at once.
-        rowDetails[state.ref.nodeId] = PotRows.shared.detailsOf(meta: session.meta)
-        return outcome == .written
+        if let facts = pots.rowDetails() { rowDetails[ref.nodeId] = facts }
+        return stored
     }
 
     /// The "New pot" sheet: saving while it creates, and its refusal (a `PotCreate.Outcome` name).
@@ -1320,31 +1299,26 @@ final class AppModel {
     /// Creates a Pot named `name` at the root of `scopeId` with `currency` and `people`, reads the tenant's lists again and
     /// opens it; true once it exists (its people may still have failed: then it opens and says so on Settings).
     func createPot(scopeId: String, name: String, currency: String, minorUnits: Int32, people: [PotCreate.NewPerson]) async -> Bool {
-        guard let t = tenantSession else { return false }
+        guard let pots = potModel, let shellModel else { return false }
         creatingPot = CreatingPot(saving: true)
         // in the folder on screen, where the sheet creates in the space shown (the web's "New" at a level)
         let parent = scopeId == shell.space ? shell.folder?.nodeId : nil
-        let r = try? await PotCreate.shared.create(
-            tenant: t, scopeId: scopeId, parentId: parent, name: name,
-            base: Ledger.BaseCurrency(currency: currency, minorUnits: minorUnits), people: people, categories: []
-        )
-        guard let r, let nodeId = r.nodeId else {
-            creatingPot = CreatingPot(message: r?.outcome.name ?? "REFUSED")
-            return false
-        }
-        t.forgetTree()
-        await refreshLists(t)
-        creatingPot = CreatingPot(message: r.outcome == .created ? nil : r.outcome.name)
-        if let ref = ((try? await t.objects()) ?? []).first(where: { $0.nodeId == nodeId }) { open(ref) }
-        return true
+        let created = (try? await pots.create(
+            shell: shellModel, scopeId: scopeId, parentId: parent, name: name,
+            base: Ledger.BaseCurrency(currency: currency, minorUnits: minorUnits), people: people
+        ))?.boolValue ?? false
+        let c = pots.creating.value as? PotModel.Creating
+        creatingPot = CreatingPot(saving: false, message: c?.message ?? (created ? nil : "REFUSED"))
+        applyShell(start: false)
+        await readDetails(shellModel.tenant)
+        return created
     }
 
-    func clearCreatingPot() { creatingPot = CreatingPot() }
+    func clearCreatingPot() { potModel?.clearCreating(); creatingPot = CreatingPot() }
 
     /// One unit of `currency` in the open Pot's base from today's table, or nil: the rate is typed then.
     func rateFor(_ currency: String) async -> ExchangeRates.Filled? {
-        guard let session = potSession else { return nil }
-        return (try? await session.rateFor(currency: currency, day: FormState.dayString(Date()))) ?? nil
+        (try? await potModel?.rateFor(currency: currency, day: FormState.dayString(Date()))) ?? nil
     }
 
     /// A receipt of the open Pot opened to its bytes, or nil (blocked, or it did not read).
@@ -1423,10 +1397,10 @@ final class AppModel {
     }
 
     /// The receipts the last save left out for want of room (the entry was saved).
-    var skippedReceipts: [String] { potSession?.skippedReceipts ?? [] }
+    var skippedReceipts: [String] { potModel?.skippedReceipts ?? [] }
 
     /// Forgets the open Pot's last refusal (a sheet closed).
-    func clearPotMessage() { pot?.message = nil }
+    func clearPotMessage() { potModel?.clearMessage(); syncPot() }
 
     func choose(_ app: ApplicationId?) { moveShell { $0.choose(app: app) }; drawerOpen = false }
     func switchSpace(_ scopeId: String) { moveShell { $0.switchSpace(scopeId: scopeId) } }
