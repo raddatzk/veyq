@@ -65,15 +65,5 @@ object Receipts {
 
     /** A download's name (core's `downloadName`): the sealed name (trimmed), else "receipt", gaining the extension its sealed
      *  type names only where it has none of its own. */
-    fun downloadName(name: String?, type: String?): String {
-        val base = name?.trim()?.takeIf { it.isNotEmpty() } ?: "receipt"
-        val ext = MIME_TO_EXT[type.orEmpty()] ?: return base
-        return if (Regex("[^.]\\.[^.\\s]{1,16}$").containsMatchIn(base)) base else "$base.$ext"
-    }
-
-    /** Core's `MIME_TO_EXT`, exactly: a type it does not name adds nothing. */
-    private val MIME_TO_EXT = mapOf(
-        "image/jpeg" to "jpg", "image/png" to "png", "image/gif" to "gif", "image/webp" to "webp", "image/heic" to "heic",
-        "application/pdf" to "pdf", "video/mp4" to "mp4", "video/quicktime" to "mov", "video/webm" to "webm", "video/x-matroska" to "mkv",
-    )
+    fun downloadName(name: String?, type: String?): String = me.raddatz.veyq.mobile.blob.DownloadName.of(type, "receipt", name)
 }

@@ -1,9 +1,9 @@
 package me.raddatz.veyq.mobile.blob
 
 /**
- * What a blob's decrypted bytes are, by their magic numbers alone — a port of the image, text and PDF part of
- * `src/web/src/core/blob/sniff.ts`. The bytes decide; a claimed type or name is never consulted, so a peer's file
- * labelled "image" that is no image is never handed to an image decoder as one.
+ * What a blob's decrypted bytes are, by their magic numbers alone — a port of `src/web/src/core/blob/sniff.ts` (images,
+ * audio and video containers, text, PDF). The bytes decide; a claimed type or name only ever narrows ([claimsText]), so a
+ * peer's file labelled "image" that is no image is never handed to an image decoder as one.
  */
 object Sniff {
     enum class Image(val mime: String) { JPEG("image/jpeg"), PNG("image/png"), GIF("image/gif"), WEBP("image/webp"), AVIF("image/avif"), BMP("image/bmp"), HEIC("image/heic") }
@@ -124,5 +124,75 @@ object Sniff {
             if (u(b, i) == 0x25 && hasAscii(b, i, "%PDF-")) return !isText(b)
         }
         return false
+    }
+
+    /** An audio or video container: whether it is video, and the MIME it is played under. */
+    data class Stream(val video: Boolean, val mime: String)
+
+    /** The audio/video container [b] is, by its magic bytes (the web's `sniffStream`; the player decides if it can play it). */
+    fun stream(b: ByteArray): Stream? {
+        if (hasAscii(b, 4, "ftyp")) {
+            val brand = asciiAt(b, 8, 4)
+            if (brand == "qt  ") return Stream(true, "video/quicktime")
+            if (brand == "M4A " || brand == "M4B " || brand == "M4P ") return Stream(false, "audio/mp4")
+            if (brand in AVIF || brand in HEIC) return null
+            return Stream(true, "video/mp4")
+        }
+        if (b.size >= 4 && u(b, 0) == 0x1a && u(b, 1) == 0x45 && u(b, 2) == 0xdf && u(b, 3) == 0xa3) {
+            return if (asciiAt(b, 0, 64).contains("matroska")) Stream(true, "video/x-matroska") else Stream(true, "video/webm")
+        }
+        if (hasAscii(b, 0, "OggS")) return if (asciiAt(b, 0, 160).contains("theora")) Stream(true, "video/ogg") else Stream(false, "audio/ogg")
+        if (hasAscii(b, 0, "RIFF") && hasAscii(b, 8, "WAVE")) return Stream(false, "audio/wav")
+        if (hasAscii(b, 0, "fLaC")) return Stream(false, "audio/flac")
+        if (hasAscii(b, 0, "ID3")) return Stream(false, "audio/mpeg")
+        if (b.size >= 2 && u(b, 0) == 0xff && (u(b, 1) and 0xe0) == 0xe0) {
+            val layer = (u(b, 1) shr 1) and 0x03
+            val version = (u(b, 1) shr 3) and 0x03
+            if (layer == 0 && (u(b, 1) and 0xf6) == 0xf0) return Stream(false, "audio/aac")
+            val bitrate = if (b.size > 2) u(b, 2) shr 4 else 1
+            val rate = if (b.size > 2) (u(b, 2) shr 2) and 0x03 else 0
+            if (layer == 1 && version != 1 && bitrate != 0x0f && rate != 0x03) return Stream(false, "audio/mpeg")
+        }
+        return null
+    }
+
+    private val TEXT_TYPES = setOf(
+        "application/json", "application/ld+json", "application/x-ndjson", "application/xml", "application/javascript",
+        "application/x-javascript", "application/typescript", "application/x-yaml", "application/yaml", "application/toml",
+        "application/x-sh", "application/x-httpd-php", "application/sql", "application/x-tex", "application/rtf",
+    )
+    private val TEXT_EXTENSIONS = setOf(
+        "txt", "text", "md", "markdown", "rst", "adoc", "csv", "tsv", "json", "jsonl", "ndjson", "xml", "yaml", "yml", "toml", "ini",
+        "cfg", "conf", "env", "properties", "log", "sql", "html", "htm", "css", "scss", "less", "js", "mjs", "cjs", "ts", "tsx",
+        "jsx", "vue", "svelte", "py", "rb", "php", "java", "kt", "kts", "scala", "go", "rs", "c", "h", "cc", "cpp", "hpp", "cs", "swift",
+        "m", "sh", "bash", "zsh", "fish", "ps1", "bat", "lua", "pl", "r", "tex", "srt", "vtt", "gradle", "dockerfile", "gitignore",
+        "lock", "diff", "patch", "svg",
+    )
+    private val EXTENSION = Regex("[^.]\\.([^.\\s/\\\\]{1,16})$")
+
+    /** The lower-cased extension of [name] (no dot), or "" (the web's `extensionOf`). */
+    fun extensionOf(name: String?): String = EXTENSION.find(name ?: "")?.groupValues?.get(1)?.lowercase() ?: ""
+
+    /** Whether the CLAIMED type or name says "text" — a claim that may only narrow what the bytes already allow. */
+    fun claimsText(type: String?, name: String?): Boolean {
+        val t = (type ?: "").substringBefore(';').trim().lowercase()
+        if (t.startsWith("text/") || t in TEXT_TYPES || t.endsWith("+json") || t.endsWith("+xml")) return true
+        return extensionOf(name) in TEXT_EXTENSIONS
+    }
+
+    /** [b] as the text [isText] said it is: UTF-16 by its byte-order mark, else UTF-8 (a leading mark dropped). */
+    fun decodeText(b: ByteArray): String {
+        if (b.size >= 2 && ((u(b, 0) == 0xff && u(b, 1) == 0xfe) || (u(b, 0) == 0xfe && u(b, 1) == 0xff))) {
+            val le = u(b, 0) == 0xff
+            val sb = StringBuilder()
+            var i = 2
+            while (i + 1 < b.size) {
+                sb.append((if (le) u(b, i) or (u(b, i + 1) shl 8) else (u(b, i) shl 8) or u(b, i + 1)).toChar())
+                i += 2
+            }
+            return sb.toString()
+        }
+        val start = if (b.size >= 3 && u(b, 0) == 0xef && u(b, 1) == 0xbb && u(b, 2) == 0xbf) 3 else 0
+        return b.decodeToString(start, b.size)
     }
 }

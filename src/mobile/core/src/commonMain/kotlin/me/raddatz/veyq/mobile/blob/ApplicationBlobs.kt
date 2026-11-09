@@ -167,13 +167,24 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      */
     internal suspend fun reserveAndPump(
         scopeId: String, node: OpenNode, role: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?,
+    ): Pair<String, Plan> = reserveAndPumpFrames(scopeId, node, role, bytes.size.toLong(), type, name, modifiedAt) { from, length ->
+        bytes.copyOfRange(from.toInt(), (from + length).toInt())
+    }
+
+    /**
+     * [reserveAndPump] over a source of [size] bytes read a frame at a time ([read]: the plaintext from an offset, at most a
+     * frame long), so a file of any size is sealed and sent without holding it whole.
+     */
+    internal suspend fun reserveAndPumpFrames(
+        scopeId: String, node: OpenNode, role: String, size: Long, type: String, name: String?, modifiedAt: Long?,
+        read: suspend (from: Long, length: Int) -> ByteArray,
     ): Pair<String, Plan> {
         val key = account.primitives.randomBytes(32)
         val blobId = NodeCreate.uuid(account)
-        val count = V1.chunkCount(bytes.size.toLong())
+        val count = V1.chunkCount(size)
         val item = BlobUploadRequestItem(
             blobId = blobId, ownerId = node.id, role = role, chunkCount = count,
-            byteSize = bytes.size.toLong() + V1.FRAME_OVERHEAD.toLong() * count,
+            byteSize = size + V1.FRAME_OVERHEAD.toLong() * count,
             wrappedBlobKey = b64(suite.seal(keyContext(scopeId, node.id, blobId, role), node.key, key)),
             wrappedBlobMeta = b64(BlobMeta.seal(suite, key, type, name, modifiedAt)),
         )
@@ -194,8 +205,10 @@ class ApplicationBlobs(private val tenant: TenantSession) {
         }
         for (i in 0 until count) {
             if (i !in signed) sign(i)
-            val from = i * V1.FRAME_PLAINTEXT
-            val chunk = bytes.copyOfRange(from, minOf(bytes.size, from + V1.FRAME_PLAINTEXT))
+            val from = i.toLong() * V1.FRAME_PLAINTEXT
+            val length = minOf(size - from, V1.FRAME_PLAINTEXT.toLong()).toInt()
+            val chunk = read(from, length)
+            if (chunk.size != length) throw UploadRefused("source_changed")
             var status = account.putToStore(signed.getValue(i), suite.sealFrame(key, i, count, chunk))
             if (status == 403) {
                 // The window's signature expired: sign again from here, seal the frame again (a fresh nonce), once.
@@ -223,17 +236,35 @@ class ApplicationBlobs(private val tenant: TenantSession) {
 
     /** A blob's plaintext under [key], its [chunkCount] frames read through presigned GETs and opened in place. */
     internal suspend fun frames(scopeId: String, blobId: String, chunkCount: Int, key: ByteArray): ByteArray {
+        val out = ArrayList<ByteArray>(chunkCount)
+        framesTo(scopeId, blobId, chunkCount, key) { out += it }
+        val all = ByteArray(out.sumOf { it.size })
+        var o = 0
+        for (part in out) {
+            part.copyInto(all, o)
+            o += part.size
+        }
+        return all
+    }
+
+    /**
+     * A blob's plaintext under [key] handed to [sink] a frame at a time, in order, from frame [first] to [until] (exclusive):
+     * a file of any size is read without holding it whole, and a page that decides by the first frame reads only that one.
+     */
+    internal suspend fun framesTo(
+        scopeId: String, blobId: String, chunkCount: Int, key: ByteArray, first: Int = 0, until: Int = chunkCount,
+        sink: suspend (ByteArray) -> Unit,
+    ) {
         val b = object { val blobId = blobId; val chunkCount = chunkCount }
         var urls = presignGets(scopeId, b.blobId)
         var resigned = 0
-        val out = ArrayList<ByteArray>(b.chunkCount)
-        for (i in 0 until b.chunkCount) {
+        for (i in first until minOf(until, b.chunkCount)) {
             var tries = 0
             var backoff = 250L
             while (true) {
                 val (status, frame) = account.getFromStore(urls[i])
                 if (frame != null) {
-                    out += suite.openFrame(key, i, b.chunkCount, frame)
+                    sink(suite.openFrame(key, i, b.chunkCount, frame))
                     break
                 }
                 if (status == 403 && resigned < 2) {
@@ -250,13 +281,6 @@ class ApplicationBlobs(private val tenant: TenantSession) {
                 throw UploadRefused("chunk_get_failed:$status")
             }
         }
-        val all = ByteArray(out.sumOf { it.size })
-        var o = 0
-        for (part in out) {
-            part.copyInto(all, o)
-            o += part.size
-        }
-        return all
     }
 
     private suspend fun presignGets(scopeId: String, blobId: String): List<String> {
