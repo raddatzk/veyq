@@ -146,6 +146,19 @@ class NodeItemsRevisions {
     }
 
     /**
+     * The counters of every LIVE node of [scopeId] that has had an item change (node id → counters), in one read — for a
+     * reader that keys something on every item list of a space at once (Memories' scope listing, ADR 0125 decision 8a).
+     * Live is core's predicate (`deletedAt is null`, a trashed subtree is marked whole), asked in the same statement, so no
+     * caller spells it or sends a scope's whole id list. A node with no row has never held an item, so leaving it out
+     * changes nothing a digest over its lists would say; a node trashed or restored also moves the scope's tree revision,
+     * which such a reader keys on beside this.
+     */
+    fun revisionsOfLiveNodes(scopeId: String): Map<String, ItemsRevisions> =
+        NodeItemsRevisionEntity.list(
+            "nodeId in (select n.id from NodeEntity n where n.scopeId = ?1 and n.deletedAt is null)", scopeId,
+        ).associate { it.nodeId to ItemsRevisions(it.revision, it.deleteRevision) }
+
+    /**
      * One conditional poll of a node's item list. Reads the counters as a consistent pair; when [ifNoneMatch] still
      * equals the revision ⇒ [ItemsRead.NotModified] (the idle fast path: neither lambda runs). Otherwise [delta] — one
      * page of the application's keyset query past the client's cursor — and, **only when [sinceDelete] lags the node's

@@ -615,6 +615,35 @@ class MediaStore(
         return ItemsPage(toRows(page.items).map { r -> byId.getValue(r.mediaId).let { m -> ShareMediaRow(m.nodeId, m.shareIdentityId, r) } }, page.more)
     }
 
+    /**
+     * One page of every live medium on a live node of [scopeId] — what `listScopeMedia` serves a member's search (ADR 0125
+     * decision 8a): at most [limit] media past [after], in **id** order, each tagged with its node. A trashed node's media
+     * keep `deletedAt` null (the node's subtree is marked, not its media), so the node's own liveness is asked here, by
+     * its row (core's `deletedAt is null`, the predicate [findNode] asks of one node) — in the statement, not as a list of
+     * the scope's node ids, which a space of thousands of nodes would make a parameter list of thousands. The scan is
+     * `ix_media_scope` in id order (InnoDB's secondary index carries the primary key), each node a primary-key lookup.
+     * [ShareMediaRow.identityId] is the row's stored guest identity; which identities are served is the reader's rule.
+     */
+    fun listScopeMedia(scopeId: String, after: String?, limit: Int): ItemsPage<ShareMediaRow> {
+        val liveNode = "exists (select n.id from NodeEntity n where n.id = m.nodeId and n.deletedAt is null)"
+        val query = if (after == null) {
+            MediaEntity.find("from MediaEntity m where m.scopeId = ?1 and m.deletedAt is null and $liveNode order by m.id", scopeId)
+        } else {
+            MediaEntity.find("from MediaEntity m where m.scopeId = ?1 and m.deletedAt is null and $liveNode and m.id > ?2 order by m.id", scopeId, after)
+        }
+        val page = ItemsPage.of(query.range(0, limit).list(), limit) // range is inclusive: limit + 1 rows
+        val byId = page.items.associateBy { it.id }
+        return ItemsPage(toRows(page.items).map { r -> byId.getValue(r.mediaId).let { m -> ShareMediaRow(m.nodeId, m.shareIdentityId, r) } }, page.more)
+    }
+
+    /** The sealed drop private key of each of [nodeIds] that has one (node id → key): what opens a WRITE_ONLY row there. */
+    fun dropKeysOf(nodeIds: Collection<String>): Map<String, String> =
+        if (nodeIds.isEmpty()) {
+            emptyMap()
+        } else {
+            NodeEntity.list("id in ?1 and sealedDropPrivateKey is not null", nodeIds.distinct()).associate { it.id to it.sealedDropPrivateKey!! }
+        }
+
     /** A primary's sealed name: for a contributor (`share:{id}`) copy the identity's sealed name; else null (member → username). */
     private fun primarySealedNameFor(ownerKey: String): String? =
         when (val owner = PrincipalKey.parse(ownerKey)) {
