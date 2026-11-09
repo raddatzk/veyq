@@ -42,6 +42,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -262,60 +267,126 @@ private fun labelOf(id: String, node: NodeAt, contribution: HeaderContribution, 
 }
 
 /**
- * Core's cover dialog (the web's `CoverDialog`): the node's cover as it shows, 16:9, and the one place it is chosen, changed
- * and removed — a picture from the system's photo picker (no permission: it hands over the one picture chosen), made the
- * cover on this device; Remove where there is one.
+ * Core's cover dialog (the web's `CoverDialog` around its 16:9 `ImageCropper`): the one place a node's cover is chosen, framed
+ * and removed. Its source is the stored cover, framed anew (only the crop moves: the web's `keep`), or a picture picked here
+ * from the system's photo picker (no permission: it hands over the one picture chosen), uploaded with its crop; a drag pans
+ * it and a pinch or the slider zooms it (core's `CoverFrame`, the web's math, so a cover framed here reopens as framed on
+ * the web and back).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CoverSheet(node: NodeAt, model: AppModel, onClose: () -> Unit) {
     val palette = LocalPalette.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val covers by model.covers.collectAsStateWithLifecycle()
-    val cover = covers[node.nodeId]?.second
+    val hasCover = model.covers.collectAsStateWithLifecycle().value.containsKey(node.nodeId)
+    var image by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var picked by remember { mutableStateOf<android.net.Uri?>(null) }
+    var storedCrop by remember { mutableStateOf<me.raddatz.veyq.mobile.session.NodeCover.Crop?>(null) }
+    var pose by remember { mutableStateOf<me.raddatz.veyq.mobile.session.CoverFrame.Pose?>(null) }
+    var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var loading by remember { mutableStateOf(hasCover) }
     var saving by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
     val failed = stringResource(R.string.cover_failed)
+    val unreadable = stringResource(R.string.cover_unreadable)
+    val zoomLabel = stringResource(R.string.cover_zoom)
+    androidx.compose.runtime.LaunchedEffect(node.nodeId) {
+        if (hasCover) model.coverSource(node)?.let { (picture, crop) -> image = picture; storedCrop = crop }
+        loading = false
+    }
+    val frame = remember(image, size) {
+        val img = image
+        if (img == null || size.width == 0) null
+        else me.raddatz.veyq.mobile.session.CoverFrame(img.width.toDouble(), img.height.toDouble(), size.width.toDouble(), size.height.toDouble())
+    }
+    // a source shows framed as stored (or centred, a fresh one) once the frame's size is known
+    androidx.compose.runtime.LaunchedEffect(frame) { if (frame != null) pose = storedCrop?.let(frame::pose) ?: frame.centred() }
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        saving = true
         problem = null
         scope.launch {
-            val ok = model.setCover(node, uri)
-            saving = false
-            if (ok) onClose() else problem = failed
+            val picture = model.coverPicture(uri)
+            if (picture == null) problem = unreadable
+            else {
+                picked = uri
+                storedCrop = null
+                pose = null
+                image = picture
+            }
         }
+    }
+    fun done(ok: Boolean) {
+        saving = false
+        if (ok) onClose() else problem = failed
     }
     ModalBottomSheet(onDismissRequest = { if (!saving) onClose() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.cover_title), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.cover_hint), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
             Box(
-                Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(role(palette.surface)),
+                Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(role(palette.surface))
+                    .onSizeChanged { size = it }
+                    .pointerInput(frame) {
+                        val f = frame ?: return@pointerInput
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            pose = pose?.let { f.zoom(f.pan(it, pan.x.toDouble(), pan.y.toDouble()), zoom.toDouble()) }
+                        }
+                    },
                 contentAlignment = Alignment.Center,
             ) {
-                if (cover != null) Image(cover, null, Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentScale = ContentScale.Crop)
-                else Icon(kindIcon(node.kind), null, tint = role(palette.muted))
+                val img = image
+                val p = pose
+                if (img != null && p != null && frame != null) {
+                    androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+                        val scale = frame.baseScale * p.zoom
+                        drawImage(
+                            img,
+                            dstOffset = androidx.compose.ui.unit.IntOffset(p.x.toInt(), p.y.toInt()),
+                            dstSize = androidx.compose.ui.unit.IntSize((img.width * scale).toInt(), (img.height * scale).toInt()),
+                        )
+                    }
+                } else if (loading) {
+                    androidx.compose.material3.CircularProgressIndicator()
+                } else {
+                    Icon(kindIcon(node.kind), null, tint = role(palette.muted))
+                }
+            }
+            val p = pose
+            if (p != null && frame != null) {
+                androidx.compose.material3.Slider(
+                    value = p.zoom.toFloat(),
+                    onValueChange = { z -> pose = frame.zoom(p, z / p.zoom) },
+                    valueRange = me.raddatz.veyq.mobile.session.CoverFrame.MIN_ZOOM.toFloat()..me.raddatz.veyq.mobile.session.CoverFrame.MAX_ZOOM.toFloat(),
+                    enabled = !saving,
+                    modifier = Modifier.semantics { contentDescription = zoomLabel },
+                )
             }
             if (saving) LinearProgressIndicator(Modifier.fillMaxWidth())
             problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (cover != null) OutlinedButton(enabled = !saving, onClick = {
-                    saving = true
-                    problem = null
-                    scope.launch {
-                        val ok = model.removeCover(node)
-                        saving = false
-                        if (ok) onClose() else problem = failed
-                    }
-                }) { Text(stringResource(R.string.cover_remove), color = MaterialTheme.colorScheme.error) }
-                Box(Modifier.weight(1f))
-                TextButton(onClick = onClose, enabled = !saving) { Text(stringResource(R.string.entry_cancel)) }
-                Button(enabled = !saving, onClick = {
+                OutlinedButton(enabled = !saving, onClick = {
                     pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }) { Text(stringResource(R.string.cover_choose)) }
+                if (hasCover) TextButton(enabled = !saving, onClick = {
+                    saving = true
+                    problem = null
+                    scope.launch { done(model.removeCover(node)) }
+                }) { Text(stringResource(R.string.cover_remove), color = MaterialTheme.colorScheme.error) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f))
+                TextButton(onClick = onClose, enabled = !saving) { Text(stringResource(R.string.entry_cancel)) }
+                Button(enabled = !saving && p != null && frame != null, onClick = {
+                    val f = frame ?: return@Button
+                    val at = pose ?: return@Button
+                    val crop = f.crop(at)
+                    saving = true
+                    problem = null
+                    val uri = picked
+                    scope.launch { done(if (uri != null) model.setCover(node, uri, crop) else model.recropCover(node, crop)) }
+                }) { Text(stringResource(R.string.cover_save)) }
             }
         }
     }

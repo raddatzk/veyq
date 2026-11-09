@@ -799,27 +799,51 @@ final class AppModel {
     /// What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`).
     private(set) var rowDetails: [String: [String]] = [:]
 
-    /// Each listed node's cover as a small picture, by node id, with the blob it was opened from (core's covers,
-    /// uc.platform.node-cover): opened once per blob, dropped when the node names another or none.
+    /// Each listed node's cover as a small picture of its framed part, by node id, with the key it was opened under — its
+    /// blob and crop (core's covers, uc.platform.node-cover): opened once per blob and crop, dropped when the node names
+    /// another or none.
     private(set) var covers: [String: (blobId: String, image: CGImage)] = [:]
 
     private func readCovers(_ t: TenantSession) async {
-        let named = ((try? await NodeCover.shared.named(tenant: t)) ?? [:])
+        let named = ((try? await NodeCover.shared.framed(tenant: t)) ?? [:])
         var next = covers.filter { named[$0.key] == $0.value.blobId }
-        for (nodeId, blobId) in named where next[nodeId] == nil {
-            if let data = (try? await AppleSessions.shared.openCover(tenant: t, nodeId: nodeId)) ?? nil,
-               let image = CoverImages.image(data, maxPixels: 192) {
-                next[nodeId] = (blobId, image)
+        for (nodeId, key) in named where next[nodeId] == nil {
+            if let opened = (try? await AppleSessions.shared.openFramedCover(tenant: t, nodeId: nodeId)) ?? nil,
+               let whole = CoverImages.image(opened.data as Data, maxPixels: 384),
+               let image = Self.framed(whole, opened.crop) {
+                next[nodeId] = (key, image)
             }
         }
         if tenantSession === t { covers = next }
     }
 
-    /// Sets the picture `data` as the cover of `ref`: made the web's cover JPEG on the device (long edge 2048, quality 0.85,
-    /// `COVER_SPEC`), uploaded and attached (core's `NodeCover`); false when it did not land.
-    func setCover(_ ref: NodeAt, data: Data) async -> Bool {
+    /// The part of `image` a cover's `crop` shows (core's `CoverFrame.pixels`, the web's `coverImageStyle`).
+    private static func framed(_ image: CGImage, _ crop: NodeCover.Crop) -> CGImage? {
+        let r = CoverFrame.companion.pixels(crop: crop, width: Int32(image.width), height: Int32(image.height))
+        return image.cropping(to: CGRect(x: Int(r.get(index: 0)), y: Int(r.get(index: 1)), width: Int(r.get(index: 2)), height: Int(r.get(index: 3))))
+    }
+
+    /// Sets the picture `data` as the cover of `ref`, framed by `crop`: made the web's cover JPEG on the device (long edge
+    /// 2048, quality 0.85, `COVER_SPEC`) — the whole picture, the crop stored beside it as the web stores it —, uploaded and
+    /// attached (core's `NodeCover`); false when it did not land.
+    func setCover(_ ref: NodeAt, data: Data, crop: NodeCover.Crop = NodeCover.CropCompanion.shared.FULL) async -> Bool {
         guard let t = tenantSession, let jpeg = CoverImages.jpeg(data, maxPixels: 2048, quality: 0.85) else { return false }
-        let outcome = try? await AppleSessions.shared.setCover(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, jpeg: jpeg)
+        let outcome = try? await AppleSessions.shared.setCover(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, jpeg: jpeg, crop: crop)
+        await refreshLists(t)
+        return outcome == .done
+    }
+
+    /// `ref`'s cover as it is stored — the whole picture and its crop — for the cover sheet to frame anew; nil: none.
+    func coverSource(_ ref: NodeAt) async -> (image: CGImage, crop: NodeCover.Crop)? {
+        guard let t = tenantSession, let opened = (try? await AppleSessions.shared.openFramedCover(tenant: t, nodeId: ref.nodeId)) ?? nil,
+              let image = CoverImages.image(opened.data as Data, maxPixels: 2048) else { return nil }
+        return (image, opened.crop)
+    }
+
+    /// Moves the crop of `ref`'s cover, its picture kept (the web's `keep`); false when it did not land.
+    func recropCover(_ ref: NodeAt, crop: NodeCover.Crop) async -> Bool {
+        guard let t = tenantSession else { return false }
+        let outcome = try? await NodeCover.shared.recrop(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, crop: crop)
         await refreshLists(t)
         return outcome == .done
     }

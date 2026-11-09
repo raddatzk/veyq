@@ -246,41 +246,63 @@ struct NodeHeaderActions: View {
     }
 }
 
-/// Core's cover dialog (the web's `CoverDialog`): the node's cover as it shows, 16:9, and the one place it is chosen, changed
-/// and removed — a picture from the system's photo picker, made the cover on this device; Remove where there is one.
+/// Core's cover dialog (the web's `CoverDialog` around its 16:9 `ImageCropper`): the one place a node's cover is chosen,
+/// framed and removed. Its source is the stored cover, framed anew (only the crop moves: the web's `keep`), or a picture
+/// picked here from the system's photo picker, uploaded with its crop; a drag pans it and a pinch or the slider zooms it
+/// (core's `CoverFrame`, the web's math, so a cover framed here reopens as framed on the web and back).
 struct CoverSheet: View {
     @Bindable var model: AppModel
     let node: NodeAt
     @Environment(\.dismiss) private var dismiss
     @State private var item: PhotosPickerItem?
+    @State private var image: CGImage?
+    @State private var picked: Data?
+    @State private var storedCrop: NodeCover.Crop?
+    @State private var pose: CoverFrame.Pose?
+    @State private var size: CGSize = .zero
+    @State private var dragged: CGSize = .zero
+    @State private var pinched: CGFloat = 1
+    @State private var loading = false
     @State private var saving = false
     @State private var problem: String?
+
+    private var hasCover: Bool { model.covers[node.nodeId] != nil }
+
+    /// The frame's math for the source on screen, once the frame's size is known.
+    private var frame: CoverFrame? {
+        guard let image, size.width > 0 else { return nil }
+        return CoverFrame(imageWidth: Double(image.width), imageHeight: Double(image.height), frameWidth: size.width, frameHeight: size.height)
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    ZStack {
-                        Role.surface
-                        if let cover = model.covers[node.nodeId]?.image {
-                            Image(decorative: cover, scale: 1).resizable().scaledToFill()
-                        } else {
-                            Image(systemName: Names.kindSymbol(node.kind)).font(.largeTitle).foregroundStyle(Role.muted)
+                    cropper
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                        .listRowInsets(EdgeInsets())
+                    if let frame, let pose {
+                        Slider(value: Binding(get: { pose.zoom }, set: { self.pose = frame.zoom(pose: pose, factor: $0 / pose.zoom) }),
+                               in: CoverFrame.companion.MIN_ZOOM...CoverFrame.companion.MAX_ZOOM) {
+                            Text("Zoom")
+                        } minimumValueLabel: {
+                            Image(systemName: "minus.magnifyingglass")
+                        } maximumValueLabel: {
+                            Image(systemName: "plus.magnifyingglass")
                         }
+                        .disabled(saving)
                     }
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-                    .listRowInsets(EdgeInsets())
                 } footer: {
-                    Text("Choose a picture as the cover.")
+                    Text("Upload an image as the cover, then drag and zoom to frame it.")
                 }
                 Section {
                     PhotosPicker(selection: $item, matching: .images) {
-                        Label("Choose a Picture", systemImage: "photo.on.rectangle")
+                        Label("Choose an Image", systemImage: "photo.on.rectangle")
                     }
                     .disabled(saving)
-                    if model.covers[node.nodeId] != nil {
-                        Button("Remove Cover", systemImage: "trash", role: .destructive) { Task { await remove() } }
+                    if hasCover {
+                        Button("Remove Cover", systemImage: "trash", role: .destructive) { Task { await finish { await model.removeCover(node) } } }
                             .disabled(saving)
                     }
                 }
@@ -291,28 +313,97 @@ struct CoverSheet: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { Task { await save() } }.disabled(saving || frame == nil || pose == nil)
+                }
+            }
         }
-        .onChange(of: item) { _, picked in
-            guard let picked else { return }
+        .task {
+            // the stored cover, framed as stored
+            guard hasCover else { return }
+            loading = true
+            if let source = await model.coverSource(node) {
+                storedCrop = source.crop
+                image = source.image
+            }
+            loading = false
+        }
+        .onChange(of: item) { _, chosen in
+            guard let chosen else { return }
             item = nil
-            Task { await set(picked) }
+            Task {
+                guard let data = try? await chosen.loadTransferable(type: Data.self), let picture = CoverImages.image(data, maxPixels: 2048) else {
+                    problem = String(localized: "This image could not be read. Try a JPEG or PNG.")
+                    return
+                }
+                problem = nil
+                picked = data
+                storedCrop = nil
+                pose = nil
+                image = picture
+            }
         }
     }
 
-    private func set(_ picked: PhotosPickerItem) async {
-        saving = true
-        problem = nil
-        let ok: Bool
-        if let data = try? await picked.loadTransferable(type: Data.self) { ok = await model.setCover(node, data: data) } else { ok = false }
-        saving = false
-        if ok { dismiss() } else { problem = String(localized: "The cover could not be saved. Please try again.") }
+    /// The 16:9 viewport: the source at its pose, a drag pans it and a pinch zooms it.
+    private var cropper: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                Role.surface
+                if let image, let frame, let pose {
+                    let scale = frame.baseScale * pose.zoom
+                    Image(decorative: image, scale: 1).resizable()
+                        .frame(width: Double(image.width) * scale, height: Double(image.height) * scale)
+                        .offset(x: pose.x, y: pose.y)
+                } else if loading {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Image(systemName: Names.kindSymbol(node.kind)).font(.largeTitle).foregroundStyle(Role.muted)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture()
+                    .onChanged { g in
+                        guard let frame, let pose else { return }
+                        self.pose = frame.pan(pose: pose, dx: g.translation.width - dragged.width, dy: g.translation.height - dragged.height)
+                        dragged = g.translation
+                    }
+                    .onEnded { _ in dragged = .zero }
+                    .simultaneously(with: MagnifyGesture()
+                        .onChanged { g in
+                            guard let frame, let pose else { return }
+                            self.pose = frame.zoom(pose: pose, factor: g.magnification / pinched)
+                            pinched = g.magnification
+                        }
+                        .onEnded { _ in pinched = 1 })
+            )
+            .onAppear { size = geo.size }
+            .onChange(of: geo.size) { _, new in size = new }
+        }
+        // a source shows framed as stored (or centred, a fresh one) once the frame's size is known
+        .onChange(of: frameKey) { _, _ in
+            guard let frame else { return }
+            pose = storedCrop.map { frame.pose(crop: $0) } ?? frame.centred(zoom: 1)
+        }
     }
 
-    private func remove() async {
+    /// What decides a source's first pose: the source and the frame's size.
+    private var frameKey: String { "\(image.map { "\($0.width)x\($0.height)" } ?? "-")@\(size.width)x\(size.height)@\(picked?.count ?? 0)" }
+
+    private func save() async {
+        guard let frame, let pose else { return }
+        let crop = frame.crop(pose: pose)
+        if let picked { await finish { await model.setCover(node, data: picked, crop: crop) } } else { await finish { await model.recropCover(node, crop: crop) } }
+    }
+
+    private func finish(_ work: () async -> Bool) async {
         saving = true
         problem = nil
-        let ok = await model.removeCover(node)
+        let ok = await work()
         saving = false
         if ok { dismiss() } else { problem = String(localized: "The cover could not be saved. Please try again.") }
     }

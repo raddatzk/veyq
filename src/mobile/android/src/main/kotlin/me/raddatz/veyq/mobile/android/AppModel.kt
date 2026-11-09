@@ -682,51 +682,82 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         readCovers(t)
     }
 
-    /** Each listed node's cover as a small picture, by node id (core's covers, uc.platform.node-cover): opened once per blob,
-     *  dropped when the node names another or none. */
+    /** Each listed node's cover as a small picture of its framed part, by node id (core's covers, uc.platform.node-cover):
+     *  opened once per blob and crop (the pair's key), dropped when the node names another or none. */
     private val _covers = MutableStateFlow<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>>(emptyMap())
     val covers: StateFlow<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>> = _covers.asStateFlow()
 
     private fun readCovers(t: me.raddatz.veyq.mobile.session.TenantSession) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val named = runCatching { me.raddatz.veyq.mobile.session.NodeCover.named(t) }.getOrDefault(emptyMap())
+            val named = runCatching { me.raddatz.veyq.mobile.session.NodeCover.framed(t) }.getOrDefault(emptyMap())
             val have = _covers.value.filter { (id, c) -> named[id] == c.first }
-            val fresh = named.filter { (id, blob) -> have[id]?.first != blob }.mapNotNull { (id, blob) ->
-                val bytes = runCatching { me.raddatz.veyq.mobile.session.NodeCover.openNode(t, id) }.getOrNull() ?: return@mapNotNull null
-                thumbnail(bytes)?.let { id to (blob to it) }
+            val fresh = named.filter { (id, key) -> have[id]?.first != key }.mapNotNull { (id, key) ->
+                val opened = runCatching { me.raddatz.veyq.mobile.session.NodeCover.openFramed(t, id) }.getOrNull() ?: return@mapNotNull null
+                thumbnail(opened.bytes, opened.crop)?.let { id to (key to it) }
             }
             if (tenantSession === t) _covers.value = have + fresh
         }
     }
 
-    /** A cover's picture decoded at a list's size: a row draws it a few dozen pixels wide. */
-    private fun thumbnail(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    /** A cover's framed part decoded at a list's size (a row draws it a few dozen pixels wide, a header a few hundred). */
+    private fun thumbnail(bytes: ByteArray, crop: me.raddatz.veyq.mobile.session.NodeCover.Crop): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
         val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
         android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         var sample = 1
-        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 192) sample *= 2
-        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 384) sample *= 2
+        val whole = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+        val (x, y, w, h) = me.raddatz.veyq.mobile.session.CoverFrame.pixels(crop, whole.width, whole.height).toList()
+        android.graphics.Bitmap.createBitmap(whole, x, y, w, h)
     }.getOrNull()?.asImageBitmap()
 
+    /** A picture decoded for the cover sheet's frame: its long edge at most the cover's 2048 (`COVER_SPEC`). */
+    private fun picture(source: android.graphics.ImageDecoder.Source): android.graphics.Bitmap =
+        android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            val long = maxOf(info.size.width, info.size.height)
+            if (long > 2048) {
+                val f = 2048.0 / long
+                decoder.setTargetSize((info.size.width * f).toInt().coerceAtLeast(1), (info.size.height * f).toInt().coerceAtLeast(1))
+            }
+            decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+
+    /** The picture at [uri], for the cover sheet to frame before it is set; null when it does not read as an image. */
+    suspend fun coverPicture(uri: android.net.Uri): androidx.compose.ui.graphics.ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching { picture(android.graphics.ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)).asImageBitmap() }.getOrNull()
+    }
+
+    /** [ref]'s cover as it is stored — the whole picture and its crop — for the cover sheet to frame anew; null: none. */
+    suspend fun coverSource(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<androidx.compose.ui.graphics.ImageBitmap, me.raddatz.veyq.mobile.session.NodeCover.Crop>? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val t = tenantSession ?: return@withContext null
+            val opened = runCatching { me.raddatz.veyq.mobile.session.NodeCover.openFramed(t, ref.nodeId) }.getOrNull() ?: return@withContext null
+            runCatching { picture(android.graphics.ImageDecoder.createSource(java.nio.ByteBuffer.wrap(opened.bytes))).asImageBitmap() }.getOrNull()?.let { it to opened.crop }
+        }
+
+    /** Moves the crop of [ref]'s cover, its picture kept (the web's `keep`); false when it did not land. */
+    suspend fun recropCover(ref: me.raddatz.veyq.mobile.navigation.NodeAt, crop: me.raddatz.veyq.mobile.session.NodeCover.Crop): Boolean {
+        val t = tenantSession ?: return false
+        val done = runCatching { me.raddatz.veyq.mobile.session.NodeCover.recrop(t, ref.scopeId, ref.nodeId, crop) }
+            .getOrNull() == me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE
+        refreshLists(t)
+        return done
+    }
+
     /**
-     * Sets the picture at [uri] as the cover of [ref]: decoded on the device and made the web's cover JPEG (long edge 2048,
-     * quality 0.85, `COVER_SPEC`), uploaded and attached (core's `NodeCover`); false when it did not land.
+     * Sets the picture at [uri] as the cover of [ref], framed by [crop]: decoded on the device and made the web's cover JPEG
+     * (long edge 2048, quality 0.85, `COVER_SPEC`) — the whole picture, the crop stored beside it as the web stores it —,
+     * uploaded and attached (core's `NodeCover`); false when it did not land.
      */
-    suspend fun setCover(ref: me.raddatz.veyq.mobile.navigation.NodeAt, uri: android.net.Uri): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun setCover(
+        ref: me.raddatz.veyq.mobile.navigation.NodeAt, uri: android.net.Uri,
+        crop: me.raddatz.veyq.mobile.session.NodeCover.Crop = me.raddatz.veyq.mobile.session.NodeCover.Crop.FULL,
+    ): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val t = tenantSession ?: return@withContext false
         val jpeg = runCatching {
-            val source = android.graphics.ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
-            val bitmap = android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                val long = maxOf(info.size.width, info.size.height)
-                if (long > 2048) {
-                    val f = 2048.0 / long
-                    decoder.setTargetSize((info.size.width * f).toInt().coerceAtLeast(1), (info.size.height * f).toInt().coerceAtLeast(1))
-                }
-                decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
-            }
+            val bitmap = picture(android.graphics.ImageDecoder.createSource(getApplication<Application>().contentResolver, uri))
             java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }.toByteArray()
         }.getOrNull() ?: return@withContext false
-        val done = runCatching { me.raddatz.veyq.mobile.session.NodeCover.set(t, ref.scopeId, ref.nodeId, jpeg) }
+        val done = runCatching { me.raddatz.veyq.mobile.session.NodeCover.set(t, ref.scopeId, ref.nodeId, jpeg, crop) }
             .getOrNull() == me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE
         refreshLists(t)
         done

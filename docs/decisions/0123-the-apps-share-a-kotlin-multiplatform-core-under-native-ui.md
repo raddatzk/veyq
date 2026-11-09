@@ -270,8 +270,13 @@ implementation exists but what holds it to the first.
   `CoverDialog`: the cover as it shows, 16:9, the picture chosen, changed and removed in one place) sets, changes and
   removes it from the platform's photo picker (no library permission), the device making the web's cover JPEG (long edge
   2048, quality 0.85), and its rows show it in place of the kind's tile (the web draws a cover the app set, and the iOS app one
-  Android set, measured 2026-11-09). The crop editor is not built — a cover the app sets is the whole picture, a
-  centred fit, and one the web cropped shows its crop on the web — nor the cover as the page header's leading visual. A level
+  Android set, measured 2026-11-09). The sheet frames the picture as the web's 16:9 `ImageCropper` does — a drag pans it, a
+  pinch or a slider zooms it 1 to 3, no empty corner — in core's `session/CoverFrame.kt`, the web's math, so a stored crop
+  reopens as it was framed in any client (`CoverFrameTest`; fill turned to fit turns it red); a new picture is uploaded with
+  its crop, the stored one framed anew moves only the crop (`NodeCover.recrop`, a plain meta write, the blob kept), and every
+  list draws the framed part (`CoverFrame.pixels`). Measured 2026-11-09: `CoverCropLiveTest` (framed, read back, re-framed
+  with its blob kept), a frame dragged on Android and one pinched on iOS shown so in the web's header. The cover as the page
+  header's leading visual is not built. A level
   creates as the web's "New" menu does (decision 9's creating action in its menu form, and the drawer's "New" opening it on
   Home): a folder there (`session/FolderCreate.kt`, its name refused where a sibling folds the same) or a Pot there. A
   folder Home shows has core's actions as the web's level header does — favorite, rename, move, cover, report, delete with

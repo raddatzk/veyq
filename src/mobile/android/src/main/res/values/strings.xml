@@ -412,8 +412,11 @@
     <string name="copy_name_taken">There is no free name for the copy there. Rename it first, or choose another place.</string>
     <string name="copy_nothing">Nothing here can be copied by this version of veyq.</string>
     <string name="cover_title">Cover</string>
-    <string name="cover_hint">Choose a picture as the cover.</string>
+    <string name="cover_hint">Upload an image as the cover, then drag and zoom to frame it.</string>
     <string name="cover_choose">Choose a picture</string>
+    <string name="cover_save">Save cover</string>
+    <string name="cover_unreadable">This image could not be read. Try a JPEG or PNG.</string>
+    <string name="cover_zoom">Zoom</string>
     <string name="cover_set">Set cover</string>
     <string name="cover_change">Change cover</string>
     <string name="cover_remove">Remove cover</string>
