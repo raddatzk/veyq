@@ -97,4 +97,56 @@ class DepotLiveTest {
         if (!keep) assertTrue(NodeTrash.delete(tenant, scopeId, up.nodeId!!) == NodeTrash.Deleted.TRASHED)
         println("[$rootName] \"$name\": uploaded in ${first.chunkCount} frames, read back, replaced (blob ${first.blobId} → ${second.blobId}), stale replace refused; ${if (keep) "kept" else "trashed"}")
     }
+
+    /**
+     * `VEYQ_LIVE_FOLDER_UPLOAD=<root folder>` uploads a directory made here ("App up", nested, a case clash, a file of three
+     * frames) there twice — the second beside the first as "App up (2)" — and checks a fresh session finds every folder and
+     * file where the plan put it, each file to the byte; both stay, for the web's level.
+     */
+    @Test
+    fun aDirectoryIsUploadedAsFoldersAndFiles() = runTest(timeout = 10.minutes) {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
+        val rootName = System.getenv("VEYQ_LIVE_FOLDER_UPLOAD") ?: return@runTest
+        val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            testDevice(BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        val tenant = account.open(account.defaultTenant!!)
+        val parent = tenant.nodes().first { it.kind == "FOLDER" && it.parentId == null && it.name == rootName }
+        val big = ByteArray(600_000) { (it * 13).toByte() }
+        val files = linkedMapOf(
+            "readme.txt" to "hello".encodeToByteArray(), "Docs/plan.txt" to "plan".encodeToByteArray(),
+            "Docs/PLAN.TXT" to "PLAN".encodeToByteArray(), "Docs/Deep/big.bin" to big,
+        )
+        val entries = files.map { (path, bytes) ->
+            FolderUpload.Entry(path, bytes.size.toLong(), "application/octet-stream", 1_700_000_000_000L) { from, n -> bytes.copyOfRange(from.toInt(), from.toInt() + n) }
+        }
+        val names = mutableListOf<String>()
+        repeat(2) {
+            val r = FolderUpload.upload(tenant, parent.scopeId, parent.nodeId, "App up", entries, AppKinds::tokenInput)
+            assertEquals(FolderUpload.Outcome.DONE, r.outcome, "${r.failedFolders} ${r.failedFiles}")
+            assertEquals(4, r.uploaded)
+            names += r.name
+        }
+        assertEquals("App up (2)", names[1], "the second goes beside the first")
+        val fresh = account.open(tenant.tenant)
+        val nodes = fresh.nodes()
+        val top = nodes.first { it.parentId == parent.nodeId && it.name == names[0] && it.kind == "FOLDER" }
+        fun child(of: String, name: String) = nodes.first { it.parentId == of && it.name == name }
+        val docs = child(top.nodeId, "Docs")
+        val listed = DepotFiles.list(fresh)
+        suspend fun bytes(id: String): ByteArray {
+            val o = java.io.ByteArrayOutputStream()
+            DepotFiles.read(fresh, listed.getValue(id)) { o.write(it) }
+            return o.toByteArray()
+        }
+        assertEquals("hello", bytes(child(top.nodeId, "readme.txt").nodeId).decodeToString())
+        assertEquals("plan", bytes(child(docs.nodeId, "plan.txt").nodeId).decodeToString())
+        assertEquals("PLAN", bytes(child(docs.nodeId, "PLAN (2).TXT").nodeId).decodeToString())
+        assertEquals(sha(big), sha(bytes(child(child(docs.nodeId, "Deep").nodeId, "big.bin").nodeId)))
+        println("[$rootName] uploaded \"${names[0]}\" and \"${names[1]}\": every folder and file where planned, to the byte")
+    }
 }

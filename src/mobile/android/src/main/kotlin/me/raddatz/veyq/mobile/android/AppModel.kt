@@ -742,6 +742,81 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Depot's "Upload folder…": the directory the system's picker granted ([tree], `OpenDocumentTree`) walked through its
+     * documents provider — only its files, each read at any offset — and uploaded under [parentId] (`FolderUpload`); what did
+     * not go up is said, in the web's words.
+     */
+    fun uploadFolderPicked(scopeId: String, parentId: String?, tree: android.net.Uri) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val t = tenantSession ?: return@launch
+            val report = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val (rootName, entries) = treeEntries(tree)
+                    me.raddatz.veyq.mobile.depot.FolderUpload.upload(t, scopeId, parentId, rootName, entries, me.raddatz.veyq.mobile.AppKinds::tokenInput) { name, done, total ->
+                        _uploading.value = "$name (${done + 1}/$total)"
+                    }
+                }.getOrNull()
+            }
+            _uploading.value = null
+            refreshLists(t)
+            val r = report ?: return@launch notify(Notice(app.getString(R.string.share_failed)))
+            val size = android.text.format.Formatter.formatShortFileSize(app, r.bytes)
+            val said = when (r.outcome) {
+                me.raddatz.veyq.mobile.depot.FolderUpload.Outcome.NO_ROOM -> listOf(app.getString(R.string.depot_folder_no_room, r.name, size))
+                me.raddatz.veyq.mobile.depot.FolderUpload.Outcome.ROOT_FAILED -> listOf(app.getString(R.string.depot_folder_failed, r.name))
+                else -> r.failedFolders.map { app.getString(R.string.depot_folder_part_failed, it) } +
+                    r.failedFiles.mapNotNull { (name, outcome) -> uploadProblem(name, outcome) }
+            }
+            if (said.isNotEmpty()) notify(Notice(said.joinToString("\n")))
+        }
+    }
+
+    /** The directory [tree] names: its name and every file below it, by its path there (`/`-separated). */
+    private fun treeEntries(tree: android.net.Uri): Pair<String, List<me.raddatz.veyq.mobile.depot.FolderUpload.Entry>> {
+        val resolver = getApplication<Application>().contentResolver
+        val rootId = android.provider.DocumentsContract.getTreeDocumentId(tree)
+        val rootName = resolver.query(
+            android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, rootId),
+            arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null,
+        )?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "Folder"
+        val out = ArrayList<me.raddatz.veyq.mobile.depot.FolderUpload.Entry>()
+        fun walk(docId: String, path: String) {
+            val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
+            val cols = arrayOf(
+                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID, android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE, android.provider.DocumentsContract.Document.COLUMN_SIZE,
+                android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+            )
+            val rows = ArrayList<Array<Any?>>()
+            resolver.query(children, cols, null, null, null)?.use { q ->
+                while (q.moveToNext()) rows += arrayOf(q.getString(0), q.getString(1), q.getString(2), if (q.isNull(3)) 0L else q.getLong(3), if (q.isNull(4)) null else q.getLong(4))
+            }
+            for (row in rows) {
+                val id = row[0] as String
+                val name = row[1] as String
+                val mime = row[2] as String?
+                val at = if (path.isEmpty()) name else "$path/$name"
+                if (mime == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) { walk(id, at); continue }
+                val uri = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, id)
+                out += me.raddatz.veyq.mobile.depot.FolderUpload.Entry(at, row[3] as Long, mime ?: "application/octet-stream", row[4] as Long?) { from, length ->
+                    // opened per frame: the upload asks one frame after another and never holds the file
+                    val pfd = resolver.openFileDescriptor(uri, "r") ?: throw java.io.IOException("unreadable")
+                    pfd.use { d ->
+                        java.io.FileInputStream(d.fileDescriptor).channel.use { ch ->
+                            val buf = java.nio.ByteBuffer.allocate(length)
+                            while (buf.hasRemaining()) if (ch.read(buf, from + buf.position()) < 0) break
+                            buf.array().copyOf(buf.position())
+                        }
+                    }
+                }
+            }
+        }
+        walk(rootId, "")
+        return rootName to out
+    }
+
     /** Replaces [nodeId] with [p] and says how it went; a content changed meanwhile offers "Replace anyway". */
     suspend fun replaceWithNotice(nodeId: String, p: Picked, expected: String?) {
         val app = getApplication<Application>()

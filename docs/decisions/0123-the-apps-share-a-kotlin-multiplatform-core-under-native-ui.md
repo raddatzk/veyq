@@ -370,8 +370,18 @@ implementation exists but what holds it to the first.
   the web opens). A file's page names who uploaded its content as the web's `uploader.ts` does (`depot/Uploaders.kt`): a
   member of its space by name, one who left as a former member, a link's guest by the guest's folder it lies in, marked as
   a guest's, else "a guest" (measured 2026-11-09 on Android against the web's page: "Kevin Raddatz", "Clara (guest)" in a
-  drop box, "a guest" in a guest's folder moved out). Not built yet: a folder upload, a READ_WRITE guest's own sealed name
-  as an uploader (said as "a guest").
+  drop box, "a guest" in a guest's folder moved out). A level's "New" offers "Upload folder…" as the web's
+  `uploadFolder.ts` does (`depot/FolderUpload.kt`, the directory from the system's folder picker: Android's documents
+  provider, Apple's file importer): only its files make nodes, each directory's subfolders named before its files (the
+  archive's safe name, numbered on while a slug is taken); the tenant asked first whether the bytes fit
+  (`checkTenantStorageFit`, advisory — a check that does not answer lets it go on); the top folder numbered past the
+  level's siblings, never merged; every folder made depth first, one that cannot be made said with what is in it; then the
+  files one after another, each tried twice but a refusal for room; nothing rolled back (measured 2026-11-09:
+  `FolderUploadTest` — the slug rule taken out turns it red —; `DepotLiveTest` uploading a nested directory with a case
+  clash and a file of three frames twice, the second as "App up (2)", every file read back to the byte and the web listing
+  it; a directory picked on Android uploaded whole, which the web lists). Not built yet: a READ_WRITE guest's own sealed name
+  as an uploader (said as "a guest"); an unpacked download picked as a folder is uploaded as one (the app imports no
+  download yet); the storage check before a copy.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's

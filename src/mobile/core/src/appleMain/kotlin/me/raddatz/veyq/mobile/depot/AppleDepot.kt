@@ -50,6 +50,24 @@ object AppleDepot {
         reading(path) { read -> DepotFiles.upload(tenant, scopeId, parentId, name, size, type, modifiedAt, AppKinds::tokenInput, read) }
     }
 
+    /** One file of a picked directory: its path below the directory, where it lies on the device, and its facts. */
+    class FolderFile(val relativePath: String, val path: String, val size: Long, val type: String, val modifiedAt: Long?)
+
+    /**
+     * Depot's "Upload folder…": the directory named [rootName] whose [files] Swift listed, uploaded under [parentId]
+     * (`FolderUpload`), each file opened for each frame the upload asks; [onFile] is told each file as it starts.
+     */
+    @Throws(Exception::class)
+    suspend fun uploadFolder(
+        tenant: TenantSession, scopeId: String, parentId: String?, rootName: String, files: List<FolderFile>,
+        onFile: (name: String, done: Int, total: Int) -> Unit,
+    ): FolderUpload.Report = withContext(Dispatchers.Default) {
+        val entries = files.map { f ->
+            FolderUpload.Entry(f.relativePath, f.size, f.type, f.modifiedAt) { from, length -> reading(f.path) { read -> read(from, length) } }
+        }
+        FolderUpload.upload(tenant, scopeId, parentId, rootName, entries, AppKinds::tokenInput, onFile)
+    }
+
     /** Replaces [file]'s content with the file at [path] over [expectedBlobId] (`DepotFiles.replace`). */
     @Throws(Exception::class)
     suspend fun replace(

@@ -323,6 +323,10 @@
     <string name="depot_not_uploaded">Noch nicht hochgeladen</string>
     <string name="depot_modified">Geändert %1$s</string>
     <string name="depot_upload">Dateien hochladen</string>
+    <string name="depot_upload_folder">Ordner hochladen…</string>
+    <string name="depot_folder_no_room">„%1$s“ wurde nicht hochgeladen: Dafür ist nicht genug Speicherplatz vorhanden (%2$s). Gib Platz frei oder frage die Person, die deinen Bereich betreibt.</string>
+    <string name="depot_folder_failed">„%1$s“ konnte nicht angelegt werden, deshalb wurde nichts davon hochgeladen.</string>
+    <string name="depot_folder_part_failed">Der Ordner „%1$s“ konnte nicht angelegt werden, deshalb wurde nichts darin hochgeladen.</string>
     <string name="depot_uploading">„%1$s“ wird hochgeladen…</string>
     <string name="depot_replace">Ersetzen…</string>
     <string name="depot_upload_into">Hochladen…</string>

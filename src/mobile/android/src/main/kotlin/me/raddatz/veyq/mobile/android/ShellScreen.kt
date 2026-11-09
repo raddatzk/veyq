@@ -346,6 +346,11 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         val space = s.shell.space
         if (uris.isNotEmpty() && space != null) model.uploadPicked(space, s.shell.folder?.nodeId, uris)
     }
+    // Depot's "Upload folder…": the system's folder picker grants one directory, uploaded here whole (`FolderUpload`)
+    val pickFolder = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { tree ->
+        val space = s.shell.space
+        if (tree != null && space != null) model.uploadFolderPicked(space, s.shell.folder?.nodeId, tree)
+    }
     // The level's "New" (the web's menu): a folder here, a Pot here, or files uploaded here.
     // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
     val inGuestFolder = s.shell.space?.let { sp -> s.shell.folder?.let { f -> model.inIdentityFolder(me.raddatz.veyq.mobile.navigation.NodeAt(sp, f.nodeId, "FOLDER", f.name)) } } ?: false
@@ -353,6 +358,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, onClick = { close(); naming = true })
         androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.create_pot)) }, onClick = { close(); creatingPot = true })
         androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.depot_upload)) }, onClick = { close(); pickFiles.launch(arrayOf("*/*")) })
+        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.depot_upload_folder)) }, onClick = { close(); pickFolder.launch(null) })
     }) { list, bottom ->
     Column(Modifier.fillMaxSize()) {
         if (s.filters.size > 1) {

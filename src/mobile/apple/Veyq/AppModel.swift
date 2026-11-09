@@ -1008,6 +1008,55 @@ final class AppModel {
         }
     }
 
+    /// Depot's "Upload folder…": the directory at `url` (the system's folder picker) listed here — only its files, hidden ones
+    /// included, as the web's directory input holds them — and uploaded under the level shown (`FolderUpload`); what did not
+    /// go up is said, in the web's words.
+    func uploadFolder(_ url: URL) async {
+        guard let t = tenantSession, let scopeId = shell.space else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let files = Self.folderFiles(url)
+        let report = try? await AppleDepot.shared.uploadFolder(
+            tenant: t, scopeId: scopeId, parentId: shell.folder?.nodeId, rootName: url.lastPathComponent, files: files
+        ) { @Sendable name, done, total in
+            Task { @MainActor [weak self] in self?.uploading = "\(name) (\(done.intValue + 1)/\(total.intValue))" }
+        }
+        uploading = nil
+        await refreshLists(t)
+        guard let report else { notice = Notice(text: String(localized: "That didn’t work — please try again.")); return }
+        let size = ByteCountFormatter.string(fromByteCount: report.bytes, countStyle: .file)
+        var said: [String] = []
+        switch report.outcome {
+        case .noRoom: said = [String(localized: "“\(report.name)” was not uploaded: there is not enough storage space for it (\(size)). Free some space, or ask whoever runs your space.")]
+        case .rootFailed: said = [String(localized: "“\(report.name)” could not be created, so nothing of it was uploaded.")]
+        default:
+            said = report.failedFolders.map { String(localized: "The folder “\($0)” could not be created, so nothing in it was uploaded.") }
+                + report.failedFiles.compactMap { Self.uploadProblem($0.first as String? ?? "", $0.second) }
+        }
+        if !said.isEmpty { notice = Notice(text: said.joined(separator: "\n")) }
+    }
+
+    /// The files below the directory at `url` (hidden ones included, as the web's directory input holds them), each by its
+    /// path below it; a directory enumerator is not iterated in an async context, so this is its own synchronous walk.
+    nonisolated private static func folderFiles(_ url: URL) -> [AppleDepot.FolderFile] {
+        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey, .contentTypeKey]
+        var files: [AppleDepot.FolderFile] = []
+        let base = url.standardizedFileURL.path
+        if let walk = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) {
+            for case let file as URL in walk {
+                guard let v = try? file.resourceValues(forKeys: Set(keys)), v.isRegularFile == true else { continue }
+                let full = file.standardizedFileURL.path
+                let relative = full.hasPrefix(base + "/") ? String(full.dropFirst(base.count + 1)) : file.lastPathComponent
+                files.append(AppleDepot.FolderFile(
+                    relativePath: relative, path: full, size: Int64(v.fileSize ?? 0),
+                    type: v.contentType?.preferredMIMEType ?? "application/octet-stream",
+                    modifiedAt: v.contentModificationDate.map { KotlinLong(value: Int64($0.timeIntervalSince1970 * 1000)) }
+                ))
+            }
+        }
+        return files
+    }
+
     /// Replaces file `nodeId` with the file at `url` over `expected`, and says how it went (a content changed meanwhile
     /// offers "Replace anyway").
     func replaceFile(_ nodeId: String, url: URL, expected: String?) async {

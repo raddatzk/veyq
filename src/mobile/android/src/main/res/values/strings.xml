@@ -325,6 +325,10 @@
     <string name="depot_not_uploaded">Not uploaded yet</string>
     <string name="depot_modified">Modified %1$s</string>
     <string name="depot_upload">Upload files</string>
+    <string name="depot_upload_folder">Upload folder…</string>
+    <string name="depot_folder_no_room">“%1$s” was not uploaded: there is not enough storage space for it (%2$s). Free some space, or ask whoever runs your space.</string>
+    <string name="depot_folder_failed">“%1$s” could not be created, so nothing of it was uploaded.</string>
+    <string name="depot_folder_part_failed">The folder “%1$s” could not be created, so nothing in it was uploaded.</string>
     <string name="depot_uploading">Uploading “%1$s”…</string>
     <string name="depot_replace">Replace…</string>
     <string name="depot_upload_into">Upload…</string>

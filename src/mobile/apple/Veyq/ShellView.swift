@@ -340,6 +340,7 @@ struct HomeView: View {
     @State private var nameProblem: String?
     @State private var creatingPot = false
     @State private var pickingFiles = false
+    @State private var pickingFolder = false
 
     private var title: String {
         if let folder = model.shell.folder { return folder.name }
@@ -402,12 +403,19 @@ struct HomeView: View {
             Button("New Folder", systemImage: "folder.badge.plus") { newName = ""; nameProblem = nil; naming = true }
             Button("New Pot", systemImage: "wallet.bifold") { creatingPot = true }
             Button("Upload Files", systemImage: "square.and.arrow.up.on.square") { pickingFiles = true }
+            Button("Upload Folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
         }
         // Depot's "Upload files": the system's picker hands over the files chosen, uploaded here one after another
         .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
             Task { await model.uploadFiles(urls) }
         }
+        // Depot's "Upload folder…": the folder picker hands over one directory, uploaded here whole (a second importer on its
+        // own view: SwiftUI presents only one per view)
+        .background(EmptyView().fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
+            guard case .success(let url) = result else { return }
+            Task { await model.uploadFolder(url) }
+        })
         .alert("New Folder", isPresented: $naming) {
             TextField("Name", text: $newName)
             Button("Create") {
