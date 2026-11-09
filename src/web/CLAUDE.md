@@ -354,7 +354,10 @@ here; the server is blind.
   called with the node's key for that call only, the kinds of its page's documents, a `note`) and, for the node on screen,
   `contributeSearchDocuments` (`contribution.ts`, the header door's shape: the member's `SpaceView` provides it, a guest's
   page does not, a bookmark's embed blocks it). Memories: `features/memories/search.ts`. Text is compared through
-  `shared/text/fold.ts`, never `slugify`.
+  `shared/text/fold.ts`, never `slugify`. After the spaces' groups come People and Settings (decision 9,
+  `peopleAndSettings.ts`): the members from the directory's roster as last read (`tenantPeopleNow`), and the settings
+  sections from `features/settings/sections.ts` - **the one list the rail reads too**, gates and `ready` included, so never
+  a copy of the section list in the search; a chip hides both groups.
 
   **Favorites are core's (inbox #409, [ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose

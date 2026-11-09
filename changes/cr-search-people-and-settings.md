@@ -1,7 +1,7 @@
 ---
 id: cr-search-people-and-settings
 title: People and settings sections are search results; Depot and Expenses kinds get their kind word
-status: planned
+status: done
 satisfies: [uc.platform.search]
 adrs: ["0125", "0022", "0083", "0079"]
 invariants:
@@ -139,4 +139,60 @@ Both groups come after the spaces' groups, People first. An empty group is not s
 
 ## Retrospective
 
-(filled by the implementer)
+Implemented 2026-11-09 in the worktree `search-design`, three phases. Each code phase `pnpm run check` green in `src/web/`
+(measured: 539 test files both times), the core-import guard green; the browser pass ran on the `veyq-search` stack.
+
+**Technical choices made (owner away; recorded here, as asked).**
+- **The one list is a composable, not a store:** `features/settings/sections.ts` `useSettingsSections()` returns the
+  categories, `offered` (the sections with their heading, empty until `ready`), `ready`, `isHidden` and `load()`. Each
+  caller holds its own answers: the rail loads on mount (as before), the search on every focus (the previous answers
+  stand until the new ones are in, so the group does not flicker). A tenant change re-reads the role only once `load()`
+  ran, so the search reads nothing before its first focus. Device linking became a `computed` (it was read once at
+  setup); the hub's behaviour is otherwise unchanged and its test file is untouched.
+- **The group collection is in the list too:** the CR says one document per rail `NavItem`, so an owned group's page is a
+  Settings result headed *Gruppen*.
+- **People follow the directory's snapshot** (`tenantPeopleNow`, new): rebuilt when the roster is read, empty after
+  `resetPeopleDirectory` (sign-out). The person chips read the same source now, instead of the field's own copy.
+- **Model:** `SearchDocument` gained `aliases` (matched as a name, at its best rank: `~kevin` finds the account),
+  `subtitle` (a row's own second line) and the kinds `person` / `settings`. Both kinds carry their own `open`, and
+  `groups.ts` classifies by kind first, so they never fall into the contributed-document branch.
+- **The chip rule is explicit in `groups.ts`**, although no chip offered today lets a person or a section through
+  (`satisfies` already drops them): it is the rule the ADR states, and its test builds a chip that would let them
+  through, so the rule is bitten, not only the predicate.
+- **A sixth door in `veyq/one-settings-door`:** `SearchField.vue` is added to the rule's ignores with its reason (the
+  lint caught the `/settings/<id>` push).
+- **`every-kind-has-a-word`** is its own criterion, held by a test in `applications.test.ts` over `registry.kinds()`
+  (every kind but core's bookmark) plus the chip in `SearchField.test.ts`.
+- **Bites (snapshot-and-restore):** phase 1 - the owner gate and the `ready` gate dropped, 4 module tests and 2 hub tests
+  red; phase 2 - the same two gates, both kind words and the chip rule dropped, 6 tests red (the bite pair, the "answer
+  out" case, both kind chips, the applications test, the chip rule).
+
+**Pages touched:** `site/src/content/docs/spaces/search.mdx` and `de/spaces/search.mdx` (People, Settings, the new kind
+words, the chip hiding both groups).
+
+**Browser pass** (`veyq-search` stack, owner `kevin@veyq.test`, German UI; one file `Reiseplan.txt` uploaded into
+*Reisen* for the kind chip): desktop 18 checks, phone (390 px) 6 checks, all PASS (scripts `p9-pass.mjs`, `p9-phone.mjs`
+in the session scratchpad's `search-pass/`). Found there, not by a test: **after a chip is chosen, no row is highlighted,
+so Enter does nothing** until ArrowDown - the layer's behaviour since the first CR, not this one's; left as is and named
+below.
+
+**Owner questions (each with the conservative default built).**
+1. **The bookmark kind has no kind word** (the CR named Depot's and Expenses'). Recommendation: give `SHARE_BOOKMARK` one
+   (*Lesezeichen*) in a one-line follow-up; the applications test then drops its exception.
+2. **The person chip and the person result read alike** ("Kevin Raddatz · Person" over "Kevin Raddatz · ~kevin"). Built
+   as the ADR says; recommendation: keep, the chip's row says *Person*, the result's shows the picture and handle.
+3. **Enter after a chip does nothing until a row is highlighted.** Recommendation: highlight the first result after a
+   chip (a small change in `VeyqTagsInput`), so the keyboard flow continues.
+4. Keep this CR for your review or delete it: its binding lessons are in `src/web/CLAUDE.md` (the search paragraph) and
+   in code comments.
+
+**What went wrong.**
+- **Phase 2's first full check was red three times on things the targeted runs did not cover:** the one-settings-door
+  lint, `AppTopbar.test.ts` reaching the network (the focus now loads the settings answers) and Depot's descriptor
+  snapshot in `register.test.ts`. Root cause: I ran only the suites I had touched before the full check. Next time: before
+  the first full check of a phase that adds a read to a shared component, grep every test that mounts it
+  (`rg -l "<Component>" -g '*.test.ts'`) and every test that snapshots a descriptor it extends.
+- **Signing:** phase 1's commit failed with the 1Password error and was made with `--no-gpg-sign` (as the owner allowed);
+  phase 2's signed normally an hour later. The signer is intermittent, not down.
+
+**Next time:** grep the mounters of a shared component before adding a read to it.
