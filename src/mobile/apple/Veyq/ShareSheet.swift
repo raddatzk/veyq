@@ -13,6 +13,17 @@ struct ShareWords {
 
     /// The words of `kind`'s share sheet: a Pot's, else core's folder words (the web's default `ShareDialogCopy`).
     static func of(_ kind: String) -> ShareWords {
+        if kind == DepotFiles.shared.DROPBOX {
+            let hint = String(localized: "Creates a drop box with this name here. Anyone with the link can send you files: each person gets a folder of their own, and nobody sees the drop box or what others sent. You manage its links on the drop box.")
+            return ShareWords(
+                title: String(localized: "Drop box links"),
+                intro: String(localized: "Anyone with a link can add files. Nobody with it sees the drop box or what others added."),
+                contributor: String(localized: "Add files only"),
+                viewerHint: hint,
+                contributorHint: hint,
+                deleteConfirm: String(localized: "Delete this link for good? Nobody can send files with it any more. What guests already sent stays in the drop box.")
+            )
+        }
         if kind == DepotFiles.shared.FILE {
             return ShareWords(
                 title: String(localized: "Share this file"),
@@ -52,6 +63,8 @@ struct ShareSheet: View {
     let model: AppModel
     let ref: NodeAt
     private var words: ShareWords { ShareWords.of(ref.kind) }
+    /// A drop box's own links: WRITE_ONLY only, no name of their own; a folder offers "Add files only", which makes one.
+    private var dropBox: Bool { ref.kind == DepotFiles.shared.DROPBOX }
     @Environment(\.dismiss) private var dismiss
     @State private var links: [ShareLinks.Link]?
     @State private var failed = false
@@ -69,7 +82,7 @@ struct ShareSheet: View {
                 if let fresh {
                     FreshLinkView(url: fresh) { self.fresh = nil }
                 } else if let link = editing {
-                    NewLinkForm(rules: model.linkRules(), words: words, editing: link, onCancel: { editing = nil }) { role, label, password, expiresAt in
+                    NewLinkForm(rules: model.linkRules(), words: words, editing: link, writeOnly: dropBox, onCancel: { editing = nil }) { role, label, password, expiresAt in
                         let r = await model.editLink(ref, shareId: link.shareId, edit: ShareLinkChanges.Edit(label: label, password: password, expiresAt: expiresAt, role: role))
                         guard r.outcome == .done else { return Self.changed(r.outcome) }
                         editing = nil
@@ -77,8 +90,24 @@ struct ShareSheet: View {
                         return nil
                     }
                 } else if creating {
-                    NewLinkForm(rules: model.linkRules(), words: words, onCancel: { creating = false }) { role, label, password, expiresAt in
-                        let minted = await model.mintLink(ref, role: role, label: label, password: password ?? "", expiresAt: expiresAt)
+                    NewLinkForm(
+                        rules: model.linkRules(), words: words, writeOnly: dropBox,
+                        uploadOffered: ref.kind == "FOLDER" && model.linkRules().dropBox, onCancel: { creating = false }
+                    ) { role, label, password, expiresAt in
+                        if role == ShareLinks.shared.WRITE_ONLY && !dropBox {
+                            // "Add files only" on a folder: a drop box named so, here, with its first link (`createDropBoxWithLink`)
+                            let made = await model.createDropBox(ref, name: label, password: password ?? "", expiresAt: expiresAt)
+                            switch made.outcome {
+                            case .created:
+                                creating = false
+                                fresh = made.url
+                                return nil
+                            case .nameTaken: return String(localized: "Something with a similar name already exists here.")
+                            case .linkFailed: return String(localized: "The drop box is made, but its link was not. Open the drop box to make one.")
+                            default: return String(localized: "That didn’t work — please try again.")
+                            }
+                        }
+                        let minted = await model.mintLink(ref, role: dropBox ? ShareLinks.shared.WRITE_ONLY : role, label: dropBox ? "" : label, password: password ?? "", expiresAt: expiresAt)
                         guard minted.outcome == .created, let url = minted.url else { return Self.problem(minted.outcome) }
                         creating = false
                         fresh = url
@@ -155,8 +184,8 @@ struct ShareSheet: View {
                     ForEach(links, id: \.shareId) { link in
                         // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one, switch
                         // off an own one that is on, delete a switched-off one the server lets go (`FolderShareDialog`)
-                        let canEdit = link.mine && link.enabled && link.url != nil
-                        let canRenew = link.mine || !link.enabled
+                        let canEdit = !dropBox && link.mine && link.enabled && link.url != nil
+                        let canRenew = !dropBox && (link.mine || !link.enabled)
                         let canSwitchOff = link.enabled && link.mine
                         let canDelete = !link.enabled && link.deletable
                         LinkRow(link: link, words: words, busy: busy == link.shareId)
@@ -230,7 +259,11 @@ private struct LinkRow: View {
     @State private var copied = false
 
     private var roleWord: String {
-        link.role == ShareLinks.shared.READ ? String(localized: "View only") : words.contributor
+        switch link.role {
+        case ShareLinks.shared.READ: String(localized: "View only")
+        case ShareLinks.shared.WRITE_ONLY: String(localized: "Add files only")
+        default: words.contributor
+        }
     }
 
     var body: some View {
@@ -291,6 +324,10 @@ private struct NewLinkForm: View {
     let words: ShareWords
     /// The link an edit changes (its settings fill the form; a password left blank stays as it is); nil mints a new one.
     var editing: ShareLinks.Link? = nil
+    /// A drop box's own link: its role is fixed and it has no name of its own.
+    var writeOnly = false
+    /// A folder's third role, "Add files only" (Depot's `folderUploadShare`): it makes a drop box with the name typed.
+    var uploadOffered = false
     let onCancel: () -> Void
     /// role, label, password (nil: untouched, blank: none), end; answers why not, or nil once done.
     let onCreate: (String, String, String?, String?) async -> String?
@@ -316,14 +353,22 @@ private struct NewLinkForm: View {
     var body: some View {
         Form {
             Section {
-                Picker("Role", selection: $role) {
-                    Text("View only").tag(ShareLinks.shared.READ)
-                    if rules.contribute { Text(words.contributor).tag(ShareLinks.shared.READ_WRITE) }
+                if !writeOnly {
+                    Picker("Role", selection: $role) {
+                        Text("View only").tag(ShareLinks.shared.READ)
+                        if rules.contribute { Text(words.contributor).tag(ShareLinks.shared.READ_WRITE) }
+                        if uploadOffered { Text("Add files only").tag(ShareLinks.shared.WRITE_ONLY) }
+                    }
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
-                Text(role == ShareLinks.shared.READ ? words.viewerHint : words.contributorHint)
+                Text(role == ShareLinks.shared.READ ? words.viewerHint
+                     : role == ShareLinks.shared.WRITE_ONLY ? String(localized: "Creates a drop box with this name here. Anyone with the link can send you files: each person gets a folder of their own, and nobody sees the drop box or what others sent. You manage its links on the drop box.")
+                     : words.contributorHint)
                     .font(.caption).foregroundStyle(Role.muted)
-                TextField("Optional label (only you see it)", text: $label)
+                // a drop box's own links have no name; the one "Add files only" makes needs one — its guests see it
+                if !writeOnly {
+                    TextField(role == ShareLinks.shared.WRITE_ONLY ? "Name — guests with the link see it" : "Optional label (only you see it)", text: $label)
+                }
             }
             Section {
                 Toggle("Password protection", isOn: $withPassword).disabled(rules.passwordRequired)
@@ -364,11 +409,13 @@ private struct NewLinkForm: View {
                     HStack { Spacer(); if saving { ProgressView() } else { Text(editing == nil ? "Create link" : "Save").fontWeight(.semibold) }; Spacer() }
                 }
                 // an edit keeps the password where the field stays blank
-                .disabled(saving || (withPassword && password.trimmingCharacters(in: .whitespaces).count < passwordMin && !(hadPassword && password.isEmpty)))
+                .disabled(saving || (withPassword && password.trimmingCharacters(in: .whitespaces).count < passwordMin && !(hadPassword && password.isEmpty))
+                          || (role == ShareLinks.shared.WRITE_ONLY && !writeOnly && label.trimmingCharacters(in: .whitespaces).isEmpty))
                 Button("Cancel", action: onCancel).disabled(saving)
             }
         }
         .onAppear {
+            if writeOnly { role = ShareLinks.shared.WRITE_ONLY }
             if let editing {
                 role = editing.role
                 label = editing.label

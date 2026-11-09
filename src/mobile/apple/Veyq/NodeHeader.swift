@@ -81,7 +81,7 @@ struct KindPage {
     }
 
     /// Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover.
-    private static let dropBox = KindPage(shareable: false, takesCover: true, header: { node, _ in
+    private static let dropBox = KindPage(shareable: true, takesCover: true, header: { node, _ in
         HeaderContribution(
             rename: false,
             deleteTitle: String(localized: "Delete Drop Box"),

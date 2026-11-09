@@ -327,6 +327,13 @@
     <string name="depot_error_stale_file">“%1$s” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first.</string>
     <string name="depot_error_quota">“%1$s” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.</string>
     <string name="depot_error_failed">“%1$s” could not be uploaded.</string>
+    <string name="share_role_uploader">Add files only</string>
+    <string name="share_upload_name">Name — guests with the link see it</string>
+    <string name="dropbox_upload_hint">Creates a drop box with this name here. Anyone with the link can send you files: each person gets a folder of their own, and nobody sees the drop box or what others sent. You manage its links on the drop box.</string>
+    <string name="dropbox_share_title">Drop box links</string>
+    <string name="dropbox_share_hint">Anyone with a link can add files. Nobody with it sees the drop box or what others added.</string>
+    <string name="dropbox_share_delete_confirm">Delete this link for good? Nobody can send files with it any more. What guests already sent stays in the drop box.</string>
+    <string name="dropbox_link_failed">The drop box is made, but its link was not. Open the drop box to make one.</string>
     <string name="dropbox_people_none">Nobody yet</string>
     <plurals name="dropbox_people">
         <item quantity="one">1 person</item>

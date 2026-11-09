@@ -326,7 +326,15 @@ implementation exists but what holds it to the first.
   each file opening its page, a folder deleted to the trash after its question; its row says how many people have a
   folder in it, and it is never renamed. Measured 2026-11-09: a drop box the web made and two guests filled through its
   link, every file read by `DropBoxLiveTest` to the SHA-256 the guests dropped (an entry key taken from the parent turns
-  it red), and its page in both apps. Not built yet: a drop box's links and its creation ("Add files only"), its re-key
+  it red), and its page in both apps. A folder's share sheet offers the web's third role, "Add files only" (where the
+  tenant has `core.public-shares.drop-box`): it makes a drop box of the name typed there and its first WRITE_ONLY link
+  (`DropBoxes.create`, the web's `createDropBoxWithLink`); a WRITE_ONLY link carries no wrap but the drop key's public
+  half under its `K_share`, the first one births the drop key (its private half under the drop box's key), a later one
+  reuses it (`drop_key_exists` re-read), and its close re-keys nothing (it opens no key). A drop box's own sheet lists,
+  copies, mints, switches off and deletes its links. Measured 2026-11-09: a drop box the app made with its link, a second
+  link minted on its key and switched off (`DropBoxLiveTest`), a web guest dropping through the app's link and both the app
+  (to the SHA-256) and the web's member page opening what they dropped; the same made from Android's share sheet. Not
+  built yet: reactivating a switched-off drop box link, the space's top level's "Add files only", a drop box's re-key
   (it stays due for a web device), moving a guest's folder out, a file's copy and its place in a folder's download (both
   left out and said), a folder upload, the uploader on a file's page.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -78,7 +79,10 @@ internal class ShareWords(
 
 /** The words of [kind]'s share sheet: a Pot's, a file's, else core's folder words (the web's default `ShareDialogCopy`). */
 internal fun shareWords(kind: String): ShareWords =
-    if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.FILE) ShareWords(
+    if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX) ShareWords(
+        R.string.dropbox_share_title, R.string.dropbox_share_hint, R.string.share_role_uploader,
+        R.string.dropbox_upload_hint, R.string.dropbox_upload_hint, R.string.dropbox_share_delete_confirm,
+    ) else if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.FILE) ShareWords(
         R.string.share_file_title, R.string.share_file_intro, R.string.share_file_role_contributor,
         R.string.share_file_role_viewer_hint, R.string.share_file_role_contributor_hint, R.string.share_file_delete_confirm,
     ) else if (kind == me.raddatz.veyq.mobile.expenses.PotSession.KIND) ShareWords(
@@ -99,6 +103,8 @@ internal fun shareWords(kind: String): ShareWords =
 @Composable
 internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, onClose: () -> Unit) {
     val words = shareWords(ref.kind)
+    // a drop box's own links: WRITE_ONLY only, no name of their own; a folder offers "Add files only", which makes one
+    val dropBox = ref.kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -137,7 +143,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
             val made = fresh
             when {
                 made != null -> FreshLink(made) { fresh = null }
-                editing != null -> NewLinkForm(rules, words, onCancel = { editing = null }, editing = editing) { role, label, password, expiresAt ->
+                editing != null -> NewLinkForm(rules, words, onCancel = { editing = null }, editing = editing, writeOnly = dropBox) { role, label, password, expiresAt ->
                     val link = editing!!
                     val r = model.editLink(ref, link.shareId, me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit(label, password, expiresAt, role))
                     changedText(r.outcome).also {
@@ -147,8 +153,25 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                         }
                     }
                 }
-                creating -> NewLinkForm(rules, words, onCancel = { creating = false }) { role, label, password, expiresAt ->
-                    val minted = model.mintLink(ref, role, label, password.orEmpty(), expiresAt)
+                creating -> NewLinkForm(
+                    rules, words, onCancel = { creating = false }, writeOnly = dropBox,
+                    uploadOffered = ref.kind == "FOLDER" && rules.dropBox,
+                ) { role, label, password, expiresAt ->
+                    if (role == ShareLinks.WRITE_ONLY && !dropBox) {
+                        // "Add files only" on a folder: a drop box named so, here, with its first link (`createDropBoxWithLink`)
+                        val made = model.createDropBox(ref, label, password.orEmpty(), expiresAt)
+                        return@NewLinkForm when (made.outcome) {
+                            me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED -> {
+                                creating = false
+                                fresh = made.url
+                                null
+                            }
+                            me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.NAME_TAKEN -> context.getString(R.string.node_slug_taken)
+                            me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.LINK_FAILED -> context.getString(R.string.dropbox_link_failed)
+                            else -> context.getString(R.string.share_failed)
+                        }
+                    }
+                    val minted = model.mintLink(ref, if (dropBox) ShareLinks.WRITE_ONLY else role, if (dropBox) "" else label, password.orEmpty(), expiresAt)
                     if (minted.outcome == ShareLinks.Outcome.CREATED) {
                         creating = false
                         fresh = minted.url
@@ -170,8 +193,8 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                                     link, words, busy = busy == link.shareId,
                                     // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one,
                                     // delete a switched-off one the server lets go (`FolderShareDialog`)
-                                    onEdit = if (link.mine && link.enabled && link.url != null) ({ editing = link }) else null,
-                                    onRenew = if (link.mine || !link.enabled) ({ renewing = link }) else null,
+                                    onEdit = if (!dropBox && link.mine && link.enabled && link.url != null) ({ editing = link }) else null,
+                                    onRenew = if (!dropBox && (link.mine || !link.enabled)) ({ renewing = link }) else null,
                                     onDelete = if (!link.enabled && link.deletable) ({ deleting = link }) else null,
                                     onSwitchOff = if (link.enabled && link.mine) {
                                     {
@@ -250,7 +273,7 @@ private fun LinkRow(
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
-                link.label.ifEmpty { stringResource(if (link.role == ShareLinks.READ) R.string.share_role_viewer else words.contributor) },
+                link.label.ifEmpty { stringResource(roleWord(link.role, words)) },
                 fontWeight = FontWeight.SemiBold,
             )
             val dates = listOfNotNull(
@@ -259,7 +282,7 @@ private fun LinkRow(
             ).joinToString(" · ")
             Text(dates, style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             val badges = listOfNotNull(
-                if (link.label.isNotEmpty()) stringResource(if (link.role == ShareLinks.READ) R.string.share_role_viewer else words.contributor) else null,
+                if (link.label.isNotEmpty()) stringResource(roleWord(link.role, words)) else null,
                 if (link.passwordRequired) stringResource(R.string.share_password_badge) else null,
                 if (!link.enabled) stringResource(R.string.share_switched_off) else null,
                 if (!link.mine) stringResource(R.string.share_by_member) else null,
@@ -322,6 +345,10 @@ private fun FreshLink(url: String, onDone: () -> Unit) {
 @Composable
 private fun NewLinkForm(
     rules: ShareLinks.Rules, words: ShareWords, onCancel: () -> Unit,
+    /** A drop box's own link: its role is fixed and it has no name of its own. */
+    writeOnly: Boolean = false,
+    /** A folder's third role, "Add files only" (Depot's `folderUploadShare`): it makes a drop box with the name typed. */
+    uploadOffered: Boolean = false,
     /** The link an edit changes (its settings fill the form; a password left blank stays as it is); null mints a new one. */
     editing: ShareLinks.Link? = null,
     /** role, label, password (null: untouched, blank: none), end; answers why not, or null once done. */
@@ -329,7 +356,7 @@ private fun NewLinkForm(
 ) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var role by remember { mutableStateOf(editing?.role ?: ShareLinks.READ) }
+    var role by remember { mutableStateOf(if (writeOnly) ShareLinks.WRITE_ONLY else editing?.role ?: ShareLinks.READ) }
     var label by remember { mutableStateOf(editing?.label.orEmpty()) }
     val hadPassword = editing?.passwordRequired == true
     var withPassword by remember { mutableStateOf(rules.passwordRequired || hadPassword) }
@@ -342,18 +369,33 @@ private fun NewLinkForm(
     var problem by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (!writeOnly) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChip(selected = role == ShareLinks.READ, onClick = { role = ShareLinks.READ }, label = { Text(stringResource(R.string.share_role_viewer)) })
         if (rules.contribute) FilterChip(
             selected = role == ShareLinks.READ_WRITE, onClick = { role = ShareLinks.READ_WRITE },
             label = { Text(stringResource(words.contributor)) },
         )
+        if (uploadOffered) FilterChip(
+            selected = role == ShareLinks.WRITE_ONLY, onClick = { role = ShareLinks.WRITE_ONLY },
+            label = { Text(stringResource(R.string.share_role_uploader)) },
+        )
     }
     Text(
-        stringResource(if (role == ShareLinks.READ) words.viewerHint else words.contributorHint),
+        stringResource(
+            when (role) {
+                ShareLinks.READ -> words.viewerHint
+                ShareLinks.WRITE_ONLY -> R.string.dropbox_upload_hint
+                else -> words.contributorHint
+            },
+        ),
         style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(vertical = 6.dp),
     )
-    OutlinedTextField(label, { label = it }, label = { Text(stringResource(R.string.share_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    // a drop box's own links have no name; the one "Add files only" makes needs one — its guests see it
+    if (!writeOnly) OutlinedTextField(
+        label, { label = it },
+        label = { Text(stringResource(if (role == ShareLinks.WRITE_ONLY) R.string.share_upload_name else R.string.share_label)) },
+        singleLine = true, modifier = Modifier.fillMaxWidth(),
+    )
     Spacer(Modifier.padding(6.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -431,9 +473,16 @@ private fun NewLinkForm(
                     saving = false
                 }
             },
-            enabled = passwordOk && !saving,
+            enabled = passwordOk && !saving && (role != ShareLinks.WRITE_ONLY || writeOnly || label.isNotBlank()),
         ) { Text(stringResource(if (editing != null) R.string.share_save else R.string.share_create)) }
     }
+}
+
+/** A link's role in the sheet's words. */
+private fun roleWord(role: String, words: ShareWords): Int = when (role) {
+    ShareLinks.READ -> R.string.share_role_viewer
+    ShareLinks.WRITE_ONLY -> R.string.share_role_uploader
+    else -> words.contributor
 }
 
 private fun mintProblem(outcome: ShareLinks.Outcome): Int = when (outcome) {

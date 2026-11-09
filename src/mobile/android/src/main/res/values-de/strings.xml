@@ -325,6 +325,13 @@
     <string name="depot_error_stale_file">„%1$s“ wurde nicht hochgeladen: Jemand anderes hat diese Datei inzwischen ersetzt. Ersetze sie trotzdem oder sieh dir zuerst die andere an.</string>
     <string name="depot_error_quota">„%1$s“ wurde nicht hochgeladen: Es ist kein Speicherplatz mehr frei. Gelöschte Dateien geben erst Platz frei, wenn der Papierkorb geleert ist.</string>
     <string name="depot_error_failed">„%1$s“ konnte nicht hochgeladen werden.</string>
+    <string name="share_role_uploader">Nur Dateien hinzufügen</string>
+    <string name="share_upload_name">Name — Gäste mit dem Link sehen ihn</string>
+    <string name="dropbox_upload_hint">Legt hier einen Briefkasten mit diesem Namen an. Wer den Link hat, kann dir Dateien schicken: Jede Person bekommt einen eigenen Ordner, und niemand sieht den Briefkasten oder was andere geschickt haben. Seine Links verwaltest du am Briefkasten.</string>
+    <string name="dropbox_share_title">Links zum Briefkasten</string>
+    <string name="dropbox_share_hint">Wer einen Link hat, kann Dateien einwerfen. Den Briefkasten und was andere eingeworfen haben, sieht damit niemand.</string>
+    <string name="dropbox_share_delete_confirm">Diesen Link endgültig löschen? Niemand kann damit noch Dateien einwerfen. Was Gäste schon eingeworfen haben, bleibt im Briefkasten.</string>
+    <string name="dropbox_link_failed">Der Briefkasten ist angelegt, sein Link aber nicht. Öffne den Briefkasten, um einen zu erstellen.</string>
     <string name="dropbox_people_none">Noch niemand</string>
     <plurals name="dropbox_people">
         <item quantity="one">1 Person</item>

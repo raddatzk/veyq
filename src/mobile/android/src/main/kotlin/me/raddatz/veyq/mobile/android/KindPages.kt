@@ -55,7 +55,7 @@ internal object KindPages {
     })
 
     /** Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover. */
-    private val dropBox = KindPage(shareable = false, takesCover = true, header = { node, _ ->
+    private val dropBox = KindPage(shareable = true, takesCover = true, header = { node, _ ->
         HeaderContribution(
             rename = false,
             deleteTitle = stringResource(R.string.dropbox_delete),

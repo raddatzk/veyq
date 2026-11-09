@@ -503,7 +503,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The READ and READ_WRITE links on [ref], newest first; null when they do not list. */
     suspend fun shareLinks(ref: me.raddatz.veyq.mobile.navigation.NodeAt): List<me.raddatz.veyq.mobile.session.ShareLinks.Link>? {
         val t = tenantSession ?: return null
-        return runCatching { me.raddatz.veyq.mobile.session.ShareLinks.list(t, ref.scopeId, ref.nodeId) }.getOrNull()
+        return runCatching { me.raddatz.veyq.mobile.session.ShareLinks.list(t, ref.scopeId, ref.nodeId, writeOnly = ref.kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX) }.getOrNull()
     }
 
     /** Mints a [role] link on [ref]; on success its address, to hand out once. */
@@ -757,6 +757,18 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- Depot's files (the application's `depot/`) ----
+
+    /**
+     * "Add files only" on folder [folder]: a drop box named [name] in it with its first link (`DropBoxes.create`); the lists
+     * are read anew.
+     */
+    suspend fun createDropBox(folder: me.raddatz.veyq.mobile.navigation.NodeAt, name: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.depot.DropBoxes.Created {
+        val t = tenantSession ?: return me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED)
+        val r = runCatching { me.raddatz.veyq.mobile.depot.DropBoxes.create(t, folder.scopeId, folder.nodeId, name, password, expiresAt) }
+            .getOrDefault(me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED))
+        refreshLists(t)
+        return r
+    }
 
     /** Drop box [nodeId]'s guests' folders with their files (`DropBoxes.folders`); null when they could not be read. */
     suspend fun dropBoxFolders(scopeId: String, nodeId: String): List<me.raddatz.veyq.mobile.depot.DropBoxes.GuestFolder>? {

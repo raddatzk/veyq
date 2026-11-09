@@ -799,6 +799,16 @@ final class AppModel {
     /// What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`).
     private(set) var rowDetails: [String: [String]] = [:]
 
+    /// "Add files only" on folder `folder`: a drop box named `name` in it with its first link (`DropBoxes.create`); the lists
+    /// are read anew.
+    func createDropBox(_ folder: NodeAt, name: String, password: String, expiresAt: String?) async -> DropBoxes.Created {
+        guard let t = tenantSession else { return DropBoxes.Created(outcome: .failed, nodeId: nil, url: nil, minted: nil) }
+        let r = (try? await DropBoxes.shared.create(tenant: t, scopeId: folder.scopeId, parentId: folder.nodeId, name: name, password: password, expiresAt: expiresAt))
+            ?? DropBoxes.Created(outcome: .failed, nodeId: nil, url: nil, minted: nil)
+        await refreshLists(t)
+        return r
+    }
+
     /// Drop box `nodeId`'s guests' folders with their files (`DropBoxes.folders`); nil when they could not be read.
     func dropBoxFolders(scopeId: String, nodeId: String) async -> [DropBoxes.GuestFolder]? {
         guard let t = tenantSession else { return nil }
