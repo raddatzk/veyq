@@ -325,6 +325,10 @@
     <string name="depot_error_stale_file">„%1$s“ wurde nicht hochgeladen: Jemand anderes hat diese Datei inzwischen ersetzt. Ersetze sie trotzdem oder sieh dir zuerst die andere an.</string>
     <string name="depot_error_quota">„%1$s“ wurde nicht hochgeladen: Es ist kein Speicherplatz mehr frei. Gelöschte Dateien geben erst Platz frei, wenn der Papierkorb geleert ist.</string>
     <string name="depot_error_failed">„%1$s“ konnte nicht hochgeladen werden.</string>
+    <string name="file_send">Kopie senden…</string>
+    <string name="file_send_title">Kopie senden</string>
+    <string name="file_send_notice">Damit geht eine entschlüsselte Kopie von „%1$s“ an die App, die du wählst. Dort schützt veyq sie nicht mehr: Diese App und alles, wohin sie synchronisiert oder weiterleitet, kann sie lesen.</string>
+    <string name="file_send_confirm">Kopie senden</string>
     <string name="file_delete">Datei löschen</string>
     <string name="file_delete_confirm">„%1$s“ kommt in den Papierkorb.</string>
     <string name="file_type_unknown">Unbekannt</string>

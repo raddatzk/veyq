@@ -881,6 +881,36 @@ final class AppModel {
     /// The file whose content the person is picking a replacement for (the header's "Replace…"), while they pick.
     var replacing: String?
 
+    /// The file a person is about to send a copy of to another app ("Send a Copy…"), while the shell says first that the
+    /// copy leaves veyq decrypted. The data are theirs; the app says what happens and never forbids it.
+    var sendingCopy: NodeAt?
+
+    /// A decrypted copy on its way to the system's share sheet, until the sheet is done with it.
+    struct SentCopy: Identifiable {
+        let url: URL
+        var id: URL { url }
+    }
+
+    var sentCopy: SentCopy?
+
+    /// Where copies sent to another app wait to be read: cleared before the next one and when the sheet is done.
+    private static var sharedDir: URL { FileManager.default.temporaryDirectory.appendingPathComponent("shared", isDirectory: true) }
+
+    func clearSentCopies() {
+        try? FileManager.default.removeItem(at: Self.sharedDir)
+    }
+
+    /// A decrypted copy of file `ref` under its own name (core's `downloadName`), for the system's share sheet.
+    func copyForSending(_ ref: NodeAt) async -> SentCopy? {
+        guard let t = tenantSession, let f = files[ref.nodeId], f.hasContent else { return nil }
+        clearSentCopies()
+        let dir = Self.sharedDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
+        let url = dir.appendingPathComponent(DepotFiles.shared.downloadName(file: f, nodeName: ref.name))
+        guard (try? await AppleDepot.shared.download(tenant: t, file: f, path: url.path))?.boolValue == true else { return nil }
+        return SentCopy(url: url)
+    }
+
     /// The name of the file being uploaded, while one is.
     private(set) var uploading: String?
 

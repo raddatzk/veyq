@@ -309,9 +309,13 @@ implementation exists but what holds it to the first.
   shows by its first frame's BYTES (`depot/FileView.kt`, the web's `view.ts` and `sniff.ts`, `FileViewTest`): an image, a
   PDF (Android's `PdfRenderer` draws pictures a page at a time; PDFKit with its links never followed — the receipts' PDF
   view too now), a claimed text as plain text (its first MiB), an audio or video played in the app; anything else is only
-  downloaded. **Decided (2026-11-09): a peer's file is never handed to another app** — no "open with", no plaintext copy
-  outside the app's own cache; a PDF or media file the page plays is decrypted into that cache under its SNIFFED type's
-  extension and deleted when the page closes. Measured 2026-11-09: `DepotLiveTest` (a three-frame upload read back to the
+  downloaded; a PDF or media file the page plays is decrypted into the app's cache under its SNIFFED type's extension and
+  deleted when the page closes. **Decided (owner 2026-11-09): the data are the person's — the app says what happens and
+  never forbids it.** A file's "Send a copy…" hands a decrypted copy, under its own name, to whatever app the person picks
+  through the system's share sheet (Android's FileProvider over the cache's `shared/`, cleared before the next copy and at
+  start; iOS's activity sheet, the copy removed when it closes; a Mac downloads instead), after a notice that the copy
+  leaves veyq's protection: that app, and wherever it syncs or forwards it, can read it. What veyq itself SHOWS stays
+  decided by the bytes — that is about what the app renders safely, not about what a person may do with their file. Measured 2026-11-09: `DepotLiveTest` (a three-frame upload read back to the
   byte with its meta, a name taken answered as the file it is, a replace with a new blob, a stale replace refused); the web
   shows the app's file — its text, size, type, modified time, uploader — and an image and a PDF uploaded from Android's
   picker open in both the web and the app. Not built yet: the drop box, a file's copy and its place in a folder's download

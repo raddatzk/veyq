@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.android
 
 import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.outlined.Upload
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.runtime.getValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
@@ -90,7 +91,12 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution {
                 "replace", stringResource(if (has) R.string.depot_replace else R.string.depot_upload_into),
                 androidx.compose.material.icons.Icons.Outlined.Upload,
             ) { pick.launch(arrayOf("*/*")) },
-        ),
+            // a decrypted copy to another app the person picks (the system's share sheet), after the shell's notice
+            OwnAction(
+                "send", stringResource(R.string.file_send), androidx.compose.material.icons.Icons.Outlined.Send,
+                me.raddatz.veyq.mobile.navigation.NodeHeader.Slot.MENU,
+            ) { model.askToSend(node) },
+        ).filter { it.id != "send" || has },
     )
 }
 

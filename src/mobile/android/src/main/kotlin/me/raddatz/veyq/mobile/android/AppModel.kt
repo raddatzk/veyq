@@ -97,6 +97,11 @@ sealed interface Screen {
 }
 
 class AppModel(app: Application) : AndroidViewModel(app) {
+    init {
+        // a copy sent to another app in an earlier run has been read by now (or never will be)
+        clearSentCopies()
+    }
+
     private val prefs = app.getSharedPreferences("veyq-recent", Context.MODE_PRIVATE)
     private val recent = RecentUses(persist = ::persistRecent, initial = loadRecent())
     private val hidden = Hidden(persist = { prefs.edit().putStringSet("hidden", it).apply() }, initial = prefs.getStringSet("hidden", emptySet()).orEmpty())
@@ -776,6 +781,45 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }.isSuccess
         runCatching { out.close() }
         return if (ok) emptyList() else null
+    }
+
+    /**
+     * The file a person is about to send a copy of to another app ("Send a copy…"), while the shell asks them first: the copy
+     * leaves veyq decrypted. The data are theirs; the app says what happens and never forbids it.
+     */
+    private val _sending = MutableStateFlow<me.raddatz.veyq.mobile.navigation.NodeAt?>(null)
+    val sending: StateFlow<me.raddatz.veyq.mobile.navigation.NodeAt?> = _sending.asStateFlow()
+
+    fun askToSend(ref: me.raddatz.veyq.mobile.navigation.NodeAt?) {
+        _sending.value = ref
+    }
+
+    /** Where the copies sent to another app wait to be read: cleared before the next one and when the app starts. */
+    private val sharedDir get() = java.io.File(getApplication<Application>().cacheDir, "shared")
+
+    fun clearSentCopies() {
+        runCatching { sharedDir.deleteRecursively() }
+    }
+
+    /**
+     * A decrypted copy of file [ref] under its own name (core's `downloadName`), in the app's shared cache, and the content
+     * URI another app reads it through (the FileProvider, read permission granted to the one it is sent to); null when it
+     * could not be written.
+     */
+    suspend fun copyForSending(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<android.net.Uri, String>? {
+        val file = _files.value[ref.nodeId]?.takeIf { it.hasContent } ?: return null
+        val app = getApplication<Application>()
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            clearSentCopies()
+            val dir = java.io.File(sharedDir, java.util.UUID.randomUUID().toString()).apply { mkdirs() }
+            val out = java.io.File(dir, me.raddatz.veyq.mobile.depot.DepotFiles.downloadName(file, ref.name))
+            val ok = runCatching { out.outputStream().buffered().use { o -> readFile(file) { o.write(it) } } }.isSuccess
+            if (!ok) {
+                dir.deleteRecursively()
+                return@withContext null
+            }
+            androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.files", out) to (file.type ?: "application/octet-stream")
+        }
     }
 
     /** A picked document as an upload reads it: its name, size, type and modified time from the system's listing. */

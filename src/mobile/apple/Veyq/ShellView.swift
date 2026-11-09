@@ -240,6 +240,24 @@ struct Bar: View {
                 Button("OK", role: .cancel) {}
             }
         }
+        // "Send a Copy…": what happens is said first — the copy leaves veyq decrypted —, then the system's share sheet
+        .alert("Send a Copy", isPresented: Binding(get: { model.sendingCopy != nil }, set: { if !$0 { model.sendingCopy = nil } }), presenting: model.sendingCopy) { node in
+            Button("Send a Copy") {
+                Task {
+                    if let copy = await model.copyForSending(node) { model.sentCopy = copy } else {
+                        model.notice = AppModel.Notice(text: String(localized: "“\(node.name)” could not be downloaded. Please try again."))
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { node in
+            Text("This sends a decrypted copy of “\(node.name)” to the app you pick. There veyq no longer protects it: that app, and wherever it syncs or forwards it, can read it.")
+        }
+        #if os(iOS)
+        .sheet(item: Binding(get: { model.sentCopy }, set: { model.sentCopy = $0 })) { copy in
+            ActivitySheet(url: copy.url) { model.clearSentCopies() }
+        }
+        #endif
         // a file's "Replace…": the system's picker hands over one file
         .fileImporter(isPresented: Binding(get: { model.replacing != nil }, set: { if !$0 { model.replacing = nil } }), allowedContentTypes: [.item]) { result in
             guard let nodeId = model.replacing, case .success(let url) = result else { return }
@@ -670,3 +688,19 @@ enum Names {
         }
     }
 }
+
+#if os(iOS)
+/// The system's share sheet for one file (a decrypted copy the person chose to send); [done] when it closes.
+struct ActivitySheet: UIViewControllerRepresentable {
+    let url: URL
+    let done: () -> Void
+
+    func makeUIViewController(context: UIViewControllerRepresentableContext<ActivitySheet>) -> UIActivityViewController {
+        let vc = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        vc.completionWithItemsHandler = { _, _, _, _ in done() }
+        return vc
+    }
+
+    func updateUIViewController(_ vc: UIActivityViewController, context: UIViewControllerRepresentableContext<ActivitySheet>) {}
+}
+#endif

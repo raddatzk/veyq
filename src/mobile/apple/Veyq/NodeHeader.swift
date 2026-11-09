@@ -86,7 +86,7 @@ struct KindPage {
             download: has ? { await model.downloadFile(node) } : nil,
             actions: [OwnAction(id: "replace", label: has ? String(localized: "Replace…") : String(localized: "Upload…"), systemImage: "square.and.arrow.down.on.square") {
                 model.replacing = node.nodeId
-            }]
+            }] + sendAction(node, model, has)
         )
     }, body: { ref, _, model in AnyView(FileScreen(model: model, ref: ref)) })
 
@@ -130,6 +130,16 @@ struct KindPage {
             download: { await model.downloadPot(ref).map { Downloaded(url: $0) } }
         )
     }, body: { ref, key, model in AnyView(PotScreen(model: model, ref: ref, tab: key)) })
+}
+
+/// A file's "Send a Copy…" (iOS: the system's share sheet; a Mac downloads instead), after the shell's notice.
+@MainActor private func sendAction(_ node: NodeAt, _ model: AppModel, _ has: Bool) -> [OwnAction] {
+    #if os(iOS)
+    guard has else { return [] }
+    return [OwnAction(id: "send", label: String(localized: "Send a Copy…"), systemImage: "paperplane", slot: .menu) { model.sendingCopy = node }]
+    #else
+    return []
+    #endif
 }
 
 /// Core's header actions on a node of any kind (the web's `NodeHeader` with `coreNodeActions.ts` and `standardNodeActions`,

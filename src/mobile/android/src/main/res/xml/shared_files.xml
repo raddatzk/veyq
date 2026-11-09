@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the app hands another app through its FileProvider: only the decrypted copies a person chose to send
+     ("Send a copy…" on a file's page), under the cache's shared/ directory, which the app clears before the next one. -->
+<paths>
+    <cache-path name="shared" path="shared/" />
+</paths>

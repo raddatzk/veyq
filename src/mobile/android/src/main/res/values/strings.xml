@@ -327,6 +327,10 @@
     <string name="depot_error_stale_file">“%1$s” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first.</string>
     <string name="depot_error_quota">“%1$s” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.</string>
     <string name="depot_error_failed">“%1$s” could not be uploaded.</string>
+    <string name="file_send">Send a copy…</string>
+    <string name="file_send_title">Send a copy</string>
+    <string name="file_send_notice">This sends a decrypted copy of “%1$s” to the app you pick. There veyq no longer protects it: that app, and wherever it syncs or forwards it, can read it.</string>
+    <string name="file_send_confirm">Send a copy</string>
     <string name="file_delete">Delete file</string>
     <string name="file_delete_confirm">“%1$s” goes to the trash.</string>
     <string name="file_type_unknown">Unknown</string>

@@ -123,6 +123,36 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         }
     }
     val uploading by model.uploading.collectAsStateWithLifecycle()
+    // "Send a copy…": what happens is said first — the copy leaves veyq decrypted —, then the system's share sheet
+    val sending by model.sending.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val sendFailed = stringResource(R.string.download_failed, sending?.name ?: "")
+    sending?.let { node ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { model.askToSend(null) },
+            title = { Text(stringResource(R.string.file_send_title)) },
+            text = { Text(stringResource(R.string.file_send_notice, node.name)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    model.askToSend(null)
+                    scope.launch {
+                        val copy = model.copyForSending(node)
+                        if (copy == null) {
+                            snackbar.showSnackbar(sendFailed)
+                            return@launch
+                        }
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = copy.second
+                            putExtra(android.content.Intent.EXTRA_STREAM, copy.first)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(send, null))
+                    }
+                }) { Text(stringResource(R.string.file_send_confirm)) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { model.askToSend(null) }) { Text(stringResource(R.string.entry_cancel)) } },
+        )
+    }
 
     BackHandler(enabled = shell.searching || shell.canGoBack) {
         if (shell.searching) model.search(false) else model.goBack()
