@@ -101,12 +101,24 @@ export function suggestChips(text: string, chips: readonly SearchChip[], sources
   for (const { tail, rest } of tails) {
     const t = fold(tail)
     if (t.length < MIN_TAIL) continue
-    for (const p of sources.people) if (wordPrefix(fold(p.name), t)) offer({ chip: { type: 'person', userId: p.userId, label: p.name }, text: rest })
+    for (const p of sources.people) if (wordPrefix(foldOnce(p.name), t)) offer({ chip: { type: 'person', userId: p.userId, label: p.name }, text: rest })
     for (const [place, label] of places) if (wordPrefix(place, t)) offer({ chip: { type: 'place', place, label }, text: rest })
-    for (const s of sources.spaces) if (wordPrefix(fold(s.label), t)) offer({ chip: { type: 'space', scopeId: s.scopeId, label: s.label }, text: rest })
-    for (const k of sources.kinds) if (wordPrefix(fold(k.label), t)) offer({ chip: { type: 'kind', kinds: k.kinds, label: k.label }, text: rest })
+    for (const s of sources.spaces) if (wordPrefix(foldOnce(s.label), t)) offer({ chip: { type: 'space', scopeId: s.scopeId, label: s.label }, text: rest })
+    for (const k of sources.kinds) if (wordPrefix(foldOnce(k.label), t)) offer({ chip: { type: 'kind', kinds: k.kinds, label: k.label }, text: rest })
   }
   return [...byType.year, ...byType.person, ...byType.place, ...byType.space, ...byType.kind]
+}
+
+/** A name of a suggestion's source (a member, a space, a kind's word) folded once, not on every keystroke
+ *  (cr-search-polish): the names are few and stable, and a query's text is never kept here. */
+const folded = new Map<string, string>()
+function foldOnce(name: string): string {
+  let f = folded.get(name)
+  if (f === undefined) {
+    if (folded.size >= 4096) folded.clear()
+    folded.set(name, (f = fold(name)))
+  }
+  return f
 }
 
 /** {@link placesOf} once per document list: a keystroke asks again over the same list (cr-search-at-volume). */
@@ -181,12 +193,17 @@ export interface Match {
   rank: number
 }
 
+/** The text of `query` as it is matched: folded, trimmed, one space between words. */
+const foldedText = (query: SearchQuery): string => fold(query.text.trim()).replace(/\s+/g, ' ')
+
 /** The documents matching `query`, unordered. A query with neither a chip nor text matches nothing. */
 export function matchAll(docs: readonly SearchDocument[], query: SearchQuery): Match[] {
-  const t = fold(query.text.trim()).replace(/\s+/g, ' ')
-  if (!t && query.chips.length === 0) return []
+  return matchIn(docs, query.chips, foldedText(query))
+}
+
+function matchIn(docs: Iterable<SearchDocument>, chips: readonly SearchChip[], t: string): Match[] {
+  if (!t && chips.length === 0) return []
   const out: Match[] = []
-  const chips = query.chips
   const words = wordsOf(t)
   for (const doc of docs) {
     if (chips.length > 0 && !chips.every((c) => satisfies(doc, c))) continue
@@ -194,6 +211,40 @@ export function matchAll(docs: readonly SearchDocument[], query: SearchQuery): M
     if (rank !== null) out.push({ doc, rank })
   }
   return out
+}
+
+/** {@link matchAll} that remembers its last answer (`createMatcher`). */
+export type Matcher = (docs: readonly SearchDocument[], query: SearchQuery) => Match[]
+
+/**
+ * A {@link matchAll} for a field the member types into (cr-search-polish): it keeps its last answer, and where the query
+ * only GREW - the same documents, the same chips, a text that starts with the last one - it narrows the last matches
+ * instead of scanning every document. That is sound because a text that grows only drops matches: every word of the longer
+ * text holds a word of the shorter one, and a name, an alias or a place that holds the longer text holds the shorter. The
+ * same query again (a "show more") is answered by the last matches as they are. Anything else - a letter taken back, a chip
+ * added or removed, the documents moved - scans every document again. A query that asks nothing is never remembered: its
+ * empty answer is not the matches of every text.
+ */
+export function createMatcher(): Matcher {
+  let last: { docs: readonly SearchDocument[]; chips: string; t: string; matches: Match[] } | null = null
+  return (docs, query) => {
+    const t = foldedText(query)
+    const chips = query.chips.map(chipKey).sort().join('\u0000')
+    if (!t && query.chips.length === 0) {
+      last = null
+      return []
+    }
+    let matches: Match[]
+    if (last && last.docs === docs && last.chips === chips && t.startsWith(last.t)) {
+      matches = t === last.t ? last.matches : matchIn(docsOf(last.matches), query.chips, t)
+    } else matches = matchIn(docs, query.chips, t)
+    last = { docs, chips, t, matches }
+    return matches
+  }
+}
+
+function* docsOf(matches: readonly Match[]): Generator<SearchDocument> {
+  for (const m of matches) yield m.doc
 }
 
 /** Order matches within a group: rank, then the name's collation, then the id (a stable answer for equal names). */

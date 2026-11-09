@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PERSON_DOCUMENT, SETTINGS_DOCUMENT, searchDocument, type SearchDocument } from './model'
-import { descendantsOf, searchGroups, type SearchContext } from './groups'
+import { descendantsOf, firstRanked, searchGroups, type SearchContext } from './groups'
+import { byRank, matchAll } from './query'
 import { treeNode } from '../../test/models'
 
 const node = (id: string, name: string, scopeId = 'active') =>
@@ -78,5 +79,34 @@ describe('the results grouped by where the member stands', () => {
     expect([...descendantsOf(tree, 'trips')].sort()).toEqual(['day1', 'paris', 'rome'])
     const cyclic = [treeNode({ id: 'a', parentId: 'b' }), treeNode({ id: 'b', parentId: 'a' })]
     expect([...descendantsOf(cyclic, 'a')].sort()).toEqual(['a', 'b'])
+  })
+})
+
+// cr-search-polish: a group is ranked only as far as it is shown, its count stays exact
+describe('a group ranked as far as it is shown', () => {
+  // names that tie on rank and differ by collation, case, digits and accents - the order a full sort gives is the answer
+  const many = Array.from({ length: 300 }, (_, i) =>
+    node(`n${i}`, `${['Rom', 'rom', 'Röm', 'Roma', 'Trip to Rome', 'Aroma'][i % 6]} ${(i * 7919) % 300}`))
+
+  it('selects the same first N as a full sort, for every N', () => {
+    const matches = matchAll(many, { chips: [], text: 'rom' })
+    const order = byRank(collator)
+    const full = [...matches].sort(order).map((m) => m.doc.id)
+    for (const n of [0, 1, 8, 16, 299, 300, 301]) expect(firstRanked(matches, n, order).map((m) => m.doc.id), `n=${n}`).toEqual(full.slice(0, n))
+  })
+
+  it('leaves the matches it was handed as they were', () => {
+    const matches = matchAll(many, { chips: [], text: 'rom' })
+    const before = matches.map((m) => m.doc.id)
+    firstRanked(matches, 8, byRank(collator))
+    expect(matches.map((m) => m.doc.id)).toEqual(before)
+  })
+
+  it('hands each group its first `limit` results and its exact total', () => {
+    const groups = searchGroups(many, { chips: [], text: 'rom' }, ctx({ openNodeId: null, activeTree: [] }), collator, { limits: { space: 8 } })
+    expect(groups.map((g) => [g.id, g.results.length, g.total])).toEqual([['space', 8, 300]])
+    const whole = searchGroups(many, { chips: [], text: 'rom' }, ctx({ openNodeId: null, activeTree: [] }), collator)
+    expect(groups[0].results).toEqual(whole[0].results.slice(0, 8))
+    expect(whole[0].results).toHaveLength(300)
   })
 })

@@ -3,7 +3,12 @@
 // spaces, the members of the tenant and the settings sections (decision 9: they live in no space, so their fixed place after
 // content keeps a query's content results where they were). Ranking happens within a group only (`query.ts`); a group with
 // nothing is left out, so its heading never says "none".
-import { byRank, matchAll, type Match, type SearchQuery } from './query'
+//
+// **A group is ranked only as far as it is drawn** (cr-search-polish): the field shows a few results per group, and a
+// one-letter query matches thousands of documents. So a group's first `limit` results are SELECTED - kept in order in a
+// list of that length while every match passes once - instead of sorting every match on every keystroke; its `total`
+// stays exact, for "show more".
+import { byRank, matchAll, type Match, type Matcher, type SearchQuery } from './query'
 import { PERSON_DOCUMENT, SETTINGS_DOCUMENT, type SearchDocument } from './model'
 import type { TreeNode } from '../node/tree'
 
@@ -14,8 +19,17 @@ export const SEARCH_GROUPS: readonly SearchGroupId[] = ['open', 'space', 'other'
 
 export interface SearchGroup {
   id: SearchGroupId
-  /** Every match of the group, ranked. */
+  /** The group's best matches, ranked: its first `limit` (every match without one). */
   results: readonly SearchDocument[]
+  /** How many documents of the group match, those beyond `results` included. */
+  total: number
+}
+
+/** How far each group is ranked, and how the documents are matched (a field's {@link createMatcher}). */
+export interface SearchGroupOptions {
+  /** A group's first results to rank; a group not named is ranked whole. */
+  limits?: Partial<Record<SearchGroupId, number>>
+  match?: Matcher
 }
 
 /** Where the member stands. */
@@ -50,11 +64,13 @@ export function descendantsOf(tree: readonly TreeNode[], nodeId: string): Set<st
  * group when its node is the open one or below it, else this space or the other spaces.
  * A person and a settings section are no content: with any chip set - a filter over content - neither group is shown.
  */
-export function searchGroups(docs: readonly SearchDocument[], query: SearchQuery, ctx: SearchContext, collator: Intl.Collator): SearchGroup[] {
+export function searchGroups(
+  docs: readonly SearchDocument[], query: SearchQuery, ctx: SearchContext, collator: Intl.Collator, options: SearchGroupOptions = {},
+): SearchGroup[] {
   const below = ctx.openNodeId ? descendantsOf(ctx.activeTree, ctx.openNodeId) : new Set<string>()
   const groups: Record<SearchGroupId, Match[]> = { open: [], space: [], other: [], people: [], settings: [] }
   const filtered = query.chips.length > 0
-  for (const m of matchAll(docs, query)) {
+  for (const m of (options.match ?? matchAll)(docs, query)) {
     const d = m.doc
     if (d.kind === PERSON_DOCUMENT) {
       if (!filtered) groups.people.push(m)
@@ -67,5 +83,28 @@ export function searchGroups(docs: readonly SearchDocument[], query: SearchQuery
     else groups.space.push(m)
   }
   const order = byRank(collator)
-  return SEARCH_GROUPS.filter((id) => groups[id].length > 0).map((id) => ({ id, results: groups[id].sort(order).map((m) => m.doc) }))
+  return SEARCH_GROUPS.filter((id) => groups[id].length > 0).map((id) => ({
+    id, results: firstRanked(groups[id], options.limits?.[id] ?? Infinity, order).map((m) => m.doc), total: groups[id].length,
+  }))
+}
+
+/** The first `n` of `matches` in `order`, without sorting the rest: each match is compared with the last one kept and, when
+ *  it is better, put in its place by a binary search. `matches` itself is left as it was. */
+export function firstRanked<T>(matches: readonly T[], n: number, order: (a: T, b: T) => number): T[] {
+  if (matches.length <= n) return [...matches].sort(order)
+  const kept: T[] = []
+  if (n <= 0) return kept
+  for (const m of matches) {
+    if (kept.length === n && order(m, kept[n - 1]) >= 0) continue
+    let lo = 0
+    let hi = kept.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (order(m, kept[mid]) < 0) hi = mid
+      else lo = mid + 1
+    }
+    kept.splice(lo, 0, m)
+    if (kept.length > n) kept.pop()
+  }
+  return kept
 }

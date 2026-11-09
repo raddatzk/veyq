@@ -36,7 +36,7 @@ import { useSettingsSections } from '../../features/settings/sections'
 import { searchContribution } from './contribution'
 import { requestOpenItem } from './openRequest'
 import { PERSON_DOCUMENT, searchDocument, yearsOf, type SearchDocument } from './model'
-import { chipKey, suggestChips, type ChipSuggestion, type SearchChip } from './query'
+import { chipKey, createMatcher, suggestChips, type ChipSuggestion, type SearchChip } from './query'
 import { SEARCH_GROUPS, searchGroups, type SearchGroupId } from './groups'
 import { personDocuments, settingsDocuments } from './peopleAndSettings'
 import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, searchState, type SearchScope } from './searchIndex'
@@ -191,11 +191,13 @@ function removeChip(tag: ChipTag) {
 
 // --- the results -----------------------------------------------------------------------------------------------------
 // the chips as plain objects: the query reads them once per document, and a reactive read each time costs a keystroke
-// at volume (cr-search-at-volume)
+// at volume (cr-search-at-volume); the matcher narrows the last matches while the text only grows, and each group is
+// ranked only as far as it is shown (cr-search-polish)
+const matcher = createMatcher()
 const groups = computed(() =>
   searchGroups(documents.value, { chips: chips.value.map((c) => toRaw(c)), text: text.value }, {
     activeScopeId: activeSpace.scopeId, openNodeId: openNode.value?.id ?? null, activeTree: activeTree.value,
-  }, collator.value),
+  }, collator.value, { limits: shown.value, match: matcher }),
 )
 watch([text, chips], () => (shown.value = firstPage()))
 const HEADING: Record<Exclude<SearchGroupId, 'open'>, string> = {
@@ -205,7 +207,7 @@ const heading = (id: SearchGroupId) => (id === 'open' ? t('shell.search.groupOpe
 const resultGroups = computed<VeyqTagOptionGroup<ResultOption>[]>(() =>
   groups.value.map((g) => {
     const visible = g.results.slice(0, shown.value[g.id])
-    const rest = g.results.length - visible.length
+    const rest = g.total - visible.length
     return {
       key: g.id,
       label: heading(g.id),

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { searchDocument, type SearchDocument, type SearchFacets } from './model'
-import { byRank, chipKey, matchAll, Rank, satisfies, suggestChips, textRank, type ChipSources, type SearchChip } from './query'
+import {
+  byRank, chipKey, createMatcher, matchAll, Rank, satisfies, suggestChips, textRank, type ChipSources, type SearchChip, type SearchQuery,
+} from './query'
 
 let n = 0
 const doc = (name: string, facets: SearchFacets = {}, o: Partial<SearchDocument> = {}): SearchDocument =>
@@ -131,5 +133,55 @@ describe('the text', () => {
 
   it('a query with neither text nor a chip finds nothing', () => {
     expect(matchAll([doc('Rome')], { chips: [], text: '   ' })).toEqual([])
+  })
+})
+
+// cr-search-polish: the typing margin - a text that only grew narrows the last matches
+describe('the matcher of a field', () => {
+  const names = ['Kevelaer 2012', 'Kevins Geburtstag', 'Ken', 'Aroma', 'IMG_0001.jpg', 'Summer in Kev', 'Keller', 'Café Müller']
+  const docs = names.map((name, i) => doc(name, { years: { from: 2010 + i, to: 2010 + i }, places: i % 2 ? ['Kevelaer'] : [] }))
+  const year = (y: number): SearchChip => ({ type: 'year', year: y })
+  const sorted = (ms: { doc: SearchDocument; rank: number }[]) => ms.map((m) => `${m.doc.name}:${m.rank}`).sort()
+
+  it('answers every step of a typed sequence as a whole scan does, letters taken back and chips moved included', () => {
+    const steps: SearchQuery[] = [
+      { chips: [], text: 'k' }, { chips: [], text: 'ke' }, { chips: [], text: 'kev' }, { chips: [], text: 'kev ' }, { chips: [], text: 'kev s' },
+      { chips: [], text: 'kev' }, { chips: [], text: 'ke' }, { chips: [year(2012)], text: 'ke' }, { chips: [year(2012)], text: 'kev' },
+      { chips: [], text: 'kev' }, { chips: [], text: '' }, { chips: [], text: 'c' }, { chips: [], text: 'caf' }, { chips: [year(2017)], text: '' },
+      { chips: [year(2017)], text: 'c' },
+    ]
+    const match = createMatcher()
+    for (const q of steps) expect(sorted(match(docs, q)), JSON.stringify(q)).toEqual(sorted(matchAll(docs, q)))
+  })
+
+  it('narrows the last matches while the text grows: a document it dropped is not asked again', () => {
+    const match = createMatcher()
+    match(docs, { chips: [], text: 'ke' })
+    // a document renamed in place under the same list is only seen by a whole scan: the narrowing never looks at it
+    const img = docs.find((d) => d.name === 'IMG_0001.jpg')! as { foldedName: string }
+    const before = img.foldedName
+    img.foldedName = 'kevimg'
+    try {
+      expect(match(docs, { chips: [], text: 'kev' }).map((m) => m.doc.name)).not.toContain('IMG_0001.jpg')
+      expect(matchAll(docs, { chips: [], text: 'kev' }).map((m) => m.doc.name)).toContain('IMG_0001.jpg') // control
+    } finally {
+      img.foldedName = before
+    }
+  })
+
+  it('scans again for another document list, another chip, a shorter text, or after a query that asked nothing', () => {
+    const match = createMatcher()
+    expect(match(docs, { chips: [], text: '' })).toEqual([])
+    expect(match(docs, { chips: [], text: 'k' }).length).toBe(matchAll(docs, { chips: [], text: 'k' }).length)
+    const more = [...docs, doc('Kevin')]
+    expect(match(more, { chips: [], text: 'kev' }).map((m) => m.doc.name)).toContain('Kevin')
+    expect(match(more, { chips: [year(2011)], text: 'kev' }).map((m) => m.doc.name)).toEqual(['Kevins Geburtstag'])
+    expect(match(more, { chips: [], text: 'kev' }).map((m) => m.doc.name)).toContain('Kevelaer 2012')
+  })
+
+  it('the same query again is the last answer as it was ("show more")', () => {
+    const match = createMatcher()
+    const first = match(docs, { chips: [], text: 'ke' })
+    expect(match(docs, { chips: [], text: 'ke ' })).toBe(first)
   })
 })
