@@ -40,7 +40,7 @@ with both apps behaving as before on a device for what it touched, and commits o
    exchange rates, receipts, the minor units of a currency (one core table), entry rows as data.
 7. **A file's view (`FileView.open`, both apps; the drift settled: core decides and reads) and a settled upload's offer (`DepotFiles.offerFor`, no test yet: its jobs need a session) done 2026-11-10; left: file facts as data, the uploader's wording, drop boxes, send-a-copy.** **Depot.** Files and their facts, uploader, the file view's decision and reads, uploads and their settling, drop
    boxes, send-a-copy's state.
-8. **Memories.** Gallery, chapters, details rows and uploaders as data, the upload's refresh rule.
+8. **Details' labels and values and a Memory's chapters done 2026-11-10 (`MediaDetails.label`, `shown`, `chapters`; Apple's two other labels settled to the web's); the gallery and upload stay thin pass-throughs.** **Memories.** Gallery, chapters, details rows and uploaders as data, the upload's refresh rule.
 9. **Session.** Start and resume, sign-in with the trust fallback, unlock, switching, sign-out, managed servers, the
    per-tenant reset; the platform supplies `ThisDevice` and whether it is the share extension. Last: it touches key
    material; proved by `DeviceTrustLiveTest` and both devlogin passes.

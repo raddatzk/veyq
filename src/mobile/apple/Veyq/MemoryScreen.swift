@@ -78,9 +78,9 @@ struct MemoryScreen: View {
         // read again whenever the lists are, and when a medium of this device is in
         .task(id: "\(model.rowDetails.count)/\(model.galleryRevision)") {
             if let read = await model.memoryGallery(scopeId: ref.scopeId, nodeId: ref.nodeId) { gallery = read; failed = false } else { failed = true }
-            chapters = ref.kind == "MEMORY"
-                ? await model.scopeNodes(ref.scopeId).filter { $0.parentId == ref.nodeId && $0.kind == "CHAPTER" }
-                : []
+            chapters = MediaDetails.shared.chapters(
+                memoryKind: ref.kind, memoryId: ref.nodeId, scopeNodes: ref.kind == "MEMORY" ? await model.scopeNodes(ref.scopeId) : []
+            )
         }
         #if os(iOS)
         .fullScreenCover(item: $open) { start in Lightbox(model: model, items: items, memoryName: ref.name, index: start.index) }
@@ -441,48 +441,13 @@ private struct MediaDetailsView: View {
         }
     }
 
-    private static func label(_ field: MediaDetails.Field) -> String {
-        switch field {
-        case .captured: say(.memoryFieldCaptured)
-        case .fileName: say(.tabDepotFile)
-        case .fileSize: say(.memoryFieldFileSize)
-        case .fileFormat: say(.memoryFieldFileFormat)
-        case .camera: say(.memoryFieldCamera)
-        case .lens: say(.memoryFieldLens)
-        case .focalLength: say(.memoryFieldFocalLength)
-        case .focalLength35: say(.memoryFieldFocalLength35)
-        case .aperture: say(.memoryFieldAperture)
-        case .exposure: say(.memoryFieldExposure)
-        case .exposureCompensation: say(.memoryFieldExposureCompensation)
-        case .iso: say(.memoryFieldIso)
-        case .flash: say(.memoryFieldFlash)
-        case .dimensions: say(.memoryFieldDimensions)
-        case .title: say(.entryTitle)
-        case .description_: say(.memoryFieldDescription)
-        case .rating: say(.memoryFieldRating)
-        case .software: say(.memoryFieldSoftware)
-        case .artist: say(.memoryFieldArtist)
-        case .copyright: say(.memoryFieldCopyright)
-        case .altitude: say(.memoryFieldAltitude)
-        case .directionTrue, .directionMagnetic: say(.memoryFieldDirection)
-        case .gpsAccuracy: say(.memoryFieldGpsAccuracy)
-        case .corrected: say(.memoryFieldStatus)
-        case .place: say(.memoryFieldPlace)
-        case .location: say(.memoryFieldLocation)
-        default: ""
-        }
-    }
+    private static func label(_ field: MediaDetails.Field) -> String { say(MediaDetails.shared.label(field: field)) }
 
     private static func value(_ row: MediaDetails.Row) -> String {
-        let n = row.number?.int64Value ?? 0
-        switch row.field {
-        case .captured: return Date(timeIntervalSince1970: Double(n) / 1000).formatted(date: .abbreviated, time: .shortened)
-        case .fileSize: return ByteCountFormatter.string(fromByteCount: n, countStyle: .file)
-        case .flash: return n == 1 ? say(.memoryFlashFired) : say(.memoryFlashNotFired)
-        case .directionTrue: return say(.memoryDirectionTrue, n)
-        case .directionMagnetic: return say(.memoryDirectionMagnetic, n)
-        case .corrected: return say(.memoryCorrected)
-        default: return row.value
-        }
+        let shown = MediaDetails.shared.shown(row: row)
+        if let words = shown as? MediaDetails.ShownWords { return say(notice: words.notice) }
+        if let size = shown as? MediaDetails.ShownSize { return ByteCountFormatter.string(fromByteCount: size.bytes, countStyle: .file) }
+        if let moment = shown as? MediaDetails.ShownMoment { return Date(timeIntervalSince1970: Double(moment.epochMs) / 1000).formatted(date: .abbreviated, time: .shortened) }
+        return (shown as? MediaDetails.ShownPlain)?.text ?? row.value
     }
 }

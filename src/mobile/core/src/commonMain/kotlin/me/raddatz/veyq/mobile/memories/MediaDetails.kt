@@ -32,6 +32,61 @@ object MediaDetails {
      */
     class Row(val field: Field, val value: String, val number: Long? = null)
 
+    /** A row's label, for both apps (the web's `media.details.*`). */
+    fun label(field: Field): me.raddatz.veyq.mobile.words.Msg = when (field) {
+        Field.CAPTURED -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_CAPTURED
+        Field.FILE_NAME -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_FILE_NAME
+        Field.FILE_SIZE -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_FILE_SIZE
+        Field.FILE_FORMAT -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_FILE_FORMAT
+        Field.CAMERA -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_CAMERA
+        Field.LENS -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_LENS
+        Field.FOCAL_LENGTH -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_FOCAL_LENGTH
+        Field.FOCAL_LENGTH_35 -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_FOCAL_LENGTH_35
+        Field.APERTURE -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_APERTURE
+        Field.EXPOSURE -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_EXPOSURE
+        Field.EXPOSURE_COMPENSATION -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_EXPOSURE_COMPENSATION
+        Field.ISO -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_ISO
+        Field.FLASH -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_FLASH
+        Field.DIMENSIONS -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_DIMENSIONS
+        Field.TITLE -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_TITLE
+        Field.DESCRIPTION -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_DESCRIPTION
+        Field.RATING -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_RATING
+        Field.SOFTWARE -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_SOFTWARE
+        Field.ARTIST -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_ARTIST
+        Field.COPYRIGHT -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_COPYRIGHT
+        Field.ALTITUDE -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_ALTITUDE
+        Field.GPS_ACCURACY -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_GPS_ACCURACY
+        Field.PLACE -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_PLACE
+        Field.LOCATION -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_LOCATION
+        Field.DIRECTION_TRUE, Field.DIRECTION_MAGNETIC -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_DIRECTION
+        Field.CORRECTED -> me.raddatz.veyq.mobile.words.Msg.MEMORY_FIELD_STATUS
+    }
+
+    /** How a row's value shows: in words, as a size or a moment the platform writes its way, or as read. */
+    sealed class Shown {
+        class Words(val notice: me.raddatz.veyq.mobile.words.Notice) : Shown()
+        class Size(val bytes: Long) : Shown()
+        class Moment(val epochMs: Long) : Shown()
+        class Plain(val text: String) : Shown()
+    }
+
+    fun shown(row: Row): Shown {
+        val n = row.number ?: 0
+        return when (row.field) {
+            Field.CAPTURED -> Shown.Moment(n)
+            Field.FILE_SIZE -> Shown.Size(n)
+            Field.FLASH -> Shown.Words(me.raddatz.veyq.mobile.words.Notice(if (n == 1L) me.raddatz.veyq.mobile.words.Msg.MEMORY_FLASH_FIRED else me.raddatz.veyq.mobile.words.Msg.MEMORY_FLASH_NOT_FIRED))
+            Field.DIRECTION_TRUE -> Shown.Words(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_DIRECTION_TRUE, n.toInt()))
+            Field.DIRECTION_MAGNETIC -> Shown.Words(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_DIRECTION_MAGNETIC, n.toInt()))
+            Field.CORRECTED -> Shown.Words(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_CORRECTED))
+            else -> Shown.Plain(row.value)
+        }
+    }
+
+    /** The chapters a Memory holds (its children of kind `CHAPTER`), as listed; none for a chapter itself. */
+    fun chapters(memoryKind: String, memoryId: String, scopeNodes: List<me.raddatz.veyq.mobile.navigation.NodeRef>): List<me.raddatz.veyq.mobile.navigation.NodeRef> =
+        if (memoryKind != "MEMORY") emptyList() else scopeNodes.filter { it.parentId == memoryId && it.kind == "CHAPTER" }
+
     /** The heavy EXIF tier (`media-exif`, the web's `MediaExif`): what does not parse is absent. */
     class Exif(
         val make: String?, val model: String?, val lens: String?, val focalLength: Double?, val focalLength35: Double?,

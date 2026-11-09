@@ -101,7 +101,7 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
     LaunchedEffect(ref.nodeId, details, uploaded) {
         val read = model.memoryGallery(ref.scopeId, ref.nodeId)
         if (read == null) failed = true else { gallery = read; failed = false }
-        chapters = if (ref.kind == "MEMORY") model.scopeNodes(ref.scopeId).filter { it.parentId == ref.nodeId && it.kind == "CHAPTER" } else emptyList()
+        chapters = MediaDetails.chapters(ref.kind, ref.nodeId, if (ref.kind == "MEMORY") model.scopeNodes(ref.scopeId) else emptyList())
     }
     var open by remember { mutableStateOf<Int?>(null) }
     val hero = LocalNodeHero.current
@@ -442,44 +442,15 @@ private fun DetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun detailLabel(field: MediaDetails.Field): String = stringResource(
-    when (field) {
-        MediaDetails.Field.CAPTURED -> R.string.memory_field_captured
-        MediaDetails.Field.FILE_NAME -> R.string.memory_field_file_name
-        MediaDetails.Field.FILE_SIZE -> R.string.memory_field_file_size
-        MediaDetails.Field.FILE_FORMAT -> R.string.memory_field_file_format
-        MediaDetails.Field.CAMERA -> R.string.memory_field_camera
-        MediaDetails.Field.LENS -> R.string.memory_field_lens
-        MediaDetails.Field.FOCAL_LENGTH -> R.string.memory_field_focal_length
-        MediaDetails.Field.FOCAL_LENGTH_35 -> R.string.memory_field_focal_length_35
-        MediaDetails.Field.APERTURE -> R.string.memory_field_aperture
-        MediaDetails.Field.EXPOSURE -> R.string.memory_field_exposure
-        MediaDetails.Field.EXPOSURE_COMPENSATION -> R.string.memory_field_exposure_compensation
-        MediaDetails.Field.ISO -> R.string.memory_field_iso
-        MediaDetails.Field.FLASH -> R.string.memory_field_flash
-        MediaDetails.Field.DIMENSIONS -> R.string.memory_field_dimensions
-        MediaDetails.Field.TITLE -> R.string.memory_field_title
-        MediaDetails.Field.DESCRIPTION -> R.string.memory_field_description
-        MediaDetails.Field.RATING -> R.string.memory_field_rating
-        MediaDetails.Field.SOFTWARE -> R.string.memory_field_software
-        MediaDetails.Field.ARTIST -> R.string.memory_field_artist
-        MediaDetails.Field.COPYRIGHT -> R.string.memory_field_copyright
-        MediaDetails.Field.ALTITUDE -> R.string.memory_field_altitude
-        MediaDetails.Field.DIRECTION_TRUE, MediaDetails.Field.DIRECTION_MAGNETIC -> R.string.memory_field_direction
-        MediaDetails.Field.GPS_ACCURACY -> R.string.memory_field_gps_accuracy
-        MediaDetails.Field.CORRECTED -> R.string.memory_field_status
-        MediaDetails.Field.PLACE -> R.string.memory_field_place
-        MediaDetails.Field.LOCATION -> R.string.memory_field_location
-    },
-)
+private fun detailLabel(field: MediaDetails.Field): String = say(MediaDetails.label(field))
 
 @Composable
-private fun detailValue(row: MediaDetails.Row): String = when (row.field) {
-    MediaDetails.Field.CAPTURED -> capturedText(row.number ?: 0)
-    MediaDetails.Field.FILE_SIZE -> android.text.format.Formatter.formatShortFileSize(LocalContext.current, row.number ?: 0)
-    MediaDetails.Field.FLASH -> stringResource(if (row.number == 1L) R.string.memory_flash_fired else R.string.memory_flash_not_fired)
-    MediaDetails.Field.DIRECTION_TRUE -> stringResource(R.string.memory_direction_true, (row.number ?: 0).toInt())
-    MediaDetails.Field.DIRECTION_MAGNETIC -> stringResource(R.string.memory_direction_magnetic, (row.number ?: 0).toInt())
-    MediaDetails.Field.CORRECTED -> stringResource(R.string.memory_corrected)
-    else -> row.value
+private fun detailValue(row: MediaDetails.Row): String {
+    val context = LocalContext.current
+    return when (val v = MediaDetails.shown(row)) {
+        is MediaDetails.Shown.Words -> context.text(v.notice)
+        is MediaDetails.Shown.Size -> android.text.format.Formatter.formatShortFileSize(context, v.bytes)
+        is MediaDetails.Shown.Moment -> capturedText(v.epochMs)
+        is MediaDetails.Shown.Plain -> v.text
+    }
 }
