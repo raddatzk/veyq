@@ -13,6 +13,8 @@ struct PotShareSheet: View {
     @State private var failed = false
     @State private var creating = false
     @State private var fresh: String?
+    @State private var busy: String?
+    @State private var notice: String?
 
     var body: some View {
         NavigationStack {
@@ -49,17 +51,34 @@ struct PotShareSheet: View {
                 if model.linkRules().on {
                     Button("New link", systemImage: "plus") { creating = true }
                 }
+                if let notice { Text(notice).font(.caption).foregroundStyle(Role.muted) }
             }
             Section {
                 if failed {
                     Text("Your links could not be loaded.").foregroundStyle(Role.danger)
                 } else if let links {
-                    ForEach(links, id: \.shareId) { LinkRow(link: $0) }
+                    ForEach(links, id: \.shareId) { link in
+                        LinkRow(link: link, busy: busy == link.shareId, onSwitchOff: link.enabled && link.mine ? { Task { await switchOff(link) } } : nil)
+                    }
                 } else {
                     ProgressView().frame(maxWidth: .infinity)
                 }
             }
         }
+    }
+
+    /// Switched off at once, as the web does: the Pot gets a new key, so the link opens nothing any more.
+    private func switchOff(_ link: ShareLinks.Link) async {
+        busy = link.shareId
+        let closed = await model.switchOffLink(ref, shareId: link.shareId)
+        busy = nil
+        switch closed {
+        case .closed: notice = nil
+        case .closedRekeyPending:
+            notice = String(localized: "The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.")
+        default: notice = String(localized: "That didn’t work — please try again.")
+        }
+        await load()
     }
 
     private func load() async {
@@ -81,6 +100,8 @@ struct PotShareSheet: View {
 /// One link: its label (else its role), when it was made and ends, its badges, and its copy where it can be rebuilt.
 private struct LinkRow: View {
     let link: ShareLinks.Link
+    let busy: Bool
+    let onSwitchOff: (() -> Void)?
     @State private var copied = false
 
     private var roleWord: String {
@@ -110,6 +131,13 @@ private struct LinkRow: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Copy link")
+            }
+            if busy {
+                ProgressView()
+            } else if let onSwitchOff {
+                Button(action: onSwitchOff) { Image(systemName: "nosign").foregroundStyle(Role.danger) }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Revoke")
             }
         }
     }

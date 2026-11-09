@@ -470,6 +470,24 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return runCatching { me.raddatz.veyq.mobile.session.ShareLinks.mint(t, ref.scopeId, ref.nodeId, role, label, password, expiresAt) }.getOrDefault(failed)
     }
 
+    /**
+     * Switches link [shareId] on [ref] off and re-keys the Pot below it (core's `ShareLinks.switchOff`, Expenses' re-key of
+     * its revisions); an open Pot is read anew, since its key changed.
+     */
+    suspend fun switchOffLink(ref: ObjectRef, shareId: String): me.raddatz.veyq.mobile.session.ShareLinks.Closed {
+        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.ShareLinks.Closed.FAILED
+        val content = if (ref.kind == PotSession.KIND) me.raddatz.veyq.mobile.expenses.PotRekey.content else null
+        val r = runCatching {
+            me.raddatz.veyq.mobile.session.ShareLinks.switchOff(t, ref.scopeId, ref.nodeId, shareId, content, ::tokenInputFor) { java.util.UUID.randomUUID().toString() }
+        }.getOrDefault(me.raddatz.veyq.mobile.session.ShareLinks.Closed.FAILED)
+        val session = potSession
+        if (_pot.value?.ref == ref && session != null) {
+            runCatching { session.rekeyed() }
+            if (potSession === session) _pot.update { it?.copy(view = PotView(session)) }
+        }
+        return r
+    }
+
     // ---- a move (core's NodeMove) ----
 
     /**

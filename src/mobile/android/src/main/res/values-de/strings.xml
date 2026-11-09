@@ -343,4 +343,6 @@
     <string name="share_requirement_refused">Dieser Bereich verlangt jetzt für jeden Link ein Passwort oder ein Enddatum. Ergänze, was fehlt, und versuche es erneut.</string>
     <string name="share_not_allowed">Links sind hier ausgeschaltet.</string>
     <string name="share_failed">Das hat nicht geklappt — bitte erneut versuchen.</string>
+    <string name="share_switch_off">Widerrufen</string>
+    <string name="share_closed_rekeying">Der Link ist abgeschaltet. Was darunter liegt, bekommt ein neues Schloss, damit der alte Link auch künftig nichts mehr öffnet.</string>
 </resources>

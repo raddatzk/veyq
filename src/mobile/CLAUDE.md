@@ -65,7 +65,9 @@ A Gradle build of its own, run through its own wrapper.
   folder and back, a fresh session opening it there each time, and checks a move to its place and onto a Pot of its name
   are refused; both Pots stay trashed. `VEYQ_LIVE_LINKS=<pot name>` mints a READ link with a label and a READ_WRITE link
   with a password and an end on that Pot and reads both back listed (they stay); `VEYQ_LIVE_LINKS_OUT=<file>` writes the
-  first one's address there, for the web's guest page (a dev link names the backend's port, 8080: open it on Vite's). `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
+  first one's address there, for the web's guest page (a dev link names the backend's port, 8080: open it on Vite's). `VEYQ_LIVE_LINK_OFF=<root folder name>` creates a Pot there with an entry, a receipt and links A and B, switches A off
+  — the Pot re-keyed on this device — and checks a fresh session reads the entry and the receipt and writes there at
+  once; with `VEYQ_LIVE_LINKS_OUT` both addresses go to that file, for the web's guest page (A opens nothing, B the Pot). `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
   names taken and a sibling's refused, and trashes it; `VEYQ_LIVE_RENAME_TARGET="<from>|<to>"` renames the root Pot
   `<from>` (created when there is none) and prints what the re-seal of its links did — with a link the web minted on it,
   that link's guest page then shows `<to>`. Gradle does not count an environment variable as an
@@ -117,6 +119,10 @@ A Gradle build of its own, run through its own wrapper.
 - A Kotlin name exported to Swift must not be one of NSObject's: an enum entry `SELF` becomes the class property `self`,
   which overrides `+[NSObject self]`, and the class's first use recurses until the stack overflows (measured 2026-11-09:
   `NodeMove.Block.SELF`, now `ITSELF`). Avoid `self`, `description`, `hash`, `class`, `copy`, `init`, `new` as names.
+- A Swift closure handed to core is called on core's threads (after a request answered, Ktor's), never only on the main
+  one: written in the `@MainActor` model it is inferred main-actor isolated, and Swift 6 traps on the first call from
+  elsewhere (`_dispatch_assert_queue_fail`, measured 2026-11-09: the re-key's rekey id). Mark it `@Sendable` and reach
+  nothing of the model in it (`AppModel.tokenInputFor` is `nonisolated static` for that).
 - Every file of `apple/Veyq/` but `VeyqApp.swift` and `DevLogin.swift` is also compiled into the share extension, which
   builds with `APPLICATION_EXTENSION_API_ONLY`: no `UIApplication.shared` or other API an extension may not use there,
   and nothing the app alone may do (moving or removing what it keeps) without `AppModel.inExtension` guarding it.

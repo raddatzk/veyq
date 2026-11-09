@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -78,6 +79,8 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
     var failed by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
     var fresh by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
     suspend fun load() {
         val read = model.shareLinks(ref)
         if (read == null) failed = true else { links = read; failed = false }
@@ -104,6 +107,7 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
                 }
                 else -> {
                     if (rules.on) Button(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.share_new)) }
+                    notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(top = 8.dp)) }
                     Spacer(Modifier.padding(6.dp))
                     val list = links
                     when {
@@ -111,7 +115,21 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
                         list == null -> CircularProgressIndicator(Modifier.padding(16.dp).align(Alignment.CenterHorizontally))
                         else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
                             items(list, key = { it.shareId }) { link ->
-                                LinkRow(link)
+                                LinkRow(link, busy = busy == link.shareId, onSwitchOff = if (link.enabled && link.mine) {
+                                    {
+                                        busy = link.shareId
+                                        scope.launch {
+                                            val closed = model.switchOffLink(ref, link.shareId)
+                                            busy = null
+                                            notice = when (closed) {
+                                                ShareLinks.Closed.CLOSED -> null
+                                                ShareLinks.Closed.CLOSED_REKEY_PENDING -> context.getString(R.string.share_closed_rekeying)
+                                                ShareLinks.Closed.FAILED -> context.getString(R.string.share_failed)
+                                            }
+                                            load()
+                                        }
+                                    }
+                                } else null)
                                 HorizontalDivider()
                             }
                         }
@@ -123,7 +141,7 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
 }
 
 @Composable
-private fun LinkRow(link: ShareLinks.Link) {
+private fun LinkRow(link: ShareLinks.Link, busy: Boolean, onSwitchOff: (() -> Unit)?) {
     val palette = LocalPalette.current
     val context = LocalContext.current
     val copied = stringResource(R.string.share_copied)
@@ -150,6 +168,11 @@ private fun LinkRow(link: ShareLinks.Link) {
         val url = link.url
         if (url != null && link.enabled) IconButton(onClick = { copy(context, url); android.widget.Toast.makeText(context, copied, android.widget.Toast.LENGTH_SHORT).show() }) {
             Icon(Icons.Outlined.ContentCopy, stringResource(R.string.share_copy))
+        }
+        // Switched off at once, as the web does: the Pot gets a new key, so the link opens nothing any more.
+        if (busy) CircularProgressIndicator(Modifier.padding(12.dp).width(20.dp))
+        else if (onSwitchOff != null) IconButton(onClick = onSwitchOff) {
+            Icon(Icons.Outlined.Block, stringResource(R.string.share_switch_off), tint = role(palette.danger))
         }
     }
 }

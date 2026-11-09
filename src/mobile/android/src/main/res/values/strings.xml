@@ -345,4 +345,6 @@
     <string name="share_requirement_refused">This space now requires a password or an end date on every link. Add what is missing and try again.</string>
     <string name="share_not_allowed">Links are switched off here.</string>
     <string name="share_failed">That didn’t work — please try again.</string>
+    <string name="share_switch_off">Revoke</string>
+    <string name="share_closed_rekeying">The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.</string>
 </resources>

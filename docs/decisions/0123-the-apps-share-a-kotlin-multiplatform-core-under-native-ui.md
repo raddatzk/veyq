@@ -207,8 +207,16 @@ implementation exists but what holds it to the first.
   and the recovery copy anew; each row's label and address are rebuilt from its recovery copy at the dialog's own node
   (`v1.json#share_write_token` held by the conformance suite; a link minted in each app opens on the web's guest page,
   and the web's dialog lists the app's links by their labels, measured 2026-11-09; the recovery copy's binding killed by
-  a mutation). Switching a link off, renewing, editing and deleting are not built: closing one re-keys the subtree below
-  it, which needs the re-key engine. Cover, copy, download and report are not built.
+  a mutation). A link is switched off from the app as on the web — `revokeShare`, then the node it is rooted at re-keyed
+  on this device (`session/NodeRekey.kt`, the web's `rekeyNode`): a fresh key, its attachment and application blobs and
+  core's cover re-wrapped with `K_blob` kept, each open link rooted there wrapped anew (one whose recovery copy opens
+  for no one named by its digest, so the commit closes it), a link guest's name sealed anew, the kind's own content
+  through its hook (Expenses' `expenses/PotRekey.kt`: every revision's `K_rev`), staged and committed at the scope's
+  current epoch. Only what this client fully holds is re-keyed — a node with no child, no drop key, a parent not due;
+  anything else stays due for a member's web device, and the app says so (a Pot's re-key with an entry and a receipt,
+  the other link still opening it on the web's guest page and the closed one nothing, measured live by `PotLiveTest`;
+  a revision key sealed under the old key killed by it; the web opens a Pot the iOS app re-keyed, receipt included,
+  2026-11-09). Renewing, editing and deleting a link are not built. Cover, copy, download and report are not built.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

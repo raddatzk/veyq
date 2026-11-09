@@ -512,7 +512,7 @@ final class AppModel {
         guard let notice = trashNotice, let node = notice.node, let t = tenantSession else { return }
         trashNotice = nil
         var restored = false
-        if let tokenInput = tokenInputFor(kind: node.kind, name: node.name) {
+        if let tokenInput = Self.tokenInputFor(kind: node.kind, name: node.name) {
             let r = try? await NodeTrash.shared.restore(tenant: t, node: node, tokenInput: tokenInput, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS)
             restored = r == .restored
         }
@@ -545,6 +545,23 @@ final class AppModel {
         )) ?? failed
     }
 
+    /// Switches link `shareId` on `ref` off and re-keys the Pot below it (core's `ShareLinks.switchOff`, Expenses' re-key of
+    /// its revisions); an open Pot is read anew under its new key.
+    func switchOffLink(_ ref: ObjectRef, shareId: String) async -> ShareLinks.Closed {
+        guard let t = tenantSession else { return .failed }
+        let content: NodeRekeyContentRekey? = ref.kind == PotSession.companion.KIND ? PotRekey.shared.content : nil
+        let r = (try? await ShareLinks.shared.switchOff(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, content: content,
+            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
+            uuid: { @Sendable in UUID().uuidString.lowercased() }
+        )) ?? .failed
+        if pot?.ref == ref, let session = potSession {
+            _ = try? await session.rekeyed()
+            if potSession === session { pot?.view = PotView(session: session) }
+        }
+        return r
+    }
+
     // MARK: A move (core's NodeMove)
 
     /// Where a move's undo puts the node back.
@@ -568,7 +585,7 @@ final class AppModel {
         guard let t = tenantSession else { return .failed }
         let r = try? await NodeMove.shared.move(
             tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, to: to,
-            tokenInput: { [weak self] kind, name in self?.tokenInputFor(kind: kind, name: name) },
+            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
             allows: placement, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
         )
         await refreshLists(t)
@@ -588,7 +605,7 @@ final class AppModel {
         guard let t = tenantSession else { return (String(localized: "That didn’t work. Please try again."), false) }
         let r = try? await NodeRename.shared.rename(
             tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, name: name,
-            tokenInput: { [weak self] kind, name in self?.tokenInputFor(kind: kind, name: name) },
+            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
             nowMs: Int64(Date().timeIntervalSince1970 * 1000), waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
         )
         guard let r else { return (String(localized: "That didn’t work. Please try again."), false) }
@@ -613,10 +630,10 @@ final class AppModel {
         }
     }
 
-    /// How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`).
     /// How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`), a folder's the
     /// platform's (`slugify`, no route segment). Nil for a kind the app does not know: nothing is placed under it.
-    private func tokenInputFor(kind: String, name: String) -> String? {
+    /// Free of the main actor: core calls it from its own threads, after a request answered (a re-key, a placement).
+    nonisolated static func tokenInputFor(kind: String, name: String) -> String? {
         switch kind {
         case PotSession.companion.KIND: PotCreate.shared.tokenInput(name: name)
         case "FOLDER": Naming.shared.slugify(name: name)
@@ -633,12 +650,12 @@ final class AppModel {
     }
 
     /// Whether the app can bring `row` back: its kind's fold of a name is known here.
-    func canRestore(_ row: NodeTrash.Trashed) -> Bool { tokenInputFor(kind: row.kind, name: row.name) != nil }
+    func canRestore(_ row: NodeTrash.Trashed) -> Bool { Self.tokenInputFor(kind: row.kind, name: row.name) != nil }
 
     /// Brings `row` back from the trash, under `newName` after its own was taken; the lists are read anew.
     func restoreFromTrash(_ row: NodeTrash.Trashed, newName: String?) async -> NodeTrash.Restored {
         guard let t = tenantSession,
-              let token = tokenInputFor(kind: row.kind, name: newName?.trimmingCharacters(in: .whitespaces) ?? row.name) else { return .refused }
+              let token = Self.tokenInputFor(kind: row.kind, name: newName?.trimmingCharacters(in: .whitespaces) ?? row.name) else { return .refused }
         let r = (try? await NodeTrash.shared.restoreFromTrash(
             tenant: t, node: row, tokenInput: token, newName: newName, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
         )) ?? .refused
@@ -683,7 +700,7 @@ final class AppModel {
         Task {
             let session = (try? await AppleSessions.shared.openPot(tenant: tenant, scopeId: ref.scopeId, nodeId: ref.nodeId)) ?? nil
             potSession = session
-            potPoll = LivePoll(cadence: LivePoll.companion.ITEMS, now: { KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) }, random: { KotlinDouble(value: Double.random(in: 0..<1)) })
+            potPoll = LivePoll(cadence: LivePoll.companion.ITEMS, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) }, random: { @Sendable in KotlinDouble(value: Double.random(in: 0..<1)) })
             if pot?.ref == ref { pot = PotState(ref: ref, view: session.map { PotView(session: $0) }, failed: session == nil) }
         }
     }
