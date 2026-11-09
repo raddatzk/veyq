@@ -709,6 +709,41 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         done
     }
 
+    /**
+     * Creates a folder named [name] in [scopeId] under [parentId] (null: the space's root), core's folder (the web's
+     * `FolderNameDialog`): the lists are read anew. Why not, in the web's words, or null once created.
+     */
+    suspend fun createFolder(scopeId: String, parentId: String?, name: String): String? {
+        val t = tenantSession ?: return getApplication<Application>().getString(R.string.folder_failed)
+        val n = name.trim()
+        if (n.isEmpty()) return getApplication<Application>().getString(R.string.folder_name_empty)
+        val r = runCatching {
+            me.raddatz.veyq.mobile.session.FolderCreate.create(t, scopeId, parentId, n)
+        }.getOrNull()
+        refreshLists(t)
+        return when (r) {
+            is me.raddatz.veyq.mobile.session.NodeCreate.Result.Done -> null
+            is me.raddatz.veyq.mobile.session.NodeCreate.Result.Refused ->
+                if (r.reason == me.raddatz.veyq.mobile.session.NodeCreate.Reason.NAME_TAKEN) getApplication<Application>().getString(R.string.folder_name_taken)
+                else getApplication<Application>().getString(R.string.folder_failed)
+            null -> getApplication<Application>().getString(R.string.folder_failed)
+        }
+    }
+
+    /** What the drawer's "New" asked Home to create ("folder" or "pot"), until Home opens its dialog. */
+    private val _newRequest = MutableStateFlow<String?>(null)
+    val newRequest: StateFlow<String?> = _newRequest.asStateFlow()
+
+    /** The drawer's "New": Home, where its dialog for [kind] opens. */
+    fun requestNew(kind: String) {
+        choose(null)
+        _newRequest.value = kind
+    }
+
+    fun newRequestTaken() {
+        _newRequest.value = null
+    }
+
     /** Removes the cover of [ref]; false when it did not land. */
     suspend fun removeCover(ref: ObjectRef): Boolean {
         val t = tenantSession ?: return false
@@ -791,11 +826,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * tenant's lists again and opens it; [done] runs once it exists (its people may still have failed: then the Pot opens
      * and says so on its Settings, where they can be added).
      */
-    fun createPot(scopeId: String, name: String, currency: String, minorUnits: Int, people: List<PotCreate.NewPerson>, done: () -> Unit) {
+    fun createPot(scopeId: String, name: String, currency: String, minorUnits: Int, people: List<PotCreate.NewPerson>, parentId: String? = null, done: () -> Unit) {
         val t = tenantSession ?: return
         _creating.value = CreatingPot(saving = true)
         viewModelScope.launch {
-            val r = runCatching { PotCreate.create(t, scopeId, null, name, Ledger.BaseCurrency(currency, minorUnits), people) }
+            val r = runCatching { PotCreate.create(t, scopeId, parentId, name, Ledger.BaseCurrency(currency, minorUnits), people) }
                 .getOrDefault(PotCreate.Result(PotCreate.Outcome.REFUSED))
             val nodeId = r.nodeId
             if (nodeId == null) {

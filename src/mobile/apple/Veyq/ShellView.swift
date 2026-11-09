@@ -74,7 +74,11 @@ struct DrawerList: View {
             Section {
                 Brand().padding(.vertical, 6)
                 TenantSwitcher(model: model)
-                Button { } label: {
+                // the web's sidebar "New": what a level creates, opened on Home
+                Menu {
+                    Button("New Folder", systemImage: "folder.badge.plus") { model.requestNew(.folder) }
+                    Button("New Pot", systemImage: "wallet.bifold") { model.requestNew(.pot) }
+                } label: {
                     Label("New", systemImage: "plus").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -270,6 +274,10 @@ struct Bar: View {
 /// switched from the title (owner 2026-11-08), iOS' own title menu.
 struct HomeView: View {
     @Bindable var model: AppModel
+    @State private var naming = false
+    @State private var newName = ""
+    @State private var nameProblem: String?
+    @State private var creatingPot = false
 
     private var title: String {
         if let folder = model.shell.folder { return folder.name }
@@ -309,6 +317,33 @@ struct HomeView: View {
                     ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface)
                 }
             }
+        }
+        // the level's "New" (the web's menu): a folder here, or a Pot here
+        .createMenu("New", shown: model.shell.space != nil) {
+            Button("New Folder", systemImage: "folder.badge.plus") { newName = ""; nameProblem = nil; naming = true }
+            Button("New Pot", systemImage: "wallet.bifold") { creatingPot = true }
+        }
+        .alert("New Folder", isPresented: $naming) {
+            TextField("Name", text: $newName)
+            Button("Create") {
+                let name = newName
+                Task {
+                    if let problem = await model.createFolder(name: name) { nameProblem = problem; naming = true }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let nameProblem { Text(nameProblem) }
+        }
+        .sheet(isPresented: $creatingPot) { PotCreateSheet(model: model) }
+        // what the drawer's "New" asked for
+        .onChange(of: model.newRequest, initial: true) { _, asked in
+            switch asked {
+            case .folder: newName = ""; nameProblem = nil; naming = true
+            case .pot: creatingPot = true
+            case nil: return
+            }
+            model.newRequest = nil
         }
         .scrollContentBackground(.hidden)
         .navigationTitle(title)

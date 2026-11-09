@@ -133,7 +133,9 @@ fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
                 Button(
                     onClick = {
                         takeTyped()
-                        model.createPot(scopeId, name, currency, minorUnitsOf(currency), people.toList()) { onClose() }
+                        // in the folder on screen, where the sheet creates in the space shown (the web's "New" at a level)
+                        val parent = if (scopeId == s.shell.space) s.shell.folder?.nodeId else null
+                        model.createPot(scopeId, name, currency, minorUnitsOf(currency), people.toList(), parent) { onClose() }
                     },
                     enabled = name.isNotBlank() && scopeId.isNotEmpty() && !creating.saving,
                 ) { Text(stringResource(R.string.create_pot_create)) }

@@ -806,6 +806,31 @@ final class AppModel {
         return outcome == .done
     }
 
+    /// Creates a folder named `name` in the space and folder on screen, core's folder (the web's `FolderNameDialog`); the
+    /// lists are read anew. Why not, in the web's words, or nil once created.
+    func createFolder(name: String) async -> String? {
+        guard let t = tenantSession, let scopeId = shell.space else { return String(localized: "The folder could not be created. Please try again.") }
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if n.isEmpty { return String(localized: "Give it a name.") }
+        let r = try? await FolderCreate.shared.create(tenant: t, scopeId: scopeId, parentId: shell.folder?.nodeId, name: n)
+        await refreshLists(t)
+        if r is NodeCreateResultDone { return nil }
+        if let refused = r as? NodeCreateResultRefused, refused.reason == .nameTaken {
+            return String(localized: "Something with this name is already here.")
+        }
+        return String(localized: "The folder could not be created. Please try again.")
+    }
+
+    /// What the drawer's "New" asked Home to create, until Home opens its dialog.
+    enum NewKind { case folder, pot }
+    var newRequest: NewKind?
+
+    /// The drawer's "New": Home, where its dialog for `kind` opens.
+    func requestNew(_ kind: NewKind) {
+        choose(nil)
+        newRequest = kind
+    }
+
     /// Removes the cover of `ref`; false when it did not land.
     func removeCover(_ ref: ObjectRef) async -> Bool {
         guard let t = tenantSession else { return false }
@@ -903,8 +928,10 @@ final class AppModel {
     func createPot(scopeId: String, name: String, currency: String, minorUnits: Int32, people: [PotCreate.NewPerson]) async -> Bool {
         guard let t = tenantSession else { return false }
         creatingPot = CreatingPot(saving: true)
+        // in the folder on screen, where the sheet creates in the space shown (the web's "New" at a level)
+        let parent = scopeId == shell.space ? shell.folder?.nodeId : nil
         let r = try? await PotCreate.shared.create(
-            tenant: t, scopeId: scopeId, parentId: nil, name: name,
+            tenant: t, scopeId: scopeId, parentId: parent, name: name,
             base: Ledger.BaseCurrency(currency: currency, minorUnits: minorUnits), people: people, categories: []
         )
         guard let r, let nodeId = r.nodeId else {

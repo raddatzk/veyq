@@ -101,7 +101,8 @@ A Gradle build of its own, run through its own wrapper.
 
 Apple's HIG and Material 3 win over a look shared with the web ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
 decision 9): before building a control, ask what the platform's own apps do, and do that. A view's creating action is
-`CreateAction(…)` (Android, `CreateAction.kt`) and `.createAction(…)` (Apple, `CreateAction.swift`), never a
+`CreateAction(…)` (Android, `CreateAction.kt`; with `menu` where a level creates several kinds) and `.createAction(…)` /
+`.createMenu(…)` (Apple, `CreateAction.swift`), never a
 floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
 menu on iOS.
 

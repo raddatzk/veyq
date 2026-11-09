@@ -409,4 +409,11 @@
     <string name="cover_change">Change cover</string>
     <string name="cover_remove">Remove cover</string>
     <string name="cover_failed">The cover could not be saved. Please try again.</string>
+    <string name="create_new">New</string>
+    <string name="folder_new">New folder</string>
+    <string name="folder_name">Name</string>
+    <string name="folder_create">Create</string>
+    <string name="folder_name_empty">Give it a name.</string>
+    <string name="folder_name_taken">Something with this name is already here.</string>
+    <string name="folder_failed">The folder could not be created. Please try again.</string>
 </resources>

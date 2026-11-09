@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,23 +38,27 @@ fun CreateAction(
     label: String,
     shown: Boolean,
     onClick: () -> Unit,
+    /** Where a level creates more than one kind (the web's "New" menu): the button opens this menu, its entries each
+     *  closing it with the first argument. Null: the button is the one action. */
+    menu: (@Composable (close: () -> Unit) -> Unit)? = null,
     content: @Composable (list: LazyListState, bottom: Dp) -> Unit,
 ) {
     val list = rememberLazyListState()
     val expanded by remember { derivedStateOf { !list.canScrollBackward } }
     val palette = LocalPalette.current
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Box(Modifier.fillMaxSize()) {
         content(list, if (shown) CLEARANCE else 0.dp)
-        if (shown) {
+        if (shown) Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
             ExtendedFloatingActionButton(
-                onClick = onClick,
+                onClick = { if (menu != null) open = true else onClick() },
                 icon = { Icon(Icons.Outlined.Add, if (expanded) null else label) },
                 text = { Text(label) },
                 expanded = expanded,
                 containerColor = role(palette.primary),
                 contentColor = role(palette.onFill),
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
             )
+            if (menu != null) androidx.compose.material3.DropdownMenu(open, { open = false }) { menu { open = false } }
         }
     }
 }

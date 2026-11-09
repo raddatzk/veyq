@@ -130,6 +130,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 onOpen = { closeDrawerThen { model.open(it) } },
                 onSwitch = { account, tenant -> closeDrawerThen { model.switchTo(account, tenant) } },
                 onAddServer = { closeDrawerThen { model.openManage() } },
+                onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
             )
         },
     ) {
@@ -210,7 +211,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     shell.searching -> SearchScreen(s.objects, onOpen = model::open, onClose = { model.search(false) })
                     shell.openObject?.kind == "EXPENSES_POT" -> PotScreen(shell.openObject!!, shell.selectedTab, model)
                     shell.openObject != null -> ObjectScreen(shell.openObject!!, shell.selectedTab)
-                    shell.application == null -> HomeScreen(s, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
+                    shell.application == null -> HomeScreen(s, model, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
                     shell.application == ApplicationId.EXPENSES -> ExpensesList(s, model)
                     else -> ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open)
                 }
@@ -263,8 +264,24 @@ private fun spaceIcon(kind: String): ImageVector = when (kind) {
  * every application's objects mixed; the filters at the top keep one application's objects, the folders stay.
  */
 @Composable
-private fun HomeScreen(s: Screen.Signed, onEnter: (me.raddatz.veyq.mobile.navigation.FolderRef) -> Unit, onOpen: (ObjectRef) -> Unit, onFilter: (ApplicationId?) -> Unit) {
+private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.veyq.mobile.navigation.FolderRef) -> Unit, onOpen: (ObjectRef) -> Unit, onFilter: (ApplicationId?) -> Unit) {
     val palette = LocalPalette.current
+    var naming by remember { mutableStateOf(false) }
+    var creatingPot by remember { mutableStateOf(false) }
+    // what the drawer's "New" asked for
+    val asked by model.newRequest.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(asked) {
+        when (asked) {
+            "folder" -> naming = true
+            "pot" -> creatingPot = true
+        }
+        if (asked != null) model.newRequestTaken()
+    }
+    // The level's "New" (the web's menu): a folder here, or a Pot here.
+    CreateAction(stringResource(R.string.create_new), shown = s.shell.space != null, onClick = {}, menu = { close ->
+        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, onClick = { close(); naming = true })
+        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.create_pot)) }, onClick = { close(); creatingPot = true })
+    }) { list, bottom ->
     Column(Modifier.fillMaxSize()) {
         if (s.filters.size > 1) {
             val selected = s.filters.indexOf(s.shell.filter).coerceAtLeast(0)
@@ -290,7 +307,7 @@ private fun HomeScreen(s: Screen.Signed, onEnter: (me.raddatz.veyq.mobile.naviga
         if (level.isEmpty()) {
             Empty()
         } else {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
                 items(level, key = { it.scopeId + it.nodeId }) { node ->
                     val folder = node.asFolder()
                     if (folder != null) {
@@ -307,6 +324,39 @@ private fun HomeScreen(s: Screen.Signed, onEnter: (me.raddatz.veyq.mobile.naviga
             }
         }
     }
+    }
+    if (naming) FolderNameDialog(onClose = { naming = false }) { name -> model.createFolder(s.shell.space!!, s.shell.folder?.nodeId, name) }
+    if (creatingPot) PotCreateSheet(s, model) { creatingPot = false }
+}
+
+/** Core's name dialog for a new folder (`FolderNameDialog`): the name, trimmed on save; a refusal says why and stays. */
+@Composable
+private fun FolderNameDialog(onClose: () -> Unit, onCreate: suspend (String) -> String?) {
+    var name by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!saving) onClose() },
+        title = { Text(stringResource(R.string.folder_new)) },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                name, { name = it; problem = null }, singleLine = true, label = { Text(stringResource(R.string.folder_name)) },
+                isError = problem != null, supportingText = problem?.let { { Text(it) } },
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(enabled = name.isNotBlank() && !saving, onClick = {
+                saving = true
+                scope.launch {
+                    problem = onCreate(name)
+                    saving = false
+                    if (problem == null) onClose()
+                }
+            }) { Text(stringResource(R.string.folder_create)) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onClose, enabled = !saving) { Text(stringResource(R.string.trash_cancel)) } },
+    )
 }
 
 /** The web's folder tile: the info role's soft fill and text (`ui.css` § folder). */
@@ -380,6 +430,8 @@ private fun Drawer(
     onOpen: (ObjectRef) -> Unit,
     onSwitch: (me.raddatz.veyq.mobile.session.VeyqAccount, me.raddatz.veyq.mobile.navigation.TenantRef) -> Unit,
     onAddServer: () -> Unit,
+    /** The sidebar's "New": what a level creates ("folder", "pot"), opened on Home. */
+    onNew: (String) -> Unit,
 ) {
     val palette = LocalPalette.current
     // The web's sidebar: the surface, washed with a trace of the accent from the top (`--app-chrome-pattern`).
@@ -394,15 +446,23 @@ private fun Drawer(
             Brand(Modifier.padding(start = 8.dp, top = 20.dp, bottom = 14.dp))
             TenantSwitcher(s, onSwitch, onAddServer)
             Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = {},
-                colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.drawer_new))
+            // the web's sidebar "New": what a level creates, opened on Home
+            var newMenu by remember { mutableStateOf(false) }
+            Box {
+                Button(
+                    onClick = { newMenu = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.drawer_new))
+                }
+                androidx.compose.material3.DropdownMenu(newMenu, { newMenu = false }) {
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, onClick = { newMenu = false; onNew("folder") })
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.create_pot)) }, onClick = { newMenu = false; onNew("pot") })
+                }
             }
             Spacer(Modifier.height(6.dp))
             Row(app = Icons.Outlined.Home, label = stringResource(R.string.drawer_home), selected = s.shell.isHome) { onChoose(null) }

@@ -19,4 +19,18 @@ extension View {
             }
         }
     }
+
+    /// The creating action where a level creates more than one kind (the web's "New" menu): the "+" opens a menu of
+    /// `entries`, as Files' "+" does.
+    func createMenu<Entries: View>(_ label: LocalizedStringKey, shown: Bool = true, @ViewBuilder entries: @escaping () -> Entries) -> some View {
+        toolbar {
+            if shown {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu(content: entries) { Image(systemName: "plus") }
+                        .accessibilityLabel(Text(label))
+                        .help(Text(label))
+                }
+            }
+        }
+    }
 }

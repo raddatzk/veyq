@@ -407,4 +407,11 @@
     <string name="cover_change">Titelbild ändern</string>
     <string name="cover_remove">Titelbild entfernen</string>
     <string name="cover_failed">Das Titelbild konnte nicht gespeichert werden. Bitte versuche es noch einmal.</string>
+    <string name="create_new">Neu</string>
+    <string name="folder_new">Neuer Ordner</string>
+    <string name="folder_name">Name</string>
+    <string name="folder_create">Anlegen</string>
+    <string name="folder_name_empty">Gib einen Namen ein.</string>
+    <string name="folder_name_taken">Hier gibt es schon etwas mit diesem Namen.</string>
+    <string name="folder_failed">Der Ordner konnte nicht angelegt werden. Bitte versuche es noch einmal.</string>
 </resources>
