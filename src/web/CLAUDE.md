@@ -351,9 +351,13 @@ here; the server is blind.
   each tree read by its ETag, opened with `openListedScope`, its keys zeroed in a `finally`; the active space follows
   `treeStore`; `clearActiveSpace` drops it; nothing is written to any storage). A document is plaintext and never holds a
   key. An application adds to it only through the registry: `KindDescriptor.search` (the kind's word, a `facets` hook
-  called with the node's key for that call only, the kinds of its page's documents, a `note`) and, for the node on screen,
-  `contributeSearchDocuments` (`contribution.ts`, the header door's shape: the member's `SpaceView` provides it, a guest's
-  page does not, a bookmark's embed blocks it). Memories: `features/memories/search.ts`. Text is compared through
+  called with the node's key for that call only, the kinds of its documents), `app.search({ scopeDocuments })` (its objects
+  of a whole space - Memories' every photo, ADR 0125 decision 8a - asked on every walk, the active space's included, with
+  its last tag and documents and a lazy `keys()` whose node keys core zeroes when the hook returns) and, for the node on
+  screen, `contributeSearchDocuments` (`contribution.ts`, the header door's shape: the member's `SpaceView` provides it, a
+  guest's page does not, a bookmark's embed blocks it; its document of an object replaces the space's). An object found
+  outside the page opens its node and leaves `openRequest.ts`'s in-memory request, which the node's page takes - no
+  address. Memories: `features/memories/search.ts`. Text is compared through
   `shared/text/fold.ts`, never `slugify`. After the spaces' groups come People and Settings (decision 9,
   `peopleAndSettings.ts`): the members from the directory's roster as last read (`tenantPeopleNow`), and the settings
   sections from `features/settings/sections.ts` - **the one list the rail reads too**, gates and `ready` included, so never

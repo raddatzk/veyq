@@ -871,20 +871,25 @@ def search_spec(inst: Instance, runs: int, throttles: list[int], active: str = "
     `active` one (the tenant's, where sign-in lands, or the group, entered by its fragment) on screen while measuring.
     Returns it and the node count of every space."""
     manifest = json.loads((inst.dir / "manifest.json").read_text(encoding="utf-8"))
-    if "tree" not in manifest or "spread" not in manifest:
-        raise Refused("the search needs `stage tree <N>` (or `seed tree --target N`) and `seed spread --target N` first")
+    if "tree" not in manifest or "spread" not in manifest or "photos" not in manifest:
+        raise Refused("the search needs `stage tree <N>` (or `seed tree --target N`), `seed spread --target N` and "
+                      "`seed photos --target N` first (every photo of every space is a document, ADR 0125 decision 8a)")
     owner = owner_account(inst)
     spread, group = manifest["spread"], manifest["tree"]["scopeId"]
-    counts = {}
+    counts, media = {}, {}
     for scope in (group, spread["personalScopeId"], spread["tenantScopeId"]):
         rows = inst.sql(f"SELECT COUNT(*) FROM veyq_node WHERE scope_id = '{scope}' AND deleted_at IS NULL;\n")
         counts[scope] = int(rows[0][0])
+        rows = inst.sql(f"SELECT COUNT(*) FROM veyq_media WHERE scope_id = '{scope}' AND deleted_at IS NULL;\n")
+        media[scope] = int(rows[0][0])
+    counts["media"] = media
     tenant, personal = spread["tenantScopeId"], spread["personalScopeId"]
     on = {"tenant": (tenant, "", "Trips 000"), "group": (group, manifest["tree"]["hash"], "Folder 000")}[active]
     spec = {
         "label": f"search-{active}", "domain": DOMAIN, "runs": runs, "throttles": throttles,
         "account": {k: owner[k] for k in ("email", "password", "secretKey")},
         "otherScopes": [s for s in (group, tenant, personal) if s != on[0]], "activeScope": on[0], "activeHash": on[1],
+        "mediaScopes": [group, tenant, personal],
         "rootText": on[2], "keys": ["K", "e", "v", "Enter", "Backspace"], "chip": spread["place"], "settleMs": 300,
     }
     return spec, counts
@@ -895,6 +900,7 @@ def search_findings(result: dict, counts: dict[str, int], spec: dict) -> dict:
     per space the search opens itself, nothing decoded), its detector bitten by the first focus; 2 and 4 are reported."""
     runs, findings = result["runs"], []
     nodes_re = re.compile(r"^/api/scopes/([0-9a-f-]{36})/nodes$")
+    media_re = re.compile(r"^/api/scopes/([0-9a-f-]{36})/media$")
     per_run = []
     for r in runs:
         tag = f"x{r['throttle']} run {r['run']}"
@@ -924,6 +930,15 @@ def search_findings(result: dict, counts: dict[str, int], spec: dict) -> dict:
         for s in spec["otherScopes"]:
             if by_scope.get(s) != [304]:
                 findings.append(f"{tag}: quantity 3 — the second focus read space {s} as {by_scope.get(s)}, not one 304")
+        # every space's media listing, the active one's included (ADR 0125 decision 8a): one 304 each, nothing re-read
+        media_by_scope: dict[str, list[int]] = {}
+        for x in second["responses"]:
+            m = media_re.match(x["path"])
+            if m:
+                media_by_scope.setdefault(m.group(1), []).append(x["status"])
+        for s in spec.get("mediaScopes", []):
+            if media_by_scope.get(s) != [304]:
+                findings.append(f"{tag}: quantity 3 — the second focus read space {s}'s media as {media_by_scope.get(s)}, not one 304")
         if second["decodes"] != 0:
             findings.append(f"{tag}: quantity 3 — the second focus decoded {second['decodes']} strings: {second.get('decoded')}")
         per_run.append({
@@ -934,7 +949,8 @@ def search_findings(result: dict, counts: dict[str, int], spec: dict) -> dict:
             "typingPerStep": {s["key"]: {"maxTask": s["longtasks"]["maxMs"], "eventMax": s["eventMaxMs"], "toSettled": s["toSettledMs"]}
                               for s in r["steps"]},
             "secondNodes": {s: by_scope.get(s) for s in spec["otherScopes"]}, "secondDecodes": second["decodes"], "secondDecoded": second.get("decoded"),
-            "secondApi": sorted({f"{x['method']} {nodes_re.sub('/api/scopes/{id}/nodes', x['path'])} {x['status']}" for x in second["responses"]}),
+            "secondApi": sorted({f"{x['method']} {media_re.sub('/api/scopes/{id}/media', nodes_re.sub('/api/scopes/{id}/nodes', x['path']))} {x['status']}" for x in second["responses"]}),
+            "secondMedia": {s: media_by_scope.get(s) for s in spec.get("mediaScopes", [])},
             "failedRequests": r["failedRequests"],
         })
     return {"counts": counts, "runs": per_run, "findings": findings,

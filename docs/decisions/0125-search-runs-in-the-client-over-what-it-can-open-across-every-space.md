@@ -1,6 +1,6 @@
 # ADR 0125 — Search runs in the client over what it can open, across every space
 - Status: Accepted
-- Built: partly (not built: decision 8)
+- Built: partly (decision 8a built; 8b and 8c not built)
 - Date: 2026-11-08
 - Model: [uc.platform.search](../features/platform/use-cases/uc.platform.search.md)
 
@@ -94,6 +94,17 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
      - **Opening:** the client opens the listing while the walk of decision 3 still holds the space's node keys,
        through an application's per-space search hook. It zeroes those keys with the rest. The open Memory's own
        documents (decision 6) win over the same medium's document from the listing.
+     - **Built** (`listScopeMedia`; `ApplicationRegistrar.search`, `searchIndex.ts`, Memories' `search.ts`):
+       - The listing restricts to live nodes in its statement (an `exists` on the node's row), not by a list of the
+         scope's node ids, and narrows a row to what the search opens (no derivative, no bucket, no time).
+       - The tag is derived, not a digest of the rows: a member is told the item revisions already, so an idle read costs
+         the tree revision, one join over the live nodes' item revisions and the blocks, and no media query.
+       - The hook reads the listing by its tag on every walk, the active space's included, and asks for the node keys only
+         when a medium must be opened: on a tree `304` the scope key is opened only then. A medium at an unchanged
+         revision is kept unopened, and a blocked one is no document.
+       - A photo outside the open Memory opens its Memory by the node's fragment and leaves an in-memory request the
+         Memory's page takes once its gallery holds the medium. It is no address: a reload or a copied link carries no
+         medium, since a medium's own address does not fit ADR 0015's grammar (an open question).
    - **(b) Full text over the journal.** This is designed inside the journal's refinement (inbox #18): whether a client
      reads one compacted snapshot per journal or replays updates decides its cost. It then plugs in as one more
      document kind.
@@ -123,26 +134,29 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
 ## Consequences
 
 - **What the server learns:**
-  - The first stage adds no endpoint. The server learns that a member opened each of their spaces' trees, as it does
-    when they enter each space.
-  - Stage 8(a) adds the fact that a client read every listing of a space: ids and times, the kind of fact opening each
-    Memory reveals today.
-- **The first stage does not find a photo by its own place or date unless it lies in the open Memory.** "Rome" finds the
-  Memory whose place is Rome, not a photo taken in Rome inside a Memory placed elsewhere. Stage 8(a) closes this. A
-  result list must not imply it searched what it did not.
-- **The cost of a first search across many spaces is one tree fetch per space, opened in slices.** It is paid on focus,
-  not at sign-in. Measured (cr-search-at-volume, 2026-11-09) on this Mac in desktop Chrome, on the volume harness's own
-  instance with 7,000 nodes over three spaces (one of 5,000) and 445 members, at a 1-minute load of 6–10:
-  - **The build:** 0.46–1.03 s until every space is indexed, 2.0–3.8 s at a 4× CPU throttle. Its longest main-thread
-    task is 52–73 ms, and 90–127 ms at 4×. Before the build ran in slices (`searchIndex.ts`, at most 40 ms at a time,
-    the space on screen included), one task per space held the main thread 0.8–2.6 s at 4×.
-  - **Typing** "K", "Ke", "Kev", a chip and Backspace: no long task unthrottled; the longest at 4× is 65–86 ms, the
-    first keystroke's.
-  - **A second focus with nothing changed** reads each other space as one `304`, and the index opens nothing.
-  - **The index's memory:** 3.7–4.2 MB of JS heap.
+  - The server learns that a member opened each of their spaces' trees, as it does when they enter each space.
+  - Stage 8(a) adds one read, `listScopeMedia`: that a client read every listing of a space - ids, sizes and times, the
+    kind of fact opening each Memory reveals today - and, while nothing moved, one `304` per space per focus. Nothing
+    about a query.
+- **The cost of a first search across many spaces is one tree fetch and one media listing per space, opened in
+  slices.** It is paid on focus, not at sign-in. Measured (cr-search-photos-of-every-space, 2026-11-09) on this Mac in
+  desktop Chrome, on the volume harness's own instance with 7,000 nodes over three spaces (one of 5,000), 10,000 photos in
+  one Memory and 445 members, at a 1-minute load of 5.9–8.4:
+  - **The build:** 1.8–2.6 s until every space and its photos are indexed, 3.3–5.0 s at a 4× CPU throttle. Its longest
+    main-thread task is 53–79 ms, and 84–119 ms at 4× (bound: 200 ms). It runs in slices (`searchIndex.ts`, at most
+    40 ms at a time, the space on screen and an application's objects included); before it did, one task per space held
+    the main thread 0.8–2.6 s at 4× (cr-search-at-volume, without photos).
+  - **Typing** "K", "Ke", "Kev", a chip and Backspace: no long task unthrottled; the longest at 4× is 57–99 ms (bound:
+    100 ms), the first keystroke's, most of it Vue's render of the list. Before a document that does not hold the text
+    was answered by one search and the text's words were split once per query (`query.ts`), the photos took it to
+    70–113 ms - over the bound in two of twelve readings.
+  - **A second focus with nothing changed** reads each other space's tree and every space's media listing as one `304`
+    each, and the index opens nothing.
+  - **The index's memory:** 7.8–8.4 MB of JS heap (3.7–4.2 MB without the photos).
   - The command: `scripts/measure_volume.py --instance I search --runs 2 --throttles 1,4 --active tenant|group`, after
-    `seed tree --target 5000`, `seed spread --target 1000` and `seed members --target 445`. The readings and the judging
-    rule are in the CR's retrospective. The harness is temporary, `cr-volume-measurement-cax` deletes it.
+    `seed tree --target 5000`, `seed spread --target 1000`, `seed members --target 445` and `seed photos --target 10000`.
+    The readings and the judging rule are in the CR's retrospective. The harness is temporary, `cr-volume-measurement-cax`
+    deletes it.
 - **A removed member's search loses that space** when its keys go, and keeps nothing they could not read before.
 - **Rejected alternatives:**
   - A persistent on-device index (decision 2).

@@ -28,6 +28,8 @@ type Spec = {
   account: Account
   /** The spaces the search must open itself (every one but the active space), by id. */
   otherScopes: string[]
+  /** The spaces whose media listing the search reads (every one, the active space included: ADR 0125 decision 8a). */
+  mediaScopes: string[]
   /** The active space while measuring, by id: the tenant's (where sign-in lands), or another entered by `activeHash`. */
   activeScope: string
   /** The fragment that enters the active space after sign-in; empty: stay in the tenant's. */
@@ -216,6 +218,14 @@ async function heaviestFrames(page: Page, profile: Profile, top = 12) {
 }
 
 const nodesScope = (path: string) => /^\/api\/scopes\/([0-9a-f-]{36})\/nodes$/.exec(path)?.[1] ?? null
+const mediaScope = (path: string) => /^\/api\/scopes\/([0-9a-f-]{36})\/media$/.exec(path)?.[1] ?? null
+/** Every tree the search opens itself and every space's media listing answered since `wall`. */
+const answered = (responses: Response[], wall: number) => {
+  const since = responses.filter((r) => r.at >= wall)
+  const trees = new Set(since.map((r) => nodesScope(r.path)))
+  const media = new Set(since.map((r) => mediaScope(r.path)))
+  return spec.otherScopes.every((s) => trees.has(s)) && (spec.mediaScopes ?? []).every((s) => media.has(s))
+}
 
 async function measure(browser: Browser, throttle: number, run: number): Promise<Record<string, unknown>> {
   const context = await browser.newContext()
@@ -244,9 +254,8 @@ async function measure(browser: Browser, throttle: number, run: number): Promise
   const firstAt = await now(page)
   await field.click()
   const buildAt = await settled(page, async () => {
-    const seen = new Set(responses.filter((r) => r.at >= firstWall).map((r) => nodesScope(r.path)))
     const p = await probe(page)
-    return spec.otherScopes.every((s) => seen.has(s)) && p.loadingSeen !== null && p.loadingGone !== null
+    return answered(responses, firstWall) && p.loadingSeen !== null && p.loadingGone !== null
   })
   let p = await probe(page)
   const buildDoneAt = p.loadingGone ?? buildAt ?? p.now
@@ -307,8 +316,7 @@ async function measure(browser: Browser, throttle: number, run: number): Promise
   const secondAt = await now(page)
   await field.click()
   const secondDone = await settled(page, async () => {
-    const seen = new Set(responses.filter((r) => r.at >= secondWall).map((r) => nodesScope(r.path)))
-    return spec.otherScopes.every((s) => seen.has(s)) && !(await page.locator('.veyq-search__loading').count())
+    return answered(responses, secondWall) && !(await page.locator('.veyq-search__loading').count())
   }, 2 * 60_000)
   p = await probe(page)
   const secondEnd = secondDone ?? p.now

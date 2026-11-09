@@ -1,10 +1,10 @@
-# UC: Search every space for a node, a Memory or a photo of the open Memory
+# UC: Search every space for a node, a Memory or a photo
 
 - **ID:** uc.platform.search
-- **Status:** built (web; browser pass 2026-11-09), the first stage of [ADR 0125](../../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md): names and Memory
-  meta across every space, plus the media of the open Memory, and (decision 9) the tenant's members and the settings
-  sections as results of their own. Decision 8 (the photos of every space, journal full text, semantic search) is not
-  built.
+- **Status:** built (web and backend; browser passes 2026-11-09), [ADR 0125](../../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)'s first
+  stage and decision 8a: names and Memory meta across every space, every photo and video of every space, and (decision
+  9) the tenant's members and the settings sections as results of their own. Decisions 8b and 8c (journal full text,
+  semantic search) are not built.
 - **Primary actor:** A member whose keys are unlocked.
 - **Goal:** Find a folder, a Memory, a Chapter, a file, a drop box, a Pot or a photo by its name, date, place, people or
   kind, in any space the member belongs to in the tenant they are in - and a member of the tenant or a settings section -
@@ -14,7 +14,8 @@
   - The member belongs to at least one space.
 - **Postconditions (success):**
   - The member opens a result where it lives.
-  - The server has seen only the tree reads it would see when the member enters each space.
+  - The server has seen only the tree reads it would see when the member enters each space, and each space's media
+    listing read (see Quality notes).
 
 ## Main flow
 
@@ -22,14 +23,19 @@
    a phone, the field is reached from the top bar.
 2. **Load every space.** On the first focus of the session, the client opens the tree of every space the member
    belongs to in this tenant (personal, the tenant's, every group) that it does not hold yet. Each tree is fetched and opened with that space's key, as entering the space
-   would, but **the active space does not change**. The keys are zeroed once its documents are built; the next focus
-   revalidates each tree by its ETag. The active space and the open Memory are indexed first. A space
-   still loading is named as loading in the results.
+   would, but **the active space does not change**. Then each space's media listing is read (`listScopeMedia`: every
+   live medium on a live node of the space, in pages) and opened under its nodes' keys while they are held. The keys are
+   zeroed once its documents are built; the next focus revalidates each tree and each listing by its ETag - a photo's
+   change moves no tree revision, so the listing is asked even when the tree answers `304`. The active space and the
+   open Memory are indexed first. A space still loading is named as loading in the results.
 3. **Build the documents.**
    - Core turns every node into a document: its space, its kind, its id, its revision and its name.
    - Each application adds the fields of its own kinds through the registry. Memories adds a Memory's date range, its
-     place name and its participants' names. For the open Memory it adds one document per photo and video of its
-     already-opened listing, with capture time and place.
+     place name and its participants' names.
+   - Each application adds the objects of its own inside a space's nodes through the registry. Memories adds one
+     document per photo and video of every Memory and chapter, with its original's name, its capture time and its place,
+     from the space's media listing; a blocked medium is no document. For the open Memory the same documents come from
+     its already-opened listing and replace the listing's.
    - Core adds one document per member of this tenant (the directory's name, and their `~username` as a second name),
      from the roster the client already read, and one per settings section the settings rail offers this member now:
      the rail and the search read one list with one set of gates (`features/settings/sections.ts`), and while a gate's
@@ -52,21 +58,22 @@
      place match.
 6. **Show the results in groups,** each ranked within itself: the open node's - headed by its name, *In “Rom 2024”*,
    holding what its page contributed and the nodes below it (when a node's page is open, not a folder) -, **In this
-   space**, **Other spaces** (each result naming its space and its path), then **People** (each with their picture or
+   space**, **Other spaces** (each result naming its space and its path; a photo goes where its Memory goes, its
+   Memory's path and its day in its second line), then **People** (each with their picture or
    initial and `~username`) and **Settings** (each with its heading on the rail). The part of a name the text matched is shown in bold. An empty group is not shown. A chip is a
    filter over content: while one is set, People and Settings are not shown. A member's name offers them as a person
    chip and lists them as a person - the chip filters, the person opens their profile.
 7. **Open a result.** The member chooses one. A node opens where it lives, switching the active space when it lies in
-   another. A photo opens in the open Memory's lightbox. A person opens their profile page. A settings
+   another. A photo of the open Memory opens in its lightbox; a photo of another Memory opens that Memory (in its space)
+   with the photo in the lightbox. A person opens their profile page. A settings
    section opens on the settings page, the active space kept.
 
 ## Alternate / exception flows
 
 - **A1 — a tree changes while the search is open:** the space's revision moved (the poll the client already runs). The
   tree is re-read, its documents are replaced, and the results update without losing the query.
-- **A2 — no result:** the field says nothing was found and names what was searched. The first stage searches names,
-  Memory dates, places and people across every space, but photos only in the open Memory. A photo's own place or date
-  outside the open Memory is not searched yet, and the empty state must not imply it was.
+- **A2 — no result:** the field says nothing was found and names what was searched: names, dates, places and people
+  in every space - a photo's own place and date included - and members and settings.
 - **E1 — a space cannot be opened** (its key is not on this device yet, a fetch fails, a rotation is in flight): its
   results are left out, and the result list names that space as not searched. The other spaces are unaffected.
 - **E2 — the member is removed from a space, or the space is rotated:** its tree no longer fetches or opens, or it moved.
@@ -76,10 +83,14 @@
 
 ## Quality notes
 
-- **Operator-blind, also about the query.** Nothing about the query leaves the device. No endpoint is added, and the
-  tree reads of step 2 are those of entering each space.
+- **Operator-blind, also about the query.** Nothing about the query leaves the device. The tree reads of step 2 are
+  those of entering each space. The one read the search adds, a space's media listing, tells the server that a member
+  read every listing of that space - ids, sizes, times, the fact opening each Memory reveals today - and nothing about a
+  query ([ADR 0125](../../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)
+  § Consequences).
 - **In memory only.** No index, query or result is written to IndexedDB, localStorage, Cache Storage or the server.
-  No key is held for search: each tree's keys are zeroed once its documents are built.
+  No key is held for search: each tree's keys are zeroed once its documents are built, and so is every node key a
+  space's listing was opened under.
 - **The build never blocks the page.** A space's tree is opened and indexed in slices of at most 40 ms, so a keystroke
   or a paint gets in between, even at 5,000 nodes on a slow CPU ([ADR 0125](../../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md) § Consequences has the measured numbers).
 - **One source of truth.** A document is derived from an object and its revision. The index never holds a value the
@@ -91,8 +102,8 @@
 
 ## User impact
 
-You can find any folder, Memory, Chapter or file across all your spaces by name, date, place or the people in it,
-without the server learning what you searched for.
+You can find any folder, Memory, Chapter, file or photo across all your spaces by name, date, place or the people in
+it, without the server learning what you searched for.
 
 ## Related
 

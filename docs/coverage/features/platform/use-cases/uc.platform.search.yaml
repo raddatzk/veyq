@@ -1,6 +1,6 @@
 useCase: uc.platform.search
 feature: platform
-title: Search every space for a node, a Memory or a photo of the open Memory
+title: Search every space for a node, a Memory or a photo
 acceptanceCriteria:
   - id: every-space-of-the-tenant
     text: The first focus of the search field opens the tree of every space the member belongs to in this tenant (personal, the tenant's, every group) without changing the active space; each tree's keys are zeroed once its documents are built, and a later focus revalidates each tree by its ETag (a 304 keeps the documents, a moved tree is opened again, a tree that no longer fetches or opens loses its documents).
@@ -18,12 +18,26 @@ acceptanceCriteria:
       web:
         unit: [src/core/search/groups.test.ts, src/core/search/SearchField.test.ts]
   - id: memories-contributes-through-the-registry
-    text: Memories contributes a Memory's date range, place and participants and the photos and videos of the open Memory's opened listing (capture time, place) through the registry; core imports no application.
+    text: Memories contributes a Memory's date range, place and participants, every photo and video of every space (its scopeDocuments hook) and the photos and videos of the open Memory's opened listing (capture time, place) through the registry; core imports no application.
     coverage:
       web:
         unit: [src/features/memories/search.test.ts, src/features/memories/components/MemoryDetail.search.test.ts, src/core/search/contribution.test.ts]
+  - id: photos-of-every-space
+    text: Every live photo and video of every space is a document with its original's name, its capture time and its place, read from the space's media listing (listScopeMedia - every live medium on a live node of the scope, in pages by id, an ETag from the tree revision, the live nodes' item revisions and the content blocks; a 304 keeps the documents and opens nothing) and opened per node under the node's key while the walk holds it, every node key zeroed once the application's hook returned; a medium at an unchanged revision is kept unopened, a blocked medium is no document, and the open Memory's own document of a medium replaces the listing's; a photo goes where its Memory goes (the open node's group, In this space, Other spaces), its Memory's path and day in its second line.
+    coverage:
+      web:
+        unit: [src/core/search/searchIndex.test.ts, src/features/memories/search.scope.test.ts, src/core/search/SearchField.test.ts, src/core/search/groups.test.ts, src/features/memories/components/MemoryDetail.search.test.ts]
+      backend:
+        integration:
+          - ScopeMediaListSliceTest.pagesByIdAcrossTheScopesNodesEveryMediumOnce
+          - ScopeMediaListSliceTest.aTrashedNodesMediaATrashedMediumAndAnotherScopesMediaAreNeverListed
+          - ScopeMediaListSliceTest.aNonMemberIsTheScopes404
+          - ScopeMediaListSliceTest.anUnchangedScopeIsA304AndAnUploadATrashANodeTrashAndABlockEachMoveTheTag
+          - ScopeMediaListSliceTest.aBlockedMediumIsKeptAndMarkedAsInTheNodesListing
+          - ScopeMediaListSliceTest.aPageOfOneMediumAndOfSixtyAcrossNodesIssueTheSameStatementsAndAnIdleReadReadsNoPage
+          - ShareUploaderSliceTest.everyReaderOfTheMemoryIsServedWhatOpensAnUpload
   - id: open-a-result
-    text: Choosing a result opens it where it lives - a node in its space (switching the active space when it lies in another), a photo in the open Memory's lightbox.
+    text: Choosing a result opens it where it lives - a node in its space (switching the active space when it lies in another), a photo of the open Memory in its lightbox, a photo of another Memory by opening that Memory (in its space), which then opens the photo in its lightbox once its gallery holds it.
     coverage:
       web:
         unit: [src/core/search/SearchField.test.ts, src/features/memories/components/MemoryDetail.search.test.ts]
@@ -43,9 +57,7 @@ acceptanceCriteria:
       web:
         unit: [src/applications.test.ts, src/core/search/SearchField.test.ts]
   - id: nothing-leaves-or-persists
-    text: No query, document or result is sent to the server or written to IndexedDB, localStorage, sessionStorage or Cache Storage; no endpoint is added; a share view has no search field.
+    text: No query, document or result is sent to the server or written to IndexedDB, localStorage, sessionStorage or Cache Storage; the one read the search adds (a space's media listing) carries nothing of the query; a share view has no search field.
     coverage:
       web:
         unit: [src/core/search/searchIndex.test.ts, src/components/app/AppShell.search.test.ts, src/core/search/contribution.test.ts]
-gaps:
-  backend: "No backend part: search runs in the client over trees and listings the backend already serves (ADR 0125 decision 1); no endpoint is added."
