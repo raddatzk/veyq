@@ -52,6 +52,7 @@ import { ScopeKind } from '../../api/generated/scopes'
 import { defineComponent, h, provide } from 'vue'
 import { contributeSearchDocuments, searchContributionsKey } from './contribution'
 import { searchOpenRequest } from './openRequest'
+import { registry } from '../applications/registry'
 
 const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
 const KEVIN = 'kkkkkkkk-0000-4000-8000-000000000002'
@@ -623,6 +624,32 @@ describe('the In: chip', () => {
     expect(rows()).toEqual(['Rome 2024 Familie · Trips', 'strand.jpg Familie · Trips / Rome 2024'])
     await type('strand')
     expect(rows()).toEqual(['strand.jpg Familie · Trips / Rome 2024'])
+  })
+
+  // owner 2026-11-09: an In: chip shows its node's kind (a Memory's icon), not always a folder
+  it('draws an In: suggestion and its chip with the icon of the node\'s kind; control: a folder keeps the folder icon', async () => {
+    vi.mocked(indexedDocuments).mockReturnValue([...indexedDocuments(), strand()])
+    await mountField()
+    const iconOf = (sel: string) => document.body.querySelector(sel)?.querySelector('.veyq-icon')?.getAttribute('data-icon')
+    const inSuggestionIcon = () =>
+      [...document.body.querySelectorAll('.veyq-tags-input__suggestions .veyq-tags-input__option')]
+        .find((o) => o.textContent?.includes('Rome 2024'))?.querySelector('.veyq-icon')?.getAttribute('data-icon')
+    const memoryIcon = registry.kind(trees.S1.find((n) => n.id === 'rome')!.kind)
+    expect(memoryIcon.supported).toBe(true)
+    const folderIcon = registry.kind(FOLDER_KIND)
+    await type('rome')
+    expect(suggestionRows()).toContain(`Rome 2024 Familie · Trips ${t('shell.search.chipIn')}`)
+    expect(inSuggestionIcon()).toBe(memoryIcon.supported && memoryIcon.icon)
+    expect(suggestionRows()[0]).toBe(`Rome 2024 Familie · Trips ${t('shell.search.chipIn')}`)
+    await press('Enter')
+    expect(chips()).toEqual(['Rome 2024'])
+    expect(iconOf('.veyq-tags-input__tag')).toBe(memoryIcon.supported && memoryIcon.icon)
+    await press('Backspace')
+    await type('trip') // control: a folder's chip
+    await press('Enter')
+    expect(chips()).toEqual(['Trips'])
+    expect(iconOf('.veyq-tags-input__tag')).toBe(folderIcon.supported && folderIcon.icon)
+    expect(folderIcon.supported && folderIcon.icon).not.toBe(memoryIcon.supported && memoryIcon.icon)
   })
 
   it('offers two nodes of one name as two suggestions, each with where it lives, each narrowing to its own subtree', async () => {

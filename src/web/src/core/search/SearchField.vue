@@ -218,6 +218,14 @@ type ChipTag = VeyqTag & { chip: SearchChip }
 type ChipOption = VeyqTagOption & { suggestion: ChipSuggestion }
 type ResultOption = VeyqTagOption & { doc?: SearchDocument; more?: number }
 
+/** A chip's icon: its type's, and for an *In:* chip the icon of its node's kind (a Memory's, a folder's; owner
+ *  2026-11-09), read from the indexed tree - the type's own when the node is not (yet) indexed. */
+function chipIcon(chip: SearchChip): VeyqIconName {
+  if (chip.type !== 'in') return CHIP_ICON[chip.type]
+  const kind = indexedTree(chip.scopeId)?.find((n) => n.id === chip.nodeId)?.kind
+  const d = kind ? registry.kind(kind) : null
+  return d?.supported ? d.icon : CHIP_ICON.in
+}
 const tags = computed<ChipTag[]>(() => chips.value.map((chip) => ({ key: chipKey(chip), label: chipLabel(chip), chip })))
 const suggestions = computed<ChipOption[]>(() =>
   suggestChips(text.value, chips.value, {
@@ -413,9 +421,9 @@ const statusSaid = computed(() => loadingShown.value || !!notSearched.value || s
     @choose="choose"
   >
     <template #leading><VeyqIcon name="search" class="veyq-search__icon" /></template>
-    <template #tag="{ tag }"><VeyqIcon :name="CHIP_ICON[tag.chip.type]" class="veyq-search__chip-icon" /></template>
+    <template #tag="{ tag }"><VeyqIcon :name="chipIcon(tag.chip)" class="veyq-search__chip-icon" /></template>
     <template #option="{ option }">
-      <VeyqIcon :name="CHIP_ICON[option.suggestion.chip.type]" />
+      <VeyqIcon :name="chipIcon(option.suggestion.chip)" />
       <span v-if="option.suggestion.chip.type === 'in'" class="veyq-search__result-main">
         <span class="veyq-search__option-label">{{ option.label }}</span>
         <span class="veyq-search__result-meta">{{ chipWhere(option.suggestion.chip) }}</span>
