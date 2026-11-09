@@ -104,7 +104,7 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution {
     // the replace: the system's picker hands over one document, which replaces the content over the one listed
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
         val p = uri?.let { model.picked(it) } ?: return@rememberLauncherForActivityResult
-        scope.launch { model.replaceWithNotice(node.nodeId, p, f?.blobId) }
+        model.replace(node.nodeId, model.source(p), f?.blobId)
     }
     val has = f?.hasContent == true
     return HeaderContribution(

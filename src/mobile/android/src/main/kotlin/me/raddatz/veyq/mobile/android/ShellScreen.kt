@@ -123,7 +123,6 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed) n.run?.let { scope.launch { it() } }
         }
     }
-    val uploading by model.uploading.collectAsStateWithLifecycle()
     // "Send a copy…": what happens is said first — the copy leaves veyq decrypted —, then the system's share sheet
     val sending by model.sending.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -273,12 +272,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 }
               }
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
-                uploading?.let { name ->
-                    Column(Modifier.fillMaxWidth()) {
-                        androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
-                        Text(stringResource(R.string.depot_uploading, name), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                    }
-                }
+                UploadTray(model)
             }
         }
         trashOf?.let { SpaceTrashSheet(it, model) { trashOf = null } }
@@ -341,10 +335,11 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         }
         if (asked != null) model.newRequestTaken()
     }
-    // Depot's "Upload files": the system's picker hands over the documents chosen, uploaded here one after another
+    // Depot's "Upload files": the system's picker hands over the documents chosen, queued for this level
+    val levelLabel = s.shell.folder?.name ?: spaceName(s.space)
     val pickFiles = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         val space = s.shell.space
-        if (uris.isNotEmpty() && space != null) model.uploadPicked(space, s.shell.folder?.nodeId, uris)
+        if (uris.isNotEmpty() && space != null) model.uploadPicked(space, s.shell.folder?.nodeId, levelLabel, uris)
     }
     // Depot's "Upload folder…": the system's folder picker grants one directory, uploaded here whole (`FolderUpload`)
     val pickFolder = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { tree ->

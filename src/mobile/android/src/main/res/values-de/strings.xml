@@ -565,4 +565,22 @@
     <string name="memory_upload_failed">Konnte nicht hinzugefügt werden: %1$s. Bitte versuche es erneut.</string>
     <string name="memory_upload_no_room">„%1$s“ konnte nicht hinzugefügt werden: Im Speicher dieses Bereichs ist kein Platz mehr.</string>
     <string name="memory_upload_switched_off">Erinnerungen ist hier abgeschaltet, deshalb kann nichts dazukommen.</string>
+    <!-- the shell's uploads (core's upload queue, the web's `upload.*`) -->
+    <string name="upload_title">Uploads</string>
+    <string name="upload_active">%1$d aktiv</string>
+    <string name="upload_failed_count">%1$d nicht hochgeladen</string>
+    <string name="upload_cancel_all">Alle abbrechen</string>
+    <string name="upload_cancel">Abbrechen</string>
+    <string name="upload_retry">Erneut versuchen</string>
+    <string name="upload_close">Schließen</string>
+    <string name="upload_status_queued">In Warteschlange</string>
+    <string name="upload_status_preparing">Wird vorbereitet …</string>
+    <string name="upload_status_uploading">Lädt hoch …</string>
+    <string name="upload_status_done">Fertig</string>
+    <string name="upload_status_failed">Fehlgeschlagen</string>
+    <string name="upload_status_cancelled">Abgebrochen</string>
+    <string name="upload_no_space">Kein Speicherplatz mehr frei. Einträge im Papierkorb belegen weiter Platz, bis sie endgültig entfernt sind.</string>
+    <string name="upload_switched_off">Diese Anwendung ist hier abgeschaltet.</string>
+    <string name="upload_name_taken">Hier gibt es schon einen Ordner, eine Erinnerung oder eine Datei mit ähnlichem Namen.</string>
+    <string name="upload_preparing_folder">Die Ordner von „%1$s“ werden angelegt …</string>
 </resources>

@@ -94,7 +94,6 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
     val palette = LocalPalette.current
     val details by model.rowDetails.collectAsStateWithLifecycle()
     val uploaded by model.galleryRevision.collectAsStateWithLifecycle()
-    val uploading by model.uploading.collectAsStateWithLifecycle()
     // read again whenever the lists are
     var gallery by remember { mutableStateOf<MemoryMedia.Gallery?>(null) }
     var failed by remember { mutableStateOf(false) }
@@ -109,13 +108,13 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
     val items = gallery?.items
     // the system's photo picker: photos and videos, several at once
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-        if (uris.isNotEmpty()) model.uploadMedia(ref.scopeId, ref.nodeId, uris)
+        if (uris.isNotEmpty()) model.uploadMedia(ref.scopeId, ref.nodeId, ref.name, uris)
     }
     fun pickMedia() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
     // the picker hands a photo over with its location zeroed and under a number: full media access keeps both, so it is
     // asked for once, before the first pick; whatever the answer, the picker opens
     val askAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pickMedia() }
-    CreateGridAction(stringResource(R.string.memory_add), shown = uploading == null, onClick = {
+    CreateGridAction(stringResource(R.string.memory_add), shown = true, onClick = {
         if (model.mediaAccessAsked()) pickMedia() else askAccess.launch(mediaAccessPermissions())
     }) { grid, bottom ->
     LazyVerticalGrid(

@@ -567,4 +567,22 @@
     <string name="memory_upload_failed">Could not add: %1$s. Please try again.</string>
     <string name="memory_upload_no_room">“%1$s” could not be added: there is no room left in this space’s storage.</string>
     <string name="memory_upload_switched_off">Memories is switched off here, so nothing can be added.</string>
+    <!-- the shell's uploads (core's upload queue, the web's `upload.*`) -->
+    <string name="upload_title">Uploads</string>
+    <string name="upload_active">%1$d active</string>
+    <string name="upload_failed_count">%1$d not uploaded</string>
+    <string name="upload_cancel_all">Cancel all</string>
+    <string name="upload_cancel">Cancel</string>
+    <string name="upload_retry">Retry</string>
+    <string name="upload_close">Close</string>
+    <string name="upload_status_queued">Queued</string>
+    <string name="upload_status_preparing">Preparing…</string>
+    <string name="upload_status_uploading">Uploading…</string>
+    <string name="upload_status_done">Done</string>
+    <string name="upload_status_failed">Failed</string>
+    <string name="upload_status_cancelled">Cancelled</string>
+    <string name="upload_no_space">No space left. Items in a trash still take up space until they are removed for good.</string>
+    <string name="upload_switched_off">This application is switched off here.</string>
+    <string name="upload_name_taken">A folder, Memory or file with a similar name already exists here.</string>
+    <string name="upload_preparing_folder">Creating the folders of “%1$s”…</string>
 </resources>
