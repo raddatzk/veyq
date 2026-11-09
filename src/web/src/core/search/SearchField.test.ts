@@ -177,10 +177,10 @@ describe('the search field', () => {
   })
 
   // was: the results in their groups (In this space, Other spaces) - now one list with no heading, each row saying where
-  it('shows the results as one list with no heading, each with its space and path - the space on screen too', async () => {
+  it('shows the results as one list under its heading, each with its space and path - the space on screen too', async () => {
     await mountField()
     await type('rome')
-    expect(headings()).toEqual([])
+    expect(headings()).toEqual([t('shell.search.results')]) // the results are headed, always (owner 2026-11-09)
     expect(rows()).toEqual(['Rome 2024 Familie · Trips', 'Rome garden Family group'])
   })
 
@@ -192,7 +192,7 @@ describe('the search field', () => {
   })
 
   // was: the open node's group headed by its name - now what lies below the open node comes first at an equal match
-  it('puts what lies below the open node first at an equal match, with no heading', async () => {
+  it('puts what lies below the open node first at an equal match, with no heading of its own', async () => {
     setBreadcrumb([{ id: null, name: 'Familie', hash: '' }, { id: 'trips', name: 'Trips', hash: '#trips/' }, { id: 'rome', name: 'Rome 2024', hash: '#trips/memories/rome-2024' }])
     trees.S1 = [...trees.S1, treeNode({ id: 'day', parentId: 'rome', name: 'Rome day one' })]
     vi.mocked(indexedDocuments).mockReturnValue([
@@ -201,7 +201,7 @@ describe('the search field', () => {
     ])
     await mountField()
     await type('rome')
-    expect(headings()).toEqual([t('shell.search.filterBy')]) // Rome 2024 holds a chapter, so it is offered as In: too
+    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.results')]) // Rome 2024 holds a chapter, so it is offered as In: too
     expect(suggestionRows()).toEqual([`Rome 2024 Familie · Trips ${t('shell.search.chipIn')}`])
     // by the name alone "Rome 2024" would come first; below the open node, "Rome day one" does
     expect(resultRows()).toEqual(['Rome day one Familie · Trips / Rome 2024', 'Rome 2024 Familie · Trips'])
@@ -310,7 +310,7 @@ describe('the search field', () => {
       await mountField()
       await type('img_7')
       expect(rows().filter((r) => r.startsWith('IMG_7.jpg'))).toHaveLength(1)
-      expect(headings()).toEqual([]) // was: the open node's group heading
+      expect(headings()).toEqual([t('shell.search.results')]) // the results are headed, always (owner 2026-11-09) // was: the open node's group heading
       await press('Enter')
       expect(opened).toHaveBeenCalled()
       expect(push).not.toHaveBeenCalled()
@@ -420,7 +420,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
   it('finds a member by their name and by their username', async () => {
     await mountField()
     await type('anna')
-    expect(headings()).toEqual([t('shell.search.filterBy')]) // was: and the People group's heading
+    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.results')]) // was: and the People group's heading
     expect(rows()).toContain('A Anna Schmidt ~anna') // the initial the roster has, the name, the handle
     await type('~anna')
     expect(rows()).toEqual(['A Anna Schmidt ~anna'])
@@ -431,7 +431,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     vi.mocked(tenantPeopleNow).mockReturnValue([{ userId: 'r', username: 'romeo', realName: null, displayName: 'romeo' }])
     await mountField()
     await type('rom')
-    expect(headings()).toEqual([t('shell.search.filterBy')])
+    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.results')])
     expect(rows()).toEqual([`romeo ${t('shell.search.chipPerson')}`, 'Rome 2024 Familie · Trips', 'Rome garden Family group', 'R romeo ~romeo'])
   })
 
@@ -439,7 +439,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     await mountField()
     await type('kevin')
     expect(rows()).toEqual([`kevin ${t('shell.search.chipPerson')}`, 'K kevin ~kevin'])
-    expect(headings()).toEqual([t('shell.search.filterBy')]) // was: and the People group's heading
+    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.results')]) // was: and the People group's heading
     expect(suggestionRows()).toEqual([`kevin ${t('shell.search.chipPerson')}`])
     await press('ArrowDown')
     expect(highlighted()).toBe('K kevin ~kevin')
@@ -451,7 +451,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
   it('finds a section by its label and opens it on the settings page, the space on screen kept', async () => {
     await mountField()
     await type(t('settings.password').slice(0, 5))
-    expect(headings()).toEqual([]) // was: the Settings group's heading
+    expect(headings()).toEqual([t('shell.search.results')]) // the results are headed, always (owner 2026-11-09) // was: the Settings group's heading
     expect(rows()).toEqual([`${t('settings.password')} ${t('settings.personal')}`])
     await press('Enter')
     expect(push).toHaveBeenCalledWith('/settings/password')
@@ -611,10 +611,10 @@ describe('the In: chip', () => {
 // on and it is listed (the layer's own test holds the drop-out and the pointer).
 describe('the suggestions\' heading and the entry Enter takes', () => {
   // was: "Filter by" above the result groups' headings - now the one heading, no other below it
-  it('heads the chip suggestions "Filter by", and no heading stands below it', async () => {
+  it('heads the chip suggestions "Filter by" and the results "Results", and no other heading', async () => {
     await mountField()
     await type('2024')
-    expect(headings()).toEqual([t('shell.search.filterBy')])
+    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.results')])
     expect(suggestionRows()).toEqual([`2024 ${t('shell.search.chipYear')}`])
     expect(rows()).toEqual([`2024 ${t('shell.search.chipYear')}`, 'Rome 2024 Familie · Trips'])
   })
@@ -832,8 +832,8 @@ describe('the polish (cr-search-polish)', () => {
     expect(groups.length).toBe(2)
     const [suggested, found] = groups
     expect(document.getElementById(suggested.getAttribute('aria-labelledby') ?? '')?.textContent?.trim()).toBe(t('shell.search.filterBy'))
-    expect(found.getAttribute('aria-label')).toBe(t('shell.search.results'))
-    expect(found.getAttribute('aria-labelledby') || null).toBeNull() // no heading of its own to point at
+    expect(document.getElementById(found.getAttribute('aria-labelledby') ?? '')?.textContent?.trim()).toBe(t('shell.search.results'))
+    expect(found.getAttribute('aria-label')).toBeNull() // was: named for a screen reader only; now its visible heading names it
     const input = field()
     expect(input.getAttribute('role')).toBe('combobox')
     expect(input.getAttribute('aria-expanded')).toBe('true')

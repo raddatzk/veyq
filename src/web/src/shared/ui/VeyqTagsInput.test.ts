@@ -200,15 +200,15 @@ describe('VeyqTagsInput with results', () => {
     return { added, chosen }
   }
 
-  // was: both areas headed ('Filter by', 'Results'); now only the suggestions are, and the results are named for a screen reader
-  it('heads the suggestions only, names the results without a heading, and highlights the first entry, a suggestion', async () => {
+  // both areas headed ('Filter by', 'Results') again (owner 2026-11-09: the results are always headed), each heading naming its group
+  it('heads the suggestions and the results, each heading naming its group, and highlights the first entry, a suggestion', async () => {
     mountSearch()
     await flushPromises()
     await type('k')
-    expect([...document.body.querySelectorAll('.veyq-tags-input__group-label')].map((x) => x.textContent?.trim())).toEqual(['Filter by'])
+    expect([...document.body.querySelectorAll('.veyq-tags-input__group-label')].map((x) => x.textContent?.trim())).toEqual(['Filter by', 'Results'])
     const results = document.body.querySelector('.veyq-tags-input__results')!
     expect(results.getAttribute('role')).toBe('group')
-    expect(results.getAttribute('aria-label')).toBe('Results')
+    expect(document.getElementById(results.getAttribute('aria-labelledby') ?? '')?.textContent?.trim()).toBe('Results')
     expect(results.querySelectorAll('.veyq-tags-input__option')).toHaveLength(2)
     expect(options().map((o) => o.textContent?.trim())).toEqual(['Ken', 'Kevin', 'Kenia', 'Kevins Geburtstag'])
     expect(highlighted()).toBe('Ken')

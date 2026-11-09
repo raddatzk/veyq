@@ -16,7 +16,7 @@
 // the `leading` slot before the chips (a search field's magnifier).
 //
 // **Results under the suggestions** (the shell's search, ADR 0125): `results` is one list of options that are no chip,
-// drawn after the suggestions with no heading of its own (`resultsLabel` is its accessible name only) - choosing one emits
+// drawn after the suggestions under its own heading (`resultsLabel`, always drawn, owner 2026-11-09) - choosing one emits
 // `choose` with it and leaves the text and the list as they are, so the caller decides (it opens the result, it shows
 // more); the `result` slot draws one (`{ option }`), the `status` slot a line under them that is no option (loading,
 // nothing found). With a `status` slot the list shows even while it holds no option (a caller that has nothing to say
@@ -79,7 +79,7 @@ const props = defineProps<{
   options: O[]
   /** The options that are no chip, after the suggestions (see the header). */
   results?: R[]
-  /** The results' accessible name; no heading is drawn. */
+  /** The heading over the results, drawn whenever there are results (also their accessible name). */
   resultsLabel?: string
   placeholder?: string
   inputId?: string
@@ -279,8 +279,10 @@ function pick(event: Event, option: O) {
               <slot name="option" :option="o">{{ o.label }}</slot>
             </ComboboxItem>
           </ComboboxGroup>
-          <!-- the results: one list, no heading (its name is for a screen reader only) -->
-          <ComboboxGroup v-if="results?.length" class="veyq-tags-input__group veyq-tags-input__results" :aria-label="resultsLabel">
+          <!-- the results: one list, headed by `resultsLabel` (the search's *Treffer*), always, so a suggestion never reads
+               as a result (owner 2026-11-09) -->
+          <ComboboxGroup v-if="results?.length" class="veyq-tags-input__group veyq-tags-input__results">
+            <ComboboxLabel v-if="resultsLabel" class="veyq-tags-input__group-label">{{ resultsLabel }}</ComboboxLabel>
             <ComboboxItem
               v-for="o in results"
               :key="o.key"

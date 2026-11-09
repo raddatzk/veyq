@@ -1346,6 +1346,13 @@
   font-weight: 700;
 }
 
+/* the results under the suggestions: a line between the two areas, so the filters and what was found stay apart */
+.veyq-tags-input__suggestions + .veyq-tags-input__results {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--app-line);
+  padding-top: 0.25rem;
+}
+
 /* a line under the options that is no option: what the list is doing, what it found nothing for */
 .veyq-tags-input__status {
   display: flex;

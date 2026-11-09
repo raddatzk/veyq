@@ -68,7 +68,8 @@
      second character on, so the list for "K" holds no "Reiselink" and typing on only narrows it.
    - An exact match of the name ranks first, then a prefix, then a word's start, then a match inside a word, then a
      match of a place or of a settings section's word.
-6. **Show the results as one list** after the suggestions, with no heading of its own (ADR 0125 decision 5). It is
+6. **Show the results as one list** after the suggestions, under the heading *Results* (de *Treffer*), always shown,
+   with a line between it and the suggestions (ADR 0125 decision 5). It is
    ordered by the match (step 5), then by where the result lies - below the open node (what its page contributed and
    the nodes below it, while a node's page is open, not a folder), then the active space, then the other spaces, then
    people and settings -, then by the name's collation: a strong match elsewhere comes before a weak one here. Each row

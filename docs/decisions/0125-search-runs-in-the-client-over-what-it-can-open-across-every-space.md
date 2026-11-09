@@ -75,13 +75,15 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
      diacritic-insensitive.
 5. **The list has two areas: the chip suggestions (*Filter by*), then ONE list of results** (owner, 2026-11-09: "keep it
    simple - suggestions and results as two separate areas, suggestions first; where a result lies should set the order,
-   not a group"). No heading stands below *Filter by*.
+   not a group"). The results stand under one heading of their own, *Results* (de *Treffer*), drawn always, with a line
+   between the two areas (owner, 2026-11-09: a person suggestion above the results read as a result); there is no other
+   heading.
    - **The order:** match quality first - an exact name, then a prefix, then a word's start, then inside a word, then a
      place or a settings section's word -, then where the result lies - the open node's subtree, then the active space,
      then the other spaces, then people and settings -, then the name's collation. A strong match elsewhere comes before
      a weak one here; where the member stands breaks ties and never hides a result.
    - **Each row says where its result lies**: another space's result its space and path, this space's its path, a person
-     their `~username`, a settings section its heading on the rail. So the order needs no heading to be read.
+     their `~username`, a settings section its heading on the rail. So the order needs no heading per place to be read.
    - **Paging:** the first 10 results are drawn, and "show more" adds 10; the count is exact.
    - **Why one list, and why the groups went:** a member read five headed groups (the open node, this space, other
      spaces, people, settings) for what one ordered list with a place on every row says, and a strong match in another
