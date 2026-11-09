@@ -1517,3 +1517,78 @@ div.veyq-level-item-main,
 .veyq-level-item-action.is-pressed {
   color: var(--app-favorite);
 }
+
+/* ── The shell's search (uc.platform.search, core/search/SearchField.vue) ───────────────────────────────────────────
+   The layer's tags input with a magnifier in front, its list as wide as the field and taller than a picker's: the chips
+   it offers, then the results in their groups, then what it is doing. A row: the kind's icon, the name over where it
+   lives, the matched chips' values at its end. Tokens only, so no dark twin. */
+.veyq-search {
+  min-width: 0;
+}
+
+.veyq-search .veyq-tags-input {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.veyq-search__icon {
+  flex: none;
+  color: var(--app-muted);
+}
+
+.veyq-search__chip-icon {
+  flex: none;
+  font-size: 0.8rem;
+  color: var(--app-muted);
+}
+
+.veyq-search__list.veyq-tags-input__list {
+  width: max(var(--reka-combobox-trigger-width), min(30rem, calc(100vw - 2rem)));
+  max-height: min(32rem, var(--reka-combobox-content-available-height));
+}
+
+.veyq-search__option-label,
+.veyq-search__result-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.veyq-search__option-kind {
+  margin-inline-start: auto;
+  color: var(--app-muted);
+  font-size: 0.8rem;
+}
+
+.veyq-search__result-icon {
+  flex: none;
+  color: var(--app-muted);
+}
+
+.veyq-search__result-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.veyq-search__result-meta {
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.veyq-search__result-chip {
+  flex: none;
+}
+
+.veyq-search__more {
+  color: var(--app-accent);
+  font-size: 0.875rem;
+}
+
+.veyq-search__failed {
+  color: var(--app-text);
+}

@@ -1503,6 +1503,28 @@ const en = {
     // Axis-neutral "follow the device": the language pickers used to borrow shell.themeSystem, which tied a
     // language label to the theme block's wording for no reason.
     systemDefault: 'System',
+    // The top bar's search (uc.platform.search, ADR 0125): one field over every space; the open node's group is named by the
+    // node, as core names no application's kind.
+    search: {
+      label: 'Search all spaces',
+      placeholder: 'Search all spaces',
+      open: 'Search',
+      title: 'Search',
+      groupOpen: 'In “{name}”',
+      groupSpace: 'In this space',
+      groupOther: 'Other spaces',
+      showMore: 'Show {count} more',
+      loading: 'Searching one space… | Searching {count} spaces…',
+      notSearched: 'Not searched: {spaces}',
+      listFailed: 'Your other spaces could not be read, so only this space was searched.',
+      hint: 'Searches names, dates, places and people in all your spaces.',
+      empty: 'Nothing found.',
+      chipYear: 'Year',
+      chipPlace: 'Place',
+      chipPerson: 'Person',
+      chipSpace: 'Space',
+      chipKind: 'Kind',
+    },
   },
   applications: {
     // uc.platform.switch-application-off: the banner above every page of a space while an application is switched off.
@@ -3610,6 +3632,26 @@ const de: typeof en = {
     themeLight: 'Hell',
     themeDark: 'Dunkel',
     systemDefault: 'System',
+    search: {
+      label: 'Alle Bereiche durchsuchen',
+      placeholder: 'Alle Bereiche durchsuchen',
+      open: 'Suchen',
+      title: 'Suche',
+      groupOpen: 'In „{name}“',
+      groupSpace: 'In diesem Bereich',
+      groupOther: 'Andere Bereiche',
+      showMore: '{count} weitere zeigen',
+      loading: 'Ein Bereich wird durchsucht … | {count} Bereiche werden durchsucht …',
+      notSearched: 'Nicht durchsucht: {spaces}',
+      listFailed: 'Deine anderen Bereiche ließen sich nicht lesen, darum wurde nur dieser Bereich durchsucht.',
+      hint: 'Durchsucht Namen, Daten, Orte und Personen in all deinen Bereichen.',
+      empty: 'Nichts gefunden.',
+      chipYear: 'Jahr',
+      chipPlace: 'Ort',
+      chipPerson: 'Person',
+      chipSpace: 'Bereich',
+      chipKind: 'Art',
+    },
   },
   applications: {
     switchedOff: '{application} ist hier abgeschaltet. Was da ist, kannst du weiter öffnen und herunterladen – sichere, was du behalten willst.',

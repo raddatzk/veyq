@@ -1331,6 +1331,30 @@
   color: var(--app-text);
 }
 
+/* a group of results under the suggestions: its heading small, bold and quiet - never upper-cased, as it may hold a name */
+.veyq-tags-input__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.veyq-tags-input__group-label {
+  padding: 0.5rem 0.75rem 0.25rem;
+  color: var(--app-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* a line under the options that is no option: what the list is doing, what it found nothing for */
+.veyq-tags-input__status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--app-muted);
+  font-size: 0.875rem;
+}
+
 /* ── Tabs ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
 .veyq-tabs {
   display: flex;
