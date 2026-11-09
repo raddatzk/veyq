@@ -6,16 +6,90 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.raddatz.veyq.mobile.api.apis.ContentApi
 import me.raddatz.veyq.mobile.api.models.RestoreNodeRequest
+import me.raddatz.veyq.mobile.crypto.Context
+import me.raddatz.veyq.mobile.crypto.OpenRefused
 import me.raddatz.veyq.mobile.crypto.b64
+import me.raddatz.veyq.mobile.crypto.unb64
+import me.raddatz.veyq.mobile.crypto.utf8
 
 /**
  * A node to the space's trash and back, core's for every kind (the web's `deleteNode` and `restoreNode`,
  * `core/node/tree.ts`, `deleteSelection.ts`, `trashUndo.ts`). A delete is committed at once — a soft delete of the whole
  * subtree that frees the name — so its undo is a restore: the node comes back under the parent it left, its key wrap
  * untouched, with a slug token derived anew under the LIVE parent's key (the scope key at the root), since the delete
- * consumed the old one; a restore moves no placement revision and no epoch.
+ * consumed the old one; a restore moves no placement revision and no epoch. The space's trash lists the root of each
+ * deleted subtree, restores one (under a new name where something took its own meanwhile) and purges one now
+ * (`SpaceTrashDialog.vue`, `listTrash`, `purgeNode`).
  */
 object NodeTrash {
+    /**
+     * The root of a deleted subtree as the space's trash lists it: its name opened under the key its entry lives under —
+     * its LIVE parent's (a trashed root's parent is always live) or, at the root, the scope key. [deletedAt] and
+     * [purgeAfter] are the server's instants (ISO 8601); [attached] whether the node itself holds a blob in one of core's
+     * attachment slots (what an application's empty-in-trash note reads).
+     */
+    class Trashed(
+        val scopeId: String,
+        val id: String,
+        val parentId: String?,
+        val kind: String,
+        val name: String,
+        val epoch: Int,
+        val scopeEpoch: Int,
+        val placementRevision: Long,
+        val deletedAt: String,
+        val purgeAfter: String,
+        val attached: Boolean,
+    )
+
+    /**
+     * The trash of [scopeId], in the server's order; null when it could not be read. An entry whose name does not open
+     * (a guest-sealed one under an identity folder, a parent this device does not hold) is left out, as the web does.
+     * Read it against the tree read after a restore: a child that stays in the trash opens only under its parent now live.
+     */
+    @Throws(Exception::class)
+    suspend fun list(tenant: TenantSession, scopeId: String): List<Trashed>? {
+        val account = tenant.account
+        val (scopeKey, _) = tenant.scopeKey(scopeId) ?: return null
+        val r = runCatching { account.respond { ContentApi(tenant.base, account.http).listTrashedNodes(scopeId) } }.getOrNull() ?: return null
+        if (!r.success) return null
+        val live = tenant.trees()[scopeId].orEmpty().associateBy { it.id }
+        return r.body().mapNotNull { row ->
+            if (row.shareIdentityId != null) return@mapNotNull null
+            val entryKey = row.parentId?.let { live[it]?.key ?: return@mapNotNull null } ?: scopeKey
+            val name = try {
+                account.suite.openField(nameContext(scopeId, row.id, row.scopeEpoch, row.placementRevision), entryKey, unb64(row.encryptedName)).decodeToString()
+            } catch (e: OpenRefused) {
+                return@mapNotNull null
+            } catch (e: IllegalArgumentException) {
+                return@mapNotNull null
+            }
+            Trashed(
+                scopeId, row.id, row.parentId, row.kind, name, row.epoch, row.scopeEpoch, row.placementRevision,
+                row.deletedAt, row.purgeAfter, row.attached,
+            )
+        }
+    }
+
+    enum class Purged {
+        PURGED,
+        /** It is no longer in the trash (`404 node_not_found`): restored or purged meanwhile — read the list again. */
+        GONE,
+        FAILED,
+    }
+
+    /** Erases [nodeId] of [scopeId] and everything under it now, before its scheduled purge: irreversible. */
+    @Throws(Exception::class)
+    suspend fun purge(tenant: TenantSession, scopeId: String, nodeId: String): Purged {
+        val account = tenant.account
+        val r = runCatching { account.respond { ContentApi(tenant.base, account.http).purgeNode(scopeId, nodeId) } }.getOrElse { return Purged.FAILED }
+        return when {
+            r.success -> Purged.PURGED
+            r.status == 404 -> Purged.GONE
+            else -> Purged.FAILED
+        }
+    }
+
     enum class Deleted {
         /** It is in the trash now. */
         TRASHED,
@@ -57,10 +131,45 @@ object NodeTrash {
      * parent's, or at the root the node's own; never under a key from before the space's last rotation (the floor).
      */
     @Throws(Exception::class)
-    suspend fun restore(tenant: TenantSession, node: OpenNode, tokenInput: String, waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS): Restored {
+    suspend fun restore(tenant: TenantSession, node: OpenNode, tokenInput: String, waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS): Restored =
+        restoreEntry(tenant, Entry(node.scopeId, node.id, node.parentId, node.epoch, node.scopeEpoch, node.placementRevision), tokenInput, null, waitsMs, null)
+
+    /**
+     * Brings [node] back from the space's trash. [newName] is the retry after a [Restored.NAME_TAKEN]: the name sealed anew
+     * travels in the same request as the slug token derived from it ([tokenInput] is then the new name's fold), so the node
+     * is never live with a token its own name does not produce. A re-key meanwhile reads the trash again for the node.
+     */
+    @Throws(Exception::class)
+    suspend fun restoreFromTrash(
+        tenant: TenantSession,
+        node: Trashed,
+        tokenInput: String,
+        newName: String? = null,
+        waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS,
+    ): Restored = restoreEntry(
+        tenant, Entry(node.scopeId, node.id, node.parentId, node.epoch, node.scopeEpoch, node.placementRevision), tokenInput,
+        newName?.trim()?.takeIf { it.isNotEmpty() }, waitsMs,
+    ) { list(tenant, node.scopeId)?.firstOrNull { it.id == node.id }?.let { Entry(it.scopeId, it.id, it.parentId, it.epoch, it.scopeEpoch, it.placementRevision) } }
+
+    /** What a restore reads of the node: where its entry lives and what its name is bound to. */
+    private class Entry(val scopeId: String, val id: String, val parentId: String?, val epoch: Int, val scopeEpoch: Int, val placementRevision: Long)
+
+    private fun nameContext(scopeId: String, nodeId: String, scopeEpoch: Int, placementRevision: Long) = Context(
+        "node-name", "scopeId" to scopeId, "nodeId" to nodeId, "epoch" to scopeEpoch.toLong(), "placementRevision" to placementRevision,
+    )
+
+    private suspend fun restoreEntry(
+        tenant: TenantSession,
+        first: Entry,
+        tokenInput: String,
+        newName: String?,
+        waitsMs: List<Long>,
+        refresh: (suspend () -> Entry?)?,
+    ): Restored {
         val account = tenant.account
-        val scopeId = node.scopeId
+        val scopeId = first.scopeId
         val (scopeKey, scopeEpoch) = tenant.scopeKey(scopeId) ?: return Restored.REFUSED
+        var node = first
         var parent: OpenNode? = null
         suspend fun findParent(): Boolean {
             if (node.parentId == null) return true
@@ -71,16 +180,22 @@ object NodeTrash {
         var restored = false
         val result = NodeEpochWrite.run(
             waitsMs = waitsMs,
-            belowFloor = { (parent ?: node).scopeEpoch < scopeEpoch },
+            belowFloor = { (parent?.scopeEpoch ?: node.scopeEpoch) < scopeEpoch },
             reread = {
                 tenant.forgetTree()
+                if (refresh != null) node = refresh() ?: return@run false
                 findParent()
             },
             attempt = {
                 val p = parent
+                val entryKey = p?.key ?: scopeKey
+                // A restore is no placement: a name sealed anew binds the revision the node already has (ADR 0080 decision 3).
                 val request = RestoreNodeRequest(
-                    slugToken = b64(account.suite.slugToken(p?.key ?: scopeKey, p?.id ?: scopeId, tokenInput)),
-                    parentEpoch = (p ?: node).epoch,
+                    slugToken = b64(account.suite.slugToken(entryKey, p?.id ?: scopeId, tokenInput)),
+                    parentEpoch = p?.epoch ?: node.epoch,
+                    encryptedName = newName?.let {
+                        b64(account.suite.sealField(nameContext(scopeId, node.id, node.scopeEpoch, node.placementRevision), entryKey, utf8(it)))
+                    },
                 )
                 val r = account.respond { ContentApi(tenant.base, account.http).restoreNode(scopeId, node.id, request) }
                 val code = if (r.success) null else codeOf(runCatching { r.response.bodyAsText() }.getOrDefault(""))

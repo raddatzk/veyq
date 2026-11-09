@@ -199,6 +199,36 @@ class PotLiveTest {
             assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, ref.scopeId, nodeId))
             println("[$potName] pinned and unpinned; \"$name\" trashed, restored, its name taken, trashed again")
         }
+        System.getenv("VEYQ_LIVE_TRASH")?.let { potName ->
+            // The space's trash: a fresh Pot trashed is listed under its name; with a Pot of its name created meanwhile its
+            // restore is refused by name and goes through under a new one (sealed in the same request); trashed again and
+            // purged, a second purge finds it gone and the list no longer holds it. The Pot of the old name stays trashed.
+            val trash = me.raddatz.veyq.mobile.session.NodeTrash
+            val scopeId = pots.first { it.name == potName }.scopeId
+            val n = System.currentTimeMillis() % 100_000
+            val name = "App trash view $n"
+            val nodeId = PotCreate.create(tenant, scopeId, null, name, Ledger.BaseCurrency("EUR", 2), emptyList()).nodeId!!
+            tenant.forgetTree()
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, trash.delete(tenant, scopeId, nodeId))
+            val listed = trash.list(tenant, scopeId)!!.single { it.id == nodeId }
+            assertEquals(name, listed.name)
+            assertEquals(PotSession.KIND, listed.kind)
+            val holder = PotCreate.create(tenant, scopeId, null, name, Ledger.BaseCurrency("EUR", 2), emptyList()).nodeId!!
+            tenant.forgetTree()
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Restored.NAME_TAKEN, trash.restoreFromTrash(tenant, listed, PotCreate.tokenInput(name)))
+            val renamed = "$name restored"
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Restored.RESTORED, trash.restoreFromTrash(tenant, listed, PotCreate.tokenInput(renamed), renamed))
+            assertEquals(renamed, account.open(tenant.tenant).objects().single { it.nodeId == nodeId }.name)
+            assertTrue(trash.list(tenant, scopeId)!!.none { it.id == nodeId })
+            // Its new name is taken now: the token was derived from the name sealed with it.
+            assertEquals(PotCreate.Outcome.NAME_TAKEN, PotCreate.create(tenant, scopeId, null, renamed, Ledger.BaseCurrency("EUR", 2), emptyList()).outcome)
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, trash.delete(tenant, scopeId, nodeId))
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Purged.PURGED, trash.purge(tenant, scopeId, nodeId))
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Purged.GONE, trash.purge(tenant, scopeId, nodeId))
+            assertTrue(trash.list(tenant, scopeId)!!.none { it.id == nodeId })
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, trash.delete(tenant, scopeId, holder))
+            println("[$potName] \"$name\" listed in the trash, restored as \"$renamed\" past a Pot of its name, purged")
+        }
         System.getenv("VEYQ_LIVE_RENAME")?.let { potName ->
             // A fresh Pot renamed (read back by a fresh session), its old name free and its new one taken, a sibling's name
             // refused before anything is sent, then trashed (it stays in the trash).
