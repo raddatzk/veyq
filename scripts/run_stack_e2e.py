@@ -136,6 +136,10 @@ Usage:
     python3 scripts/run_stack_e2e.py --app veyq:local --admin veyq-admin:local [--keep] [--asset-set-out FILE] \\
         [-- <playwright test args>]
 
+    Playwright's `--project` takes several values, so file filters given after a bare `--project NAME` are read as
+    project names and the run fails before any test: put the files first, or write `--project=NAME`
+    (`-- search.spec.ts --project=platform`).
+
 Environment (all optional):
     VEYQ_STACK_WAIT_SECS   How long `veyqctl install` waits for a healthy stack (its VEYQ_WAIT_SECS). Default: 300
     VEYQ_STACK_CERT_SECS   How long the certificate stage polls for Pebble's certificate. Default: 120
