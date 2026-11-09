@@ -209,6 +209,8 @@ private struct EntriesList: View {
             }
         }
         .scrollContentBackground(.hidden)
+        // Room below the last row for the floating button, so no row ends under it (Android's 96 dp).
+        .contentMargins(.bottom, view.canWrite && !view.people.isEmpty ? 88 : 0, for: .scrollContent)
         .overlay(alignment: .bottomTrailing) {
             if view.canWrite && !view.people.isEmpty {
                 // Creating is the web's green role (`--app-primary`).
