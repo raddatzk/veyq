@@ -314,6 +314,12 @@
     <string name="move_refused_scope_deleting">This space is being deleted; nothing can be moved.</string>
     <string name="move_refused_failed">Moving didn’t work. Please try again.</string>
     <!-- A Pot's guest links (the web's expenses.share and sharing). -->
+    <string name="share_folder_title">Share this folder</string>
+    <string name="share_folder_intro">Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.</string>
+    <string name="share_folder_role_contributor">View + add files</string>
+    <string name="share_folder_role_viewer_hint">Anyone with the link can look at this folder and everything in it, read-only.</string>
+    <string name="share_folder_role_contributor_hint">Anyone with the link can look, add folders and content, move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history.</string>
+    <string name="share_folder_delete_confirm">Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.</string>
     <string name="share_title">Share this Pot</string>
     <string name="share_intro">Create a link anyone can open in a browser — no account, no install. It shows only this Pot, and you can switch it off anytime.</string>
     <string name="share_new">New link</string>

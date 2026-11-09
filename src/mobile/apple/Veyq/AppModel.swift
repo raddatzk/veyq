@@ -565,13 +565,13 @@ final class AppModel {
     func linkRules() -> ShareLinks.Rules { tenantSession?.linkRules ?? ShareLinks.RulesCompanion.shared.UNKNOWN }
 
     /// The READ and READ_WRITE links on `ref`, newest first; nil when they do not list.
-    func shareLinks(_ ref: ObjectRef) async -> [ShareLinks.Link]? {
+    func shareLinks(_ ref: NodeAt) async -> [ShareLinks.Link]? {
         guard let t = tenantSession else { return nil }
         return try? await ShareLinks.shared.list(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId)
     }
 
     /// Mints a `role` link on `ref`; on success its address, to hand out once.
-    func mintLink(_ ref: ObjectRef, role: String, label: String, password: String, expiresAt: String?) async -> ShareLinks.Minted {
+    func mintLink(_ ref: NodeAt, role: String, label: String, password: String, expiresAt: String?) async -> ShareLinks.Minted {
         let failed = ShareLinks.Minted(outcome: .failed, url: nil, refusal: nil)
         guard let t = tenantSession else { return failed }
         return (try? await ShareLinks.shared.mint(
@@ -580,19 +580,16 @@ final class AppModel {
         )) ?? failed
     }
 
-    /// Switches link `shareId` on `ref` off and re-keys the Pot below it (core's `ShareLinks.switchOff`, Expenses' re-key of
-    /// its revisions); an open Pot is read anew under its new key.
-    func switchOffLink(_ ref: ObjectRef, shareId: String) async -> ShareLinks.Closed {
+    /// Switches link `shareId` on `ref` off and re-keys the subtree below it (core's `ShareLinks.switchOff`, each kind's
+    /// content through `AppKinds`); an open Pot is read anew, since its key may have changed.
+    func switchOffLink(_ ref: NodeAt, shareId: String) async -> ShareLinks.Closed {
         guard let t = tenantSession else { return .failed }
         let r = (try? await ShareLinks.shared.switchOff(
             tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, kinds: AppKinds.shared.rekeys,
             tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
             uuid: { @Sendable in UUID().uuidString.lowercased() }
         )) ?? .failed
-        if pot?.ref == ref, let session = potSession {
-            _ = try? await session.rekeyed()
-            if potSession === session { pot?.view = PotView(session: session) }
-        }
+        await potRekeyed()
         return r
     }
 
@@ -603,12 +600,15 @@ final class AppModel {
         guard !t.rekeyingScopes.isEmpty else { return }
         Task {
             let ran = (try? await NodeRekey.shared.resume(tenant: t)) ?? [:]
-            if !ran.isEmpty, tenantSession === t { await refreshLists(t) }
+            if !ran.isEmpty, tenantSession === t {
+                await potRekeyed()
+                await refreshLists(t)
+            }
         }
     }
 
     /// Edits one of this member's open links on `ref` in place: label, password (nil untouched, blank removed), end, role.
-    func editLink(_ ref: ObjectRef, shareId: String, edit: ShareLinkChanges.Edit) async -> ShareLinkChanges.Changed {
+    func editLink(_ ref: NodeAt, shareId: String, edit: ShareLinkChanges.Edit) async -> ShareLinkChanges.Changed {
         let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
         guard let t = tenantSession else { return failed }
         return (try? await ShareLinkChanges.shared.edit(
@@ -617,7 +617,7 @@ final class AppModel {
     }
 
     /// Renews link `shareId` on `ref`: a new address carrying its settings, the old one closed and the node re-keyed.
-    func renewLink(_ ref: ObjectRef, shareId: String) async -> ShareLinkChanges.Changed {
+    func renewLink(_ ref: NodeAt, shareId: String) async -> ShareLinkChanges.Changed {
         let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
         guard let t = tenantSession else { return failed }
         let r = (try? await ShareLinkChanges.shared.renew(
@@ -626,12 +626,12 @@ final class AppModel {
             uuid: { @Sendable in UUID().uuidString.lowercased() }, nowMs: Int64(Date().timeIntervalSince1970 * 1000),
             waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
         )) ?? failed
-        await potRekeyed(ref)
+        await potRekeyed()
         return r
     }
 
     /// Deletes link `shareId` on `ref` for good.
-    func deleteLink(_ ref: ObjectRef, shareId: String) async -> ShareLinkChanges.Changed {
+    func deleteLink(_ ref: NodeAt, shareId: String) async -> ShareLinkChanges.Changed {
         let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
         guard let t = tenantSession else { return failed }
         let r = (try? await ShareLinkChanges.shared.delete(
@@ -639,13 +639,14 @@ final class AppModel {
             tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
             uuid: { @Sendable in UUID().uuidString.lowercased() }, nowMs: Int64(Date().timeIntervalSince1970 * 1000)
         )) ?? failed
-        await potRekeyed(ref)
+        await potRekeyed()
         return r
     }
 
-    /// An open Pot read anew under its key, after a link to it closed and it may have been re-keyed.
-    private func potRekeyed(_ ref: ObjectRef) async {
-        if pot?.ref == ref, let session = potSession {
+    /// The open Pot read anew under its key, after a re-key that may have reached it: a link on it or on a folder above it
+    /// closed, or a scope's re-key finished in the background. A Pot the re-key did not reach reads the same.
+    private func potRekeyed() async {
+        if let session = potSession {
             _ = try? await session.rekeyed()
             if potSession === session { pot?.view = PotView(session: session) }
         }

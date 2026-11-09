@@ -64,14 +64,38 @@ import java.time.format.FormatStyle
 private const val PASSWORD_MIN = 10
 
 /**
- * A Pot's guest links (the web's `PotShareDialog`, core's `FolderShareDialog` with Expenses' words): the links on it, newest
+ * The sentences a node's share sheet says in its kind's words (the web's `ShareDialogCopy`): a folder's are core's
+ * (`share.folder.*`), a Pot's Expenses' (`expenses.share.*`). The rest of the sheet is the same for every kind.
+ */
+internal class ShareWords(
+    @androidx.annotation.StringRes val title: Int,
+    @androidx.annotation.StringRes val intro: Int,
+    @androidx.annotation.StringRes val contributor: Int,
+    @androidx.annotation.StringRes val viewerHint: Int,
+    @androidx.annotation.StringRes val contributorHint: Int,
+    @androidx.annotation.StringRes val deleteConfirm: Int,
+)
+
+/** The words of [kind]'s share sheet: a Pot's, else core's folder words (the web's default `ShareDialogCopy`). */
+internal fun shareWords(kind: String): ShareWords =
+    if (kind == me.raddatz.veyq.mobile.expenses.PotSession.KIND) ShareWords(
+        R.string.share_title, R.string.share_intro, R.string.share_role_contributor,
+        R.string.share_role_viewer_hint, R.string.share_role_contributor_hint, R.string.share_delete_confirm,
+    ) else ShareWords(
+        R.string.share_folder_title, R.string.share_folder_intro, R.string.share_folder_role_contributor,
+        R.string.share_folder_role_viewer_hint, R.string.share_folder_role_contributor_hint, R.string.share_folder_delete_confirm,
+    )
+
+/**
+ * A node's guest links (core's `FolderShareDialog`, a Pot's with Expenses' words, [shareWords]): the links on it, newest
  * first, each copied from here; "New link" mints one — view only, or view and contribute where the tenant allows it, an
  * optional label only the member sees, a password and an end where the member wants them or the tenant's rules require
- * them — and shows it once to copy or share. Switching a link off, renewing and editing come with the subtree's re-key.
+ * them — and shows it once to copy or share. Switching a link off re-keys what is below it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit) {
+internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, onClose: () -> Unit) {
+    val words = shareWords(ref.kind)
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -103,14 +127,14 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
 
     ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
-            Text(stringResource(R.string.share_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(words.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.padding(4.dp))
-            Text(stringResource(R.string.share_intro), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
+            Text(stringResource(words.intro), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
             Spacer(Modifier.padding(8.dp))
             val made = fresh
             when {
                 made != null -> FreshLink(made) { fresh = null }
-                editing != null -> NewLinkForm(rules, onCancel = { editing = null }, editing = editing) { role, label, password, expiresAt ->
+                editing != null -> NewLinkForm(rules, words, onCancel = { editing = null }, editing = editing) { role, label, password, expiresAt ->
                     val link = editing!!
                     val r = model.editLink(ref, link.shareId, me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit(label, password, expiresAt, role))
                     changedText(r.outcome).also {
@@ -120,7 +144,7 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
                         }
                     }
                 }
-                creating -> NewLinkForm(rules, onCancel = { creating = false }) { role, label, password, expiresAt ->
+                creating -> NewLinkForm(rules, words, onCancel = { creating = false }) { role, label, password, expiresAt ->
                     val minted = model.mintLink(ref, role, label, password.orEmpty(), expiresAt)
                     if (minted.outcome == ShareLinks.Outcome.CREATED) {
                         creating = false
@@ -140,7 +164,7 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
                         else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
                             items(list, key = { it.shareId }) { link ->
                                 LinkRow(
-                                    link, busy = busy == link.shareId,
+                                    link, words, busy = busy == link.shareId,
                                     // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one,
                                     // delete a switched-off one the server lets go (`FolderShareDialog`)
                                     onEdit = if (link.mine && link.enabled && link.url != null) ({ editing = link }) else null,
@@ -195,7 +219,7 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text(stringResource(R.string.share_delete)) },
-            text = { Text(stringResource(R.string.share_delete_confirm)) },
+            text = { Text(stringResource(words.deleteConfirm)) },
             confirmButton = {
                 TextButton(onClick = {
                     deleting = null
@@ -214,7 +238,7 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
 
 @Composable
 private fun LinkRow(
-    link: ShareLinks.Link, busy: Boolean, onSwitchOff: (() -> Unit)?,
+    link: ShareLinks.Link, words: ShareWords, busy: Boolean, onSwitchOff: (() -> Unit)?,
     onEdit: (() -> Unit)? = null, onRenew: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
@@ -223,7 +247,7 @@ private fun LinkRow(
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
-                link.label.ifEmpty { stringResource(if (link.role == ShareLinks.READ) R.string.share_role_viewer else R.string.share_role_contributor) },
+                link.label.ifEmpty { stringResource(if (link.role == ShareLinks.READ) R.string.share_role_viewer else words.contributor) },
                 fontWeight = FontWeight.SemiBold,
             )
             val dates = listOfNotNull(
@@ -232,7 +256,7 @@ private fun LinkRow(
             ).joinToString(" · ")
             Text(dates, style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             val badges = listOfNotNull(
-                if (link.label.isNotEmpty()) stringResource(if (link.role == ShareLinks.READ) R.string.share_role_viewer else R.string.share_role_contributor) else null,
+                if (link.label.isNotEmpty()) stringResource(if (link.role == ShareLinks.READ) R.string.share_role_viewer else words.contributor) else null,
                 if (link.passwordRequired) stringResource(R.string.share_password_badge) else null,
                 if (!link.enabled) stringResource(R.string.share_switched_off) else null,
                 if (!link.mine) stringResource(R.string.share_by_member) else null,
@@ -294,7 +318,7 @@ private fun FreshLink(url: String, onDone: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewLinkForm(
-    rules: ShareLinks.Rules, onCancel: () -> Unit,
+    rules: ShareLinks.Rules, words: ShareWords, onCancel: () -> Unit,
     /** The link an edit changes (its settings fill the form; a password left blank stays as it is); null mints a new one. */
     editing: ShareLinks.Link? = null,
     /** role, label, password (null: untouched, blank: none), end; answers why not, or null once done. */
@@ -319,11 +343,11 @@ private fun NewLinkForm(
         FilterChip(selected = role == ShareLinks.READ, onClick = { role = ShareLinks.READ }, label = { Text(stringResource(R.string.share_role_viewer)) })
         if (rules.contribute) FilterChip(
             selected = role == ShareLinks.READ_WRITE, onClick = { role = ShareLinks.READ_WRITE },
-            label = { Text(stringResource(R.string.share_role_contributor)) },
+            label = { Text(stringResource(words.contributor)) },
         )
     }
     Text(
-        stringResource(if (role == ShareLinks.READ) R.string.share_role_viewer_hint else R.string.share_role_contributor_hint),
+        stringResource(if (role == ShareLinks.READ) words.viewerHint else words.contributorHint),
         style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(vertical = 6.dp),
     )
     OutlinedTextField(label, { label = it }, label = { Text(stringResource(R.string.share_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())

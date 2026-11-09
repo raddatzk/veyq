@@ -99,7 +99,7 @@ struct PotHeaderActions: View {
                 }
             }
         }
-        .sheet(isPresented: $sharing) { PotShareSheet(model: model, ref: ref) }
+        .sheet(isPresented: $sharing) { ShareSheet(model: model, ref: ref.at) }
         .sheet(isPresented: $reporting) { ReportSheet(model: model, ref: ref.at) }
         // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.
         .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
@@ -140,8 +140,8 @@ struct PotHeaderActions: View {
 /// What a delete into the trash says, at the bottom of the shell: "“x” moved to the trash." with its Undo for as long as the
 /// web offers it (`TRASH_UNDO_MS`, 6 s), or a refusal; it goes by itself.
 /// A folder's core actions on Home (the web's level header: `standardNodeActions` and `coreNodeActions` for a folder), in one
-/// "more" menu so a level's bar keeps room for its title: the heart, then rename, move, its cover, report and delete. Its
-/// links, download and copy are not offered yet.
+/// "more" menu so a level's bar keeps room for its title: share, the heart, then rename, move, its cover, report and delete.
+/// Its download and copy are not offered yet.
 struct FolderHeaderActions: View {
     @Bindable var model: AppModel
     let folder: NodeAt
@@ -155,10 +155,16 @@ struct FolderHeaderActions: View {
     @State private var pickingCover = false
     @State private var coverItem: PhotosPickerItem?
     @State private var reporting = false
+    @State private var sharing = false
 
     var body: some View {
-        // One "more" menu, the heart its first entry (as Files' folder menu): a level's bar keeps room for its title.
+        // One "more" menu, Share and the heart its first entries (as Files' folder menu): a level's bar keeps room for its title.
         Menu {
+                // The folder's links (core's share action, `nodeRights.share`): offered where the tenant has links on. The
+                // app reaches no guest's identity folder (they live in drop boxes, which it does not open yet).
+                if model.linkRules().on {
+                    Button("Share…", systemImage: "square.and.arrow.up") { sharing = true }
+                }
                 if let pinned {
                     Button(pinned ? "Remove from Favorites" : "Add to Favorites", systemImage: pinned ? "heart.slash" : "heart") {
                         self.pinned = !pinned
@@ -201,6 +207,7 @@ struct FolderHeaderActions: View {
             }
         }
         .sheet(isPresented: $reporting) { ReportSheet(model: model, ref: folder) }
+        .sheet(isPresented: $sharing) { ShareSheet(model: model, ref: folder) }
         .alert("Delete Folder", isPresented: $asking) {
             Button("Delete", role: .destructive) { Task { await model.trash(folder) } }
             Button("Cancel", role: .cancel) {}

@@ -213,8 +213,11 @@ implementation exists but what holds it to the first.
   node's place and lists only folders and what takes its kind (each kind's placement, the app's answer), saying why
   "Move here" cannot be chosen; a name taken there is refused by name before sending, and the move offers the web's
   undo (`NodeMoveTest`, each rule killed by a mutation; a Pot moved into a folder and back, opened there by a fresh
-  session each time, measured live by `PotLiveTest`). A Pot's guest links are listed and minted (`session/ShareLinks.kt`,
-  the web's `manageShares.ts`): READ and READ_WRITE, an optional label, password and end within the tenant's
+  session each time, measured live by `PotLiveTest`). A Pot's and a folder's guest links are listed and minted
+  (`session/ShareLinks.kt`, the web's `manageShares.ts`; one sheet in each app, `ShareSheet`, in the kind's words as the
+  web's `ShareDialogCopy` — a folder's core's, a Pot's Expenses'; a folder's READ_WRITE link minted on Android opens on the
+  web's guest page as a contributor, the Pot below it readable, measured 2026-11-09): READ and READ_WRITE — the web's third,
+  "Add files only", births a drop box and comes with Depot —, an optional label, password and end within the tenant's
   `core.public-shares` rules; `K_share` and the client-minted id stay across a `stale_epoch`, whose retry seals the wrap
   and the recovery copy anew; each row's label and address are rebuilt from its recovery copy at the dialog's own node
   (`v1.json#share_write_token` held by the conformance suite; a link minted in each app opens on the web's guest page,

@@ -704,7 +704,7 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
     var reporting by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
     if (reporting) ReportSheet(open.at, model) { reporting = false }
     val reportOffered by model.reportOffered.collectAsStateWithLifecycle()
-    if (sharing) PotShareSheet(open, model) { sharing = false }
+    if (sharing) ShareSheet(open.at, model) { sharing = false }
     // The Pot's links (core's share action, a header button as the web's): offered where the tenant has links on.
     if (model.linkRules().on) androidx.compose.material3.IconButton(onClick = { sharing = true }) {
         androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, stringResource(R.string.share_title))
@@ -821,9 +821,9 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
 }
 
 /**
- * A folder's core actions on Home (the web's level header: `standardNodeActions` and `coreNodeActions` for a folder): the
- * heart, then rename, move, its cover, report and delete — what holds for a node of any kind. Its links, download and
- * copy are not offered yet.
+ * A folder's core actions on Home (the web's level header: `standardNodeActions` and `coreNodeActions` for a folder): its
+ * links (a bar action, as a Pot's), the heart, then rename, move, its cover, report and delete — what holds for a node of
+ * any kind. Its download and copy are not offered yet.
  */
 @Composable
 private fun FolderHeaderActions(folder: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, snackbar: androidx.compose.material3.SnackbarHostState, scope: kotlinx.coroutines.CoroutineScope, rootName: String) {
@@ -832,6 +832,13 @@ private fun FolderHeaderActions(folder: me.raddatz.veyq.mobile.navigation.NodeAt
     var reporting by androidx.compose.runtime.remember(folder.nodeId) { androidx.compose.runtime.mutableStateOf(false) }
     val reportOffered by model.reportOffered.collectAsStateWithLifecycle()
     if (reporting) ReportSheet(folder, model) { reporting = false }
+    var sharing by androidx.compose.runtime.remember(folder.nodeId) { androidx.compose.runtime.mutableStateOf(false) }
+    if (sharing) ShareSheet(folder, model) { sharing = false }
+    // The folder's links (core's share action, `nodeRights.share`): offered where the tenant has links on. The app reaches
+    // no guest's identity folder (they live in drop boxes, which it does not open yet), where none is.
+    if (model.linkRules().on) androidx.compose.material3.IconButton(onClick = { sharing = true }) {
+        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, stringResource(R.string.share_folder_title))
+    }
     if (moving) {
         NodeMoveSheet(folder, rootName, model, onMoved = { to, from ->
             scope.launch {

@@ -312,6 +312,12 @@
     <string name="move_refused_scope_deleting">Dieser Bereich wird gelöscht; nichts kann verschoben werden.</string>
     <string name="move_refused_failed">Das Verschieben hat nicht geklappt. Bitte versuche es erneut.</string>
     <!-- Die Links einer Kasse (expenses.share und sharing des Webs). -->
+    <string name="share_folder_title">Diesen Ordner teilen</string>
+    <string name="share_folder_intro">Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten.</string>
+    <string name="share_folder_role_contributor">Ansehen + Dateien hinzufügen</string>
+    <string name="share_folder_role_viewer_hint">Wer den Link hat, kann diesen Ordner mit allem darin ansehen — schreibgeschützt.</string>
+    <string name="share_folder_role_contributor_hint">Wer den Link hat, kann ansehen, Ordner und Inhalte hinzufügen, darin verschieben und Dateien hochladen — auch über jede Datei, die schon darin liegt, deine eingeschlossen. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.</string>
+    <string name="share_folder_delete_confirm">Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Was Gäste angelegt haben, bleibt in diesem Ordner.</string>
     <string name="share_title">Diese Kasse teilen</string>
     <string name="share_intro">Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese Kasse, und du kannst ihn jederzeit abschalten.</string>
     <string name="share_new">Neuer Link</string>

@@ -1,13 +1,47 @@
 import SwiftUI
 import VeyqCore
 
-/// A Pot's guest links (the web's `PotShareDialog`, core's `FolderShareDialog` with Expenses' words): the links on it, newest
+/// The sentences a node's share sheet says in its kind's words (the web's `ShareDialogCopy`): a folder's are core's
+/// (`share.folder.*`), a Pot's Expenses' (`expenses.share.*`). The rest of the sheet is the same for every kind.
+struct ShareWords {
+    let title: String
+    let intro: String
+    let contributor: String
+    let viewerHint: String
+    let contributorHint: String
+    let deleteConfirm: String
+
+    /// The words of `kind`'s share sheet: a Pot's, else core's folder words (the web's default `ShareDialogCopy`).
+    static func of(_ kind: String) -> ShareWords {
+        if kind == PotSession.companion.KIND {
+            return ShareWords(
+                title: String(localized: "Share this Pot"),
+                intro: String(localized: "Create a link anyone can open in a browser — no account, no install. It shows only this Pot, and you can switch it off anytime."),
+                contributor: String(localized: "View + contribute"),
+                viewerHint: String(localized: "Anyone with the link sees the entries, balances and overview, read-only."),
+                contributorHint: String(localized: "Anyone with the link can also add, change and delete entries, and add and rename people."),
+                deleteConfirm: String(localized: "Delete this link for good? It can never be switched on or renewed again. Entries guests wrote stay in the Pot.")
+            )
+        }
+        return ShareWords(
+            title: String(localized: "Share this folder"),
+            intro: String(localized: "Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime."),
+            contributor: String(localized: "View + add files"),
+            viewerHint: String(localized: "Anyone with the link can look at this folder and everything in it, read-only."),
+            contributorHint: String(localized: "Anyone with the link can look, add folders and content, move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history."),
+            deleteConfirm: String(localized: "Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.")
+        )
+    }
+}
+
+/// A node's guest links (core's `FolderShareDialog`, a Pot's with Expenses' words, `ShareWords`): the links on it, newest
 /// first, each copied from here; "New link" mints one — view only, or view and contribute where the tenant allows it, an
 /// optional label only the member sees, a password and an end where the member wants them or the tenant's rules require
-/// them — and shows it once to copy or share. Switching a link off, renewing and editing come with the subtree's re-key.
-struct PotShareSheet: View {
+/// them — and shows it once to copy or share. Switching a link off re-keys what is below it.
+struct ShareSheet: View {
     let model: AppModel
-    let ref: ObjectRef
+    let ref: NodeAt
+    private var words: ShareWords { ShareWords.of(ref.kind) }
     @Environment(\.dismiss) private var dismiss
     @State private var links: [ShareLinks.Link]?
     @State private var failed = false
@@ -25,7 +59,7 @@ struct PotShareSheet: View {
                 if let fresh {
                     FreshLinkView(url: fresh) { self.fresh = nil }
                 } else if let link = editing {
-                    NewLinkForm(rules: model.linkRules(), editing: link, onCancel: { editing = nil }) { role, label, password, expiresAt in
+                    NewLinkForm(rules: model.linkRules(), words: words, editing: link, onCancel: { editing = nil }) { role, label, password, expiresAt in
                         let r = await model.editLink(ref, shareId: link.shareId, edit: ShareLinkChanges.Edit(label: label, password: password, expiresAt: expiresAt, role: role))
                         guard r.outcome == .done else { return Self.changed(r.outcome) }
                         editing = nil
@@ -33,7 +67,7 @@ struct PotShareSheet: View {
                         return nil
                     }
                 } else if creating {
-                    NewLinkForm(rules: model.linkRules(), onCancel: { creating = false }) { role, label, password, expiresAt in
+                    NewLinkForm(rules: model.linkRules(), words: words, onCancel: { creating = false }) { role, label, password, expiresAt in
                         let minted = await model.mintLink(ref, role: role, label: label, password: password ?? "", expiresAt: expiresAt)
                         guard minted.outcome == .created, let url = minted.url else { return Self.problem(minted.outcome) }
                         creating = false
@@ -45,7 +79,7 @@ struct PotShareSheet: View {
                     list
                 }
             }
-            .navigationTitle("Share this Pot")
+            .navigationTitle(words.title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -62,7 +96,7 @@ struct PotShareSheet: View {
             Button("Delete link", role: .destructive) { Task { await delete(link) } }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("Delete this link for good? It can never be switched on or renewed again. Entries guests wrote stay in the Pot.")
+            Text(words.deleteConfirm)
         }
     }
 
@@ -97,7 +131,7 @@ struct PotShareSheet: View {
     private var list: some View {
         List {
             Section {
-                Text("Create a link anyone can open in a browser — no account, no install. It shows only this Pot, and you can switch it off anytime.")
+                Text(words.intro)
                     .font(.subheadline).foregroundStyle(Role.muted)
                 if model.linkRules().on {
                     Button("New link", systemImage: "plus") { creating = true }
@@ -115,7 +149,7 @@ struct PotShareSheet: View {
                         let canRenew = link.mine || !link.enabled
                         let canSwitchOff = link.enabled && link.mine
                         let canDelete = !link.enabled && link.deletable
-                        LinkRow(link: link, busy: busy == link.shareId)
+                        LinkRow(link: link, words: words, busy: busy == link.shareId)
                             // Apple's HIG: a row's actions as swipe actions and its context menu, as Mail's
                             .swipeActions(edge: .trailing) {
                                 if canSwitchOff {
@@ -181,11 +215,12 @@ struct PotShareSheet: View {
 /// One link: its label (else its role), when it was made and ends, its badges, and its copy where it can be rebuilt.
 private struct LinkRow: View {
     let link: ShareLinks.Link
+    let words: ShareWords
     let busy: Bool
     @State private var copied = false
 
     private var roleWord: String {
-        link.role == ShareLinks.shared.READ ? String(localized: "View only") : String(localized: "View + contribute")
+        link.role == ShareLinks.shared.READ ? String(localized: "View only") : words.contributor
     }
 
     var body: some View {
@@ -243,6 +278,7 @@ private let passwordMin = 10
 /// not, or nil once minted.
 private struct NewLinkForm: View {
     let rules: ShareLinks.Rules
+    let words: ShareWords
     /// The link an edit changes (its settings fill the form; a password left blank stays as it is); nil mints a new one.
     var editing: ShareLinks.Link? = nil
     let onCancel: () -> Void
@@ -272,12 +308,10 @@ private struct NewLinkForm: View {
             Section {
                 Picker("Role", selection: $role) {
                     Text("View only").tag(ShareLinks.shared.READ)
-                    if rules.contribute { Text("View + contribute").tag(ShareLinks.shared.READ_WRITE) }
+                    if rules.contribute { Text(words.contributor).tag(ShareLinks.shared.READ_WRITE) }
                 }
                 .pickerStyle(.segmented)
-                Text(role == ShareLinks.shared.READ
-                     ? "Anyone with the link sees the entries, balances and overview, read-only."
-                     : "Anyone with the link can also add, change and delete entries, and add and rename people.")
+                Text(role == ShareLinks.shared.READ ? words.viewerHint : words.contributorHint)
                     .font(.caption).foregroundStyle(Role.muted)
                 TextField("Optional label (only you see it)", text: $label)
             }
