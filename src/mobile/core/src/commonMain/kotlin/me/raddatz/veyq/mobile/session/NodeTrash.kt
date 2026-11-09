@@ -43,8 +43,11 @@ object NodeTrash {
     )
 
     /**
-     * The trash of [scopeId], in the server's order; null when it could not be read. An entry whose name does not open
-     * (a guest-sealed one under an identity folder, a parent this device does not hold) is left out, as the web does.
+     * The trash of [scopeId], in the server's order; null when it could not be read. A guest-sealed entry under an identity
+     * folder is left out, as the web's `listTrash` does. So is a member's entry whose name does not open (a parent this device
+     * does not hold, a name sealed to another placement) — there the web differs: one such entry fails its whole trash
+     * ("could not be opened"), which a dev instance showed 2026-11-09 with a Pot an interrupted rename left; here the rest
+     * stays restorable.
      * Read it against the tree read after a restore: a child that stays in the trash opens only under its parent now live.
      */
     @Throws(Exception::class)

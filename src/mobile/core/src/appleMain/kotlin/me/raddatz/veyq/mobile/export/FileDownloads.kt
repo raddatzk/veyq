@@ -37,4 +37,30 @@ object FileDownloads {
             if (!done) remove(path)
         }
     }
+
+    /**
+     * Writes node [nodeId] of [scopeId] with everything under it [kinds] exports to [path] (`NodeExport.walk`, `write`); what
+     * it left out, or null when there is nothing to export (nothing is left at [path] then).
+     */
+    @Throws(Exception::class)
+    suspend fun subtree(
+        tenant: me.raddatz.veyq.mobile.session.TenantSession, scopeId: String, nodeId: String, kinds: NodeExport.Kinds,
+        appVersion: String, nowMs: Long, path: String,
+    ): List<NodeExport.Skipped>? = withContext(Dispatchers.Default) {
+        val walked = NodeExport.walk(tenant, scopeId, nodeId, kinds) ?: return@withContext null
+        val file = fopen(path, "wb") ?: throw IllegalStateException("cannot write $path")
+        var done = false
+        try {
+            NodeExport.write(walked.root, appVersion, nowMs, { tenant.account.primitives.sha256(it) }) { bytes ->
+                if (bytes.isEmpty()) return@write
+                val n = bytes.usePinned { fwrite(it.addressOf(0), 1u, bytes.size.toULong(), file) }
+                if (n != bytes.size.toULong()) throw IllegalStateException("short write to $path")
+            }
+            done = true
+            walked.skipped
+        } finally {
+            fclose(file)
+            if (!done) remove(path)
+        }
+    }
 }

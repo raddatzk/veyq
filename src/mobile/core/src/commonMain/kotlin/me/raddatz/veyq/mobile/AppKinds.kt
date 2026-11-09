@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile
 
 import me.raddatz.veyq.mobile.crypto.Naming
 import me.raddatz.veyq.mobile.expenses.PotCreate
+import me.raddatz.veyq.mobile.expenses.PotExport
 import me.raddatz.veyq.mobile.expenses.PotRekey
 import me.raddatz.veyq.mobile.expenses.PotSession
 import me.raddatz.veyq.mobile.session.NodeRekey
@@ -40,6 +41,29 @@ object AppKinds {
 
     /** What a tenant session re-keys and folds with (`TenantSession.rekeyRules`). */
     val rules = NodeRekey.Rules(rekeys, ::tokenInput)
+
+    /**
+     * How the build's kinds export into a download (the web's `exportContent` hooks, `NodeExport.walk`): a Pot its ledger and
+     * receipts (`PotExport`, its erased people named [deletedName]); every other kind but a folder is left out and said.
+     */
+    fun exports(deletedName: String) = me.raddatz.veyq.mobile.export.NodeExport.Kinds(
+        exports = { it == PotSession.KIND },
+        content = { tenant, node -> PotSession.open(tenant, node.scopeId, node.id)?.let { PotExport.content(it, deletedName) } },
+    )
+
+    /**
+     * How the build's kinds copy under a copied folder (the web's `importContent` for a copy, `SubtreeCopy`): a Pot by
+     * Expenses' copy (`PotCopy`, its erased people named [deletedName]); every other kind but a folder is left out and said.
+     */
+    fun copies(deletedName: String, uuid: () -> String) = me.raddatz.veyq.mobile.export.SubtreeCopy.Kinds(
+        copies = { it == PotSession.KIND },
+        duplicate = { tenant, node, scopeId, parentId ->
+            PotSession.open(tenant, scopeId, node.id)?.let { source ->
+                me.raddatz.veyq.mobile.expenses.PotCopy.duplicate(source, tenant, scopeId, parentId, deletedName, uuid)
+                    .takeIf { it.outcome == me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.COPIED }?.nodeId
+            }
+        },
+    )
 
     /**
      * A kind's header priority (the web's `header.order` of its descriptor, `NodeHeader.plan`): the ids listed first, in
