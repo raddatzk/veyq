@@ -411,59 +411,59 @@ final class AppModel {
 
     // MARK: What another app shared (ADR 0126)
 
-    /// Files shared to veyq, waiting for the Pot they go to (the pick mode), and how many were left out.
-    struct Incoming {
-        let files: [PotSession.PendingReceipt]
-        let refused: Int
-    }
+    /// Files shared to veyq, waiting for the Pot they go to, and how many were left out (core's `ShareInbox`).
+    typealias Incoming = ShareInbox.Incoming
 
+    /// The share's way from arrival to where its files went (core's `ShareInbox`).
+    let inbox = ShareInbox()
+    /// The files waiting (the pick mode is on); nil when none wait.
     private(set) var incoming: Incoming?
-    /// What a Pot took, until its new expense is saved: its editor closed unsaved gives it back to the pick mode.
-    private var taken: Incoming?
     /// How the share ends: true once its files were saved where they went, false when it was cancelled.
     var onShareDone: ((Bool) -> Void)?
+
+    private func syncInbox() { incoming = inbox.waiting.value as? Incoming }
 
     /// Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
     /// they go (ADR 0126 decision 1) — the start does the same while the session is still opening.
     func receiveShare(_ incoming: Incoming) {
         moveShell { Shell.companion.start(lastUsed: nil, space: $0.space) }
-        self.incoming = incoming
+        inbox.receive(incoming: incoming)
+        syncInbox()
     }
 
     /// Files dropped onto the app (ADR 0126 decision 9): an open Pot that takes them opens its new expense with them at once;
     /// anywhere else they wait in the pick mode, as a share's do.
     func receiveDrop(_ incoming: Incoming) {
-        if let ref = shell.openObject, ref.kind == PotSession.companion.KIND, pot?.ref == ref, let view = pot?.view,
-           view.canWrite, !view.people.isEmpty, !incoming.files.isEmpty {
-            self.incoming = incoming
+        if let ref = shell.openObject, ref.kind == PotSession.companion.KIND, pot?.ref == ref, inbox.takesDropOn(view: pot?.view, incoming: incoming) {
+            inbox.receive(incoming: incoming)
+            syncInbox()
         } else {
             receiveShare(incoming)
         }
     }
 
     func cancelShare() {
-        incoming = nil
+        inbox.cancel()
+        syncInbox()
         onShareDone?(false)
     }
 
     /// The waiting files, taken by the Pot opened as their place: its new expense's receipts.
     func takeShare() -> [PotSession.PendingReceipt]? {
-        guard let waiting = incoming, !waiting.files.isEmpty else { return nil }
-        taken = waiting
-        incoming = nil
-        return waiting.files
+        let files = inbox.take()
+        syncInbox()
+        return files
     }
 
-    /// The new expense's editor closed unsaved: the files wait again, for this Pot or another.
+    /// The new expense's editor closed unsaved: the files wait again, for this Pot or another (from Home).
     func returnShare() {
-        guard let t = taken else { return }
-        taken = nil
-        receiveShare(t)
+        if inbox.giveBack() != nil { moveShell { Shell.companion.start(lastUsed: nil, space: $0.space) } }
+        syncInbox()
     }
 
     /// The new expense the shared files went into was saved: the share is done.
     func shareSaved() {
-        taken = nil
+        inbox.saved()
         onShareDone?(true)
     }
 

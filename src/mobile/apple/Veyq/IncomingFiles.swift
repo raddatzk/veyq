@@ -28,7 +28,7 @@ enum IncomingFiles {
             held += data.count
             files.append(AppleSessions.shared.pendingReceipt(id: UUID().uuidString.lowercased(), data: data, type: type, name: name, modifiedAt: nil))
         }
-        return AppModel.Incoming(files: files, refused: refused)
+        return AppModel.Incoming(files: files, refused: Int32(refused))
     }
 
     private static func load(_ provider: NSItemProvider) async -> (Data, String)? {

@@ -775,7 +775,7 @@ internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false 
 
 /** The pick mode's banner: what waits and where it can go, with its cancel. */
 @Composable
-private fun ShareBanner(incoming: ShareIn.Incoming, onCancel: () -> Unit) {
+private fun ShareBanner(incoming: me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming, onCancel: () -> Unit) {
     val palette = LocalPalette.current
     Row(
         Modifier.fillMaxWidth().background(role(palette.accentSoft)).padding(horizontal = 16.dp, vertical = 10.dp),

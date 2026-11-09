@@ -350,7 +350,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         shellWatch?.cancel()
         shellModel = model
         startPending = true
-        model.load(openLastUsed = _incoming.value == null)
+        model.load(openLastUsed = shareInbox.waiting.value == null)
         shellWatch = viewModelScope.launch { model.state.collect { it?.let(::publish) } }
         readRowDetails(t)
         syncAvatars(t)
@@ -358,43 +358,33 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- what another app shared (ADR 0126) ----
 
-    private val _incoming = MutableStateFlow<ShareIn.Incoming?>(null)
-    /** Files shared to veyq, waiting for the Pot they go to (the pick mode); null when none waits. */
-    val incoming: StateFlow<ShareIn.Incoming?> = _incoming.asStateFlow()
+    /** Files shared to veyq, from their arrival to where they went (core's `ShareInbox`). */
+    val shareInbox = me.raddatz.veyq.mobile.expenses.ShareInbox()
 
-    /** What a Pot took, until its new expense is saved: its editor closed unsaved gives it back to the pick mode. */
-    private var taken: ShareIn.Incoming? = null
+    /** Files waiting for the Pot they go to (the pick mode); null when none waits. */
+    val incoming: StateFlow<me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming?> = shareInbox.waiting
 
     /**
      * Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
      * they go (ADR 0126 decision 1) — the start does the same while the session is still opening.
      */
-    fun receiveShare(incoming: ShareIn.Incoming) {
+    fun receiveShare(incoming: me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming) {
         updateShell { Shell.start(null, it.space) }
-        _incoming.value = incoming
+        shareInbox.receive(incoming)
     }
 
-    fun cancelShare() {
-        _incoming.value = null
-    }
+    fun cancelShare() = shareInbox.cancel()
 
     /** The waiting files, taken by the Pot opened as their place: its new expense's receipts. */
-    fun takeShare(): List<PotSession.PendingReceipt>? {
-        val waiting = _incoming.value?.takeIf { it.files.isNotEmpty() } ?: return null
-        taken = waiting
-        _incoming.value = null
-        return waiting.files
-    }
+    fun takeShare(): List<PotSession.PendingReceipt>? = shareInbox.take()
 
-    /** The new expense's editor closed unsaved: the files wait again, for this Pot or another. */
+    /** The new expense's editor closed unsaved: the files wait again, for this Pot or another (from Home). */
     fun returnShare() {
-        taken?.let { taken = null; receiveShare(it) }
+        if (shareInbox.giveBack() != null) updateShell { Shell.start(null, it.space) }
     }
 
     /** The new expense the shared files went into was saved: the share is done. */
-    fun shareSaved() {
-        taken = null
-    }
+    fun shareSaved() = shareInbox.saved()
 
     // ---- core's actions on a node ----
 

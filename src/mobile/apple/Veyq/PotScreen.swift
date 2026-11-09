@@ -67,7 +67,7 @@ struct PotScreen: View {
         // Files shared to veyq and placed here: a new expense with them as its receipts, where entries may be added.
         .task(id: ShareKey(waiting: model.incoming != nil, loaded: model.pot?.ref == ref && model.pot?.view != nil)) {
             // Only while the shell still shows this Pot: files given back (its editor closed unsaved) move the shell Home first.
-            guard model.incoming != nil, model.shell.openObject == ref, model.pot?.ref == ref, let view = model.pot?.view, view.canWrite, !view.people.isEmpty,
+            guard model.incoming != nil, model.shell.openObject == ref, model.pot?.ref == ref, let view = model.pot?.view, model.inbox.goesInto(view: view),
                   let f = view.blankForm(date: FormState.dayString(Date()), separator: decimalSeparator), let files = model.takeShare() else { return }
             editing = Editing(entryId: nil, basedOn: nil, people: view.people, form: f, pending: files, fromShare: true)
             sharing = true

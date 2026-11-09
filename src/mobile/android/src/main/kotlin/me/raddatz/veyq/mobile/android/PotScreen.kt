@@ -223,7 +223,7 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
     LaunchedEffect(incoming, view.canWrite) {
         // Only while the shell still shows this Pot: files given back (its editor closed unsaved) move the shell Home first.
         val open = (model.screen.value as? Screen.Signed)?.shell?.openObject == state.ref
-        if (incoming != null && open && view.canWrite && view.people.isNotEmpty()) shared = model.takeShare()
+        if (incoming != null && open && model.shareInbox.goesInto(view)) shared = model.takeShare()
     }
     // Its editor closed unsaved: the files wait again in the pick mode, for this Pot or another.
     shared?.let { files ->

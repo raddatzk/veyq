@@ -16,10 +16,7 @@ import java.io.ByteArrayOutputStream
  * Pot takes and those it refuses. A HEIC photo is taken as a JPEG (decision 7), so the receipt reads in every browser.
  */
 object ShareIn {
-    /** The files waiting for the place they go, and how many were refused (no image or PDF, too large, too many). */
-    class Incoming(val files: List<PotSession.PendingReceipt>, val refused: Int)
-
-    fun from(context: Context, intent: Intent?): Incoming? {
+    fun from(context: Context, intent: Intent?): me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming? {
         if (intent == null) return null
         val uris = when (intent.action) {
             Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
@@ -29,7 +26,7 @@ object ShareIn {
         if (uris.isEmpty()) return null
         val read = uris.map { read(context, it) }
         val (fit, refused) = PotShare.split(read.filterNotNull(), { it.type }, { it.name }, { it.size })
-        return Incoming(fit, refused.size + read.count { it == null })
+        return me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming(fit, refused.size + read.count { it == null })
     }
 
     /** One shared stream read whole (one larger than a receipt may be is not read), or null when it does not open. */
