@@ -30,12 +30,13 @@ export interface MediaGalleryLiveCtx {
   memoryKey: () => Uint8Array | null
   onSettle: () => Promise<void>
   /**
-   * The item-favorite filter (ADR 0068), or null when the gallery shows everything. It is applied to
+   * The gallery's filter - the item marks (ADR 0068) and the facts (uc.memory.gallery step 8), one predicate
+   * (`galleryFilter.ts`' `galleryPredicate`) - or null when the gallery shows everything. It is applied to
    * `sortedItems` — the one list the grid, each tile's `index` and `openLightboxAt`'s snapshot all derive from
    * — so filtering narrows the lightbox with the grid. Filtering only the grid would let prev/next page
    * straight out of the selection the user just made.
    */
-  markFilter?: () => ((mediaId: string) => boolean) | null
+  filter?: () => ((item: MediaItem) => boolean) | null
 }
 
 /** A grid tile handed to [MediaGrid]: an in-flight optimistic upload or a listed media. */
@@ -97,8 +98,8 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // both positions in THIS list, never in the merged one, so an in-flight tile can never shift which photo a
   // click opens. The merged list sorts on the same key, so the media order inside it is identical to this.
   const sortedItems = computed(() => {
-    const keep = ctx.markFilter?.() ?? null
-    const listed = keep ? items.value.filter((it) => keep(it.mediaId)) : items.value
+    const keep = ctx.filter?.() ?? null
+    const listed = keep ? items.value.filter(keep) : items.value
     return byCaptureTime(listed, capturedAtOf, sortDirection.value)
   })
 
@@ -120,9 +121,9 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const layoutItems = computed<MemoryTileItem[]>(() =>
     byCaptureTime<MemoryTileItem>(
       [
-        // An in-flight upload carries no marks yet, so it is not part of a filtered view — showing it would
-        // put an unmarked tile inside "only mine". Unfiltered, it keeps its capture-time slot as always.
-        ...(ctx.markFilter?.()
+        // An in-flight upload carries no marks and no opened facts yet, so it is not part of a filtered view — showing
+        // it would put an unmarked tile inside "only mine". Unfiltered, it keeps its capture-time slot as always.
+        ...(ctx.filter?.()
           ? []
           : optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t }))),
         ...sortedItems.value.map((it, index) => ({
@@ -203,7 +204,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     lightboxItems.value = sortedItems.value.slice()
     lightboxIndex.value = index
   }
-  /** Open the lightbox on the medium `mediaId` (a search result, ADR 0125): in the gallery's order, or - where a mark filter
+  /** Open the lightbox on the medium `mediaId` (a search result, ADR 0125): in the gallery's order, or - where a filter
    *  hides it - over every listed medium, so the result opens whatever the gallery shows. False when it is not listed. */
   function openLightboxOn(mediaId: string): boolean {
     const at = sortedItems.value.findIndex((it) => it.mediaId === mediaId)

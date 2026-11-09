@@ -358,7 +358,9 @@ here; the server is blind.
   guest's page does not, a bookmark's embed blocks it; its document of an object replaces the space's). An object found
   outside the page opens its node and leaves `openRequest.ts`'s in-memory request, which the node's page takes - no
   address. Memories: `features/memories/search.ts`. Text is compared through
-  `shared/text/fold.ts`, never `slugify`. After the spaces' groups come People and Settings (decision 9,
+  `shared/text/fold.ts`, never `slugify`. A Memory's gallery filter (`features/memories/galleryFilter.ts`) reads its
+  text with the same grammar - `tailsOf`, `wordPrefix`, `suggestChips`, `satisfies`, `textRank` - and adds only the
+  capture day, a chip of its own; never a second copy of the chip logic. After the spaces' groups come People and Settings (decision 9,
   `peopleAndSettings.ts`): the members from the directory's roster as last read (`tenantPeopleNow`), and the settings
   sections from `features/settings/sections.ts` - **the one list the rail reads too**, gates and `ready` included, so never
   a copy of the section list in the search; a chip hides both groups.

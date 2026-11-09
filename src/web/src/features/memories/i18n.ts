@@ -270,6 +270,17 @@ const en = {
       'This photo’s details (its time and place) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. The photo itself is not affected.',
     sortNewest: 'Newest first',
     sortOldest: 'Oldest first',
+    // The filter by facts (uc.memory.gallery step 8): the search's chips over this Memory's photos, and the name.
+    filter: {
+      label: 'Filter the photos of this Memory',
+      placeholder: 'Day, place, name …',
+      chipDay: 'Day',
+      text: '“{text}”',
+      marksMine: 'your marks',
+      marksEveryone: 'everyone’s marks',
+      // E5: every filter in force, so an empty grid never reads as an empty Memory
+      empty: 'Nothing in this Memory matches {filters}.',
+    },
     // Item marks (ADR 0068). Every string here is written against one rule: a mark is SHARED with the space,
     // so nothing may suggest it is private. "Only mine" names a filter over what is shown — never a promise
     // about who can see it. The count beside the heart is the standing evidence that others do.
@@ -542,6 +553,15 @@ const de: typeof en = {
       'Die Angaben zu diesem Foto (Zeit und Ort) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Das Foto selbst ist davon nicht betroffen.',
     sortNewest: 'Neueste zuerst',
     sortOldest: 'Älteste zuerst',
+    filter: {
+      label: 'Die Fotos dieser Erinnerung filtern',
+      placeholder: 'Tag, Ort, Name …',
+      chipDay: 'Tag',
+      text: '„{text}“',
+      marksMine: 'deine Markierungen',
+      marksEveryone: 'Markierungen von allen',
+      empty: 'Nichts in dieser Erinnerung passt zu {filters}.',
+    },
     marks: {
       mark: 'Dieses Foto markieren — alle in diesem Bereich sehen es',
       unmark: 'Deine Markierung entfernen',

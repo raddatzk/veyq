@@ -324,6 +324,26 @@ acceptanceCriteria:
       so it never reads as a broken Memory (E5). cr-favorites-two-objects (ADR 0068 §7).
     coverage:
       web: { unit: [src/features/memories/components/MemoryDetail.test.ts] }
+  - id: gallery-narrows-by-facts
+    text: >-
+      A member's gallery toolbar holds a filter field with the search's chip grammar (uc.platform.search step 4, core's
+      `query.ts` and the layer's tags input): a capture day (in the viewer's time zone, the corrected capture time first;
+      its label names the year where the Memory spans more than one), a capture year offered only where two or more occur,
+      a place the items carry, and photo or video where both occur; a medium without a capture time matches no day and no
+      year. The text left over matches the original's name, never its place. The chips combine with each other and with
+      the mark filter in one predicate over the one sorted list, so the order is unchanged and the lightbox pages through
+      the narrowed set; an in-flight upload is not part of a filtered view, and a medium blocked by the operator matches
+      no chip and no text. An empty
+      result names every filter in force (E5). Client-only, with no server part: it reads the opened listing alone, nothing
+      is fetched, sent or written to any storage for it, and opening another Memory clears it. A share guest has no field
+      (`memoryRights().filterFacts`, false for every share role). cr-gallery-filter-by-facts.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/galleryFilter.test.ts
+          - src/features/memories/components/MemoryDetail.filter.test.ts
+          - src/features/memories/components/MemoryDetail.guest.test.ts
+          - src/features/memories/rights.test.ts
   - id: marks-are-reclaimed-with-what-they-point-at
     text: >
       Item marks die with the things they describe: the scope purge erases them (enforced structurally — the

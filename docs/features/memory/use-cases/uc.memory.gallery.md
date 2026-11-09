@@ -109,7 +109,10 @@
    - **The field:** a filter field in the gallery's header takes the search's chip grammar
      ([uc.platform.search](../../platform/use-cases/uc.platform.search.md) step 4, one component).
    - **Chips:** a capture **day** (the days the Memory's items were captured on), a capture **year** when the Memory
-     spans more than one, a **place** its items carry, and a **kind** (photo, video).
+     spans more than one, a **place** its items carry, and a **kind** (photo, video, offered when both occur). The day and
+     the year are the viewer's, in the time zone the gallery shows dates in, from the corrected capture time where one is
+     set; a day's chip names its year where the Memory spans more than one. An item without a capture time matches no day
+     and no year, and a medium blocked by the operator matches no chip and no text.
    - **Free text:** whatever is not turned into a chip matches the original's name.
    - **Combining:** the chips combine with each other and with the favorites filter of step 7.
    - **Display:** as with step 7, the ordering rule is unchanged and the filter only removes tiles. The lightbox pages

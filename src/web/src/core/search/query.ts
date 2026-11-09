@@ -57,12 +57,17 @@ export interface ChipSuggestion {
   text: string
 }
 
-const MIN_TAIL = 2
-const PER_TYPE = 3
+/** The shortest tail of the text a chip is suggested for, folded (a year's four digits aside). */
+export const MIN_TAIL = 2
+/** How many chips of one type are suggested at most. */
+export const PER_TYPE = 3
 const YEAR = /^\d{4}$/
 
+// `wordPrefix` and `tailsOf` are exported for a chip type an application adds over the same grammar (Memories' capture day
+// in a gallery's filter, `features/memories/galleryFilter.ts`), so the reading of the typed text is one, never a copy.
+
 /** Whether `name` (folded) has a word that starts with `prefix` (folded), the whole name included. */
-function wordPrefix(name: string, prefix: string): boolean {
+export function wordPrefix(name: string, prefix: string): boolean {
   if (name.startsWith(prefix)) return true
   for (let i = name.indexOf(prefix); i > 0; i = name.indexOf(prefix, i + 1)) if (isBoundary(name, i)) return true
   return false
@@ -71,7 +76,7 @@ function wordPrefix(name: string, prefix: string): boolean {
 const isBoundary = (s: string, i: number) => i === 0 || !/[\p{L}\p{N}]/u.test(s[i - 1])
 
 /** The tails of `text` that start at a word, longest first, each with what stays before it. */
-function tailsOf(text: string): { tail: string; rest: string }[] {
+export function tailsOf(text: string): { tail: string; rest: string }[] {
   const out: { tail: string; rest: string }[] = []
   const re = /\S+/g
   for (let m = re.exec(text); m; m = re.exec(text)) out.push({ tail: text.slice(m.index).trim(), rest: text.slice(0, m.index).trimEnd() })
