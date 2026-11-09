@@ -51,9 +51,9 @@ class NodeRekeyRulesTest {
         // an owner-only node is an owner's
         assertFalse(NodeRekey.isMine(row("a", null, true, ownerOnly = true), owner = false, kinds))
         assertTrue(NodeRekey.isMine(row("a", null, true, ownerOnly = true), owner = true, kinds))
-        // a drop key's replacement and a guest's identity folder are the web's
-        assertFalse(NodeRekey.isMine(row("a", null, true, "DEPOT_DROPBOX", drop = true), owner = true, kinds))
-        assertFalse(NodeRekey.isMine(row("a", null, true, identity = true), owner = true, kinds))
+        // a drop box's drop key and a guest's identity folder are re-keyed here too, by an owner (the server marks them owner-only)
+        assertTrue(NodeRekey.isMine(row("a", null, true, "DEPOT_DROPBOX", drop = true), owner = true, kinds))
+        assertTrue(NodeRekey.isMine(row("a", null, true, identity = true), owner = true, kinds))
     }
 
     @Test

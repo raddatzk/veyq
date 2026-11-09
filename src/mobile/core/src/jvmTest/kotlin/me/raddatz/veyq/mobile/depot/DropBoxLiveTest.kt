@@ -20,6 +20,77 @@ import kotlin.time.Duration.Companion.minutes
  * to its listed size; each file's SHA-256 is printed, to hold against what the guest dropped.
  */
 class DropBoxLiveTest {
+    private suspend fun signIn(): me.raddatz.veyq.mobile.session.TenantSession? {
+        val origin = System.getenv("VEYQ_LIVE") ?: return null
+        val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            testDevice(BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        return account.open(account.defaultTenant!!)
+    }
+
+    /**
+     * A drop box re-keyed with the subtree above it (ADR 0114, the web's `replaceDropKey`). `VEYQ_LIVE_DROPBOX_REKEY_SETUP=<root
+     * folder>` makes a folder there ("App dropre <n>") holding a drop box ("Box") with its link, written to
+     * `VEYQ_LIVE_LINKS_OUT` for a web guest to drop through. `VEYQ_LIVE_DROPBOX_REKEY="<root folder>/<that folder>"` then
+     * mints a READ link on the folder and switches it off: the whole subtree is re-keyed on this device — the drop box's drop
+     * key replaced, its link's public half and every guest's K_up sealed anew, each guest's folder kept under its K_up —, so
+     * nothing of it is due after, and a fresh session reads every guest's file; the same old link then still takes files
+     * (drop through it again, and `VEYQ_LIVE_DROPBOX` reads the new folder too).
+     */
+    @Test
+    fun aDropBoxIsReKeyedWithItsGuestsKept() = runTest(timeout = 5.minutes) {
+        System.getenv("VEYQ_LIVE_DROPBOX_REKEY_SETUP")?.let { rootName ->
+            val tenant = signIn() ?: return@runTest
+            val parent = tenant.nodes().first { it.kind == "FOLDER" && it.parentId == null && it.name == rootName }
+            val name = "App dropre ${System.currentTimeMillis() % 100_000}"
+            val folder = (me.raddatz.veyq.mobile.session.FolderCreate.create(tenant, parent.scopeId, parent.nodeId, name) as me.raddatz.veyq.mobile.session.NodeCreate.Result.Done).created.nodeId
+            val made = DropBoxes.create(tenant, parent.scopeId, folder, "Box", "", null)
+            assertEquals(DropBoxes.Outcome.CREATED, made.outcome)
+            System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(made.url!! + "\n") }
+            println("[$rootName] \"$name\" with its drop box \"Box\": ${made.url}")
+        }
+        System.getenv("VEYQ_LIVE_DROPBOX_REKEY")?.let { spec ->
+            val tenant = signIn() ?: return@runTest
+            val (rootName, folderName) = spec.split('/', limit = 2)
+            val nodes = tenant.nodes()
+            val parent = nodes.first { it.kind == "FOLDER" && it.parentId == null && it.name == rootName }
+            val folder = nodes.first { it.kind == "FOLDER" && it.parentId == parent.nodeId && it.name == folderName }
+            val box = nodes.first { it.kind == DepotFiles.DROPBOX && it.parentId == folder.nodeId }
+            val before = DropBoxes.folders(tenant, box.scopeId, box.nodeId)
+            assertTrue(before.isNotEmpty() && before.all { it.files.isNotEmpty() }, "drop through the link first")
+            val links = me.raddatz.veyq.mobile.session.ShareLinks
+            val minted = links.mint(tenant, folder.scopeId, folder.nodeId, links.READ, "", "", null)
+            val closed = links.switchOff(
+                tenant, folder.scopeId, folder.nodeId, minted.url!!.substringAfter("/s/").substringBefore('#'),
+                me.raddatz.veyq.mobile.AppKinds.rekeys, me.raddatz.veyq.mobile.AppKinds::tokenInput,
+            ) { java.util.UUID.randomUUID().toString() }
+            val rekeyApi = me.raddatz.veyq.mobile.api.apis.RekeyApi(tenant.base, tenant.account.http)
+            if (closed != me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED) {
+                for (r in tenant.account.call { rekeyApi.listRekeyNodes(folder.scopeId) }.nodes.filter { it.due }) println("    due: ${r.id} ${r.kind} parent=${r.parentId} ownerOnly=${r.ownerOnly} identity=${r.shareIdentityId} drop=${r.sealedDropPrivateKey != null}")
+            }
+            assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED, closed, "the subtree was not re-keyed whole")
+            val due = tenant.account.call { rekeyApi.listRekeyNodes(folder.scopeId) }.nodes.filter { it.due }.map { it.id }
+            assertEquals(emptyList(), due, "a node of the space is still due")
+            // a fresh session opens every guest's folder and file through the NEW drop key
+            val fresh = tenant.account.open(tenant.tenant)
+            val after = DropBoxes.folders(fresh, box.scopeId, box.nodeId)
+            assertEquals(before.map { it.label to it.files.map { f -> f.name } }, after.map { it.label to it.files.map { f -> f.name } })
+            val files = DepotFiles.list(fresh)
+            for (f in after) for (n in f.files) {
+                val file = files.getValue(n.id)
+                val out = java.io.ByteArrayOutputStream()
+                DepotFiles.read(fresh, file) { out.write(it) }
+                assertEquals(file.size, out.size().toLong())
+                println("    ${f.label}/${n.name}: sha256 " + MessageDigest.getInstance("SHA-256").digest(out.toByteArray()).joinToString("") { "%02x".format(it) })
+            }
+            println("[$spec] the folder's link switched off: its subtree re-keyed whole, the drop box's guests kept (${after.size} folders)")
+        }
+    }
+
     /**
      * `VEYQ_LIVE_DROPBOX_CREATE=<root folder>`: the app makes a drop box there ("App drop <n>") with its first link (the
      * drop key born with it), mints a second that reuses that key, lists both as the drop box's links, switches the second

@@ -32,12 +32,15 @@ import me.raddatz.veyq.mobile.crypto.utf8
  * entry under the new key — its key re-wrapped, its name re-sealed, its slug token recomputed (its kind's fold,
  * [tokenInput]); its attachment and application blobs; core's cover in its meta; each open link rooted here (a link whose
  * recovery copy opens for no one is named by its digest, and the commit closes it); a link guest's name; the kind's own
- * content through its [ContentRekey]. Staged in slices of 256, then committed — the server swaps it all in, or nothing.
+ * content through its [ContentRekey]. A drop box's drop key is replaced (the web's `replaceDropKey`): a fresh key pair,
+ * its private half under the new key, each WRITE_ONLY link's public half anew under its K_share, each guest's K_up sealed
+ * to the new public half; a guest's identity folder keeps its entry under that K_up. Staged in slices of 256, then
+ * committed — the server swaps it all in, or nothing.
  *
  * What this client leaves for another device, the node staying due ([Outcome.LEFT]): a node only an owner re-keys where
- * this account is no owner; a kind it does not re-key ([Kinds] answers null: Memories' media are the web's); a node
- * with a drop key, a drop-box guest or a guest's identity folder (the drop key's replacement is the web's); and what
- * lies below any of those. Its device's grant behind the scope's current epoch leaves everything.
+ * this account is no owner (a drop box, a guest's identity folder and what lies below them are owner-only); a kind it does
+ * not re-key ([Kinds] answers null: Memories' media are the web's); and what lies below any of those. Its device's grant
+ * behind the scope's current epoch leaves everything.
  */
 object NodeRekey {
     /** A kind's own content moved to the node's new key (the web's `rekeyContent`), staged under [RekeyContext.rekeyId] before the commit. */
@@ -148,7 +151,7 @@ object NodeRekey {
 
     /** Whether this client re-keys [n] at all (see the class); its subtree waits for whoever does. */
     internal fun isMine(n: RekeyNode, owner: Boolean, kinds: Kinds): Boolean =
-        (owner || !n.ownerOnly) && n.shareIdentityId == null && n.sealedDropPrivateKey == null && kinds.contentOf(n.kind) != null
+        (owner || !n.ownerOnly) && kinds.contentOf(n.kind) != null
 
     private enum class Step { COMMITTED, CONFLICT, LEFT, FAILED }
 
@@ -176,7 +179,7 @@ object NodeRekey {
                 val frontier = wanted.filter { parentNotDue(it, byId) }
                 if (frontier.isEmpty()) return Result(Outcome.FAILED, committed) // a parent lags that is not listed
                 val keys = openKeys(account.suite, scopeId, scopeKey, rows)
-                val workable = frontier.filter { it.id !in left && isMine(it, owner, kinds) && it.id in keys }
+                val workable = frontier.filter { it.id !in left && isMine(it, owner, kinds) && it.id in keys.node }
                 if (workable.isEmpty()) return Result(Outcome.LEFT, committed)
                 try {
                     for (node in workable) {
@@ -191,7 +194,8 @@ object NodeRekey {
                         }
                     }
                 } finally {
-                    keys.values.forEach { it.fill(0) }
+                    keys.node.values.forEach { it.fill(0) }
+                    keys.entry.values.forEach { it.fill(0) }
                 }
             }
         } finally {
@@ -202,37 +206,54 @@ object NodeRekey {
     private fun at(scopeId: String, nodeId: String, scopeEpoch: Int, revision: Long) =
         arrayOf<Pair<String, Any>>("scopeId" to scopeId, "nodeId" to nodeId, "epoch" to scopeEpoch.toLong(), "placementRevision" to revision)
 
-    /** Every node's CURRENT key, opened top-down from the rows as listed: a root under the scope's one key, every other under
-     *  its parent's. A node whose chain does not open — or a guest's identity folder, its entry under the guest's `K_up` — is
-     *  absent, and so is what lies below it. */
-    private fun openKeys(suite: V1, scopeId: String, scopeKey: ByteArray, rows: List<RekeyNode>): Map<String, ByteArray> {
+    /** Every node's CURRENT key — and the key its entry lives under — opened top-down from the rows as listed: a root under
+     *  the scope's one key, every other under its parent's, a guest's identity folder under the guest's `K_up` opened through
+     *  its drop box's drop key (`Tree.childEntryKey`). A node whose chain does not open is absent, and so is what lies below. */
+    private class Keys(val node: Map<String, ByteArray>, val entry: Map<String, ByteArray>)
+    // `entry` holds only the keys opened for it — a guest's K_up —, never a parent's key or the scope's one key, which every
+    // round's `fill(0)` would otherwise wipe (the scope key is the session's own: wiped, no root opens any more)
+
+    private fun openKeys(suite: V1, scopeId: String, scopeKey: ByteArray, rows: List<RekeyNode>): Keys {
         val children = rows.groupBy { it.parentId }
         val keys = HashMap<String, ByteArray>()
-        val queue = ArrayDeque(children[null].orEmpty().map { it to scopeKey })
+        val entries = HashMap<String, ByteArray>()
+        val queue = ArrayDeque(children[null].orEmpty().map { Triple(it, null as RekeyNode?, scopeKey) })
         while (queue.isNotEmpty()) {
-            val (row, entryKey) = queue.removeFirst()
-            if (row.shareIdentityId != null) continue
-            val key = runCatching {
-                suite.open(Context("content-key", *at(scopeId, row.id, row.scopeEpoch, row.placementRevision)), entryKey, unb64(row.wrappedContentKey))
+            val (row, parent, parentKey) = queue.removeFirst()
+            val pair = runCatching {
+                val entryKey = entryKeyOf(suite, scopeId, parent, parentKey, row)
+                entryKey to suite.open(Context("content-key", *at(scopeId, row.id, row.scopeEpoch, row.placementRevision)), entryKey, unb64(row.wrappedContentKey))
             }.getOrNull() ?: continue
-            keys[row.id] = key
-            children[row.id].orEmpty().forEach { queue.addLast(it to key) }
+            if (row.shareIdentityId != null) entries[row.id] = pair.first
+            keys[row.id] = pair.second
+            children[row.id].orEmpty().forEach { queue.addLast(Triple(it, row, pair.second)) }
         }
-        return keys
+        return Keys(keys, entries)
+    }
+
+    /** The key [row]'s entry lives under: its parent's key, or a guest's `K_up` for an identity folder (`childEntryKey`). */
+    private fun entryKeyOf(suite: V1, scopeId: String, parent: RekeyNode?, parentKey: ByteArray, row: RekeyNode): ByteArray {
+        val identity = row.shareIdentityId ?: return parentKey
+        val sealedDrop = parent?.sealedDropPrivateKey ?: throw me.raddatz.veyq.mobile.crypto.OpenRefused("content-key")
+        val wrapped = row.wrappedIdentityKey ?: throw me.raddatz.veyq.mobile.crypto.OpenRefused("content-key")
+        val seed = suite.deserializeDropKey(suite.open(Context("drop-private-key", "scopeId" to scopeId, "nodeId" to parent.id), parentKey, unb64(sealedDrop)))
+        return suite.openAs(Context("upload-identity-key", "scopeId" to scopeId, "nodeId" to parent.id, "identityId" to identity), suite.xwingKey(seed), unb64(wrapped))
     }
 
     /** One due node whose parent is not due re-keyed (see the class). The new key lives only for the call. */
     private suspend fun rekeyNode(
         tenant: TenantSession, api: RekeyApi, scopeId: String, scopeKey: ByteArray, current: Int, rows: List<RekeyNode>,
-        byId: Map<String, RekeyNode>, keys: Map<String, ByteArray>, node: RekeyNode, kinds: Kinds,
+        byId: Map<String, RekeyNode>, opened: Keys, node: RekeyNode, kinds: Kinds,
         tokenInput: (kind: String, name: String) -> String?, uuid: () -> String,
     ): Step {
         val account = tenant.account
         val suite = account.suite
         val content = kinds.contentOf(node.kind) ?: return Step.LEFT
+        val keys = opened.node
         val parent = node.parentId?.let { byId[it] ?: return Step.FAILED }
-        // The key the entry lives under: the parent's current key (its re-key ran in an earlier round), the scope's one key at the root.
-        val entryKey = if (parent == null) scopeKey else keys[parent.id] ?: return Step.LEFT
+        // The key the entry lives under: the parent's current key (its re-key ran in an earlier round), the scope's one key at
+        // the root — a guest's identity folder's the guest's K_up, before and after (`entryNew = entryNow`, `rekeyScope.ts`).
+        val entryKey = (if (parent == null) scopeKey else opened.entry[node.id] ?: keys[parent.id]) ?: return Step.LEFT
         val oldKey = keys[node.id] ?: return Step.LEFT
         val name = suite.openField(Context("node-name", *at(scopeId, node.id, node.scopeEpoch, node.placementRevision)), entryKey, unb64(node.encryptedName)).decodeToString()
         val fold = tokenInput(node.kind, name) ?: return Step.LEFT
@@ -246,7 +267,15 @@ object NodeRekey {
         val rekeyId = uuid()
         try {
             val parts = account.call { api.getNodeRekeyParts(scopeId, node.id) }
-            if (parts.identities.any { it.wrappedIdentityKey != null } || parts.shares.any { it.hasDropPublicKey }) return Step.LEFT
+            // A drop box's drop key is REPLACED (the web's `replaceDropKey`): a fresh key pair, its private half under the new
+            // key; every WRITE_ONLY link's public half anew under its own K_share; every guest's K_up sealed to the new public
+            // half (the guest keeps its K_up and its folder).
+            val oldDrop = node.sealedDropPrivateKey?.let {
+                suite.deserializeDropKey(suite.open(Context("drop-private-key", "scopeId" to scopeId, "nodeId" to node.id), oldKey, unb64(it)))
+            }
+            if (oldDrop == null && parts.shares.any { it.hasDropPublicKey }) return Step.FAILED
+            val freshDrop = oldDrop?.let { suite.generateDropKey() }
+            val freshPublic = freshDrop?.let { suite.serializeHybridPublic(suite.dropKeyPublic(it)) }
             val childEntries = childFolds.map { (c, childName, childFold) ->
                 val childKey = suite.open(Context("content-key", *at(scopeId, c.id, c.scopeEpoch, c.placementRevision)), oldKey, unb64(c.wrappedContentKey))
                 try {
@@ -272,12 +301,26 @@ object NodeRekey {
                     // the copy opens for no one: named by the digest of the copy as served, and the commit closes that link
                     RekeyShareWrap(s.shareId, lostCopyDigest = b64(suite.p.sha256(utf8(s.sealedShareKey))))
                 } else try {
-                    RekeyShareWrap(s.shareId, wrap = if (s.hasWrap) b64(suite.seal(Context("share-key"), kShare, newKey)) else null)
+                    RekeyShareWrap(
+                        s.shareId,
+                        wrap = if (s.hasWrap) b64(suite.seal(Context("share-key"), kShare, newKey)) else null,
+                        sealedDropPublicKey = if (s.hasDropPublicKey) b64(suite.seal(Context("drop-public-key"), kShare, freshPublic!!)) else null,
+                    )
                 } finally {
                     kShare.fill(0)
                 }
             }
             val identities = parts.identities.map { i ->
+                i.wrappedIdentityKey?.let { wrapped ->
+                    val drop = oldDrop ?: throw me.raddatz.veyq.mobile.crypto.OpenRefused("upload-identity-key")
+                    val context = Context("upload-identity-key", "scopeId" to scopeId, "nodeId" to node.id, "identityId" to i.identityId)
+                    val kUp = suite.openAs(context, suite.xwingKey(drop), unb64(wrapped))
+                    try {
+                        return@map RekeyIdentitySeal(i.identityId, wrappedIdentityKey = b64(suite.sealTo(context, suite.dropKeyPublic(freshDrop!!), kUp)))
+                    } finally {
+                        kUp.fill(0)
+                    }
+                }
                 val sealed = i.sealedDisplayName ?: return@map RekeyIdentitySeal(i.identityId)
                 val context = Context("share-identity-name", "scopeId" to scopeId, "shareId" to i.shareId, "identityId" to i.identityId)
                 val plain = suite.openField(context, oldKey, unb64(sealed))
@@ -302,6 +345,7 @@ object NodeRekey {
                 slugToken = b64(suite.slugToken(entryKey, parent?.id ?: scopeId, fold)),
                 wrappedContentKey = b64(suite.seal(Context("content-key", *sealedAt), entryKey, newKey)),
                 parentId = parent?.id, parentEpoch = parent?.epoch, wrappedMeta = wrappedMeta,
+                sealedDropPrivateKey = freshDrop?.let { b64(suite.seal(Context("drop-private-key", "scopeId" to scopeId, "nodeId" to node.id), newKey, suite.serializeDropKey(it))) },
             )
             val r = account.respond { api.commitNodeRekey(scopeId, node.id, rekeyId, commit) }
             return when {

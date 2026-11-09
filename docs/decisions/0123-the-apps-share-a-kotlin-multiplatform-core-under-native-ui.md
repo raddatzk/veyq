@@ -232,8 +232,11 @@ implementation exists but what holds it to the first.
   Expenses' `expenses/PotRekey.kt` (every revision's `K_rev`); a folder, a file, a Depot drop box and a bookmark need
   none. The run resumes from the server's marks: an app closed mid-run leaves the rest due, and a member's device that
   opens the tenant finishes, in the background, what it can of every scope it is served as re-keying (`NodeRekey.resume`).
-  What this client does not fully hold — a Memory or a Chapter (Memories is not in the app yet), a node with a drop key,
-  an identity folder, a node only an owner may re-key — is left due for a device that does, and the app says so (a
+  A drop box's drop key is replaced as the web's `replaceDropKey` does (a fresh key pair, each WRITE_ONLY link's public
+  half and each guest's `K_up` sealed to it anew, a guest's identity folder kept under its `K_up`); drop boxes and
+  identity folders are owner-only, so a member's device that is no owner leaves them due. What this client does not
+  fully hold — a Memory or a Chapter (Memories is not in the app yet), a node only an owner may re-key where it is
+  none — is left due for a device that does, and the app says so (a
   Pot's re-key with an entry and a receipt, the other link still opening it on the web's guest page and the closed one
   nothing, measured live by `PotLiveTest`; a revision key sealed under the old key killed by it; the web opens a Pot the
   iOS app re-keyed, receipt included; a close of a folder with a Pot and a folder holding a Pot below re-keys all four,
@@ -333,9 +336,12 @@ implementation exists but what holds it to the first.
   reuses it (`drop_key_exists` re-read), and its close re-keys nothing (it opens no key). A drop box's own sheet lists,
   copies, mints, switches off and deletes its links. Measured 2026-11-09: a drop box the app made with its link, a second
   link minted on its key and switched off (`DropBoxLiveTest`), a web guest dropping through the app's link and both the app
-  (to the SHA-256) and the web's member page opening what they dropped; the same made from Android's share sheet. Not
-  built yet: reactivating a switched-off drop box link, the space's top level's "Add files only", a drop box's re-key
-  (it stays due for a web device), moving a guest's folder out, a file's copy and its place in a folder's download (both
+  (to the SHA-256) and the web's member page opening what they dropped; the same made from Android's share sheet; a
+  folder holding a drop box with a web guest's files re-keyed whole by the app twice, nothing left due, every guest's
+  file read to its SHA-256 by a fresh session, the same old link taking two more guests' files between the runs and the
+  web's member page opening all three guests' folders after (`DropBoxLiveTest`; the `K_up` left unsealed turns it red, the
+  guest's folder staying due). Not built yet: reactivating a switched-off drop box link, the space's top level's "Add
+  files only", moving a guest's folder out, a file's copy and its place in a folder's download (both
   left out and said), a folder upload, the uploader on a file's page.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
