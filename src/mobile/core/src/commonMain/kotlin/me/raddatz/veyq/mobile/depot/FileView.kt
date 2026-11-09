@@ -20,6 +20,13 @@ object FileView {
 
     enum class Kind { IMAGE, MEDIA, PDF, TEXT, TOO_LARGE, EMPTY, UNSUPPORTED }
 
+    /** What the page says where it shows no content of [kind]: too large, empty, else not shown here. */
+    fun message(kind: Kind): me.raddatz.veyq.mobile.words.Msg = when (kind) {
+        Kind.TOO_LARGE -> me.raddatz.veyq.mobile.words.Msg.FILE_TOO_LARGE
+        Kind.EMPTY -> me.raddatz.veyq.mobile.words.Msg.FILE_EMPTY
+        else -> me.raddatz.veyq.mobile.words.Msg.FILE_UNSUPPORTED
+    }
+
     /**
      * What to show: its [kind], the sniffed [mime] and its [fileExtension] (what a file handed to the platform's viewer is named
      * by), how many [frames] to read for it (all, or a text's first [TEXT_CAP] bytes), and whether a text is [truncated].

@@ -128,6 +128,7 @@ func say(piece: Piece) -> String {
     case let p as Piece.Said: say(notice: p.notice)
     case let p as Piece.Plain: p.text
     case let p as Piece.Day: localDay(p.iso)
+    case let p as Piece.Size: ByteCountFormatter.string(fromByteCount: p.bytes, countStyle: .file)
     case let p as Piece.Money: money(p.amount, p.currency, p.minorUnits)
     default: ""
     }

@@ -93,22 +93,13 @@ internal fun FileScreen(ref: ObjectRef, model: AppModel) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // the facts (Depot's `detail`): size, the sealed type (a claim, shown as such), modified
         if (file != null && file.hasContent) {
-            val facts = listOfNotNull(
-                file.size?.let { android.text.format.Formatter.formatShortFileSize(context, it) },
-                file.type ?: stringResource(R.string.file_type_unknown),
-                file.modifiedAt?.let { stringResource(R.string.depot_modified, java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(it))) },
-            )
+            val facts = me.raddatz.veyq.mobile.depot.DepotFiles.facts(file).map { piece(it) }
             Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             // who uploaded it (Depot's header fact): a member by name, one who left, a guest by the name it gave itself
             var uploader by remember(file.blobId, file.uploaderKey) { mutableStateOf<me.raddatz.veyq.mobile.depot.Uploaders.Uploader?>(null) }
             LaunchedEffect(file.blobId, file.uploaderKey) { uploader = model.uploader(file) }
             uploader?.let { u ->
-                val who = when (u.kind) {
-                    me.raddatz.veyq.mobile.depot.Uploaders.Kind.MEMBER -> u.name.orEmpty()
-                    me.raddatz.veyq.mobile.depot.Uploaders.Kind.FORMER -> stringResource(R.string.people_former_member)
-                    me.raddatz.veyq.mobile.depot.Uploaders.Kind.GUEST -> u.name?.let { stringResource(R.string.depot_guest_name, it) } ?: stringResource(R.string.depot_a_guest)
-                }
-                Text(stringResource(R.string.depot_uploaded_by, who), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                Text(say(me.raddatz.veyq.mobile.depot.Uploaders.words(u)), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             }
         }
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
@@ -121,15 +112,7 @@ internal fun FileScreen(ref: ObjectRef, model: AppModel) {
                         Text(stringResource(R.string.file_opening), color = role(palette.muted), modifier = Modifier.padding(top = 8.dp))
                     }
                     Shown.Failed -> Note(stringResource(R.string.file_open_failed))
-                    is Shown.Message -> Note(
-                        stringResource(
-                            when (s.kind) {
-                                FileView.Kind.TOO_LARGE -> R.string.file_too_large
-                                FileView.Kind.EMPTY -> R.string.file_empty
-                                else -> R.string.file_unsupported
-                            },
-                        ),
-                    )
+                    is Shown.Message -> Note(say(FileView.message(s.kind)))
                     is Shown.Picture -> Image(s.image, ref.name, Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
                     is Shown.Text -> Column(Modifier.fillMaxSize()) {
                         if (s.truncated) Text(stringResource(R.string.file_text_truncated), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))

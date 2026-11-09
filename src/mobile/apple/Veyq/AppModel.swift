@@ -810,50 +810,22 @@ final class AppModel {
         guard tenantSession === t else { return }
         files = read
         var details = pots
-        for (id, f) in read { details[id] = Self.fileDetails(f) }
+        for (id, f) in read { details[id] = DepotFiles.shared.rowDetails(f: f).map { say(piece: $0) } }
         // a drop box's row: how many guests have a folder in it (Depot's `people`)
-        let listed = shellModel?.current?.lists.nodes ?? []
-        for box in listed where box.kind == DepotFiles.shared.DROPBOX {
-            let n = listed.filter { $0.parentId == box.nodeId && $0.kind == "FOLDER" }.count
-            details[box.nodeId] = [n == 0 ? say(.dropboxPeopleNone) : say(.dropboxPeople, n)]
-        }
+        for (id, people) in DropBoxes.shared.people(nodes: shellModel?.current?.lists.nodes ?? []) { details[id] = [say(notice: people)] }
         rowDetails = details
     }
 
-    private static func fileDetails(_ f: DepotFiles.File) -> [String] {
-        guard f.hasContent else { return [say(.depotNotUploaded)] }
-        var parts: [String] = []
-        if let size = f.size { parts.append(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file)) }
-        if let m = f.modifiedAt {
-            let date = Date(timeIntervalSince1970: Double(m.int64Value) / 1000).formatted(date: .abbreviated, time: .shortened)
-            parts.append(say(.depotModified, date))
-        }
-        return parts
-    }
-
-    /// A file page's facts: size, the sealed type (a claim, shown as such), modified.
+    /// A file page's facts: size, the sealed type (a claim, shown as such), modified (core's `DepotFiles.facts`).
     func fileFacts(_ f: DepotFiles.File) -> String {
-        var parts: [String] = []
-        if let size = f.size { parts.append(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file)) }
-        parts.append(f.type ?? say(.fileTypeUnknown))
-        if let m = f.modifiedAt {
-            let date = Date(timeIntervalSince1970: Double(m.int64Value) / 1000).formatted(date: .abbreviated, time: .shortened)
-            parts.append(say(.depotModified, date))
-        }
-        return parts.joined(separator: " · ")
+        DepotFiles.shared.facts(f: f).map { say(piece: $0) }.joined(separator: " · ")
     }
 
     /// What a file's page shows (core's `FileView`): its first frame read and decided by its bytes, then what that needs.
     /// Who uploaded `f`'s content (Depot's `uploaderOf`), as its page names it; nil where nobody is to be named.
     func uploaderText(_ f: DepotFiles.File) async -> String? {
         guard let t = tenantSession, let u = try? await Uploaders.shared.of(tenant: t, file: f) else { return nil }
-        let who: String
-        switch u.kind {
-        case .member: who = u.name ?? ""
-        case .former: who = say(.peopleFormerMember)
-        default: who = u.name.map { say(.depotGuestName, $0) } ?? say(.depotAGuest)
-        }
-        return say(.depotUploadedBy, who)
+        return say(notice: Uploaders.shared.words(u: u))
     }
 
     func fileView(_ f: DepotFiles.File, nodeName: String) async -> FileShown {
@@ -862,7 +834,7 @@ final class AppModel {
         switch d.kind {
         case .image:
             guard let data = v.data, let image = CoverImages.image(data as Data, maxPixels: 4096) else {
-                return .message(say(.fileUnsupported))
+                return .message(say(FileView.shared.message(kind: .unsupported)))
             }
             return .picture(image)
         case .text:
@@ -871,9 +843,7 @@ final class AppModel {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("view-\(UUID().uuidString).\(d.fileExtension ?? "bin")")
             guard (try? await AppleDepot.shared.download(tenant: t, file: f, path: url.path))?.boolValue == true else { return .failed }
             return d.kind == .pdf ? .pdf(url) : .media(url)
-        case .tooLarge: return .message(say(.fileTooLarge))
-        case .empty: return .message(say(.fileEmpty))
-        default: return .message(say(.fileUnsupported))
+        default: return .message(say(FileView.shared.message(kind: d.kind)))
         }
     }
 

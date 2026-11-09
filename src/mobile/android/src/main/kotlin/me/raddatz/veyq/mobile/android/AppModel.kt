@@ -532,13 +532,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         if (tenantSession === t) _files.value = files
         val app = getApplication<Application>()
         // a drop box's row: how many guests have a folder in it (Depot's `people`)
-        val boxes = runCatching { t.nodes() }.getOrDefault(emptyList()).let { nodes ->
-            nodes.filter { it.kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX }.associate { box ->
-                val n = nodes.count { it.parentId == box.nodeId && it.kind == "FOLDER" }
-                box.nodeId to listOf(if (n == 0) app.getString(R.string.dropbox_people_none) else app.resources.getQuantityString(R.plurals.dropbox_people, n, n))
-            }
-        }
-        _rowDetails.value = pots + files.mapValues { (_, f) -> fileDetails(f) } + boxes
+        val boxes = me.raddatz.veyq.mobile.depot.DropBoxes.people(runCatching { t.nodes() }.getOrDefault(emptyList())).mapValues { listOf(app.text(it.value)) }
+        _rowDetails.value = pots + files.mapValues { (_, f) -> me.raddatz.veyq.mobile.depot.DepotFiles.rowDetails(f).map { app.piece(it) } } + boxes
         readCovers(t)
     }
 
@@ -820,16 +815,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** Every file of the tenant with its content's reference and opened meta, by node id (`DepotFiles.list`). */
     private val _files = MutableStateFlow<Map<String, me.raddatz.veyq.mobile.depot.DepotFiles.File>>(emptyMap())
     val files: StateFlow<Map<String, me.raddatz.veyq.mobile.depot.DepotFiles.File>> = _files.asStateFlow()
-
-    /** A file's row facts (Depot's `details`): its size and when it was modified, or that its upload has not finished. */
-    private fun fileDetails(f: me.raddatz.veyq.mobile.depot.DepotFiles.File): List<String> {
-        val app = getApplication<Application>()
-        if (!f.hasContent) return listOf(app.getString(R.string.depot_not_uploaded))
-        return listOfNotNull(
-            f.size?.let { android.text.format.Formatter.formatShortFileSize(app, it) },
-            f.modifiedAt?.let { app.getString(R.string.depot_modified, java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(it))) },
-        )
-    }
 
     /** What [file]'s page shows (node [nodeName]), read as far as it needs (core's `FileView.open`); null when it did not read. */
     suspend fun openFileView(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, nodeName: String): me.raddatz.veyq.mobile.depot.FileView.Opened? {

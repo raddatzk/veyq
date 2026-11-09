@@ -134,21 +134,12 @@ fun money(minor: Long, currency: String?, minorUnits: Int): String {
 }
 
 /** An entry's `YYYY-MM-DD` as the person's locale writes a day; the text itself when it is no date. */
-private fun localDate(iso: String): String = runCatching {
+internal fun localDate(iso: String): String = runCatching {
     java.time.LocalDate.parse(iso).format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))
 }.getOrDefault(iso)
 
 @Composable
 internal fun categoryName(id: String?, view: PotView): String = if (id == null) "" else piece(view.categoryLabel(id))
-
-/** One piece of a row's line (core's `Piece`), written Android's way. */
-@Composable
-internal fun piece(p: me.raddatz.veyq.mobile.words.Piece): String = when (p) {
-    is me.raddatz.veyq.mobile.words.Piece.Said -> say(p.notice)
-    is me.raddatz.veyq.mobile.words.Piece.Plain -> p.text
-    is me.raddatz.veyq.mobile.words.Piece.Day -> localDate(p.iso)
-    is me.raddatz.veyq.mobile.words.Piece.Money -> money(p.amount, p.currency, p.minorUnits)
-}
 
 @Composable
 private fun personName(name: String?) = name ?: stringResource(R.string.pot_deleted_person)

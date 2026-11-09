@@ -17,6 +17,17 @@ object Uploaders {
     /** [kind]; a member's [userId] and [name]; a guest's [name] as it named itself, bare (the page marks it), or null. */
     class Uploader(val kind: Kind, val userId: String? = null, val name: String? = null)
 
+    /** Who uploaded it, as a file's page says it: a member by name, one who left, a guest by the name it gave itself. */
+    fun words(u: Uploader): me.raddatz.veyq.mobile.words.Notice {
+        val who: Any = when (u.kind) {
+            Kind.MEMBER -> u.name.orEmpty()
+            Kind.FORMER -> me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.PEOPLE_FORMER_MEMBER)
+            Kind.GUEST -> u.name?.let { me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_GUEST_NAME, it) }
+                ?: me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_A_GUEST)
+        }
+        return me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_UPLOADED_BY, who)
+    }
+
     private const val USER = "user:"
     private const val SHARE = "share:"
 

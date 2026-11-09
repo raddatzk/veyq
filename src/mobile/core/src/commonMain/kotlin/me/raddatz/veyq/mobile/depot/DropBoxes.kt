@@ -10,6 +10,14 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * "Anna (2)", `displayNamesOf`), each with the files under it.
  */
 object DropBoxes {
+    /** Each drop box's row (Depot's `people`): how many guests have a folder in it, by its node id. */
+    fun people(nodes: List<me.raddatz.veyq.mobile.navigation.NodeRef>): Map<String, me.raddatz.veyq.mobile.words.Notice> =
+        nodes.filter { it.kind == DepotFiles.DROPBOX }.associate { box ->
+            val n = nodes.count { it.parentId == box.nodeId && it.kind == "FOLDER" }
+            box.nodeId to if (n == 0) me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DROPBOX_PEOPLE_NONE)
+            else me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DROPBOX_PEOPLE, n)
+        }
+
     /** One guest's folder in a drop box: its node, the name it shows under, the files in it. */
     class GuestFolder(val node: OpenNode, val label: String, val files: List<OpenNode>)
 

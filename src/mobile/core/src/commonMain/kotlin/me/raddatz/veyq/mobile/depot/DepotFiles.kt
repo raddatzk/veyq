@@ -21,6 +21,24 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * the server's `listFiles` per folder, joined with the tenant's tree by node id.
  */
 object DepotFiles {
+    /** "Modified …": when a file's content was last changed, as its uploader's device sealed it. */
+    private fun modified(f: File): me.raddatz.veyq.mobile.words.Piece? = f.modifiedAt?.let {
+        me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_MODIFIED, me.raddatz.veyq.mobile.words.Moment(it)))
+    }
+
+    /** A file's row facts (Depot's `details`): its size and when it was modified, or that its upload has not finished. */
+    fun rowDetails(f: File): List<me.raddatz.veyq.mobile.words.Piece> =
+        if (!f.hasContent) listOf(me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_NOT_UPLOADED)))
+        else listOfNotNull(f.size?.let { me.raddatz.veyq.mobile.words.Piece.Size(it) }, modified(f))
+
+    /** A file page's facts (Depot's `detail`): its size, the sealed type (a claim, shown as such) or "unknown type", modified. */
+    fun facts(f: File): List<me.raddatz.veyq.mobile.words.Piece> = listOfNotNull(
+        f.size?.let { me.raddatz.veyq.mobile.words.Piece.Size(it) },
+        f.type?.let { me.raddatz.veyq.mobile.words.Piece.Plain(it) }
+            ?: me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FILE_TYPE_UNKNOWN)),
+        modified(f),
+    )
+
     const val FILE = "FILE"
     const val DROPBOX = "DEPOT_DROPBOX"
     const val ROLE = "FILE_CONTENT"

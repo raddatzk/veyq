@@ -18,7 +18,7 @@ import me.raddatz.veyq.mobile.session.ShareLinks
 /**
  * What a screen says, as the catalog's key and its arguments (ADR 0127 decisions 1 and 3): each platform renders it in
  * the person's language. An argument is a `String`, an `Int`, a [Bytes] (a size the platform formats its own way),
- * another [Notice] (a word inside the sentence) or a [Joined] list of those.
+ * a [Moment], another [Notice] (a word inside the sentence) or a [Joined] list of those.
  */
 class Notice(val msg: Msg, val args: List<Any> = emptyList()) {
     constructor(msg: Msg, vararg args: Any) : this(msg, args.toList())
@@ -37,7 +37,7 @@ class Joined(val parts: List<Any>, val separator: String) {
 
 /**
  * One piece of a row's line, which a platform writes its own way and joins with the others: words of the catalog, a
- * name as written, a day (ISO, `2026-11-10`) or an amount in a currency's minor units.
+ * name as written, a day (ISO, `2026-11-10`), a size in bytes or an amount in a currency's minor units.
  */
 sealed class Piece {
     class Said(val notice: Notice) : Piece() {
@@ -58,11 +58,24 @@ sealed class Piece {
         override fun toString() = "Day($iso)"
     }
 
+    class Size(val bytes: Long) : Piece() {
+        override fun equals(other: Any?) = other is Size && other.bytes == bytes
+        override fun hashCode() = bytes.hashCode()
+        override fun toString() = "Size($bytes)"
+    }
+
     class Money(val amount: Long, val currency: String?, val minorUnits: Int) : Piece() {
         override fun equals(other: Any?) = other is Money && other.amount == amount && other.currency == currency && other.minorUnits == minorUnits
         override fun hashCode() = amount.hashCode()
         override fun toString() = "Money($amount $currency/$minorUnits)"
     }
+}
+
+/** A moment in a sentence (epoch ms): each platform writes it as its own date and time read ("Nov 10, 2026, 14:05"). */
+class Moment(val epochMs: Long) {
+    override fun equals(other: Any?) = other is Moment && other.epochMs == epochMs
+    override fun hashCode() = epochMs.hashCode()
+    override fun toString() = "Moment($epochMs)"
 }
 
 /** A count of bytes in a sentence: each platform writes it as its own file sizes read ("1.2 MB"). */
