@@ -92,10 +92,13 @@ proxy through this instance would make it learn what each member reads.
    must too, which the Run docs say.
 4. **Embedding is decided by what the share's instance says of itself** — the first use of capability discovery across
    instances ([ADR 0032](0032-capability-discovery-version-gating.md), ADR 0088). The client reads the share's
-   `/api/setup` (this origin's own needs no CORS) and embeds only where its major equals this client's
-   ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md)'s rule for the web client) and it serves `core.public-shares`
+   `/api/setup` (this origin's own needs no CORS) and embeds only where its major is one this client speaks — the
+   window of [ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 5, counted back from this client's major
+   (decision 6's one exception), never a newer major — and it serves `core.public-shares`
    and `core.public-shares.embeddable`; anything else — a refusal, another major, a missing entry, a network error —
-   falls back to ADR 0120's open, with one line saying why. A write's own capability (`.contribute`) is the share's
+   falls back to ADR 0120's open, with one line saying why. Until a major 2 is released that window is this client's
+   own major alone, so the built check — equality — is the rule's whole extent; the guest adapter for an older major
+   is due with major 2 (ADR 0085 § Consequences). A write's own capability (`.contribute`) is the share's
    server's to refuse, as on its page. As built (`core/sharing/shareInstance.ts`): `embeddability` is one pure function
    over what was read, its refusals `switchedOff`, `unreachable` (no answer, or no version or capability list),
    `otherVersion`, `noLinks` and `notEmbeddable`; the fallback line names each but `switchedOff`. "No answer" is its own

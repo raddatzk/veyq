@@ -308,7 +308,11 @@ leaves only when a removal is pending. A year without one has no major, and an u
 the same steps on its own date:
 
 1. **The clients that speak the new major are published first,** so the apps in the stores speak it before any server
-   does. Until a native client exists this step is empty: the web client and admin-web ship in the server's image.
+   does. **From major 2 on, the clients also keep speaking the majors the window still holds** (ADR 0085 decision 5):
+   each native app and the web client's guest embed of another instance's share (ADR 0121 decision 4) carry the
+   adapter of every older major in the window, proved by a CI job against that major's server image, before
+   `VERSION` moves. Major 2's train is the first to need one (major 1's adapter); none is built before it (ADR 0085
+   § Consequences). The web client and admin-web otherwise ship in the server's image and need nothing here.
 2. **The old major's last release, on the commit before the bump:** promote that commit's snapshot from `main`.
 3. **The release branch, cut from that release's tag.** Its own history counts on from it, so its first fix is
    `<old>.<n+1>`. The train ends every branch cut before it, so those get no more releases.
