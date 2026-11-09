@@ -180,6 +180,7 @@ tasks.withType<Test>().configureEach {
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
     environment("VEYQ_VECTORS", vectors.absolutePath)
     environment("VEYQ_ENV_FILE", rootDir.resolve("../../.run/.env").canonicalPath)
+    environment("VEYQ_REPO_ROOT", rootDir.resolve("../..").canonicalPath)
     System.getenv("VEYQ_LIVE")?.let { environment("VEYQ_LIVE", it) }
     testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null }
     inputs.file(vectors).withPropertyName("vectors")
