@@ -44,6 +44,11 @@ state them:
 - **A live region:** check whether the layer has one already, with
   `rg -n "aria-live|role=\"status\"" src/web/src/shared/ui src/web/src/components`, and reuse it.
 
+- **Found by the volume measurement** (`cr-search-at-volume` retrospective): every focus of the field reloads the
+  settings sections - per focus a grant open per group and two account documents. Load them once per session (and
+  again only where the rail itself would reload: a membership or role change it already watches), as a fifth item of
+  this CR; a test counts the reads over two focuses.
+
 ## Phases
 
 Single phase (web only).

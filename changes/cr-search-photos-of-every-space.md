@@ -55,6 +55,13 @@ time, place and the original's name, as the open Memory's are today.
   - `TokenAnswersAreNotCompressedTest` names `listNodeMedia`; check whether the new operation belongs there.
   - Slice tests live beside `MediaListPagingSliceTest` and `MediaListQueryCountSliceTest`, with `MediaSeed.kt`.
 
+- **Build on the slicing** (`cr-search-at-volume`, commit `71b23a327`): the index now builds each space in steps
+  of at most 40 ms with yields between them, and the measured 4x-throttle reserve on the first keystroke is only
+  14-35 ms under the 100 ms bound. So the per-space photo hook runs inside that step loop (opening a page per step, the
+  listing opener in its worker). Add the photos stage to `scripts/measure_volume.py search`, re-run it once, and record
+  the numbers in ADR 0125 § Consequences: both bounds must still hold with the photos indexed (the volume harness seeds
+  photos: `… stage photos <N>`).
+
 ## Design
 
 - **Contract** (`contracts/api/memories/media.openapi.yaml`, tag `media`, under the `MediaApi` root
