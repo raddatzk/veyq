@@ -10,7 +10,14 @@ data class ObjectRef(
     val kind: String,
     val application: ApplicationId,
     val name: String,
-)
+) {
+    /** The node an action is about, as core's node actions take it. */
+    val at: NodeAt get() = NodeAt(scopeId, nodeId, kind, name)
+}
+
+/** A node an action is about, of any kind (an object, a folder): where it is, what kind it is, what it is called. Core's
+ *  node actions (favorite, rename, move, copy, delete, cover, report) take one, whoever owns the node. */
+data class NodeAt(val scopeId: String, val nodeId: String, val kind: String, val name: String)
 
 /** When this device last opened an object (ADR 0122 decision 6: Recent is per install, never synced). */
 data class Use(val ref: ObjectRef, val lastUsedEpochMs: Long)

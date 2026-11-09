@@ -53,6 +53,26 @@ data class Shell(
 
     fun enter(folder: FolderRef): Shell = copy(path = path + folder)
 
+    /**
+     * Home at folder [folderId] (null: the space's root), its path read from [tree] (the space's): where a folder renamed
+     * or moved is now. A folder the tree does not hold, or a served parent cycle, ends the path where it breaks.
+     */
+    fun at(tree: List<NodeRef>, folderId: String?): Shell {
+        val byId = tree.associateBy { it.nodeId }
+        val path = ArrayList<FolderRef>()
+        val seen = HashSet<String>()
+        var id = folderId
+        while (id != null && seen.add(id)) {
+            val n = byId[id] ?: break
+            if (n.isFolder) path.add(0, FolderRef(n.nodeId, n.name))
+            id = n.parentId
+        }
+        return copy(path = path)
+    }
+
+    /** The folder Home shows (null: the root) as a node action takes it, in space [scopeId]. */
+    fun folderAt(scopeId: String): NodeAt? = folder?.let { NodeAt(scopeId, it.nodeId, NodeRef.FOLDER, it.name) }
+
     fun filter(app: ApplicationId?): Shell = copy(filter = app)
 
     /**

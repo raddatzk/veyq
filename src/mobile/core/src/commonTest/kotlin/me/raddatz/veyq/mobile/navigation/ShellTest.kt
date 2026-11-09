@@ -83,6 +83,24 @@ class ShellTest {
     }
 
     @Test
+    fun homeAtAFolderReadsItsPathFromTheTree() {
+        val tree = listOf(
+            NodeRef("s", "a", null, NodeRef.FOLDER, "Reisen"),
+            NodeRef("s", "b", "a", NodeRef.FOLDER, "Rom renamed"),
+            NodeRef("s", "p", "b", "EXPENSES_POT", "Pot"),
+        )
+        val shell = Shell(null, space = "s").enter(FolderRef("b", "Rom"))
+        assertEquals(listOf(FolderRef("a", "Reisen"), FolderRef("b", "Rom renamed")), shell.at(tree, "b").path)
+        assertTrue(shell.at(tree, null).path.isEmpty())
+        // a folder the tree does not hold ends the path there
+        assertTrue(shell.at(tree, "gone").path.isEmpty())
+        // a served cycle ends instead of spinning
+        val cycle = listOf(NodeRef("s", "x", "y", NodeRef.FOLDER, "X"), NodeRef("s", "y", "x", NodeRef.FOLDER, "Y"))
+        assertEquals(2, shell.at(cycle, "x").path.size)
+        assertEquals(NodeAt("s", "b", NodeRef.FOLDER, "Rom"), shell.folderAt("s"))
+    }
+
+    @Test
     fun choosingInTheDrawerClosesTheObjectAndSearch() {
         val s = Shell.start(pot, "s").search(true).choose(ApplicationId.DEPOT)
         assertNull(s.openObject)
