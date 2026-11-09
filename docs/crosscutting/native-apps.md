@@ -87,7 +87,7 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
 - Several instances gated on their major (inbox #436): the apps speak only their own major today.
 
 **Navigation and sharing**
-- A search index beyond names (ADR 0122 decision 7); listing a kind across scopes.
+- Search beyond names: the web's search in the client over what it can open, across every space ([ADR 0125](../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)), taken over once the apps reach the web's features (owner 2026-11-09); listing a kind across scopes.
 - Opening a received link in the app, as its guest, and the handover from the browser that must not carry a link's
   `#k=` key unguarded (#435); a kept link (`SHARE_BOOKMARK`) has no page yet.
 - Dropping files onto the app (Android; Apple's drop is built, not measured).
