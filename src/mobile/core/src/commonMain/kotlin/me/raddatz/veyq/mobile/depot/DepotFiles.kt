@@ -188,6 +188,30 @@ object DepotFiles {
         override fun isFinal(code: String) = code in Codes.FINAL
     }
 
+    /**
+     * What a settled Depot upload offers (Depot's `replaceConfirm`): a name a file already holds offers that file's replace
+     * with what was picked, content someone replaced meanwhile "Replace anyway" over theirs. The item leaves the tray; its
+     * notice says it, with [action] as its button.
+     */
+    class Offer(
+        val notice: me.raddatz.veyq.mobile.words.Notice, val action: me.raddatz.veyq.mobile.words.Msg,
+        val nodeId: String, val source: UploadSource, val expectedBlobId: String?,
+    )
+
+    /** [item]'s offer, or null where it offers nothing; [blobIdOf] is a listed file's content now. */
+    fun offerFor(item: UploadQueue.Item, blobIdOf: (String) -> String?): Offer? {
+        if (item.status != UploadQueue.Status.FAILED) return null
+        val job = item.job
+        return when {
+            job is UploadJob && item.error == Codes.EXISTS -> job.existing?.let { existing ->
+                Offer(me.raddatz.veyq.mobile.words.Notices.replaceOffered(item.name), me.raddatz.veyq.mobile.words.Msg.DEPOT_REPLACE_TITLE, existing, job.picked, blobIdOf(existing))
+            }
+            job is ReplaceJob && item.error == Codes.STALE ->
+                Offer(me.raddatz.veyq.mobile.words.Notices.replaceStale(item.name), me.raddatz.veyq.mobile.words.Msg.DEPOT_REPLACE_ANYWAY, job.file.nodeId, job.picked, job.currentBlobId)
+            else -> null
+        }
+    }
+
     private const val OCTET = "application/octet-stream"
 
     /**

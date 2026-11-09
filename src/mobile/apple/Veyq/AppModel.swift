@@ -1078,23 +1078,13 @@ final class AppModel {
     private func depotSettled(_ item: UploadQueue.Item) async {
         guard let t = tenantSession else { return }
         await refreshLists(t)
-        guard item.status == .failed else { return }
-        if let job = item.job as? DepotFiles.UploadJob, item.error == DepotFiles.Codes.shared.EXISTS, let existing = job.existing {
-            uploads.remove(id: item.id)
-            let picked = job.picked
-            notice = Notice(
-                text: say(notice: Notices.shared.replaceOffered(name: item.name)),
-                action: say(.depotReplaceTitle)
-            ) { [weak self] in self?.replace(existing, source: picked, expected: self?.files[existing]?.blobId) }
-        } else if let job = item.job as? DepotFiles.ReplaceJob, item.error == DepotFiles.Codes.shared.STALE {
-            uploads.remove(id: item.id)
-            let picked = job.picked
-            let current = job.currentBlobId
-            let nodeId = job.file.nodeId
-            notice = Notice(
-                text: say(notice: Notices.shared.replaceStale(name: item.name)),
-                action: say(.depotReplaceAnyway)
-            ) { [weak self] in self?.replace(nodeId, source: picked, expected: current) }
+        guard let offer = DepotFiles.shared.offerFor(item: item, blobIdOf: { [files] id in files[id]?.blobId }) else { return }
+        uploads.remove(id: item.id)
+        let nodeId = offer.nodeId
+        let source = offer.source
+        let expected = offer.expectedBlobId
+        notice = Notice(text: say(notice: offer.notice), action: say(offer.action)) { [weak self] in
+            self?.replace(nodeId, source: source, expected: expected)
         }
     }
 

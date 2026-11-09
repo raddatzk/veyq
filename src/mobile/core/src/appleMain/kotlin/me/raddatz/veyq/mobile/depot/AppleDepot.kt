@@ -80,20 +80,8 @@ object AppleDepot {
     /** [file]'s view: its first frame decided by its bytes (the node's name a claim only when it has an extension). */
     @Throws(Exception::class)
     suspend fun view(tenant: TenantSession, file: DepotFiles.File, nodeName: String): Viewed = withContext(Dispatchers.Default) {
-        var head = ByteArray(0)
-        DepotFiles.read(tenant, file, 0, 1) { head = it }
-        val named = if (me.raddatz.veyq.mobile.blob.Sniff.extensionOf(nodeName).isNotEmpty()) nodeName else file.uploadedName
-        val d = FileView.decide(head, file.chunkCount, file.size ?: 0, file.type, named)
-        when (d.kind) {
-            FileView.Kind.IMAGE -> Viewed(d, read(tenant, file, file.chunkCount), null)
-            FileView.Kind.TEXT -> {
-                val parts = ArrayList<ByteArray>()
-                DepotFiles.read(tenant, file, 0, d.frames) { parts += it }
-                val all = parts.fold(ByteArray(0)) { a, b -> a + b }
-                Viewed(d, null, me.raddatz.veyq.mobile.blob.Sniff.decodeText(all.copyOf(minOf(all.size, FileView.TEXT_CAP))))
-            }
-            else -> Viewed(d, null, null)
-        }
+        val o = FileView.open(tenant, file, nodeName)
+        Viewed(o.decision, o.bytes?.toNSData(), o.text)
     }
 
     /** [file]'s first [frames] frames' plaintext, joined (a view's head, an image, a text's first MiB). */

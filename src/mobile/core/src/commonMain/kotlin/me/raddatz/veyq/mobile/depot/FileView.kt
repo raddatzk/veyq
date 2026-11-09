@@ -47,6 +47,38 @@ object FileView {
         return Decision(Kind.UNSUPPORTED)
     }
 
+    /** What a file's page shows, read as far as it needs: the [decision], an image's [bytes], a text's [text]. */
+    class Opened(val decision: Decision, val bytes: ByteArray?, val text: String?)
+
+    /**
+     * [file]'s view (node [nodeName]): its first frame decided by its bytes — the node's name a claim only where it has an
+     * extension, else the uploaded name —, then an image read whole, a text's first [TEXT_CAP] bytes decoded. A PDF or
+     * media file is the platform's to stream ([DepotFiles.read]) into what renders it.
+     */
+    @Throws(Exception::class)
+    suspend fun open(tenant: me.raddatz.veyq.mobile.session.TenantSession, file: DepotFiles.File, nodeName: String): Opened {
+        var head = ByteArray(0)
+        DepotFiles.read(tenant, file, 0, 1) { head = it }
+        val named = if (Sniff.extensionOf(nodeName).isNotEmpty()) nodeName else file.uploadedName
+        val d = decide(head, file.chunkCount, file.size ?: 0, file.type, named)
+        suspend fun frames(until: Int): ByteArray {
+            val parts = ArrayList<ByteArray>()
+            DepotFiles.read(tenant, file, 0, until) { parts += it }
+            val all = ByteArray(parts.sumOf { it.size })
+            var o = 0
+            for (p in parts) {
+                p.copyInto(all, o)
+                o += p.size
+            }
+            return all
+        }
+        return when (d.kind) {
+            Kind.IMAGE -> Opened(d, frames(file.chunkCount), null)
+            Kind.TEXT -> frames(d.frames).let { Opened(d, null, Sniff.decodeText(it.copyOf(minOf(it.size, TEXT_CAP)))) }
+            else -> Opened(d, null, null)
+        }
+    }
+
     private val EXTENSIONS = mapOf(
         "video/quicktime" to "mov", "audio/mp4" to "m4a", "video/mp4" to "mp4", "video/x-matroska" to "mkv", "video/webm" to "webm",
         "video/ogg" to "ogv", "audio/ogg" to "ogg", "audio/wav" to "wav", "audio/flac" to "flac", "audio/mpeg" to "mp3", "audio/aac" to "aac",

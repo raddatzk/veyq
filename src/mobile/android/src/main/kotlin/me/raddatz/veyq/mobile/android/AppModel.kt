@@ -692,23 +692,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val app = getApplication<Application>()
             tenantSession?.let { refreshLists(it) }
-            if (item.status != me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED) return@launch
-            val job = item.job
-            when {
-                job is me.raddatz.veyq.mobile.depot.DepotFiles.UploadJob && item.error == me.raddatz.veyq.mobile.depot.DepotFiles.Codes.EXISTS -> {
-                    val existing = job.existing ?: return@launch
-                    uploads.remove(item.id)
-                    notify(Notice(app.text(me.raddatz.veyq.mobile.words.Notices.replaceOffered(item.name)), app.getString(R.string.depot_replace_title)) {
-                        replace(existing, job.picked, _files.value[existing]?.blobId)
-                    })
-                }
-                job is me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob && item.error == me.raddatz.veyq.mobile.depot.DepotFiles.Codes.STALE -> {
-                    uploads.remove(item.id)
-                    notify(Notice(app.text(me.raddatz.veyq.mobile.words.Notices.replaceStale(item.name)), app.getString(R.string.depot_replace_anyway)) {
-                        replace(job.file.nodeId, job.picked, job.currentBlobId)
-                    })
-                }
-            }
+            val offer = me.raddatz.veyq.mobile.depot.DepotFiles.offerFor(item) { _files.value[it]?.blobId } ?: return@launch
+            uploads.remove(item.id)
+            notify(Notice(app.text(offer.notice), app.words(offer.action)) { replace(offer.nodeId, offer.source, offer.expectedBlobId) })
         }
     }
 
@@ -947,6 +933,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             f.size?.let { android.text.format.Formatter.formatShortFileSize(app, it) },
             f.modifiedAt?.let { app.getString(R.string.depot_modified, java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(it))) },
         )
+    }
+
+    /** What [file]'s page shows (node [nodeName]), read as far as it needs (core's `FileView.open`); null when it did not read. */
+    suspend fun openFileView(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, nodeName: String): me.raddatz.veyq.mobile.depot.FileView.Opened? {
+        val t = tenantSession ?: return null
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { me.raddatz.veyq.mobile.depot.FileView.open(t, file, nodeName) }.getOrNull()
+        }
     }
 
     /** [file]'s content a frame at a time ([DepotFiles.read]). */

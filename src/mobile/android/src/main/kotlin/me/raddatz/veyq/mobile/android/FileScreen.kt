@@ -177,14 +177,9 @@ private fun Note(text: String) {
 
 /** Reads [f] as far as its view needs and makes it showable (off the main thread). */
 private suspend fun show(context: android.content.Context, model: AppModel, f: DepotFiles.File, nodeName: String): Shown {
-    var head = ByteArray(0)
-    model.readFile(f, 0, 1) { head = it }
-    val d = FileView.decide(head, f.chunkCount, f.size ?: 0, f.type, nodeName.takeIf { Sniff.extensionOf(it).isNotEmpty() } ?: f.uploadedName)
-    suspend fun all(frames: Int = f.chunkCount): ByteArray {
-        val out = java.io.ByteArrayOutputStream()
-        model.readFile(f, 0, frames) { out.write(it) }
-        return out.toByteArray()
-    }
+    // core decides and reads what the view needs (`FileView.open`); a PDF or a medium is streamed into a file here
+    val opened = model.openFileView(f, nodeName) ?: return Shown.Failed
+    val d = opened.decision
     suspend fun toCache(): java.io.File {
         val file = java.io.File(context.cacheDir, "view-${java.util.UUID.randomUUID()}.${d.fileExtension}")
         file.outputStream().buffered().use { out -> model.readFile(f) { out.write(it) } }
@@ -192,7 +187,7 @@ private suspend fun show(context: android.content.Context, model: AppModel, f: D
     }
     return when (d.kind) {
         FileView.Kind.IMAGE -> withContext(Dispatchers.Default) {
-            val bytes = all()
+            val bytes = opened.bytes ?: return@withContext Shown.Message(FileView.Kind.UNSUPPORTED)
             val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             var sample = 1
@@ -200,10 +195,7 @@ private suspend fun show(context: android.content.Context, model: AppModel, f: D
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
                 ?.let { Shown.Picture(it.asImageBitmap()) } ?: Shown.Message(FileView.Kind.UNSUPPORTED)
         }
-        FileView.Kind.TEXT -> {
-            val bytes = all(d.frames)
-            Shown.Text(Sniff.decodeText(bytes.copyOf(minOf(bytes.size, FileView.TEXT_CAP))), d.truncated)
-        }
+        FileView.Kind.TEXT -> Shown.Text(opened.text.orEmpty(), d.truncated)
         FileView.Kind.PDF -> withContext(Dispatchers.IO) {
             val file = toCache()
             runCatching {
