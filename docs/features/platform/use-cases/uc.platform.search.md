@@ -21,7 +21,7 @@
 
 1. **Open the search.** The member focuses the search field in the app shell. A keyboard shortcut does the same; on
    a phone, the field is reached from the top bar. Focusing opens nothing: the list opens with the first typed
-   character, and the field keeps its focus colour while the pointer rests on it (owner, 2026-11-09: a click into
+   character - or at once when a chip is set, since the field then already asks something (owner, 2026-11-09), and the field keeps its focus colour while the pointer rests on it (owner, 2026-11-09: a click into
    the field showed a panel and flickering states before anything was typed).
 2. **Load every space.** On the first focus of the session, the client opens the tree of every space the member
    belongs to in this tenant (personal, the tenant's, every group) that it does not hold yet. Each tree is fetched and opened with that space's key, as entering the space

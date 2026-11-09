@@ -33,7 +33,8 @@
 // search, and - instead of results, when a query found nothing - what is searched.
 //
 // **A calm focus** (uc.platform.search step 1, cr-search-calm-focus): focusing starts the index (above) and opens
-// nothing. The list is open only while something is asked - text or a chip: the first typed character opens it, and
+// nothing - unless a chip is set: then the field already asks something, and focusing or clicking into it shows what
+// the chips find (owner 2026-11-09). The list is open only while something is asked - text or a chip: the first typed character opens it, and
 // Backspace to an empty field with no chip closes it (with a chip left, the list stays and follows what remains). A
 // space still loading is said only once the list is open AND the loading has lasted {@link LOADING_DELAY_MS} since
 // then: a load shorter than that shows no state at all, so the panel does not jump through "N spaces…" lines on a
@@ -99,6 +100,12 @@ function onFocus() {
   void refreshSearchIndex().catch(() => undefined)
   void loadTenantPeople().catch(() => undefined)
   sectionsRead ??= sections.load()
+  openForChips()
+}
+/** With a chip set, the field already asks something: focusing it or clicking into it shows what the chips find, with no
+ *  character typed (owner 2026-11-09). Without a chip a focus stays calm (see the header). */
+function openForChips() {
+  if (chips.value.length > 0) open.value = true
 }
 /** The groups the index lists: one the settings answers do not know is a group joined (one they know and the index does
  *  not, left or deleted), and the rail's Groups collection moves with it. */
@@ -388,6 +395,7 @@ const statusSaid = computed(() => loadingShown.value || !!notSearched.value || s
     :aria-label="t('shell.search.label')"
     autocomplete="off"
     @focus="onFocus"
+    @click="openForChips"
     @add="addChip"
     @remove="removeChip"
     @choose="choose"

@@ -176,6 +176,31 @@ describe('the search field', () => {
     expect(listOpen()).toBe(false)
   })
 
+  // owner 2026-11-09: with a chip set the field already asks something, so focusing or clicking into it shows the results
+  it('with a chip set, a focus and a click into the field open the list with what the chip finds; control: no chip, no list', async () => {
+    await mountField()
+    await type('2024')
+    await press('Enter') // the year chip
+    expect(chips()).toEqual(['2024'])
+    await press('Escape')
+    expect(listOpen()).toBe(false)
+    field().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(listOpen()).toBe(true) // a click into the field, still focused
+    expect(resultRows()).toEqual(['Rome 2024 Familie · Trips 2024'])
+    await press('Escape')
+    field().blur()
+    field().dispatchEvent(new FocusEvent('focus'))
+    await flushPromises()
+    expect(listOpen()).toBe(true) // a new focus
+    await press('Backspace') // the chip goes: nothing is asked
+    expect(listOpen()).toBe(false)
+    field().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    field().dispatchEvent(new FocusEvent('focus'))
+    await flushPromises()
+    expect(listOpen()).toBe(false) // control: without a chip a click and a focus stay calm
+  })
+
   // was: the results in their groups (In this space, Other spaces) - now one list with no heading, each row saying where
   it('shows the results as one list under its heading, each with its space and path - the space on screen too', async () => {
     await mountField()
