@@ -198,27 +198,3 @@ struct ReceiptFile: Transferable {
     }
 }
 
-/// A PDF's pages from memory (PDFKit); nothing of the document runs but its rendering.
-#if os(iOS)
-struct PDFPages: UIViewRepresentable {
-    let data: Data
-    func makeUIView(context: UIViewRepresentableContext<PDFPages>) -> PDFView {
-        let v = PDFView()
-        v.autoScales = true
-        v.document = PDFDocument(data: data)
-        return v
-    }
-    func updateUIView(_ v: PDFView, context: UIViewRepresentableContext<PDFPages>) {}
-}
-#else
-struct PDFPages: NSViewRepresentable {
-    let data: Data
-    func makeNSView(context: NSViewRepresentableContext<PDFPages>) -> PDFView {
-        let v = PDFView()
-        v.autoScales = true
-        v.document = PDFDocument(data: data)
-        return v
-    }
-    func updateNSView(_ v: PDFView, context: NSViewRepresentableContext<PDFPages>) {}
-}
-#endif

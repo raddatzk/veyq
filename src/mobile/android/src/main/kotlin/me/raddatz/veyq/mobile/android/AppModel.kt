@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
@@ -679,8 +680,177 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun readRowDetails(t: me.raddatz.veyq.mobile.session.TenantSession) {
-        _rowDetails.value = runCatching { me.raddatz.veyq.mobile.expenses.PotRows.details(t) }.getOrDefault(emptyMap())
+        val pots = runCatching { me.raddatz.veyq.mobile.expenses.PotRows.details(t) }.getOrDefault(emptyMap())
+        val files = runCatching { me.raddatz.veyq.mobile.depot.DepotFiles.list(t) }.getOrDefault(emptyMap())
+        if (tenantSession === t) _files.value = files
+        _rowDetails.value = pots + files.mapValues { (_, f) -> fileDetails(f) }
         readCovers(t)
+    }
+
+    // ---- what the shell says (a snackbar), and an upload under way ----
+
+    /** A notice the shell shows once: its text and, where offered, an action (Depot's "Replace anyway"). */
+    class Notice(val text: String, val action: String? = null, val run: (suspend () -> Unit)? = null)
+
+    private val _notices = kotlinx.coroutines.channels.Channel<Notice>(kotlinx.coroutines.channels.Channel.BUFFERED)
+    val notices: kotlinx.coroutines.flow.Flow<Notice> = _notices.receiveAsFlow()
+
+    fun notify(n: Notice) {
+        _notices.trySend(n)
+    }
+
+    /** The name of the file being uploaded, while one is. */
+    private val _uploading = MutableStateFlow<String?>(null)
+    val uploading: StateFlow<String?> = _uploading.asStateFlow()
+
+    /**
+     * Uploads the picked [uris] one after another under the level shown (`DepotFiles.upload`): a name a file already holds
+     * offers its replace (Depot's `replaceConfirm`), a refusal says why.
+     */
+    fun uploadPicked(scopeId: String, parentId: String?, uris: List<android.net.Uri>) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            for (uri in uris) {
+                val p = picked(uri) ?: continue
+                _uploading.value = p.name
+                val r = uploadFile(scopeId, parentId, p)
+                _uploading.value = null
+                when {
+                    r.outcome == me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.EXISTS && r.existing != null -> {
+                        val existing: String = r.existing!!
+                        notify(Notice(app.getString(R.string.depot_replace_confirm, p.name), app.getString(R.string.depot_replace_title)) {
+                            replaceWithNotice(existing, p, _files.value[existing]?.blobId)
+                        })
+                    }
+                    else -> uploadProblem(p.name, r.outcome)?.let { notify(Notice(it)) }
+                }
+            }
+        }
+    }
+
+    /** Replaces [nodeId] with [p] and says how it went; a content changed meanwhile offers "Replace anyway". */
+    suspend fun replaceWithNotice(nodeId: String, p: Picked, expected: String?) {
+        val app = getApplication<Application>()
+        _uploading.value = p.name
+        val r = replaceFile(nodeId, p, expected)
+        _uploading.value = null
+        if (r.outcome == me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.STALE) {
+            notify(Notice(app.getString(R.string.depot_error_stale_file, p.name), app.getString(R.string.depot_replace_anyway)) {
+                replaceWithNotice(nodeId, p, r.currentBlobId)
+            })
+        } else {
+            uploadProblem(p.name, r.outcome)?.let { notify(Notice(it)) }
+        }
+    }
+
+    // ---- Depot's files (the application's `depot/`) ----
+
+    /** Every file of the tenant with its content's reference and opened meta, by node id (`DepotFiles.list`). */
+    private val _files = MutableStateFlow<Map<String, me.raddatz.veyq.mobile.depot.DepotFiles.File>>(emptyMap())
+    val files: StateFlow<Map<String, me.raddatz.veyq.mobile.depot.DepotFiles.File>> = _files.asStateFlow()
+
+    /** A file's row facts (Depot's `details`): its size and when it was modified, or that its upload has not finished. */
+    private fun fileDetails(f: me.raddatz.veyq.mobile.depot.DepotFiles.File): List<String> {
+        val app = getApplication<Application>()
+        if (!f.hasContent) return listOf(app.getString(R.string.depot_not_uploaded))
+        return listOfNotNull(
+            f.size?.let { android.text.format.Formatter.formatShortFileSize(app, it) },
+            f.modifiedAt?.let { app.getString(R.string.depot_modified, java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(it))) },
+        )
+    }
+
+    /** [file]'s content a frame at a time ([DepotFiles.read]). */
+    suspend fun readFile(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, first: Int = 0, until: Int = Int.MAX_VALUE, sink: suspend (ByteArray) -> Unit) {
+        val t = tenantSession ?: throw IllegalStateException("signed out")
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { me.raddatz.veyq.mobile.depot.DepotFiles.read(t, file, first, until, sink) }
+    }
+
+    /** Writes file [ref]'s content to [out] as it is read; nothing left out, or null when it did not finish. */
+    suspend fun downloadFile(ref: me.raddatz.veyq.mobile.navigation.NodeAt, out: java.io.OutputStream): List<String>? {
+        val file = _files.value[ref.nodeId]?.takeIf { it.hasContent } ?: return null
+        val ok = runCatching {
+            out.buffered(1 shl 16).let { b ->
+                readFile(file) { b.write(it) }
+                b.flush()
+            }
+        }.isSuccess
+        runCatching { out.close() }
+        return if (ok) emptyList() else null
+    }
+
+    /** A picked document as an upload reads it: its name, size, type and modified time from the system's listing. */
+    class Picked(val uri: android.net.Uri, val name: String, val size: Long, val type: String, val modifiedAt: Long?)
+
+    fun picked(uri: android.net.Uri): Picked? {
+        val resolver = getApplication<Application>().contentResolver
+        return runCatching {
+            resolver.query(uri, null, null, null, null)?.use { c ->
+                if (!c.moveToFirst()) return@use null
+                val name = c.getString(c.getColumnIndexOrThrow(android.provider.OpenableColumns.DISPLAY_NAME))
+                val size = c.getLong(c.getColumnIndexOrThrow(android.provider.OpenableColumns.SIZE))
+                val modified = c.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED).takeIf { it >= 0 && !c.isNull(it) }?.let { c.getLong(it) }
+                Picked(uri, name, size, resolver.getType(uri) ?: "application/octet-stream", modified)
+            }
+        }.getOrNull()
+    }
+
+    /** Reads [p] at any offset (its descriptor's channel), for an upload that seals it a frame at a time. */
+    private suspend fun <T> withSource(p: Picked, use: suspend (suspend (Long, Int) -> ByteArray) -> T): T {
+        val pfd = getApplication<Application>().contentResolver.openFileDescriptor(p.uri, "r") ?: throw java.io.IOException("unreadable")
+        pfd.use {
+            java.io.FileInputStream(it.fileDescriptor).channel.use { ch ->
+                return use { from, length ->
+                    val buf = java.nio.ByteBuffer.allocate(length)
+                    while (buf.hasRemaining()) {
+                        if (ch.read(buf, from + buf.position()) < 0) break
+                    }
+                    buf.array().copyOf(buf.position())
+                }
+            }
+        }
+    }
+
+    /** Uploads [p] as a new file under [parentId] in [scopeId] (`DepotFiles.upload`); the lists are read anew. */
+    suspend fun uploadFile(scopeId: String, parentId: String?, p: Picked): me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded {
+        val t = tenantSession ?: return me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.FAILED)
+        val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                withSource(p) { read ->
+                    me.raddatz.veyq.mobile.depot.DepotFiles.upload(t, scopeId, parentId, p.name, p.size, p.type, p.modifiedAt, me.raddatz.veyq.mobile.AppKinds::tokenInput, read)
+                }
+            }.getOrElse { me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.FAILED) }
+        }
+        refreshLists(t)
+        return r
+    }
+
+    /** Replaces file [nodeId]'s content with [p] over [expectedBlobId] (`DepotFiles.replace`); the lists are read anew. */
+    suspend fun replaceFile(nodeId: String, p: Picked, expectedBlobId: String?): me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded {
+        val failed = me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.FAILED)
+        val t = tenantSession ?: return failed
+        val file = _files.value[nodeId] ?: return failed
+        val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                withSource(p) { read ->
+                    me.raddatz.veyq.mobile.depot.DepotFiles.replace(t, file, p.size, p.type, p.name, p.modifiedAt, expectedBlobId, read)
+                }
+            }.getOrElse { failed }
+        }
+        refreshLists(t)
+        return r
+    }
+
+    /** Why an upload of [name] did not land, in Depot's words (`depot.errors.*`), or null once it did. */
+    fun uploadProblem(name: String, outcome: me.raddatz.veyq.mobile.depot.DepotFiles.Outcome): String? {
+        val app = getApplication<Application>()
+        return when (outcome) {
+            me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.DONE -> null
+            me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.TAKEN_BY_OTHER -> app.getString(R.string.depot_error_slug_taken, name)
+            me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.STALE -> app.getString(R.string.depot_error_stale_file, name)
+            me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.NO_ROOM -> app.getString(R.string.depot_error_quota, name)
+            me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.BUSY -> app.getString(R.string.move_refused_rekey_pending)
+            else -> app.getString(R.string.depot_error_failed, name)
+        }
     }
 
     /** Each listed node's cover as a small picture of its framed part, by node id (core's covers, uc.platform.node-cover):

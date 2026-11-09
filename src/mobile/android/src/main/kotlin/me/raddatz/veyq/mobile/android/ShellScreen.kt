@@ -115,6 +115,15 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     var trashOf by remember { mutableStateOf<String?>(null) }
     fun closeDrawerThen(f: () -> Unit) { f(); scope.launch { drawer.close() } }
 
+    // what the model says (an upload's refusal, its "Replace anyway"): one snackbar each
+    androidx.compose.runtime.LaunchedEffect(model) {
+        model.notices.collect { n ->
+            val answer = snackbar.showSnackbar(n.text, actionLabel = n.action, withDismissAction = n.action != null, duration = androidx.compose.material3.SnackbarDuration.Long)
+            if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed) n.run?.let { scope.launch { it() } }
+        }
+    }
+    val uploading by model.uploading.collectAsStateWithLifecycle()
+
     BackHandler(enabled = shell.searching || shell.canGoBack) {
         if (shell.searching) model.search(false) else model.goBack()
     }
@@ -228,6 +237,12 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 }
               }
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+                uploading?.let { name ->
+                    Column(Modifier.fillMaxWidth()) {
+                        androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text(stringResource(R.string.depot_uploading, name), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    }
+                }
             }
         }
         trashOf?.let { SpaceTrashSheet(it, model) { trashOf = null } }
@@ -289,10 +304,16 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         }
         if (asked != null) model.newRequestTaken()
     }
-    // The level's "New" (the web's menu): a folder here, or a Pot here.
+    // Depot's "Upload files": the system's picker hands over the documents chosen, uploaded here one after another
+    val pickFiles = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        val space = s.shell.space
+        if (uris.isNotEmpty() && space != null) model.uploadPicked(space, s.shell.folder?.nodeId, uris)
+    }
+    // The level's "New" (the web's menu): a folder here, a Pot here, or files uploaded here.
     CreateAction(stringResource(R.string.create_new), shown = s.shell.space != null, onClick = {}, menu = { close ->
         androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, onClick = { close(); naming = true })
         androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.create_pot)) }, onClick = { close(); creatingPot = true })
+        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.depot_upload)) }, onClick = { close(); pickFiles.launch(arrayOf("*/*")) })
     }) { list, bottom ->
     Column(Modifier.fillMaxSize()) {
         if (s.filters.size > 1) {

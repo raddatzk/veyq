@@ -76,9 +76,12 @@ internal class ShareWords(
     @androidx.annotation.StringRes val deleteConfirm: Int,
 )
 
-/** The words of [kind]'s share sheet: a Pot's, else core's folder words (the web's default `ShareDialogCopy`). */
+/** The words of [kind]'s share sheet: a Pot's, a file's, else core's folder words (the web's default `ShareDialogCopy`). */
 internal fun shareWords(kind: String): ShareWords =
-    if (kind == me.raddatz.veyq.mobile.expenses.PotSession.KIND) ShareWords(
+    if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.FILE) ShareWords(
+        R.string.share_file_title, R.string.share_file_intro, R.string.share_file_role_contributor,
+        R.string.share_file_role_viewer_hint, R.string.share_file_role_contributor_hint, R.string.share_file_delete_confirm,
+    ) else if (kind == me.raddatz.veyq.mobile.expenses.PotSession.KIND) ShareWords(
         R.string.share_title, R.string.share_intro, R.string.share_role_contributor,
         R.string.share_role_viewer_hint, R.string.share_role_contributor_hint, R.string.share_delete_confirm,
     ) else ShareWords(

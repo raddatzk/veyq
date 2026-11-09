@@ -231,6 +231,32 @@ struct Bar: View {
             }
         }
         .sheet(item: $trashOf) { SpaceTrashSheet(model: model, scopeId: $0.scopeId) }
+        // what the model says once (an upload's refusal, its "Replace anyway")
+        .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } }), presenting: model.notice) { n in
+            if let action = n.action, let run = n.run {
+                Button(action, role: .destructive) { Task { await run() } }
+                Button("Cancel", role: .cancel) {}
+            } else {
+                Button("OK", role: .cancel) {}
+            }
+        }
+        // a file's "Replace…": the system's picker hands over one file
+        .fileImporter(isPresented: Binding(get: { model.replacing != nil }, set: { if !$0 { model.replacing = nil } }), allowedContentTypes: [.item]) { result in
+            guard let nodeId = model.replacing, case .success(let url) = result else { return }
+            model.replacing = nil
+            Task { await model.replaceFile(nodeId, url: url, expected: model.files[nodeId]?.blobId) }
+        }
+        .overlay(alignment: .top) {
+            if let name = model.uploading {
+                VStack(spacing: 4) {
+                    ProgressView()
+                    Text("Uploading “\(name)”…").font(.footnote).foregroundStyle(Role.muted)
+                }
+                .padding(10)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .padding(.top, 8)
+            }
+        }
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
@@ -285,6 +311,7 @@ struct HomeView: View {
     @State private var newName = ""
     @State private var nameProblem: String?
     @State private var creatingPot = false
+    @State private var pickingFiles = false
 
     private var title: String {
         if let folder = model.shell.folder { return folder.name }
@@ -345,6 +372,12 @@ struct HomeView: View {
         .createMenu("New", shown: model.shell.space != nil) {
             Button("New Folder", systemImage: "folder.badge.plus") { newName = ""; nameProblem = nil; naming = true }
             Button("New Pot", systemImage: "wallet.bifold") { creatingPot = true }
+            Button("Upload Files", systemImage: "square.and.arrow.up.on.square") { pickingFiles = true }
+        }
+        // Depot's "Upload files": the system's picker hands over the files chosen, uploaded here one after another
+        .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            guard case .success(let urls) = result, !urls.isEmpty else { return }
+            Task { await model.uploadFiles(urls) }
         }
         .alert("New Folder", isPresented: $naming) {
             TextField("Name", text: $newName)

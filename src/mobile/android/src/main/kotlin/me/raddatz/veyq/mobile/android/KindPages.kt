@@ -1,6 +1,9 @@
 package me.raddatz.veyq.mobile.android
 
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.outlined.Upload
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,9 +48,15 @@ internal object KindPages {
         PotScreen(ref, tab, model)
     })
 
+    /** Depot's file: its download under its own name, its replace (or first upload), its page (`FileScreen`). */
+    private val file = KindPage(shareable = true, takesCover = false, header = { node, model -> fileHeader(node, model) }, body = { ref, _, model ->
+        FileScreen(ref, model)
+    })
+
     fun of(kind: String): KindPage? = when (kind) {
         "FOLDER" -> folder
         PotSession.KIND -> pot
+        me.raddatz.veyq.mobile.depot.DepotFiles.FILE -> file
         else -> null
     }
 }
@@ -57,6 +66,32 @@ private fun copyLosses(context: android.content.Context, kind: String): List<Str
     "FOLDER" -> listOf(context.getString(R.string.copy_loss_folder_cover))
     PotSession.KIND -> listOf(context.getString(R.string.copy_loss_pot), context.getString(R.string.copy_loss_cover))
     else -> emptyList()
+}
+
+@Composable
+private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution {
+    val files by model.files.collectAsStateWithLifecycle()
+    val f = files[node.nodeId]
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // the replace: the system's picker hands over one document, which replaces the content over the one listed
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        val p = uri?.let { model.picked(it) } ?: return@rememberLauncherForActivityResult
+        scope.launch { model.replaceWithNotice(node.nodeId, p, f?.blobId) }
+    }
+    val has = f?.hasContent == true
+    return HeaderContribution(
+        deleteTitle = stringResource(R.string.file_delete),
+        deleteQuestion = stringResource(R.string.file_delete_confirm, node.name),
+        download = if (has) { out -> model.downloadFile(node, out) } else null,
+        downloadName = me.raddatz.veyq.mobile.depot.DepotFiles.downloadName(f, node.name),
+        downloadMime = "application/octet-stream",
+        actions = listOf(
+            OwnAction(
+                "replace", stringResource(if (has) R.string.depot_replace else R.string.depot_upload_into),
+                androidx.compose.material.icons.Icons.Outlined.Upload,
+            ) { pick.launch(arrayOf("*/*")) },
+        ),
+    )
 }
 
 @Composable

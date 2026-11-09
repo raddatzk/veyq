@@ -72,9 +72,23 @@ struct KindPage {
         switch kind {
         case "FOLDER": folder
         case PotSession.companion.KIND: pot
+        case DepotFiles.shared.FILE: file
         default: nil
         }
     }
+
+    /// Depot's file: its download under its own name, its replace (or first upload), its page (`FileScreen`).
+    private static let file = KindPage(shareable: true, takesCover: false, header: { node, model in
+        let has = model.files[node.nodeId]?.hasContent == true
+        return HeaderContribution(
+            deleteTitle: String(localized: "Delete File"),
+            deleteQuestion: String(localized: "“\(node.name)” goes to the trash."),
+            download: has ? { await model.downloadFile(node) } : nil,
+            actions: [OwnAction(id: "replace", label: has ? String(localized: "Replace…") : String(localized: "Upload…"), systemImage: "square.and.arrow.down.on.square") {
+                model.replacing = node.nodeId
+            }]
+        )
+    }, body: { ref, _, model in AnyView(FileScreen(model: model, ref: ref)) })
 
     /// Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`).
     private static let folder = KindPage(shareable: true, takesCover: true, header: { node, model in

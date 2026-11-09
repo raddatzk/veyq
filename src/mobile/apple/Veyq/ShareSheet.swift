@@ -13,6 +13,16 @@ struct ShareWords {
 
     /// The words of `kind`'s share sheet: a Pot's, else core's folder words (the web's default `ShareDialogCopy`).
     static func of(_ kind: String) -> ShareWords {
+        if kind == DepotFiles.shared.FILE {
+            return ShareWords(
+                title: String(localized: "Share this file"),
+                intro: String(localized: "Create a link anyone can open in a browser — no account, no install. It shows only this one file, and you can switch it off anytime."),
+                contributor: String(localized: "View + contribute"),
+                viewerHint: String(localized: "Anyone with the link can see this file and download it, read-only."),
+                contributorHint: String(localized: "Anyone with the link can see and download this file and replace its content — the old content cannot be restored: there is no version history."),
+                deleteConfirm: String(localized: "Delete this link for good? It can never be switched on or renewed again. Content guests replaced stays in this file.")
+            )
+        }
         if kind == PotSession.companion.KIND {
             return ShareWords(
                 title: String(localized: "Share this Pot"),

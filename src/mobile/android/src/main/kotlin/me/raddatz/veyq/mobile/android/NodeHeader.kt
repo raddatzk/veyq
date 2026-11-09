@@ -80,6 +80,9 @@ internal class HeaderContribution(
     val copyNotes: (suspend () -> CopyNotes)? = null,
     /** The download door: writes the node's ZIP to the stream; what it left out (lines to say), or null when not whole. */
     val download: (suspend (java.io.OutputStream) -> List<String>?)? = null,
+    /** What the download is saved as (its name and type): the node's ZIP by default, a file its own name and bytes. */
+    val downloadName: String? = null,
+    val downloadMime: String = "application/zip",
     /** The application's own actions, merged into core's plan where the kind's order puts them. */
     val actions: List<OwnAction> = emptyList(),
 )
@@ -131,7 +134,7 @@ internal fun NodeHeaderActions(
     val downloadFailed = stringResource(R.string.download_failed, node.name)
     val downloaded = stringResource(R.string.download_done, node.name)
     val saveTo = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip"),
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument(contribution.downloadMime),
     ) { uri ->
         val door = contribution.download
         if (uri == null || door == null) return@rememberLauncherForActivityResult
@@ -162,7 +165,7 @@ internal fun NodeHeaderActions(
                     }
                 }
             }
-            Plan.DOWNLOAD -> saveTo.launch(me.raddatz.veyq.mobile.export.NodeExport.fileName(node.name))
+            Plan.DOWNLOAD -> saveTo.launch(contribution.downloadName ?: me.raddatz.veyq.mobile.export.NodeExport.fileName(node.name))
             in own -> own.getValue(id).onClick()
             else -> dialog = id
         }

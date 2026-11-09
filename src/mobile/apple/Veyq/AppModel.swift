@@ -364,7 +364,7 @@ final class AppModel {
         rawNodes = try await t.nodes()
         rawFavorites = try await t.favorites()
         rawOff = t.applicationsOff()
-        rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? [:]
+        await readDetails(t, reset: true)
         await readCovers(t)
         // The pictures the directory names a revision for, in the background; the letters show meanwhile.
         avatars = [:]
@@ -474,7 +474,7 @@ final class AppModel {
     private func refreshLists(_ t: TenantSession) async {
         rawNodes = (try? await t.nodes()) ?? rawNodes
         rawFavorites = (try? await t.favorites()) ?? rawFavorites
-        rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? rowDetails
+        await readDetails(t)
         await readCovers(t)
         rebuild(start: false)
     }
@@ -799,6 +799,171 @@ final class AppModel {
     /// What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`).
     private(set) var rowDetails: [String: [String]] = [:]
 
+    /// Every file of the tenant with its content's reference and opened meta, by node id (Depot's `DepotFiles.list`).
+    private(set) var files: [String: DepotFiles.File] = [:]
+
+    /// The rows' facts: each Pot's (Expenses' `PotRows`) and each file's (its size and modified time, Depot's `details`).
+    private func readDetails(_ t: TenantSession, reset: Bool = false) async {
+        let pots = (try? await PotRows.shared.details(tenant: t)) ?? (reset ? [:] : rowDetails)
+        let read = (try? await DepotFiles.shared.list(tenant: t)) ?? (reset ? [:] : files)
+        guard tenantSession === t else { return }
+        files = read
+        var details = pots
+        for (id, f) in read { details[id] = Self.fileDetails(f) }
+        rowDetails = details
+    }
+
+    private static func fileDetails(_ f: DepotFiles.File) -> [String] {
+        guard f.hasContent else { return [String(localized: "Not uploaded yet")] }
+        var parts: [String] = []
+        if let size = f.size { parts.append(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file)) }
+        if let m = f.modifiedAt {
+            let date = Date(timeIntervalSince1970: Double(m.int64Value) / 1000).formatted(date: .abbreviated, time: .shortened)
+            parts.append(String(localized: "Modified \(date)"))
+        }
+        return parts
+    }
+
+    /// A file page's facts: size, the sealed type (a claim, shown as such), modified.
+    func fileFacts(_ f: DepotFiles.File) -> String {
+        var parts: [String] = []
+        if let size = f.size { parts.append(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file)) }
+        parts.append(f.type ?? String(localized: "Unknown"))
+        if let m = f.modifiedAt {
+            let date = Date(timeIntervalSince1970: Double(m.int64Value) / 1000).formatted(date: .abbreviated, time: .shortened)
+            parts.append(String(localized: "Modified \(date)"))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// What a file's page shows (core's `FileView`): its first frame read and decided by its bytes, then what that needs.
+    func fileView(_ f: DepotFiles.File, nodeName: String) async -> FileShown {
+        guard let t = tenantSession, let v = try? await AppleDepot.shared.view(tenant: t, file: f, nodeName: nodeName) else { return .failed }
+        let d = v.decision
+        switch d.kind {
+        case .image:
+            guard let data = v.data, let image = CoverImages.image(data as Data, maxPixels: 4096) else {
+                return .message(String(localized: "This file cannot be shown here. You can download it."))
+            }
+            return .picture(image)
+        case .text:
+            return .text(v.text ?? "", truncated: d.truncated)
+        case .pdf, .media:
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("view-\(UUID().uuidString).\(d.fileExtension ?? "bin")")
+            guard (try? await AppleDepot.shared.download(tenant: t, file: f, path: url.path))?.boolValue == true else { return .failed }
+            return d.kind == .pdf ? .pdf(url) : .media(url)
+        case .tooLarge: return .message(String(localized: "This file is too large to show here. You can download it."))
+        case .empty: return .message(String(localized: "This file is empty."))
+        default: return .message(String(localized: "This file cannot be shown here. You can download it."))
+        }
+    }
+
+    /// File `ref`'s content written to a temporary file under its download name, for the system's save sheet.
+    func downloadFile(_ ref: NodeAt) async -> Downloaded? {
+        guard let t = tenantSession, let f = files[ref.nodeId], f.hasContent else { return nil }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
+        let url = dir.appendingPathComponent(DepotFiles.shared.downloadName(file: f, nodeName: ref.name))
+        guard (try? await AppleDepot.shared.download(tenant: t, file: f, path: url.path))?.boolValue == true else { return nil }
+        return Downloaded(url: url)
+    }
+
+    /// Something the shell asks or says once (an upload's refusal, its "Replace anyway"), with its action where it offers one.
+    struct Notice: Identifiable {
+        let id = UUID()
+        let text: String
+        var action: String?
+        var run: (() async -> Void)?
+    }
+
+    var notice: Notice?
+
+    /// The file whose content the person is picking a replacement for (the header's "Replace…"), while they pick.
+    var replacing: String?
+
+    /// The name of the file being uploaded, while one is.
+    private(set) var uploading: String?
+
+    /// A picked file as an upload reads it: its path (while its security scope is open), name, size, type, modified time.
+    private struct Picked {
+        let url: URL
+        let name: String
+        let size: Int64
+        let type: String
+        let modifiedAt: Int64?
+
+        init?(_ url: URL) {
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .contentTypeKey, .nameKey]) else { return nil }
+            self.url = url
+            name = values.name ?? url.lastPathComponent
+            size = Int64(values.fileSize ?? 0)
+            type = values.contentType?.preferredMIMEType ?? "application/octet-stream"
+            modifiedAt = values.contentModificationDate.map { Int64($0.timeIntervalSince1970 * 1000) }
+        }
+    }
+
+    /// Uploads the picked `urls` one after another under the level shown (`DepotFiles.upload`): a name a file already holds
+    /// offers its replace (Depot's `replaceConfirm`), a refusal says why.
+    func uploadFiles(_ urls: [URL]) async {
+        guard let t = tenantSession, let scopeId = shell.space else { return }
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let p = Picked(url) else { continue }
+            uploading = p.name
+            let r = try? await AppleDepot.shared.upload(
+                tenant: t, scopeId: scopeId, parentId: shell.folder?.nodeId, path: p.url.path, name: p.name, size: p.size, type: p.type,
+                modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) }
+            )
+            uploading = nil
+            await refreshLists(t)
+            if let r, r.outcome == .exists, let existing = r.existing {
+                notice = Notice(
+                    text: String(localized: "Replace “\(p.name)”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history."),
+                    action: String(localized: "Replace File")
+                ) { [weak self] in await self?.replaceFile(existing, url: url, expected: self?.files[existing]?.blobId) }
+            } else if let problem = Self.uploadProblem(p.name, r?.outcome) {
+                notice = Notice(text: problem)
+            }
+        }
+    }
+
+    /// Replaces file `nodeId` with the file at `url` over `expected`, and says how it went (a content changed meanwhile
+    /// offers "Replace anyway").
+    func replaceFile(_ nodeId: String, url: URL, expected: String?) async {
+        guard let t = tenantSession, let f = files[nodeId] else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let p = Picked(url) else { return }
+        uploading = p.name
+        let r = try? await AppleDepot.shared.replace(
+            tenant: t, file: f, path: p.url.path, name: p.name, size: p.size, type: p.type,
+            modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) }, expectedBlobId: expected
+        )
+        uploading = nil
+        await refreshLists(t)
+        if r?.outcome == .stale {
+            let current = r?.currentBlobId
+            notice = Notice(text: Self.uploadProblem(p.name, .stale) ?? "", action: String(localized: "Replace anyway")) { [weak self] in
+                await self?.replaceFile(nodeId, url: url, expected: current)
+            }
+        } else if let problem = Self.uploadProblem(p.name, r?.outcome) {
+            notice = Notice(text: problem)
+        }
+    }
+
+    /// Why an upload of `name` did not land, in Depot's words (`depot.errors.*`), or nil once it did.
+    private static func uploadProblem(_ name: String, _ outcome: DepotFiles.Outcome?) -> String? {
+        switch outcome {
+        case .done: nil
+        case .takenByOther: String(localized: "“\(name)” was not uploaded: a folder, Memory or file with a similar name already exists here.")
+        case .stale: String(localized: "“\(name)” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first.")
+        case .noRoom: String(localized: "“\(name)” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.")
+        case .busy: String(localized: "The space’s key is being renewed. Try again in a moment.")
+        default: String(localized: "“\(name)” could not be uploaded.")
+        }
+    }
+
     /// Each listed node's cover as a small picture of its framed part, by node id, with the key it was opened under — its
     /// blob and crop (core's covers, uc.platform.node-cover): opened once per blob and crop, dropped when the node names
     /// another or none.
@@ -989,7 +1154,7 @@ final class AppModel {
         t.forgetTree()
         rawNodes = (try? await t.nodes()) ?? rawNodes
         rawFavorites = (try? await t.favorites()) ?? rawFavorites
-        rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? rowDetails
+        await readDetails(t)
         await readCovers(t)
         rebuild(start: false)
         creatingPot = CreatingPot(message: r.outcome == .created ? nil : r.outcome.name)

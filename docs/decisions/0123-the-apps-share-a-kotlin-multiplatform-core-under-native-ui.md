@@ -296,6 +296,26 @@ implementation exists but what holds it to the first.
   the Pot there opening with its entry; the same folder copied by `FolderLiveTest` and from Android's header, every Pot of the
   copy reading as the original's (a copy that skips what is under a folder turns it red). The web's storage check before a
   copy (`checkTenantStorageFit`) is not made here yet.
+- **Depot's files** (the web's `features/depot/`, `docs/apps/depot.md`; the application's package `depot/`): a file is core's
+  `FILE` node and its content one core attachment in its `FILE_CONTENT` slot, its type, uploaded name and modified time the
+  blob's sealed meta, its size the blob's less a frame's overhead each (`DepotFiles`, over the generated `api.depot`). Rows
+  say a file's size and modified time, or that its upload has not finished; "Upload files" in a level's New menu sends the
+  documents the system's picker hands over — the name checked against the level first (a file of the name offers its
+  replace in the web's words, another kind's refuses it), the node created, its content sealed and sent a frame at a time
+  from the document read at any offset (`ApplicationBlobs.reserveAndPumpFrames`), attached at the node's epoch
+  (`completeFile`), and the node moved to the trash where the content did not attach; the header's replace sends a new
+  content over the one listed (`expectedBlobId`, a content changed meanwhile offered "Replace anyway"); the download is the
+  content under its own name (core's `downloadName`), read a frame at a time (`framesTo`). A file's page decides what it
+  shows by its first frame's BYTES (`depot/FileView.kt`, the web's `view.ts` and `sniff.ts`, `FileViewTest`): an image, a
+  PDF (Android's `PdfRenderer` draws pictures a page at a time; PDFKit with its links never followed — the receipts' PDF
+  view too now), a claimed text as plain text (its first MiB), an audio or video played in the app; anything else is only
+  downloaded. **Decided (2026-11-09): a peer's file is never handed to another app** — no "open with", no plaintext copy
+  outside the app's own cache; a PDF or media file the page plays is decrypted into that cache under its SNIFFED type's
+  extension and deleted when the page closes. Measured 2026-11-09: `DepotLiveTest` (a three-frame upload read back to the
+  byte with its meta, a name taken answered as the file it is, a replace with a new blob, a stale replace refused); the web
+  shows the app's file — its text, size, type, modified time, uploader — and an image and a PDF uploaded from Android's
+  picker open in both the web and the app. Not built yet: the drop box, a file's copy and its place in a folder's download
+  (both left out and said), a folder upload, the uploader on a file's page.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's
