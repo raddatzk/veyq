@@ -44,11 +44,12 @@ export function* nodeDocumentSteps(
       const seal = node.wrappedMeta ?? null
       const before = previous?.get(node.id)
       const facets = before && before.seal === seal ? before.doc.facets : facetsOf(scopeId, node, byId, epochs, resolver.keyOf)
+      const above = placeOf(node, byId)
       out.set(node.id, {
         seal,
         doc: searchDocument({
           scopeId, kind: node.kind, id: node.id, nodeId: node.id, revision: nodeRevision(node), name: node.name,
-          path: pathOf(node, byId), facets,
+          path: above.names, pathIds: above.ids, facets,
         }),
       })
       yield
@@ -85,28 +86,46 @@ export function* scopeDocumentSteps(
   scopeId: string, objects: readonly ScopeDocument[], byId: ReadonlyMap<string, TreeNode>,
 ): Generator<void, SearchDocument[], void> {
   const out: SearchDocument[] = []
-  const paths = new Map<string, string[]>()
+  // one path per node, shared by every object of it (a Memory's thousands of photos hold one pair of arrays)
+  const places = new Map<string, NodePlace>()
   for (const o of objects) {
     const node = byId.get(o.nodeId)
     if (node) {
-      let path = paths.get(node.id)
-      if (!path) paths.set(node.id, (path = [...pathOf(node, byId), node.name]))
-      out.push(searchDocument({ scopeId, kind: o.kind, id: o.id, nodeId: o.nodeId, revision: o.revision, name: o.name, path, facets: o.facets, icon: o.icon }))
+      let at = places.get(node.id)
+      if (!at) places.set(node.id, (at = placeWithin(node, byId)))
+      out.push(searchDocument({
+        scopeId, kind: o.kind, id: o.id, nodeId: o.nodeId, revision: o.revision, name: o.name, path: at.names, pathIds: at.ids,
+        facets: o.facets, icon: o.icon,
+      }))
     }
     yield
   }
   return out
 }
 
-/** The names above `node`, outermost first (a cycle a tampered tree could hold ends the walk). */
-export function pathOf(node: TreeNode, byId: ReadonlyMap<string, TreeNode>): string[] {
+/** Where a document lies: the names and the ids of the nodes above it, outermost first. */
+export interface NodePlace {
+  names: string[]
+  ids: string[]
+}
+
+/** The nodes above `node`, outermost first (a cycle a tampered tree could hold ends the walk). */
+export function placeOf(node: Pick<TreeNode, 'id' | 'parentId'>, byId: ReadonlyMap<string, Pick<TreeNode, 'id' | 'parentId' | 'name'>>): NodePlace {
   const names: string[] = []
+  const ids: string[] = []
   const seen = new Set<string>([node.id])
   let cur = node.parentId ? byId.get(node.parentId) : undefined
   while (cur && !seen.has(cur.id)) {
     seen.add(cur.id)
     names.unshift(cur.name)
+    ids.unshift(cur.id)
     cur = cur.parentId ? byId.get(cur.parentId) : undefined
   }
-  return names
+  return { names, ids }
+}
+
+/** Where an object inside `node` lies (a photo of a Memory): the nodes above it and the node itself. */
+export function placeWithin(node: Pick<TreeNode, 'id' | 'parentId' | 'name'>, byId: ReadonlyMap<string, Pick<TreeNode, 'id' | 'parentId' | 'name'>>): NodePlace {
+  const above = placeOf(node, byId)
+  return { names: [...above.names, node.name], ids: [...above.ids, node.id] }
 }

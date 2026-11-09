@@ -1,10 +1,12 @@
 <script setup lang="ts">
 // The shell's search field (uc.platform.search, ADR 0125): one field over every space of the tenant, its chips and its
-// results in one list - the chips it offers for the typed text first, under their own heading (*Filter by*), then the
-// results grouped by where the member stands
-// (the open node, this space, other spaces), then the tenant's members and the settings sections (ADR 0125 decision 9). The
-// model is core's (`searchIndex.ts`, `query.ts`, `groups.ts`, `peopleAndSettings.ts`); this draws it on the layer's tags
-// input and opens what is chosen. The layer highlights the first entry, a suggestion or a result, and keeps an entry the
+// results in one list of two areas - the chips it offers for the typed text first, under their own heading (*Filter by*),
+// then ONE list of results with no heading (decision 5): ordered by the match, then where the result lies (the open
+// node, this space, other spaces, then the tenant's members and the settings sections, decision 9), then the name; each
+// row says where it lies. Ten are drawn, and "show more" adds ten. Every kind has its word for a kind chip - core's
+// *Person* and *Setting* included - and a node something lies below is offered as *In:* that node, its space and path as
+// the suggestion's second line (two nodes of one name are two suggestions). The model is core's (`searchIndex.ts`,
+// `query.ts`, `results.ts`, `peopleAndSettings.ts`); this draws it on the layer's tags input and opens what is chosen. The layer highlights the first entry, a suggestion or a result, and keeps an entry the
 // member moved to while they type on; Enter takes the highlighted one (`VeyqTagsInput`'s header).
 //
 // **The first focus builds the index, every later one revalidates it** (`refreshSearchIndex`), and while the list is open
@@ -17,7 +19,8 @@
 // **What a row draws.** The part of a name the text matched is bold (`nameParts`: found in the folded name, drawn over
 // the name's own characters), as text nodes and a `strong` element - never markup from a string. A month chip reads its
 // month in the UI's language. **A screen reader** hears, through a polite live region, how many results there are and a
-// chip added or removed; each group is named by its heading, and the field stays the layer's combobox.
+// chip added or removed; the suggestions are named by their heading, the results by their own name, and the field
+// stays the layer's combobox.
 //
 // **Opening a result.** A node opens through the navigation the sidebar uses - a push of its fragment, which enters its
 // space when it lies in another (`SpaceView` re-enters on a new scope token); a contributed document opens itself (a photo
@@ -29,7 +32,7 @@
 import { computed, onBeforeUnmount, ref, toRaw, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import VeyqTagsInput, { type VeyqTag, type VeyqTagOption, type VeyqTagOptionGroup } from '../../shared/ui/VeyqTagsInput.vue'
+import VeyqTagsInput, { type VeyqTag, type VeyqTagOption } from '../../shared/ui/VeyqTagsInput.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import type { VeyqIconName } from '../../shared/ui/icons'
 import { activeSpace } from '../../app/activeSpace'
@@ -43,16 +46,18 @@ import PersonAvatar from '../people/PersonAvatar.vue'
 import { useSettingsSections } from '../../features/settings/sections'
 import { searchContribution } from './contribution'
 import { requestOpenItem } from './openRequest'
-import { PERSON_DOCUMENT, searchDocument, yearsOf, type SearchDocument } from './model'
+import { PERSON_DOCUMENT, SETTINGS_DOCUMENT, searchDocument, yearsOf, type SearchDocument } from './model'
 import { chipKey, createMatcher, matchedText, nameParts, suggestChips, type ChipSuggestion, type NamePart, type SearchChip } from './query'
-import { SEARCH_GROUPS, searchGroups, type SearchGroupId } from './groups'
+import { searchResults } from './results'
+import { placeWithin } from './documents'
 import { personDocuments, settingsDocuments } from './peopleAndSettings'
 import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, searchState, type SearchScope } from './searchIndex'
 
 /** How often an open list revalidates every space (a `304` while nothing moved). */
 const REVALIDATE_MS = 20_000
-/** How many results a group shows at first, and how many more each "show more" adds. */
-const GROUP_PAGE = 8
+/** How many results the list shows at first, and how many more each "show more" adds (ADR 0125 decision 5): few rows drawn
+ *  is what keeps the first keystroke's task short, which is mostly the list's render (cr-search-polish). */
+const PAGE = 10
 
 const props = defineProps<{ inputId?: string }>()
 /** A result was opened (the sheet around the field closes). */
@@ -65,9 +70,8 @@ const router = useRouter()
 const text = ref('')
 const chips = ref<SearchChip[]>([])
 const open = ref(false)
-const firstPage = () => Object.fromEntries(SEARCH_GROUPS.map((id) => [id, GROUP_PAGE])) as Record<SearchGroupId, number>
-const shown = ref<Record<SearchGroupId, number>>(firstPage())
-/** The tenant's members as the directory last read them (none after a sign-out): the person chips and the People group. */
+const shown = ref(PAGE)
+/** The tenant's members as the directory last read them (none after a sign-out): the person chips and the person results. */
 const people = computed(() => tenantPeopleNow())
 /** The settings sections the rail offers now, with the rail's own gates (none until every answer is in). */
 const sections = useSettingsSections()
@@ -115,9 +119,10 @@ const contributed = computed<SearchDocument[]>(() => {
   const c = searchContribution()
   if (!c) return []
   const tree = indexedTree(c.scopeId) ?? []
-  const node = tree.find((n) => n.id === c.nodeId)
-  const path = node ? [...pathOf(node.id, tree), node.name] : []
-  return c.documents.map((d) => searchDocument({ ...d, scopeId: c.scopeId, nodeId: c.nodeId, path }))
+  const byId = new Map(tree.map((n) => [n.id, n]))
+  const node = byId.get(c.nodeId)
+  const at = node ? placeWithin(node, byId) : { names: [], ids: [c.nodeId] }
+  return c.documents.map((d) => searchDocument({ ...d, scopeId: c.scopeId, nodeId: c.nodeId, path: at.names, pathIds: at.ids }))
 })
 /** The page's own documents win over the same object a space's search found (ADR 0125 decision 8a): the open Memory's
  *  photo is the gallery's, which it opens in place. */
@@ -135,19 +140,6 @@ const elsewhere = computed<SearchDocument[]>(() => [
 ])
 const documents = computed(() => [...content.value, ...elsewhere.value])
 
-function pathOf(nodeId: string, tree: readonly { id: string; parentId: string | null; name: string }[]): string[] {
-  const byId = new Map(tree.map((n) => [n.id, n]))
-  const names: string[] = []
-  const seen = new Set<string>([nodeId])
-  let cur = byId.get(nodeId)?.parentId ? byId.get(byId.get(nodeId)!.parentId!) : undefined
-  while (cur && !seen.has(cur.id)) {
-    seen.add(cur.id)
-    names.unshift(cur.name)
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined
-  }
-  return names
-}
-
 // --- words ------------------------------------------------------------------------------------------------------------
 function spaceLabel(scope: SearchScope | null): string {
   if (scope?.name) return scope.name
@@ -155,11 +147,14 @@ function spaceLabel(scope: SearchScope | null): string {
   if (scope?.kind === ScopeKind.Tenant) return t('shell.shared')
   return t('shell.groups')
 }
-/** Each kind's word with the kinds it names (a word two kinds share is one chip). */
+/** Each kind's word with the kinds it names (a word two kinds share is one chip): every kind's the registry knows, and
+ *  core's two documents of no space (decision 9). */
 const kindWords = computed(() => {
   const byLabel = new Map<string, Set<string>>()
   const icons = new Map<string, VeyqIconName>()
   const add = (label: string, kind: string) => byLabel.set(t(label), (byLabel.get(t(label)) ?? new Set()).add(kind))
+  add('shell.search.kindPerson', PERSON_DOCUMENT)
+  add('shell.search.kindSetting', SETTINGS_DOCUMENT)
   for (const kind of registry.kinds()) {
     const d = registry.kind(kind)
     if (!d.supported || !d.search) continue
@@ -181,11 +176,11 @@ const collator = computed(() => new Intl.Collator(locale.value, { numeric: true,
 
 // --- the chips -------------------------------------------------------------------------------------------------------
 const CHIP_ICON: Record<SearchChip['type'], VeyqIconName> = {
-  month: 'calendar', year: 'calendar', place: 'map-marker', person: 'user', space: 'users', kind: 'tag',
+  month: 'calendar', year: 'calendar', place: 'map-marker', person: 'user', space: 'users', in: 'folder-open', kind: 'tag',
 }
 const CHIP_WORD: Record<SearchChip['type'], string> = {
   month: 'shell.search.chipMonth', year: 'shell.search.chipYear', place: 'shell.search.chipPlace', person: 'shell.search.chipPerson',
-  space: 'shell.search.chipSpace', kind: 'shell.search.chipKind',
+  space: 'shell.search.chipSpace', in: 'shell.search.chipIn', kind: 'shell.search.chipKind',
 }
 const monthFormat = computed(() => new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }))
 /** Each month's names, January first: in the UI's language and in English ("Mai", "May"). */
@@ -201,7 +196,7 @@ function chipLabel(c: SearchChip): string {
 
 type ChipTag = VeyqTag & { chip: SearchChip }
 type ChipOption = VeyqTagOption & { suggestion: ChipSuggestion }
-type ResultOption = VeyqTagOption & { doc?: SearchDocument; group: SearchGroupId; more?: number }
+type ResultOption = VeyqTagOption & { doc?: SearchDocument; more?: number }
 
 const tags = computed<ChipTag[]>(() => chips.value.map((chip) => ({ key: chipKey(chip), label: chipLabel(chip), chip })))
 const suggestions = computed<ChipOption[]>(() =>
@@ -213,6 +208,10 @@ const suggestions = computed<ChipOption[]>(() =>
     months: monthNames.value,
   }).map((suggestion) => ({ key: `chip:${chipKey(suggestion.chip)}`, label: chipLabel(suggestion.chip), suggestion })),
 )
+/** Where an *In:* suggestion's node lies: its space and the names above it - what tells two nodes of one name apart. */
+function chipWhere(c: SearchChip): string {
+  return c.type === 'in' ? [spaceLabel(indexedScope(c.scopeId)), c.path.join(' / ')].filter(Boolean).join(' · ') : ''
+}
 /** What the live region says of the last chip added or removed, until the member types on. */
 const chipNote = ref<{ said: string; text: string } | null>(null)
 function addChip(option: ChipOption) {
@@ -231,7 +230,7 @@ watch(text, (now) => {
 // --- the results -----------------------------------------------------------------------------------------------------
 // the chips as plain objects: the query reads them once per document, and a reactive read each time costs a keystroke
 // at volume (cr-search-at-volume); the matcher remembers the queries asked while the list is open and narrows them as the
-// text grows, and each group is ranked only as far as it is shown (cr-search-polish). Its memory goes when the list
+// text grows, and the list is ranked only as far as it is shown (cr-search-polish). Its memory goes when the list
 // closes, when the documents move (the index's next generation, a sign-out's reset included) and with the field.
 const matcher = createMatcher()
 watch(open, (isOpen) => {
@@ -239,39 +238,30 @@ watch(open, (isOpen) => {
 })
 watch(documents, () => matcher.clear())
 onBeforeUnmount(() => matcher.clear())
-const groups = computed(() =>
-  searchGroups(documents.value, { chips: chips.value.map((c) => toRaw(c)), text: text.value }, {
-    activeScopeId: activeSpace.scopeId, openNodeId: openNode.value?.id ?? null, activeTree: activeTree.value,
-  }, collator.value, { limits: shown.value, match: matcher }),
+const found = computed(() =>
+  searchResults(documents.value, { chips: chips.value.map((c) => toRaw(c)), text: text.value }, {
+    activeScopeId: activeSpace.scopeId, openNodeId: openNode.value?.id ?? null,
+  }, collator.value, { limit: shown.value, match: matcher }),
 )
-watch([text, chips], () => (shown.value = firstPage()))
-const HEADING: Record<Exclude<SearchGroupId, 'open'>, string> = {
-  space: 'shell.search.groupSpace', other: 'shell.search.groupOther', people: 'shell.search.groupPeople', settings: 'shell.search.groupSettings',
-}
-const heading = (id: SearchGroupId) => (id === 'open' ? t('shell.search.groupOpen', { name: openNode.value?.name ?? '' }) : t(HEADING[id]))
-const resultGroups = computed<VeyqTagOptionGroup<ResultOption>[]>(() =>
-  groups.value.map((g) => {
-    const visible = g.results.slice(0, shown.value[g.id])
-    const rest = g.total - visible.length
-    return {
-      key: g.id,
-      label: heading(g.id),
-      options: [
-        ...visible.map((doc) => ({ key: `result:${doc.scopeId}:${doc.kind}:${doc.id}`, label: doc.name, doc, group: g.id })),
-        ...(rest > 0 ? [{ key: `more:${g.id}`, label: t('shell.search.showMore', { count: Math.min(rest, GROUP_PAGE) }), group: g.id, more: rest }] : []),
-      ],
-    }
-  }),
-)
+watch([text, chips], () => (shown.value = PAGE))
+const resultOptions = computed<ResultOption[]>(() => {
+  const { results, total } = found.value
+  const rest = total - results.length
+  return [
+    ...results.map((doc) => ({ key: `result:${doc.scopeId}:${doc.kind}:${doc.id}`, label: doc.name, doc })),
+    ...(rest > 0 ? [{ key: 'more', label: t('shell.search.showMore', { count: Math.min(rest, PAGE) }), more: rest }] : []),
+  ]
+})
 
-/** What a row says under the name: its own line (a person's handle, a section's heading), or where it lives (and in which
- *  space, for another space's) - a photo's day after it; a photo of the open Memory says only its day. */
+/** What a row says under the name - where it lies, as the one list has no heading to say it: its own line (a person's
+ *  handle, a section's heading), or its path (and its space before it, for another space's) - a photo's day after it; a
+ *  photo of the open Memory says only its day. */
 function secondLine(option: ResultOption): string {
   const doc = option.doc!
   if (doc.subtitle !== undefined) return doc.subtitle
   const day = doc.facets.capturedAt !== undefined ? dayFormat.value.format(doc.facets.capturedAt) : ''
   const path = doc.open ? '' : doc.path.join(' / ')
-  const where = option.group !== 'other' ? path : [spaceLabel(indexedScope(doc.scopeId)), path].filter(Boolean).join(' · ')
+  const where = doc.scopeId === activeSpace.scopeId ? path : [spaceLabel(indexedScope(doc.scopeId)), path].filter(Boolean).join(' · ')
   return [where, day].filter(Boolean).join(' · ')
 }
 /** The values of the chips in force a row carries (its years, its place, the person), shown beside it. */
@@ -292,7 +282,7 @@ function matchedValues(doc: SearchDocument): string[] {
 
 function choose(option: ResultOption) {
   if (option.more !== undefined) {
-    shown.value = { ...shown.value, [option.group]: shown.value[option.group] + GROUP_PAGE }
+    shown.value += PAGE
     return
   }
   const doc = option.doc
@@ -327,7 +317,7 @@ const asked = computed(() => text.value.trim() !== '' || chips.value.length > 0)
 /** The live region's words (see the header): the last chip added or removed, then how many results; nothing until asked. */
 const announcement = computed(() => {
   if (!asked.value) return chipNote.value?.said ?? ''
-  const count = groups.value.reduce((sum, g) => sum + g.total, 0)
+  const count = found.value.total
   return [chipNote.value?.said, t('shell.search.announceResults', { count }, count)].filter(Boolean).join(' ')
 })
 const loadingCount = computed(() => searchState.loading.length)
@@ -344,7 +334,8 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
     :input-id="props.inputId"
     :tags="tags"
     :options="suggestions"
-    :groups="resultGroups"
+    :results="resultOptions"
+    :results-label="t('shell.search.results')"
     :options-label="t('shell.search.filterBy')"
     :placeholder="t('shell.search.placeholder')"
     :aria-label="t('shell.search.label')"
@@ -359,7 +350,11 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
     <template #tag="{ tag }"><VeyqIcon :name="CHIP_ICON[tag.chip.type]" class="veyq-search__chip-icon" /></template>
     <template #option="{ option }">
       <VeyqIcon :name="CHIP_ICON[option.suggestion.chip.type]" />
-      <span class="veyq-search__option-label">{{ option.label }}</span>
+      <span v-if="option.suggestion.chip.type === 'in'" class="veyq-search__result-main">
+        <span class="veyq-search__option-label">{{ option.label }}</span>
+        <span class="veyq-search__result-meta">{{ chipWhere(option.suggestion.chip) }}</span>
+      </span>
+      <span v-else class="veyq-search__option-label">{{ option.label }}</span>
       <span class="veyq-search__option-kind">{{ t(CHIP_WORD[option.suggestion.chip.type]) }}</span>
     </template>
     <template #result="{ option }">
@@ -378,7 +373,7 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
       <span v-if="loadingCount > 0" class="veyq-search__loading">{{ t('shell.search.loading', { count: loadingCount }, loadingCount) }}</span>
       <span v-if="notSearched" class="veyq-search__failed">{{ t('shell.search.notSearched', { spaces: notSearched }) }}</span>
       <span v-if="searchState.listFailed" class="veyq-search__failed">{{ t('shell.search.listFailed') }}</span>
-      <template v-if="!groups.length && !suggestions.length && loadingCount === 0">
+      <template v-if="!found.total && !suggestions.length && loadingCount === 0">
         <span v-if="asked" class="veyq-search__empty">{{ t('shell.search.empty') }}</span>
         <span class="veyq-search__hint">{{ t('shell.search.hint') }}</span>
       </template>

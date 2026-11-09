@@ -1522,18 +1522,15 @@ const en = {
     // Axis-neutral "follow the device": the language pickers used to borrow shell.themeSystem, which tied a
     // language label to the theme block's wording for no reason.
     systemDefault: 'System',
-    // The top bar's search (uc.platform.search, ADR 0125): one field over every space; the open node's group is named by the
-    // node, as core names no application's kind; the tenant's members and the settings sections follow (decision 9).
+    // The top bar's search (uc.platform.search, ADR 0125): one field over every space; the chip suggestions, then one list of
+    // results (decision 5) - its name is for a screen reader, no heading is drawn; the tenant's members and the settings
+    // sections are results too (decision 9), each kind with its word for a kind chip.
     search: {
       label: 'Search all spaces',
       placeholder: 'Search all spaces',
       open: 'Search',
       title: 'Search',
-      groupOpen: 'In “{name}”',
-      groupSpace: 'In this space',
-      groupOther: 'Other spaces',
-      groupPeople: 'People',
-      groupSettings: 'Settings',
+      results: 'Results',
       showMore: 'Show {count} more',
       loading: 'Searching one space… | Searching {count} spaces…',
       notSearched: 'Not searched: {spaces}',
@@ -1548,6 +1545,11 @@ const en = {
       chipSpace: 'Space',
       chipKind: 'Kind',
       chipMonth: 'Month',
+      // An "In:" chip: what lies below a folder, a Memory, a Chapter.
+      chipIn: 'In',
+      // Core's two kinds of result, each a kind chip's word.
+      kindPerson: 'Person',
+      kindSetting: 'Setting',
       // Read to a screen reader as they change (a polite live region): how many results, and a chip added or removed.
       announceResults: 'No results | One result | {count} results',
       announceChipAdded: 'Filter {label} added.',
@@ -3683,11 +3685,7 @@ const de: typeof en = {
       placeholder: 'Alle Bereiche durchsuchen',
       open: 'Suchen',
       title: 'Suche',
-      groupOpen: 'In „{name}“',
-      groupSpace: 'In diesem Bereich',
-      groupOther: 'Andere Bereiche',
-      groupPeople: 'Personen',
-      groupSettings: 'Einstellungen',
+      results: 'Treffer',
       showMore: '{count} weitere zeigen',
       loading: 'Ein Bereich wird durchsucht … | {count} Bereiche werden durchsucht …',
       notSearched: 'Nicht durchsucht: {spaces}',
@@ -3701,6 +3699,9 @@ const de: typeof en = {
       chipSpace: 'Bereich',
       chipKind: 'Art',
       chipMonth: 'Monat',
+      chipIn: 'In',
+      kindPerson: 'Person',
+      kindSetting: 'Einstellung',
       announceResults: 'Keine Treffer | Ein Treffer | {count} Treffer',
       announceChipAdded: 'Filter „{label}“ hinzugefügt.',
       announceChipRemoved: 'Filter „{label}“ entfernt.',

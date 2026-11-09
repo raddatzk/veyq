@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 // The shell's search field (uc.platform.search) over a stubbed index and the REAL registry (Memories registered, so its
 // kind words are the real ones): the first focus asks for the index, a suggestion becomes a chip and Backspace
-// takes it away, the results come in their groups with where they live, choosing one opens it, and the field says what it
-// searched when it found nothing; the tenant's members and the settings sections the rail offers are results of their own
-// (ADR 0125 decision 9), and Depot's and Expenses' kinds have their word. Driven by the key events the layer's combobox
-// listens to.
+// takes it away, the results come as one list after the suggestions with where each lives, choosing one opens it, and the
+// field says what it searched when it found nothing; the tenant's members and the settings sections the rail offers are
+// results too (ADR 0125 decision 9), every kind has its word - core's Person and Setting, Depot's and Expenses' -, and a
+// node something lies below is an In: chip (cr-search-chips-for-everything). Driven by the key events the layer's
+// combobox listens to.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const push = vi.hoisted(() => vi.fn())
@@ -79,6 +80,8 @@ const highlighted = () => {
   return o ? words(o).join(' ') : null
 }
 const suggestionRows = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-input__suggestions .veyq-tags-input__option')].map((o) => words(o).join(' '))
+/** The rows of the one list of results, after the suggestions. */
+const resultRows = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-input__results .veyq-tags-input__option')].map((o) => words(o).join(' '))
 async function press(key: string) {
   field().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
   await flushPromises()
@@ -115,7 +118,7 @@ beforeEach(() => {
   vi.mocked(indexedScope).mockImplementation((id) => scopes.find((s) => s.id === id) ?? null)
   vi.mocked(indexedDocuments).mockReturnValue([
     doc({ id: 'trips', kind: FOLDER_KIND, name: 'Trips' }),
-    doc({ id: 'rome', name: 'Rome 2024', path: ['Trips'], facets: { years: { from: 2024, to: 2024 }, people: [ANNA] } }),
+    doc({ id: 'rome', name: 'Rome 2024', path: ['Trips'], pathIds: ['trips'], facets: { years: { from: 2024, to: 2024 }, people: [ANNA] } }),
     doc({ id: 'garden', scopeId: 'G1', name: 'Rome garden', facets: { years: { from: 2023, to: 2023 } } }),
   ])
   vi.mocked(tenantPeopleNow).mockReturnValue([
@@ -135,20 +138,28 @@ describe('the search field', () => {
     expect(status()).toBe(t('shell.search.hint'))
   })
 
-  it('shows the results in their groups, another space\'s with its space and path', async () => {
+  // was: the results in their groups (In this space, Other spaces) - now one list with no heading, each row saying where
+  it('shows the results as one list with no heading, another space\'s with its space and path', async () => {
     await mountField()
     await type('rome')
-    expect(headings()).toEqual([t('shell.search.groupSpace'), t('shell.search.groupOther')])
+    expect(headings()).toEqual([])
     expect(rows()).toEqual(['Rome 2024 Trips', 'Rome garden Family group'])
   })
 
-  it('heads the open node\'s group by its name', async () => {
+  // was: the open node's group headed by its name - now what lies below the open node comes first at an equal match
+  it('puts what lies below the open node first at an equal match, with no heading', async () => {
     setBreadcrumb([{ id: null, name: 'Familie', hash: '' }, { id: 'trips', name: 'Trips', hash: '#trips/' }, { id: 'rome', name: 'Rome 2024', hash: '#trips/memories/rome-2024' }])
     trees.S1 = [...trees.S1, treeNode({ id: 'day', parentId: 'rome', name: 'Rome day one' })]
-    vi.mocked(indexedDocuments).mockReturnValue([doc({ id: 'day', name: 'Rome day one' }), doc({ id: 'rome', name: 'Rome 2024' })])
+    vi.mocked(indexedDocuments).mockReturnValue([
+      doc({ id: 'day', name: 'Rome day one', path: ['Trips', 'Rome 2024'], pathIds: ['trips', 'rome'] }),
+      doc({ id: 'rome', name: 'Rome 2024', path: ['Trips'], pathIds: ['trips'] }),
+    ])
     await mountField()
     await type('rome')
-    expect(headings()).toEqual([t('shell.search.groupOpen', { name: 'Rome 2024' }), t('shell.search.groupSpace')])
+    expect(headings()).toEqual([t('shell.search.filterBy')]) // Rome 2024 holds a chapter, so it is offered as In: too
+    expect(suggestionRows()).toEqual([`Rome 2024 Familie · Trips ${t('shell.search.chipIn')}`])
+    // by the name alone "Rome 2024" would come first; below the open node, "Rome day one" does
+    expect(resultRows()).toEqual(['Rome day one Trips / Rome 2024', 'Rome 2024 Trips'])
     trees.S1 = trees.S1.slice(0, 2)
   })
 
@@ -254,7 +265,7 @@ describe('the search field', () => {
       await mountField()
       await type('img_7')
       expect(rows().filter((r) => r.startsWith('IMG_7.jpg'))).toHaveLength(1)
-      expect(headings()).toEqual([t('shell.search.groupOpen', { name: 'Rome 2024' })])
+      expect(headings()).toEqual([]) // was: the open node's group heading
       await press('Enter')
       expect(opened).toHaveBeenCalled()
       expect(push).not.toHaveBeenCalled()
@@ -284,15 +295,19 @@ describe('the search field', () => {
     expect(status()).toContain(t('shell.search.notSearched', { spaces: 'Old group' }))
   })
 
-  it('shows a group\'s first results and more on request', async () => {
-    vi.mocked(indexedDocuments).mockReturnValue(Array.from({ length: 11 }, (_, i) => doc({ id: `n${i}`, name: `Rome ${String(i).padStart(2, '0')}` })))
+  // was: a group's first 8 and more on request - now the list's first 10, 10 more on request, the count exact
+  it('shows the first 10 results and 10 more on request, the count exact', async () => {
+    vi.mocked(indexedDocuments).mockReturnValue(Array.from({ length: 25 }, (_, i) => doc({ id: `n${i}`, name: `Rome ${String(i).padStart(2, '0')}` })))
     await mountField()
     await type('rome')
-    expect(rows()).toHaveLength(9)
-    expect(rows().at(-1)).toBe(t('shell.search.showMore', { count: 3 }))
-    for (let i = 0; i < 8; i++) await press('ArrowDown')
-    await press('Enter')
     expect(rows()).toHaveLength(11)
+    expect(rows().slice(0, 2)).toEqual(['Rome 00', 'Rome 01'])
+    expect(rows().at(-1)).toBe(t('shell.search.showMore', { count: 10 }))
+    expect(document.body.querySelector('[data-testid="search-announcement"]')!.textContent!.trim()).toBe(t('shell.search.announceResults', { count: 25 }, 25))
+    for (let i = 0; i < 10; i++) await press('ArrowDown')
+    await press('Enter')
+    expect(rows()).toHaveLength(21)
+    expect(rows().at(-1)).toBe(t('shell.search.showMore', { count: 5 }))
     expect(push).not.toHaveBeenCalled()
   })
 })
@@ -307,24 +322,26 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
   it('finds a member by their name and by their username', async () => {
     await mountField()
     await type('anna')
-    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.groupPeople')])
+    expect(headings()).toEqual([t('shell.search.filterBy')]) // was: and the People group's heading
     expect(rows()).toContain('A Anna Schmidt ~anna') // the initial the roster has, the name, the handle
     await type('~anna')
     expect(rows()).toEqual(['A Anna Schmidt ~anna'])
   })
 
-  it('puts the People group after every space\'s group', async () => {
+  // was: the People group after every space's group - now a person after content at an equal match, in the one list
+  it('puts a person after content at an equal match', async () => {
     vi.mocked(tenantPeopleNow).mockReturnValue([{ userId: 'r', username: 'romeo', realName: null, displayName: 'romeo' }])
     await mountField()
     await type('rom')
-    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.groupSpace'), t('shell.search.groupOther'), t('shell.search.groupPeople')])
+    expect(headings()).toEqual([t('shell.search.filterBy')])
+    expect(rows()).toEqual([`romeo ${t('shell.search.chipPerson')}`, 'Rome 2024 Trips', 'Rome garden Family group', 'R romeo ~romeo'])
   })
 
   it('offers a member as a chip AND lists them as a person: the chip filters, the result opens their profile', async () => {
     await mountField()
     await type('kevin')
     expect(rows()).toEqual([`kevin ${t('shell.search.chipPerson')}`, 'K kevin ~kevin'])
-    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.groupPeople')])
+    expect(headings()).toEqual([t('shell.search.filterBy')]) // was: and the People group's heading
     expect(suggestionRows()).toEqual([`kevin ${t('shell.search.chipPerson')}`])
     await press('ArrowDown')
     expect(highlighted()).toBe('K kevin ~kevin')
@@ -336,7 +353,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
   it('finds a section by its label and opens it on the settings page, the space on screen kept', async () => {
     await mountField()
     await type(t('settings.password').slice(0, 5))
-    expect(headings()).toEqual([t('shell.search.groupSettings')])
+    expect(headings()).toEqual([]) // was: the Settings group's heading
     expect(rows()).toEqual([`${t('settings.password')} ${t('settings.personal')}`])
     await press('Enter')
     expect(push).toHaveBeenCalledWith('/settings/password')
@@ -365,19 +382,60 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     expect(headings()).toEqual([])
     answer(tenantRole('MEMBER'))
     await flushPromises()
-    expect(headings()).toEqual([t('shell.search.groupSettings')])
+    expect(rows()).toEqual([`${t('settings.password')} ${t('settings.personal')}`]) // was: the Settings group's heading
   })
 
-  it('hides both groups once a chip is set: a chip filters content', async () => {
+  // was: "hides both groups once a chip is set" - the hide rule went; a chip is a predicate over every document, and a
+  // person chip asks what the person takes part in, which their own profile is not
+  it('a person chip lists what they take part in, not their profile (the predicate, no hide rule)', async () => {
     await mountField()
     await type('anna')
-    expect(headings()).toContain(t('shell.search.groupPeople'))
+    expect(rows()).toContain('A Anna Schmidt ~anna')
     expectSuggestionHighlighted()
     await press('Enter') // the person chip
     expect(chips()).toEqual(['Anna Schmidt'])
-    expect(headings()).not.toContain(t('shell.search.groupPeople'))
-    expect(headings()).not.toContain(t('shell.search.groupSettings'))
     expect(rows()).toEqual(['Rome 2024 Trips Anna Schmidt'])
+  })
+
+  it('Kind: Person lists only people - with no text, and with text', async () => {
+    await mountField()
+    await type(t('shell.search.kindPerson'))
+    expect(suggestionRows()).toContain(`${t('shell.search.kindPerson')} ${t('shell.search.chipKind')}`)
+    expect(highlighted()).toBe(`${t('shell.search.kindPerson')} ${t('shell.search.chipKind')}`)
+    await press('Enter')
+    expect(chips()).toEqual([t('shell.search.kindPerson')])
+    expect(rows()).toEqual(['A Anna Schmidt ~anna', 'K kevin ~kevin'])
+    await type('ann')
+    expect(rows().filter((r) => !suggestionRows().includes(r))).toEqual(['A Anna Schmidt ~anna'])
+  })
+
+  it('Kind: Setting lists only the settings sections the rail offers', async () => {
+    await mountField()
+    i18n.global.locale.value = 'de'
+    try {
+      await type('Einstell')
+      expect(suggestionRows()).toContain('Einstellung Art')
+      await press('Enter')
+      expect(chips()).toEqual(['Einstellung'])
+      const found = resultRows()
+      expect(found.length).toBeGreaterThan(0)
+      expect(found).not.toContain('Rome 2024 Trips')
+      expect(found.some((r) => r.includes('Anna') || r.includes('kevin'))).toBe(false)
+      expect(found).toContain(`${i18n.global.t('settings.password')} ${i18n.global.t('settings.personal')}`) // in German, the locale on
+    } finally {
+      i18n.global.locale.value = 'en'
+    }
+  })
+
+  it('a year chip lists no person and no setting; control: without it a person is listed', async () => {
+    vi.mocked(tenantPeopleNow).mockReturnValue([{ userId: 'r', username: 'rome2024', realName: null, displayName: 'Rome 2024 fan' }])
+    await mountField()
+    await type('rome 2024')
+    expect(resultRows()).toContain('R Rome 2024 fan ~rome2024') // control
+    await press('Enter') // the year chip, "rome" kept
+    expect(chips()).toEqual(['2024'])
+    expect(field().value).toBe('rome')
+    expect(resultRows()).toEqual(['Rome 2024 Trips 2024'])
   })
 
   it('names what it searches: members and settings too', async () => {
@@ -407,14 +465,55 @@ describe('the kind words of Depot, Expenses and core\'s bookmark', () => {
   })
 })
 
+// cr-search-chips-for-everything: a node something lies below is an In: chip, with where it lives as its second line
+describe('the In: chip', () => {
+  const strand = () => doc({ id: 'p1', nodeId: 'rome', kind: 'memories.photo', name: 'strand.jpg', path: ['Trips', 'Rome 2024'], pathIds: ['trips', 'rome'] })
+
+  it('"trip" offers In: Trips with its space, which narrows to its subtree, a photo included; control: the photo without it', async () => {
+    vi.mocked(indexedDocuments).mockReturnValue([...indexedDocuments(), strand()])
+    await mountField()
+    await type('strand')
+    expect(rows()).toContain('strand.jpg Trips / Rome 2024') // control: listed without the chip
+    await type('trip')
+    expect(suggestionRows()).toEqual([`Trips Familie ${t('shell.search.chipIn')}`])
+    await press('Enter')
+    expect(chips()).toEqual(['Trips'])
+    expect(rows()).toEqual(['Rome 2024 Trips', 'strand.jpg Trips / Rome 2024'])
+    await type('strand')
+    expect(rows()).toEqual(['strand.jpg Trips / Rome 2024'])
+  })
+
+  it('offers two nodes of one name as two suggestions, each with where it lives, each narrowing to its own subtree', async () => {
+    vi.mocked(indexedDocuments).mockReturnValue([
+      doc({ id: 'trips', kind: FOLDER_KIND, name: 'Trips' }),
+      doc({ id: 'rome', name: 'Rome 2024', path: ['Trips'], pathIds: ['trips'] }),
+      doc({ id: 'work', kind: FOLDER_KIND, name: 'Work' }),
+      doc({ id: 'trips2', kind: FOLDER_KIND, name: 'Trips', path: ['Work'], pathIds: ['work'] }),
+      doc({ id: 'fair', name: 'Trade fair', path: ['Work', 'Trips'], pathIds: ['work', 'trips2'] }),
+      doc({ id: 'g-trips', scopeId: 'G1', kind: FOLDER_KIND, name: 'Trips' }),
+      doc({ id: 'camp', scopeId: 'G1', name: 'Camping', path: ['Trips'], pathIds: ['g-trips'] }),
+    ])
+    await mountField()
+    await type('trips')
+    expect(suggestionRows()).toEqual([
+      `Trips Familie ${t('shell.search.chipIn')}`, `Trips Familie · Work ${t('shell.search.chipIn')}`, `Trips Family group ${t('shell.search.chipIn')}`,
+    ])
+    await press('ArrowDown')
+    await press('Enter')
+    expect(chips()).toEqual(['Trips'])
+    expect(rows()).toEqual(['Trade fair Work / Trips'])
+  })
+})
+
 // uc.platform.search step 4 (owner 2026-11-09): the suggestions stand under their own heading; the first entry of the list is
 // highlighted, a suggestion or a result, and Enter takes it; an entry the member moved to stays highlighted while they type
 // on and it is listed (the layer's own test holds the drop-out and the pointer).
 describe('the suggestions\' heading and the entry Enter takes', () => {
-  it('heads the chip suggestions "Filter by", above the result groups', async () => {
+  // was: "Filter by" above the result groups' headings - now the one heading, no other below it
+  it('heads the chip suggestions "Filter by", and no heading stands below it', async () => {
     await mountField()
     await type('2024')
-    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.groupSpace')])
+    expect(headings()).toEqual([t('shell.search.filterBy')])
     expect(suggestionRows()).toEqual([`2024 ${t('shell.search.chipYear')}`])
     expect(rows()).toEqual([`2024 ${t('shell.search.chipYear')}`, 'Rome 2024 Trips'])
   })
@@ -495,7 +594,8 @@ describe('the polish (cr-search-polish)', () => {
     ])
     await mountField()
     await type('kev')
-    const [first, second] = names()
+    // the member kevin is a result too now, in the one list; the two documents are the ones looked at
+    const [first, second] = ['Kevins Geburtstag', '<b>Kev</b> & co'].map((n) => names().find((e) => e.textContent === n)!)
     const strong = first.querySelector('strong')!
     expect(strong.textContent).toBe('Kev')
     expect([...strong.childNodes].map((n) => n.nodeType)).toEqual([Node.TEXT_NODE])
@@ -619,18 +719,16 @@ describe('the polish (cr-search-polish)', () => {
     expect(announced()).not.toContain(t('shell.search.announceChipRemoved', { label: '2024' }))
   })
 
-  it('names each group by its heading, and the field is a combobox that owns the list', async () => {
+  // was: every group named by its heading - now the suggestions by theirs and the one list of results by its own name
+  it('names the suggestions by their heading and the results by their name, and the field is a combobox that owns the list', async () => {
     await mountField()
-    await type('rome')
+    await type('2024')
     const groups = [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="group"]')]
     expect(groups.length).toBe(2)
-    for (const g of groups) {
-      const labelledBy = g.getAttribute('aria-labelledby') ?? ''
-      const label = labelledBy ? document.getElementById(labelledBy) : null
-      expect(label?.textContent?.trim(), `group ${g.id}`).toBeTruthy()
-      expect(headings()).toContain(label!.textContent!.trim())
-    }
-    expect(groups.map((g) => document.getElementById(g.getAttribute('aria-labelledby')!)!.textContent!.trim())).toEqual(headings())
+    const [suggested, found] = groups
+    expect(document.getElementById(suggested.getAttribute('aria-labelledby') ?? '')?.textContent?.trim()).toBe(t('shell.search.filterBy'))
+    expect(found.getAttribute('aria-label')).toBe(t('shell.search.results'))
+    expect(found.getAttribute('aria-labelledby') || null).toBeNull() // no heading of its own to point at
     const input = field()
     expect(input.getAttribute('role')).toBe('combobox')
     expect(input.getAttribute('aria-expanded')).toBe('true')

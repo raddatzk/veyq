@@ -163,8 +163,9 @@ describe('VeyqTagsInput', () => {
 // With results under the suggestions (the shell's search, uc.platform.search step 4): the first entry of the list is
 // highlighted, a suggestion or a result, and Enter takes it; an entry the member moved the highlight to (keys or pointer)
 // stays highlighted while they type on, as long as it is listed. Reka alone puts the highlight back on the first entry
-// whenever the text changes (the picker test above is that control).
-describe('VeyqTagsInput with result groups', () => {
+// whenever the text changes (the picker test above is that control). The list has two areas, the suggestions under
+// their heading and the results after them with none (cr-search-chips-for-everything).
+describe('VeyqTagsInput with results', () => {
   const PEOPLE = ['Ken', 'Kevin']
   const RESULTS = [{ key: 'r:kenia', label: 'Kenia' }, { key: 'r:kevin', label: 'Kevins Geburtstag' }]
   /** The shell's search in small: the people whose name starts with the text as chip suggestions (a chip stays offered -
@@ -182,7 +183,8 @@ describe('VeyqTagsInput with result groups', () => {
           h(VeyqTagsInput<VeyqTag, VeyqTagOption>, {
             tags: tags.value,
             options: typed() ? PEOPLE.filter((n) => n.toLowerCase().startsWith(typed())).map((n) => ({ key: `p:${n}`, label: n })) : [],
-            groups: typed() ? [{ key: 'g', label: 'Results', options: RESULTS.filter((r) => r.label.toLowerCase().includes(typed())) }] : [],
+            results: typed() ? RESULTS.filter((r) => r.label.toLowerCase().includes(typed())) : [],
+            resultsLabel: 'Results',
             optionsLabel: 'Filter by',
             query: query.value,
             'onUpdate:query': (q: string) => (query.value = q),
@@ -198,11 +200,16 @@ describe('VeyqTagsInput with result groups', () => {
     return { added, chosen }
   }
 
-  it('heads the suggestions and highlights the first entry, a suggestion', async () => {
+  // was: both areas headed ('Filter by', 'Results'); now only the suggestions are, and the results are named for a screen reader
+  it('heads the suggestions only, names the results without a heading, and highlights the first entry, a suggestion', async () => {
     mountSearch()
     await flushPromises()
     await type('k')
-    expect([...document.body.querySelectorAll('.veyq-tags-input__group-label')].map((x) => x.textContent?.trim())).toEqual(['Filter by', 'Results'])
+    expect([...document.body.querySelectorAll('.veyq-tags-input__group-label')].map((x) => x.textContent?.trim())).toEqual(['Filter by'])
+    const results = document.body.querySelector('.veyq-tags-input__results')!
+    expect(results.getAttribute('role')).toBe('group')
+    expect(results.getAttribute('aria-label')).toBe('Results')
+    expect(results.querySelectorAll('.veyq-tags-input__option')).toHaveLength(2)
     expect(options().map((o) => o.textContent?.trim())).toEqual(['Ken', 'Kevin', 'Kenia', 'Kevins Geburtstag'])
     expect(highlighted()).toBe('Ken')
   })
@@ -221,9 +228,9 @@ describe('VeyqTagsInput with result groups', () => {
     expect(highlighted()).toBe('Kevin')
   })
 
-  // The owner's amendment: a dropped-out entry falls back to the first entry of ITS group and stays remembered - listed
-  // again, it is highlighted again (Backspace is the usual way back).
-  it('when the remembered entry drops out, highlights the first entry of its group, and the entry again once it is back', async () => {
+  // The owner's amendment: a dropped-out entry falls back to the first entry of ITS area (was: its group) and stays
+  // remembered - listed again, it is highlighted again (Backspace is the usual way back).
+  it('when the remembered entry drops out, highlights the first entry of its area, and the entry again once it is back', async () => {
     mountSearch()
     await flushPromises()
     await type('ke')
@@ -231,14 +238,14 @@ describe('VeyqTagsInput with result groups', () => {
     await press('ArrowDown')
     await press('ArrowDown')
     expect(highlighted()).toBe('Kevins Geburtstag')
-    await type('ken') // "Kevins Geburtstag" is no longer listed; its group's first entry is Kenia, the list's first Ken
+    await type('ken') // "Kevins Geburtstag" is no longer listed; its area's first entry is Kenia, the list's first Ken
     expect(options().map((o) => o.textContent?.trim())).toEqual(['Ken', 'Kenia'])
     expect(highlighted()).toBe('Kenia')
     await type('ke') // back: highlighted again
     expect(highlighted()).toBe('Kevins Geburtstag')
   })
 
-  it('falls back to the first entry of the list when the remembered entry\'s group is gone', async () => {
+  it('falls back to the first entry of the list when the remembered entry\'s area is empty', async () => {
     mountSearch()
     await flushPromises()
     await type('ke')

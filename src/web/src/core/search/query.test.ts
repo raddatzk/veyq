@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { searchDocument, type SearchDocument, type SearchFacets } from './model'
+import { searchResults } from './results'
 import {
-  byRank, chipKey, createMatcher, MATCH_HISTORY, matchAll, matchedText, nameParts, Rank, satisfies, suggestChips, textRank, type ChipSources, type SearchChip,
+  chipKey, createMatcher, MATCH_HISTORY, matchAll, matchedText, nameParts, Rank, satisfies, suggestChips, textRank, type ChipSources, type SearchChip,
   type SearchQuery,
 } from './query'
 
@@ -53,6 +54,47 @@ describe('chip suggestions from the typed text', () => {
 
   it('does not offer a match inside a word', () => {
     expect(offered('chmidt')).toEqual([])
+  })
+})
+
+// cr-search-chips-for-everything: a node something lies below is an In: chip, matched by its id, scoped to its space
+describe('the In: chip', () => {
+  // the tenant's space: Reisen/ → Rom 2024 (a Memory) → a photo; Arbeit/ → Reisen (a second "Reisen"); a group: Reisen/ → Paris
+  const reisen = doc('Reisen', {}, { id: 'reisen', nodeId: 'reisen' })
+  const rom = doc('Rom 2024', {}, { id: 'rom', nodeId: 'rom', path: ['Reisen'], pathIds: ['reisen'] })
+  const photo = doc('strand.jpg', {}, { id: 'p1', nodeId: 'rom', kind: 'memories.photo', path: ['Reisen', 'Rom 2024'], pathIds: ['reisen', 'rom'] })
+  const arbeit = doc('Arbeit', {}, { id: 'arbeit', nodeId: 'arbeit' })
+  const reisen2 = doc('Reisen', {}, { id: 'reisen2', nodeId: 'reisen2', path: ['Arbeit'], pathIds: ['arbeit'] })
+  const memo = doc('Notiz', {}, { id: 'memo', nodeId: 'memo', path: ['Arbeit', 'Reisen'], pathIds: ['arbeit', 'reisen2'] })
+  const groupReisen = doc('Reisen', {}, { scopeId: 'g1', id: 'g-reisen', nodeId: 'g-reisen' })
+  const paris = doc('Paris', {}, { scopeId: 'g1', id: 'paris', nodeId: 'paris', path: ['Reisen'], pathIds: ['g-reisen'] })
+  const empty = doc('Reiseziele', {}, { id: 'empty', nodeId: 'empty' })
+  const all = [reisen, rom, photo, arbeit, reisen2, memo, groupReisen, paris, empty]
+  const inChip = (d: SearchDocument): SearchChip => ({ type: 'in', scopeId: d.scopeId, nodeId: d.id, label: d.name, path: d.path })
+
+  it('offers a node something lies below by a word of its name, with the names above it; not an empty one', () => {
+    const s = suggestChips('reis', [], sources({ documents: all })).filter((x) => x.chip.type === 'in')
+    expect(s.map((x) => chipKey(x.chip))).toEqual(['in:s1:reisen', 'in:s1:reisen2', 'in:g1:g-reisen'])
+    expect(s[1].chip).toEqual({ type: 'in', scopeId: 's1', nodeId: 'reisen2', label: 'Reisen', path: ['Arbeit'] })
+    expect(offered('reisez', [], sources({ documents: all }))).toEqual([]) // Reiseziele holds nothing
+  })
+
+  it('narrows to the node\'s subtree, a photo by its Memory included, the node itself not; control: without it all are there', () => {
+    const names = (chips: SearchChip[]) => matchAll(all, { chips, text: '' }).map((m) => m.doc.name)
+    expect(names([inChip(reisen)])).toEqual(['Rom 2024', 'strand.jpg'])
+    expect(matchAll(all, { chips: [], text: 'strand' }).map((m) => m.doc.id)).toEqual(['p1'])
+  })
+
+  it('tells two nodes of one name apart by id, in one space and across spaces', () => {
+    expect(matchAll(all, { chips: [inChip(reisen2)], text: '' }).map((m) => m.doc.id)).toEqual(['memo'])
+    expect(matchAll(all, { chips: [inChip(groupReisen)], text: '' }).map((m) => m.doc.id)).toEqual(['paris'])
+    // the space is part of it: an id another space holds below a node of the same id is not this one's
+    const elsewhere = doc('Fremd', {}, { scopeId: 'g2', id: 'x', nodeId: 'x', pathIds: ['reisen'] })
+    expect(satisfies(elsewhere, inChip(reisen))).toBe(false)
+  })
+
+  it('a document of no space (a person, a settings section) is in no node', () => {
+    expect(satisfies(doc('Anna', {}, { scopeId: '', kind: 'person' }), inChip(reisen))).toBe(false)
   })
 })
 
@@ -118,10 +160,19 @@ describe('the text', () => {
     expect(textRank(doc('Summer in Rome'), 'rome summer')).toBe(Rank.inside)
   })
 
-  it('orders by rank, then by the name', () => {
+  // was: `byRank` sorted the matches; the order is now the one list's (`results.ts`), which in one place is rank, then name
+  it('orders by rank, then by the name, in one place', () => {
     const docs = [doc('Aroma'), doc('Trip to Rome'), doc('Rom'), doc('Roma B'), doc('Roma A'), doc('Summer', { places: ['Rom'] })]
-    const order = matchAll(docs, { chips: [], text: 'rom' }).sort(byRank(new Intl.Collator('en'))).map((m) => m.doc.name)
-    expect(order).toEqual(['Rom', 'Roma A', 'Roma B', 'Trip to Rome', 'Aroma', 'Summer'])
+    const order = searchResults(docs, { chips: [], text: 'rom' }, { activeScopeId: 's1', openNodeId: null }, new Intl.Collator('en'))
+    expect(order.results.map((d) => d.name)).toEqual(['Rom', 'Roma A', 'Roma B', 'Trip to Rome', 'Aroma', 'Summer'])
+  })
+
+  it('ranks a settings section\'s word with a place: after every match of a name, inside a word included', () => {
+    const mail = doc('Mail', {}, { keywords: ['E-Mail', 'SMTP'] })
+    expect(textRank(mail, 'smtp')).toBe(Rank.place)
+    expect(textRank(mail, 'mtp')).toBeNull() // from a word's start only
+    expect(textRank(doc('Gesmtpx'), 'smtp')).toBe(Rank.inside) // control: a name inside a word ranks before it
+    expect(textRank(doc('Mail', {}, { keywords: ['Mail'] }), 'mail')).toBe(Rank.exact) // the name counts first
   })
 
   it('matches another name a document carries as its name (a person\'s ~username), at its best rank', () => {

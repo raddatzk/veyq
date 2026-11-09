@@ -21,7 +21,7 @@ While you type, veyq offers what your words could mean, under **Filter by**, abo
 into a filter: click it, or press <kbd>Enter</kbd> while it is highlighted. The first entry of the list is highlighted,
 a filter or a result, and <kbd>Enter</kbd> takes the highlighted entry. Once you move the highlight with <kbd>↑</kbd>,
 <kbd>↓</kbd> or the pointer, it stays on that entry while you type on. If your words no longer find that entry, the
-first entry of its group is highlighted instead; once the entry is back, for example after <kbd>Backspace</kbd>, it is
+first entry of its part of the list - the filters or the results - is highlighted instead; once the entry is back, for example after <kbd>Backspace</kbd>, it is
 highlighted again. Choose a filter's × or press <kbd>Backspace</kbd> to take it away again.
 
 - **Year**: four digits, such as `2024`. A Memory matches when its dates touch that year, a photo when it was taken
@@ -29,25 +29,34 @@ highlighted again. Choose a filter's × or press <kbd>Backspace</kbd> to take it
 - **Month**: a month's name with its year, such as `May 2024` (or in German, `Mai 2024`); the first three letters of
   the month are enough. A Memory matches when its dates touch that month, a photo when it was taken in it. A month's
   name without a year is read as part of a name, not as a filter.
-- **Person**: part of a member's name. It finds the Memories that list them as there. The same word also lists the
-  member under **People**: choose the filter to find their Memories, or the person to open their profile.
+- **Person**: part of a member's name. It finds the Memories that list them as there, not their profile. The same word
+  also lists the member among the results: choose the filter to find their Memories, or the person to open their profile.
 - **Place**: part of a place a Memory or a photo names.
 - **Space**: part of a space's name.
-- **Kind**: a word such as *Memory*, *Chapter*, *Folder*, *File*, *Drop box*, *Pot*, *Bookmark*, *Photo* or *Video*.
+- **In**: part of the name of a folder, a Memory or a chapter that holds something. It finds what lies inside it, its
+  photos included, and only there. Two with the same name are offered as two filters, each with its space and where it
+  lies, so you can choose the one you mean.
+- **Kind**: a word such as *Memory*, *Chapter*, *Folder*, *File*, *Drop box*, *Pot*, *Bookmark*, *Photo*, *Video*,
+  *Person* or *Setting*. *Person* lists only members, *Setting* only parts of the settings.
 
-## How the results are grouped
+A filter narrows everything: a member or a part of the settings stays in the list only where it fits the filter, so a
+year filter lists no person, as a person has no year.
 
-- **In “…”**: when a Memory is open, what is in it comes first: its chapters, and its photos and videos.
-- **In this space**: the rest of the space you are in.
-- **Other spaces**: everything else, each result with its space and where it lives there. A photo stands where its
-  Memory stands, with its Memory and the day it was taken.
-- **People**: everyone who is a member here, found by their name or by their `~username`.
-- **Settings**: the parts of the settings, each with the heading it has there. Besides its name, each part is found
-  by a few words of its own: *email* or *SMTP* finds the mail settings, *password* the place to change it. You find
-  exactly the ones your settings offer you right now: a part only the space's owner can open is listed for its owner
-  alone.
+## How the results are ordered
 
-While a filter is set, People and Settings are not listed: a filter narrows what is in your spaces.
+The results are one list under the filters. What your words match best comes first: a name that is exactly your words,
+then one that starts with them, then one with a word that starts with them, then one that holds them inside a word, then
+a place or a word of the settings. Among equally good matches, what is near you comes first: what is inside the open
+Memory (its chapters, its photos and videos), then the rest of the space you are in, then your other spaces, then
+members and the settings. So a name that is exactly your words still comes first when it lies in another space.
+
+Each result says where it lies: its space and its place there when it is in another space, its place in this one
+otherwise. A photo shows its Memory and the day it was taken. A member shows their `~username`, and is found by it too;
+a part of the settings shows the heading it has there. Besides its name, each part of the settings is found by a few
+words of its own: *email* or *SMTP* finds the mail settings, *password* the place to change it. You find exactly the
+parts your settings offer you right now: a part only the space's owner can open is listed for its owner alone.
+
+The first 10 results are shown; **Show 10 more** adds the next ones.
 
 ## What is searched
 
@@ -58,6 +67,6 @@ found.
 While veyq is still reading a space, the field says so; a space it could not read is named as not searched.
 
 With a screen reader, the field is a combobox: the number of results is read out as it changes, and so is a filter
-added or taken away; each group of results is named by its heading.
+added or taken away; the filters are named by their heading, and the results by their own name.
 
 A shared link has no search.

@@ -1331,7 +1331,7 @@
   color: var(--app-text);
 }
 
-/* a group of results under the suggestions: its heading small, bold and quiet - never upper-cased, as it may hold a name */
+/* the suggestions, and the results after them: the suggestions' heading small, bold and quiet - never upper-cased */
 .veyq-tags-input__group {
   display: flex;
   flex-direction: column;

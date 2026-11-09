@@ -8,25 +8,35 @@ acceptanceCriteria:
       web:
         unit: [src/core/search/searchIndex.test.ts, src/core/node/keyResolver.test.ts]
   - id: chips-and-text
-    text: A token that reads as a year (a Memory matches when its date range overlaps it, a photo when captured in it), a month's name (three letters at least, in the UI's language or in English) followed by a year as that month (a Memory matches when its date range overlaps the month, a photo when captured in it, an undated Memory never; a month's name alone offers nothing), a member's name, a place a document carries, a space's name or a kind's word is offered as a chip; a document matches when it satisfies every chip and the remaining text matches its name or place, ignoring case and diacritics. The chip suggestions stand under a heading of their own (Filter by), above the result groups; the first entry of the list is highlighted, a suggestion or a result, also right after a chip was chosen, and Enter takes it (a suggestion becomes a chip, a result opens); once the member moves the highlight (arrow keys or pointer) it stays on that entry while they type on, as long as it is listed; when it drops out the first entry of its group is highlighted (the list's first when that group is gone), and it stays remembered - listed again, it is highlighted again - until a new move replaces it or choosing an entry or closing the list forgets it; a field without results (the people pickers) keeps Reka's own highlight. The part of a result's name the text matched is drawn bold, found in the folded name and mapped back over the name's own characters ("Straße" for "strasse", "Café" for "cafe"), as text nodes and a strong element, never as markup from a string. While the text only grows under the same chips and documents, the previous matches are narrowed instead of every document scanned.
+    text: A token that reads as a year (a Memory matches when its date range overlaps it, a photo when captured in it), a month's name (three letters at least, in the UI's language or in English) followed by a year as that month (a Memory matches when its date range overlaps the month, a photo when captured in it, an undated Memory never; a month's name alone offers nothing), a member's name, a place a document carries, a space's name, a kind's word or the name of a node something lies below (In:) is offered as a chip; a document matches when it satisfies every chip and the remaining text matches its name or place, ignoring case and diacritics. The chip suggestions stand under a heading of their own (Filter by), above the one list of results, which has none; the first entry of the list is highlighted, a suggestion or a result, also right after a chip was chosen, and Enter takes it (a suggestion becomes a chip, a result opens); once the member moves the highlight (arrow keys or pointer) it stays on that entry while they type on, as long as it is listed; when it drops out the first entry of its area is highlighted - the suggestions or the results - (the list's first when that area is empty), and it stays remembered - listed again, it is highlighted again - until a new move replaces it or choosing an entry or closing the list forgets it; a field without results (the people pickers) keeps Reka's own highlight. The part of a result's name the text matched is drawn bold, found in the folded name and mapped back over the name's own characters ("Straße" for "strasse", "Café" for "cafe"), as text nodes and a strong element, never as markup from a string. While the text only grows under the same chips and documents, the previous matches are narrowed instead of every document scanned.
     coverage:
       web:
         unit: [src/core/search/query.test.ts, src/core/search/SearchField.test.ts, src/shared/ui/VeyqTagsInput.test.ts, src/shared/text/fold.test.ts, src/features/memories/search.test.ts]
-  - id: grouped-by-context
-    text: Results are grouped by the open node (headed by its name, when a node's page is open - what it contributed and the nodes below it), In this space, Other spaces, ranked only within a group (an exact or prefix name match above a match inside a word, a name above a place) and only as far as it is shown (its first results selected, its count exact for "show more"); an empty group is not shown.
+  - id: one-list-ordered-by-match-and-place
+    text: The results are one list after the suggestions, with no heading below Filter by, ordered by the match (an exact name, a prefix, a word's start, inside a word, then a place or a settings section's word), then by where the result lies (below the open node - what its page contributed and the nodes below it, while a node's page is open -, the active space, the other spaces, then people and settings), then by the name's collation - so an exact match in another space comes before an inside-word match here; each row says where it lies (another space's its space and path, this space's its path); the first 10 are shown and "show more" adds 10, the list ranked only as far as it is shown and its count exact.
     coverage:
       web:
-        unit: [src/core/search/groups.test.ts, src/core/search/SearchField.test.ts]
+        unit: [src/core/search/results.test.ts, src/core/search/SearchField.test.ts]
+  - id: a-chip-is-a-predicate-over-every-document
+    text: Every chip is a predicate over every document, a person and a settings section included, and no rule hides a kind of document while a chip is set - Kind Person lists only people, a year chip lists no person and no setting (they have no year), and a person chip lists what that person takes part in, never their own profile.
+    coverage:
+      web:
+        unit: [src/core/search/results.test.ts, src/core/search/SearchField.test.ts]
+  - id: in-a-node
+    text: A node something lies below (a folder, a Memory, a Chapter) is offered as an In chip when the text starts a word of its name, with its space and the names above it as its second line; the chip narrows to what lies below that node by id in its space - the nodes below it and the objects of it and of them, a photo by its Memory - and two nodes of one name are two suggestions, each narrowing to its own subtree.
+    coverage:
+      web:
+        unit: [src/core/search/query.test.ts, src/core/search/SearchField.test.ts]
   - id: memories-contributes-through-the-registry
     text: Memories contributes a Memory's date range, place and participants, every photo and video of every space (its scopeDocuments hook) and the photos and videos of the open Memory's opened listing (capture time, place) through the registry; core imports no application.
     coverage:
       web:
         unit: [src/features/memories/search.test.ts, src/features/memories/components/MemoryDetail.search.test.ts, src/core/search/contribution.test.ts]
   - id: photos-of-every-space
-    text: Every live photo and video of every space is a document with its original's name, its capture time and its place, read from the space's media listing (listScopeMedia - every live medium on a live node of the scope, in pages by id, an ETag from the tree revision, the live nodes' item revisions and the content blocks; a 304 keeps the documents and opens nothing) and opened per node under the node's key while the walk holds it, every node key zeroed once the application's hook returned; a medium at an unchanged revision is kept unopened, a blocked medium is no document, and the open Memory's own document of a medium replaces the listing's; a photo goes where its Memory goes (the open node's group, In this space, Other spaces), its Memory's path and day in its second line.
+    text: Every live photo and video of every space is a document with its original's name, its capture time and its place, read from the space's media listing (listScopeMedia - every live medium on a live node of the scope, in pages by id, an ETag from the tree revision, the live nodes' item revisions and the content blocks; a 304 keeps the documents and opens nothing) and opened per node under the node's key while the walk holds it, every node key zeroed once the application's hook returned; a medium at an unchanged revision is kept unopened, a blocked medium is no document, and the open Memory's own document of a medium replaces the listing's; a photo lies where its Memory lies (below the open node when its Memory is the open one or below it), its Memory's path and day in its second line.
     coverage:
       web:
-        unit: [src/core/search/searchIndex.test.ts, src/features/memories/search.scope.test.ts, src/core/search/SearchField.test.ts, src/core/search/groups.test.ts, src/features/memories/components/MemoryDetail.search.test.ts]
+        unit: [src/core/search/searchIndex.test.ts, src/features/memories/search.scope.test.ts, src/core/search/SearchField.test.ts, src/core/search/results.test.ts, src/features/memories/components/MemoryDetail.search.test.ts]
       backend:
         integration:
           - ScopeMediaListSliceTest.pagesByIdAcrossTheScopesNodesEveryMediumOnce
@@ -42,22 +52,22 @@ acceptanceCriteria:
       web:
         unit: [src/core/search/SearchField.test.ts, src/features/memories/components/MemoryDetail.search.test.ts]
   - id: people-are-results
-    text: Every member of this tenant is a result in a People group after the spaces' groups, named as the directory names them and found by that name or by their ~username, from the roster the client already read (dropped at sign-out); choosing one opens their profile page, while the same word still offers them as a person chip; with any chip set, the People group is not shown.
+    text: Every member of this tenant is a result in the one list, after content at an equal match, named as the directory names them and found by that name or by their ~username, from the roster the client already read (dropped at sign-out); choosing one opens their profile page, while the same word still offers them as a person chip.
     coverage:
       web:
-        unit: [src/core/search/SearchField.test.ts, src/core/search/groups.test.ts, src/core/search/query.test.ts]
+        unit: [src/core/search/SearchField.test.ts, src/core/search/results.test.ts, src/core/search/query.test.ts]
   - id: settings-are-the-rails-sections
-    text: The settings sections are results in a Settings group after People, exactly those the settings rail offers this member now - one list with one set of gates, read by both (an owner-only, moderator-only or capability-gated section the rail hides is never a result; none while a gate's answer is out); a section is found by its label and by a few words of its own kept in its entry of that list, matched from a word's start only ("E-Mail" lists the mail section for an owner and nothing for a member); the field reads the list's answers once, on its first focus, and again only where they move (another tenant's role, a group the index lists that the answers do not know); choosing one opens it on the settings page with the active space kept; with any chip set, the Settings group is not shown.
+    text: The settings sections are results in the one list, after content at an equal match, exactly those the settings rail offers this member now - one list with one set of gates, read by both (an owner-only, moderator-only or capability-gated section the rail hides is never a result; none while a gate's answer is out); a section is found by its label and by a few words of its own kept in its entry of that list, matched from a word's start only ("E-Mail" lists the mail section for an owner and nothing for a member); the field reads the list's answers once, on its first focus, and again only where they move (another tenant's role, a group the index lists that the answers do not know); choosing one opens it on the settings page with the active space kept; a section matched by its word ranks with a place match, after every name match.
     coverage:
       web:
-        unit: [src/features/settings/sections.test.ts, src/core/search/SearchField.test.ts, src/core/search/groups.test.ts, src/views/SettingsHubView.test.ts]
+        unit: [src/features/settings/sections.test.ts, src/core/search/SearchField.test.ts, src/core/search/results.test.ts, src/core/search/query.test.ts, src/views/SettingsHubView.test.ts]
   - id: a-screen-reader-drives-it
-    text: The field is a combobox a screen reader drives (role combobox, its expanded state, the listbox it controls); a polite live region announces the number of results as it changes and a chip added or removed; each result group is named by its heading (its aria-labelledby resolves to the heading's text).
+    text: The field is a combobox a screen reader drives (role combobox, its expanded state, the listbox it controls); a polite live region announces the number of results as it changes and a chip added or removed; the suggestions are named by their heading (their aria-labelledby resolves to its text) and the one list of results by its own name (aria-label), as it has no heading.
     coverage:
       web:
         unit: [src/core/search/SearchField.test.ts]
   - id: every-kind-has-a-word
-    text: Every registered kind has a kind word, so a kind chip reaches it - Memories' Memory and Chapter, Depot's file and drop box, Expenses' Pot, and core's folder and bookmark (its word in core's catalog, as the kind is core's).
+    text: Every registered kind has a kind word, so a kind chip reaches it - Memories' Memory and Chapter, Depot's file and drop box, Expenses' Pot, and core's folder and bookmark (its word in core's catalog, as the kind is core's) and core's two documents of no space, Person and Setting.
     coverage:
       web:
         unit: [src/applications.test.ts, src/core/search/SearchField.test.ts]

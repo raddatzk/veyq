@@ -23,7 +23,7 @@ eines davon, um es zum Filter zu machen: Klicke es an, oder drücke <kbd>Eingabe
 Hervorgehoben ist der erste Eintrag der Liste, ein Filter oder ein Ergebnis, und <kbd>Eingabe</kbd> nimmt den
 hervorgehobenen Eintrag. Bewegst du die Hervorhebung mit <kbd>↑</kbd>, <kbd>↓</kbd> oder dem Mauszeiger, bleibt sie auf
 diesem Eintrag, während du weitertippst. Finden deine Worte den Eintrag nicht mehr, ist stattdessen der erste Eintrag
-seiner Gruppe hervorgehoben; steht er wieder in der Liste, etwa nach der <kbd>Rücktaste</kbd>, ist er wieder
+seines Teils der Liste hervorgehoben - der Filter oder der Ergebnisse; steht er wieder in der Liste, etwa nach der <kbd>Rücktaste</kbd>, ist er wieder
 hervorgehoben. Mit dem × eines Filters oder <kbd>Rücktaste</kbd> nimmst du ihn wieder weg.
 
 - **Jahr**: vier Ziffern, etwa `2024`. Eine Erinnerung passt, wenn ihr Datum dieses Jahr berührt, ein Foto, wenn es
@@ -31,27 +31,38 @@ hervorgehoben. Mit dem × eines Filters oder <kbd>Rücktaste</kbd> nimmst du ihn
 - **Monat**: der Name eines Monats mit seinem Jahr, etwa `Mai 2024` (oder englisch `May 2024`); die ersten drei
   Buchstaben des Monats genügen. Eine Erinnerung passt, wenn ihr Datum diesen Monat berührt, ein Foto, wenn es in diesem
   Monat aufgenommen wurde. Ein Monatsname ohne Jahr gilt als Teil eines Namens, nicht als Filter.
-- **Person**: ein Teil des Namens eines Mitglieds. Es findet die Erinnerungen, in denen die Person als dabei steht.
-  Dasselbe Wort listet das Mitglied auch unter **Personen**: Wähle den Filter für ihre Erinnerungen, oder die Person,
-  um ihr Profil zu öffnen.
+- **Person**: ein Teil des Namens eines Mitglieds. Es findet die Erinnerungen, in denen die Person als dabei steht,
+  nicht ihr Profil. Dasselbe Wort listet das Mitglied auch unter den Ergebnissen: Wähle den Filter für ihre
+  Erinnerungen, oder die Person, um ihr Profil zu öffnen.
 - **Ort**: ein Teil eines Orts, den eine Erinnerung oder ein Foto nennt.
 - **Bereich**: ein Teil des Namens eines Bereichs.
-- **Art**: ein Wort wie *Erinnerung*, *Kapitel*, *Ordner*, *Datei*, *Briefkasten*, *Kasse*, *Lesezeichen*, *Foto* oder *Video*.
+- **In**: ein Teil des Namens eines Ordners, einer Erinnerung oder eines Kapitels, in dem etwas liegt. Es findet, was
+  darin liegt, seine Fotos eingeschlossen, und nur dort. Zwei mit demselben Namen bietet veyq als zwei Filter an, jeden
+  mit seinem Bereich und dem Ort darin, damit du den wählst, den du meinst.
+- **Art**: ein Wort wie *Erinnerung*, *Kapitel*, *Ordner*, *Datei*, *Briefkasten*, *Kasse*, *Lesezeichen*, *Foto*,
+  *Video*, *Person* oder *Einstellung*. *Person* listet nur Mitglieder, *Einstellung* nur Teile der Einstellungen.
 
-## Wie die Ergebnisse gruppiert sind
+Ein Filter grenzt alles ein: Ein Mitglied oder ein Teil der Einstellungen bleibt nur in der Liste, wo es zum Filter
+passt - ein Jahresfilter listet also keine Person, denn eine Person hat kein Jahr.
 
-- **In „…“**: Ist eine Erinnerung geöffnet, kommt zuerst, was in ihr liegt: ihre Kapitel, ihre Fotos und Videos.
-- **In diesem Bereich**: der Rest des Bereichs, in dem du gerade bist.
-- **Andere Bereiche**: alles Übrige, jedes Ergebnis mit seinem Bereich und dem Ort darin. Ein Foto steht da, wo
-  seine Erinnerung steht, mit seiner Erinnerung und dem Tag, an dem es aufgenommen wurde.
-- **Personen**: alle, die hier Mitglied sind, gefunden über ihren Namen oder ihren `~Benutzernamen`.
-- **Einstellungen**: die Teile der Einstellungen, jeder mit der Überschrift, unter der er dort steht. Außer über seinen
-  Namen findest du jeden Teil über ein paar eigene Wörter: *E-Mail* oder *SMTP* findet die E-Mail-Einstellungen,
-  *Kennwort* die Stelle, an der du dein Passwort änderst. Du findest genau die, die dir deine Einstellungen gerade
-  anbieten: Einen Teil, den nur öffnen kann, wer den Bereich besitzt, findet nur diese Person.
+## Wie die Ergebnisse geordnet sind
 
-Solange ein Filter gesetzt ist, erscheinen Personen und Einstellungen nicht: Ein Filter grenzt ein, was in deinen
-Bereichen liegt.
+Die Ergebnisse stehen als eine Liste unter den Filtern. Was deine Worte am besten treffen, kommt zuerst: ein Name, der
+genau deine Worte ist, dann einer, der mit ihnen beginnt, dann einer mit einem Wort, das mit ihnen beginnt, dann einer,
+der sie mitten in einem Wort enthält, dann ein Ort oder ein Wort der Einstellungen. Unter gleich guten Treffern kommt
+zuerst, was dir nahe liegt: was in der geöffneten Erinnerung liegt (ihre Kapitel, ihre Fotos und Videos), dann der Rest
+des Bereichs, in dem du gerade bist, dann deine anderen Bereiche, dann Mitglieder und Einstellungen. Ein Name, der genau
+deine Worte ist, kommt also auch dann zuerst, wenn er in einem anderen Bereich liegt.
+
+Jedes Ergebnis sagt, wo es liegt: seinen Bereich und den Ort darin, wenn es in einem anderen Bereich liegt, sonst seinen
+Ort in diesem. Ein Foto zeigt seine Erinnerung und den Tag, an dem es aufgenommen wurde. Ein Mitglied zeigt seinen
+`~Benutzernamen` und wird auch über ihn gefunden; ein Teil der Einstellungen zeigt die Überschrift, unter der er dort
+steht. Außer über seinen Namen findest du jeden Teil der Einstellungen über ein paar eigene Wörter: *E-Mail* oder *SMTP*
+findet die E-Mail-Einstellungen, *Kennwort* die Stelle, an der du dein Passwort änderst. Du findest genau die Teile, die
+dir deine Einstellungen gerade anbieten: Einen Teil, den nur öffnen kann, wer den Bereich besitzt, findet nur diese
+Person.
+
+Die ersten 10 Ergebnisse stehen da; **10 weitere zeigen** holt die nächsten.
 
 ## Was durchsucht wird
 
@@ -62,6 +73,6 @@ gesperrt hat, findet die Suche nicht.
 Liest veyq einen Bereich noch, sagt das Feld es; einen Bereich, den es nicht lesen konnte, nennt es als nicht durchsucht.
 
 Mit einem Screenreader ist das Feld eine Combobox: Die Zahl der Treffer wird vorgelesen, sobald sie sich ändert, ebenso
-ein hinzugefügter oder entfernter Filter; jede Gruppe von Ergebnissen trägt ihre Überschrift als Namen.
+ein hinzugefügter oder entfernter Filter; die Filter tragen ihre Überschrift als Namen, die Ergebnisse einen eigenen.
 
 Ein geteilter Link hat keine Suche.

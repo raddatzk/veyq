@@ -46,6 +46,10 @@ export interface SearchDocument {
   readonly name: string
   /** The names of the nodes above it, outermost first - what a result row shows as where it lives. */
   readonly path: readonly string[]
+  /** The ids of those nodes, in the same order: what an *In:* chip and the open node's place in the order ask
+   *  (`query.ts`, `results.ts`) - a node's id, never its name, so two nodes of one name are two places. An object's
+   *  (a photo's) ends with its own node. Empty for a document of no space (a person, a settings section). */
+  readonly pathIds: readonly string[]
   readonly facets: SearchFacets
   /** The node a contributed document belongs to (the open Memory); a node's own document: its own id. */
   readonly nodeId: string
@@ -70,7 +74,8 @@ export interface SearchDocument {
   readonly subtitle?: string
 }
 
-/** The kind of a member's document (ADR 0125 decision 9): a person of this tenant, opened on their profile page. */
+/** The kind of a member's document (ADR 0125 decision 9): a person of this tenant, opened on their profile page. Core's
+ *  kind, with its own word for a kind chip (*Person*), as the settings section's below (*Setting*). */
 export const PERSON_DOCUMENT = 'person'
 /** The kind of a settings section's document (ADR 0125 decision 9): a section the settings rail offers now. */
 export const SETTINGS_DOCUMENT = 'settings'
@@ -103,11 +108,16 @@ export interface ScopeDocument {
   icon?: VeyqIconName
 }
 
-/** Core's one way to make a document, so its folded fields are always there. */
-export function searchDocument(d: Omit<SearchDocument, 'foldedName' | 'foldedPlaces' | 'foldedAliases' | 'foldedKeywords'>): SearchDocument {
+const NO_IDS: readonly string[] = Object.freeze([])
+
+/** Core's one way to make a document, so its folded fields are always there; `pathIds` left out is none (a document of
+ *  no space, or one no chip of a node can reach). */
+export function searchDocument(
+  d: Omit<SearchDocument, 'foldedName' | 'foldedPlaces' | 'foldedAliases' | 'foldedKeywords' | 'pathIds'> & { pathIds?: readonly string[] },
+): SearchDocument {
   return {
-    ...d, foldedName: fold(d.name), foldedPlaces: (d.facets.places ?? []).map(fold), foldedAliases: (d.aliases ?? []).map(fold),
-    foldedKeywords: (d.keywords ?? []).map(fold),
+    ...d, pathIds: d.pathIds ?? NO_IDS, foldedName: fold(d.name), foldedPlaces: (d.facets.places ?? []).map(fold),
+    foldedAliases: (d.aliases ?? []).map(fold), foldedKeywords: (d.keywords ?? []).map(fold),
   }
 }
 
