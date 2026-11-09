@@ -63,6 +63,12 @@ class PotSession private constructor(private val tenant: TenantSession, private 
 
     private fun openMeta(): PotMeta? = PotMeta.opened(account.suite, node)
 
+    /** The tenant a member id of this Pot means a person in, for a download (`PotExport`). */
+    internal val tenantId: String get() = tenant.tenant.tenantId
+
+    /** The suite's SHA-256, for a download's checksums. */
+    internal fun sha256(bytes: ByteArray): ByteArray = account.suite.p.sha256(bytes)
+
     /** What is held, for a pure rule over it. */
     internal fun heldRevisions(): List<HeldRevision> = held.values.toList()
 
@@ -344,7 +350,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         val n = node
         receipts = listing.blobs.filter { it.role == Receipts.ROLE }.map { b ->
             val meta = blobs.metaOf(n.scopeId, n, b)
-            Receipts.Receipt(b.id, b.ownerId, b, meta?.name, meta?.type, b.size, b.createdAt, b.dropped, b.blocked)
+            Receipts.Receipt(b.id, b.ownerId, b, meta?.name, meta?.type, b.size, b.createdAt, b.dropped, b.blocked, meta?.modifiedAt)
         }
         return true
     }

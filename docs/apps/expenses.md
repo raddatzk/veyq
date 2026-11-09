@@ -267,7 +267,8 @@ stays inside the Pot (§ Entries).
 ## Download and import
 
 A Pot downloads ([ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md))
-as a JSON file of its participants and entries, which an import reads back, a CSV of the entries for a spreadsheet,
+as its participants and entries in the download's manifest (the node's `content`, `contracts/export/expenses/content.schema.json`),
+which an import reads back, a CSV of the entries for a spreadsheet,
 and its receipts as files beside them, each under the name and type its sealed meta holds, opened on the downloading
 device. History is not exported; an import starts each entry at its current revision, under new ids, a batch of at most
 256 records after another, each on what the one before wrote, and uploads each receipt under a new id into the new Pot

@@ -32,6 +32,8 @@ object Receipts {
     class Receipt(
         val receiptId: String, val entryId: String, internal val listed: ApplicationBlobs.Listed,
         val name: String?, val type: String?, val size: Long, val createdAt: Long, val dropped: Boolean, val blocked: Boolean,
+        /** The modified time its sealed meta carries (ms), which a download keeps. */
+        val modifiedAt: Long? = null,
     )
 
     /** How a receipt is shown, by its decrypted bytes alone (`receiptView`): an image, a PDF, or a download only. */

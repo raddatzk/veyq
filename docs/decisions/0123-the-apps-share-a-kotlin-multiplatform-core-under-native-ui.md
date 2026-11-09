@@ -241,7 +241,12 @@ implementation exists but what holds it to the first.
   contact (GDPR Art. 13). The encodings are `crypto/Report.kt`, held to `v1.json#report_bundle`, and the field key a
   report hands over is `V1.fieldKeyOf`, held to every `#field_seal`'s; the server took a report from the live test and
   from each app (2026-11-09); that a moderator opens one is not measured here — the moderation surface wants the
-  password and the Secret Key typed. Cover, copy and download are not built.
+  password and the Secret Key typed. A Pot is downloaded as the web's ZIP (ADR 0082, uc.platform.export-import): core's
+  envelope (`export/`: the store-only writer, the safe names and the manifest of format version 2, each a port of the web's
+  `core/export/`, the names held to its `archiveName` cases) around Expenses' content (`expenses/PotExport.kt`, the web's
+  `exportPot` and its CSV), streamed where the person picks it — Android's create-document, Apple's save sheet over a
+  temporary file — never held whole (the web's import takes a Pot the app downloaded, receipts and entries alike, and the
+  JDK's reader the writer's ZIP64 records, measured 2026-11-09). Cover and copy are not built.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

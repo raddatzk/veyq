@@ -8,6 +8,11 @@ import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.session.VeyqAccount
 import me.raddatz.veyq.mobile.session.testDevice
 import java.io.File
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -320,6 +325,39 @@ class PotLiveTest {
             assertTrue(!listed.single { it.label == "A" }.enabled && listed.single { it.label == "B" }.enabled)
             System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(a.url + "\n" + b.url) }
             println("[$folderName] \"$name\": link A switched off and the Pot re-keyed; entry, receipt and a new write open; B stays on")
+        }
+        System.getenv("VEYQ_LIVE_EXPORT")?.let { potName ->
+            // The Pot downloaded as the web's ZIP: the JDK reads it, the manifest names every payload by its SHA-256, the
+            // content carries every live entry and the CSV a line each. With VEYQ_LIVE_EXPORT_OUT the archive is saved there,
+            // for the web's import (the check that the web reads what the app writes).
+            val ref = pots.first { it.name == potName }
+            val session = PotSession.open(tenant, ref.scopeId, ref.nodeId)!!
+            val content = PotExport.content(session, "Deleted people")!!
+            val out = java.io.ByteArrayOutputStream()
+            val written = me.raddatz.veyq.mobile.export.NodeExport.write(
+                ref.name, ref.kind, content, me.raddatz.veyq.mobile.session.VeyqAccount.MAJOR.toString(), System.currentTimeMillis(),
+                { java.security.MessageDigest.getInstance("SHA-256").digest(it) }, { out.write(it) },
+            )
+            val file = File(System.getenv("VEYQ_LIVE_EXPORT_OUT") ?: File.createTempFile("pot", ".zip").path).apply { writeBytes(out.toByteArray()) }
+            java.util.zip.ZipFile(file).use { zip ->
+                val manifest = kotlinx.serialization.json.Json.parseToJsonElement(zip.getInputStream(zip.getEntry(".veyq/manifest.json")).readBytes().decodeToString()).jsonObject
+                assertEquals(2, manifest["version"]!!.jsonPrimitive.int)
+                val root = manifest["root"]!!.jsonObject
+                val pot = root["content"]!!.jsonObject
+                val live = session.ledger!!.entries.count { it.status == Ledger.Status.LIVE }
+                assertEquals(live, pot["entries"]!!.jsonArray.size)
+                val refs = pot["entries"]!!.jsonArray.flatMap { e -> e.jsonObject["receipts"]?.jsonArray.orEmpty().map { it.jsonObject["file"]!!.jsonObject } } +
+                    pot["table"]!!.jsonObject
+                for (r in refs) {
+                    val bytes = zip.getInputStream(zip.getEntry(r["path"]!!.jsonPrimitive.content)).readBytes()
+                    assertEquals(r["size"]!!.jsonPrimitive.long, bytes.size.toLong())
+                    val sha = java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+                    assertEquals(r["sha256"]!!.jsonPrimitive.content, sha)
+                }
+                val csv = zip.getInputStream(zip.getEntry(pot["table"]!!.jsonObject["path"]!!.jsonPrimitive.content)).readBytes().decodeToString()
+                assertEquals(live + 1, csv.split("\r\n").count { it.isNotEmpty() })
+            }
+            println("[$potName] downloaded: ${written.payloads} payloads, ${written.bytes} bytes, ${file.length()} bytes of ZIP at ${file.path}")
         }
         System.getenv("VEYQ_LIVE_REPORT")?.let { potName ->
             // A fresh Pot beside [potName] reported (it stays, trashed, and the report stays open for the dev moderators): its
