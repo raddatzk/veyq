@@ -304,7 +304,13 @@ struct HomeView: View {
                 if let folder = node.asFolder() {
                     Button { model.enter(folder) } label: {
                         HStack(spacing: 12) {
-                            FolderTile()
+                            if let cover = model.covers[node.nodeId]?.image {
+                                Image(decorative: cover, scale: 1).resizable().scaledToFill()
+                                    .frame(width: 34, height: 34)
+                                    .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+                            } else {
+                                FolderTile()
+                            }
                             Text(node.name).fontWeight(.bold).foregroundStyle(Role.text)
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
@@ -319,6 +325,12 @@ struct HomeView: View {
             }
         }
         // the level's "New" (the web's menu): a folder here, or a Pot here
+        // a folder Home shows: core's actions on it, as the web's level header has them
+        .toolbar {
+            if let space = model.shell.space, let folder = model.shell.folderAt(scopeId: space) {
+                ToolbarItem(placement: .primaryAction) { FolderHeaderActions(model: model, folder: folder).id(folder.nodeId) }
+            }
+        }
         .createMenu("New", shown: model.shell.space != nil) {
             Button("New Folder", systemImage: "folder.badge.plus") { newName = ""; nameProblem = nil; naming = true }
             Button("New Pot", systemImage: "wallet.bifold") { creatingPot = true }
@@ -351,14 +363,27 @@ struct HomeView: View {
         // The inline title is where iOS shows its title menu's chevron; a large title would hide the switcher.
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .toolbarTitleMenu {
-            if model.shell.folder == nil {
+        .modifier(SpaceSwitcherMenu(model: model, shown: model.shell.folder == nil))
+    }
+}
+
+/// The space switcher in Home's title, at a space's root only: inside a folder the title is the folder's, and a title menu
+/// with nothing in it would still take the bar's room with its chevron.
+private struct SpaceSwitcherMenu: ViewModifier {
+    @Bindable var model: AppModel
+    let shown: Bool
+
+    func body(content: Content) -> some View {
+        if shown {
+            content.toolbarTitleMenu {
                 ForEach(model.spaces, id: \.scopeId) { space in
                     Button { model.switchSpace(space.scopeId) } label: {
                         Label(Names.spaceName(space), systemImage: space.scopeId == model.shell.space ? "checkmark" : Names.spaceSymbol(space.kind))
                     }
                 }
             }
+        } else {
+            content
         }
     }
 }

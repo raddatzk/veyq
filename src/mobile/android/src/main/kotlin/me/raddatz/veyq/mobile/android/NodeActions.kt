@@ -29,7 +29,8 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
  */
 @Composable
 internal fun NodeHeaderActions(
-    ref: ObjectRef,
+    /** The node's name, which the rename dialog starts from. */
+    name: String,
     pinned: Boolean?,
     canRename: Boolean,
     canDelete: Boolean,
@@ -139,7 +140,7 @@ internal fun NodeHeaderActions(
             dismissButton = { TextButton(onClick = { asking = false }) { Text(stringResource(R.string.entry_cancel)) } },
         )
     }
-    if (renaming) RenameDialog(ref.name, onRename) { renaming = false }
+    if (renaming) RenameDialog(name, onRename) { renaming = false }
 }
 
 /** Core's name dialog for a rename (`FolderNameDialog`): the name as it is, trimmed on save; unchanged or empty writes nothing. */

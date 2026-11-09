@@ -458,10 +458,10 @@ final class AppModel {
     // MARK: Core's actions on a node
 
     /// Whether `ref` is pinned; nil while its space's pin set is not loaded (no heart is offered then).
-    func isFavorite(_ ref: ObjectRef) -> Bool? { tenantSession?.isFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId)?.boolValue }
+    func isFavorite(_ ref: NodeAt) -> Bool? { tenantSession?.isFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId)?.boolValue }
 
     /// Pins or unpins `ref`, then the lists are read anew; false when it was not stored (the heart goes back).
-    func toggleFavorite(_ ref: ObjectRef) async -> Bool {
+    func toggleFavorite(_ ref: NodeAt) async -> Bool {
         guard let t = tenantSession, let now = t.isFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId)?.boolValue else { return false }
         let stored = (try? await t.setFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId, on: !now))?.boolValue ?? false
         await refreshLists(t)
@@ -488,15 +488,19 @@ final class AppModel {
     private(set) var trashNotice: TrashNotice?
 
     /// Moves `ref` with everything under it to the space's trash; a page whose node went leaves for its parent.
-    func trash(_ ref: ObjectRef) async {
+    func trash(_ ref: NodeAt) async {
         guard let t = tenantSession else { return }
         let before = try? await t.node(scopeId: ref.scopeId, nodeId: ref.nodeId)
         let deleted = (try? await NodeTrash.shared.delete(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId)) ?? .failed
         if deleted == .trashed || deleted == .gone {
-            if shell.openObject == ref { goBack() }
-            if pot?.ref == ref { pot = nil; potSession = nil }
+            if shell.openObject?.nodeId == ref.nodeId { goBack() }
+            if pot?.ref.nodeId == ref.nodeId { pot = nil; potSession = nil }
         }
         await refreshLists(t)
+        // a folder on Home's path went: Home shows the folder above it
+        if deleted == .trashed || deleted == .gone, let i = shell.path.firstIndex(where: { $0.nodeId == ref.nodeId }) {
+            shell = shell.at(tree: await scopeNodes(ref.scopeId), folderId: i > 0 ? shell.path[i - 1].nodeId : nil)
+        }
         switch deleted {
         case .trashed: trashNotice = TrashNotice(message: String(localized: "“\(ref.name)” moved to the trash."), node: before ?? nil)
         case .gone: trashNotice = TrashNotice(message: String(localized: "It is no longer there."), node: nil)
@@ -541,7 +545,7 @@ final class AppModel {
     }
 
     /// Reports `ref` to the moderators: whole or by its name, in `category` for `reason`, `contact` optional.
-    func report(_ ref: ObjectRef, scope: NodeReport.Scope, category: String, reason: String, contact: String) async -> NodeReport.Sent {
+    func report(_ ref: NodeAt, scope: NodeReport.Scope, category: String, reason: String, contact: String) async -> NodeReport.Sent {
         let failed = NodeReport.Sent(outcome: .failed, reference: nil, receivedAt: nil)
         guard let t = tenantSession else { return failed }
         return (try? await NodeReport.shared.report(
@@ -642,7 +646,7 @@ final class AppModel {
 
     /// Where a move's undo puts the node back.
     struct MoveBack {
-        let ref: ObjectRef
+        let ref: NodeAt
         let to: String?
     }
 
@@ -657,7 +661,7 @@ final class AppModel {
 
     /// Moves `ref` under `to` (nil: the space's root), its name kept; the lists are read anew. With `toName`, the bottom of
     /// the shell says where it went and offers its undo back to `from`.
-    func move(_ ref: ObjectRef, to: String?, toName: String?, from: String?) async -> NodeMove.Outcome {
+    func move(_ ref: NodeAt, to: String?, toName: String?, from: String?) async -> NodeMove.Outcome {
         guard let t = tenantSession else { return .failed }
         let r = try? await NodeMove.shared.move(
             tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, to: to,
@@ -665,6 +669,7 @@ final class AppModel {
             allows: placement, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
         )
         await refreshLists(t)
+        if r?.outcome == .moved { await relocate(ref) }
         let outcome = r?.outcome ?? .failed
         if outcome == .moved, let toName {
             trashNotice = TrashNotice(
@@ -676,8 +681,8 @@ final class AppModel {
 
     /// Copies the open Pot `ref` to `to` (nil: the space's root) in its space (uc.platform.copy-node): a new Pot under fresh
     /// keys with its people, live entries and receipts; the lists are read anew and the shell says where it went.
-    func copyPot(_ ref: ObjectRef, to: String?, toName: String) async -> PotCopy.Outcome {
-        guard let t = tenantSession, let session = potSession, pot?.ref == ref else { return .failed }
+    func copyPot(_ ref: NodeAt, to: String?, toName: String) async -> PotCopy.Outcome {
+        guard let t = tenantSession, let session = potSession, pot?.ref.nodeId == ref.nodeId else { return .failed }
         let r = try? await PotCopy.shared.duplicate(
             source: session, tenant: t, scopeId: ref.scopeId, parentId: to, deletedName: String(localized: "deleted person"),
             uuid: { @Sendable in UUID().uuidString.lowercased() }
@@ -690,10 +695,16 @@ final class AppModel {
         return outcome
     }
 
+    /// Home's path read anew where `ref` is a folder on it (renamed or moved): the folder shown is where it is now.
+    private func relocate(_ ref: NodeAt) async {
+        guard shell.path.contains(where: { $0.nodeId == ref.nodeId }) else { return }
+        shell = shell.at(tree: await scopeNodes(ref.scopeId), folderId: shell.folder?.nodeId)
+    }
+
     /// Renames `ref` to `name` (core's `NodeRename`: the placement, then its open links' names); the lists are read anew
     /// and an open page follows the node under its new name. Why it did not land, in core's words, or nil once renamed;
     /// `linksFailed` says a link kept the old name (the rename stands).
-    func rename(_ ref: ObjectRef, to name: String) async -> (problem: String?, linksFailed: Bool) {
+    func rename(_ ref: NodeAt, to name: String) async -> (problem: String?, linksFailed: Bool) {
         guard let t = tenantSession else { return (String(localized: "That didn’t work. Please try again."), false) }
         let r = try? await NodeRename.shared.rename(
             tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, name: name,
@@ -704,6 +715,7 @@ final class AppModel {
         switch r.outcome {
         case .renamed:
             await refreshLists(t)
+            await relocate(ref)
             if shell.openObject?.nodeId == ref.nodeId,
                let renamed = ((try? await t.objects()) ?? []).first(where: { $0.scopeId == ref.scopeId && $0.nodeId == ref.nodeId }) {
                 shell = shell.goBack().open(ref: renamed)
@@ -799,7 +811,7 @@ final class AppModel {
 
     /// Sets the picture `data` as the cover of `ref`: made the web's cover JPEG on the device (long edge 2048, quality 0.85,
     /// `COVER_SPEC`), uploaded and attached (core's `NodeCover`); false when it did not land.
-    func setCover(_ ref: ObjectRef, data: Data) async -> Bool {
+    func setCover(_ ref: NodeAt, data: Data) async -> Bool {
         guard let t = tenantSession, let jpeg = CoverImages.jpeg(data, maxPixels: 2048, quality: 0.85) else { return false }
         let outcome = try? await AppleSessions.shared.setCover(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, jpeg: jpeg)
         await refreshLists(t)
@@ -832,7 +844,7 @@ final class AppModel {
     }
 
     /// Removes the cover of `ref`; false when it did not land.
-    func removeCover(_ ref: ObjectRef) async -> Bool {
+    func removeCover(_ ref: NodeAt) async -> Bool {
         guard let t = tenantSession else { return false }
         let outcome = try? await NodeCover.shared.remove(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId)
         await refreshLists(t)

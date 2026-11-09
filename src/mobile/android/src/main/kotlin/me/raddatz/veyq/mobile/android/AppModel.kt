@@ -382,10 +382,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     // ---- core's actions on a node ----
 
     /** Whether [ref] is pinned; null while its space's pin set is not loaded (no heart is offered then). */
-    fun isFavorite(ref: ObjectRef): Boolean? = tenantSession?.isFavorite(ref.scopeId, ref.nodeId)
+    fun isFavorite(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean? = tenantSession?.isFavorite(ref.scopeId, ref.nodeId)
 
     /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */
-    suspend fun toggleFavorite(ref: ObjectRef): Boolean {
+    suspend fun toggleFavorite(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean {
         val t = tenantSession ?: return false
         val now = t.isFavorite(ref.scopeId, ref.nodeId) ?: return false
         val stored = runCatching { t.setFavorite(ref.scopeId, ref.nodeId, !now) }.getOrDefault(false)
@@ -403,13 +403,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * Moves [ref] with everything under it to the space's trash; a page whose node went leaves for its parent. What came of
      * it, and the node as it was before (what an undo restores).
      */
-    suspend fun trash(ref: ObjectRef): Pair<me.raddatz.veyq.mobile.session.NodeTrash.Deleted, me.raddatz.veyq.mobile.session.OpenNode?> {
+    suspend fun trash(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<me.raddatz.veyq.mobile.session.NodeTrash.Deleted, me.raddatz.veyq.mobile.session.OpenNode?> {
         val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to null
         val before = runCatching { t.node(ref.scopeId, ref.nodeId) }.getOrNull()
         val deleted = runCatching { me.raddatz.veyq.mobile.session.NodeTrash.delete(t, ref.scopeId, ref.nodeId) }.getOrDefault(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED)
         if (deleted == me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED || deleted == me.raddatz.veyq.mobile.session.NodeTrash.Deleted.GONE) {
-            if ((_screen.value as? Screen.Signed)?.shell?.openObject == ref) goBack()
-            if (_pot.value?.ref == ref) {
+            if ((_screen.value as? Screen.Signed)?.shell?.openObject?.nodeId == ref.nodeId) goBack()
+            // a folder on Home's path went: Home shows the folder above it
+            updateShell { s -> if (s.path.any { it.nodeId == ref.nodeId }) s.copy(path = s.path.takeWhile { it.nodeId != ref.nodeId }) else s }
+            if (_pot.value?.ref?.nodeId == ref.nodeId) {
                 _pot.value = null
                 potSession = null
             }
@@ -431,7 +433,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * Renames [ref] to [name] (core's `NodeRename`: the placement, then its open links' names); the lists are read anew
      * and an open page follows the node under its new name. What came of it.
      */
-    suspend fun rename(ref: ObjectRef, name: String): me.raddatz.veyq.mobile.session.NodeRename.Result {
+    suspend fun rename(ref: me.raddatz.veyq.mobile.navigation.NodeAt, name: String): me.raddatz.veyq.mobile.session.NodeRename.Result {
         val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeRename.Result(me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED)
         val r = runCatching { me.raddatz.veyq.mobile.session.NodeRename.rename(t, ref.scopeId, ref.nodeId, name, ::tokenInputFor, System.currentTimeMillis()) }
             .getOrDefault(me.raddatz.veyq.mobile.session.NodeRename.Result(me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED))
@@ -439,8 +441,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             refreshLists(t)
             val renamed = runCatching { t.objects() }.getOrDefault(emptyList()).firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }
             if (renamed != null && (_screen.value as? Screen.Signed)?.shell?.openObject?.nodeId == ref.nodeId) updateShell { it.goBack().open(renamed) }
+            relocate(t, ref)
         }
         return r
+    }
+
+    /** Home's path read anew where [ref] is a folder on it (renamed or moved): the folder shown is where it is now. */
+    private suspend fun relocate(t: me.raddatz.veyq.mobile.session.TenantSession, ref: me.raddatz.veyq.mobile.navigation.NodeAt) {
+        val shell = (_screen.value as? Screen.Signed)?.shell ?: return
+        if (shell.path.none { it.nodeId == ref.nodeId }) return
+        val tree = runCatching { t.nodes() }.getOrDefault(emptyList()).filter { it.scopeId == ref.scopeId }
+        updateShell { it.at(tree, it.folder?.nodeId) }
     }
 
     /**
@@ -468,7 +479,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Reports [ref] to the moderators: whole or by its name, in [category] for [reason], [contact] optional. */
-    suspend fun report(ref: ObjectRef, scope: me.raddatz.veyq.mobile.session.NodeReport.Scope, category: String, reason: String, contact: String): me.raddatz.veyq.mobile.session.NodeReport.Sent {
+    suspend fun report(ref: me.raddatz.veyq.mobile.navigation.NodeAt, scope: me.raddatz.veyq.mobile.session.NodeReport.Scope, category: String, reason: String, contact: String): me.raddatz.veyq.mobile.session.NodeReport.Sent {
         val failed = me.raddatz.veyq.mobile.session.NodeReport.Sent(me.raddatz.veyq.mobile.session.NodeReport.Outcome.FAILED)
         val t = tenantSession ?: return failed
         return runCatching { me.raddatz.veyq.mobile.session.NodeReport.report(t, ref.scopeId, ref.nodeId, scope, category, reason, contact) }.getOrDefault(failed)
@@ -575,11 +586,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Moves [ref] under [to] (null: the space's root), its name kept; the lists are read anew. */
-    suspend fun move(ref: ObjectRef, to: String?): me.raddatz.veyq.mobile.session.NodeMove.Result {
+    suspend fun move(ref: me.raddatz.veyq.mobile.navigation.NodeAt, to: String?): me.raddatz.veyq.mobile.session.NodeMove.Result {
         val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeMove.Result(me.raddatz.veyq.mobile.session.NodeMove.Outcome.FAILED)
         val r = runCatching { me.raddatz.veyq.mobile.session.NodeMove.move(t, ref.scopeId, ref.nodeId, to, ::tokenInputFor, placement) }
             .getOrDefault(me.raddatz.veyq.mobile.session.NodeMove.Result(me.raddatz.veyq.mobile.session.NodeMove.Outcome.FAILED))
         refreshLists(t)
+        if (r.outcome == me.raddatz.veyq.mobile.session.NodeMove.Outcome.MOVED) relocate(t, ref)
         return r
     }
 
@@ -689,7 +701,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * Sets the picture at [uri] as the cover of [ref]: decoded on the device and made the web's cover JPEG (long edge 2048,
      * quality 0.85, `COVER_SPEC`), uploaded and attached (core's `NodeCover`); false when it did not land.
      */
-    suspend fun setCover(ref: ObjectRef, uri: android.net.Uri): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun setCover(ref: me.raddatz.veyq.mobile.navigation.NodeAt, uri: android.net.Uri): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val t = tenantSession ?: return@withContext false
         val jpeg = runCatching {
             val source = android.graphics.ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
@@ -745,7 +757,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Removes the cover of [ref]; false when it did not land. */
-    suspend fun removeCover(ref: ObjectRef): Boolean {
+    suspend fun removeCover(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean {
         val t = tenantSession ?: return false
         val done = runCatching { me.raddatz.veyq.mobile.session.NodeCover.remove(t, ref.scopeId, ref.nodeId) }
             .getOrNull() == me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE

@@ -7,7 +7,7 @@ import VeyqCore
 /// takes it, else says why.
 struct NodeMoveSheet: View {
     let model: AppModel
-    let ref: ObjectRef
+    let ref: NodeAt
     /// The browser as "Copy to…" (the web's `CopyNodesDialog`): a copy may go where its original is.
     var copy = false
     @Environment(\.dismiss) private var dismiss

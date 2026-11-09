@@ -12,8 +12,8 @@ extension View {
         toolbar {
             if shown {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: action) { Image(systemName: "plus") }
-                        .accessibilityLabel(Text(label))
+                    // a label, shown as its symbol in the bar and by its words where the bar overflows into its menu
+                    Button(action: action) { Label { Text(label) } icon: { Image(systemName: "plus") } }
                         .help(Text(label))
                 }
             }
@@ -26,8 +26,7 @@ extension View {
         toolbar {
             if shown {
                 ToolbarItem(placement: .primaryAction) {
-                    Menu(content: entries) { Image(systemName: "plus") }
-                        .accessibilityLabel(Text(label))
+                    Menu(content: entries) { Label { Text(label) } icon: { Image(systemName: "plus") } }
                         .help(Text(label))
                 }
             }

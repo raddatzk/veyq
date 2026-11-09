@@ -416,4 +416,6 @@
     <string name="folder_name_empty">Give it a name.</string>
     <string name="folder_name_taken">Something with this name is already here.</string>
     <string name="folder_failed">The folder could not be created. Please try again.</string>
+    <string name="folder_delete">Delete folder</string>
+    <string name="folder_delete_confirm">“%1$s” and everything in it go to the trash.</string>
 </resources>

@@ -260,7 +260,10 @@ implementation exists but what holds it to the first.
   Android set, measured 2026-11-09). The crop editor is not built — a cover the app sets is the whole picture, a
   centred fit, and one the web cropped shows its crop on the web — nor the cover as the page header's leading visual. A level
   creates as the web's "New" menu does (decision 9's creating action in its menu form, and the drawer's "New" opening it on
-  Home): a folder there (`session/FolderCreate.kt`, its name refused where a sibling folds the same) or a Pot there.
+  Home): a folder there (`session/FolderCreate.kt`, its name refused where a sibling folds the same) or a Pot there. A
+  folder Home shows has core's actions as the web's level header does — favorite, rename, move, cover, report, delete with
+  its undo (`navigation/NodeAt`, the node any of them takes, whatever its kind) — and Home's path is read anew from the tree
+  where the folder shown was renamed or moved (`Shell.at`); a folder's links, download and copy are not built.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

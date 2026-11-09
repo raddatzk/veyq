@@ -57,7 +57,7 @@ private val CATEGORIES = listOf(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ReportSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit) {
+internal fun ReportSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, onClose: () -> Unit) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current

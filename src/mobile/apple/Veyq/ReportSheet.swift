@@ -7,7 +7,7 @@ import VeyqCore
 /// receipt: its reference and when it was received.
 struct ReportSheet: View {
     let model: AppModel
-    let ref: ObjectRef
+    let ref: NodeAt
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var category: String?

@@ -51,7 +51,7 @@ import me.raddatz.veyq.mobile.session.NodeMove
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun NodeMoveSheet(
-    ref: ObjectRef, rootName: String, model: AppModel, onMoved: (to: String, from: String?) -> Unit,
+    ref: me.raddatz.veyq.mobile.navigation.NodeAt, rootName: String, model: AppModel, onMoved: (to: String, from: String?) -> Unit,
     /** The browser as "Copy to…" (the web's `CopyNodesDialog`): copies to the place chosen, answers why not or null once
      *  copied; a copy may go where its original is. Null: the move. */
     copy: (suspend (to: String?) -> String?)? = null,
