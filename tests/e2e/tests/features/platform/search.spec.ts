@@ -216,9 +216,9 @@ test(
       await expect(whereOf(result(page, name))).not.toHaveText(/^Personal\b/)
     }
     // The suggestions stand under their heading - here the In chip of the Memory that holds photos - and the one list
-    // after them has none: Filter by is the list's only heading.
+    // after them under its own, always (owner 2026-11-09): Filter by, then Results.
     await expect(suggestion(page, glacier, 'In')).toBeVisible({ timeout: 60_000 })
-    await expect(page.locator('.veyq-search__list .veyq-tags-input__group-label')).toHaveText(['Filter by'])
+    await expect(page.locator('.veyq-search__list .veyq-tags-input__group-label')).toHaveText(['Filter by', 'Results'])
     // The part of the name the text matched, bold: a strong element over the name's own characters.
     await expect(result(page, glacier).locator('strong.veyq-search__match')).toHaveText('Gletscherwanderung')
 
