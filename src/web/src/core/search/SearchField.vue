@@ -17,7 +17,7 @@
 // the settings page by a push, which keeps the active space as the profile menu's Settings entry does (a hard navigation
 // would reset it). The field says what it searched: the spaces still loading, those it could not search, and
 // - before and instead of results - what is searched, with each application's note on what it searches only in part.
-import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, toRaw, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import VeyqTagsInput, { type VeyqTag, type VeyqTagOption, type VeyqTagOptionGroup } from '../../shared/ui/VeyqTagsInput.vue'
@@ -182,8 +182,10 @@ function removeChip(tag: ChipTag) {
 }
 
 // --- the results -----------------------------------------------------------------------------------------------------
+// the chips as plain objects: the query reads them once per document, and a reactive read each time costs a keystroke
+// at volume (cr-search-at-volume)
 const groups = computed(() =>
-  searchGroups(documents.value, { chips: chips.value, text: text.value }, {
+  searchGroups(documents.value, { chips: chips.value.map((c) => toRaw(c)), text: text.value }, {
     activeScopeId: activeSpace.scopeId, openNodeId: openNode.value?.id ?? null, activeTree: activeTree.value,
   }, collator.value),
 )

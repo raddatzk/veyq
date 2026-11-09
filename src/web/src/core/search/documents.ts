@@ -4,10 +4,11 @@
 // **No key outlives the walk.** The node keys are opened once each (`core/node/keyResolver.ts`) and zeroed before this
 // returns, whatever a hook did; the scope key is the caller's, who zeroes it (the index) or keeps owning it (the active
 // space's). **Rebuilt per seal, not per walk:** a node whose sealed meta is the one a previous document was derived from keeps
-// that document's facets, so a re-opened tree unseals only what moved.
+// that document's facets, so a re-opened tree unseals only what moved. **One node per step** ({@link nodeDocumentSteps}): the
+// index runs a space it opened itself in slices, so a big tree never holds the main thread whole (cr-search-at-volume).
 import { registry } from '../applications/registry'
 import { keyResolver } from '../node/keyResolver'
-import type { TreeNode } from '../node/tree'
+import { runThrough, type TreeNode } from '../node/tree'
 import type { ScopeKey } from '../../features/spaces/epochs'
 import { searchDocument, type SearchDocument, type SearchFacets } from './model'
 
@@ -27,6 +28,14 @@ export const nodeRevision = (node: TreeNode): string => `${node.placementRevisio
 export function nodeDocuments(
   scopeId: string, epochs: ScopeKey, nodes: readonly TreeNode[], previous?: ReadonlyMap<string, NodeDocument>,
 ): Map<string, NodeDocument> {
+  return runThrough(nodeDocumentSteps(scopeId, epochs, nodes, previous))
+}
+
+/** {@link nodeDocuments} one node per step, for a caller that runs it in slices (`searchIndex.ts`). The keys it opened are
+ *  zeroed when it ends - finished, thrown, or stopped early by the caller's `return()`. */
+export function* nodeDocumentSteps(
+  scopeId: string, epochs: ScopeKey, nodes: readonly TreeNode[], previous?: ReadonlyMap<string, NodeDocument>,
+): Generator<void, Map<string, NodeDocument>, void> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const resolver = keyResolver(scopeId, epochs, nodes)
   const out = new Map<string, NodeDocument>()
@@ -42,6 +51,7 @@ export function nodeDocuments(
           path: pathOf(node, byId), facets,
         }),
       })
+      yield
     }
   } finally {
     resolver.zero()

@@ -8,10 +8,14 @@
 // key not on this device yet, the member removed, a rotation in flight) loses its documents and is named as not searched; a
 // space no longer listed loses its documents too. **The active space does not change** - nothing here enters a space.
 //
+// **In slices** (cr-search-at-volume): opening a tree and making its documents run as steps, at most {@link SLICE_MS} at a
+// time, so a space of thousands of nodes never holds the main thread whole - a keystroke or a paint gets in between; a
+// reset between two slices abandons the build (its keys zeroed all the same).
+//
 // **The active space is the tree on screen.** While the member's space page holds the active space's tree (`treeStore`), its
 // documents are derived from that tree whenever it changes - the tree poll the page already runs brings a rename here
-// without a fetch of the search's own (uc A1) - under the key `activeSpace` owns (never zeroed here). It is built first, at
-// once; the other spaces follow.
+// without a fetch of the search's own (uc A1) - under the key `activeSpace` owns (never zeroed here). Its build starts
+// first, in slices like the others'; the other spaces follow.
 //
 // **Nothing persists.** No storage of any kind is written, no endpoint is added, the query never leaves this module's
 // callers. A build that a sign-out overtook is abandoned (`generation`, as `participantIndex` does); {@link resetSearchIndex}
@@ -21,9 +25,9 @@ import { listMyScopes, listMyTenants, openListedScope } from '../../features/spa
 import { zeroScopeKey } from '../../features/spaces/epochs'
 import { ScopeKind, type ScopeSummary } from '../../api/generated/scopes'
 import { activeEpochKeys, activeSpace } from '../../app/activeSpace'
-import { fetchTree, openTree, type TreeNode } from '../node/tree'
+import { fetchTree, openTreeSteps, type TreeNode } from '../node/tree'
 import { shownTreeTag, treeStore } from '../node/treeStore'
-import { nodeDocuments, type NodeDocument } from './documents'
+import { nodeDocumentSteps, type NodeDocument } from './documents'
 import type { SearchDocument } from './model'
 
 /** A space as the search names it. */
@@ -84,22 +88,51 @@ function scopeOf(s: ScopeSummary, groupName?: string | null): SearchScope {
   return { id: s.id, kind: s.kind, name }
 }
 
-/** The active space's entry from the tree on screen. */
+/** The active space's build in flight (its number, its space): a newer tree on screen, a reset or a space left supersedes it. */
+let activeRun = 0
+let activeRunScope: string | null = null
+
+/**
+ * The active space's entry from the tree on screen, built in slices like any other space's (cr-search-at-volume): the
+ * documents of a big space on screen are made a slice at a time, and the space counts as loading once a build pauses (a
+ * small tree, or one whose documents all stand, is built at once). The scope key is `activeSpace`'s: a build that meets
+ * another space, another key or a reset after a pause is abandoned, and only the node keys it opened are zeroed.
+ */
 function followActive(): void {
   const scopeId = activeSpace.scopeId
   const epochs = activeEpochKeys()
-  if (!scopeId || !epochs || !servedByTree(scopeId) || !activeSpace.kind) return
+  const kind = activeSpace.kind
+  if (!scopeId || !epochs || !servedByTree(scopeId) || !kind) return
+  const run = ++activeRun
+  activeRunScope = scopeId
+  const started = generation
+  const nodes = treeStore.nodes
+  const etag = shownTreeTag()
   const prev = entries.get(scopeId)
-  const name = activeSpace.kind === ScopeKind.Group ? activeSpace.name : activeSpace.kind === ScopeKind.Tenant ? (prev?.scope.name ?? tenantName) : null
-  entries.set(scopeId, {
-    scope: { id: scopeId, kind: activeSpace.kind, name },
-    etag: shownTreeTag(),
-    nameSeal: prev?.nameSeal ?? null,
-    nodes: treeStore.nodes,
-    documents: nodeDocuments(scopeId, epochs, treeStore.nodes, prev?.documents),
-  })
-  searchState.failed = searchState.failed.filter((s) => s.id !== scopeId)
-  bump()
+  const current = () => run === activeRun && generation === started && activeSpace.scopeId === scopeId && activeEpochKeys() === epochs
+  const alive = () => {
+    if (!current()) throw new Abandoned()
+    if (!searchState.loading.includes(scopeId)) searchState.loading = [scopeId, ...searchState.loading]
+  }
+  // a newer build of the same space owns its loading mark; one of another space does not
+  const done = () => {
+    if (run === activeRun || activeRunScope !== scopeId) searchState.loading = searchState.loading.filter((id) => id !== scopeId)
+  }
+  void inSlices(nodeDocumentSteps(scopeId, epochs, nodes, prev?.documents), alive).then(
+    (documents) => {
+      done()
+      if (!current()) return
+      const before = entries.get(scopeId)
+      const name = kind === ScopeKind.Group ? activeSpace.name : kind === ScopeKind.Tenant ? (before?.scope.name ?? tenantName) : null
+      entries.set(scopeId, { scope: { id: scopeId, kind, name }, etag, nameSeal: before?.nameSeal ?? null, nodes, documents })
+      searchState.failed = searchState.failed.filter((s) => s.id !== scopeId)
+      bump()
+    },
+    (e: unknown) => {
+      done()
+      if (!(e instanceof Abandoned)) throw e
+    },
+  )
 }
 
 /** Ask for the index: the first call starts it, every call revalidates every space (coalesced while one runs). */
@@ -147,7 +180,8 @@ async function walk(): Promise<void> {
     // The active space first (uc step 2), then the rest as listed.
     const ordered = [...scopes].sort((a, b) => Number(b.id === activeSpace.scopeId) - Number(a.id === activeSpace.scopeId))
     searchState.scopes = ordered.map((s) => scopeOf(s, entries.get(s.id)?.scope.name))
-    searchState.loading = ordered.filter((s) => !servedByTree(s.id)).map((s) => s.id)
+    // the active space is loading only while a build of its own pauses (followActive)
+    searchState.loading = ordered.filter((s) => !servedByTree(s.id) || searchState.loading.includes(s.id)).map((s) => s.id)
     searchState.failed = []
     bump()
     for (const s of ordered) {
@@ -185,12 +219,41 @@ async function readSpace(s: ScopeSummary, alive: () => void): Promise<void> {
   if (!opened) throw new Error('scope_not_openable')
   try {
     alive()
-    const nodes = openTree(s.id, opened.epochs, read.rows)
-    const documents = nodeDocuments(s.id, opened.epochs, nodes, prev?.documents)
+    const nodes = await inSlices(openTreeSteps(s.id, opened.epochs, read.rows), alive)
+    const documents = await inSlices(nodeDocumentSteps(s.id, opened.epochs, nodes, prev?.documents), alive)
     entries.set(s.id, { scope: scopeOf(s, opened.name ?? null), etag: read.etag, nameSeal, nodes, documents })
     searchState.scopes = searchState.scopes.map((x) => (x.id === s.id ? scopeOf(s, opened.name ?? null) : x))
   } finally {
     zeroScopeKey(opened.epochs)
+  }
+}
+
+/** How long one slice of a space's build may hold the main thread, in the page's own milliseconds - a throttled CPU
+ *  measures slower milliseconds, so the slice stays this long on any device (cr-search-at-volume). */
+export const SLICE_MS = 40
+
+/** Hand the main thread back (a typed key, a paint) between two slices. */
+const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+/**
+ * Run `steps` to their result in slices of about {@link SLICE_MS}, pausing between two and asking `alive` after each pause
+ * (a reset in the pause abandons the build). However it ends - its result, a throw, abandoned - the steps are closed, so
+ * the keys a step holds are zeroed in its own `finally`.
+ */
+async function inSlices<T>(steps: Generator<void, T, void>, alive: () => void): Promise<T> {
+  try {
+    let started = performance.now()
+    for (;;) {
+      const step = steps.next()
+      if (step.done) return step.value
+      if (performance.now() - started >= SLICE_MS) {
+        await pause()
+        alive()
+        started = performance.now()
+      }
+    }
+  } finally {
+    steps.return(undefined as never)
   }
 }
 

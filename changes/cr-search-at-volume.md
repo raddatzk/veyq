@@ -145,3 +145,45 @@ first keystroke ("K"), whose Event Timing duration was 88–320 ms.
   and name, `refusedDocuments` opens the two account documents), which `SearchField.onFocus` calls on every focus. That
   is a cost per group per focus outside `core/search/`; recorded here, not fixed (no bound covers it).
 - **Quantity 4**, the index's heap: +4.1 MB with the group opened by the search, +3.7 MB with it on screen.
+
+### Phase 2 — the fix: the build in slices (image `veyq-vol-search:fix`)
+
+- **What changed.** A space's build runs as steps, at most `SLICE_MS` (40 ms of the page's own clock, so a throttled
+  device slices as finely) at a time, with a `setTimeout(0)` pause between two slices (`inSlices`, `searchIndex.ts`).
+  - `core/node/tree.ts`: the one name-opening walk became a generator (`openEntrySteps`, one row per step);
+    `openTree` runs it through (`runThrough`), `openTreeSteps` hands it out. **My choice** to step the shared walk
+    rather than copy it into `core/search/`: a second copy of the key chain and the guest-folder rule would be the
+    key-logic duplication the root `CLAUDE.md` calls a defect, so the change reaches one file outside `core/search/`
+    and changes no behaviour there (every `core/node` test green).
+  - `core/search/documents.ts`: `nodeDocumentSteps`, one node per step; `nodeDocuments` runs it through.
+  - `core/search/searchIndex.ts`: `readSpace` runs both in slices. `followActive` (the space on screen) does too — the
+    group landing showed it is the second long task; it counts as loading only once it pauses (a small tree, or a
+    revalidation whose seals all stand, is built at once, with no flash of "Searching one space…"), and a newer tree on
+    screen, another space, another key or a reset supersedes a build in flight. However a build ends, its generator is
+    closed, so the node keys it opened are zeroed in its `finally`; the scope key stays its owner's (the walk's
+    `finally`, or `activeSpace`).
+  - The typing: `matchAll` reads the chip list once and skips it when empty, `textRank` no longer spreads an array per
+    document, `suggestChips` keeps the places of a document list per list (a `WeakMap`), and `SearchField` hands the
+    query plain chips (`toRaw`), not the reactive ones read once per document.
+  - **What the member sees** is unchanged: the same results in the same order; a big space's results arrive over the
+    build's slices, under the "Searching N spaces…" line that already said so.
+- **Unit tests** (`searchIndex.test.ts`, "a space is built in slices"): a build hands the main thread back between
+  slices (a macrotask runs between them) and indexes what one pass would; a fast build is not paused; a reset in a pause
+  installs nothing and leaves every scope and node key zeroed; the space on screen is built in slices, counts as
+  loading while it pauses and is never read again; leaving it mid-build abandons the build with its node keys zeroed.
+  Bitten: without the generator's `return()` the reset case is red; with a slice that never ends the two slice cases
+  are red; with the active space's build unsliced its two cases are red.
+- **Re-measured**, the same command, twice:
+
+| Invocation, load (1-min, start→end) | landing | build wall ×1 / ×4 | longest build task ×1 / ×4 | longest typing task ×4 | heap after build |
+|---|---|---|---|---|---|
+| C 10:37, 9.5→6.6 | tenant | 1,005, 826 / 3,020, 3,758 ms | 53, 52 / 91, 115 ms | 71, 86 ms | +4.1–4.2 MB |
+| C 10:39, 6.6→6.4 | group | 690, 474 / 2,337, 2,095 ms | 73, 59 / 127, 122 ms | 72, 68 ms | +3.7 MB |
+| D 10:40, 6.5→7.0 | tenant | 869, 1,028 / 3,023, 3,067 ms | 58, 71 / 97, 90 ms | 80, 71 ms | +4.1–4.2 MB |
+| D 10:41, 7.0→5.7 | group | 456, 716 / 2,055, 1,992 ms | 56, 69 / 104, 111 ms | 72, 65 ms | +3.7 MB |
+
+- **Judgment: both bounds hold in both runs** — the build's longest task 90–127 ms at ×4 (bound 200), typing's 65–86 ms
+  (bound 100), at loads 5.7–9.5. The build's wall time barely moved (×4 tenant landing 2.7–4.1 s before, 3.0–3.8 s
+  after). The longest typing task is still the first keystroke ("K", which matches ~840 names); its margin to the bound
+  is 14–35 ms at ×4 on this Mac.
+- `pnpm run check` in `src/web/` green (539 files, 6,512 tests).

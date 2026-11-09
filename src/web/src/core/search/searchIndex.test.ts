@@ -34,7 +34,7 @@ import type { MyTenant } from '../../api/generated/scopes'
 import { openedScope, scopeSummary } from '../../test/models'
 import { testKind } from '../../test/testApplication'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
-import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, resetSearchIndex, searchState } from './searchIndex'
+import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, resetSearchIndex, searchState, SLICE_MS } from './searchIndex'
 import type { SearchFacetContext } from '../applications/registry'
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
@@ -335,5 +335,109 @@ describe('nothing is written to any storage', () => {
     const { matchAll } = await import('./query')
     expect(matchAll(indexedDocuments(), { chips: [], text: 'rome' }).map((m) => m.doc.name)).toEqual(['Rome 2024'])
     expect(writes).toEqual([])
+  })
+})
+
+describe('a space is built in slices (cr-search-at-volume)', () => {
+  const big = Array.from({ length: 60 }, (_, i) => ({ id: id(1000 + i), name: `Node ${String(i).padStart(2, '0')}` }))
+  /** Every read of the page's clock a slice later than the last: each step of a build ends its slice. */
+  function everyStepEndsASlice() {
+    let t = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => (t += SLICE_MS))
+  }
+  /** Count the macrotasks that run while `work` does: what a keystroke or a paint would get in between. */
+  async function macrotasksDuring(work: Promise<void>): Promise<number> {
+    let ticks = 0
+    let done = false
+    const tick = () => {
+      if (done) return
+      ticks++
+      setTimeout(tick, 0)
+    }
+    setTimeout(tick, 0)
+    await work
+    done = true
+    return ticks
+  }
+  beforeEach(() => {
+    mocked.fetchTree.mockImplementation(async (scopeId) => ({
+      rows: scopeId === GROUP ? rows(GROUP, 'Family', big) : rows(scopeId, 'Small', []),
+      etag: `W/"${scopeId}-1"`,
+    }))
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('hands the main thread back between slices and indexes what one pass would', async () => {
+    everyStepEndsASlice()
+    const ticks = await macrotasksDuring(refreshSearchIndex())
+    // the group alone takes 61 steps to open and 61 to index: the build paused between them
+    expect(ticks).toBeGreaterThanOrEqual(2 * big.length)
+    expect(names(GROUP)).toEqual(['Family', ...big.map((b) => b.name)].sort())
+    expect(indexedTree(GROUP)?.map((n) => n.id)).toEqual(rows(GROUP, 'Family', big).map((r) => r.id))
+  })
+
+  it('pauses only once a slice is spent: a fast build runs a space through', async () => {
+    const ticks = await macrotasksDuring(refreshSearchIndex())
+    expect(ticks).toBeLessThan(big.length)
+    expect(names(GROUP)).toHaveLength(big.length + 1)
+  })
+
+  it('abandons a build a reset overtook in a pause, and zeroes every key it held', async () => {
+    everyStepEndsASlice()
+    // the first facets call (the small trees have none, the group's 60) resets mid-build
+    facets.mockImplementationOnce((ctx: SearchFacetContext) => {
+      seen.push(ctx)
+      resetSearchIndex()
+      return {}
+    })
+    await refreshSearchIndex()
+    expect(indexedDocuments()).toEqual([])
+    expect(seen).toHaveLength(1) // nothing was asked after the reset
+    expect(seen[0].nodeKey.every((b) => b === 0)).toBe(true)
+    for (const k of handedOut) expect(k.key.every((b) => b === 0)).toBe(true)
+  })
+
+  describe('the space on screen', () => {
+    const groupKey = (): ScopeKey => ({ epoch: 0, key: keys.get(GROUP)! })
+    function showGroup() {
+      mocked.activeEpochKeys.mockReturnValue(groupKey())
+      Object.assign(activeSpace, { scopeId: GROUP, kind: ScopeKind.Group, name: 'Family group', status: 'ready' })
+      Object.assign(treeStore, { nodes: openTree(GROUP, groupKey(), rows(GROUP, 'Family', big)), loaded: true })
+    }
+
+    it('is built in slices too, counts as loading while it pauses, and ends with what one pass would', async () => {
+      showGroup()
+      everyStepEndsASlice()
+      let loadingSeen = false
+      const ticks = await macrotasksDuring(
+        (async () => {
+          await refreshSearchIndex()
+          await vi.waitFor(() => {
+            loadingSeen ||= searchState.loading.includes(GROUP)
+            expect(names(GROUP)).toHaveLength(big.length + 1)
+          })
+        })(),
+      )
+      expect(ticks).toBeGreaterThanOrEqual(big.length)
+      expect(loadingSeen).toBe(true)
+      expect(searchState.loading).toEqual([])
+      expect(mocked.fetchTree.mock.calls.map((c) => c[0])).not.toContain(GROUP)
+      expect(keys.get(GROUP)!.some((b) => b !== 0)).toBe(true) // the page's key, never zeroed here
+    })
+
+    it('abandons a build the member left the space during, and zeroes the node keys it opened', async () => {
+      showGroup()
+      everyStepEndsASlice()
+      facets.mockImplementationOnce((ctx: SearchFacetContext) => {
+        seen.push(ctx)
+        activeSpace.scopeId = TENANT // the member moved on while the build paused
+        return {}
+      })
+      await refreshSearchIndex()
+      await vi.waitFor(() => expect(searchState.loading).toEqual([]))
+      expect(names(GROUP)).toEqual([])
+      expect(seen[0].nodeKey.every((b) => b === 0)).toBe(true)
+      expect(keys.get(GROUP)!.some((b) => b !== 0)).toBe(true)
+    })
   })
 })

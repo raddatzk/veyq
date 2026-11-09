@@ -92,7 +92,7 @@ export function suggestChips(text: string, chips: readonly SearchChip[], sources
   const tails = tailsOf(text)
   const last = tails.at(-1)
   if (last && YEAR.test(last.tail)) offer({ chip: { type: 'year', year: Number(last.tail) }, text: last.rest })
-  const places = placesOf(sources.documents)
+  const places = placesOfCached(sources.documents)
   for (const { tail, rest } of tails) {
     const t = fold(tail)
     if (t.length < MIN_TAIL) continue
@@ -102,6 +102,14 @@ export function suggestChips(text: string, chips: readonly SearchChip[], sources
     for (const k of sources.kinds) if (wordPrefix(fold(k.label), t)) offer({ chip: { type: 'kind', kinds: k.kinds, label: k.label }, text: rest })
   }
   return [...byType.year, ...byType.person, ...byType.place, ...byType.space, ...byType.kind]
+}
+
+/** {@link placesOf} once per document list: a keystroke asks again over the same list (cr-search-at-volume). */
+const placesByList = new WeakMap<readonly SearchDocument[], Map<string, string>>()
+function placesOfCached(docs: readonly SearchDocument[]): Map<string, string> {
+  let places = placesByList.get(docs)
+  if (!places) placesByList.set(docs, (places = placesOf(docs)))
+  return places
 }
 
 /** Every place the documents name, folded → as first named. */
@@ -137,9 +145,9 @@ export const Rank = { exact: 0, prefix: 1, wordStart: 2, inside: 3, place: 4 } a
 /** How `doc` matches the folded text `t`, or null when it does not; an empty text matches every document at the best rank. */
 export function textRank(doc: SearchDocument, t: string): number | null {
   if (!t) return Rank.exact
-  let best: number | null = null
-  for (const name of [doc.foldedName, ...doc.foldedAliases]) {
-    const rank = nameRank(name, t)
+  let best = nameRank(doc.foldedName, t)
+  for (const alias of doc.foldedAliases) {
+    const rank = nameRank(alias, t)
     if (rank !== null && (best === null || rank < best)) best = rank
   }
   if (best !== null) return best
@@ -169,8 +177,9 @@ export function matchAll(docs: readonly SearchDocument[], query: SearchQuery): M
   const t = fold(query.text.trim()).replace(/\s+/g, ' ')
   if (!t && query.chips.length === 0) return []
   const out: Match[] = []
+  const chips = query.chips
   for (const doc of docs) {
-    if (!query.chips.every((c) => satisfies(doc, c))) continue
+    if (chips.length > 0 && !chips.every((c) => satisfies(doc, c))) continue
     const rank = textRank(doc, t)
     if (rank !== null) out.push({ doc, rank })
   }
