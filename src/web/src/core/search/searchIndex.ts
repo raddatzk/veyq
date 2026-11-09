@@ -8,8 +8,8 @@
 // key not on this device yet, the member removed, a rotation in flight) loses its documents and is named as not searched; a
 // space no longer listed loses its documents too. **The active space does not change** - nothing here enters a space.
 //
-// **In slices** (cr-search-at-volume): opening a tree and making its documents run as steps, at most {@link SLICE_MS} at a
-// time, so a space of thousands of nodes never holds the main thread whole - a keystroke or a paint gets in between; a
+// **In slices** (uc.platform.search § Quality notes, measured in ADR 0125 § Consequences): opening a tree and making its
+// documents run as steps, at most {@link SLICE_MS} at a time, so a space of thousands of nodes never holds the main thread whole - a keystroke or a paint gets in between; a
 // reset between two slices abandons the build (its keys zeroed all the same).
 //
 // **The active space is the tree on screen.** While the member's space page holds the active space's tree (`treeStore`), its
@@ -114,7 +114,7 @@ let activeRun = 0
 let activeRunScope: string | null = null
 
 /**
- * The active space's entry from the tree on screen, built in slices like any other space's (cr-search-at-volume): the
+ * The active space's entry from the tree on screen, built in slices like any other space's: the
  * documents of a big space on screen are made a slice at a time, and the space counts as loading once a build pauses (a
  * small tree, or one whose documents all stand, is built at once). The scope key is `activeSpace`'s: a build that meets
  * another space, another key or a reset after a pause is abandoned, and only the node keys it opened are zeroed.
@@ -328,7 +328,7 @@ async function readObjects(scopeId: string, nodes: readonly TreeNode[], open: ()
 }
 
 /** How long one slice of a space's build may hold the main thread, in the page's own milliseconds - a throttled CPU
- *  measures slower milliseconds, so the slice stays this long on any device (cr-search-at-volume). */
+ *  measures slower milliseconds, so the slice stays this long on any device. */
 export const SLICE_MS = 40
 
 /** Hand the main thread back (a typed key, a paint) between two slices. */

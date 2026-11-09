@@ -9,11 +9,11 @@
 // entry is through, no tenant is known, and a role read for no tenant says "no owner"). A failed read is an answer: the
 // section it gates is not offered.
 //
-// **Words a section is found by** (uc.platform.search, cr-search-polish): beside its label, each section names a few words in
+// **Words a section is found by** (uc.platform.search step 5): beside its label, each section names a few words in
 // its entry (`words`, from the catalogs' `settings.words.<id>`, comma-separated, in the UI's language) - "E-Mail" finds the
 // mail section, "Kennwort" the password. The search matches them from a word's start (`SearchDocument.keywords`), never
 // inside one, and from the third typed character on; the rail does not show them, the search's row does where one is why
-// the section is listed (cr-search-visible-reasons).
+// the section is listed.
 //
 // The rail mixes two axes (ADR 0022 §3): the account's sections (Persönlich, always), the scope-in-path ones (the tenant's
 // while the Tenant scope is active) and a collection (Gruppen: every group the caller owns).

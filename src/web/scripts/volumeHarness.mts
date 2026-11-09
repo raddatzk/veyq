@@ -48,7 +48,7 @@ export type Manifest = Partial<Record<'photos' | 'bare' | 'upload' | 'treeDeep' 
   wide?: { scopeId: string; memoryName: string; hash: string }
   /** `marks`: the Memory whose owner's mark set is full, and the one photo in it past the cap (unmarked, newest). */
   marks?: Place & { marked: number; pastCap: string }
-  /** `spread` (cr-search-at-volume): the tenant's and the owner's personal space, each filled to `perSpace` nodes. */
+  /** `spread` (the search's measurement, ADR 0125 § Consequences): the tenant's and the owner's personal space, each filled to `perSpace` nodes. */
   spread?: { tenantScopeId: string; personalScopeId: string; place: string; perSpace: number }
 }
 

@@ -42,7 +42,9 @@
    - Core adds one document per member of this tenant (the directory's name, and their `~username` as a second name),
      from the roster the client already read, and one per settings section the settings rail offers this member now:
      the rail and the search read one list with one set of gates (`features/settings/sections.ts`), and while a gate's
-     answer is out no section is offered (ADR 0125 decision 9).
+     answer is out no section is offered (ADR 0125 decision 9). The search reads those answers on its first focus and
+     again when the tenant's role or the set of the member's groups changes; a role change inside a group, or a trust
+     refusal arising mid-session, reaches it at the next sign-in (the rail reads its own answers each time it opens).
 4. **Type the query.** The member types. Each token that reads as a known facet is offered as a chip: a year, a month with its year ("Mai 2024",
    "May 2024" - a Memory matches when its range overlaps the month, a photo when captured in it), a member's name (person), a place a document carries, a space's name, a kind's word -
    every kind has one, core's *Person* and *Setting* included -, and the name of a node that holds something (a folder, a

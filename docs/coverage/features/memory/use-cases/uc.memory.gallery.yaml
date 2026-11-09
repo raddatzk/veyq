@@ -336,7 +336,7 @@ acceptanceCriteria:
       no chip and no text. An empty
       result names every filter in force (E5). Client-only, with no server part: it reads the opened listing alone, nothing
       is fetched, sent or written to any storage for it, and opening another Memory clears it. A share guest has no field
-      (`memoryRights().filterFacts`, false for every share role). cr-gallery-filter-by-facts.
+      (`memoryRights().filterFacts`, false for every share role).
     coverage:
       web:
         unit:

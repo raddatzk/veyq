@@ -893,9 +893,11 @@ Compare trees, not occurrences. For an **automated, repeated** guard that re-inj
 every run, work on a throwaway *copy* of the tree, not the live one: `scripts/validate_guard_gaps.py`
 copies → forges → runs → discards, so even an abort leaves an orphaned tempdir, never a dirty tree
 (every guard's `__file__`-relative `ROOT` makes a copied `scripts/<guard>.py` resolve to the copy).
-Snapshot-restore is the interactive one-shot; a copy is its automated form. **Batching levers into one run is
-sound only across disjoint code paths AND disjoint tests:** a test stops at its first failed assertion, so two
-levers that redden the same test leave the second unproven (`cr-queued-rotation-owners-only-no-leased-join`
+Snapshot-restore is the interactive one-shot; a copy is its automated form. **Where a live dev server serves the tree,
+the one-shot bites a copy too:** an injection into a file the owner's Vite serves hot-reloads every mutant into their
+open page, so the lever goes into a copy beside the file, run by a copy of its test (2026-11-09, five search bites).
+**Batching levers into one run is sound only across disjoint code paths AND disjoint tests:** a test stops at its first
+failed assertion, so two levers that redden the same test leave the second unproven (`cr-queued-rotation-owners-only-no-leased-join`
 paired "derive from the oldest job" with "drop the re-queue's state gate", and the first answered for both).
 
 **First check the lever is wired to the mechanism at all.** Both traps below assume the lever *reaches* the code
@@ -1806,7 +1808,10 @@ stopped the CR — while under load the page path took 22.6–73.6 s and the cha
 reading was wrong; each was a different substrate, and only one was written down. So every timing carries
 `sysctl -n vm.loadavg` beside it, a before/after pair runs alternately in one window rather than hours apart,
 and a gate that authorises building is taken again quiet before it does — a gate measured once is § *bite the
-MEASUREMENT* left undone.
+MEASUREMENT* left undone. **A bound — a ceiling a reading must stay under — is judged at the load there is**, since the
+owner's work keeps this Mac from ever being quiet (a harness waiting for a load of 3 waited 25 minutes at 6–25): a bound
+that holds under load passes, since load only makes the numbers worse; one that fails gets one re-run and fails on a
+second; after a fix, both runs must hold. Let the load of your own last heavy step fall before the first run.
 
 ### Where a mapping depends on a library's output, one un-mocked test runs BEFORE the mapping
 

@@ -12,14 +12,14 @@
 // **The first focus builds the index, every later one revalidates it** (`refreshSearchIndex`), and while the list is open
 // the spaces are revalidated again every {@link REVALIDATE_MS} - each a `304` while nothing moved (ADR 0081). Nothing about
 // the query leaves this component: the text, the chips and the results are local state. **The settings sections are read
-// once**, on the first focus (cr-search-polish: a read per focus opened every group's grant and two account documents), and
+// once**, on the first focus (a read per focus opened every group's grant and two account documents), and
 // again only where the rail's answers move: the tenant's role on another tenant (`sections.ts` watches it), the groups when
 // the spaces the index lists change - a group joined, left or deleted.
 //
 // **What a row draws.** The part of a name the text matched is bold (`nameParts`: found in the folded name, drawn over
 // the name's own characters), as text nodes and a `strong` element - never markup from a string. A settings section listed
 // for one of its words, not its label, draws that word after its second line, its matched part bold the same way
-// (`reasonKeyword`, cr-search-visible-reasons): a result never stands there for a reason the member cannot see. A month chip reads its
+// (`reasonKeyword`, uc.platform.search step 5): a result never stands there for a reason the member cannot see. A month chip reads its
 // month in the UI's language. **A screen reader** hears, through a polite live region, how many results there are and a
 // chip added or removed; the suggestions are named by their heading, the results by their own name, and the field
 // stays the layer's combobox.
@@ -32,7 +32,7 @@
 // does (a hard navigation would reset it). The field says what it searched: the spaces still loading, those it could not
 // search, and - instead of results, when a query found nothing - what is searched.
 //
-// **A calm focus** (uc.platform.search step 1, cr-search-calm-focus): focusing starts the index (above) and opens
+// **A calm focus** (uc.platform.search step 1): focusing starts the index (above) and opens
 // nothing - unless a chip is set: then the field already asks something, and focusing or clicking into it shows what
 // the chips find (owner 2026-11-09). The list is open only while something is asked - text or a chip: the first typed character opens it, and
 // Backspace to an empty field with no chip closes it (with a chip left, the list stays and follows what remains). A
@@ -68,7 +68,7 @@ import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, search
 /** How often an open list revalidates every space (a `304` while nothing moved). */
 const REVALIDATE_MS = 20_000
 /** How many results the list shows at first, and how many more each "show more" adds (ADR 0125 decision 5): few rows drawn
- *  is what keeps the first keystroke's task short, which is mostly the list's render (cr-search-polish). */
+ *  is what keeps the first keystroke's task short, which is mostly the list's render (measured at volume, ADR 0125 § Consequences). */
 const PAGE = 10
 /** How long the open list waits on a loading space before it says so: a shorter load shows no state (see the header). */
 const LOADING_DELAY_MS = 300
@@ -257,8 +257,8 @@ watch(text, (now) => {
 
 // --- the results -----------------------------------------------------------------------------------------------------
 // the chips as plain objects: the query reads them once per document, and a reactive read each time costs a keystroke
-// at volume (cr-search-at-volume); the matcher remembers the queries asked while the list is open and narrows them as the
-// text grows, and the list is ranked only as far as it is shown (cr-search-polish). Its memory goes when the list
+// at volume (ADR 0125 § Consequences); the matcher remembers the queries asked while the list is open and narrows them as the
+// text grows, and the list is ranked only as far as it is shown. Its memory goes when the list
 // closes, when the documents move (the index's next generation, a sign-out's reset included) and with the field.
 const matcher = createMatcher()
 watch(open, (isOpen) => {
@@ -354,7 +354,7 @@ const matched = computed(() => matchedText(text.value))
 const partsOf = (doc: SearchDocument): NamePart[] => nameParts(doc.name, matched.value)
 /** A row's second line in parts ({@link secondLine}), and - where a settings word, not the name, is why the row is listed -
  *  that word after it with its matched part bold ("Persönlich · **Ken**nwort"): a result never stands there for a reason
- *  the member cannot see (cr-search-visible-reasons). */
+ *  the member cannot see (uc.platform.search step 5). */
 function metaParts(option: ResultOption): NamePart[] {
   const line = secondLine(option)
   const word = reasonKeyword(option.doc!, matched.value)

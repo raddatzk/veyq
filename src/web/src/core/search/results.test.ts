@@ -1,4 +1,4 @@
-// The one list of results (ADR 0125 decisions 5 and 9, cr-search-chips-for-everything): the match first, then where the result
+// The one list of results (ADR 0125 decisions 5 and 9): the match first, then where the result
 // lies, then the name; a chip is a predicate over every document, people and settings sections included; the list is ranked
 // only as far as it is drawn, its count exact.
 import { describe, it, expect } from 'vitest'
@@ -66,7 +66,7 @@ describe('one list, ordered by the match, then where the result lies, then the n
   })
 })
 
-// was: "shows neither group while a chip is set" - replaced by the predicate rule (cr-search-chips-for-everything)
+// was: "shows neither group while a chip is set" - replaced by the predicate rule (ADR 0125 decision 4)
 describe('a chip is a predicate over every document', () => {
   const list = [
     person('u1', 'Romy'), section('maps', 'Rome maps'),
@@ -102,7 +102,7 @@ describe('where a node lies', () => {
   })
 })
 
-// cr-search-polish: the list is ranked only as far as it is shown, its count stays exact
+// the list is ranked only as far as it is shown, its count stays exact
 describe('a list ranked as far as it is shown', () => {
   // names that tie on rank and differ by collation, case, digits and accents - the order a full sort gives is the answer;
   // half in another space, so the place takes part too

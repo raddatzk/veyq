@@ -88,7 +88,7 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
    - **Why one list, and why the groups went:** a member read five headed groups (the open node, this space, other
      spaces, people, settings) for what one ordered list with a place on every row says, and a strong match in another
      space was buried under a weak one here. The groups also cost: the first keystroke's longest task is mostly the
-     first list's render, not the matching (cr-search-polish measured it at volume), and five groups of eight drew up to
+     first list's render, not the matching (measured at volume, § Consequences), and five groups of eight drew up to
      45 rows where one list draws 11. An invisible context weight was rejected earlier because nothing on screen said
      why a result came first; here the place is a tie-break after the match, and every row names it. (Owner, 2026-11-08:
      the open Memory's content comes first - it still does, at an equal match.)
@@ -121,7 +121,9 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
        - The listing restricts to live nodes in its statement (an `exists` on the node's row), not by a list of the
          scope's node ids, and narrows a row to what the search opens (no derivative, no bucket, no time).
        - The tag is derived, not a digest of the rows: a member is told the item revisions already, so an idle read costs
-         the tree revision, one join over the live nodes' item revisions and the blocks, and no media query.
+         the tree revision, one join over the live nodes' item revisions and the blocks, and no media query. On MariaDB
+         the listing scans `ix_media_scope` in id order with no filesort (EXPLAIN at 10,000 photos); the join's plan on an
+         instance with many tenants was not measured.
        - The hook reads the listing by its tag on every walk, the active space's included, and asks for the node keys only
          when a medium must be opened: on a tree `304` the scope key is opened only then. A medium at an unchanged
          revision is kept unopened, and a blocked one is no document.
@@ -164,32 +166,34 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
     kind of fact opening each Memory reveals today - and, while nothing moved, one `304` per space per focus. Nothing
     about a query.
 - **The cost of a first search across many spaces is one tree fetch and one media listing per space, opened in
-  slices.** It is paid on focus, not at sign-in. Measured (cr-search-photos-of-every-space, 2026-11-09) on this Mac in
+  slices.** It is paid on focus, not at sign-in. Measured (2026-11-09, with the photos of decision 8a) on this Mac in
   desktop Chrome, on the volume harness's own instance with 7,000 nodes over three spaces (one of 5,000), 10,000 photos in
   one Memory and 445 members, at a 1-minute load of 5.9–8.4:
   - **The build:** 1.8–2.6 s until every space and its photos are indexed, 3.3–5.0 s at a 4× CPU throttle. Its longest
     main-thread task is 53–79 ms, and 84–119 ms at 4× (bound: 200 ms). It runs in slices (`searchIndex.ts`, at most
     40 ms at a time, the space on screen and an application's objects included); before it did, one task per space held
-    the main thread 0.8–2.6 s at 4× (cr-search-at-volume, without photos).
+    the main thread 0.8–2.6 s at 4× (measured without photos).
   - **Typing** "K", "Ke", "Kev", a chip and Backspace: no long task unthrottled; the longest at 4× is 57–99 ms (bound:
     100 ms), the first keystroke's, most of it Vue's render of the list. Before a document that does not hold the text
     was answered by one search and the text's words were split once per query (`query.ts`), the photos took it to
-    70–113 ms - over the bound in two of twelve readings. With cr-search-polish's items in (the month chip, the
-    settings' words, the bold part of each row; the field now narrows the matches it remembers while the text grows and
-    ranks a group only as far as it is shown), at loads of 5.3–37: 76–100 ms in two invocations, every reading holding;
+    70–113 ms - over the bound in two of twelve readings. With the month chip, the
+    settings' words and the bold part of each row in (the field now narrows the matches it remembers while the text grows
+    and ranks only as far as it is shown), at loads of 5.3–37: 76–100 ms in two invocations, every reading holding;
     one reading of another went to 207 ms at a load of 8, and one at 115 ms at a load of 30. The margin is the first
-    list's render, not the matching. With one list of 10 (decision 5; cr-search-chips-for-everything), the first keystroke
+    list's render, not the matching. With one list of 10 (decision 5), the first keystroke
     draws 11 rows instead of up to 29, and its longest task at 4× fell to none of 50 ms or more in four readings of eight and
     50-66 ms in the rest, at loads of 5.6-13: a margin of 34 ms or more.
   - **A second focus with nothing changed** reads each other space's tree and every space's media listing as one `304`
-    each, and the index opens nothing; since cr-search-polish nothing else decodes either (the settings sections are read
+    each, and the index opens nothing; nothing else decodes either (the settings sections are read
     once, on the first focus).
   - **The index's memory:** 9.1–9.6 MB of JS heap since each document carries the ids above it (decision 4's *In:*),
     7.8–8.4 MB before (3.7–4.2 MB without the photos).
   - The command: `scripts/measure_volume.py --instance I search --runs 2 --throttles 1,4 --active tenant|group`, after
     `seed tree --target 5000`, `seed spread --target 1000`, `seed members --target 445` and `seed photos --target 10000`.
-    The readings and the judging rule are in the CR's retrospective. The harness is temporary, `cr-volume-measurement-cax`
-    deletes it.
+    Judged on a busy machine, with the load recorded at both ends of each run: a bound that held under load passed, a
+    failure got one re-run and would have failed on a second ([`changes/README.md`](../../changes/README.md), *machine load
+    is part of a timing's substrate*). The individual readings were not kept. The harness is temporary,
+    `cr-volume-measurement-cax` deletes it.
 - **A removed member's search loses that space** when its keys go, and keeps nothing they could not read before.
 - **Rejected alternatives:**
   - A persistent on-device index (decision 2).

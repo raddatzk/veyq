@@ -6,10 +6,10 @@
 // then the id. So a strong match elsewhere comes before a weak one here: where the member stands breaks ties and never
 // hides a result. Each row says where it lies (`SearchField.vue`), so the order needs no heading.
 //
-// **No kind of document is hidden by a rule of its own** (cr-search-chips-for-everything): a chip is a predicate over
+// **No kind of document is hidden by a rule of its own** (ADR 0125 decisions 4 and 9): a chip is a predicate over
 // every document (`query.ts` `satisfies`), and a person or a settings section a chip leaves in is listed like content.
 //
-// **The list is ranked only as far as it is drawn** (cr-search-polish): the field shows a page of results, and a one-letter
+// **The list is ranked only as far as it is drawn** (ADR 0125 decision 5): the field shows a page of results, and a one-letter
 // query matches thousands of documents. So the first `limit` results are SELECTED - kept in order in a list of that
 // length while every match passes once - instead of sorting every match on every keystroke; `total` stays exact.
 import { matchAll, type Matcher, type SearchQuery } from './query'

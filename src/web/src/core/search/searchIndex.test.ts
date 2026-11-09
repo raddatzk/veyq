@@ -349,7 +349,7 @@ describe('nothing is written to any storage', () => {
   })
 })
 
-describe('a space is built in slices (cr-search-at-volume)', () => {
+describe('a space is built in slices', () => {
   const big = Array.from({ length: 60 }, (_, i) => ({ id: id(1000 + i), name: `Node ${String(i).padStart(2, '0')}` }))
   /** Every read of the page's clock a slice later than the last: each step of a build ends its slice. */
   function everyStepEndsASlice() {

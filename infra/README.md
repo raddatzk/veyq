@@ -61,6 +61,14 @@ presigned URLs for (`http://veyq.localhost:<webPort>`), `veyq.backendPort` / `ve
 web's and admin-web's proxy targets and `backend:seed`'s bases. Ports do not separate the data: both instances run
 on the one dev database and bucket, so a branch's schema meets the other checkout's backend (inbox #456).
 
+**A database and a store of its own** take a stack of their own: a copy of `docker/docker-compose.yml` kept outside
+the repository, with `mariadb` and `garage` only, other `container_name`s, volumes and host ports (beside it a copy of
+`garage.toml`), started as its own project (`docker compose -p <name> -f <copy> up -d`, removed with `down -v`); the
+owner's stack is untouched. The backend then takes `QUARKUS_DATASOURCE_JDBC_URL` (e.g.
+`jdbc:mariadb://localhost:13306/veyq`), `VEYQ_BUNDLED_STORE_ENDPOINT` and `VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT` (the
+copy's S3 and admin ports) besides the ports above, and web's Vite `VEYQ_STORE_TARGET` (the copy's S3 port). Its first
+start sets the bucket up, as on the shared stack; seed it with `bootstrap:user` against the moved bases.
+
 ## Compose profiles
 
 Docker Compose for the local dev dependencies. Three profiles:

@@ -8,7 +8,7 @@
 // document carries, that place; of a space's name, that space; of the name of a node something lies below, *In:* that
 // node; of a kind's word, that kind. Choosing one turns that tail into the chip and the rest stays text.
 //
-// **A chip is a predicate over every document** (cr-search-chips-for-everything): a person and a settings section are
+// **A chip is a predicate over every document** (ADR 0125 decision 4): a person and a settings section are
 // documents like any other, and a chip they cannot satisfy - a year, a place, *In:* - leaves them out by itself; no rule
 // hides a kind of document while a chip is set. *Person: X* asks a document's participants, so X's own profile does not
 // satisfy it. *In:* asks the ids of the nodes a document lies below (`pathIds`), never a name.
@@ -18,7 +18,7 @@
 // its name) or, ranked after every name match, one of its places or - from a word's start only - a word it is found by
 // (a settings section's). The order of the results is `results.ts`'s: the rank, then where the result lies, then the name.
 //
-// **A result is never listed for a reason the member cannot see** (cr-search-visible-reasons, uc.platform.search step 5):
+// **A result is never listed for a reason the member cannot see** (uc.platform.search step 5):
 // one typed character matches word starts only - a match inside a word counts from {@link MIN_INSIDE} characters on, so
 // "K" lists no "Reiselink" -, and a settings section's word counts from {@link MIN_KEYWORD} on and is drawn on the row's
 // second line where it is the reason ({@link reasonKeyword}). Both rules start at a length, so the matcher narrows only
@@ -154,7 +154,7 @@ export function suggestChips(text: string, chips: readonly SearchChip[], sources
 }
 
 /** A name of a suggestion's source (a member, a space, a kind's word, a month) folded once, not on every keystroke
- *  (cr-search-polish): the names are few and stable, and a query's text is never kept here. */
+ *  - the names are few and stable, and a query's text is never kept here. */
 const folded = new Map<string, string>()
 function foldOnce(name: string): string {
   let f = folded.get(name)
@@ -165,7 +165,7 @@ function foldOnce(name: string): string {
   return f
 }
 
-/** {@link placesOf} once per document list: a keystroke asks again over the same list (cr-search-at-volume). */
+/** {@link placesOf} once per document list: a keystroke asks again over the same list. */
 const placesByList = new WeakMap<readonly SearchDocument[], Map<string, string>>()
 function placesOfCached(docs: readonly SearchDocument[]): Map<string, string> {
   let places = placesByList.get(docs)
@@ -243,7 +243,7 @@ function lengthOf(t: string): number {
 }
 
 /** The words of the folded text `t`, split once per query: {@link matchAll} asks every document with them, and a split per
- *  document was a regular expression and an array for each of 17,000 documents on every keystroke (cr-search-photos-of-every-space). */
+ *  document was a regular expression and an array for each of 17,000 documents on every keystroke (ADR 0125 § Consequences). */
 const wordsOf = (t: string): string[] => t.split(/\s+/).filter(Boolean)
 
 /** How `doc` matches the folded text `t` (its `words`, when the caller split them already), or null when it does not; an
@@ -344,7 +344,7 @@ export interface Matcher {
 export const MATCH_HISTORY = 64
 
 /**
- * A {@link matchAll} for a field the member types into (cr-search-polish). It remembers the matches of every query asked
+ * A {@link matchAll} for a field the member types into. It remembers the matches of every query asked
  * while the field is open (the owner, 2026-11-09), by its chips and its folded text, for one list of documents:
  * - **The same query again** - a "show more", or Backspace from "Kev" back to "Ke" - is the remembered answer as it was.
  * - **A query that grew** from a remembered one (the same chips, a text that starts with that one's) narrows the matches of
@@ -353,7 +353,7 @@ export const MATCH_HISTORY = 64
  *   word of the shorter one, and a name, an alias, a keyword or a place that holds the longer text holds the shorter. So
  *   only a text that long, or an empty one (it matches every document the chips leave), is narrowed from: "K" matches word
  *   starts only and "Ke" inside words too, "Ke" no settings word and "Ken" one - each of those scans every document
- *   (cr-search-visible-reasons).
+ *   (uc.platform.search step 5).
  * - **Anything else** - a new chip, a text no remembered one starts - scans every document.
  * Another list of documents - the index's next generation: a space rebuilt, a listing re-read, the open Memory's
  * contribution or the roster moved - forgets everything, and so does {@link Matcher.clear}, which the field calls when its

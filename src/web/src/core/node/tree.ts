@@ -149,7 +149,7 @@ type EntryRow = {
  * not open (a guest's garbage, a wrap of another identity) leaves that folder's subtree out of the result instead of
  * refusing the member's whole space; every other row keeps the strict rule above.
  *
- * **One row per step** (cr-search-at-volume): it pauses after each row, so a caller that must not hold the main thread
+ * **One row per step** (the search's build in slices, ADR 0125 § Consequences): it pauses after each row, so a caller that must not hold the main thread
  * for a whole big tree (the search's index, {@link openTreeSteps}) runs it in slices; {@link openTree} runs it through.
  */
 function* openEntrySteps(scopeId: string, epochs: ScopeKey, rows: EntryRow[]): Generator<void, Map<string, string>, void> {

@@ -1188,7 +1188,7 @@
   transition: border-color 0.2s;
 }
 
-/* the focus colour wins over the hover: a focused field keeps it under the pointer (cr-search-calm-focus) */
+/* the focus colour wins over the hover: a focused field keeps it under the pointer (uc.platform.search step 1) */
 .veyq-tags-input:not([data-disabled]):not([data-focused]):hover {
   border-color: var(--app-muted);
 }

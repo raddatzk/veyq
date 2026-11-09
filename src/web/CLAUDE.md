@@ -378,7 +378,7 @@ here; the server is blind.
   the text grows (`createMatcher`: in memory only, forgotten when the list closes, the documents move or the field goes),
   and ranks the list only as far as it is shown (`results.ts` `firstRanked`); a new rule in `textRank` must stay
   monotone in the text from the length the matcher narrows from (`EVERY_RULE`, today three characters), or the narrowing
-  drops a match - a rule that starts at a longer length raises that length (cr-search-polish, cr-search-visible-reasons).
+  drops a match - a rule that starts at a longer length raises that length.
 
   **Favorites are core's (inbox #409, [ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose

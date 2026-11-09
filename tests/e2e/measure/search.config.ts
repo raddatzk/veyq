@@ -1,4 +1,4 @@
-// The search's measurement on the volume instance (cr-search-at-volume, search.ts beside it) — NOT lane L1, and not the
+// The search's measurement on the volume instance (ADR 0125 § Consequences, search.ts beside it) — NOT lane L1, and not the
 // list leg either: `scripts/measure_volume.py search` starts it the way it starts volume.ts (the overlay's Playwright
 // image, the instance's own networks), with `-c measure/search.config.ts`. TEMPORARY, with the rest of
 // `tests/e2e/measure/` (`cr-volume-measurement-cax` deletes it).

@@ -23,7 +23,7 @@ describe('fold', () => {
   })
 })
 
-describe('foldMap (cr-search-polish)', () => {
+describe('foldMap', () => {
   it('names, per folded letter, the characters of the original it came from', () => {
     expect(foldMap('Straße')).toEqual({ folded: 'strasse', start: [0, 1, 2, 3, 4, 4, 5], end: [1, 2, 3, 4, 5, 5, 6] })
     // a mark written apart belongs to the letter before it

@@ -57,7 +57,7 @@ describe('chip suggestions from the typed text', () => {
   })
 })
 
-// cr-search-chips-for-everything: a node something lies below is an In: chip, matched by its id, scoped to its space
+// ADR 0125 decision 4: a node something lies below is an In: chip, matched by its id, scoped to its space
 describe('the In: chip', () => {
   // the tenant's space: Reisen/ → Rom 2024 (a Memory) → a photo; Arbeit/ → Reisen (a second "Reisen"); a group: Reisen/ → Paris
   const reisen = doc('Reisen', {}, { id: 'reisen', nodeId: 'reisen' })
@@ -188,7 +188,7 @@ describe('the text', () => {
   })
 })
 
-// cr-search-visible-reasons (owner 2026-11-09): a result never stands there for a reason the member cannot see
+// uc.platform.search step 5 (owner 2026-11-09): a result never stands there for a reason the member cannot see
 describe('a reason the member can see', () => {
   const password = () => doc('Passwort ändern', {}, { keywords: ['Kennwort', 'Passwort', 'Anmeldung'] })
 
@@ -232,7 +232,7 @@ describe('a reason the member can see', () => {
   })
 })
 
-// cr-search-polish: the month chip - a month's name with a year, in the UI's language or in English
+// ADR 0125 decision 4: the month chip - a month's name with a year, in the UI's language or in English
 describe('the month chip', () => {
   const names = (locale: string) => Array.from({ length: 12 }, (_, i) => new Intl.DateTimeFormat(locale, { month: 'long' }).format(new Date(2000, i, 15)))
   const de = names('de')
@@ -296,7 +296,7 @@ describe('the month chip', () => {
   })
 })
 
-// cr-search-polish: the matched part of a name, found in the folded name and drawn over the name's own characters
+// uc.platform.search step 6: the matched part of a name, found in the folded name and drawn over the name's own characters
 describe('the matched part of a name', () => {
   const strong = (name: string, text: string) => nameParts(name, matchedText(text)).map((p) => (p.strong ? `[${p.text}]` : p.text)).join('')
 
@@ -329,7 +329,7 @@ describe('the matched part of a name', () => {
   })
 })
 
-// cr-search-polish: the typing margin - a text that only grew narrows the last matches
+// the typing margin (ADR 0125 § Consequences) - a text that only grew narrows the last matches
 describe('the matcher of a field', () => {
   const names = ['Kevelaer 2012', 'Kevins Geburtstag', 'Ken', 'Aroma', 'IMG_0001.jpg', 'Summer in Kev', 'Keller', 'Café Müller']
   const docs = names.map((name, i) => doc(name, { years: { from: 2010 + i, to: 2010 + i }, places: i % 2 ? ['Kevelaer'] : [] }))
@@ -347,8 +347,8 @@ describe('the matcher of a field', () => {
     for (const q of steps) expect(sorted(match(docs, q)), JSON.stringify(q)).toEqual(sorted(matchAll(docs, q)))
   })
 
-  // was: from "ke" to "kev"; a text of two characters is no superset any more (cr-search-visible-reasons), so from "kev"
-  // cr-search-visible-reasons: "K" matches word starts only and "Ke" inside words too, "Ke" no settings word and "Ken" one
+  // was: from "ke" to "kev"; a text of two characters is no superset any more (uc.platform.search step 5), so from "kev"
+  // uc.platform.search step 5: "K" matches word starts only and "Ke" inside words too, "Ke" no settings word and "Ken" one
   it('answers "K" to "Ke" to "Ken" and back as fresh queries do - a shorter text below every rule is no superset', () => {
     const list = [
       ...docs, doc('Paket'), doc('Reiselink'), doc('Passwort ändern', {}, { keywords: ['Kennwort'] }), doc('Home', { places: ['Parkweg'] }),
@@ -414,7 +414,7 @@ describe('the matcher of a field', () => {
     return { list, reads: () => reads }
   }
 
-  // was: "ke" then "kev" narrowed from "ke"; a two-character text is no superset any more (cr-search-visible-reasons),
+  // was: "ke" then "kev" narrowed from "ke"; a two-character text is no superset any more (uc.platform.search step 5),
   // so "kev" scans, and "kevi" narrows from it - the Backspace is the same
   it('Backspace from "kev" to "ke" reads no document: the answer for "ke" is remembered', () => {
     const { list, reads } = counted()

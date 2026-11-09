@@ -1,4 +1,4 @@
-// The search at a household's volume (cr-search-at-volume): what the top bar's field costs the device that uses it, read
+// The search at a household's volume (ADR 0125 § Consequences): what the top bar's field costs the device that uses it, read
 // along the CR's judging rule. TEMPORARY, see search.config.ts beside it.
 //
 // `scripts/measure_volume.py search` writes the spec (/out/search-spec.json) and reads the result (/out/search-result.json).

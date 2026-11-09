@@ -5,7 +5,7 @@
 // returns, whatever a hook did; the scope key is the caller's, who zeroes it (the index) or keeps owning it (the active
 // space's). **Rebuilt per seal, not per walk:** a node whose sealed meta is the one a previous document was derived from keeps
 // that document's facets, so a re-opened tree unseals only what moved. **One node per step** ({@link nodeDocumentSteps}): the
-// index runs a space it opened itself in slices, so a big tree never holds the main thread whole (cr-search-at-volume).
+// index runs a space it opened itself in slices, so a big tree never holds the main thread whole (uc.platform.search § Quality notes).
 import { registry } from '../applications/registry'
 import { keyResolver } from '../node/keyResolver'
 import { runThrough, type TreeNode } from '../node/tree'

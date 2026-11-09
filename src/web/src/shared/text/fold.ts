@@ -14,7 +14,7 @@ export function fold(s: string): string {
 
 /**
  * Where each character of `fold(s)` came from in `s`, for drawing a match found in the folded text over the original
- * (cr-search-polish): folding changes lengths ("ß" is two letters folded, "é" written as "e" + an accent is one), so a
+ * (the search's bold part, uc.platform.search step 6): folding changes lengths ("ß" is two letters folded, "é" written as "e" + an accent is one), so a
  * folded index is no index of `s`. `start[i]` and `end[i]` are the bounds in `s` of the character that folded to the i-th
  * folded one; a mark that folds to nothing belongs to the character before it. Null when folding character by character
  * does not give `fold(s)` (a letter whose lower case depends on its neighbours) - the caller then draws no match.

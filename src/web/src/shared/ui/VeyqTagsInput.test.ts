@@ -164,7 +164,7 @@ describe('VeyqTagsInput', () => {
 // highlighted, a suggestion or a result, and Enter takes it; an entry the member moved the highlight to (keys or pointer)
 // stays highlighted while they type on, as long as it is listed. Reka alone puts the highlight back on the first entry
 // whenever the text changes (the picker test above is that control). The list has two areas, the suggestions under
-// their heading and the results after them with none (cr-search-chips-for-everything).
+// their heading and the results after them with none (ADR 0125 decision 5).
 describe('VeyqTagsInput with results', () => {
   const PEOPLE = ['Ken', 'Kevin']
   const RESULTS = [{ key: 'r:kenia', label: 'Kenia' }, { key: 'r:kevin', label: 'Kevins Geburtstag' }]

@@ -387,7 +387,7 @@ test(
     await openShared(page)
     // "dark mode" is one of the appearance section's own words (settings.words.appearance): matched from a word's start
     // and from the third character, and drawn after the row's heading as the reason it is listed
-    // (cr-search-visible-reasons). (Not "mail server", the mail section's: a canary that generic could sit in a relay's
+    // (uc.platform.search step 5). (Not "mail server", the mail section's: a canary that generic could sit in a relay's
     // log line.)
     await search(page, 'dark mode')
     const section = result(page, 'Appearance and language')

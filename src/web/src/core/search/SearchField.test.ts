@@ -4,7 +4,7 @@
 // takes it away, the results come as one list after the suggestions with where each lives, choosing one opens it, and the
 // field says what it searched when it found nothing; the tenant's members and the settings sections the rail offers are
 // results too (ADR 0125 decision 9), every kind has its word - core's Person and Setting, Depot's and Expenses' -, and a
-// node something lies below is an In: chip (cr-search-chips-for-everything). Driven by the key events the layer's
+// node something lies below is an In: chip (ADR 0125 decision 4). Driven by the key events the layer's
 // combobox listens to.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
@@ -88,7 +88,9 @@ const highlighted = () => {
   return o ? words(o).join(' ') : null
 }
 const suggestionRows = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-input__suggestions .veyq-tags-input__option')].map((o) => words(o).join(' '))
-/** The rows of the one list of results, after the suggestions. */
+/** The rows of the one list of results, after the suggestions. Assert what is FOUND with this, never with a count over both
+ *  areas: a node that comes to hold something is then offered as an In: suggestion, which such a count misreads as a
+ *  wrong result. */
 const resultRows = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-input__results .veyq-tags-input__option')].map((o) => words(o).join(' '))
 async function press(key: string) {
   field().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
@@ -141,7 +143,7 @@ beforeEach(() => {
 
 describe('the search field', () => {
   // was: "asks for the index on focus and says what it searches" - the focus showed the hint in an open list; now the
-  // focus starts the index and opens nothing, and the first character opens the list (cr-search-calm-focus)
+  // focus starts the index and opens nothing, and the first character opens the list (uc.platform.search step 1)
   it('asks for the index on focus and opens nothing; the first typed character opens the list', async () => {
     await mountField()
     expect(refreshSearchIndex).toHaveBeenCalled()
@@ -608,7 +610,7 @@ describe('the kind words of Depot, Expenses and core\'s bookmark', () => {
   })
 })
 
-// cr-search-chips-for-everything: a node something lies below is an In: chip, with where it lives as its second line
+// ADR 0125 decision 4: a node something lies below is an In: chip, with where it lives as its second line
 describe('the In: chip', () => {
   const strand = () => doc({ id: 'p1', nodeId: 'rome', kind: 'memories.photo', name: 'strand.jpg', path: ['Trips', 'Rome 2024'], pathIds: ['trips', 'rome'] })
 
@@ -736,7 +738,7 @@ describe('the suggestions\' heading and the entry Enter takes', () => {
       { userId: KEVIN, username: 'kevin', realName: 'Kevin', displayName: 'Kevin' },
     ] satisfies Person[])
     // was: the two sections found by their word "keys" followed the people for "k" and "ke"; a settings word now counts
-    // from the third character on (cr-search-visible-reasons), so neither lists them ("key" does: the next describe)
+    // from the third character on (uc.platform.search step 5), so neither lists them ("key" does: the next describe)
     await mountField()
     await type('k')
     expect(rows()).toEqual(['K Ken ~ken', 'K Kevin ~kevin'])
@@ -751,8 +753,8 @@ describe('the suggestions\' heading and the entry Enter takes', () => {
   })
 })
 
-// cr-search-polish: the matched part in bold, the month chip, the settings sections' words and read, a screen reader's view
-describe('the polish (cr-search-polish)', () => {
+// the matched part in bold, the month chip, the settings sections' words and read, a screen reader's view
+describe('the bold part, the month chip, the settings words, a screen reader', () => {
   const names = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-search__result-name')]
   const announced = () => document.body.querySelector('[data-testid="search-announcement"]')?.textContent?.trim() ?? ''
 
@@ -813,7 +815,7 @@ describe('the polish (cr-search-polish)', () => {
     }
   })
 
-  // was: the row read "<label> <heading>"; the word it was found by now follows its heading (cr-search-visible-reasons)
+  // was: the row read "<label> <heading>"; the word it was found by now follows its heading (uc.platform.search step 5)
   it('finds the mail section by "E-Mail" for an owner, and for a member nothing - the gate holds', async () => {
     const mail = `${t('mail.navTitle')} ${t('settings.tenant')} · e-mail`
     vi.mocked(listMyTenants).mockResolvedValue(tenantRole('OWNER'))
@@ -933,7 +935,7 @@ describe('the queries remembered while the list is open', () => {
   })
 })
 
-// cr-search-visible-reasons (owner 2026-11-09): a result never stands there for a reason the member cannot see
+// uc.platform.search step 5 (owner 2026-11-09): a result never stands there for a reason the member cannot see
 describe('a reason the member can see', () => {
   /** The row of a result whose name is `name`, or undefined. */
   const rowOf = (name: string) =>

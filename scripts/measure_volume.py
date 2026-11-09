@@ -29,7 +29,7 @@ included (`accounts.json`); readings go to `.run/measurements/` (gitignored). Ne
     measure_volume.py --instance DIR oom-bite                      the sampler's bite: a tiny memory limit, live
     measure_volume.py --instance DIR pass marks [--cap 12284]      #500: the mark set seeded to its cap, then marked past it
     measure_volume.py --instance DIR pass trust-reset [--min-pins N]  #491: the owner's pin store corrupted, then reset
-    measure_volume.py --instance DIR search [--runs 2]              cr-search-at-volume: the search field, tests/e2e/measure/search.ts
+    measure_volume.py --instance DIR search [--runs 2]              the search field (ADR 0125 § Consequences), tests/e2e/measure/search.ts
     measure_volume.py --instance DIR status | teardown
     measure_volume.py judge <readings dir>                         Q1's rule over one stage's readings
 
@@ -859,7 +859,7 @@ def specs(inst: Instance, axis: str, items: int, runs: int, throttles: list[int]
     raise Refused(f"no browser leg for {axis}")
 
 
-# ---------------------------------------------------------------- the search (cr-search-at-volume, tests/e2e/measure/search.ts)
+# ---------------------------------------------------------------- the search (ADR 0125 § Consequences, tests/e2e/measure/search.ts)
 
 
 SEARCH_TYPING_BOUND_MS = 100  # bound 1: from a keystroke to the updated list, at 4x throttle
@@ -1295,7 +1295,7 @@ def main() -> int:
     ps.add_argument("name", choices=("marks", "trust-reset"))
     ps.add_argument("--cap", type=int, default=12284, help="marks: the marks one set holds (ADR 0068 § 4)")
     ps.add_argument("--min-pins", type=int, default=1, help="trust-reset: the entries the owner's store must hold first")
-    se = sub.add_parser("search", help="cr-search-at-volume: the search field's leg, tests/e2e/measure/search.ts")
+    se = sub.add_parser("search", help="the search field's leg (ADR 0125 § Consequences), tests/e2e/measure/search.ts")
     se.add_argument("--runs", type=int, default=2)
     se.add_argument("--throttles", default="1,4")
     se.add_argument("--max-load", type=float, default=3.0)

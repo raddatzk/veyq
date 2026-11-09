@@ -138,7 +138,8 @@ Usage:
 
     Playwright's `--project` takes several values, so file filters given after a bare `--project NAME` are read as
     project names and the run fails before any test: put the files first, or write `--project=NAME`
-    (`-- search.spec.ts --project=platform`).
+    (`-- search.spec.ts --project=platform`). Beside a parallel session, build the two images under a tag of your own
+    (`veyq:e2e-<name>`, plain `docker build`): its run reads `:local`, which yours must not move.
 
 Environment (all optional):
     VEYQ_STACK_WAIT_SECS   How long `veyqctl install` waits for a healthy stack (its VEYQ_WAIT_SECS). Default: 300

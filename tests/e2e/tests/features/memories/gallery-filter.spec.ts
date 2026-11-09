@@ -1,4 +1,4 @@
-// A Memory's gallery narrowed by facts in a real browser (uc.memory.gallery step 8, cr-gallery-filter-by-facts): the
+// A Memory's gallery narrowed by facts in a real browser (uc.memory.gallery step 8): the
 // gallery's own filter field with the search's chip grammar, a member's only. Three photos - two from the Munich fixture
 // (taken 15 July 2021) and one from the Lisbon fixture (taken 3 May 2022), their EXIF - so the Memory spans two years and
 // a day's chip names its year ("July 15, 2021", the app's locale). A day chip narrows the grid to the two of that day,

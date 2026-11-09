@@ -60,7 +60,7 @@ describe('yearsOfDate', () => {
   })
 })
 
-describe('monthsOfDate (the month chip, cr-search-polish)', () => {
+describe('monthsOfDate (the month chip)', () => {
   const now = new Date(2026, 10, 8)
   it('spans from the start day\'s month to the end day\'s, across a year\'s end', () => {
     expect(monthsOfDate({ mode: 'single', from: '2024-05-31', to: '2024-05-31' }, now)).toEqual({ from: '2024-05', to: '2024-05' })

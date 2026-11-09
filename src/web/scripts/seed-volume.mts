@@ -22,7 +22,7 @@
 //   seed-volume.mts tree --target N           the 'Volume tree' group, realistic shape, to exactly N nodes
 //   seed-volume.mts tree --wide N             the 'Volume wide' group: one Memory holding N Chapters
 //   seed-volume.mts spread --target N         the tenant's and the owner's personal space, each to N nodes, Memories
-//                                             dated and placed (cr-search-at-volume: the search's three spaces)
+//                                             dated and placed (the search's three spaces, ADR 0125 § Consequences)
 //   seed-volume.mts members --target N        the tenant, to exactly N members (owner included), each complete
 //   seed-volume.mts upload --count N          scenario: the first member uploads N phone-sized photos, one at a time
 //   seed-volume.mts marks --cap N             the 'Volume marks' Memory: N photos the owner has marked, one more unmarked
@@ -311,7 +311,7 @@ async function tree(target: number, shape: 'realistic' | 'wide'): Promise<void> 
   }
 }
 
-// --- spread (cr-search-at-volume) -----------------------------------------------------------------------------------
+// --- spread (the search's spaces) -----------------------------------------------------------------------------------
 
 const SPREAD_PLACES = ['Kevelaer', 'Kiel', 'Köln', 'Konstanz', 'Kyoto', 'Berlin', 'Hamburg', 'Rome', 'Lisbon', 'Oslo', 'Vienna', 'Bruges']
 type SpreadSpec = Spec & { meta?: Record<string, unknown> }
