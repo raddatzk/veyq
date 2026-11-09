@@ -363,7 +363,11 @@ here; the server is blind.
   stores, per account, one for every share-guest page, never one for the browser, no value written while the account id is
   unknown), over the CURRENT folder's children only; the FOLDERS stay in every tab; a tab is offered where its kinds have a
   node here or the viewer may add one (a kind with an allowed "New" entry), the bar only with two or more tabs; a stored tab
-  the level lacks shows as `All` without rewriting it. A tab with nothing says so in its application's own words
+  the level lacks shows as `All` without rewriting it. The "New" menu follows the shown tab (owner 2026-11-09): core's folder
+  entry in every tab, beside it only the entries whose declaring kind the tab shows (a kind with no tab: `All` only); which
+  tabs are offered still reads every allowed entry. A drop is taken under any tab, and an upload it ran shows the tab of
+  the kind whose entry took it (`All` for a kind with none), stored like a click - a dropped download's "Upload as a file"
+  too; never on a drag, a refused drop or an import. A tab with nothing says so in its application's own words
   (`list.emptyText`, an i18n key function over the level context), and a level with nothing at all says so ONCE in plain text
   composed from what the viewer may create (`node.levelEmptyNew`), or `node.levelEmpty` - no create tile.
 
