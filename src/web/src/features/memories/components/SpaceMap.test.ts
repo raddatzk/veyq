@@ -120,7 +120,7 @@ describe('SpaceMap', () => {
     expect(wrapper.text()).toContain(t('memory.place.consentTitle'))
     expect(wrapper.find('.space-map-canvas').exists()).toBe(false)
 
-    await wrapper.find('.btn-stub').trigger('click') // "Enable maps"
+    await wrapper.find('.btn-stub').trigger('click') // "Turn map services on"
     await flushPromises()
 
     expect(wrapper.find('.space-map-canvas').exists()).toBe(true)
@@ -161,7 +161,7 @@ describe('SpaceMap', () => {
     expect(line.textContent).toBe(' Leaflet | © <a href="https://evil.example">Tiles</a> & co')
   })
 
-  it('"Turn map off" withdraws at once: the map is removed, no further tile layer is made, the consent prompt returns', async () => {
+  it('"Turn map services off" withdraws at once: the map is removed, no further tile layer is made, the consent prompt returns', async () => {
     const wrapper = mountMap([pin('m1', 'Rome', 41.9, 12.5)])
     await flushPromises()
     expect(leaflet.calls.tileLayers).toBe(1)
@@ -196,7 +196,7 @@ describe('SpaceMap', () => {
     expect(fresh.find('.space-map-canvas').exists()).toBe(false)
     expect(leaflet.calls.tileLayers).toBe(1)
 
-    await wrapper.get('.btn-stub').trigger('click') // "Enable maps" for the new host
+    await wrapper.get('.btn-stub').trigger('click') // "Turn map services on" for the new host
     await flushPromises()
     expect(wrapper.find('.space-map-canvas').exists()).toBe(true)
     expect(leaflet.calls.tileLayers).toBeGreaterThan(1)

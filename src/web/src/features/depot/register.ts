@@ -93,6 +93,8 @@ export function registerDepot(registry: Registry): void {
     emptyInTrash: 'depot.trashEmpty',
     // Core's create and rename dialogs name a colliding file with it: "There is already a file named …" (#389).
     nounWithArticle: 'depot.aFile',
+    // Core's search (ADR 0125 decision 6): the kind's noun is its kind chip's word; a file is found by its name, no facets.
+    search: { label: 'depot.kindFile' },
     list: { rows: depotRows, tabLabel: 'depot.title', emptyText: depotEmptyText },
     // "Upload files" in core's level "New" menu (inbox #406): no create dialog - the row factory registers the handler that
     // opens its picker under this id (`core/node/levelActions.ts`) for the level's whole life, whichever tab is shown; the same
@@ -125,6 +127,8 @@ export function registerDepot(registry: Registry): void {
     // …and its sentence names what goes with it: the guests' folders, and the links that stop taking files (#395).
     deleteCopy: 'depot.dropBox.deleteConfirm',
     nounWithArticle: 'depot.dropBox.aDropBox',
+    // Core's search: the kind's noun is its kind chip's word.
+    search: { label: 'depot.dropBox.kind' },
     // One "Depot" tab with the files (owner 2026-11-04): kinds sharing a label share a tab, whose empty text is the first
     // kind's (the files', `depotEmptyText`).
     list: { rows: depotRows, tabLabel: 'depot.title' },

@@ -146,6 +146,8 @@ members about 12 a minute end to end (20 joined, 31 profiled; Argon2id dominates
 The harness files phase 5 deletes are the ones listed there, plus `src/web/scripts/volumeHarness.mts`,
 `src/web/scripts/volumePrelude.mts`, the `installPinnedFetch` half of `src/web/scripts/apiTransport.mts`, `src/env.d.ts` in
 `src/web/tsconfig.scripts.json`'s `include`, and `measure` in `tests/e2e/tsconfig.json`'s `include`.
+`cr-search-at-volume` added a stage and a leg that go with them (in the same files and in `tests/e2e/measure/`): `seed spread`
+and `measure_volume.py search`, with `search.ts` and `search.config.ts`.
 
 ## Decisions this CR takes
 

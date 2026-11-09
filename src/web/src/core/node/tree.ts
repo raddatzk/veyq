@@ -148,8 +148,11 @@ type EntryRow = {
  * it carry entries a WRITE_ONLY guest sealed — its identity key, its folder's name and key, its files'. One that does
  * not open (a guest's garbage, a wrap of another identity) leaves that folder's subtree out of the result instead of
  * refusing the member's whole space; every other row keeps the strict rule above.
+ *
+ * **One row per step** (the search's build in slices, ADR 0125 § Consequences): it pauses after each row, so a caller that must not hold the main thread
+ * for a whole big tree (the search's index, {@link openTreeSteps}) runs it in slices; {@link openTree} runs it through.
  */
-function openEntries(scopeId: string, epochs: ScopeKey, rows: EntryRow[]): Map<string, string> {
+function* openEntrySteps(scopeId: string, epochs: ScopeKey, rows: EntryRow[]): Generator<void, Map<string, string>, void> {
   const children = new Map<string | null, EntryRow[]>()
   for (const r of rows) children.set(r.parentId, [...(children.get(r.parentId) ?? []), r])
   const names = new Map<string, string>()
@@ -173,6 +176,7 @@ function openEntries(scopeId: string, epochs: ScopeKey, rows: EntryRow[]): Map<s
       continue
     }
     for (const child of children.get(row.id) ?? []) level.push({ row: child, parent: row, parentKey: key, guestSealed: inGuestFolder })
+    yield
   }
   if (names.size + leftOut !== new Set(rows.map((r) => r.id)).size) throw new v1.OpenRefused('node-name') // a row no chain reaches
   return names
@@ -223,9 +227,22 @@ export function treeFingerprint(rows: readonly NodeSummary[]): string {
     .join('\n')
 }
 
-/** Open listed rows into the decrypted tree: each name under the key its entry lives under ({@link openEntries}). */
+/** A generator's steps run through to its result, in one go. */
+export function runThrough<T>(steps: Generator<void, T, void>): T {
+  for (;;) {
+    const step = steps.next()
+    if (step.done) return step.value
+  }
+}
+
+/** Open listed rows into the decrypted tree: each name under the key its entry lives under ({@link openEntrySteps}). */
 export function openTree(scopeId: string, epochs: ScopeKey, rows: NodeSummary[]): TreeNode[] {
-  const names = openEntries(scopeId, epochs, rows.map((r) => ({ ...r, parentId: r.parentId ?? null })))
+  return runThrough(openTreeSteps(scopeId, epochs, rows))
+}
+
+/** {@link openTree} one row per step (see {@link openEntrySteps}): the same tree, for a caller that runs it in slices. */
+export function* openTreeSteps(scopeId: string, epochs: ScopeKey, rows: NodeSummary[]): Generator<void, TreeNode[], void> {
+  const names = yield* openEntrySteps(scopeId, epochs, rows.map((r) => ({ ...r, parentId: r.parentId ?? null })))
   return rows.filter((r) => names.has(r.id)).map((r) => ({
     id: r.id,
     parentId: r.parentId ?? null,
@@ -247,7 +264,7 @@ export function openTree(scopeId: string, epochs: ScopeKey, rows: NodeSummary[])
   }))
 }
 
-/** List the scope's tree, each name opened under the key its entry lives under ({@link openEntries}): a scope-root
+/** List the scope's tree, each name opened under the key its entry lives under ({@link openEntrySteps}): a scope-root
  *  entry under the scope's one key, every other under its parent's content key. */
 export async function listTree(scopeId: string, epochs: ScopeKey): Promise<TreeNode[]> {
   return openTree(scopeId, epochs, await fetchTreeRows(scopeId))

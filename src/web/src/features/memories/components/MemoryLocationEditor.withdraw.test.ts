@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The place editor's "Turn map off" (uc.memory.place A5), with the REAL `MemoryMap` over a fake Leaflet: the withdrawal
+// The place editor's "Turn map services off" (uc.memory.place A5), with the REAL `MemoryMap` over a fake Leaflet: the withdrawal
 // removes the map, makes no further tile layer, lets the pending (debounced) lookup ask no geocoder, and puts the consent prompt where
 // the map was; turning it back on there brings the map back.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -63,7 +63,12 @@ const stubs = {
   VeyqDialog: { template: '<div class="dlg"><slot /></div>' },
   VeyqButton: { props: ['type', 'label', 'disabled'], template: `<button :type="type || 'button'" :disabled="disabled" @click="$emit('click', $event)">{{ label }}</button>` },
 }
-// No location and no photo GPS: the editor opens `fixed`, so the map's first frame schedules a lookup of its centre.
+// No location and no photo GPS: the editor opens `fixed` on the world view, which it neither stores nor names (inbox #834);
+// the member's pan (`memberPans`) frames a point and schedules a lookup of it.
+const memberPans = (w: ReturnType<typeof mountEditor>) => {
+  w.get('.memory-map').element.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+  leaflet.handlers.moveend()
+}
 const mountEditor = () =>
   mount(MemoryLocationEditor, { props: { location: null, medoid: null, points: [] }, global: { plugins: [realI18n()], stubs, directives: { tooltip: {} } } })
 
@@ -82,11 +87,12 @@ afterEach(() => {
 
 describe('MemoryLocationEditor — turning the map off', () => {
   it('removes the map, requests no further tile and no name, and shows the consent prompt where the map was', async () => {
-    const w = mountEditor() // its map's first frame schedules the lookup synchronously; no timer has run yet
+    const w = mountEditor()
     expect(leaflet.calls.tileLayers).toBe(1)
     expect(w.find('.memory-map').exists()).toBe(true)
+    memberPans(w) // the frame schedules the lookup synchronously; no timer has run yet
     expect(vi.getTimerCount(), 'a lookup is pending').toBeGreaterThan(0)
-    const asked = vi.mocked(reverseGeocode).mock.calls.length // the editor's own opening lookup of the framed point
+    const asked = vi.mocked(reverseGeocode).mock.calls.length // the editor's own lookups so far (none has run)
 
     await w.get('.veyq-map-off').trigger('click') // a lookup of the framed centre is still pending
     await vi.advanceTimersByTimeAsync(2000)
@@ -101,7 +107,7 @@ describe('MemoryLocationEditor — turning the map off', () => {
     expect(w.find('.memory-location-name input, .memory-location-name-field').exists()).toBe(true) // still a name field
     expect(leaflet.calls.tileLayers).toBe(1)
 
-    await w.get('.map-consent-prompt button').trigger('click') // "Enable maps" there
+    await w.get('.map-consent-prompt button').trigger('click') // "Turn map services on" there
     await flushPromises()
     expect(localStorage.getItem('veyq:maps-consent')).not.toBeNull()
     expect(w.find('.memory-map').exists()).toBe(true)

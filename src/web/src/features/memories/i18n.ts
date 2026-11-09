@@ -12,6 +12,25 @@ const en = {
     // The noun that leads a row's meta line in the unified level list (inbox #407): "Memory · 1 Jun – 30 Jun 2024".
     kindMemory: 'Memory',
     kindChapter: 'Chapter',
+    // Core's search (ADR 0125): the words of a photo's and a video's documents (a medium whose original carries no name).
+    search: {
+      photo: 'Photo',
+      video: 'Video',
+    },
+    // Core's keyboard shortcut overview (uc.platform.keyboard-shortcuts): Memories' groups (`shortcuts.ts`).
+    shortcuts: {
+      gallery: 'In the gallery',
+      galleryMove: 'Move between photos and videos',
+      galleryFirstLast: 'To the first or the last',
+      galleryPage: 'One screen up or down',
+      largeView: 'In the large view',
+      previousNext: 'Previous or next',
+      zoom: 'Zoom in or out',
+      zoomReset: 'Back to the whole picture',
+      pan: 'Zoomed in: move the picture',
+      trash: 'Delete',
+      close: 'Close (zoomed in: back to the whole picture first)',
+    },
     create: 'New Memory',
     createMemoryTitle: 'Create a Memory',
     createChapterTitle: 'Create a chapter',
@@ -91,17 +110,23 @@ const en = {
       remove: 'Remove location',
       autoOptIn: 'Determine location automatically',
       autoOptInHint: 'from where your photos were taken',
-      consentTitle: 'Enable maps for locations?',
+      // The offer where a map would stand while the map services are off (uc.memory.place A6): worded as a setting, not
+      // as a cookie banner (ADR 0016); it still says what the services receive and names the hosts.
+      consentTitle: 'Map services are off',
       consentBody:
-        'To show a map and name places, the map loads from a map service and the framed point goes to a service for place names — both outside this server, straight from your device, with its IP address. You can turn this off again at any time, on the map or in Settings.',
-      consentEnable: 'Enable maps',
+        'Turned on, the map loads from a map service and the framed point goes to a service for place names — both outside this server, straight from your device, with its IP address. You can turn them off again at any time, on the map or in Settings.',
+      consentHosts: 'The map from {tiles}, place names from {places}.',
+      consentHostsTiles: 'The map from {tiles}.',
+      consentEnable: 'Turn map services on',
       // A stored consent that named other hosts (or none, before hosts were recorded) is asked again, naming the new ones.
       consentRenewTiles: 'Agree again for the service this server uses now: the map from {tiles}.',
       consentRenewBoth: 'Agree again for the services this server uses now: the map from {tiles}, place names from {places}.',
       // On every map, beside the attribution: withdraws the consent at once (GDPR Art. 7(3), uc.memory.place A5).
-      mapOff: 'Turn map off',
+      mapOff: 'Turn map services off',
       mapsNotOffered: 'This server shows no maps.',
       nameOnly: 'Name only — no position',
+      // Under the greyed centre pin while no point is set (uc.memory.place E3).
+      moveToSet: 'Move the map to set the position',
     },
     map: {
       empty: 'No places yet',
@@ -265,6 +290,17 @@ const en = {
       'This photo’s details (its time and place) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. The photo itself is not affected.',
     sortNewest: 'Newest first',
     sortOldest: 'Oldest first',
+    // The filter by facts (uc.memory.gallery step 8): the search's chips over this Memory's photos, and the name.
+    filter: {
+      label: 'Filter the photos of this Memory',
+      placeholder: 'Day, place, name …',
+      chipDay: 'Day',
+      text: '“{text}”',
+      marksMine: 'your marks',
+      marksEveryone: 'everyone’s marks',
+      // E5: every filter in force, so an empty grid never reads as an empty Memory
+      empty: 'Nothing in this Memory matches {filters}.',
+    },
     // Item marks (ADR 0068). Every string here is written against one rule: a mark is SHARED with the space,
     // so nothing may suggest it is private. "Only mine" names a filter over what is shown — never a promise
     // about who can see it. The count beside the heart is the standing evidence that others do.
@@ -293,6 +329,23 @@ const de: typeof en = {
     memoryEmpty: 'Hier gibt es noch keine Erinnerungen.',
     kindMemory: 'Erinnerung',
     kindChapter: 'Kapitel',
+    search: {
+      photo: 'Foto',
+      video: 'Video',
+    },
+    shortcuts: {
+      gallery: 'In der Galerie',
+      galleryMove: 'Zwischen Fotos und Videos wechseln',
+      galleryFirstLast: 'Zum ersten oder zum letzten',
+      galleryPage: 'Eine Bildschirmseite nach oben oder unten',
+      largeView: 'In der Großansicht',
+      previousNext: 'Zurück oder weiter',
+      zoom: 'Vergrößern oder verkleinern',
+      zoomReset: 'Zurück zum ganzen Bild',
+      pan: 'Vergrößert: Bild verschieben',
+      trash: 'Löschen',
+      close: 'Schließen (vergrößert: erst zurück zum ganzen Bild)',
+    },
     create: 'Neue Erinnerung',
     createMemoryTitle: 'Erinnerung anlegen',
     createChapterTitle: 'Kapitel anlegen',
@@ -367,15 +420,18 @@ const de: typeof en = {
       remove: 'Ort entfernen',
       autoOptIn: 'Ort automatisch ermitteln',
       autoOptInHint: 'aus dem Standort deiner Fotos',
-      consentTitle: 'Karten für Orte aktivieren?',
+      consentTitle: 'Kartendienste sind aus',
       consentBody:
-        'Um eine Karte zu zeigen und Orte zu benennen, wird die Karte von einem Kartendienst geladen und der eingerahmte Punkt an einen Dienst für Ortsnamen gesendet – beide außerhalb dieses Servers, direkt von deinem Gerät, mit dessen IP-Adresse. Du kannst das jederzeit wieder ausschalten, auf der Karte oder in den Einstellungen.',
-      consentEnable: 'Karten aktivieren',
+        'Eingeschaltet wird die Karte von einem Kartendienst geladen und der eingerahmte Punkt an einen Dienst für Ortsnamen gesendet – beide außerhalb dieses Servers, direkt von deinem Gerät, mit dessen IP-Adresse. Du kannst sie jederzeit wieder ausschalten, auf der Karte oder in den Einstellungen.',
+      consentHosts: 'Die Karte von {tiles}, Ortsnamen von {places}.',
+      consentHostsTiles: 'Die Karte von {tiles}.',
+      consentEnable: 'Kartendienste einschalten',
       consentRenewTiles: 'Stimme erneut zu, für den Dienst, den dieser Server jetzt nutzt: die Karte von {tiles}.',
       consentRenewBoth: 'Stimme erneut zu, für die Dienste, die dieser Server jetzt nutzt: die Karte von {tiles}, Ortsnamen von {places}.',
-      mapOff: 'Karte ausschalten',
+      mapOff: 'Kartendienste ausschalten',
       mapsNotOffered: 'Dieser Server zeigt keine Karten.',
       nameOnly: 'Nur ein Name – ohne Position',
+      moveToSet: 'Karte verschieben, um die Position zu setzen',
     },
     map: {
       empty: 'Noch keine Orte',
@@ -533,6 +589,15 @@ const de: typeof en = {
       'Die Angaben zu diesem Foto (Zeit und Ort) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Das Foto selbst ist davon nicht betroffen.',
     sortNewest: 'Neueste zuerst',
     sortOldest: 'Älteste zuerst',
+    filter: {
+      label: 'Die Fotos dieser Erinnerung filtern',
+      placeholder: 'Tag, Ort, Name …',
+      chipDay: 'Tag',
+      text: '„{text}“',
+      marksMine: 'deine Markierungen',
+      marksEveryone: 'Markierungen von allen',
+      empty: 'Nichts in dieser Erinnerung passt zu {filters}.',
+    },
     marks: {
       mark: 'Dieses Foto markieren — alle in diesem Bereich sehen es',
       unmark: 'Deine Markierung entfernen',

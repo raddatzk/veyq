@@ -62,13 +62,13 @@ is active only while its address is configured and its switches are on, and the 
 
 **The consent, as built** ([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)). One consent covers both,
 because tiles gate geocoding. It is off by default and kept per browser, not per account, in every space; the server
-holds no consent state, and no request leaves before it. It is given in context — the place editor or a map asks before
-the first tile loads — or under Settings → *Map and place names*, which names the tile host and the geocoder host this
+holds no consent state, and no request leaves before it. It is given in context — the place editor or a map offers it where the map would stand, before
+the first tile loads (the place editor is the name field meanwhile, uc.memory.place A6) — or under Settings → *Map services*, which names the tile host and the geocoder host this
 server configured (or that none is) and what each receives: the part of the map in view or a place's coordinate, and the
 device's IP address. The consent names those hosts and holds only for them: a new tile host, or a new or changed
 geocoder host, shows the prompt again, naming the new host, and nothing reaches it until the member agrees (a geocoder
 the Server Owner removed asks nothing; a consent stored before hosts were recorded is asked once more, and the settings
-show which hosts an earlier consent named). It is withdrawn there, with the same switch, or by *Turn map off* on any
+show which hosts an earlier consent named). It is withdrawn there, with the same switch, or by *Turn map services off* on any
 map (a level's, a person's, the place editor's and the photo panel's), beside the attribution — the one control a share guest, who has no
 settings, withdraws with. A withdrawal acts at once: the flag is removed, every open map unmounts with its tile layer
 (another tab of the browser follows), no geocoding request leaves, and the consent prompt stands where the map was.
@@ -196,6 +196,7 @@ guest moves a Memory, never a chapter); the cover is core's action with core's r
 | date, place, cover, banner (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | see the banner (read from the node's own attachment) | ✓ | ✓ | ✓ | ✓ | ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
+| narrow the gallery by facts (day, year, place, kind, the original's name; uc.memory.gallery step 8) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | participants (opaque user ids in the node's sealed meta, [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md); a Memory in a tenant or group scope) | ✓ shown and edited; the profile at `#/people/<id>` (its Memories as tiles, rows or the level's map) | ✓ shown, not edited | ✗ not shown | ✗ not shown | ✗ not shown |
 | move the node (core's move dialog, inbox #358) | ✓ a Memory to the root or a folder, a chapter into another Memory | ✗ | ✗ | ✓ a Memory a folder of the subtree holds, between the subtree's folders; ✗ a chapter, the link's root | ✗ |
 | copy the node (core's "Copy to…", [uc.platform.copy-node](../features/platform/use-cases/uc.platform.copy-node.md)) | ✓ a Memory with its chapters to the root or a folder, a chapter into a Memory: each medium's original and its existing tiers read by frame and uploaded as they are under fresh keys, its sealed facts (capture time and its correction, coordinates, place name, EXIF) sealed anew - nothing decoded (`exportImport.ts`, `addCopiedMedia`, [ADR 0082](../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md) decision 11); an uploaded cover as its blob, a photo cover by its medium; participants and contributors do not come along | ✗ | ✗ | ✗ | ✗ |

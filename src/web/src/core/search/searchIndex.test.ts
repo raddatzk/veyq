@@ -1,0 +1,572 @@
+// The search's index (ADR 0125 decisions 2 and 3) over sealed trees opened with the real crypto: every space of the member,
+// the active one from the tree on screen, the others read conditionally and their keys zeroed; a 304 keeps, a moved tree
+// rebuilds, a failure drops and names the space; a reset abandons a walk; nothing is written to any storage.
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+vi.mock('../../features/spaces/scopes', () => ({ listMyScopes: vi.fn(), listMyTenants: vi.fn(), openListedScope: vi.fn() }))
+vi.mock('../node/tree', async (orig) => ({ ...(await orig<typeof import('../node/tree')>()), fetchTree: vi.fn() }))
+vi.mock('../../features/spaces/epochs', async (orig) => ({ ...(await orig<typeof import('../../features/spaces/epochs')>()), zeroScopeKey: vi.fn() }))
+vi.mock('../../app/activeSpace', async () => {
+  const { reactive } = await import('vue')
+  return {
+    activeSpace: reactive({ scopeId: null as string | null, tenantId: 'tenant-1', kind: null as string | null, name: null as string | null, status: 'idle', epoch: 0 }),
+    activeEpochKeys: vi.fn(() => null),
+  }
+})
+vi.mock('../node/treeStore', async () => {
+  const { reactive } = await import('vue')
+  return { treeStore: reactive({ nodes: [] as unknown[], loaded: false }), shownTreeTag: vi.fn(() => 'W/"active-1"') }
+})
+
+import * as v1 from '@veyq/crypto/v1'
+import { computed, nextTick } from 'vue'
+import { fetchTree, openTree, sealName, wrapContentKey, type TreeNode } from '../node/tree'
+import { listMyScopes, listMyTenants, openListedScope } from '../../features/spaces/scopes'
+import { zeroScopeKey, type ScopeKey } from '../../features/spaces/epochs'
+import { activeEpochKeys, activeSpace } from '../../app/activeSpace'
+import { treeStore } from '../node/treeStore'
+import { registry } from '../applications/registry'
+import { FOLDER_KIND } from '../node/kind'
+import { sealNodeMeta, unsealNodeMeta } from '../node/nodeMeta'
+import { ScopeKind } from '../../api/generated/scopes'
+import type { NodeSummary } from '../../api/generated/content'
+import type { MyTenant } from '../../api/generated/scopes'
+import { openedScope, scopeSummary } from '../../test/models'
+import { testApp, testKind } from '../../test/testApplication'
+import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
+import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, resetSearchIndex, searchState, SLICE_MS } from './searchIndex'
+import type { ApplicationSearch, ScopeDocumentsContext, SearchFacetContext } from '../applications/registry'
+import type { ScopeDocument } from './model'
+
+const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+const TENANT = id(101)
+const GROUP = id(102)
+const PERSONAL = id(103)
+const SEARCHABLE = 'SEARCH_TEST_KIND'
+
+const seen: SearchFacetContext[] = []
+const facets = vi.fn((ctx: SearchFacetContext) => {
+  seen.push(ctx)
+  const meta = unsealNodeMeta(ctx.nodeKey, { scopeId: ctx.scopeId, nodeId: ctx.node.id }, ctx.node.wrappedMeta) as { place?: string }
+  return meta.place ? { places: [meta.place] } : {}
+})
+testKind(registry, { kind: SEARCHABLE, icon: 'file', rekeyContent: nothingOfItsOwnToRekey, search: { label: 'test.searchable', facets } })
+
+// An application's objects of every space (ADR 0125 decision 8a): by default it finds nothing and asks for no key.
+const objectsHook = vi.fn<ApplicationSearch['scopeDocuments']>()
+const nothingFound: ApplicationSearch['scopeDocuments'] = async () => ({ tag: 'T0', documents: [] })
+testApp(registry, 'objects-test').search({ scopeDocuments: (ctx) => objectsHook(ctx) })
+/** A photo-like object of node `nodeId`. */
+const photo = (oid: string, nodeId: string, name: string, revision = '1'): ScopeDocument => ({
+  kind: 'test.photo', id: oid, nodeId, revision, name, facets: { capturedAt: Date.UTC(2024, 4, 3), places: ['Roma'] },
+})
+
+const keys = new Map<string, Uint8Array>()
+/** A scope's sealed rows: a root folder holding one node of the searchable kind per name (with its place sealed in its meta). */
+function rows(scopeId: string, folder: string, items: { id: string; name: string; place?: string; metaRevision?: number }[], placementRevision = 1): NodeSummary[] {
+  const scopeKey = keys.get(scopeId)!
+  const addr = (nodeId: string) => ({ scopeId, nodeId, scopeEpoch: 0, placementRevision })
+  const base = { createdAt: new Date(0), placementRevision, epoch: 0, scopeEpoch: 0, slugToken: 's', orderIndex: 0, metaRevision: 0, blockedByOperator: false }
+  const folderId = id(200 + [TENANT, GROUP, PERSONAL].indexOf(scopeId))
+  const folderKey = v1.randomBytes(32)
+  const out: NodeSummary[] = [{
+    ...base, id: folderId, parentId: null, kind: FOLDER_KIND,
+    encryptedName: sealName(scopeKey, addr(folderId), folder), wrappedContentKey: wrapContentKey(scopeKey, addr(folderId), folderKey),
+  }]
+  for (const it of items) {
+    const key = v1.randomBytes(32)
+    out.push({
+      ...base, id: it.id, parentId: folderId, kind: SEARCHABLE, metaRevision: it.metaRevision ?? 0,
+      encryptedName: sealName(folderKey, addr(it.id), it.name), wrappedContentKey: wrapContentKey(folderKey, addr(it.id), key),
+      wrappedMeta: sealNodeMeta(key, { scopeId, nodeId: it.id }, { v: 1, ...(it.place ? { place: it.place } : {}) }),
+    })
+  }
+  return out
+}
+
+const mocked = {
+  listMyScopes: vi.mocked(listMyScopes), listMyTenants: vi.mocked(listMyTenants), openListedScope: vi.mocked(openListedScope),
+  fetchTree: vi.mocked(fetchTree), zeroScopeKey: vi.mocked(zeroScopeKey), activeEpochKeys: vi.mocked(activeEpochKeys),
+}
+/** Every key the index was handed, to look at after a walk. */
+const handedOut: ScopeKey[] = []
+const names = (scopeId?: string) => indexedDocuments().filter((d) => !scopeId || d.scopeId === scopeId).map((d) => d.name).sort()
+
+beforeEach(async () => {
+  vi.clearAllMocks()
+  const real = await vi.importActual<typeof import('../../features/spaces/epochs')>('../../features/spaces/epochs')
+  mocked.zeroScopeKey.mockImplementation(real.zeroScopeKey)
+  resetSearchIndex()
+  objectsHook.mockImplementation(nothingFound)
+  seen.length = 0
+  handedOut.length = 0
+  for (const s of [TENANT, GROUP, PERSONAL]) keys.set(s, v1.randomBytes(32))
+  Object.assign(activeSpace, { scopeId: null, kind: null, name: null, status: 'idle', epoch: 0 })
+  Object.assign(treeStore, { nodes: [], loaded: false })
+  mocked.listMyScopes.mockResolvedValue([
+    scopeSummary({ id: TENANT, kind: ScopeKind.Tenant }),
+    scopeSummary({ id: GROUP, kind: ScopeKind.Group, encryptedName: 'sealed-name-1' }),
+    scopeSummary({ id: PERSONAL, kind: ScopeKind.Personal }),
+  ])
+  mocked.listMyTenants.mockResolvedValue([{ tenantId: 'tenant-1', name: 'Familie Raddatz' } as unknown as MyTenant])
+  mocked.openListedScope.mockImplementation(async (s) => {
+    const opened = openedScope({ scopeId: s.id, kind: s.kind, key: keys.get(s.id)!.slice(), name: s.kind === ScopeKind.Group ? 'Family group' : undefined })
+    handedOut.push(opened.epochs)
+    return opened
+  })
+  mocked.fetchTree.mockImplementation(async (scopeId) => ({
+    rows: scopeId === TENANT ? rows(TENANT, 'Trips', [{ id: id(1), name: 'Rome 2024', place: 'Roma' }])
+      : scopeId === GROUP ? rows(GROUP, 'Family', [{ id: id(2), name: 'Garden party' }])
+        : rows(PERSONAL, 'Mine', [{ id: id(3), name: 'Diary' }]),
+    etag: `W/"${scopeId}-1"`,
+  }))
+})
+afterEach(() => resetSearchIndex())
+
+describe('the first build', () => {
+  it('opens every space of the member and names each one', async () => {
+    await refreshSearchIndex()
+    expect(names()).toEqual(['Diary', 'Family', 'Garden party', 'Mine', 'Rome 2024', 'Trips'])
+    expect(indexedScope(TENANT)?.name).toBe('Familie Raddatz')
+    expect(indexedScope(GROUP)?.name).toBe('Family group')
+    expect(indexedScope(PERSONAL)?.name).toBeNull()
+    expect(searchState.loading).toEqual([])
+    expect(searchState.failed).toEqual([])
+    // a whole read the first time: no tag
+    expect(mocked.fetchTree.mock.calls.map((c) => c[1])).toEqual([null, null, null])
+  })
+
+  it('lists the spaces once per walk, not once per space', async () => {
+    await refreshSearchIndex()
+    expect(mocked.listMyScopes).toHaveBeenCalledTimes(1)
+  })
+
+  it('zeroes every scope key it opened, and every node key the walk opened', async () => {
+    await refreshSearchIndex()
+    expect(handedOut).toHaveLength(3)
+    for (const k of handedOut) expect(mocked.zeroScopeKey).toHaveBeenCalledWith(k)
+    for (const k of handedOut) expect(k.key.every((b) => b === 0)).toBe(true)
+    expect(seen.length).toBeGreaterThan(0)
+    for (const ctx of seen) expect(ctx.nodeKey.every((b) => b === 0)).toBe(true)
+  })
+
+  it('asks the kind for its facets while the keys are open, and keeps what it answered', async () => {
+    await refreshSearchIndex()
+    expect(indexedDocuments().find((d) => d.name === 'Rome 2024')?.facets).toEqual({ places: ['Roma'] })
+    expect(indexedDocuments().find((d) => d.name === 'Rome 2024')?.path).toEqual(['Trips'])
+  })
+
+  it('does not change the active space', async () => {
+    Object.assign(activeSpace, { scopeId: TENANT, kind: ScopeKind.Tenant, status: 'ready' })
+    await refreshSearchIndex()
+    expect(activeSpace.scopeId).toBe(TENANT)
+  })
+})
+
+describe('revalidation by the tree revision', () => {
+  it('keeps a space that answers 304, without opening its key again', async () => {
+    await refreshSearchIndex()
+    mocked.fetchTree.mockClear()
+    mocked.openListedScope.mockClear()
+    mocked.fetchTree.mockResolvedValue(null)
+    await refreshSearchIndex()
+    expect(mocked.fetchTree.mock.calls.map((c) => c[1])).toEqual([`W/"${TENANT}-1"`, `W/"${GROUP}-1"`, `W/"${PERSONAL}-1"`])
+    expect(mocked.openListedScope).not.toHaveBeenCalled()
+    expect(names()).toContain('Rome 2024')
+  })
+
+  it('rebuilds a space whose tree moved, reusing the facets of a seal it already read', async () => {
+    await refreshSearchIndex()
+    facets.mockClear()
+    const tenantRows = rows(TENANT, 'Trips', [{ id: id(1), name: 'Rome 2024', place: 'Roma' }])
+    mocked.fetchTree.mockImplementation(async (scopeId) => (scopeId === TENANT ? { rows: tenantRows, etag: 'W/"t-2"' } : null))
+    await refreshSearchIndex()
+    // the rows are new seals: the facets are read again for them
+    expect(facets).toHaveBeenCalledTimes(1)
+    // the tree moved again (a new tag), the node's sealed meta did not
+    mocked.fetchTree.mockImplementation(async (scopeId) => (scopeId === TENANT ? { rows: tenantRows, etag: 'W/"t-3"' } : null))
+    facets.mockClear()
+    await refreshSearchIndex()
+    expect(facets).not.toHaveBeenCalled() // the same sealed meta: its facets are kept
+    expect(names(TENANT)).toEqual(['Rome 2024', 'Trips'])
+  })
+
+  it('drops a space whose tree no longer fetches and names it as not searched', async () => {
+    await refreshSearchIndex()
+    mocked.fetchTree.mockImplementation(async (scopeId) => {
+      if (scopeId === GROUP) throw new Error('404 scope_not_found')
+      return null
+    })
+    await refreshSearchIndex()
+    expect(names(GROUP)).toEqual([])
+    expect(searchState.failed).toEqual([{ id: GROUP, kind: ScopeKind.Group, name: 'Family group' }])
+    expect(names(TENANT)).toContain('Rome 2024')
+  })
+
+  it('drops a space whose key does not open on this device', async () => {
+    mocked.openListedScope.mockImplementation(async (s) => (s.id === PERSONAL ? null : openedScope({ scopeId: s.id, kind: s.kind, key: keys.get(s.id)!.slice() })))
+    await refreshSearchIndex()
+    expect(names(PERSONAL)).toEqual([])
+    expect(searchState.failed.map((s) => s.id)).toEqual([PERSONAL])
+  })
+
+  it('drops a space the member is no longer listed in', async () => {
+    await refreshSearchIndex()
+    mocked.listMyScopes.mockResolvedValue([scopeSummary({ id: TENANT, kind: ScopeKind.Tenant })])
+    mocked.fetchTree.mockResolvedValue(null)
+    await refreshSearchIndex()
+    expect(names(GROUP)).toEqual([])
+    expect(indexedTree(GROUP)).toBeNull()
+  })
+
+  it('reads a renamed group whole, even when its tree did not move', async () => {
+    await refreshSearchIndex()
+    mocked.listMyScopes.mockResolvedValue([scopeSummary({ id: GROUP, kind: ScopeKind.Group, encryptedName: 'sealed-name-2' })])
+    mocked.fetchTree.mockClear()
+    await refreshSearchIndex()
+    expect(mocked.fetchTree).toHaveBeenCalledWith(GROUP, null)
+  })
+
+  it('searches nothing but the space on screen when the spaces cannot be listed', async () => {
+    await refreshSearchIndex()
+    mocked.listMyScopes.mockRejectedValue(new Error('offline'))
+    await refreshSearchIndex()
+    expect(indexedDocuments()).toEqual([])
+    expect(searchState.listFailed).toBe(true)
+  })
+})
+
+describe('the active space', () => {
+  const activeKey = (): ScopeKey => ({ epoch: 0, key: keys.get(TENANT)! })
+  function showTenant() {
+    const tree: TreeNode[] = openTree(TENANT, activeKey(), rows(TENANT, 'Trips', [{ id: id(1), name: 'Rome 2024' }]))
+    mocked.activeEpochKeys.mockReturnValue(activeKey())
+    Object.assign(activeSpace, { scopeId: TENANT, kind: ScopeKind.Tenant, status: 'ready' })
+    Object.assign(treeStore, { nodes: tree, loaded: true })
+    return tree
+  }
+
+  it('comes from the tree on screen, without a read of its own and without zeroing the key the page owns', async () => {
+    showTenant()
+    await refreshSearchIndex()
+    expect(mocked.fetchTree.mock.calls.map((c) => c[0])).toEqual([GROUP, PERSONAL])
+    expect(names(TENANT)).toEqual(['Rome 2024', 'Trips'])
+    expect(keys.get(TENANT)!.some((b) => b !== 0)).toBe(true)
+  })
+
+  it('follows the tree poll: a rename on screen reaches the documents', async () => {
+    const tree = showTenant()
+    await refreshSearchIndex()
+    treeStore.nodes = tree.map((n) => (n.id === id(1) ? { ...n, name: 'Roma 2024', placementRevision: 2 } : n))
+    await nextTick()
+    expect(names(TENANT)).toEqual(['Roma 2024', 'Trips'])
+  })
+
+  it('is built first, before any other space is read', async () => {
+    showTenant()
+    let atFirstRead: string[] = []
+    mocked.fetchTree.mockImplementationOnce(async () => {
+      atFirstRead = names()
+      return { rows: rows(GROUP, 'Family', []), etag: null }
+    })
+    await refreshSearchIndex()
+    expect(atFirstRead).toEqual(['Rome 2024', 'Trips'])
+  })
+
+  it('keeps its documents after the member left it, and revalidates them by the tag they were read at', async () => {
+    showTenant()
+    await refreshSearchIndex()
+    Object.assign(activeSpace, { scopeId: GROUP, kind: ScopeKind.Group, name: 'Family group' })
+    Object.assign(treeStore, { nodes: [], loaded: false })
+    await nextTick()
+    mocked.fetchTree.mockClear()
+    mocked.fetchTree.mockResolvedValue(null)
+    await refreshSearchIndex()
+    expect(mocked.fetchTree).toHaveBeenCalledWith(TENANT, 'W/"active-1"')
+    expect(names(TENANT)).toEqual(['Rome 2024', 'Trips'])
+  })
+})
+
+describe('a reset (sign-out, re-lock)', () => {
+  it('drops every document', async () => {
+    await refreshSearchIndex()
+    expect(indexedDocuments().length).toBeGreaterThan(0)
+    resetSearchIndex()
+    expect(indexedDocuments()).toEqual([])
+    expect(searchState.started).toBe(false)
+  })
+
+  it('abandons a walk in flight: it installs nothing, and the key it opened is still zeroed', async () => {
+    let release!: () => void
+    mocked.openListedScope.mockImplementationOnce(async (s) => {
+      await new Promise<void>((r) => (release = r))
+      const opened = openedScope({ scopeId: s.id, kind: s.kind, key: keys.get(s.id)!.slice() })
+      handedOut.push(opened.epochs)
+      return opened
+    })
+    const walk = refreshSearchIndex()
+    await vi.waitFor(() => expect(release).toBeDefined())
+    resetSearchIndex()
+    release()
+    await walk
+    expect(indexedDocuments()).toEqual([])
+    expect(handedOut[0].key.every((b) => b === 0)).toBe(true)
+  })
+})
+
+describe('nothing is written to any storage', () => {
+  function spyOnStorage() {
+    const writes: string[] = []
+    const store = () => ({
+      getItem: () => null, key: () => null, length: 0, clear: () => writes.push('clear'),
+      setItem: (k: string) => writes.push(`set ${k}`), removeItem: (k: string) => writes.push(`remove ${k}`),
+    })
+    vi.stubGlobal('localStorage', store())
+    vi.stubGlobal('sessionStorage', store())
+    vi.stubGlobal('indexedDB', { open: (n: string) => (writes.push(`idb ${n}`), {}), deleteDatabase: (n: string) => writes.push(`idb-delete ${n}`) })
+    vi.stubGlobal('caches', { open: async (n: string) => (writes.push(`cache ${n}`), {}), delete: async (n: string) => writes.push(`cache-delete ${n}`) })
+    return writes
+  }
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('sees a write when one happens (the control)', () => {
+    const writes = spyOnStorage()
+    localStorage.setItem('probe', '1')
+    sessionStorage.setItem('probe', '1')
+    void indexedDB.open('probe')
+    void caches.open('probe')
+    expect(writes).toEqual(['set probe', 'set probe', 'idb probe', 'cache probe'])
+  })
+
+  it('writes nothing during a build, a revalidation and a query', async () => {
+    const writes = spyOnStorage()
+    await refreshSearchIndex()
+    mocked.fetchTree.mockResolvedValue(null)
+    await refreshSearchIndex()
+    const { matchAll } = await import('./query')
+    expect(matchAll(indexedDocuments(), { chips: [], text: 'rome' }).map((m) => m.doc.name)).toEqual(['Rome 2024'])
+    expect(writes).toEqual([])
+  })
+})
+
+describe('a space is built in slices', () => {
+  const big = Array.from({ length: 60 }, (_, i) => ({ id: id(1000 + i), name: `Node ${String(i).padStart(2, '0')}` }))
+  /** Every read of the page's clock a slice later than the last: each step of a build ends its slice. */
+  function everyStepEndsASlice() {
+    let t = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => (t += SLICE_MS))
+  }
+  /** Count the macrotasks that run while `work` does: what a keystroke or a paint would get in between. */
+  async function macrotasksDuring(work: Promise<void>): Promise<number> {
+    let ticks = 0
+    let done = false
+    const tick = () => {
+      if (done) return
+      ticks++
+      setTimeout(tick, 0)
+    }
+    setTimeout(tick, 0)
+    await work
+    done = true
+    return ticks
+  }
+  beforeEach(() => {
+    mocked.fetchTree.mockImplementation(async (scopeId) => ({
+      rows: scopeId === GROUP ? rows(GROUP, 'Family', big) : rows(scopeId, 'Small', []),
+      etag: `W/"${scopeId}-1"`,
+    }))
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('hands the main thread back between slices and indexes what one pass would', async () => {
+    everyStepEndsASlice()
+    const ticks = await macrotasksDuring(refreshSearchIndex())
+    // the group alone takes 61 steps to open and 61 to index: the build paused between them
+    expect(ticks).toBeGreaterThanOrEqual(2 * big.length)
+    expect(names(GROUP)).toEqual(['Family', ...big.map((b) => b.name)].sort())
+    expect(indexedTree(GROUP)?.map((n) => n.id)).toEqual(rows(GROUP, 'Family', big).map((r) => r.id))
+  })
+
+  it('pauses only once a slice is spent: a fast build runs a space through', async () => {
+    const ticks = await macrotasksDuring(refreshSearchIndex())
+    expect(ticks).toBeLessThan(big.length)
+    expect(names(GROUP)).toHaveLength(big.length + 1)
+  })
+
+  it('abandons a build a reset overtook in a pause, and zeroes every key it held', async () => {
+    everyStepEndsASlice()
+    // the first facets call (the small trees have none, the group's 60) resets mid-build
+    facets.mockImplementationOnce((ctx: SearchFacetContext) => {
+      seen.push(ctx)
+      resetSearchIndex()
+      return {}
+    })
+    await refreshSearchIndex()
+    expect(indexedDocuments()).toEqual([])
+    expect(seen).toHaveLength(1) // nothing was asked after the reset
+    expect(seen[0].nodeKey.every((b) => b === 0)).toBe(true)
+    for (const k of handedOut) expect(k.key.every((b) => b === 0)).toBe(true)
+  })
+
+  describe('the space on screen', () => {
+    const groupKey = (): ScopeKey => ({ epoch: 0, key: keys.get(GROUP)! })
+    function showGroup() {
+      mocked.activeEpochKeys.mockReturnValue(groupKey())
+      Object.assign(activeSpace, { scopeId: GROUP, kind: ScopeKind.Group, name: 'Family group', status: 'ready' })
+      Object.assign(treeStore, { nodes: openTree(GROUP, groupKey(), rows(GROUP, 'Family', big)), loaded: true })
+    }
+
+    it('is built in slices too, counts as loading while it pauses, and ends with what one pass would', async () => {
+      showGroup()
+      everyStepEndsASlice()
+      let loadingSeen = false
+      const ticks = await macrotasksDuring(
+        (async () => {
+          await refreshSearchIndex()
+          await vi.waitFor(() => {
+            loadingSeen ||= searchState.loading.includes(GROUP)
+            expect(names(GROUP)).toHaveLength(big.length + 1)
+          })
+        })(),
+      )
+      expect(ticks).toBeGreaterThanOrEqual(big.length)
+      expect(loadingSeen).toBe(true)
+      expect(searchState.loading).toEqual([])
+      expect(mocked.fetchTree.mock.calls.map((c) => c[0])).not.toContain(GROUP)
+      expect(keys.get(GROUP)!.some((b) => b !== 0)).toBe(true) // the page's key, never zeroed here
+    })
+
+    it('abandons a build the member left the space during, and zeroes the node keys it opened', async () => {
+      showGroup()
+      everyStepEndsASlice()
+      facets.mockImplementationOnce((ctx: SearchFacetContext) => {
+        seen.push(ctx)
+        activeSpace.scopeId = TENANT // the member moved on while the build paused
+        return {}
+      })
+      await refreshSearchIndex()
+      await vi.waitFor(() => expect(searchState.loading).toEqual([]))
+      expect(names(GROUP)).toEqual([])
+      expect(seen[0].nodeKey.every((b) => b === 0)).toBe(true)
+      expect(keys.get(GROUP)!.some((b) => b !== 0)).toBe(true)
+    })
+  })
+})
+
+describe('a reader that asked before the build (a field mounted on a reload)', () => {
+  it('sees the tree and the space once they are built: both reads follow the index', async () => {
+    const tree = computed(() => indexedTree(TENANT)?.length ?? 0)
+    const scope = computed(() => indexedScope(TENANT)?.name ?? null)
+    expect(tree.value).toBe(0)
+    expect(scope.value).toBeNull()
+    await refreshSearchIndex()
+    expect(tree.value).toBeGreaterThan(0)
+    expect(scope.value).toBe('Familie Raddatz')
+  })
+})
+
+describe("an application's objects of every space (ADR 0125 decision 8a)", () => {
+  it('asks the application while the node keys are open, zeroes them after, and files each object under its node', async () => {
+    const held: Uint8Array[] = []
+    objectsHook.mockImplementation(async (ctx: ScopeDocumentsContext) => {
+      if (ctx.scopeId !== TENANT) return nothingFound(ctx)
+      const keyOf = await ctx.keys()
+      const key = keyOf(id(1))!
+      expect(key.some((b) => b !== 0)).toBe(true) // open while the hook runs
+      held.push(key)
+      expect(keyOf('no-such-node')).toBeNull()
+      return { tag: 'T1', documents: [photo(id(901), id(1), 'strand.jpg')] }
+    })
+    await refreshSearchIndex()
+    const doc = indexedDocuments().find((d) => d.id === id(901))!
+    expect(doc).toMatchObject({ scopeId: TENANT, nodeId: id(1), name: 'strand.jpg', path: ['Trips', 'Rome 2024'], foldedPlaces: ['roma'] })
+    expect(held).toHaveLength(1)
+    expect(held[0].every((b) => b === 0)).toBe(true) // zeroed once the hook returned
+    for (const k of handedOut) expect(k.key.every((b) => b === 0)).toBe(true)
+  })
+
+  it("keeps the documents on the application's 304, opening no key when the tree did not move either", async () => {
+    objectsHook.mockImplementation(async (ctx) => (ctx.scopeId === TENANT ? { tag: 'T1', documents: [photo(id(901), id(1), 'strand.jpg')] } : nothingFound(ctx)))
+    await refreshSearchIndex()
+    mocked.fetchTree.mockResolvedValue(null)
+    mocked.openListedScope.mockClear()
+    const tags: (string | null)[] = []
+    objectsHook.mockImplementation(async (ctx) => {
+      tags.push(ctx.tag)
+      return null
+    })
+    await refreshSearchIndex()
+    expect(tags).toEqual(['T1', 'T0', 'T0'])
+    expect(mocked.openListedScope).not.toHaveBeenCalled()
+    expect(names(TENANT)).toContain('strand.jpg')
+  })
+
+  it('asks the application on a tree 304 too, and opens the scope key only when it asks for the node keys', async () => {
+    await refreshSearchIndex()
+    mocked.fetchTree.mockResolvedValue(null)
+    handedOut.length = 0
+    objectsHook.mockImplementation(async (ctx) => {
+      if (ctx.scopeId !== TENANT) return null
+      const keyOf = await ctx.keys()
+      expect(keyOf(id(1))).not.toBeNull()
+      return { tag: 'T2', documents: [photo(id(902), id(1), 'neu.jpg')] }
+    })
+    await refreshSearchIndex()
+    expect(names(TENANT)).toContain('neu.jpg')
+    expect(handedOut).toHaveLength(1) // the tenant's, for the hook; the two others opened nothing
+    expect(handedOut[0].key.every((b) => b === 0)).toBe(true)
+  })
+
+  it('hands the previous answer back, so an object at its revision is kept', async () => {
+    const first = photo(id(901), id(1), 'strand.jpg')
+    objectsHook.mockImplementation(async (ctx) => (ctx.scopeId === TENANT ? { tag: 'T1', documents: [first] } : nothingFound(ctx)))
+    await refreshSearchIndex()
+    let previous: ReadonlyMap<string, ScopeDocument> | null = null
+    objectsHook.mockImplementation(async (ctx) => {
+      if (ctx.scopeId === TENANT) previous = ctx.previous
+      return null
+    })
+    await refreshSearchIndex()
+    expect(previous!.get(id(901))).toEqual(first)
+  })
+
+  it('drops a space whose objects cannot be read and names it as not searched', async () => {
+    objectsHook.mockImplementation(async (ctx) => {
+      if (ctx.scopeId === GROUP) throw new Error('offline')
+      return nothingFound(ctx)
+    })
+    await refreshSearchIndex()
+    expect(names(GROUP)).toEqual([])
+    expect(searchState.failed.map((s) => s.id)).toEqual([GROUP])
+    expect(names(TENANT)).toContain('Rome 2024')
+  })
+
+  it('asks for the active space too, under the key the page owns, which it never zeroes', async () => {
+    const activeKey = (): ScopeKey => ({ epoch: 0, key: keys.get(TENANT)! })
+    mocked.activeEpochKeys.mockReturnValue(activeKey())
+    Object.assign(activeSpace, { scopeId: TENANT, kind: ScopeKind.Tenant, status: 'ready' })
+    Object.assign(treeStore, { nodes: openTree(TENANT, activeKey(), rows(TENANT, 'Trips', [{ id: id(1), name: 'Rome 2024' }])), loaded: true })
+    let nodeKey: Uint8Array | null = null
+    objectsHook.mockImplementation(async (ctx) => {
+      if (ctx.scopeId !== TENANT) return nothingFound(ctx)
+      nodeKey = (await ctx.keys())(id(1))
+      return { tag: 'T1', documents: [photo(id(901), id(1), 'strand.jpg')] }
+    })
+    await refreshSearchIndex()
+    await vi.waitFor(() => expect(names(TENANT)).toContain('strand.jpg'))
+    expect(nodeKey!.every((b) => b === 0)).toBe(true)
+    expect(keys.get(TENANT)!.some((b) => b !== 0)).toBe(true)
+  })
+
+  it("drops every object on a reset, and aborts the application's fetch in flight", async () => {
+    let signal: AbortSignal | null = null
+    objectsHook.mockImplementation(async (ctx) => {
+      signal = ctx.signal
+      return { tag: 'T1', documents: ctx.scopeId === TENANT ? [photo(id(901), id(1), 'strand.jpg')] : [] }
+    })
+    await refreshSearchIndex()
+    resetSearchIndex()
+    expect(signal!.aborted).toBe(true)
+    expect(indexedDocuments()).toEqual([])
+  })
+})

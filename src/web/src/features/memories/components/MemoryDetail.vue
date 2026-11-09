@@ -36,6 +36,8 @@ import VeyqTab from '../../../shared/ui/VeyqTab.vue'
 import VeyqTabPanels from '../../../shared/ui/VeyqTabPanels.vue'
 import VeyqTabPanel from '../../../shared/ui/VeyqTabPanel.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import VeyqTagsInput, { type VeyqTag, type VeyqTagOption } from '../../../shared/ui/VeyqTagsInput.vue'
+import type { VeyqIconName } from '../../../shared/ui/icons'
 import type { TreeNode } from '../../../core/node/tree'
 import { shareOfferOf, sharesAny, type NodeShareOffer } from '../../../core/node/nodeHost'
 import { hasDerivatives, mediaTypeOf, isVideoMediaType, type MediaItem } from '../media'
@@ -59,6 +61,13 @@ import { useUploaderNames } from '../useUploaderNames'
 import MemoryCard from './MemoryCard.vue'
 import { standardNodeActions, standardNodeRename, type NodeHeaderAction, type NodeHeaderFact } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
+import { contributeSearchDocuments } from '../../../core/search/contribution'
+import { searchOpenRequest, takeOpenRequest } from '../../../core/search/openRequest'
+import { mediaDocuments } from '../search'
+import {
+  factPredicate, galleryChipKey, galleryChipLabel, galleryFacts, galleryPredicate, narrowsByFacts, suggestGalleryChips,
+  type GalleryChip, type GallerySuggestion,
+} from '../galleryFilter'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -73,7 +82,6 @@ import MemoryBanner from '../banner/MemoryBanner.vue'
 import BannerDialog from '../banner/BannerDialog.vue'
 import { useMemoryBanner } from '../banner/useMemoryBanner'
 import { useBannerEditor } from '../banner/useBannerEditor'
-import MapConsentRenewal from './MapConsentRenewal.vue'
 import type { ScopeKey } from '../../spaces/epochs'
 
 const props = defineProps<{
@@ -109,7 +117,7 @@ const emit = defineEmits<{
   reportMedium: [item: MediaItem]
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { viewMode } = useViewMode()
 const { ask, askWithOption } = useConfirm()
 const toast = useToast()
@@ -257,6 +265,7 @@ const {
   lightboxItems,
   lightboxIndex,
   openLightboxAt,
+  openLightboxOn,
   openBucketLightbox,
   onDeleteFromLightbox,
   onCapturedAtUpdated,
@@ -271,7 +280,55 @@ const {
   node: () => props.node,
   memoryKey: () => props.memoryKey,
   onSettle: () => settle(),
-  markFilter: () => markFilterPredicate.value,
+  filter: () => galleryFilterPredicate.value,
+})
+
+// --- the filter by facts (uc.memory.gallery step 8): the search's chips - a capture day, a year where the Memory spans more
+// than one, a place, photo or video - and text over the original's name, read from the opened listing alone
+// (`galleryFilter.ts`). A member's only (`can.filterFacts`: a guest has no search). Its state lives here, in memory: it is
+// cleared when another Memory opens and goes with the page; nothing is written anywhere. It combines with the mark filter
+// into the gallery's one predicate, so the grid and the lightbox narrow together.
+const factChips = ref<GalleryChip[]>([])
+const factText = ref('')
+/** Each medium's facts - built only once a filter or a suggestion asks for them, so an unfiltered gallery pays nothing. */
+const facts = computed(() =>
+  props.memoryKey ? galleryFacts({ scopeId: props.scopeId, key: props.memoryKey, items: items.value, locale: locale.value }) : null,
+)
+const factsNarrow = computed(() => can.value.filterFacts && narrowsByFacts(factChips.value, factText.value))
+const galleryFilterPredicate = computed(() =>
+  galleryPredicate(markFilterPredicate.value, factsNarrow.value ? factPredicate(() => facts.value, factChips.value, factText.value) : null),
+)
+const FACT_ICON: Record<GalleryChip['type'], VeyqIconName> = { day: 'calendar', year: 'calendar', place: 'map-marker', kind: 'tag' }
+const FACT_WORD: Record<GalleryChip['type'], string> = {
+  day: 'media.filter.chipDay', year: 'shell.search.chipYear', place: 'shell.search.chipPlace', kind: 'shell.search.chipKind',
+}
+type FactTag = VeyqTag & { chip: GalleryChip }
+type FactOption = VeyqTagOption & { suggestion: GallerySuggestion }
+const factTags = computed<FactTag[]>(() => factChips.value.map((chip) => ({ key: galleryChipKey(chip), label: galleryChipLabel(chip), chip })))
+const factOptions = computed<FactOption[]>(() => {
+  const all = factText.value.trim() ? facts.value : null
+  if (!all) return []
+  return suggestGalleryChips(factText.value, factChips.value, all, { photo: t('memory.search.photo'), video: t('memory.search.video') })
+    .map((suggestion) => ({ key: `chip:${galleryChipKey(suggestion.chip)}`, label: galleryChipLabel(suggestion.chip), suggestion }))
+})
+function addFactChip(option: FactOption) {
+  factChips.value = [...factChips.value, option.suggestion.chip]
+  factText.value = option.suggestion.text
+}
+function removeFactChip(tag: FactTag) {
+  factChips.value = factChips.value.filter((c) => galleryChipKey(c) !== tag.key)
+}
+/** E5: what the empty grid says - every filter in force, so it never reads as an empty Memory. The mark filter alone keeps
+ *  its own sentence. */
+const filtering = computed(() => markFilter.value !== 'all' || factsNarrow.value)
+const filterEmptyText = computed(() => {
+  if (!factsNarrow.value) return markFilter.value === 'mine' ? t('media.marks.emptyMine') : t('media.marks.emptyEveryone')
+  const named = [
+    ...(markFilter.value === 'mine' ? [t('media.filter.marksMine')] : markFilter.value === 'everyone' ? [t('media.filter.marksEveryone')] : []),
+    ...factChips.value.map(galleryChipLabel),
+    ...(factText.value.trim() ? [t('media.filter.text', { text: factText.value.trim() })] : []),
+  ]
+  return t('media.filter.empty', { filters: new Intl.ListFormat(locale.value, { type: 'conjunction' }).format(named) })
 })
 // The Trash tab (cr-0110/0111) lives in `useMediaTrash` (cr-0147): its listing, thumbnails, batch select, the
 // restore/purge menu + confirm. A restore/purge lifts the gallery tombstone; a restore re-lists the gallery.
@@ -356,14 +413,12 @@ watch(lightboxIndex, (i) => {
 // settle points below. Props are passed as getters so the composable stays reactive to them.
 const {
   locationEditorOpen,
-  consentDialogOpen,
   storedLocation,
   gpsPoints,
   medoid,
   locationLabel,
   locationResolved,
   openLocationEditor,
-  enableMaps,
   onLocationSave,
   reconcileAutoLocation,
 } = useMemoryLocation({
@@ -426,6 +481,40 @@ contributeNodeHeader(() => ({
     },
   },
 }))
+
+// Core's search (ADR 0125 decision 6): the photos and videos of the gallery's opened listing, as documents of this node, for
+// as long as this page is on screen - a no-op on a guest's page, which provides no search. Opening one opens the lightbox
+// here; the documents are built only when the search reads them.
+contributeSearchDocuments(() =>
+  props.memoryKey
+    ? {
+        scopeId: props.scopeId,
+        nodeId: props.node.id,
+        documents: mediaDocuments({
+          scopeId: props.scopeId, key: props.memoryKey, items: items.value,
+          unnamed: (video) => t(video ? 'memory.search.video' : 'memory.search.photo'),
+          open: (mediaId) => {
+            activeTab.value = 'gallery'
+            openLightboxOn(mediaId)
+          },
+        }),
+      }
+    : null,
+)
+
+// A photo the search found from elsewhere (ADR 0125 decision 8a): the search navigated here and asked for it in core's
+// open request; it opens in the lightbox once the gallery holds it, and a request the read gallery cannot answer (the
+// medium gone meanwhile) is dropped. A guest's page never receives one (a guest has no search).
+watch(
+  [searchOpenRequest, items, status] as const,
+  () => {
+    const want = takeOpenRequest(props.scopeId, props.node.id, (id) => items.value.some((it) => it.mediaId === id), status.value !== 'loading')
+    if (!want) return
+    activeTab.value = 'gallery'
+    openLightboxOn(want)
+  },
+  { immediate: true },
+)
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
  *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the
@@ -615,6 +704,8 @@ watch(
   () => {
     activeTab.value = 'gallery'
     resetTrash() // cr-0110/0111: drop the previous Memory's trash listing/thumbs/selection
+    factChips.value = [] // the filter by facts is about the Memory you are in, as the mark filter is
+    factText.value = ''
   },
   { immediate: true },
 )
@@ -666,6 +757,30 @@ watch(
           <p v-else-if="!hasContent" class="veyq-empty">{{ t('media.empty') }}</p>
           <template v-else>
             <div v-if="items.length" class="gallery-toolbar">
+              <!-- The filter by facts (uc.memory.gallery step 8): the shell search's field and its parts' look (`.veyq-search__*`), a
+                   member's only. Not the search's `.veyq-search` itself: that keeps the chips on one line for the top bar, and on
+                   a phone it cut two chips here to "4. …" and "Ro…" (the browser pass); the layer's field wraps them. -->
+              <div v-if="can.filterFacts && memoryKey" class="gallery-fact-filter">
+                <VeyqTagsInput
+                  v-model:query="factText"
+                  list-class="veyq-search__list"
+                  :tags="factTags"
+                  :options="factOptions"
+                  :placeholder="t('media.filter.placeholder')"
+                  :aria-label="t('media.filter.label')"
+                  autocomplete="off"
+                  @add="addFactChip"
+                  @remove="removeFactChip"
+                >
+                  <template #leading><VeyqIcon name="search" class="veyq-search__icon" /></template>
+                  <template #tag="{ tag }"><VeyqIcon :name="FACT_ICON[tag.chip.type]" class="veyq-search__chip-icon" /></template>
+                  <template #option="{ option }">
+                    <VeyqIcon :name="FACT_ICON[option.suggestion.chip.type]" />
+                    <span class="veyq-search__option-label">{{ option.label }}</span>
+                    <span class="veyq-search__option-kind">{{ t(FACT_WORD[option.suggestion.chip.type]) }}</span>
+                  </template>
+                </VeyqTagsInput>
+              </div>
               <button
                 class="gallery-sort-toggle"
                 type="button"
@@ -694,10 +809,8 @@ watch(
                 </button>
               </div>
             </div>
-            <!-- E5: a filter that empties the grid names itself, so it never reads as a broken Memory. -->
-            <p v-if="markFilter !== 'all' && !layoutItems.length" class="veyq-empty">
-              {{ markFilter === 'mine' ? t('media.marks.emptyMine') : t('media.marks.emptyEveryone') }}
-            </p>
+            <!-- E5: a filter that empties the grid names every filter in force, so it never reads as a broken Memory. -->
+            <p v-if="filtering && !layoutItems.length" class="veyq-empty gallery-filter-empty">{{ filterEmptyText }}</p>
             <MediaGrid
               v-else
               ref="galleryGrid"
@@ -925,21 +1038,6 @@ watch(
       @close="locationEditorOpen = false"
     />
 
-    <VeyqDialog
-      :visible="consentDialogOpen"
-      :header="t('memory.place.consentTitle')"
-      class="memory-location-consent"
-      :style="{ width: 'min(28rem, 92vw)' }"
-      @update:visible="consentDialogOpen = false"
-    >
-      <p>{{ t('memory.place.consentBody') }}</p>
-      <MapConsentRenewal />
-      <div class="veyq-dialog-action-row">
-        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="consentDialogOpen = false" />
-        <VeyqButton :label="t('memory.place.consentEnable')" icon="map" @click="enableMaps" />
-      </div>
-    </VeyqDialog>
-
     <!-- Confirm the irreversible purge (cr-0111): permanently deletes the trashed media NOW (bypasses the 30-day retention). -->
     <VeyqDialog
       :visible="purgeConfirm !== null"
@@ -982,8 +1080,19 @@ watch(
 
 .gallery-toolbar {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  gap: 0.5rem;
   margin-bottom: 0.6rem;
+}
+/* The filter by facts takes the toolbar's free width before the sort and the mark filter, and a row of its own once less
+   than its minimum is left (a phone). */
+.gallery-fact-filter {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 28rem;
+  margin-inline-end: auto;
 }
 /* Icon + label pill (NOT the icon-only .veyq-icon-button utility, which forces a square grid-centered box and
    stacks the icon over the label). Matches the header date/place chips for a consistent toolbar affordance. */

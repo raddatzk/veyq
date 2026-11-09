@@ -33,4 +33,6 @@ export const shareBookmarkKind: KindRegistration = {
   // At the root or directly in a folder (the backend's `ShareBookmarkNodeRules`, contracts/platform/kinds/core.json).
   placement: { root: true, parents: [FOLDER_KIND] },
   rekeyContent: nothingOfItsOwnToRekey,
+  // Its word for the search's kind chip (ADR 0125 decision 6): core's catalog, as the kind is core's.
+  search: { label: 'node.bookmark.kind' },
 }

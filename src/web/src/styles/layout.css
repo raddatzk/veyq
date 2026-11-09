@@ -443,7 +443,8 @@
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* the breadcrumb, the search (uc.platform.search), the actions */
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 26rem) auto;
   align-items: center;
   gap: 0.8rem;
   min-height: var(--app-topbar-height);
@@ -472,6 +473,20 @@
 
 .app-breadcrumb .veyq-breadcrumb__list {
   flex-wrap: nowrap;
+}
+
+/* The search: the field in the bar's middle column; at a phone's width a button among the actions opens it in a sheet. */
+/* compounded with the layer's class, whose own `display` would win otherwise (its sheet loads after this one) */
+.workspace-search-open.veyq-button {
+  display: none;
+}
+
+.workspace-search-sheet.veyq-dialog {
+  width: min(calc(100vw - 2rem), 32rem);
+}
+
+.workspace-search-sheet .veyq-search {
+  width: 100%;
 }
 
 .workspace-topbar-actions {
@@ -807,7 +822,7 @@
     top: auto;
     z-index: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) minmax(10rem, 18rem) auto;
     align-items: center;
     gap: 0.65rem;
     width: 100%;
@@ -855,9 +870,17 @@
   .workspace-topbar {
     position: relative;
     top: auto;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.45rem;
+  }
+
+  .workspace-topbar > .workspace-search {
+    display: none;
+  }
+
+  .workspace-search-open.veyq-button {
+    display: inline-flex;
   }
 
   .app-breadcrumb.veyq-breadcrumb {

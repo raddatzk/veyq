@@ -58,6 +58,12 @@ export function personNow(userId: string): Person | undefined {
   return snapshot.value?.get(userId)
 }
 
+/** Every member of the tenant as last read, or none before the first read and after a sign-out (reactive, like
+ *  {@link personNow}): the search's people (ADR 0125 decision 9) follow the roster without a read of their own. */
+export function tenantPeopleNow(): Person[] {
+  return [...(snapshot.value?.values() ?? [])]
+}
+
 /** Forget the cached tenant names and every cached profile picture, revoking their object URLs (a sign-out, a test). */
 export function resetPeopleDirectory(): void {
   namesCache = null

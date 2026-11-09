@@ -29,6 +29,7 @@ included (`accounts.json`); readings go to `.run/measurements/` (gitignored). Ne
     measure_volume.py --instance DIR oom-bite                      the sampler's bite: a tiny memory limit, live
     measure_volume.py --instance DIR pass marks [--cap 12284]      #500: the mark set seeded to its cap, then marked past it
     measure_volume.py --instance DIR pass trust-reset [--min-pins N]  #491: the owner's pin store corrupted, then reset
+    measure_volume.py --instance DIR search [--runs 2]              the search field (ADR 0125 § Consequences), tests/e2e/measure/search.ts
     measure_volume.py --instance DIR status | teardown
     measure_volume.py judge <readings dir>                         Q1's rule over one stage's readings
 
@@ -858,6 +859,122 @@ def specs(inst: Instance, axis: str, items: int, runs: int, throttles: list[int]
     raise Refused(f"no browser leg for {axis}")
 
 
+# ---------------------------------------------------------------- the search (ADR 0125 § Consequences, tests/e2e/measure/search.ts)
+
+
+SEARCH_TYPING_BOUND_MS = 100  # bound 1: from a keystroke to the updated list, at 4x throttle
+SEARCH_BUILD_BOUND_MS = 200  # bound 2: while every space's tree is opened after the first focus, at 4x throttle
+
+
+def search_spec(inst: Instance, runs: int, throttles: list[int], active: str = "tenant") -> tuple[dict, dict[str, int]]:
+    """The search leg's spec from what the seeders recorded: the tree stage's group and the spread's two spaces, the
+    `active` one (the tenant's, where sign-in lands, or the group, entered by its fragment) on screen while measuring.
+    Returns it and the node count of every space."""
+    manifest = json.loads((inst.dir / "manifest.json").read_text(encoding="utf-8"))
+    if "tree" not in manifest or "spread" not in manifest or "photos" not in manifest:
+        raise Refused("the search needs `stage tree <N>` (or `seed tree --target N`), `seed spread --target N` and "
+                      "`seed photos --target N` first (every photo of every space is a document, ADR 0125 decision 8a)")
+    owner = owner_account(inst)
+    spread, group = manifest["spread"], manifest["tree"]["scopeId"]
+    counts, media = {}, {}
+    for scope in (group, spread["personalScopeId"], spread["tenantScopeId"]):
+        rows = inst.sql(f"SELECT COUNT(*) FROM veyq_node WHERE scope_id = '{scope}' AND deleted_at IS NULL;\n")
+        counts[scope] = int(rows[0][0])
+        rows = inst.sql(f"SELECT COUNT(*) FROM veyq_media WHERE scope_id = '{scope}' AND deleted_at IS NULL;\n")
+        media[scope] = int(rows[0][0])
+    counts["media"] = media
+    tenant, personal = spread["tenantScopeId"], spread["personalScopeId"]
+    on = {"tenant": (tenant, "", "Trips 000"), "group": (group, manifest["tree"]["hash"], "Folder 000")}[active]
+    spec = {
+        "label": f"search-{active}", "domain": DOMAIN, "runs": runs, "throttles": throttles,
+        "account": {k: owner[k] for k in ("email", "password", "secretKey")},
+        "otherScopes": [s for s in (group, tenant, personal) if s != on[0]], "activeScope": on[0], "activeHash": on[1],
+        "mediaScopes": [group, tenant, personal],
+        "rootText": on[2], "keys": ["K", "e", "v", "Enter", "Backspace"], "chip": spread["place"], "settleMs": 300,
+    }
+    return spec, counts
+
+
+def search_findings(result: dict, counts: dict[str, int], spec: dict) -> dict:
+    """The CR's rule over one search reading: bounds 1 and 2 at the 4x throttle decide; quantity 3 is asserted (one `304`
+    per space the search opens itself, nothing decoded), its detector bitten by the first focus; 2 and 4 are reported."""
+    runs, findings = result["runs"], []
+    nodes_re = re.compile(r"^/api/scopes/([0-9a-f-]{36})/nodes$")
+    media_re = re.compile(r"^/api/scopes/([0-9a-f-]{36})/media$")
+    per_run = []
+    for r in runs:
+        tag = f"x{r['throttle']} run {r['run']}"
+        first, second = r["first"], r["second"]
+        typing_max = max(s["longtasks"]["maxMs"] for s in r["steps"])
+        unsettled = [s["key"] for s in r["steps"] if not s["settled"]]
+        if unsettled:
+            findings.append(f"{tag}: typing steps {unsettled} never settled")
+        if first["buildMs"] is None:
+            findings.append(f"{tag}: the build never settled ({first['stopped']})")
+        if r["steps"][3]["chips"] != [spec["chip"]] or r["steps"][4]["chips"]:
+            findings.append(f"{tag}: the chip step did not add '{spec['chip']}' and the Backspace remove it: "
+                            f"{r['steps'][3]['chips']} / {r['steps'][4]['chips']}")
+        if r["throttle"] == 4 and typing_max > SEARCH_TYPING_BOUND_MS:
+            findings.append(f"{tag}: bound 1 fails — a {typing_max} ms task while typing (> {SEARCH_TYPING_BOUND_MS})")
+        if r["throttle"] == 4 and first["longtasks"]["maxMs"] > SEARCH_BUILD_BOUND_MS:
+            findings.append(f"{tag}: bound 2 fails — a {first['longtasks']['maxMs']} ms task in the build (> {SEARCH_BUILD_BOUND_MS})")
+        opened = sum(counts[s] for s in spec["otherScopes"])
+        if first["decodes"] < opened:
+            findings.append(f"{tag}: the decode counter does not bite — {first['decodes']} decodes on the first focus, "
+                            f"{opened} nodes opened")
+        by_scope: dict[str, list[int]] = {}
+        for x in second["responses"]:
+            m = nodes_re.match(x["path"])
+            if m:
+                by_scope.setdefault(m.group(1), []).append(x["status"])
+        for s in spec["otherScopes"]:
+            if by_scope.get(s) != [304]:
+                findings.append(f"{tag}: quantity 3 — the second focus read space {s} as {by_scope.get(s)}, not one 304")
+        # every space's media listing, the active one's included (ADR 0125 decision 8a): one 304 each, nothing re-read
+        media_by_scope: dict[str, list[int]] = {}
+        for x in second["responses"]:
+            m = media_re.match(x["path"])
+            if m:
+                media_by_scope.setdefault(m.group(1), []).append(x["status"])
+        for s in spec.get("mediaScopes", []):
+            if media_by_scope.get(s) != [304]:
+                findings.append(f"{tag}: quantity 3 — the second focus read space {s}'s media as {media_by_scope.get(s)}, not one 304")
+        if second["decodes"] != 0:
+            findings.append(f"{tag}: quantity 3 — the second focus decoded {second['decodes']} strings: {second.get('decoded')}")
+        per_run.append({
+            "run": tag, "buildMs": first["buildMs"], "buildMaxTaskMs": first["longtasks"]["maxMs"],
+            "buildLongTasks": first["longtasks"]["count"], "buildLongTaskMs": first["longtasks"]["totalMs"],
+            "firstDecodes": first["decodes"], "heapDeltaMB": round(r["heap"]["deltaBytes"] / 1e6, 1),
+            "typingMaxTaskMs": typing_max,
+            "typingPerStep": {s["key"]: {"maxTask": s["longtasks"]["maxMs"], "eventMax": s["eventMaxMs"], "toSettled": s["toSettledMs"]}
+                              for s in r["steps"]},
+            "secondNodes": {s: by_scope.get(s) for s in spec["otherScopes"]}, "secondDecodes": second["decodes"], "secondDecoded": second.get("decoded"),
+            "secondApi": sorted({f"{x['method']} {media_re.sub('/api/scopes/{id}/media', nodes_re.sub('/api/scopes/{id}/nodes', x['path']))} {x['status']}" for x in second["responses"]}),
+            "secondMedia": {s: media_by_scope.get(s) for s in spec.get("mediaScopes", [])},
+            "failedRequests": r["failedRequests"],
+        })
+    return {"counts": counts, "runs": per_run, "findings": findings,
+            "bound1": not any("bound 1" in f for f in findings), "bound2": not any("bound 2" in f for f in findings)}
+
+
+def search_leg(inst: Instance, runs: int, throttles: list[int], max_load: float, patience: float, active: str,
+               profile: bool = False) -> Path:
+    spec, counts = search_spec(inst, runs, throttles, active)
+    spec["profile"] = profile
+    load = wait_quiet(max_load, patience)
+    with Session(inst, spec["label"]) as s:
+        (s.out / "stage.json").write_text(json.dumps({"axis": "search", "counts": counts, "loadAtStart": load,
+                                                      "uptime": uptime_line(inst.prefix)}), encoding="utf-8")
+        status, result = playwright(inst, "measure/search.config.ts", spec, "search-spec.json", "search-result.json")
+        result["playwrightExit"] = status
+        (s.out / "search-result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    verdict = search_findings(result, counts, spec)
+    verdict["uptimeEnd"] = uptime_line(inst.prefix)
+    (s.out / "search-verdict.json").write_text(json.dumps(verdict, indent=2), encoding="utf-8")
+    say(json.dumps(verdict, indent=2))
+    return s.out
+
+
 # ---------------------------------------------------------------- scenarios and stages
 
 
@@ -1178,6 +1295,15 @@ def main() -> int:
     ps.add_argument("name", choices=("marks", "trust-reset"))
     ps.add_argument("--cap", type=int, default=12284, help="marks: the marks one set holds (ADR 0068 § 4)")
     ps.add_argument("--min-pins", type=int, default=1, help="trust-reset: the entries the owner's store must hold first")
+    se = sub.add_parser("search", help="the search field's leg (ADR 0125 § Consequences), tests/e2e/measure/search.ts")
+    se.add_argument("--runs", type=int, default=2)
+    se.add_argument("--throttles", default="1,4")
+    se.add_argument("--max-load", type=float, default=3.0)
+    se.add_argument("--patience", type=float, default=60, help="minutes to wait for a quiet host")
+    se.add_argument("--active", choices=("tenant", "group"), default="tenant",
+                    help="the space on screen: the tenant's (sign-in lands there) or the tree stage's group")
+    se.add_argument("--profile", action="store_true", help="diagnosis: a CPU profile of each typing step (no reading)")
+    se.add_argument("--rejudge", type=Path, help="judge a search-result.json already read, without a run")
     sm = sub.add_parser("sample")
     sm.add_argument("--seconds", type=int, required=True)
     j = sub.add_parser("judge")
@@ -1249,6 +1375,15 @@ def main() -> int:
                          else trust_reset_pass(inst, args.min_pins, out))
                 say(f"pass {args.name}: {'GREEN' if green else 'RED'}; readings in {out}")
                 return 0 if green else 1
+            elif args.cmd == "search":
+                if args.rejudge:
+                    spec, counts = search_spec(inst, args.runs, [int(x) for x in args.throttles.split(",")], args.active)
+                    result = json.loads(args.rejudge.read_text(encoding="utf-8"))
+                    say(json.dumps(search_findings(result, counts, spec), indent=2))
+                else:
+                    out = search_leg(inst, args.runs, [int(x) for x in args.throttles.split(",")], args.max_load, args.patience,
+                                     args.active, args.profile)
+                    say(f"readings in {out}")
             elif args.cmd == "sample":
                 out = readings_dir("sample")
                 sampler = Sampler(inst, out, local=not prefix).start()

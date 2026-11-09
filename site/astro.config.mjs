@@ -40,6 +40,7 @@ export default defineConfig({
                 'getting-started/accept-an-invitation',
                 'getting-started/emergency-kit',
                 'getting-started/sign-in',
+                'getting-started/keyboard-shortcuts',
               ],
             },
             {
@@ -68,6 +69,7 @@ export default defineConfig({
                 'spaces/move-things',
                 'spaces/copy-things',
                 'spaces/select-several',
+                'spaces/search',
                 'spaces/views-and-favorites',
                 'spaces/give-a-folder-a-cover',
                 'spaces/trash',

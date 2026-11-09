@@ -817,21 +817,6 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
       nameAnchor: { lat: 48.85, lng: 2.35, level: 'city' },
     })
   })
-
-  it('with maps not consented, the chip opens the consent dialog instead of the editor', async () => {
-    emptyStore()
-    setMapsConsent(false)
-    const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dlg"><slot /></div>' }
-    const wrapper = mountWithHeader(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), rights: memberMemoryRights({ publicShares: false }) },
-      global: { plugins: [realI18n()], stubs: { MemoryLocationEditor: LocationEditorStub, VeyqDialog: DialogStub } },
-    })
-    await flushPromises()
-    await wrapper.find('.veyq-node-header-chip[data-fact="place"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.loc-editor').exists()).toBe(false) // no editor
-    expect(wrapper.find('.dlg').text()).toContain(t('memory.place.consentBody')) // the consent dialog body
-  })
 })
 
 // inbox #458 (ADR 0088 § The register): with `memories.map` and `memories.places` off a place still works, named by
@@ -909,6 +894,98 @@ describe('MemoryDetail (a place on a server without a map, #458)', () => {
     expect(reopened.find('.veyq-node-header-chip[data-fact="place"]').text()).toContain('At grandma’s')
     expect(reverseGeocode).not.toHaveBeenCalled()
     expect(offHosts()).toEqual([])
+  })
+})
+
+// uc.memory.place A6 (ADR 0016): on a server WITH a map, a member whose map services are off names the place by hand. The
+// chip opens the real editor at once - no dialog before it -, the name field and, where the map would stand, the offer to
+// turn the map services on, naming the hosts this server configured. Nothing is asked of a geocoder and no map is drawn
+// while they are off; turned on in the editor, the map is drawn there and the typed name is kept.
+describe('MemoryDetail (a place with the map services off, on a server with a map, uc.memory.place A6)', () => {
+  const TILES = 'https://tiles.a6.example/{z}/{x}/{y}.png'
+  const GEOCODER = 'https://geocoder.a6.example'
+  const MapStub = { props: ['center'], template: '<div class="map-stub"></div>', methods: { fitPoints() {}, setView() {} } }
+  const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dlg"><slot /></div>' }
+  let requested: string[]
+  function servicesOffOnAMapServer(): void {
+    setTileUrl(TILES)
+    setGeocoderUrl(GEOCODER)
+    setMapsConsent(false)
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    requested = []
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input)
+      requested.push(url)
+      return store.fetchStub(url, init)
+    })
+  }
+  function mountReal(memoryKey: Uint8Array) {
+    return mountWithHeader(MemoryDetail, {
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights({ publicShares: false }) },
+      global: { plugins: [realI18n()], stubs: { MemoryMap: MapStub, VeyqDialog: DialogStub } },
+    })
+  }
+  const toServices = () => requested.filter((u) => u.includes('a6.example'))
+  async function openEditor(wrapper: ReturnType<typeof mountReal>) {
+    await wrapper.find('.veyq-node-header-chip[data-fact="place"]').trigger('click')
+    await flushPromises()
+  }
+
+  it('the chip opens the name field and the offer naming the hosts; a typed name is saved manual, nothing is asked of a service', async () => {
+    servicesOffOnAMapServer()
+    const memoryKey = v1.randomBytes(32)
+    vi.mocked(readExifTags).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
+    const wrapper = mountReal(memoryKey)
+    await flushPromises()
+    await flushPromises()
+
+    await openEditor(wrapper)
+    const editor = wrapper.find('.memory-location-editor')
+    expect(editor.exists(), 'the editor itself, no dialog before it').toBe(true)
+    expect(editor.find('input').exists()).toBe(true) // the name field
+    const offer = editor.find('.map-consent-prompt')
+    expect(offer.exists()).toBe(true)
+    expect(offer.text()).toContain(t('memory.place.consentHosts', { tiles: 'tiles.a6.example', places: 'geocoder.a6.example' }))
+    expect(offer.find('button').text()).toBe(t('memory.place.consentEnable'))
+    expect(wrapper.find('.map-stub').exists(), 'no map while the map services are off').toBe(false)
+
+    await editor.find('input').setValue('Paris trip')
+    await editor.trigger('submit')
+    await flushPromises()
+
+    expect(lastPatchedLocation(memoryKey)).toEqual({
+      name: 'Paris trip', nameSource: 'manual', derivedMode: 'auto', derived: { lat: 48.85, lng: 2.35 }, nameAnchor: undefined,
+    })
+    expect(reverseGeocode).not.toHaveBeenCalled()
+    expect(toServices()).toEqual([])
+    expect(localStorage.getItem('veyq:maps-consent'), 'saving turned nothing on').toBeNull()
+  })
+
+  it('turning the map services on in the editor draws the map there and keeps the typed name', async () => {
+    servicesOffOnAMapServer()
+    vi.mocked(reverseGeocode).mockResolvedValue([{ key: 'city', name: 'Paris' }])
+    const memoryKey = v1.randomBytes(32)
+    vi.mocked(readExifTags).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
+    const wrapper = mountReal(memoryKey)
+    await flushPromises()
+    await flushPromises()
+
+    await openEditor(wrapper)
+    await wrapper.find('.memory-location-editor input').setValue('Our flat')
+    await wrapper.find('.map-consent-prompt button').trigger('click')
+    await flushPromises()
+
+    expect(JSON.parse(localStorage.getItem('veyq:maps-consent')!)).toEqual({ tiles: 'tiles.a6.example', places: 'geocoder.a6.example' })
+    expect(wrapper.find('.memory-location-editor .map-stub').exists(), 'the map, in the same editor').toBe(true)
+    expect(wrapper.find('.map-consent-prompt').exists()).toBe(false)
+    expect((wrapper.find('.memory-location-editor input').element as HTMLInputElement).value).toBe('Our flat')
+    await wrapper.find('form.memory-location-editor').trigger('submit')
+    await flushPromises()
+    expect(lastPatchedLocation(memoryKey)).toMatchObject({ name: 'Our flat', nameSource: 'manual', derivedMode: 'auto', derived: { lat: 48.85, lng: 2.35 } })
   })
 })
 

@@ -105,6 +105,22 @@
    ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §6).
    A header filter narrows the grid to **everyone's favorites** or **only mine**; the grid's ordering rule is
    unchanged, the filter only removes tiles. A marked item that has since been trashed or purged simply drops.
+8. **Narrow by facts.**
+   - **The field:** a filter field in the gallery's header takes the search's chip grammar
+     ([uc.platform.search](../../platform/use-cases/uc.platform.search.md) step 4, one component).
+   - **Chips:** a capture **day** (the days the Memory's items were captured on), a capture **year** when the Memory
+     spans more than one, a **place** its items carry, and a **kind** (photo, video, offered when both occur). The day and
+     the year are the viewer's, in the time zone the gallery shows dates in, from the corrected capture time where one is
+     set; a day's chip names its year where the Memory spans more than one. An item without a capture time matches no day
+     and no year, and a medium blocked by the operator matches no chip and no text.
+   - **Free text:** whatever is not turned into a chip matches the original's name.
+   - **Combining:** the chips combine with each other and with the favorites filter of step 7.
+   - **Display:** as with step 7, the ordering rule is unchanged and the filter only removes tiles. The lightbox pages
+     through the narrowed set.
+   - **Source:** the facts are the ones the opened listing already holds (ADR 0105). Nothing is fetched or sent for
+     the filter, and it is not stored; leaving the Memory clears it.
+   - **Who:** a member's view only. A share guest has no filter field, as they have no search (owner, 2026-11-08:
+     guests get no search; ADR 0125 decision 7).
 
 ## Alternate / exception flows
 
@@ -117,8 +133,9 @@
 - **E4 — personal scope:** *"everyone's favorites"* is degenerate when the user is the only member, so the
   filter is **hidden** — not rendered disabled. The per-tile count is likewise pointless and is not shown; the
   item heart still marks, it just has no audience to report.
-- **E5 — a filter that empties the grid** (e.g. *only mine* with nothing marked yet): the grid shows an empty
-  state that names the active filter, so it never reads as a broken or empty Memory.
+- **E5 — a filter that empties the grid** (e.g. *only mine* with nothing marked yet, or a day chip with a place chip
+  no item of that day carries): the grid shows an empty state that names every active filter, so it never reads as a
+  broken or empty Memory.
 - **E6 — a medium blocked by the operator**
   ([uc.moderation.take-a-measure](../../moderation/use-cases/uc.moderation.take-a-measure.md)): its tile and the
   lightbox show *Blocked by the operator* with no reason and load no bytes (each answers `451 blocked_by_operator`), for

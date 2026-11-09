@@ -44,6 +44,7 @@ import NodePage from '../core/node/components/NodePage.vue'
 import NodeDialogs from '../core/node/components/NodeDialogs.vue'
 import { useNodeDialogs } from '../core/node/nodeDialogs'
 import { provideNodeHost, type NodeHost } from '../core/node/nodeHost'
+import { provideSearchContributions } from '../core/search/contribution'
 import LevelView from '../core/node/LevelView.vue'
 import PersonProfile from '../core/people/PersonProfile.vue'
 import { loadTenantPeople, personNow } from '../core/people/directory'
@@ -179,6 +180,8 @@ const dialogs = useNodeDialogs({
 })
 const host: NodeHost = { open: openNode, ...dialogs.doors }
 provideNodeHost(host)
+// The detail on screen may add what only it holds to the shell's search (ADR 0125 decision 6: the open Memory's photos).
+provideSearchContributions()
 
 // The tree's live refresh (inbox #408): while a page of the space's tree is on screen — a folder level, and an opened
 // node's page of any kind (inbox #503) — pick up what others changed (a share guest's upload, a peer's new Memory, a

@@ -20,6 +20,9 @@ import me.raddatz.veyq.core.node.rekey.NodeRekeyStage.Value
 import me.raddatz.veyq.core.node.rekey.RekeyOutcome
 import me.raddatz.veyq.memories.generated.model.MediaResultItem
 import me.raddatz.veyq.memories.generated.model.MediaSummary
+import me.raddatz.veyq.memories.generated.model.ScopeMediaNode
+import me.raddatz.veyq.memories.generated.model.ScopeMediaPage
+import me.raddatz.veyq.memories.generated.model.ScopeMedium
 import me.raddatz.veyq.memories.generated.model.UploaderKey
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.items.ItemsCursor
@@ -58,6 +61,7 @@ import me.raddatz.veyq.core.moderation.block.ModerationBlocks
 class MediaResource(
     private val handler: MediaHandler,
     private val rekey: MediaRekeyHandler,
+    private val scopeMedia: ScopeMediaHandler,
     private val blocks: ModerationBlocks,
     private val identity: SecurityIdentity,
 ) : MediaApi {
@@ -114,6 +118,30 @@ class MediaResource(
                 ),
             ).header("ETag", ItemsETag.of(o.mediaRevision)).build() // the ETag doubles as the client's next If-None-Match
             ListMediaOutcome.NotModified -> Response.notModified().build() // 304 — no body, no media query (idle fast path)
+            is HttpFailure -> httpError(o)
+        }
+
+    override fun listScopeMedia(scopeId: UUID, after: UUID?, limit: Int?, ifNoneMatch: String?): Response =
+        when (val o = scopeMedia.list(identity.principal.name, scopeId.toString(), after?.toString(), ItemsPage.limitOf(limit), ifNoneMatch)) {
+            is ListScopeMediaOutcome.Page -> Response.ok(
+                ScopeMediaPage(
+                    media = o.rows.map { toScopeMedium(it, it.row.mediaId in o.blocked) },
+                    more = o.more,
+                    // Per node of the page with a drop key: the key and the WRITE_ONLY identities among that node's rows.
+                    nodes = o.dropKeys.map { (nodeId, drop) ->
+                        val identities = o.rows.filter { it.nodeId == nodeId }.mapNotNullTo(LinkedHashSet()) { ScopeMediaHandler.identityOf(it) }
+                        ScopeMediaNode(
+                            nodeId = UUID.fromString(nodeId),
+                            sealedDropPrivateKey = drop,
+                            uploaderKeys = identities.mapNotNull { id ->
+                                o.uploaderKeys[id]?.let { UploaderKey(identityId = UUID.fromString(id), wrappedIdentityKey = it) }
+                            },
+                        )
+                    },
+                ),
+            ).apply { if (o.etag != null) header("ETag", o.etag) }.build()
+            // Nothing the listing depends on moved since the client's tag: no body, no media read.
+            is ListScopeMediaOutcome.NotModified -> Response.notModified().header("ETag", o.etag).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -221,6 +249,21 @@ class MediaResource(
         metaRevision = row.metaRevision,
         wrappedBlobMeta = row.wrappedBlobMeta,
         // Kept and marked, not left out (uc.moderation.take-a-measure): the tile shows the placeholder.
+        blockedByOperator = blocked,
+    )
+
+    private fun toScopeMedium(r: ShareMediaRow, blocked: Boolean) = ScopeMedium(
+        nodeId = UUID.fromString(r.nodeId),
+        mediaId = UUID.fromString(r.row.mediaId),
+        blobId = UUID.fromString(r.row.blobId),
+        chunkCount = r.row.chunkCount,
+        byteSize = r.row.byteSize,
+        wrappedBlobKey = r.row.wrappedBlobKey,
+        wrappedBlobMeta = r.row.wrappedBlobMeta,
+        wrappedMeta = r.row.wrappedMeta,
+        metaRevision = r.row.metaRevision,
+        ownerKey = r.row.ownerKey,
+        // Kept and marked, as listNodeMedia marks it (uc.moderation.take-a-measure); the search makes nothing of it.
         blockedByOperator = blocked,
     )
 

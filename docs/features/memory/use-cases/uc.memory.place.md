@@ -57,24 +57,36 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   it the medoid. Renaming a geocoded place there makes it `manual`; saving it untouched keeps its anchor.
 - **A5 — give or withdraw the map consent, in settings or at the map** ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md),
   GDPR Art. 7(3)): the one consent per browser covers the tiles and the geocoder in every space. Under Settings →
-  *Map and place names* the member sees whether it is on, the tile host and the geocoder host this server configured
+  *Map services* the member sees whether it is on, the tile host and the geocoder host this server configured
   ("none configured" for one that is absent; with no tile service there is nothing to consent to and no switch), and
   what they receive — the part of the map in view or a place's coordinate, plus the device's IP address; a switch turns
   it on or off. The consent names the hosts it was given for and holds only for them: when the Server Owner configures a
   new tile host, or a new or changed geocoder host, the next map shows the prompt again, naming the new host, and nothing
   is requested from it until the member agrees — a removed geocoder asks nothing, a consent stored before hosts were
-  recorded is asked once more, and the settings name the hosts an earlier consent covered. On every map — a level's, a person's, the place editor's, the photo panel's — *Turn map off* beside the
+  recorded is asked once more, and the settings name the hosts an earlier consent covered. On every map — a level's, a person's, the place editor's, the photo panel's — *Turn map services off* beside the
   attribution withdraws it too, the same control for a member and a share guest (who has no settings). A withdrawal
   acts at once: the stored flag is removed, every open map unmounts with its tile layer (another tab of the browser
   follows), no further tile or geocoding request leaves, and the consent prompt stands where the map was; in the open
   place editor the name field stays, with what was framed and resolved so far. Nothing stored is touched: resolved
   names and positions stay in the Memories.
+- **A6 — map services off on a server with a map** ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md)):
+  the chip opens the editor as A4 does - the name field, typed (`manual`), the position the medoid or a pin set
+  earlier - and where the map would stand it offers to turn the map services on (naming the hosts, A5). Turning them
+  on there shows the map in the same editor, the typed name kept; leaving them off saves the typed place. No dialog
+  stands between the member and the name field. The settings and the map call the switch *Map services* (de
+  *Kartendienste*), on or off.
 
 - **E1 — vault locked / Memory not open:** without the node's `K_node` the `wrappedMeta` can't be unsealed → the
   place is unavailable until unlock + open.
 - **E2 — malformed / wrong-key `wrappedMeta`:** best-effort — treated as no location; never a broken header/pin.
 - **E3 — "set location" with no photo GPS:** `derived` can't be formed. **With a map** the user moves the map to
-  set the point by hand (`fixed`). **Without one** (A4) they type a **name** (`manual`) → a valid **name-only**
+  set the point by hand (`fixed`); a map the user never moved sets **no** point - saving then stores a name-only
+  place as below, never the view the editor opened on (inbox #834: an untouched editor pinned the Memory at the
+  world view's centre). A stored `fixed` point equal to that opening view's centre is read as no point, and the
+  next save drops it.
+  While no point is set, the editor's centre pin is drawn greyed out, with the hint to move the map to set the
+  position; the first move by the member draws it as a set point (owner, 2026-11-09: a full pin under "Name only"
+  read as a point that was not there). **Without one** (A4) they type a **name** (`manual`) → a valid **name-only**
   location (`derivedMode: 'auto'`, no `derived`): shown in the detail, the profile's rows and an export, but **not**
   on any map (no coordinate) until a geotagged photo gives it the medoid.
 - **E4 — reverse-lookup off or unreachable:** the name field falls back to **manual typing** — no external

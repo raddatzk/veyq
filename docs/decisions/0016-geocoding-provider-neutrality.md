@@ -44,6 +44,15 @@ Considered and rejected:
   The fairness worry it answered — a member who sees the map's names without exposing their own coordinate — is
   bounded already: such a member has no map and sees resolved names as text only.
 - **Forward autocomplete.** Not needed by the coordinate-first flow.
+- **Hiding resolved names from a member whose map services are off** (owner's argument, 2026-11-09): member A accepted
+  that a provider may log their IP to resolve "Rome"; member B, who declined, reads the name for free - like copying
+  someone's homework, unfair to A. Rejected, for two reasons. **The law:** a consent is free only if declining costs
+  the service and nothing else (GDPR Art. 7(4), recital 42); a member who loses the place names of their family's
+  shared Memories by declining is pressed to consent. That is our reading, not a reviewed answer, and the safe side is
+  cheap: show the name. **The sharing:** A did not resolve the name for themself alone but wrote it into a SHARED
+  Memory; a private Memory was open to them. What A shares is a contribution to the space, as a photo A uploads is -
+  B reading it costs A nothing further and asks no provider. The free-riding stays bounded as decided: B gets no map
+  and no lookup of their own.
 
 ## Decision
 
@@ -67,8 +76,8 @@ provider.**
   - **One consent per browser**, applied in every space. It is device-local
     ([ADR 0022](0022-settings-information-architecture.md)): the server holds no consent state, and a consent given
     on one device does not reach another.
-  - **Given in context or in settings.** The place editor or a map asks before the first request; the member may
-    also turn it on under Settings → *Map and place names*, which names the tile and geocoder hosts this server
+  - **Given in context or in settings.** The place editor or a map offers it where the map would stand, before the first request; the member may
+    also turn it on under Settings → *Map services*, which names the tile and geocoder hosts this server
     configured and what each receives.
   - **The consent names its recipients, and a new one is asked again** (GDPR Art. 4(11) and 7: a consent is informed
     only about the recipients it named). The consent records the tile host and the geocoder host it was given for, and
@@ -78,13 +87,18 @@ provider.**
     before hosts were, which names none, is asked once more. The settings show the hosts an earlier consent named
     where they differ from the current ones.
   - **Withdrawn in settings or at the map, at once.** The same settings switch turns it off, and every map carries a
-    *Turn map off* control beside its attribution — so withdrawing is as easy as giving, and a share guest, who has
+    *Turn map services off* control beside its attribution — so withdrawing is as easy as giving, and a share guest, who has
     no settings, withdraws there too. A withdrawal takes effect immediately: every open map is torn down, no further
     tile or geocoding request leaves, and the consent prompt stands where the map was. What is already sealed —
     resolved names, positions — is not touched.
   - A **non-consenting** member's device makes **no external request** — no tiles (no map) and no geocode; they see
-    already-resolved names only as **text**. Declining costs the map and nothing else: no membership, no other
-    function.
+    already-resolved names only as **text**, and they **name a place by hand**: their place editor is the name field
+    of a server without a map, with the map's place offering to turn the map services on - never a dialog whose only
+    ways out are *Cancel* or *Turn on* (found by lane L1, 2026-11-09). Declining costs the map and nothing else: no
+    membership, no other function.
+  - **Worded as a setting, not as a cookie banner** (owner, 2026-11-09): the member's choice reads *Map services: on /
+    off* (de *Kartendienste: an / aus*), off until turned on, and turning it on names the hosts and what they receive,
+    as above. In law it stays a consent (GDPR Art. 4(11), 7); the wording only says plainly what it switches.
   - A **space owner enabling** maps for a space is the owner's wish and **never binds members**: each member is
     *notified* and consents on their own device (or is already covered by their consent). Not built.
 - **Tenant language for shared names.** A resolved name is sealed into the shared `wrappedMeta`

@@ -1,17 +1,43 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // The bar gives every crumb a real `href` (`router.resolve`), so the stub resolves a hash the way the hash history does.
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), resolve: ({ hash }: { hash: string }) => ({ href: `/${hash}` }) }) }))
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: vi.fn(), resolve: ({ hash }: { hash: string }) => ({ href: `/${hash}` }) }),
+  useRoute: () => ({ name: 'home', hash: '' }),
+}))
+// The search field is in the bar (uc.platform.search); its index is core's and is not under test here.
+vi.mock('../../core/search/searchIndex', async () => {
+  const { reactive } = await import('vue')
+  return {
+    searchState: reactive({ started: false, loading: [], failed: [], listFailed: false, scopes: [], revision: 0 }),
+    refreshSearchIndex: vi.fn(async () => {}), indexedDocuments: vi.fn(() => []), indexedTree: vi.fn(() => null), indexedScope: vi.fn(() => null),
+  }
+})
+vi.mock('../../core/people/directory', async (orig) => ({ ...(await orig<typeof import('../../core/people/directory')>()), loadTenantPeople: vi.fn(async () => new Map()) }))
 vi.mock('../../features/memories/media', () => ({ addMedia: vi.fn() }))
+// The search's settings sections (`features/settings/sections.ts`) read their gates on the field's focus.
+vi.mock('../../features/spaces/scopes', () => ({ listMyGroups: vi.fn(), listMyTenants: vi.fn() }))
+vi.mock('../../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn() }))
+vi.mock('../../features/moderation/appointment', () => ({ myAppointment: vi.fn() }))
 
 import { mount, flushPromises } from '@vue/test-utils'
 import AppTopbar from './AppTopbar.vue'
 import { setBreadcrumb } from '../../app/breadcrumb'
-import { realI18n } from '../../test/i18n'
+import { realI18n, t } from '../../test/i18n'
 import { addMedia } from '../../features/memories/media'
 import { enqueueUploads, clearUploads } from '../../features/memories/uploadQueue'
 import { NODE_DRAG_TYPE, endNodeDrag, startNodeDrag } from '../../core/node/nodeDrag'
+import { listMyGroups, listMyTenants } from '../../features/spaces/scopes'
+import { refusedDocuments } from '../../features/account/trustReset/refusedDocuments'
+import { myAppointment } from '../../features/moderation/appointment'
+
+beforeEach(() => {
+  vi.mocked(listMyGroups).mockResolvedValue([])
+  vi.mocked(listMyTenants).mockResolvedValue([])
+  vi.mocked(refusedDocuments).mockResolvedValue([])
+  vi.mocked(myAppointment).mockResolvedValue({ state: 'NONE', address: '', confirmation: 'NOT_SENT', awaitingKey: false })
+})
 
 const mountTopbar = () => mount(AppTopbar, { global: { plugins: [realI18n()] } })
 
@@ -98,5 +124,40 @@ describe('AppTopbar breadcrumb as drop targets', () => {
     const w = mountTopbar()
     expect(await dragOver(crumbs(w)[0], transfer([NODE_DRAG_TYPE]))).toBe(false)
     expect(crumbs(w)[0].classes()).not.toContain('is-drop-target')
+  })
+})
+
+// The search (uc.platform.search main flow 1): the field in the bar, and the shortcut that reaches it - `/` and Ctrl/⌘+K,
+// never while a field has the keys.
+describe('AppTopbar search', () => {
+  const searchInput = () => document.body.querySelector<HTMLInputElement>('[data-testid="search-field"] input')!
+  const key = (init: KeyboardEventInit, target: EventTarget = document.body) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+
+  it('holds the field and a button that opens it in a sheet at a phone\'s width', () => {
+    const w = mount(AppTopbar, { global: { plugins: [realI18n()] }, attachTo: document.body })
+    expect(w.find('[data-testid="search-field"]').exists()).toBe(true)
+    expect(w.find('[data-testid="search-open"]').attributes('aria-label')).toBe(t('shell.search.open'))
+    w.unmount()
+  })
+
+  it('/ and Ctrl+K put the focus in the field; neither does while another field has the keys', async () => {
+    const w = mount(AppTopbar, { global: { plugins: [realI18n()] }, attachTo: document.body })
+    key({ key: '/' })
+    await flushPromises()
+    expect(document.activeElement).toBe(searchInput())
+    searchInput().blur()
+    key({ key: 'k', ctrlKey: true })
+    await flushPromises()
+    expect(document.activeElement).toBe(searchInput())
+    searchInput().blur()
+    const other = document.createElement('input')
+    document.body.appendChild(other)
+    other.focus()
+    key({ key: '/' }, other)
+    await flushPromises()
+    expect(document.activeElement).toBe(other)
+    other.remove()
+    w.unmount()
   })
 })

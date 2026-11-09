@@ -24,6 +24,7 @@ import { EXPECTED_MAJOR } from '../../shared/state/capabilities'
 import { NO_DOORS, provideNodeHost } from '../node/nodeHost'
 import { provideNoCoreNodeActions } from '../node/coreNodeActions'
 import { provideNestedNodeHeading, provideNoNodeHeader } from '../node/nodeHeaderContribution'
+import { provideNoSearchContributions } from '../search/contribution'
 import ShareGates from '../sharing/ShareGates.vue'
 import { useShareGates } from '../sharing/shareGates'
 import { apiBaseFor } from '../sharing/shareAt'
@@ -41,6 +42,8 @@ const { t, locale } = useI18n()
 provideNodeHost(NO_DOORS)
 provideNoCoreNodeActions()
 provideNoNodeHeader()
+// No detail here adds to the member's search: what a link serves is not indexed beyond the bookmark's own name (ADR 0125).
+provideNoSearchContributions()
 provideNestedNodeHeading() // the bookmark's header is the page's h1; the share's node is named under it, as a section
 
 const { link } = props.bookmark

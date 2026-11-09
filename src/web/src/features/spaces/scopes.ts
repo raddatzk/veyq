@@ -513,6 +513,21 @@ export async function openScopeById(scopeId: string): Promise<OpenedScope | null
   return openById(scopeId, 'refuse')
 }
 
+/**
+ * Open a scope of a {@link listMyScopes} answer the caller already holds → its identity + in-memory scope key, exactly as
+ * {@link openScopeById} opens it (the grant verified, a stale grant refused), without listing the scopes again: the search
+ * opens every space of one list in a row (ADR 0125 decision 3). Null when the vault is locked or the grant does not open.
+ */
+export async function openListedScope(scope: ScopeSummary): Promise<OpenedScope | null> {
+  const priv = identityPrivate()
+  if (!priv) return null
+  try {
+    return await orUnopened(async () => toOpenedScope(scope, priv, await me(priv)))
+  } finally {
+    zero(priv)
+  }
+}
+
 /** {@link openScopeById} with the stale-grant rule chosen — `'open'` only for {@link commitRotation}. */
 async function openById(scopeId: string, staleGrant: 'refuse' | 'open'): Promise<OpenedScope | null> {
   const priv = identityPrivate()

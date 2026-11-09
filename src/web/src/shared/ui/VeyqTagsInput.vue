@@ -1,4 +1,4 @@
-<script setup lang="ts" generic="T extends VeyqTag, O extends VeyqTagOption">
+<script setup lang="ts" generic="T extends VeyqTag, O extends VeyqTagOption, R extends VeyqTagOption = VeyqTagOption">
 // A field that holds several things as chips and suggests more while typing (ADR 0107), on Reka's TagsInput inside its
 // Combobox: the chips sit in the field before the text, the suggestions open below it. The caller owns both lists:
 // `tags` are the chips (`{ key, label, removeLabel? }`, `key` unique), `options` what to suggest for the current
@@ -10,19 +10,48 @@
 // highlight, → past the last chip returns to the text (Reka's). Backspace at the text's start removes the chip before
 // it at once (Reka's own would first only highlight it — ours, below); Backspace or Delete with a chip highlighted
 // removes that chip. ↓/↑ move through the suggestions, Enter picks the highlighted one; Enter never submits the form
-// while text is typed, and text alone is never a chip — only an option is. Escape closes the suggestions.
+// while text is typed, and text alone is never a chip — only an option is. Escape closes the suggestions. The search's
+// use of these keys is listed in the shortcut overview (`core/shortcuts/shortcuts.ts`, *In the search*).
 //
-// The `tag` slot draws before a chip's label (an avatar, say; `{ tag }`), the `option` slot a suggestion (`{ option }`).
+// The `tag` slot draws before a chip's label (an avatar, say; `{ tag }`), the `option` slot a suggestion (`{ option }`),
+// the `leading` slot before the chips (a search field's magnifier).
+//
+// **Results under the suggestions** (the shell's search, ADR 0125): `results` is one list of options that are no chip,
+// drawn after the suggestions under its own heading (`resultsLabel`, always drawn, owner 2026-11-09) - choosing one emits
+// `choose` with it and leaves the text and the list as they are, so the caller decides (it opens the result, it shows
+// more); the `result` slot draws one (`{ option }`), the `status` slot a line under them that is no option (loading,
+// nothing found). With a `status` slot the list shows even while it holds no option (a caller that has nothing to say
+// passes no slot, and an empty list shows no panel). `v-model:open` is the list's state - the combobox opens it on input
+// and on ↓/↑, never on focus (the caller may close it again: the search keeps it shut while nothing is asked) -,
+// `listClass` is a class of the caller's on the list. The keyboard
+// moves through the suggestions and the results alike (Reka's combobox). `optionsLabel` heads the suggestions (the
+// search's *Filter by*), so they do not read as results: the list has exactly two areas, the suggestions, then the results.
+//
+// **Which entry Enter takes, with results** (uc.platform.search step 4, owner 2026-11-09): the FIRST ENTRY of the list is
+// highlighted, a suggestion or a result - Reka's own behaviour - and Enter takes it. Once the member moves the highlight
+// (↑/↓/Home/End, or the pointer onto an entry), the field remembers that entry (`stickyKey`) and the area it was listed
+// in, and keeps it highlighted while they type on, as long as it is listed: Reka puts the highlight back on the first
+// entry whenever the text changes, so the field moves it back with Reka's public `highlightItem`. When the entry drops
+// out, the first entry of ITS area (the suggestions or the results) is highlighted, or the list's first when that area is
+// empty - and the entry stays remembered: listed again (Backspace, say), it is highlighted again, like an undo. That
+// fallback is no move of the member's, so it never replaces the memory; a new move does, and choosing an entry (a chip
+// or a result) or the list closing forgets it. With nothing remembered the first entry is highlighted - Reka's, or ours
+// where Reka left none (its highlighted row went with a chip, or the pointer left the list). Without `results` (the
+// people pickers) the field does none of this: Reka's behaviour unchanged.
+//
 // Every other attribute (aria-label, placeholder's companions, …) lands on the text field; `inputId` is its id, for a
 // `<label for>`. Sheets reach it by `veyq-tags-input`, a chip by `veyq-tags-input__tag`, the list by
-// `veyq-tags-input__list` and a suggestion by `veyq-tags-input__option` (styled in `layer.css`).
-import { computed, ref, useTemplateRef } from 'vue'
+// `veyq-tags-input__list`, a suggestion by `veyq-tags-input__option` (their group by `veyq-tags-input__suggestions`, the results' by `veyq-tags-input__results`), the suggestions' heading by `veyq-tags-input__group-label`
+// and the status line by `veyq-tags-input__status` (styled in `layer.css`).
+import { computed, nextTick, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   ComboboxAnchor,
   ComboboxContent,
+  ComboboxGroup,
   ComboboxInput,
   ComboboxItem,
+  ComboboxLabel,
   ComboboxPortal,
   ComboboxRoot,
   TagsInputInput,
@@ -45,21 +74,31 @@ export interface VeyqTagOption {
 
 defineOptions({ inheritAttrs: false })
 const query = defineModel<string>('query', { default: '' })
+const open = defineModel<boolean>('open', { default: false })
 const props = defineProps<{
   tags: T[]
   options: O[]
+  /** The options that are no chip, after the suggestions (see the header). */
+  results?: R[]
+  /** The heading over the results, drawn whenever there are results (also their accessible name). */
+  resultsLabel?: string
   placeholder?: string
   inputId?: string
   disabled?: boolean
+  listClass?: string
+  /** The heading over the suggestions; without one they stand unheaded above the groups. */
+  optionsLabel?: string
 }>()
-const emit = defineEmits<{ add: [option: O]; remove: [tag: T] }>()
-defineSlots<{
+const emit = defineEmits<{ add: [option: O]; remove: [tag: T]; choose: [option: R] }>()
+const slots = defineSlots<{
   tag?: (scope: { tag: T }) => unknown
   option?: (scope: { option: O }) => unknown
+  leading?: () => unknown
+  result?: (scope: { option: R }) => unknown
+  status?: () => unknown
 }>()
 const { t } = useI18n()
 
-const open = ref(false)
 const keys = computed(() => props.tags.map((x) => x.key))
 const root = useTemplateRef<{ $el: HTMLElement }>('root')
 const focusField = () => root.value?.$el.querySelector<HTMLInputElement>('.veyq-tags-input__input')?.focus()
@@ -78,6 +117,7 @@ function onRemoveTag(key: unknown) {
  *  handler on the field sees it, so Reka's first-press highlight never runs; with a chip already highlighted, Reka's
  *  own removal of that chip stands. */
 function onKeydownCapture(event: KeyboardEvent) {
+  navigating = !!props.results && NAVIGATION_KEYS.has(event.key) && !event.isComposing
   if (event.key !== 'Backspace' || event.isComposing) return
   const field = event.target
   if (!(field instanceof HTMLInputElement) || field.selectionStart !== 0 || field.selectionEnd !== 0) return
@@ -94,21 +134,107 @@ function onEnter(event: KeyboardEvent) {
   if (query.value) event.preventDefault()
 }
 
+// --- the remembered entry while the list holds results (see the header) ----------------------------------------------
+const combobox = useTemplateRef<{ highlightItem?: (value: unknown) => void; highlightedElement?: HTMLElement }>('combobox')
+const NAVIGATION_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Home', 'End'])
+/** The key of the entry the member moved the highlight to, listed or not; null: nothing remembered, the first entry. */
+let stickyKey: string | null = null
+/** The area that entry was listed in when the member moved to it: where the highlight falls back while it is not listed. */
+let stickyArea: 'suggestions' | 'results' = 'suggestions'
+/** A navigation key is on its way through Reka's handlers (set before them, cleared after): the highlight it makes is the
+ *  member's. Reka moves it synchronously inside the key's handler. */
+let navigating = false
+/** Every entry the list draws, in its order: the suggestions, then the results. */
+const listed = computed(() => [...props.options.map((o) => o.key), ...(props.results ?? []).map((o) => o.key)])
+
+/** The member moved to `key`: it replaces whatever was remembered. */
+function remember(key: string) {
+  stickyKey = key
+  stickyArea = props.options.some((o) => o.key === key) ? 'suggestions' : 'results'
+}
+function forget() {
+  stickyKey = null
+}
+/** Where the highlight belongs while something is remembered: the entry itself while listed, else the first entry of its
+ *  area, else the list's first; undefined with nothing remembered (Reka's first entry stands). */
+function wanted(): string | undefined {
+  if (stickyKey === null) return undefined
+  if (listed.value.includes(stickyKey)) return stickyKey
+  const area = stickyArea === 'suggestions' ? props.options : props.results
+  return area?.[0]?.key ?? listed.value[0]
+}
+/** Put the highlight on `key` unless it is there already. */
+function highlight(key: string | undefined) {
+  if (key === undefined) return
+  const el = combobox.value?.highlightedElement
+  if (el?.isConnected && el.dataset.optionKey === key) return
+  combobox.value?.highlightItem?.(key)
+}
+function onHighlight(item: { value: unknown } | undefined) {
+  if (!props.results) return
+  const value = item?.value
+  if (navigating && typeof value === 'string') return remember(value)
+  if (!open.value) return
+  const want = wanted()
+  if (want !== undefined && value !== want) highlight(want)
+}
+/** The pointer onto an entry: the member's move, like ↓ (caught before the item's own handler highlights it). */
+function onPointerMove(event: PointerEvent) {
+  if (!props.results) return
+  const key = (event.target as Element | null)?.closest?.<HTMLElement>('[data-option-key]')?.dataset.optionKey
+  if (key !== undefined && key !== stickyKey) remember(key)
+}
+/** After the list re-rendered, and when the pointer left it: the highlight where {@link wanted} says (once Reka settled -
+ *  its first-entry highlight runs on a `nextTick` of its own); with nothing remembered, the first entry where no entry is
+ *  highlighted - Reka's went with its row (a chip was added, the text cleared without an input), or the pointer took it
+ *  along. */
+function settle() {
+  if (!props.results || !open.value) return
+  const want = wanted()
+  if (want !== undefined) return highlight(want)
+  if (!combobox.value?.highlightedElement?.isConnected) highlight(listed.value[0])
+}
+watch(open, forget)
+watch(listed, () => void nextTick(settle), { flush: 'post' })
+
+/** A result: the caller's to act on; the text and the list stay as they are. */
+function choose(event: Event, option: R) {
+  event.preventDefault()
+  if (props.disabled) return
+  forget()
+  emit('choose', option)
+}
+
+/** Put the focus in the text field (the shell's search shortcut). */
+defineExpose({ focus: () => focusField() })
+
 function pick(event: Event, option: O) {
   // ours to add: the combobox keeps no value of its own
   event.preventDefault()
   if (props.disabled || keys.value.includes(option.key)) return
+  forget()
+  query.value = '' // before the add: a caller may set what stays of the text there (`v-model:query`)
   emit('add', option)
-  query.value = ''
-  open.value = false
+  // a field with results under its suggestions keeps them on screen: the new chip narrows what they show
+  if (!props.results) open.value = false
   focusField()
 }
 </script>
 
 <template>
-  <ComboboxRoot v-model:open="open" class="veyq-tags-input-root" ignore-filter :reset-search-term-on-blur="false" :disabled="disabled">
+  <ComboboxRoot
+    ref="combobox"
+    v-model:open="open"
+    class="veyq-tags-input-root"
+    ignore-filter
+    :reset-search-term-on-blur="false"
+    :disabled="disabled"
+    @highlight="onHighlight"
+    @leave="settle"
+  >
     <ComboboxAnchor as-child>
-      <TagsInputRoot ref="root" :model-value="keys" delimiter="" :disabled="disabled" class="veyq-tags-input" @remove-tag="onRemoveTag" @keydown.capture="onKeydownCapture">
+      <TagsInputRoot ref="root" :model-value="keys" delimiter="" :disabled="disabled" class="veyq-tags-input" @remove-tag="onRemoveTag" @keydown.capture="onKeydownCapture" @keydown="navigating = false">
+        <slot name="leading" />
         <TagsInputItem v-for="tag in tags" :key="tag.key" :value="tag.key" class="veyq-tags-input__tag" :data-tag="tag.key">
           <slot name="tag" :tag="tag" />
           <TagsInputItemText class="veyq-tags-input__label">{{ tag.label }}</TagsInputItemText>
@@ -133,23 +259,45 @@ function pick(event: Event, option: O) {
       </TagsInputRoot>
     </ComboboxAnchor>
     <ComboboxPortal>
-      <ComboboxContent class="veyq-tags-input__list" position="popper" :side-offset="2" :collision-padding="8" hide-when-empty>
+      <ComboboxContent :class="['veyq-tags-input__list', listClass]" position="popper" :side-offset="2" :collision-padding="8" :hide-when-empty="!slots.status">
         <!-- a plain scroller, not ComboboxViewport: that one renders a <style> (hiding the scrollbar) the CSP would have
              to admit by hash (csp.ts), and a long member list should show its scrollbar -->
-        <div class="veyq-tags-input__viewport" role="presentation">
+        <div class="veyq-tags-input__viewport" role="presentation" @pointermove.capture="onPointerMove">
           <!-- `data-label`: Reka memoizes an item on its value and attributes, so a label that changes under the same
                key would otherwise stay stale -->
-          <ComboboxItem
-            v-for="o in options"
-            :key="o.key"
-            :value="o.key"
-            :text-value="o.label"
-            :data-label="o.label"
-            class="veyq-tags-input__option"
-            @select="(e: Event) => pick(e, o)"
-          >
-            <slot name="option" :option="o">{{ o.label }}</slot>
-          </ComboboxItem>
+          <ComboboxGroup v-if="options.length" class="veyq-tags-input__group veyq-tags-input__suggestions">
+            <ComboboxLabel v-if="optionsLabel" class="veyq-tags-input__group-label">{{ optionsLabel }}</ComboboxLabel>
+            <ComboboxItem
+              v-for="o in options"
+              :key="o.key"
+              :value="o.key"
+              :text-value="o.label"
+              :data-label="o.label"
+              :data-option-key="o.key"
+              class="veyq-tags-input__option"
+              @select="(e: Event) => pick(e, o)"
+            >
+              <slot name="option" :option="o">{{ o.label }}</slot>
+            </ComboboxItem>
+          </ComboboxGroup>
+          <!-- the results: one list, headed by `resultsLabel` (the search's *Treffer*), always, so a suggestion never reads
+               as a result (owner 2026-11-09) -->
+          <ComboboxGroup v-if="results?.length" class="veyq-tags-input__group veyq-tags-input__results">
+            <ComboboxLabel v-if="resultsLabel" class="veyq-tags-input__group-label">{{ resultsLabel }}</ComboboxLabel>
+            <ComboboxItem
+              v-for="o in results"
+              :key="o.key"
+              :value="o.key"
+              :text-value="o.label"
+              :data-label="o.label"
+              :data-option-key="o.key"
+              class="veyq-tags-input__option"
+              @select="(e: Event) => choose(e, o)"
+            >
+              <slot name="result" :option="o">{{ o.label }}</slot>
+            </ComboboxItem>
+          </ComboboxGroup>
+          <div v-if="slots.status" class="veyq-tags-input__status"><slot name="status" /></div>
         </div>
       </ComboboxContent>
     </ComboboxPortal>

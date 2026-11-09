@@ -3,8 +3,9 @@
 // date (read-modify-write, operator-blind). The map + geocoding are gated behind a personal two-stage opt-in
 // (ADR 0016/0018); the position is the medoid of the Memory's photo GPS (`auto`, self-heals as media arrive) or a
 // hand-dropped pin (`fixed`). Pure place maths + geocoding live in `./memoryLocation` + `./geocode`; this owns the
-// reactive wiring (editor/consent state, the header label, save + the geocoding self-heal). On a server without the
-// map (`memories.map` off) there is nothing to consent to: the editor opens without a map (inbox #458).
+// reactive wiring (the editor's state, the header label, save + the geocoding self-heal). The editor opens at once,
+// whatever the map: on a server without one (`memories.map` off, inbox #458) and for a member whose map services are off
+// (uc.memory.place A6, ADR 0016) it is the name field, the latter with the offer to turn them on where the map would stand.
 import { computed, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -19,7 +20,7 @@ import {
 import { nodeMetaState } from '../../core/node/nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import { reverseGeocode, defaultLevel, nameAtLevel } from './geocode'
-import { useMapConfig, setMapsConsent } from '../../shared/state/useMapConfig'
+import { useMapConfig } from '../../shared/state/useMapConfig'
 import type { MediaItem } from './media'
 import type { TreeNode } from '../../core/node/tree'
 import type { NodeMetaDoor } from './source'
@@ -39,11 +40,10 @@ export interface MemoryLocationContext {
 
 export function useMemoryLocation(ctx: MemoryLocationContext) {
   const { t, locale } = useI18n()
-  const { mapsOffered, mapsAvailable, geocoderUrl, geocodingAvailable } = useMapConfig()
+  const { geocoderUrl, geocodingAvailable } = useMapConfig()
 
   const locationEditorOpen = ref(false)
   const { editorFailed, selfHealFailed } = useMetaWriteFeedback(ctx.onMetaUpdated)
-  const consentDialogOpen = ref(false)
   const storedLocation = computed(() => (ctx.memoryKey() ? unsealMemoryLocation(ctx.scopeId(), ctx.memoryKey()!, ctx.node()) : null))
   const gpsPoints = computed(() => {
     const key = ctx.memoryKey()
@@ -66,20 +66,12 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
     return Boolean(loc && !isLocationPending(loc))
   })
 
-  /** Open the location editor — but first gate on the personal maps opt-in (no consent ⇒ ask, no external calls). */
+  /** Open the location editor. No dialog stands before it (uc.memory.place A6): with the map services off, or on a
+   *  server without a map, it is the name field and no request leaves the device; the editor itself offers to turn the
+   *  map services on where the map would stand. */
   function openLocationEditor() {
     if (!ctx.memoryKey()) return
-    // No map service on this server (`memories.map`, ADR 0088 decision 7): nothing to consent to, so the editor opens
-    // without a map and the place is named by hand (inbox #458).
-    if (!mapsOffered.value || mapsAvailable.value) locationEditorOpen.value = true
-    else consentDialogOpen.value = true
-  }
-
-  /** The user grants the coupled tiles+geocoding consent → enable and proceed into the editor. */
-  function enableMaps() {
-    setMapsConsent(true)
-    consentDialogOpen.value = false
-    if (mapsAvailable.value) locationEditorOpen.value = true
+    locationEditorOpen.value = true
   }
 
   /** Save (or, for null, remove) the location: read-modify-write under K_node — the date is preserved either way. */
@@ -140,14 +132,12 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
 
   return {
     locationEditorOpen,
-    consentDialogOpen,
     storedLocation,
     gpsPoints,
     medoid,
     locationLabel,
     locationResolved,
     openLocationEditor,
-    enableMaps,
     onLocationSave,
     reconcileAutoLocation,
   }

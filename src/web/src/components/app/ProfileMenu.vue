@@ -2,7 +2,7 @@
 // The sidebar profile (cr-0031). Markup + classes are the design source's ProfileMenu verbatim (.profile-button
 // + a popup menu) so layout.css styles it identically; only the data + actions are ours — the label is
 // the in-memory account email, and the menu carries the theme and language quick-pickers, the shell's single
-// entry into the settings hub, and sign-out. It is the one door: the top bar holds no preferences (ADR 0022 §5).
+// entry into the settings hub, the keyboard shortcut overview, and sign-out. It is the one door: the top bar holds no preferences (ADR 0022 §5).
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -14,6 +14,7 @@ import { account } from '../../app/account'
 import { signOut } from '../../features/account/login/signOut'
 import { setLocalePreference, localePreference, LOCALE_PREFERENCES, LOCALE_LABELS } from '../../i18n'
 import { useThemeState, setThemePreference, type ThemePreference } from '../../shared/state/useThemeState'
+import { openShortcuts } from '../../core/shortcuts/shortcuts'
 
 defineProps<{ showName?: boolean }>()
 
@@ -54,6 +55,8 @@ const menuItems = computed<VeyqMenuItem[]>(() => [
   // All settings (personal + tenant + server, scope/role-filtered) live in the hub (cr-0078, ADR 0022), and
   // this is the ONLY route into it — a second door anywhere in the shell is the duplication this menu ended.
   { label: t('shell.settings'), icon: 'cog', command: () => void router.push('/settings') },
+  // The keyboard shortcut overview (uc.platform.keyboard-shortcuts): `?` opens it too, this is its door for the pointer.
+  { label: t('shortcuts.title'), icon: 'keyboard', command: openShortcuts },
   // Group invitations moved out of this menu into the top-bar attention badge (cr-invitations-topbar-badge,
   // InvitationsBadge.vue) — an appears-on-demand badge routing to /invitations, so it is no longer a quiet,
   // always-present menu row here.

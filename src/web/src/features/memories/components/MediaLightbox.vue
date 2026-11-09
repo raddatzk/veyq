@@ -667,6 +667,7 @@ function emitDelete() {
   emit('delete', { mediaId: item.value.mediaId }) // the parent trashes it with an undo, or purges a guest's own (asked first)
 }
 
+// Listed in the shortcut overview: `../shortcuts.ts`, *In the large view* (the zoom's keys too, `usePanZoom`'s `onKey`).
 function onKeydown(event: KeyboardEvent) {
   // Any key pauses the slideshow — except the activation keys on its own toggle, whose click would start it again.
   if (!(isSlideshowToggle(event.target) && (event.key === 'Enter' || event.key === ' '))) pauseOnInteraction(event)
@@ -705,6 +706,7 @@ onBeforeUnmount(() => {
     class="media-lightbox"
     role="dialog"
     aria-modal="true"
+    data-shortcuts-over
     :aria-label="memoryName"
     tabindex="-1"
     @click.self="close()"

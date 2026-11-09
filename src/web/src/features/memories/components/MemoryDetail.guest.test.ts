@@ -7,8 +7,8 @@
 //
 // What it proves: nothing reaches an AUTHENTICATED client (each throws and is recorded, `test/guestMode.ts`), nothing of
 // the member's world is read (`activeSpace`, the pin store, the item marks' load), no member-only control is on the page
-// (rename, delete the Memory, the pin, share, the cover, date and place, buckets, marks, the media trash, the contributions
-// tab), and what each role may do is there: READ — the gallery, the chapters to navigate into, the lightbox's download;
+// (rename, delete the Memory, the pin, share, the cover, date and place, buckets, marks, the filter by facts, the media
+// trash, the contributions tab), and what each role may do is there: READ — the gallery, the chapters to navigate into, the lightbox's download;
 // READ_WRITE — besides, the upload (into the chapter on screen, under that chapter's key) and the delete of its own media
 // (asked first, then purged). A chapter opens through the tree's `linkTo`, the `#k=` fragment kept. And the gallery polls as
 // a member's does (inbox #497): a second uploader's photo appears without a reload, one gone from the link drops, and an
@@ -168,6 +168,11 @@ function expectGuestOnly(w: Page) {
   }
   expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters')]) // no contributions organizer, no media trash
   expect(w.find('.gallery-mark-filter').exists(), 'the mark filter').toBe(false)
+  // uc.memory.gallery step 8: a guest has no search, so no filter by facts either (`MemoryDetail.filter.test.ts` mounts the
+  // member's field); the toolbar it would sit in is drawn.
+  expect(w.find('.gallery-toolbar .gallery-sort-toggle').exists(), 'control: the gallery toolbar').toBe(true)
+  expect(w.find('.gallery-fact-filter').exists(), 'the filter by facts').toBe(false)
+  expect(byLabel(w, t('media.filter.label')).exists(), 'anything labelled as the filter by facts').toBe(false)
   // Core's header heads the guest's page too (ADR 0110 decision 10): the Memory's visual with no cover button, the date
   // greyed, and an unset place left out - "Set place" is no offer to a guest (owner 2026-11-07).
   expect(w.find('.veyq-node-header-leading').exists(), 'control: the header\'s visual').toBe(true)

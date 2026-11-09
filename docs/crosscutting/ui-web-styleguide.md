@@ -340,7 +340,7 @@ One page, `/settings/<section>`, behind an unlocked vault
 shell's only door into it — the top bar carries none, and lint holds that — and beside it the menu carries only the
 theme and language quick-pickers and sign-out.
 
-- **The rail** mixes two axes. *Personal* is always there: appearance and language, map and place names (this browser's
+- **The rail** mixes two axes. *Personal* is always there: appearance and language, map services (this browser's
   map consent, uc.memory.place A5), sessions, password, adding a device
   (where the instance links devices), security, the trust reset (only while this device refuses a document), the
   profile (in a tenant), the way into moderation (for an appointed account) and erasing the account, last. *Shared
