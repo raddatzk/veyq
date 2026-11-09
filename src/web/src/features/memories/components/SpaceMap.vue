@@ -16,6 +16,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
 import { clusterPins, sortPinsByStartDate, type LocatedPin, type PinCluster } from '../spaceMap'
+import { WORLD_VIEW } from '../memoryLocation'
 import { coverImageStyle, type LoadedCover } from '../memoryCover'
 import { formatClosedRange, formatDay } from '../memoryDateRange'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
@@ -228,7 +229,7 @@ function fitPins() {
 function initMap() {
   if (map || !el.value) return
   // Leaflet's attribution control writes its line as a string of markup, which Trusted Types refuses: ours builds it.
-  map = L.map(el.value, { attributionControl: false }).setView([20, 0], 2)
+  map = L.map(el.value, { attributionControl: false }).setView([WORLD_VIEW.center.lat, WORLD_VIEW.center.lng], WORLD_VIEW.zoom)
   L.tileLayer(tileUrl.value, { maxZoom: tileMaxZoom }).addTo(map)
   addAttribution(map, tileAttribution.value)
   map.on('zoomend moveend', renderClusters) // re-cluster + collapse when the projection changes

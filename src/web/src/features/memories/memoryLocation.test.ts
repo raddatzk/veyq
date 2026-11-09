@@ -17,6 +17,8 @@ import {
   sameMemoryLocation,
   setMemoryLocation,
   unsealMemoryLocation,
+  WORLD_VIEW,
+  type LatLng,
   type MemoryLocation,
 } from './memoryLocation'
 import { unsealMemoryDate, type MemoryDate } from './memoryDate'
@@ -121,6 +123,16 @@ describe('normalizeLocation', () => {
     expect(isLocationPending({ name: '', nameSource: 'geocoded', derivedMode: 'auto' })).toBe(true)
     expect(isLocationPending({ name: 'Teneriffa', nameSource: 'geocoded', derivedMode: 'auto' })).toBe(false)
     expect(isLocationPending(null)).toBe(false)
+  })
+
+  it('reads a `fixed` point at the world view\'s centre as none (an untouched editor stored it, inbox #834); a hair away is a point', () => {
+    const at = (derived: LatLng, derivedMode: 'fixed' | 'auto' = 'fixed') => normalizeLocation({ name: 'Lido di Ostia', nameSource: 'manual', derivedMode, derived })
+    expect(at({ lat: 20, lng: 0 })).toEqual({ name: 'Lido di Ostia', nameSource: 'manual', derivedMode: 'auto', derived: undefined, nameAnchor: undefined })
+    expect(at(WORLD_VIEW.center)?.derived).toBeUndefined() // the constant the editor opens on, not a copy of it
+    expect(at({ lat: 20.000001, lng: 0 })).toMatchObject({ derivedMode: 'fixed', derived: { lat: 20.000001, lng: 0 } })
+    expect(at({ lat: 20, lng: 0.000001 })).toMatchObject({ derivedMode: 'fixed', derived: { lat: 20, lng: 0.000001 } })
+    // a medoid of photo GPS is the photos' own, whatever it is: only a hand-set (`fixed`) point is the opening view
+    expect(at({ lat: 20, lng: 0 }, 'auto')).toMatchObject({ derivedMode: 'auto', derived: { lat: 20, lng: 0 } })
   })
 
   it('defaults nameSource→manual and derivedMode→auto, drops malformed derived/anchor', () => {

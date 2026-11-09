@@ -1,7 +1,7 @@
 ---
 id: cr-place-untouched-map-sets-no-point
 title: An untouched map in the place editor sets no point; a stored point at the opening view's centre reads as none
-status: planned
+status: done
 satisfies: [uc.memory.place]
 adrs: ["0016", "0018"]
 invariants:
@@ -71,4 +71,49 @@ Single phase (web).
 
 ## Retrospective
 
-(filled by the implementer)
+Implemented 2026-11-09 in the worktree `search-design`, on `8e5a37eb7`, in one commit.
+
+**What was built.**
+- **One constant.** `WORLD_VIEW` (`{ center: (20, 0), zoom: 2 }`) in `features/memories/memoryLocation.ts`; the editor's
+  private `WORLD` and `SpaceMap`'s literal `setView([20, 0], 2)` both read it now. Its comment says why the equality is
+  safe and that the centre must not change (old points would no longer be recognised).
+- **Read side.** `normalizeLocation` reads a `fixed` `derived` exactly equal to `WORLD_VIEW.center` as no point: `auto`, no
+  `derived` (a name only, so the first geotagged photo gives it the medoid). Every reader goes through it (the level's and a
+  person's map via `unsealMemoryLocation`, the header, export/import, the participant index, the search, which reads only
+  the name). The name-required check runs on the stored mode first, so an invalid `fixed` place does not become "pending".
+- **Write side - how a member's move is told.** Leaflet tells a user pan (`dragstart`) but no user zoom (wheel, zoom
+  buttons, double click, keys, pinch all call the same `setView` a programmatic move does). So `MemoryMap` marks the next
+  frame `user` after the member's own input on its container - `pointerdown`, `wheel`, `keydown`, caught in the capture
+  phase (the zoom buttons stop their events from bubbling) - and clears the mark after each reported frame and before every
+  programmatic `setView` / `panTo` / `fitPoints`. The old `dragstart` flag is gone (a `pointerdown` precedes every drag).
+- **Editor.** A frame that is not the member's never creates a position (`onFrame`: `!f.user && !derived` returns), so the
+  opening view is neither stored nor looked up at the geocoder. `save` stores `derivedMode: 'auto'` when there is no point;
+  Save needs only a name (E3: saved untouched it is a name only - no "disable Save until a pan", which the previous CR's
+  retro had guessed). The pill reads *Name only — no position* while the map sets no point. The turn-on path (A6) is fixed
+  by the same line.
+- **Docs.** Coverage `untouched-map-sets-no-point` (web refs; backend none, client-only). The Use page EN+DE: one sentence
+  in step 2 (without geotagged photos the map shows the world; left as it is, the place is a name only).
+
+**Tests and bites.** `pnpm run check` in `src/web/` green (544 files, 6633 tests, build and dist asserts); 69 guards green
+with `/usr/bin/python3` (`validate_guard_gaps.py` skipped, no validator changed). New
+`MemoryLocationEditor.untouchedMap.test.ts` (real `MemoryMap` over a fake Leaflet that keeps its view): untouched save,
+the pan and wheel controls, a move without input sets nothing, a stored opening-view point re-saved drops it, the medoid kept,
+a hand-set point kept. `memoryLocation.test.ts` (equality vs a hair away, `auto` untouched), `spaceMap.test.ts` (no pin, a
+hair away pinned). `MemoryLocationEditor.withdraw.test.ts` now pans before it expects a pending lookup (its opening frame
+used to schedule one - the defect). Bites on copies next to the served files (`*.bite1/2.*`, deleted after; `git status`
+and the two files' hashes equal before/after): bite 1 (the `onFrame` guard removed) - the untouched test red on the stored
+value; bite 2 (the read rule removed, swapped in by `vi.mock`) - the stored-point tests in all three suites red.
+
+**Browser pass** (`veyq-search` stack, Vite 8189, desktop 1280, German; every outside request answered or aborted in the
+browser - tiles a blank PNG, the geocoder `{}`). *Roma 2024* held raw `{ name: 'Lido di Ostia', manual, fixed, (20, 0) }`.
+Before the re-save the map model pinned nothing and the editor's pill read *Nur ein Name*; the level's map (*Reisen*,
+Kartenansicht, services on) shows *Noch keine Orte* - no Memory of the space has a point. Re-saved untouched: after a reload
+the raw meta is `{ name: 'Lido di Ostia', manual, auto }`, no `derived`. With the real Leaflet a mouse drag and a wheel zoom
+each flip the pill to *Eigener Ort* (cancelled, nothing saved). Shot: `p19-desktop-roma-name-only.png`.
+
+**What went wrong.**
+- My first pass step expected the level's map to be drawn; with no pin in the space it shows its empty panel instead. A
+  one-line probe of `SpaceMap`'s `v-if` chain would have said so. Next time: read a view's empty-state branch before a pass
+  asserts what it draws.
+- The crosshair still stands in the centre while no point is set; the pill says *Name only*, which I judged enough - an owner
+  may want the crosshair dimmed until the first move (not built, a UX choice).

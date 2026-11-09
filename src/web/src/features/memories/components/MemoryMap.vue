@@ -28,15 +28,23 @@ const props = defineProps<{
   crosshair?: boolean // show a centre crosshair — the framed point that is the `fixed` position
   dots?: LatLng[] // faint context markers (the Memory's photo GPS) — "your photos are here"
 }>()
-// `user` marks a frame that a **user drag** produced (vs a programmatic recenter) — the parent uses it to flip an
-// `auto` place to `fixed` the moment the user reframes it by hand.
+// `user` marks a frame the MEMBER produced - a pan or a zoom by hand - vs the opening view and every programmatic move
+// (`setView`, `panTo`, `fitPoints`). The parent uses it to flip an `auto` place to `fixed` the moment the member reframes it,
+// and to set no point at all from a map the member never moved (uc.memory.place E3, inbox #834).
 const emit = defineEmits<{ frame: [{ lat: number; lng: number; zoom: number; user: boolean }] }>()
 
 const el = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let pin: L.Marker | null = null
 let dotLayer: L.LayerGroup | null = null
-let userDragged = false // set by Leaflet's `dragstart` (user pan only), cleared after the next frame is reported
+// Set by the member's input on the map (below), cleared once the next frame is reported and before every programmatic move.
+// Leaflet tells a user pan by its `dragstart` but has no event that tells a member's zoom (wheel, double click, the zoom
+// buttons, keys, a pinch) from a programmatic one, so the member's input itself is the signal: each of those gestures
+// begins with a `pointerdown`, a `wheel` or a `keydown` inside the map's container, caught on the way down (capture), as
+// the zoom buttons stop their events from bubbling.
+let userInput = false
+const USER_INPUT = ['pointerdown', 'wheel', 'keydown'] as const
+const markUserInput = () => (userInput = true)
 
 // A CSS pin (divIcon) instead of Leaflet's default PNG marker — avoids bundler image-path breakage.
 const pinIcon = L.divIcon({ className: 'veyq-map-pin', html: createIconElement('map-marker'), iconSize: [30, 30], iconAnchor: [15, 30] })
@@ -66,8 +74,8 @@ function syncDots(points: LatLng[] | undefined) {
 function reportFrame() {
   if (!map) return
   const c = map.getCenter()
-  emit('frame', { lat: c.lat, lng: c.lng, zoom: map.getZoom(), user: userDragged })
-  userDragged = false
+  emit('frame', { lat: c.lat, lng: c.lng, zoom: map.getZoom(), user: userInput })
+  userInput = false
 }
 
 onMounted(() => {
@@ -78,9 +86,9 @@ onMounted(() => {
   addAttribution(map, props.attribution)
   syncDots(props.dots)
   syncPin(props.marker)
-  map.on('dragstart', () => (userDragged = true)) // fires only on a real user pan (not programmatic recenters)
+  for (const ev of USER_INPUT) el.value.addEventListener(ev, markUserInput, { capture: true, passive: true })
   map.on('moveend', reportFrame)
-  map.whenReady(reportFrame) // an initial frame so the parent can geocode the opening view
+  map.whenReady(reportFrame) // the opening frame (`user: false`): the parent may name a position it opened on, never set one
 })
 
 // Keep the static pin + photo dots in sync when the parent recomputes them (e.g. auto re-medoid / mode toggle).
@@ -88,6 +96,7 @@ watch(() => props.marker, (next) => syncPin(next))
 watch(() => props.dots, (next) => syncDots(next))
 
 onBeforeUnmount(() => {
+  for (const ev of USER_INPUT) el.value?.removeEventListener(ev, markUserInput, { capture: true })
   map?.remove()
   map = null
   pin = null
@@ -97,15 +106,18 @@ onBeforeUnmount(() => {
 defineExpose({
   /** Recenter the map on a point (used when the position jumps, e.g. a re-medoid). */
   panTo(at: LatLng) {
+    userInput = false
     map?.panTo([at.lat, at.lng])
   },
   /** Programmatically set the view (centre + zoom) — a non-user move, so it won't flip `auto` → `fixed`. */
   setView(at: LatLng, zoom: number) {
+    userInput = false
     map?.setView([at.lat, at.lng], zoom)
   },
   /** Frame the view to fit all points — the **auto** view, its zoom reflecting how spread the photos are. */
   fitPoints(points: LatLng[]) {
     if (!map || points.length === 0) return
+    userInput = false
     if (points.length === 1) map.setView([points[0].lat, points[0].lng], 14)
     else map.fitBounds(points.map((p) => [p.lat, p.lng] as [number, number]), { padding: [30, 30], maxZoom: 16 })
   },

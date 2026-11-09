@@ -75,6 +75,15 @@ acceptanceCriteria:
           - src/features/memories/spaceMap.test.ts
           - src/features/memories/components/PersonMemories.test.ts
           - src/features/memories/exportImport.test.ts
+  - id: untouched-map-sets-no-point
+    text: With the map, a Memory with no photo GPS and no stored point gets a position only from a map the MEMBER moved - a pan or a zoom by hand (E3, inbox #834). The opening view (the world view, `WORLD_VIEW`) and every programmatic move set and name nothing, so the editor saved untouched stores a place that is a name only (`derivedMode` auto, no `derived`), never the view it opened on; after a move by the member the framed point is stored `fixed` (control), and with photo GPS the medoid stays `auto`. A `fixed` point stored exactly at the world view's centre (before #834 an untouched editor stored it) is read as no point - no pin on any map, an `auto` name-only place - while one a hair away is still a point, and the next save of that place drops it. Client-only (sealed meta the server cannot read), so web refs alone - the backend part is none.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/MemoryLocationEditor.untouchedMap.test.ts
+          - src/features/memories/components/MemoryLocationEditor.withdraw.test.ts
+          - src/features/memories/memoryLocation.test.ts
+          - src/features/memories/spaceMap.test.ts
   - id: map-services-off-names-by-hand
     text: On a server WITH a map, a member whose map services are off (this browser's consent not given, or withdrawn) names a place by hand (ADR 0016, A6). The location chip opens the editor at once - no dialog before it -, the name field of a server without a map, and where the map would stand the offer to turn the map services on, naming the tile and geocoder hosts and what they receive; a typed name is saved `manual` at the medoid, and nothing is turned on. While they are off the editor draws no map and asks no geocoder (control - the same editor with them on draws the map and asks the geocoder). Turned on there, the map is drawn in the same editor and a typed name is kept (with none typed, the map names the place as on an opening with the map). The settings section, the offer and the map's control call the choice "Map services" / "Kartendienste", on or off; the section is still found in the settings search by its old words ("Karte", "Karte und Ortsnamen"). Client-only, so web refs alone.
     coverage:
