@@ -20,14 +20,17 @@
 ## Main flow
 
 1. **Open the search.** The member focuses the search field in the app shell. A keyboard shortcut does the same; on
-   a phone, the field is reached from the top bar.
+   a phone, the field is reached from the top bar. Focusing opens nothing: the list opens with the first typed
+   character, and the field keeps its focus colour while the pointer rests on it (owner, 2026-11-09: a click into
+   the field showed a panel and flickering states before anything was typed).
 2. **Load every space.** On the first focus of the session, the client opens the tree of every space the member
    belongs to in this tenant (personal, the tenant's, every group) that it does not hold yet. Each tree is fetched and opened with that space's key, as entering the space
    would, but **the active space does not change**. Then each space's media listing is read (`listScopeMedia`: every
    live medium on a live node of the space, in pages) and opened under its nodes' keys while they are held. The keys are
    zeroed once its documents are built; the next focus revalidates each tree and each listing by its ETag - a photo's
    change moves no tree revision, so the listing is asked even when the tree answers `304`. The active space and the
-   open Memory are indexed first. A space still loading is named as loading in the results.
+   open Memory are indexed first. A space still loading is named as loading in the results, but only once the member has typed and the loading has
+   lasted longer than a moment (about 300 ms); shorter loads show no intermediate state.
 3. **Build the documents.**
    - Core turns every node into a document: its space, its kind, its id, its revision and its name.
    - Each application adds the fields of its own kinds through the registry. Memories adds a Memory's date range, its
