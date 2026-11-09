@@ -118,16 +118,18 @@ func localDay(_ iso: String) -> String {
 }
 
 func categoryName(_ id: String?, _ view: PotView) -> String {
-    switch id {
-    case "food": say(.catFood)
-    case "groceries": say(.catGroceries)
-    case "accommodation": say(.catAccommodation)
-    case "transport": say(.catTransport)
-    case "leisure": say(.catLeisure)
-    case "household": say(.catHousehold)
-    case "other": say(.catOther)
-    case nil: ""
-    default: view.ownCategories.first { $0.first as String? == id }?.second as String? ?? say(.catUnknown)
+    guard let id else { return "" }
+    return say(piece: view.categoryLabel(id: id))
+}
+
+/// One piece of a row's line (core's `Piece`), written Apple's way.
+func say(piece: Piece) -> String {
+    switch piece {
+    case let p as Piece.Said: say(notice: p.notice)
+    case let p as Piece.Plain: p.text
+    case let p as Piece.Day: localDay(p.iso)
+    case let p as Piece.Money: money(p.amount, p.currency, p.minorUnits)
+    default: ""
     }
 }
 
@@ -180,7 +182,7 @@ private struct EntriesList: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(e.title ?? say(.potTransfer)).fontWeight(.semibold)
                         Text(subtitle(e)).font(.caption).foregroundStyle(Role.muted)
-                        if let badge = badge(e) { Text(badge).font(.caption2).foregroundStyle(e.status == .live ? Role.muted : Role.danger) }
+                        if let badge = view.badge(e: e) { Text(say(notice: badge.notice)).font(.caption2).foregroundStyle(badge.danger ? Role.danger : Role.muted) }
                     }
                     Spacer()
                     if let amount = e.amount { Text(money(amount.int64Value, view.currency, view.minorUnits)).fontWeight(.semibold) }
@@ -215,27 +217,9 @@ private struct EntriesList: View {
     }
 
     private func subtitle(_ e: PotView.EntryRow) -> String {
-        let who = e.who.map(personName)
-        var parts: [String] = []
-        if let date = e.date { parts.append(localDay(date)) }
-        if let category = e.category { parts.append(categoryName(category, view)) }
-        switch e.kind {
-        case .expense: parts.append(say(.potExpenseBy, who.joined(separator: ", ")))
-        case .refund: parts.append(say(.potRefundTo, who.joined(separator: ", ")))
-        case .transfer: parts.append(who.joined(separator: " → "))
-        default: break
-        }
-        if let foreign = e.foreignAmount { parts.append(money(foreign.int64Value, e.foreignCurrency, e.foreignMinorUnits)) }
-        return parts.joined(separator: " · ")
+        view.line(e: e).map { say(piece: $0) }.joined(separator: " · ")
     }
 
-    private func badge(_ e: PotView.EntryRow) -> String? {
-        switch e.status {
-        case .invalid: say(.potInvalid)
-        case .unreadable: say(.potUnreadable)
-        default: e.edited ? say(.potEdited) : nil
-        }
-    }
 }
 
 private struct OverviewList: View {

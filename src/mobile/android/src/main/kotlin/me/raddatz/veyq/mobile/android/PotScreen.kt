@@ -139,16 +139,15 @@ private fun localDate(iso: String): String = runCatching {
 }.getOrDefault(iso)
 
 @Composable
-internal fun categoryName(id: String?, view: PotView): String = when (id) {
-    "food" -> stringResource(R.string.cat_food)
-    "groceries" -> stringResource(R.string.cat_groceries)
-    "accommodation" -> stringResource(R.string.cat_accommodation)
-    "transport" -> stringResource(R.string.cat_transport)
-    "leisure" -> stringResource(R.string.cat_leisure)
-    "household" -> stringResource(R.string.cat_household)
-    "other" -> stringResource(R.string.cat_other)
-    null -> ""
-    else -> view.ownCategories.firstOrNull { it.first == id }?.second ?: stringResource(R.string.cat_unknown)
+internal fun categoryName(id: String?, view: PotView): String = if (id == null) "" else piece(view.categoryLabel(id))
+
+/** One piece of a row's line (core's `Piece`), written Android's way. */
+@Composable
+internal fun piece(p: me.raddatz.veyq.mobile.words.Piece): String = when (p) {
+    is me.raddatz.veyq.mobile.words.Piece.Said -> say(p.notice)
+    is me.raddatz.veyq.mobile.words.Piece.Plain -> p.text
+    is me.raddatz.veyq.mobile.words.Piece.Day -> localDate(p.iso)
+    is me.raddatz.veyq.mobile.words.Piece.Money -> money(p.amount, p.currency, p.minorUnits)
 }
 
 @Composable
@@ -174,25 +173,8 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(e.title ?: stringResource(R.string.pot_transfer), fontWeight = FontWeight.SemiBold)
-                        val who = e.who.map { personName(it.ifEmpty { null }) }
-                        val line = listOfNotNull(
-                            e.date?.let(::localDate),
-                            e.category?.let { categoryName(it, view) },
-                            when (e.kind) {
-                                PotView.Kind.EXPENSE -> stringResource(R.string.pot_expense_by, who.joinToString())
-                                PotView.Kind.REFUND -> stringResource(R.string.pot_refund_to, who.joinToString())
-                                PotView.Kind.TRANSFER -> who.joinToString(" → ")
-                                null -> null
-                            },
-                            e.foreignAmount?.let { money(it, e.foreignCurrency, e.foreignMinorUnits) },
-                        ).joinToString(" · ")
-                        Text(line, style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
-                        val badge = when (e.status) {
-                            Ledger.Status.INVALID -> stringResource(R.string.pot_invalid)
-                            Ledger.Status.UNREADABLE -> stringResource(R.string.pot_unreadable)
-                            else -> if (e.edited) stringResource(R.string.pot_edited) else null
-                        }
-                        badge?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = role(if (e.status == Ledger.Status.LIVE) palette.muted else palette.danger)) }
+                        Text(view.line(e).map { piece(it) }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                        view.badge(e)?.let { b -> Text(say(b.notice), style = MaterialTheme.typography.labelSmall, color = role(if (b.danger) palette.danger else palette.muted)) }
                     }
                     e.amount?.let { Text(money(it, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold) }
                 }

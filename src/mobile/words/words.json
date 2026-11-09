@@ -302,6 +302,10 @@
     "en": "Refund to {1}",
     "de": "Erstattung an {1}"
   },
+  "pot_transfer_between": {
+    "en": "{1} → {2}",
+    "de": "{1} → {2}"
+  },
   "pot_transfer": {
     "en": "Transfer",
     "de": "Überweisung"

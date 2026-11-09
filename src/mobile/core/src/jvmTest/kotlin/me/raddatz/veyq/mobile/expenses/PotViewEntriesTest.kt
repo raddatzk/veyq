@@ -119,4 +119,37 @@ class PotViewEntriesTest {
         assertEquals(Triple(ben, anna, 150L), Triple(s.fromId, s.toId, s.amount))
         assertEquals("Ben" to "Anna", s.from to s.to)
     }
+
+    @Test
+    fun anEntrysLineAndBadgeAreTheCoresPieces() {
+        val night = "0e000000-0000-4000-9000-000000000003"
+        val pay = "0e000000-0000-4000-9000-000000000004"
+        val v = view(
+            listOf(Rev(anna, 1, ParticipantBody("Anna", true, 1)), Rev(ben, 1, ParticipantBody("Ben", true, 2))) + listOf(
+                Rev(dinner, 1, expense("Dinner", 300)),
+                Rev(taxi, 1, expense("Taxi", 1000, ben, currency = "JPY", rate = "0.01").copy(minorUnits = 0, category = "lost-one")),
+                Rev(night, 1, Refund("Hotel", "accommodation", "2026-07-02", "EUR", 2, "1", 50, emptyList(), listOf(Contribution(anna, 50), Contribution(ben, 0)), Allocation(emptyList(), Split.Equal(listOf(anna, ben))))),
+                Rev(pay, 1, Transfer(null, "2026-07-03", "EUR", 2, "1", 150, emptyList(), ben, anna)),
+                Rev(pay, 2, Transfer(null, "2026-07-03", "EUR", 2, "1", 150, emptyList(), ben, anna)),
+            ),
+        )
+        fun line(id: String) = v.line(v.entries.single { it.id == id })
+        val said = { n: me.raddatz.veyq.mobile.words.Notice -> me.raddatz.veyq.mobile.words.Piece.Said(n) }
+        assertEquals(
+            listOf(me.raddatz.veyq.mobile.words.Piece.Day("2026-07-01"), said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.CAT_FOOD)),
+                said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_EXPENSE_BY, me.raddatz.veyq.mobile.words.Joined(listOf("Anna"), ", ")))),
+            line(dinner),
+        )
+        // A category the Pot no longer holds is unknown; an amount in another currency follows in its own digits.
+        assertEquals(said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.CAT_UNKNOWN)), line(taxi)[1])
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Money(1000, "JPY", 0), line(taxi).last())
+        assertEquals(said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_REFUND_TO, me.raddatz.veyq.mobile.words.Joined(listOf("Anna", "Ben"), ", "))), line(night)[2])
+        assertEquals(listOf(me.raddatz.veyq.mobile.words.Piece.Day("2026-07-03"), said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_TRANSFER_BETWEEN, "Ben", "Anna"))), line(pay))
+        // Edited is said quietly; invalid and unreadable as a danger; nothing for a plain live entry.
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.POT_EDITED to false, v.badge(v.entries.single { it.id == pay })!!.let { it.notice.msg to it.danger })
+        assertNull(v.badge(v.entries.single { it.id == dinner }))
+        // An erased participant reads as a deleted person.
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_DELETED_PERSON), v.personWords(""))
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("Mine"), PotView(PotView.Source("T", PotMeta(base, listOf("mine" to "Mine")), null, LedgerCheck.of(emptyList()), null, emptySet(), true)).categoryLabel("mine"))
+    }
 }

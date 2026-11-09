@@ -310,6 +310,44 @@ class PotView internal constructor(session: Source) {
     /** The Pot's own categories, after the defaults. */
     val ownCategories: List<Pair<String, String>> = session.meta?.categories.orEmpty()
 
+    /** A category's name: a default's in the person's language, an own one's as written, an id the Pot lost as unknown. */
+    fun categoryLabel(id: String): me.raddatz.veyq.mobile.words.Piece = DEFAULT_CATEGORY_WORDS[id]
+        ?.let { me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(it)) }
+        ?: ownCategories.firstOrNull { it.first == id }?.let { me.raddatz.veyq.mobile.words.Piece.Plain(it.second) }
+        ?: me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.CAT_UNKNOWN))
+
+    /** A participant's name in a sentence: as written, or "deleted person" for one erased (an empty name). */
+    fun personWords(name: String?): Any =
+        name?.takeIf { it.isNotEmpty() } ?: me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_DELETED_PERSON)
+
+    /**
+     * An entry row's line under its title, piece by piece (joined with " · "): its day, its category, who paid or received
+     * (a transfer: from → to), and its amount in its own currency where that is not the base.
+     */
+    fun line(e: EntryRow): List<me.raddatz.veyq.mobile.words.Piece> {
+        val who = e.who.map(::personWords)
+        return listOfNotNull(
+            e.date?.let { me.raddatz.veyq.mobile.words.Piece.Day(it) },
+            e.category?.let(::categoryLabel),
+            when (e.kind) {
+                Kind.EXPENSE -> me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_EXPENSE_BY, me.raddatz.veyq.mobile.words.Joined(who, ", "))
+                Kind.REFUND -> me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_REFUND_TO, me.raddatz.veyq.mobile.words.Joined(who, ", "))
+                Kind.TRANSFER -> me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_TRANSFER_BETWEEN, who.getOrElse(0) { "" }, who.getOrElse(1) { "" })
+                null -> null
+            }?.let { me.raddatz.veyq.mobile.words.Piece.Said(it) },
+            e.foreignAmount?.let { me.raddatz.veyq.mobile.words.Piece.Money(it, e.foreignCurrency, e.foreignMinorUnits) },
+        )
+    }
+
+    /** What an entry row says beside its line: invalid or unreadable ([Badge.danger]), else edited, else nothing. */
+    class Badge(val notice: me.raddatz.veyq.mobile.words.Notice, val danger: Boolean)
+
+    fun badge(e: EntryRow): Badge? = when (e.status) {
+        Ledger.Status.INVALID -> Badge(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_INVALID), true)
+        Ledger.Status.UNREADABLE -> Badge(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_UNREADABLE), true)
+        else -> if (e.edited) Badge(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_EDITED), false) else null
+    }
+
     private fun row(e: Ledger.Entry): EntryRow {
         val c = e.content
         // A deleted or invalid entry has no effect: its amount is its content's, converted as a live one's would be.
@@ -323,6 +361,17 @@ class PotView internal constructor(session: Source) {
         }
     }
 }
+
+/** The default categories' words (the web's `expenses.category.*`), by id. */
+private val DEFAULT_CATEGORY_WORDS: Map<String, me.raddatz.veyq.mobile.words.Msg> = mapOf(
+    "food" to me.raddatz.veyq.mobile.words.Msg.CAT_FOOD,
+    "groceries" to me.raddatz.veyq.mobile.words.Msg.CAT_GROCERIES,
+    "accommodation" to me.raddatz.veyq.mobile.words.Msg.CAT_ACCOMMODATION,
+    "transport" to me.raddatz.veyq.mobile.words.Msg.CAT_TRANSPORT,
+    "leisure" to me.raddatz.veyq.mobile.words.Msg.CAT_LEISURE,
+    "household" to me.raddatz.veyq.mobile.words.Msg.CAT_HOUSEHOLD,
+    "other" to me.raddatz.veyq.mobile.words.Msg.CAT_OTHER,
+)
 
 object Amounts {
     /**
