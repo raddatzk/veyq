@@ -29,7 +29,7 @@ with both apps behaving as before on a device for what it touched, and commits o
    stale → replace anyway), an upload item's problem, a link minted or changed, sign-in reasons, a Pot write and a
    Pot's creation. Both apps look their words up by key (their catalogs for now; decision 3's one catalog is slice
    10). Android's screen tables and Apple's model sentences go.
-2. **Links and re-keys.** `LinkForm` (the new-link and edit rules: password required, minimum length, keep/remove on
+2. **Form done 2026-11-09** (`LinkForm`, `ShareWords`; the actions move with the shell, slice 4). **Links and re-keys.** `LinkForm` (the new-link and edit rules: password required, minimum length, keep/remove on
    edit, the last allowed day, end of day, write-only for a drop box) and the link actions with the re-key resume.
 3. **Node actions.** Favorite, trash with its undo, restore, rename (and the move a rename may imply), move with its
    way back, copy, create folder, report; the header's rights input (what a kind shares, covers, copies, downloads).

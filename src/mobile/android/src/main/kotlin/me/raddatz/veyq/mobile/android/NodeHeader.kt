@@ -267,7 +267,7 @@ private fun iconOf(id: String, own: Map<String, OwnAction>): ImageVector = when 
 @Composable
 private fun labelOf(id: String, node: NodeAt, contribution: HeaderContribution, hasCover: Boolean, pinned: Boolean?): String = when (id) {
     Plan.FAVORITE -> stringResource(if (pinned == true) R.string.node_unfavorite else R.string.node_favorite)
-    Plan.SHARE -> stringResource(shareWords(node.kind).title)
+    Plan.SHARE -> say(shareWords(node.kind).title)
     Plan.RENAME -> stringResource(R.string.node_rename)
     Plan.MOVE -> stringResource(R.string.node_move)
     Plan.COPY -> stringResource(R.string.copy_action)

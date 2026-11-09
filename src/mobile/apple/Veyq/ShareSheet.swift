@@ -3,58 +3,6 @@ import VeyqCore
 
 /// The sentences a node's share sheet says in its kind's words (the web's `ShareDialogCopy`): a folder's are core's
 /// (`share.folder.*`), a Pot's Expenses' (`expenses.share.*`). The rest of the sheet is the same for every kind.
-struct ShareWords {
-    let title: String
-    let intro: String
-    let contributor: String
-    let viewerHint: String
-    let contributorHint: String
-    let deleteConfirm: String
-
-    /// The words of `kind`'s share sheet: a Pot's, else core's folder words (the web's default `ShareDialogCopy`).
-    static func of(_ kind: String) -> ShareWords {
-        if kind == DepotFiles.shared.DROPBOX {
-            let hint = say(.dropboxUploadHint)
-            return ShareWords(
-                title: say(.dropboxShareTitle),
-                intro: say(.dropboxShareHint),
-                contributor: say(.shareRoleUploader),
-                viewerHint: hint,
-                contributorHint: hint,
-                deleteConfirm: say(.dropboxShareDeleteConfirm)
-            )
-        }
-        if kind == DepotFiles.shared.FILE {
-            return ShareWords(
-                title: say(.shareFileTitle),
-                intro: say(.shareFileIntro),
-                contributor: say(.shareFileRoleContributor),
-                viewerHint: say(.shareFileRoleViewerHint),
-                contributorHint: say(.shareFileRoleContributorHint),
-                deleteConfirm: say(.shareFileDeleteConfirm)
-            )
-        }
-        if kind == PotSession.companion.KIND {
-            return ShareWords(
-                title: say(.shareTitle),
-                intro: say(.shareIntro),
-                contributor: say(.shareFileRoleContributor),
-                viewerHint: say(.shareRoleViewerHint),
-                contributorHint: say(.shareRoleContributorHint),
-                deleteConfirm: say(.shareDeleteConfirm)
-            )
-        }
-        return ShareWords(
-            title: say(.shareFolderTitle),
-            intro: say(.shareFolderIntro),
-            contributor: say(.shareFolderRoleContributor),
-            viewerHint: say(.shareFolderRoleViewerHint),
-            contributorHint: say(.shareFolderRoleContributorHint),
-            deleteConfirm: say(.shareFolderDeleteConfirm)
-        )
-    }
-}
-
 /// A node's guest links (core's `FolderShareDialog`, a Pot's with Expenses' words, `ShareWords`): the links on it, newest
 /// first, each copied from here; "New link" mints one — view only, or view and contribute where the tenant allows it, an
 /// optional label only the member sees, a password and an end where the member wants them or the tenant's rules require
@@ -62,7 +10,7 @@ struct ShareWords {
 struct ShareSheet: View {
     let model: AppModel
     let ref: NodeAt
-    private var words: ShareWords { ShareWords.of(ref.kind) }
+    private var words: ShareWords { ShareWords.companion.of(kind: ref.kind) }
     /// A drop box's own links: WRITE_ONLY only, no name of their own; a folder offers "Add files only", which makes one.
     private var dropBox: Bool { ref.kind == DepotFiles.shared.DROPBOX }
     @Environment(\.dismiss) private var dismiss
@@ -115,7 +63,7 @@ struct ShareSheet: View {
                     list
                 }
             }
-            .navigationTitle(words.title)
+            .navigationTitle(say(words.title))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -132,7 +80,7 @@ struct ShareSheet: View {
             Button(say(.shareDelete), role: .destructive) { Task { await delete(link) } }
             Button(say(.signinCancel), role: .cancel) {}
         } message: { _ in
-            Text(words.deleteConfirm)
+            Text(say(words.deleteConfirm))
         }
     }
 
@@ -168,7 +116,7 @@ struct ShareSheet: View {
     private var list: some View {
         List {
             Section {
-                Text(words.intro)
+                Text(say(words.intro))
                     .font(.subheadline).foregroundStyle(Role.muted)
                 if model.linkRules().on {
                     Button(say(.shareNew), systemImage: "plus") { creating = true }
@@ -255,13 +203,7 @@ private struct LinkRow: View {
     let busy: Bool
     @State private var copied = false
 
-    private var roleWord: String {
-        switch link.role {
-        case ShareLinks.shared.READ: say(.shareRoleViewer)
-        case ShareLinks.shared.WRITE_ONLY: say(.shareRoleUploader)
-        default: words.contributor
-        }
-    }
+    private var roleWord: String { say(words.roleWord(role: link.role)) }
 
     var body: some View {
         HStack {
@@ -306,7 +248,7 @@ struct TopLevelUploadSheet: View {
                 if let fresh {
                     FreshLinkView(url: fresh) { dismiss() }
                 } else {
-                    NewLinkForm(rules: model.linkRules(), words: ShareWords.of("FOLDER"), uploadOnly: true, onCancel: { dismiss() }) { _, label, password, expiresAt in
+                    NewLinkForm(rules: model.linkRules(), words: ShareWords.companion.of(kind: "FOLDER"), uploadOnly: true, onCancel: { dismiss() }) { _, label, password, expiresAt in
                         let made = await model.createDropBox(scopeId: scopeId, parentId: nil, name: label, password: password ?? "", expiresAt: expiresAt)
                         if made.outcome == .created {
                             fresh = made.url
@@ -362,62 +304,64 @@ private struct NewLinkForm: View {
     let onCancel: () -> Void
     /// role, label, password (nil: untouched, blank: none), end; answers why not, or nil once done.
     let onCreate: (String, String, String?, String?) async -> String?
-    @State private var role = ShareLinks.shared.READ
-    @State private var label = ""
-    @State private var withPassword = false
-    @State private var password = ""
-    @State private var withEnd = false
-    @State private var end = Date()
+    /// Core's form (`LinkForm`: its rules, the web's `FolderShareDialog`), a new one each change.
+    @State private var form: LinkForm?
     @State private var problem: String?
     @State private var saving = false
 
-    private var hadPassword: Bool { editing?.passwordRequired == true }
-    private var maxDays: Int? { rules.maxDays.map { Int(truncating: $0) } }
-
-    private static func parse(_ instant: String) -> Date? {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.date(from: instant) ?? ISO8601DateFormatter().date(from: instant)
-    }
-    private var lastDay: Date? { maxDays.map { Calendar.current.date(byAdding: .day, value: $0 - 1, to: Calendar.current.startOfDay(for: Date()))! } }
+    private var passwordMin: Int { Int(LinkForm.companion.PASSWORD_MIN) }
 
     var body: some View {
+        if let form { content(form) } else {
+            ProgressView().onAppear {
+                let endDay = editing?.expiresAt.flatMap(Self.parse).map(Self.epochDay)
+                form = LinkForm.companion.start(
+                    rules: rules, editing: editing, writeOnly: writeOnly, uploadOffered: uploadOffered, uploadOnly: uploadOnly,
+                    today: Self.epochDay(Date()), editingEndDay: endDay.map { KotlinLong(value: $0) }
+                )
+            }
+        }
+    }
+
+    @ViewBuilder private func content(_ f: LinkForm) -> some View {
         Form {
             Section {
-                if !writeOnly && !uploadOnly {
-                    Picker(say(.shareRole), selection: $role) {
-                        Text(say(.shareRoleViewer)).tag(ShareLinks.shared.READ)
-                        if rules.contribute { Text(words.contributor).tag(ShareLinks.shared.READ_WRITE) }
-                        if uploadOffered { Text(say(.shareRoleUploader)).tag(ShareLinks.shared.WRITE_ONLY) }
+                if !f.roles.isEmpty {
+                    Picker(say(.shareRole), selection: Binding(get: { f.role }, set: { form = f.withRole(role: $0) })) {
+                        ForEach(f.roles, id: \.self) { r in Text(say(words.roleWord(role: r))).tag(r) }
                     }
                     .pickerStyle(.segmented)
                 }
-                Text(role == ShareLinks.shared.READ ? words.viewerHint
-                     : role == ShareLinks.shared.WRITE_ONLY ? say(.dropboxUploadHint)
-                     : words.contributorHint)
-                    .font(.caption).foregroundStyle(Role.muted)
-                // a drop box's own links have no name; the one "Add files only" makes needs one — its guests see it
-                if !writeOnly {
-                    TextField(role == ShareLinks.shared.WRITE_ONLY ? say(.shareUploadName) : say(.shareLabel), text: $label)
+                Text(say(words.hint(role: f.role))).font(.caption).foregroundStyle(Role.muted)
+                if f.namesIt {
+                    TextField(say(f.nameLabel), text: Binding(get: { f.label }, set: { form = f.withLabel(label: $0) }))
                 }
             }
             Section {
-                Toggle(say(.sharePasswordSection), isOn: $withPassword).disabled(rules.passwordRequired)
-                if withPassword {
-                    SecureField(hadPassword ? say(.sharePasswordKeep) : say(.signinPassword), text: $password)
+                Toggle(say(.sharePasswordSection), isOn: Binding(get: { f.withPassword }, set: { form = f.withPasswordOn(on: $0) }))
+                    .disabled(!f.passwordOptional)
+                if f.withPassword {
+                    SecureField(f.hadPassword ? say(.sharePasswordKeep) : say(.signinPassword),
+                                text: Binding(get: { f.password }, set: { form = f.withPassword(password: $0) }))
                     Text(say(.sharePasswordShort, passwordMin)).font(.caption)
-                        .foregroundStyle(!password.isEmpty && password.trimmingCharacters(in: .whitespaces).count < passwordMin ? Role.danger : Role.muted)
+                        .foregroundStyle(f.passwordTooShort ? Role.danger : Role.muted)
                 }
             } footer: {
                 if rules.passwordRequired { Text(say(.sharePasswordRequired)) }
             }
             Section {
-                Toggle(say(.shareExpirySection), isOn: $withEnd).disabled(maxDays != nil)
-                if withEnd {
-                    DatePicker(say(.shareExpiresOn), selection: $end, in: Calendar.current.startOfDay(for: Date())...(lastDay ?? .distantFuture), displayedComponents: .date)
+                Toggle(say(.shareExpirySection), isOn: Binding(get: { f.withEnd }, set: { form = f.withEndOn(on: $0) }))
+                    .disabled(!f.endOptional)
+                if f.withEnd {
+                    DatePicker(
+                        say(.shareExpiresOn),
+                        selection: Binding(get: { Self.date(f.endDay) }, set: { form = f.withEndDay(day: Self.epochDay($0)) }),
+                        in: Self.date(f.today)...(f.lastDay.map { Self.date($0.int64Value) } ?? .distantFuture),
+                        displayedComponents: .date
+                    )
                 }
             } footer: {
-                if let maxDays { Text(say(.shareExpiryByRule, maxDays)) }
+                if let maxDays = rules.maxDays { Text(say(.shareExpiryByRule, Int(truncating: maxDays))) }
                 else { Text(say(.shareExpiryHint)) }
             }
             if let problem { Section { Text(problem).foregroundStyle(Role.danger) } }
@@ -425,48 +369,47 @@ private struct NewLinkForm: View {
                 Button {
                     saving = true
                     problem = nil
-                    // the end of the picked local day (`FolderShareDialog`: 23:59:59.999 there)
-                    let expiresAt: String? = withEnd ? Self.endOfDay(end) : nil
-                    let pw: String? = if withPassword && password.isEmpty && hadPassword { nil }
-                        else if withPassword { password }
-                        else if hadPassword { "" }
-                        else if editing != nil { nil }
-                        else { "" }
+                    let sent = f
                     Task {
-                        problem = await onCreate(role, label, pw, expiresAt)
+                        problem = await onCreate(sent.role, sent.label, sent.submittedPassword, sent.submittedEndDay.map { Self.endOfDay($0.int64Value) })
                         saving = false
                     }
                 } label: {
                     HStack { Spacer(); if saving { ProgressView() } else { Text(editing == nil ? say(.shareCreate) : say(.entrySave)).fontWeight(.semibold) }; Spacer() }
                 }
-                // an edit keeps the password where the field stays blank
-                .disabled(saving || (withPassword && password.trimmingCharacters(in: .whitespaces).count < passwordMin && !(hadPassword && password.isEmpty))
-                          || (role == ShareLinks.shared.WRITE_ONLY && !writeOnly && label.trimmingCharacters(in: .whitespaces).isEmpty))
+                .disabled(saving || !f.canSave)
                 Button(say(.signinCancel), action: onCancel).disabled(saving)
             }
         }
-        .onAppear {
-            if writeOnly || uploadOnly { role = ShareLinks.shared.WRITE_ONLY }
-            if let editing {
-                role = editing.role
-                label = editing.label
-                withPassword = rules.passwordRequired || editing.passwordRequired
-                if let e = editing.expiresAt, let d = Self.parse(e) { withEnd = true; end = d; return }
-                withEnd = maxDays != nil
-                end = lastDay ?? Calendar.current.date(byAdding: .day, value: 30, to: Date())!
-                return
-            }
-            withPassword = rules.passwordRequired
-            withEnd = maxDays != nil
-            end = lastDay ?? Calendar.current.date(byAdding: .day, value: 30, to: Date())!
-        }
     }
 
-    private static func endOfDay(_ day: Date) -> String {
-        let next = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: day))!
+    private static func parse(_ instant: String) -> Date? {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.string(from: next.addingTimeInterval(-0.001))
+        return f.date(from: instant) ?? ISO8601DateFormatter().date(from: instant)
+    }
+
+    /// A local calendar day as core counts it: days since 1970-01-01.
+    private static func epochDay(_ date: Date) -> Int64 {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        return Int64(utc.date(from: c)!.timeIntervalSince1970 / 86_400)
+    }
+
+    /// The local start of core's day.
+    private static func date(_ day: Int64) -> Date {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let c = utc.dateComponents([.year, .month, .day], from: Date(timeIntervalSince1970: TimeInterval(day) * 86_400))
+        return Calendar.current.date(from: c)!
+    }
+
+    /// The end of a local day as an instant (`FolderShareDialog`: 23:59:59.999 there).
+    private static func endOfDay(_ day: Int64) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.string(from: date(day + 1).addingTimeInterval(-0.001))
     }
 }
 

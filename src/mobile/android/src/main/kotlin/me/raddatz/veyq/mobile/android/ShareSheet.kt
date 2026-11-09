@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.session.ShareLinks
+import me.raddatz.veyq.mobile.session.ShareWords
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -68,30 +69,8 @@ private const val PASSWORD_MIN = 10
  * The sentences a node's share sheet says in its kind's words (the web's `ShareDialogCopy`): a folder's are core's
  * (`share.folder.*`), a Pot's Expenses' (`expenses.share.*`). The rest of the sheet is the same for every kind.
  */
-internal class ShareWords(
-    @androidx.annotation.StringRes val title: Int,
-    @androidx.annotation.StringRes val intro: Int,
-    @androidx.annotation.StringRes val contributor: Int,
-    @androidx.annotation.StringRes val viewerHint: Int,
-    @androidx.annotation.StringRes val contributorHint: Int,
-    @androidx.annotation.StringRes val deleteConfirm: Int,
-)
-
-/** The words of [kind]'s share sheet: a Pot's, a file's, else core's folder words (the web's default `ShareDialogCopy`). */
-internal fun shareWords(kind: String): ShareWords =
-    if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX) ShareWords(
-        R.string.dropbox_share_title, R.string.dropbox_share_hint, R.string.share_role_uploader,
-        R.string.dropbox_upload_hint, R.string.dropbox_upload_hint, R.string.dropbox_share_delete_confirm,
-    ) else if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.FILE) ShareWords(
-        R.string.share_file_title, R.string.share_file_intro, R.string.share_file_role_contributor,
-        R.string.share_file_role_viewer_hint, R.string.share_file_role_contributor_hint, R.string.share_file_delete_confirm,
-    ) else if (kind == me.raddatz.veyq.mobile.expenses.PotSession.KIND) ShareWords(
-        R.string.share_title, R.string.share_intro, R.string.share_role_contributor,
-        R.string.share_role_viewer_hint, R.string.share_role_contributor_hint, R.string.share_delete_confirm,
-    ) else ShareWords(
-        R.string.share_folder_title, R.string.share_folder_intro, R.string.share_folder_role_contributor,
-        R.string.share_folder_role_viewer_hint, R.string.share_folder_role_contributor_hint, R.string.share_folder_delete_confirm,
-    )
+/** The words of [kind]'s share sheet (core's `ShareWords`). */
+internal fun shareWords(kind: String): ShareWords = me.raddatz.veyq.mobile.session.ShareWords.of(kind)
 
 /**
  * A node's guest links (core's `FolderShareDialog`, a Pot's with Expenses' words, [shareWords]): the links on it, newest
@@ -127,9 +106,9 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
 
     ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
-            Text(stringResource(words.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(say(words.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.padding(4.dp))
-            Text(stringResource(words.intro), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
+            Text(say(words.intro), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
             Spacer(Modifier.padding(8.dp))
             val made = fresh
             when {
@@ -246,7 +225,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text(stringResource(R.string.share_delete)) },
-            text = { Text(stringResource(words.deleteConfirm)) },
+            text = { Text(say(words.deleteConfirm)) },
             confirmButton = {
                 TextButton(onClick = {
                     deleting = null
@@ -275,7 +254,7 @@ private fun LinkRow(
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
-                link.label.ifEmpty { stringResource(roleWord(link.role, words)) },
+                link.label.ifEmpty { say(words.roleWord(link.role)) },
                 fontWeight = FontWeight.SemiBold,
             )
             val dates = listOfNotNull(
@@ -284,7 +263,7 @@ private fun LinkRow(
             ).joinToString(" · ")
             Text(dates, style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             val badges = listOfNotNull(
-                if (link.label.isNotEmpty()) stringResource(roleWord(link.role, words)) else null,
+                if (link.label.isNotEmpty()) say(words.roleWord(link.role)) else null,
                 if (link.passwordRequired) stringResource(R.string.share_password_badge) else null,
                 if (!link.enabled) stringResource(R.string.share_switched_off) else null,
                 if (!link.mine) stringResource(R.string.share_by_member) else null,
@@ -366,9 +345,9 @@ private fun FreshLink(url: String, onDone: () -> Unit) {
 }
 
 /**
- * The form of a new link: its role, an optional label, a password and an end. A rule of the tenant turns its switch on and
- * keeps it on; the end is a day no later than the rule's last ([ShareLinks.Rules.maxDays] after today, the day before
- * excluded), sent as the end of that local day. [onCreate] answers why not, or null once minted.
+ * The form of a new link or of one being edited (core's `LinkForm`: its rules, the web's `FolderShareDialog`): its role,
+ * an optional label, a password and an end, the end a local day sent as the end of that day. [onCreate] answers why
+ * not, or null once done.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -387,63 +366,39 @@ private fun NewLinkForm(
 ) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var role by remember { mutableStateOf(if (writeOnly || uploadOnly) ShareLinks.WRITE_ONLY else editing?.role ?: ShareLinks.READ) }
-    var label by remember { mutableStateOf(editing?.label.orEmpty()) }
-    val hadPassword = editing?.passwordRequired == true
-    var withPassword by remember { mutableStateOf(rules.passwordRequired || hadPassword) }
-    var password by remember { mutableStateOf("") }
-    val lastDay = rules.maxDays?.let { LocalDate.now().plusDays(it.toLong() - 1) }
-    val editEnd = editing?.expiresAt?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull() }
-    var withEnd by remember { mutableStateOf(rules.maxDays != null || editEnd != null) }
-    var end by remember { mutableStateOf(editEnd ?: lastDay ?: LocalDate.now().plusDays(30)) }
+    var form by remember {
+        val editEnd = editing?.expiresAt?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() }.getOrNull() }
+        mutableStateOf(me.raddatz.veyq.mobile.session.LinkForm.start(rules, editing, writeOnly, uploadOffered, uploadOnly, LocalDate.now().toEpochDay(), editEnd))
+    }
     var picking by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    val min = me.raddatz.veyq.mobile.session.LinkForm.PASSWORD_MIN
 
-    if (!writeOnly && !uploadOnly) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(selected = role == ShareLinks.READ, onClick = { role = ShareLinks.READ }, label = { Text(stringResource(R.string.share_role_viewer)) })
-        if (rules.contribute) FilterChip(
-            selected = role == ShareLinks.READ_WRITE, onClick = { role = ShareLinks.READ_WRITE },
-            label = { Text(stringResource(words.contributor)) },
-        )
-        if (uploadOffered) FilterChip(
-            selected = role == ShareLinks.WRITE_ONLY, onClick = { role = ShareLinks.WRITE_ONLY },
-            label = { Text(stringResource(R.string.share_role_uploader)) },
-        )
+    if (form.roles.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (r in form.roles) FilterChip(selected = form.role == r, onClick = { form = form.withRole(r) }, label = { Text(say(words.roleWord(r))) })
     }
-    Text(
-        stringResource(
-            when (role) {
-                ShareLinks.READ -> words.viewerHint
-                ShareLinks.WRITE_ONLY -> R.string.dropbox_upload_hint
-                else -> words.contributorHint
-            },
-        ),
-        style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(vertical = 6.dp),
-    )
-    // a drop box's own links have no name; the one "Add files only" makes needs one — its guests see it
-    if (!writeOnly) OutlinedTextField(
-        label, { label = it },
-        label = { Text(stringResource(if (role == ShareLinks.WRITE_ONLY) R.string.share_upload_name else R.string.share_label)) },
-        singleLine = true, modifier = Modifier.fillMaxWidth(),
+    Text(say(words.hint(form.role)), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(vertical = 6.dp))
+    if (form.namesIt) OutlinedTextField(
+        form.label, { form = form.withLabel(it) }, label = { Text(say(form.nameLabel)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.padding(6.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(stringResource(R.string.share_password_section))
             Text(
-                stringResource(if (rules.passwordRequired) R.string.share_password_by_rule else R.string.share_password_hint, PASSWORD_MIN),
+                stringResource(if (rules.passwordRequired) R.string.share_password_by_rule else R.string.share_password_hint, min),
                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
             )
         }
-        Switch(withPassword, { withPassword = it }, enabled = !rules.passwordRequired)
+        Switch(form.withPassword, { form = form.withPasswordOn(it) }, enabled = form.passwordOptional)
     }
-    if (withPassword) OutlinedTextField(
-        password, { password = it }, label = { Text(stringResource(R.string.share_password_section)) }, singleLine = true,
+    if (form.withPassword) OutlinedTextField(
+        form.password, { form = form.withPassword(it) }, label = { Text(stringResource(R.string.share_password_section)) }, singleLine = true,
         visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        isError = password.isNotEmpty() && password.trim().length < PASSWORD_MIN,
-        placeholder = if (hadPassword) ({ Text(stringResource(R.string.share_password_keep)) }) else null,
-        supportingText = { Text(stringResource(R.string.share_password_short, PASSWORD_MIN)) }, modifier = Modifier.fillMaxWidth(),
+        isError = form.passwordTooShort,
+        placeholder = if (form.hadPassword) ({ Text(stringResource(R.string.share_password_keep)) }) else null,
+        supportingText = { Text(stringResource(R.string.share_password_short, min)) }, modifier = Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.padding(6.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -454,19 +409,18 @@ private fun NewLinkForm(
                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
             )
         }
-        Switch(withEnd, { withEnd = it }, enabled = rules.maxDays == null)
+        Switch(form.withEnd, { form = form.withEndOn(it) }, enabled = form.endOptional)
     }
-    if (withEnd) TextButton(onClick = { picking = true }) {
-        Text(stringResource(R.string.share_expires, end.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))))
+    if (form.withEnd) TextButton(onClick = { picking = true }) {
+        Text(stringResource(R.string.share_expires, LocalDate.ofEpochDay(form.endDay).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))))
     }
     if (picking) {
-        val today = LocalDate.now()
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = end.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            initialSelectedDateMillis = LocalDate.ofEpochDay(form.endDay).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
             selectableDates = object : SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                    val d = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
-                    return !d.isBefore(today) && (lastDay == null || !d.isAfter(lastDay))
+                    val d = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate().toEpochDay()
+                    return d >= form.today && (form.lastDay == null || d <= form.lastDay!!)
                 }
             },
         )
@@ -474,15 +428,13 @@ private fun NewLinkForm(
             onDismissRequest = { picking = false },
             confirmButton = {
                 TextButton(onClick = {
-                    state.selectedDateMillis?.let { end = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                    state.selectedDateMillis?.let { form = form.withEndDay(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toEpochDay()) }
                     picking = false
                 }) { Text(stringResource(R.string.share_done)) }
             },
         ) { DatePicker(state) }
     }
     problem?.let { Text(it, color = role(palette.danger), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
-    // an edit keeps the password where the field stays blank
-    val passwordOk = !withPassword || password.trim().length >= PASSWORD_MIN || (hadPassword && password.isEmpty())
     Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
         TextButton(onClick = onCancel, enabled = !saving) { Text(stringResource(R.string.trash_cancel)) }
         Spacer(Modifier.width(8.dp))
@@ -491,29 +443,16 @@ private fun NewLinkForm(
                 saving = true
                 problem = null
                 // the end of the picked local day (`FolderShareDialog`: 23:59:59.999 there)
-                val expiresAt = if (withEnd) end.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().minusMillis(1).toString() else null
+                val expiresAt = form.submittedEndDay?.let { LocalDate.ofEpochDay(it).plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().minusMillis(1).toString() }
+                val sent = form
                 scope.launch {
-                    val pw = when {
-                        withPassword && password.isEmpty() && hadPassword -> null
-                        withPassword -> password
-                        hadPassword -> ""
-                        editing != null -> null
-                        else -> ""
-                    }
-                    problem = onCreate(role, label, pw, expiresAt)
+                    problem = onCreate(sent.role, sent.label, sent.submittedPassword, expiresAt)
                     saving = false
                 }
             },
-            enabled = passwordOk && !saving && (role != ShareLinks.WRITE_ONLY || writeOnly || label.isNotBlank()),
+            enabled = form.canSave && !saving,
         ) { Text(stringResource(if (editing != null) R.string.share_save else R.string.share_create)) }
     }
-}
-
-/** A link's role in the sheet's words. */
-private fun roleWord(role: String, words: ShareWords): Int = when (role) {
-    ShareLinks.READ -> R.string.share_role_viewer
-    ShareLinks.WRITE_ONLY -> R.string.share_role_uploader
-    else -> words.contributor
 }
 
 

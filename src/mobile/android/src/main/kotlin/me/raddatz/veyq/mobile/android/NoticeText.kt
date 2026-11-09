@@ -1,6 +1,10 @@
 package me.raddatz.veyq.mobile.android
 
 import android.content.Context
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Bytes
 import me.raddatz.veyq.mobile.words.Notice
 
@@ -15,3 +19,10 @@ internal fun Context.text(n: Notice): String = words(
         }
     }.toTypedArray(),
 )
+
+/** [msg] in the person's language, in a composable (read again when the configuration, its language among it, changes). */
+@Composable
+internal fun say(msg: Msg, vararg args: Any): String {
+    LocalConfiguration.current
+    return LocalContext.current.words(msg, *args)
+}

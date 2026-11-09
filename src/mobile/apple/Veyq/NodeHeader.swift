@@ -308,7 +308,7 @@ struct NodeHeaderActions: View {
         case NodeHeader.shared.FAVORITE:
             Label(pinned == true ? say(.nodeUnfavorite) : say(.nodeFavorite), systemImage: pinned == true ? "heart.fill" : "heart")
                 .foregroundStyle(pinned == true ? Role.favorite : Role.text)
-        case NodeHeader.shared.SHARE: Label(ShareWords.of(node.kind).title, systemImage: "square.and.arrow.up")
+        case NodeHeader.shared.SHARE: Label(say(ShareWords.companion.of(kind: node.kind).title), systemImage: "square.and.arrow.up")
         case NodeHeader.shared.RENAME: Label(say(.nodeRename), systemImage: "pencil")
         case NodeHeader.shared.MOVE: Label(say(.nodeMove), systemImage: "folder")
         case NodeHeader.shared.COPY: Label(say(.theCopyAction), systemImage: "doc.on.doc")
