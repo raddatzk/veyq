@@ -1,6 +1,6 @@
 # ADR 0125 — Search runs in the client over what it can open, across every space
 - Status: Accepted
-- Built: no
+- Built: partly (not built: decision 8)
 - Date: 2026-11-08
 - Model: [uc.platform.search](../features/platform/use-cases/uc.platform.search.md)
 

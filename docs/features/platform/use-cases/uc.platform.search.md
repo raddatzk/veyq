@@ -1,8 +1,9 @@
 # UC: Search every space for a node, a Memory or a photo of the open Memory
 
 - **ID:** uc.platform.search
-- **Status:** planned ([ADR 0125](../../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)).
-  The first stage: names and Memory meta across every space, plus the media of the open Memory.
+- **Status:** built (web; browser pass 2026-11-09), the first stage of [ADR 0125](../../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md): names and Memory
+  meta across every space, plus the media of the open Memory. Decision 8 (the photos of every space, journal full text,
+  semantic search) is not built.
 - **Primary actor:** A member whose keys are unlocked.
 - **Goal:** Find a folder, a Memory, a Chapter, a file or a photo by its name, date, place, people or kind, in any
   space the member belongs to in the tenant they are in, without the server learning what was searched.
@@ -34,7 +35,8 @@
      ignoring case and diacritics.
    - Within a group, an exact or prefix match of the name ranks above a match inside a word, and a name match above a
      place match.
-6. **Show the results in groups,** each ranked within itself: **In this Memory** (when one is open), **In this
+6. **Show the results in groups,** each ranked within itself: the open node's - headed by its name, *In “Rom 2024”*,
+   holding what its page contributed and the nodes below it (when a node's page is open, not a folder) -, **In this
    space**, **Other spaces** (each result naming its space and its path). An empty group is not shown.
 7. **Open a result.** The member chooses one. A node opens where it lives, switching the active space when it lies in
    another. A photo opens in the open Memory's lightbox.
@@ -79,3 +81,4 @@ without the server learning what you searched for.
 - Use-cases: [uc.memory.date](../../memory/use-cases/uc.memory.date.md),
   [uc.memory.place](../../memory/use-cases/uc.memory.place.md),
   [uc.memory.participants](../../memory/use-cases/uc.memory.participants.md) (the fields Memories contributes)
+- End-user view (docs site): [Search all your spaces](../../../../site/src/content/docs/spaces/search.mdx)

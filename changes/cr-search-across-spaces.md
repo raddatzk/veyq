@@ -1,7 +1,7 @@
 ---
 id: cr-search-across-spaces
 title: One search field across every space of the tenant, with chips, grouped by context
-status: in-progress
+status: done
 satisfies: [uc.platform.search]
 adrs: ["0125", "0079", "0081", "0105", "0047"]
 invariants:
@@ -242,4 +242,66 @@ The owner, 2026-11-08: a new stack with its own database and Garage; the owner's
 
 ## Retrospective
 
-(filled by the implementer)
+Implemented 2026-11-08/09 in the worktree `search-design`. Four phases, each `pnpm run check` green in `src/web/` (measured:
+534 → 536 → 538 test files), the core-import guard green after each; the browser pass ran on the separate stack.
+
+**Technical choices made (owner away; recorded here, as asked).**
+- **The active space is the tree on screen.** Its documents are derived from `treeStore` whenever it changes (a meta
+  patched in place included, `watch` depth 2), under the key `activeSpace` owns; every other space is read by its ETag and
+  opened with a new `scopes.ts` `openListedScope(summary)` - so `listMyScopes` runs once per walk, not once per space. A
+  group whose sealed name changed is read whole even on an unmoved tree. A failed listing searches the active space only
+  and says so.
+- **The open node's group is headed by the node's name** (*In „Rom 2024“*), not *In this Memory*: core names no
+  application's kind (ADR 0079), and a kind noun cannot be composed into German grammar. It holds what the page contributed
+  and the nodes below the open node; the node itself stays in *In this space*. It exists while a node page (not a folder
+  level) is on screen. The use case and its criterion now say so.
+- **Registry doors:** `KindDescriptor.search` = `{ label, facets?, documents?, note? }`; `note` was added for uc A2 (Memories'
+  "photos only in the open Memory" sentence, which core may not write). The contribution door is `contributeSearchDocuments`
+  in the header door's shape; the member's `SpaceView` provides it, `BookmarkEmbed` blocks it.
+- **The layer:** `VeyqTagsInput` gained result groups (`choose`, no chip), a `status` slot, `v-model:open`, `openOnFocus`, a
+  `leading` slot and `listClass`, instead of a second combobox. A field with results keeps its list open after a chip; the
+  text is cleared before `add`, so a caller may keep the words the chip did not take. Group headings are not upper-cased,
+  as one holds a name (found in the browser pass).
+- **Layout:** the field is the bar's middle column (`minmax(14rem, 26rem)`, `minmax(10rem, 18rem)` at ≤1020 px); at ≤720 px
+  a button opens it in a bottom sheet. The button's `display` had to be compounded with `.veyq-button` - the layer's rule
+  won and showed it on desktop (found in the browser pass, not by a test).
+- **Freshness:** every focus revalidates every space; an open list revalidates every 20 s (all `304` while idle).
+- The memoizing key resolver moved from `participantIndex` to `core/node/keyResolver.ts` (with `zero()`), used by both.
+
+**Owner questions (each with the conservative default built).**
+1. The open node's group heading *In „<name>“* instead of *In this Memory* - recommendation: keep it (it says where, for
+   every kind).
+2. A photo's document name is its original file name (`IMG_1234.jpg`), else *Foto*/*Video* - recommendation: keep; a
+   photo is found mostly by year chip and place.
+3. Only Folder, Memory, Chapter, Photo and Video have a kind word; Depot's and Expenses' kinds offer no kind chip yet -
+   recommendation: give `FILE`, `DEPOT_DROPBOX` and `EXPENSES_POT` a `search.label` in a small follow-up.
+4. This CR is kept (status done) for your review instead of being deleted; delete it once read - its binding lessons are
+   already in `src/web/CLAUDE.md` (the search paragraph) and in code comments.
+
+**What went wrong.**
+- **Commit signing failed from phase 2 on** ("1Password: failed to fill whole buffer", three tries over ~1 h). Phase 1 is
+  commit `37a53833b`; phases 2-4 are recorded as tree objects with their messages in the scratchpad (`commits/`), each built
+  in its own index from the one before, so they can be committed in order once signing works (`git commit-tree -S <tree> -p
+  <parent> -F <msg>`). Root cause: not ours to see from inside the session (the agent likely needed an unlock). Next time:
+  try one signed empty-tree commit before the first phase, so a signing problem shows while the owner is still reachable.
+- **Two layout defects only the browser showed** (the button on desktop, the upper-cased name). The component tests
+  rendered the right markup; CSS order is not in happy-dom. Next time: a UI phase that adds a breakpoint switch measures
+  the hidden element's computed `display` on both sides in its first browser probe, before writing screenshots.
+- **Not walked in the browser:** the place chip. Setting a Memory's place asks for the maps opt-in, which loads a
+  third-party tile and name service; the pass declined it. The place chip is held by unit tests (`query.test.ts`) only.
+
+**The separate stack (left running for you).** Compose project `veyq-search` (file:
+`/private/tmp/claude-501/-Users-kevin-raddatz-IdeaProjects-veyq/eaffa381-d45d-4839-9402-8c59794903c9/scratchpad/search-stack/docker-compose.yml`):
+`veyq-search-mariadb` on 127.0.0.1:13306, `veyq-search-garage` on 127.0.0.1:29000 (S3) / 29003 (admin), own volumes; your
+`infra` stack was not touched. The worktree's backend (8180, admin 8190) and Vite (8189) are stopped; to look again, from
+this worktree: in `src/backend` `QUARKUS_DATASOURCE_JDBC_URL=jdbc:mariadb://localhost:13306/veyq
+VEYQ_BUNDLED_STORE_ENDPOINT=http://localhost:29000 VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT=http://localhost:29003
+VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT=http://veyq.localhost:8189 QUARKUS_HTTP_PORT=8180 VEYQ_ADMIN_CHANNEL_PORT=8190 ./gradlew
+quarkusDev -Ddebug=5106` (plus the dummy-keystore `-D` flags), and in `src/web` `VITE_PORT=8189
+VEYQ_API_TARGET=http://127.0.0.1:8180 VEYQ_STORE_TARGET=http://127.0.0.1:29000 pnpm run dev`; then browse
+`http://veyq.localhost:8189/?devlogin` (principal `kevin@veyq.test` from this worktree's `.run/.env`). It holds the tenant
+space with *Reisen / Rom 2024* (1–7 May 2024, one photo `strand.jpg`) and the group *Familie* with *Gartenfest* (14 Jul
+2023, Kevin there). The seeder pointed the tenant's mail at your Mailpit (`localhost:11025`, its default); nothing was sent.
+Remove it with `docker compose -p veyq-search down -v`.
+
+**Next time:** prove the commit signer works before phase 1, while someone can unlock it.

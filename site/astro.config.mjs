@@ -68,6 +68,7 @@ export default defineConfig({
                 'spaces/move-things',
                 'spaces/copy-things',
                 'spaces/select-several',
+                'spaces/search',
                 'spaces/views-and-favorites',
                 'spaces/give-a-folder-a-cover',
                 'spaces/trash',

@@ -346,6 +346,16 @@ here; the server is blind.
   visual (`NodeCoverImage`; Memories' cards and map draw `MemoryCoverImage` - the same `coverImageStyle` formula, pinned identical by a parity
   test), core's header (16:9 at its rows' height on every kind), the sidebar's Favorites; the icon is the default and a cover without a stored crop is a centred fit.
 
+  **The search is core's ([ADR 0125](../../docs/decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md), `core/search/`).**
+  The top bar's field (`SearchField.vue`, a share page has none) over an in-memory index of every space (`searchIndex.ts`:
+  each tree read by its ETag, opened with `openListedScope`, its keys zeroed in a `finally`; the active space follows
+  `treeStore`; `clearActiveSpace` drops it; nothing is written to any storage). A document is plaintext and never holds a
+  key. An application adds to it only through the registry: `KindDescriptor.search` (the kind's word, a `facets` hook
+  called with the node's key for that call only, the kinds of its page's documents, a `note`) and, for the node on screen,
+  `contributeSearchDocuments` (`contribution.ts`, the header door's shape: the member's `SpaceView` provides it, a guest's
+  page does not, a bookmark's embed blocks it). Memories: `features/memories/search.ts`. Text is compared through
+  `shared/text/fold.ts`, never `slugify`.
+
   **Favorites are core's (inbox #409, [ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose
   `favorites` under the Master Key, the generated `favoritesApi()` of `api/client.ts`), `favoritesStore.ts` (the reactive set, optimistic
