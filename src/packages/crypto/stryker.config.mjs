@@ -40,7 +40,12 @@ const config = {
   // endless loops), 0 survived, 0 without coverage, 6 ignored — 100.00 % on every file. When pad.ts joined (2026-10-24,
   // with the Expenses seal purposes): 1,147 mutants, 1,138 killed, the same 2 timed out, 0 survived, 7 ignored; its first
   // run had 2 survivors — the size classes' ascending check's loop bound (a read past the end compares `undefined`, so
-  // the mutant was equivalent: the check now has no bound to get wrong) and that check's message, which no test read. The identity-pin run had 4
+  // the mutant was equivalent: the check now has no bound to get wrong) and that check's message, which no test read.
+  // Stryker 10 (2026-11-07, with vitest 5) removes a call standing as a statement, which 9 never did: its first run
+  // had 3 survivors, the three wipes of a decoded Secret Key (`key.fill(0)` in emergencyKit.ts twice, secretKey.ts's
+  // typo branch) — not equivalent, a key left in memory is the defect, so the tests now spy the buffer and read zeros.
+  // Then: 1,525 mutants, 1,520 killed, 5 timed out (none static: four loop counters, sharesPwToken's params as `{}`),
+  // 0 survived, 6 ignored — at a load average above 60. The identity-pin run had 4
   // timeouts, two of them static report.ts mutants at a load average above 30 (read as unproven below); at the same
   // load this run killed both. The identity-pin store's first run had 3 survivors, all in a
   // byte compare that tolerated ids of two lengths: the ids are checked to be 32 bytes BEFORE the sort now, so the

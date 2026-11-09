@@ -13,3 +13,6 @@ scripts/.seed/
 # restored via actions/cache — never committed.
 reports/
 .stryker-tmp/
+# The vitest runner (10.x) copies its setup file into the cwd once per worker, `stryker-setup-<worker>.js` — with
+# `inPlace` that is this package — and a worker killed on a timeout leaves its copy behind (measured 2026-11-07).
+stryker-setup-*.js

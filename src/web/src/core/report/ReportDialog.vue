@@ -107,6 +107,7 @@ async function send(): Promise<void> {
     :header="t('report.title')"
     :closable="!loading"
     :close-on-escape="!loading"
+    keep-on-outside
     class="veyq-report-dialog"
     @update:visible="close"
   >

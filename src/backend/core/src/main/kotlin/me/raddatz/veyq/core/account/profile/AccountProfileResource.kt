@@ -41,6 +41,7 @@ class AccountProfileResource(
         when (val outcome = handler.update(
             identity.principal.name, tenant.resolve()?.id, profileUpdateRequest.username, profileUpdateRequest.sealedName,
             profileUpdateRequest.wrappedNameValueKey, profileUpdateRequest.epoch, profileUpdateRequest.requireGroupAddConsent,
+            profileUpdateRequest.donationBannerDismissed,
         )) {
             is ProfileOutcome.Found -> Response.ok(memberProfile(outcome)).build()
             is HttpFailure -> httpError(outcome)
@@ -63,6 +64,6 @@ class AccountProfileResource(
 
     private fun memberProfile(o: ProfileOutcome.Found) = MemberProfile(
         username = o.username, avatarRevision = o.avatarRevision, requireGroupAddConsent = o.requireGroupAddConsent,
-        sealedName = o.name?.value, wrappedNameValueKey = o.name?.wrappedValueKey,
+        donationBannerDismissed = o.donationBannerDismissed, sealedName = o.name?.value, wrappedNameValueKey = o.name?.wrappedValueKey,
     )
 }

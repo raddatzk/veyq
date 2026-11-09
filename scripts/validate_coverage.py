@@ -461,7 +461,7 @@ _SHELL_VALUE = r"""('[^']*'|"[^"]*"|[^\s;&|]*)"""
 
 
 class CiRun(NamedTuple):
-    where: str        # "ci.yml › backend"
+    where: str        # "checks.yml › backend"
     env: dict         # name -> value the Gradle invocation sees (None: a `${{ }}` expression, unknowable here)
     os: str | None    # the runner's JUnit OS constant; None when `runs-on` does not decide it
     tests: tuple      # `--tests` filters; empty = the whole suite

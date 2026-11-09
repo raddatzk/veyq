@@ -7,15 +7,22 @@
 // you pick the granularity (Straße…Land) or type your own; position and name are separate levers. A quiet
 // "Ort entfernen" clears it. Crypto/consent live in the parent; this is presentation + the geocode call.
 //
-// **Without the map** (`memories.map` off, or its consent not given — inbox #458, ADR 0088 § The register) the
-// editor is a name field only: no map, no pin, no geocoder. The position is the medoid of the photos' GPS (`auto`), a
-// pin set earlier on a map (kept as it is), or absent — a place that is a name only, which the map views skip. The
-// name is always typed here, even where the geocoder is on: the one consent it rides on is asked only with the map.
+// **A map the member never moved sets no point** (uc.memory.place E3, inbox #834). Without photo GPS and without a stored
+// point the map opens on the world view (`WORLD_VIEW`); only a frame the member produced (`user`, MemoryMap) sets the
+// position. Saved untouched, the place is a name only (`auto`, no `derived`), never the view the editor opened on. While
+// no point is set the centre pin is greyed out, with the hint to move the map; the first move draws it as a set point.
 //
-// **Withdrawn while open** (the map's "Turn map off", uc.memory.place A5): the map unmounts at once, no further tile or
-// geocoder request leaves, and the consent prompt stands where the map was; the editor goes on as the name field, keeping
-// what was framed and resolved so far, and turning the map back on there brings it back.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+// **Without the map** (`memories.map` off — inbox #458, ADR 0088 § The register — or the member's map services off,
+// uc.memory.place A6) the editor is a name field only: no map, no pin, no geocoder. The position is the medoid of the
+// photos' GPS (`auto`), a pin set earlier on a map (kept as it is), or absent — a place that is a name only, which the
+// map views skip. The name is always typed here, even where the geocoder is on: the one consent it rides on is given
+// only with the map. Where the server offers a map, the offer to turn the map services on (`MapConsentPrompt`, naming
+// the hosts) stands where the map would be; turning them on there draws the map in this editor and keeps the typed name.
+//
+// **Withdrawn while open** (the map's "Turn map services off", uc.memory.place A5): the map unmounts at once, no further
+// tile or geocoder request leaves, and the offer stands where the map was; the editor goes on as the name field, keeping
+// what was framed and resolved so far, and turning the map services back on there brings the map back.
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -26,7 +33,7 @@ import MemoryMap from './MemoryMap.vue'
 import MapConsentPrompt from './MapConsentPrompt.vue'
 import { reverseGeocode, defaultLevel, nameAtLevel, type GeoLevel } from '../geocode'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
-import { MAX_PLACE_NAME, type LatLng, type MemoryLocation } from '../memoryLocation'
+import { MAX_PLACE_NAME, WORLD_VIEW, type LatLng, type MemoryLocation } from '../memoryLocation'
 
 const props = defineProps<{
   location: MemoryLocation | null // the current stored location (null = a fresh set)
@@ -40,15 +47,14 @@ const { tileUrl, tileAttribution, tileMaxZoom, geocoderUrl, geocodingAvailable, 
 const mapRef = ref<{ fitPoints: (p: LatLng[]) => void; setView: (c: LatLng, z: number) => void } | null>(null)
 
 const DEFAULT_ZOOM = 13
-const WORLD: LatLng = { lat: 20, lng: 0 }
 
 const hasMedoid = computed(() => Boolean(props.medoid))
-// The map is drawn only where the server serves one and the user consented (the parent opens no editor otherwise,
-// except on a server without the map): no tile and no geocoder request leaves the device without both.
+// The map is drawn only where the server serves one and the member turned the map services on: no tile and no geocoder
+// request leaves the device without both. Without them the editor is the name field (uc.memory.place A4, A6).
 const withMap = computed(() => mapsAvailable.value)
 const canGeocode = computed(() => withMap.value && geocodingAvailable.value)
 // A Memory with photo GPS defaults to `auto` (follows photos); one without can only place a `fixed` point on the
-// map — or, without a map, has no position yet and stays `auto`, so the first geotagged photo gives it one.
+// map, by moving it — or, without a map, has no position yet and stays `auto`, so the first geotagged photo gives it one.
 const derivedMode = ref<'auto' | 'fixed'>(props.location?.derivedMode ?? (hasMedoid.value || !withMap.value ? 'auto' : 'fixed'))
 const derived = ref<LatLng | null>(props.location?.derived ?? (derivedMode.value === 'auto' ? props.medoid : null))
 const name = ref(props.location?.name ?? '')
@@ -56,8 +62,8 @@ const nameSource = ref<'geocoded' | 'manual'>(props.location?.nameSource ?? (can
 const levels = ref<GeoLevel[]>([])
 const chosenLevel = ref<GeoLevel['key'] | null>(props.location?.nameAnchor?.level ?? null)
 
-const initialCenter = computed<LatLng>(() => derived.value ?? props.medoid ?? WORLD)
-const initialZoom = computed(() => (derived.value || props.medoid ? DEFAULT_ZOOM : 2))
+const initialCenter = computed<LatLng>(() => derived.value ?? props.medoid ?? WORLD_VIEW.center)
+const initialZoom = computed(() => (derived.value || props.medoid ? DEFAULT_ZOOM : WORLD_VIEW.zoom))
 const levelOptions = computed(() => levels.value.map((l) => ({ label: l.name, value: l.key })))
 // The point a geocoded name resolves at (the current place): the medoid in `auto`, the framed centre in `fixed`.
 // Without the map an `auto` place keeps its stored position until the photos' medoid is known (the media may still
@@ -65,8 +71,11 @@ const levelOptions = computed(() => levels.value.map((l) => ({ label: l.name, va
 const anchorPoint = computed<LatLng | null>(() =>
   derivedMode.value === 'fixed' ? derived.value : withMap.value ? props.medoid : (props.medoid ?? derived.value),
 )
-// With the map a place needs its point; without it a name is enough (a place that is a name only, uc.memory.place E3).
-const canSave = computed(() => Boolean(name.value.trim()) && (!withMap.value || Boolean(anchorPoint.value)))
+// The one answer to "is a point set": the pill's *Name only*, the greyed centre pin and its hint all read it (E3). With
+// no medoid it turns true only at the first frame the member produced (`onFrame`), so it is the move signal itself.
+const pointSet = computed(() => Boolean(anchorPoint.value))
+// A name is enough, with the map or without: a place the member set no point for is a name only (uc.memory.place E3).
+const canSave = computed(() => Boolean(name.value.trim()))
 
 let geocodeTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -90,8 +99,11 @@ function scheduleResolve(lat: number, lng: number) {
   geocodeTimer = setTimeout(() => void resolveLevels(lat, lng), 700) // debounce continuous panning
 }
 
-/** The framed centre moved. In `auto` a **user pan** takes over → `fixed`; `fixed` tracks the centre as the place. */
+/** The framed centre moved. In `auto` a **user pan** takes over → `fixed`; `fixed` tracks the centre as the place. A
+ *  frame the member did not produce never creates a position: the opening view of a Memory with no point is no place
+ *  (uc.memory.place E3, inbox #834), so it is neither stored nor named. */
 function onFrame(f: { lat: number; lng: number; zoom: number; user: boolean }) {
+  if (!f.user && !derived.value) return
   if (derivedMode.value === 'auto') {
     if (!f.user) return // programmatic recenter (open / follow-again) — don't take over
     derivedMode.value = 'fixed'
@@ -148,7 +160,7 @@ function save() {
     name: name.value.trim(),
     nameSource: nameSource.value,
     derived: p ?? undefined,
-    derivedMode: derivedMode.value,
+    derivedMode: p ? derivedMode.value : 'auto', // no point: a name only, `auto` so the first geotagged photo gives it one
     nameAnchor: anchor,
   })
   emit('close')
@@ -158,7 +170,9 @@ function remove() {
   emit('close')
 }
 
-onMounted(() => {
+/** Frame the map and resolve the current place's names — when the editor opens with the map, and when the map services
+ *  are turned on in it. */
+function frameAndResolve() {
   if (!withMap.value) return // no map: no framing, no name to resolve
   if (derivedMode.value === 'auto' && props.medoid) {
     if (props.points && props.points.length > 1) mapRef.value?.fitPoints(props.points) // frame the whole spread
@@ -166,6 +180,19 @@ onMounted(() => {
   } else if (derived.value) {
     void resolveLevels(derived.value.lat, derived.value.lng)
   }
+}
+onMounted(frameAndResolve)
+
+// The map services turned on in the open editor (its offer, or Settings in another tab): the map is drawn here and the
+// editor goes on as if it had opened with it - except that a name already typed stays the member's (`manual`). With no
+// name yet the map may name the place; with no position yet the place is the point the member frames (`fixed`), as on an
+// opening with the map - none while they do not move it. Turned off again, the editor keeps what it has (the withdrawal above).
+watch(withMap, async (on) => {
+  if (!on) return
+  if (!name.value.trim() && canGeocode.value) nameSource.value = 'geocoded'
+  if (derivedMode.value === 'auto' && !props.medoid && !derived.value) derivedMode.value = 'fixed'
+  await nextTick() // the map mounts with this render; framing needs its instance
+  frameAndResolve()
 })
 onBeforeUnmount(() => {
   if (geocodeTimer) clearTimeout(geocodeTimer)
@@ -186,10 +213,15 @@ onBeforeUnmount(() => {
           :marker="null"
           :dots="points"
           crosshair
+          :crosshair-unset="!pointSet"
           @frame="onFrame"
         />
+        <p v-if="!pointSet" class="memory-location-hint">{{ t('memory.place.moveToSet') }}</p>
         <div class="memory-location-pill">
-          <template v-if="derivedMode === 'auto'">
+          <template v-if="!pointSet">
+            <VeyqIcon name="tag" /> {{ t('memory.place.nameOnly') }}
+          </template>
+          <template v-else-if="derivedMode === 'auto'">
             <VeyqIcon name="images" /> {{ t('memory.place.followsPhotos') }}
           </template>
           <template v-else>
@@ -271,6 +303,25 @@ onBeforeUnmount(() => {
   border: 1px solid var(--app-line);
   color: var(--app-text);
   font-size: 0.82rem;
+}
+/* Right under the greyed centre pin's tip, while no point is set (E3): says what sets one. It lets the map's drag through. */
+.memory-location-hint {
+  position: absolute;
+  top: calc(50% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  width: max-content; /* shrink-to-fit would stop at the half the `left: 50%` leaves and wrap a short line */
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 0.22rem 0.6rem;
+  border-radius: 20px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  color: var(--app-text);
+  font-size: 0.8rem;
+  text-align: center;
+  pointer-events: none;
 }
 .memory-location-follow {
   border: 0;

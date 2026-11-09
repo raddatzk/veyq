@@ -54,7 +54,7 @@ services:
   # `sh`, `stat` and `chown` and nothing else: a step that does one thing reads as that thing. It is pinned by
   # digest like every other image here, and Dependabot's `docker-compose` ecosystem bumps it.
   volume-ownership:
-    image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    image: busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
     <<: *hardened
     logging: *logging
     user: "0:0"
@@ -76,7 +76,7 @@ services:
       - veyq-acme:/chown/65532/acme
 
   mariadb:
-    image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
+    image: mariadb:12.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9
     restart: unless-stopped
     <<: *hardened
     logging: *logging
@@ -88,6 +88,9 @@ services:
     # open a connection here (ADR 0071 §3).
     networks: [db]
     environment:
+      # A data directory an older MariaDB wrote is upgraded on start: the image backs up the system tables into the data
+      # directory and runs mariadb-upgrade (a major bump such as 11.4 -> 12.3 left them on the old layout otherwise).
+      MARIADB_AUTO_UPGRADE: "1"
       MARIADB_DATABASE: veyq
       MARIADB_USER: veyq
       MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/docker/.env}

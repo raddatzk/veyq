@@ -2,7 +2,7 @@
 // opened through its value key's wrap under `K_tenant`, as `directory.ts` does for the whole tenant roster, at the member axis' three stages.
 // `pnpm exec vitest bench src/core/people/directory.bench.ts`; `vitest run` does not collect bench files, so `pnpm run check`
 // is unchanged. TEMPORARY: `cr-volume-measurement-cax` deletes it with the rest of the harness.
-import { bench, describe, expect } from 'vitest'
+import { expect, test } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { openMemberName, sealName } from '../../features/account/profile/memberName'
 
@@ -20,10 +20,11 @@ const stages = [20, 200, 1000].map((n) => [n, roster(n)] as const)
 const first = stages[0][1][0]
 expect(openMemberName(kTenant, { scopeId: SCOPE, userId: first.userId }, first.sealedName, first.wrappedNameValueKey)?.lastName).toBe('Number 0')
 
-describe('the directory opens every name', () => {
-  for (const [n, rows] of stages) {
-    bench(`${n} members`, () => {
+test('the directory opens every name', async ({ bench }) => {
+  await bench.compare(
+    ...stages.map(([n, rows]) => bench(`${n} members`, () => {
       for (const m of rows) openMemberName(kTenant, { scopeId: SCOPE, userId: m.userId }, m.sealedName, m.wrappedNameValueKey)
-    }, { iterations: 20, warmupIterations: 2, time: 0 })
-  }
+    })),
+    { iterations: 20, warmupIterations: 2, time: 0 },
+  )
 })

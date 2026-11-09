@@ -58,7 +58,7 @@ operator's view:
 - **Opt-in + transparent — and opt-in is standing consent** (two stated exceptions: the breached-password check and
   the exchange rates, below). Off by default; enabling it is an explicit choice
   with a plain-language note that a request leaves the device, and withdrawing it is as easy: for the map and place
-  names, in Settings → *Map and place names* or by *Turn map off* on the map itself, effective at once. Once enabled it may run **automatically** (e.g. a
+  names, in Settings → *Map services* or by *Turn map services off* on the map itself, effective at once. Once enabled it may run **automatically** (e.g. a
   reverse lookup on the first geotagged media of an auto-location) — enabling it *is* the consent to those
   requests; it **never** fires without opt-in. A blind, request-free alternative stays available (e.g. typing a
   place name).
@@ -156,6 +156,9 @@ rates' date.
   shares; scope and membership (who belongs to which tenant/group); a member's **per-tenant username,
   identity public key, and group-add-consent flag** — visible to, and effectively **enumerable by**, any
   fellow tenant member (anyone can create a group to run the member-resolve, [ADR 0014](../decisions/0014-group-scopes-and-governance.md) §5);
+  per account, whether its holder **dismissed the donation banner** (`donation_banner_dismissed`, served only to the
+  holder, [ADR 0124](../decisions/0124-veyq-asks-once-for-a-donation-on-every-instance.md)); a guest's dismissal never
+  leaves the browser;
   whether a member **has a profile picture** and how often it changed (`avatar_revision`; the picture itself is a
   constant-size sealed blob, [ADR 0084](../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md); contract, crypto and backend built, the web client not yet);
   server timestamps (created, changed, trashed, last rotated) for ordering — stored as written, to the millisecond (a

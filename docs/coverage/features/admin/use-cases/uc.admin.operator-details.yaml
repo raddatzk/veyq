@@ -100,7 +100,8 @@ acceptanceCriteria:
         reason: >-
           The component is mounted alone, in guest mode; that the login and share pages and the shell place it is their
           templates (`LoginView.vue`'s card footer, `ShareView.vue`'s footer, `AppShell.vue`'s workspace footer),
-          walked by lane L1 (the `stack` gap) and not by a web suite.
+          walked by lane L1 (the `stack` gap). Web suites mount those hosts with the real footer only for veyq's own
+          links in it (uc.platform.support-the-project's `the-footer-links-the-project`), not for the identification.
   - id: operator-operations-are-server-owner-only-on-the-admin-channel
     text: >-
       Every operation that reads the notification address or writes a value is a Server-Owner operation

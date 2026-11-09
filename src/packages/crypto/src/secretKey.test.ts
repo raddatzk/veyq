@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { formatSecretKey, readSecretKey, secretKeyBytes, SecretKeyUnreadable } from './secretKey'
 
@@ -74,6 +74,25 @@ describe('the Secret Key text form', () => {
       // Same bytes, same check: only the four padding bits of symbol 52 differ — the check alone would not see it.
       const zero = CASES.find((c) => c.text.startsWith('000000'))!
       expect(readSecretKey(swapSymbol(zero.text, 51, '1'))).toEqual({ ok: false, problem: 'typo' })
+    })
+
+    it('wipes the bytes it decoded before it answers', () => {
+      // A typo's bytes are no key, but they are one symbol away from one, so they do not outlive the reading. They are the
+      // one 32-byte buffer `readSecretKey` builds with `Uint8Array.from`, which the spy hands back to look at; the
+      // valid reading is the control that the spy sees that buffer at all (it is the key the reading returns).
+      const from = vi.spyOn(Uint8Array, 'from')
+      try {
+        const decoded = () => from.mock.results.map((r) => r.value as Uint8Array).filter((a) => a.length === 32)
+        const reading = readSecretKey(RAMP.text)
+        expect(decoded()).toEqual([reading.ok && reading.key])
+        expect(reading).toEqual({ ok: true, key: RAMP.key, text: RAMP.text })
+        from.mockClear()
+        expect(readSecretKey(swapSymbol(RAMP.text, 10, RAMP.text[10] === 'A' ? 'B' : 'A'))).toEqual({ ok: false, problem: 'typo' })
+        expect(decoded()).toHaveLength(1)
+        expect(decoded()[0]).toEqual(new Uint8Array(32))
+      } finally {
+        from.mockRestore()
+      }
     })
 
     it('throws it as SecretKeyUnreadable("typo")', () => {

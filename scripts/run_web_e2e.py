@@ -57,11 +57,11 @@ members from this tree, which keeps the pair working between proofs. Its pure pa
 `scripts/upgrade_proof_selftest.py`.
 
 **Why a fresh instance per file.** Every suite cold-births its own Server Owner and asserts
-`setupRequired === true`, and a server is single-owner-per-instance. `ci.yml` used to call this "a fresh in-mem
+`setupRequired === true`, and a server is single-owner-per-instance. `checks.yml` used to call this "a fresh in-mem
 DB per file", which does not work: `quarkus.datasource.db-kind` is a BUILD-TIME property baked at augmentation
 under `%prod`, so a runtime `QUARKUS_DATASOURCE_DB_KIND=h2` is ignored and the *MariaDB* driver rejects the H2
 URL. One MariaDB with a fresh `veyq_e2e_<n>` database per file is a fresh instance in the only sense the suites
-care about — at one container, and with `ci.yml`'s "build the jar once" intact.
+care about — at one container, and with `checks.yml`'s "build the jar once" intact.
 
 **Why the store cannot be a GH Actions service container.** Garage bind-mounts `/etc/garage.toml` from the repo
 (service containers start before checkout) and its bootstrap is a mandatory multi-step sequence a service
@@ -387,9 +387,11 @@ def compose_up() -> None:
     Mailpit is unconditional, not a flag: every suite's tenant is now pointed at it (`e2eBootstrap.birthInstance`)
     because a member invite travels by mail only (ADR 0055 §2). Gating that behind an argument would mean gating
     something that must always be on — and this script has no argparse at all; every argv entry is a test path.
-    Note that mailpit's healthcheck declares a 15 s interval and no `start_period`, so a cold `--wait` genuinely
-    blocks about that long. That is the right trade against a first-suite flake, and the reason not to substitute
-    a snappier poll of our own.
+    Note that mailpit's healthcheck is the image's own: a 15 s interval and, since the pinned v1.33.0, a 10 s start
+    period polled every second (`docker inspect` on the pin, 2026-11-07), so a cold `--wait` returns about a second
+    after Mailpit is up wherever the engine honours `start_interval`, and blocks up to the 15 s interval where it
+    does not (v1.20.0 declared no start period at all). Waiting on the image's own check is the right trade against a
+    first-suite flake, and the reason not to substitute a snappier poll of our own.
     """
     log(f"compose up (--profile s3 --profile mail) from {COMPOSE_FILE}")
     # Run from a git WORKTREE, this is the same compose project (`infra`) from a different directory: bind mounts
@@ -2091,7 +2093,7 @@ def keep_runs() -> int:
 
 def main(argv: list[str]) -> int:
     # `--resolve`: name the predecessor this proof would run from, as its last line `predecessor=<ref>` (empty: no run),
-    # and start nothing — `ci.yml`'s `upgrade-proof` asks it before it builds anything, one leg per predecessor.
+    # and start nothing — `checks.yml`'s `upgrade-proof` asks it before it builds anything, one leg per predecessor.
     resolve = RESOLVE_REQUEST in argv
     argv = [a for a in argv if a != RESOLVE_REQUEST]
     try:

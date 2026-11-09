@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Settings → Map and place names (uc.memory.place A5): the switch gives and withdraws this browser's one consent to the map
+// Settings → Map services (uc.memory.place A5): the switch gives and withdraws this browser's one consent to the map
 // tiles and the place-name lookup, through the real layer switch (Reka's `role="switch"` button, clicked). A withdrawal
 // removes the stored flag and turns `mapsAvailable` false at once; with no tile service there is nothing to consent to.
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -8,6 +8,7 @@ import MapsPanel from './MapsPanel.vue'
 import { setMapsConsent, useMapConfig } from '../../shared/state/useMapConfig'
 import { setTileUrl, setGeocoderUrl } from '../../test/services'
 import { realI18n, t } from '../../test/i18n'
+import { i18n } from '../../i18n'
 
 const KEY = 'veyq:maps-consent'
 const mountPanel = () => mount(MapsPanel, { global: { plugins: [realI18n()] } })
@@ -18,7 +19,7 @@ beforeEach(() => {
   setMapsConsent(true)
 })
 
-describe('Settings — Map and place names', () => {
+describe('Settings — Map services', () => {
   it('names the services this server configured and what they receive', () => {
     const w = mountPanel()
     expect(w.get('.maps-tile-host').text()).toBe('tiles.example')
@@ -94,5 +95,20 @@ describe('Settings — Map and place names', () => {
 
   it('names no earlier hosts for the same ones', () => {
     expect(mountPanel().find('.maps-given-for').exists()).toBe(false)
+  })
+
+  // uc.memory.place A6, ADR 0016 (owner 2026-11-09): the choice reads "Map services", on or off - a setting, not a cookie
+  // banner. The words are asserted as written, in both languages, so a catalog edit that brings the old framing back is red.
+  it('calls the choice Map services, in English and in German', () => {
+    const en = mountPanel()
+    expect(en.get('h2').text()).toBe('Map services')
+    expect(en.get('.maps-toggle-label span').text()).toBe('Map services in this browser')
+    en.unmount()
+
+    const plugin = realI18n()
+    i18n.global.locale.value = 'de'
+    const de = mount(MapsPanel, { global: { plugins: [plugin] } })
+    expect(de.get('h2').text()).toBe('Kartendienste')
+    expect(de.get('.maps-toggle-label span').text()).toBe('Kartendienste in diesem Browser')
   })
 })

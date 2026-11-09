@@ -50,6 +50,24 @@ export const MAX_PLACE_NAME = 200
 /** A name trimmed and cut to [MAX_PLACE_NAME] code points, so no character is split in half. */
 export const boundPlaceName = (v: string): string => Array.from(v.trim()).slice(0, MAX_PLACE_NAME).join('')
 
+/**
+ * The world view a map opens on when it has no position to show: the place editor for a Memory without photo GPS or a
+ * stored point, and a level's map before it fits its pins. The ONE copy of it - the editor, `SpaceMap` and
+ * [normalizeLocation]'s rule below all read this constant, never a literal.
+ *
+ * Before inbox #834 an editor saved untouched stored this centre as a `fixed` point (the Memory landed in the Sahara on
+ * every map), so a `fixed` point EXACTLY equal to it is read as no point (uc.memory.place E3). That is safe: no member
+ * frames a real place to this exact coordinate by hand - a pan lands on a float, never on (20, 0) itself. Do not change
+ * the centre: the points stored at the old one would no longer be recognised.
+ */
+export const WORLD_VIEW: { readonly center: LatLng; readonly zoom: number } = Object.freeze({
+  center: Object.freeze({ lat: 20, lng: 0 }),
+  zoom: 2,
+})
+
+/** Whether a point is exactly the world view's centre ([WORLD_VIEW]) - an opening view an untouched editor stored. */
+export const isWorldViewCentre = (p: LatLng): boolean => p.lat === WORLD_VIEW.center.lat && p.lng === WORLD_VIEW.center.lng
+
 const asLatLng = (raw: unknown): LatLng | undefined => {
   if (!raw || typeof raw !== 'object') return undefined
   const p = raw as { lat?: unknown; lng?: unknown }
@@ -64,7 +82,7 @@ const asLatLng = (raw: unknown): LatLng | undefined => {
  * location whose name is deferred until the first geotagged media supplies the medoid position + a geocoded name.
  * Every other shape (a `fixed` place, a `manual` name, a materialized `geocoded` one) needs a non-empty name.
  * `nameSource`/`derivedMode` fall back to the safe values (`manual` / `auto`); `derived`/`nameAnchor` drop when
- * malformed.
+ * malformed, and a `fixed` `derived` at the world view's centre ([WORLD_VIEW]) reads as no point (uc.memory.place E3).
  */
 export function normalizeLocation(raw: unknown): MemoryLocation | null {
   if (!raw || typeof raw !== 'object') return null
@@ -83,11 +101,15 @@ export function normalizeLocation(raw: unknown): MemoryLocation | null {
   const anchorPoint = asLatLng(l.nameAnchor)
   const rawLevel = (l.nameAnchor as { level?: unknown } | undefined)?.level
   const level = LEVEL_KEYS.find((k) => k === rawLevel)
+  const derived = asLatLng(l.derived)
+  // A `fixed` point at the world view's centre is the opening view an untouched editor stored (inbox #834): no point. The
+  // place reads as a name only - `auto`, so the first geotagged photo gives it the medoid - and the next save drops it.
+  const openingView = derivedMode === 'fixed' && derived !== undefined && isWorldViewCentre(derived)
   return {
     name,
     nameSource,
-    derived: asLatLng(l.derived),
-    derivedMode,
+    derived: openingView ? undefined : derived,
+    derivedMode: openingView ? 'auto' : derivedMode,
     nameAnchor: anchorPoint && level ? { ...anchorPoint, level } : undefined,
   }
 }

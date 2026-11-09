@@ -40,6 +40,7 @@ export const memberProfile = (o: Partial<MemberProfile> = {}): MemberProfile => 
   sealedName: null,
   avatarRevision: 0,
   requireGroupAddConsent: false,
+  donationBannerDismissed: false,
   ...o,
 })
 

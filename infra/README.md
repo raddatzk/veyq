@@ -61,6 +61,14 @@ presigned URLs for (`http://veyq.localhost:<webPort>`), `veyq.backendPort` / `ve
 web's and admin-web's proxy targets and `backend:seed`'s bases. Ports do not separate the data: both instances run
 on the one dev database and bucket, so a branch's schema meets the other checkout's backend (inbox #456).
 
+**A database and a store of its own** take a stack of their own: a copy of `docker/docker-compose.yml` kept outside
+the repository, with `mariadb` and `garage` only, other `container_name`s, volumes and host ports (beside it a copy of
+`garage.toml`), started as its own project (`docker compose -p <name> -f <copy> up -d`, removed with `down -v`); the
+owner's stack is untouched. The backend then takes `QUARKUS_DATASOURCE_JDBC_URL` (e.g.
+`jdbc:mariadb://localhost:13306/veyq`), `VEYQ_BUNDLED_STORE_ENDPOINT` and `VEYQ_BUNDLED_STORE_ADMIN_ENDPOINT` (the
+copy's S3 and admin ports) besides the ports above, and web's Vite `VEYQ_STORE_TARGET` (the copy's S3 port). Its first
+start sets the bucket up, as on the shared stack; seed it with `bootstrap:user` against the moved bases.
+
 ## Compose profiles
 
 Docker Compose for the local dev dependencies. Three profiles:
@@ -197,42 +205,51 @@ section keeps the commands.
 
 **A snapshot is published weekly, or when you ask for one** ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
 decision 5, amended 2026-11-07). Every push to `main` or `release/<major>.x` and every pull request (Dependabot's
-included) runs `.github/workflows/ci.yml` — the one pipeline per commit, every stage listed once in the stage map of
-[How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs) — and
-**publishes nothing**. Two runs publish: the **weekly schedule** (Monday 03:17 UTC, `main` only — GitHub runs a schedule
-on the default branch alone) and a **dispatch**. Each runs the same pipeline on its branch's HEAD and, when every stage
-is green, its `snapshot` job publishes the three images on exactly the digests lane L1 installed, as
+included) runs **Checks** (`.github/workflows/checks.yml`) — the one pipeline per commit, every stage listed once in the
+stage map of [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs)
+— and **publishes nothing**; a push to `main` or `release/<major>.x` also **stages** the images (`build-<sha>-<arch>`,
+unsigned) that its lane L1 installs. **Publish** (`.github/workflows/publish.yml`) is what publishes, on two triggers:
+the **weekly schedule** (Monday 03:17 UTC, `main` only — GitHub runs a schedule on the default branch alone) and a
+**dispatch**. It runs no pipeline: it takes the **publishable commit's newest Checks push run** — HEAD's, or, when HEAD
+and the commits before it change only docs, Markdown or the site (which Checks skips), the newest tested ancestor's (a
+notice names HEAD, that commit and the commits skipped; a code commit without a run in between is red, named) —
+refuses unless that run is wholly green (its gate and every lane leg on both architectures), and its `snapshot` job
+publishes the three images on exactly the digests that run staged and its lanes installed, as
 `<major>.<minor>-SNAPSHOT` and `sha-<commit>`, and the chart as `<major>.<minor>-SNAPSHOT`, signs them, attests each
-lane's result per architecture, and `snapshot-tag` sets the git tag `snapshot-<major>.<minor>` on the commit. A snapshot
-is **written once and never replaced**: a scheduled or dispatched run of a HEAD that already carries a `snapshot-` tag
-tests it again and publishes nothing (its `version` job leaves a notice saying so). A local run
-(`scripts/run_pipeline.py`) publishes nothing either.
+lane's result per architecture (naming the Checks run), and `snapshot-tag` sets the git tag `snapshot-<major>.<minor>`
+on that commit — the tested one, never a docs-only HEAD above it — in minutes. A snapshot is **written once and never
+replaced**: a run whose publishable commit already carries a `snapshot-` tag publishes nothing (a notice says so). A
+local run (`scripts/run_pipeline.py`) publishes and stages nothing. If that Checks run is still going, red, or was
+cancelled by hand, Publish is red and says so: re-run that Checks run (or push again), then publish. The weekly run
+also deletes staging images older than 30 days that are no branch tip.
 
-**A snapshot now:** GitHub → **Actions → CI → Run workflow**, branch `main` (or `release/<major>.x` for a fix of a
-previous major, which the schedule never reaches; any other branch is red at `version`). From a terminal:
+**A snapshot now:** GitHub → **Actions → Publish → Run workflow**, branch `main` (or `release/<major>.x` for a fix of a
+previous major, which the schedule never reaches; any other branch is red at `checks-run`). From a terminal:
 
 ```sh
-gh workflow run ci.yml --ref main                    # the tip's snapshot now, as the weekly run makes it
+gh workflow run publish.yml --ref main               # the tip's snapshot now, as the weekly run makes it
 ```
 
-- **The weekly run and a dispatch queue behind each other** (one concurrency group per ref for the two), never behind a
-  push: pushes and pull requests have a group of their own, so a dispatch starts at once beside a running push. A
+- **The weekly run and a dispatch queue behind each other** (one concurrency group per ref for Publish), never behind a
+  push: Checks has a group of its own, so a dispatch starts at once beside a running push. A
   second dispatch while one waits replaces the waiting one. A publish that lost its tag (`snapshot` green,
   `snapshot-tag` failed) is not seen as published: the next run is red at the write-once refusal — re-run the old
   run's failed `snapshot-tag` instead. GitHub disables a public repository's scheduled workflow after 60 days without
   activity in it (its docs, not measured here); Actions then offers to enable it again.
 
-- **A snapshot is signed by `ci.yml`, a release by `release.yml`**, both on `main` or `release/<major>.x`. The two are
+- **A snapshot is signed by `publish.yml`, a release by `release.yml`**, both on `main` or `release/<major>.x` (keyless
+  signing names the file holding the signing job, and `snapshot` is Publish's own; a snapshot signed by `ci.yml`, before
+  the split of 2026-11-07, is not promotable). The two are
   the same digests, so the identity is what tells them apart: Verify a release and `veyqctl` accept only the release
   identity. To check a snapshot you try on a throwaway instance, verify it under the snapshot identity:
 
   ```sh
   cosign verify ghcr.io/raddatzk/veyq@sha256:<digest> \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/publish\.yml@refs/heads/(main|release/[0-9]+\.x)$'
   cosign verify-attestation ghcr.io/raddatzk/veyq@sha256:<digest> --type https://veyq.app/attestations/stack-lane/v1 \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/ci\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+    --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/publish\.yml@refs/heads/(main|release/[0-9]+\.x)$'
   ```
 
 - **The image carries `<major>.<minor>`**, the release its commit can become, never `-SNAPSHOT`: a snapshot instance
@@ -244,7 +261,7 @@ gh workflow run ci.yml --ref main                    # the tip's snapshot now, a
   owner's GHCR packages. Make all four public, or every operator needs registry credentials — and the chart has no
   `imagePullSecrets` value, so public is the state it supports.
 - **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
-  at the top of `ci.yml`, checked against the published `.sha256sum` and the GitHub release notes.
+  at the top of `checks.yml` and `publish.yml` (and `release.yml`; one value, held equal), checked against the published `.sha256sum` and the GitHub release notes.
 
 **A release promotes a snapshot** (ADR 0091 decision 5, `.github/workflows/release.yml`). Nothing is built: the
 images every lane tested get the release's names and a second signature, from `release.yml` — the identity Verify a
@@ -291,7 +308,11 @@ leaves only when a removal is pending. A year without one has no major, and an u
 the same steps on its own date:
 
 1. **The clients that speak the new major are published first,** so the apps in the stores speak it before any server
-   does. Until a native client exists this step is empty: the web client and admin-web ship in the server's image.
+   does. **From major 2 on, the clients also keep speaking the majors the window still holds** (ADR 0085 decision 5):
+   each native app and the web client's guest embed of another instance's share (ADR 0121 decision 4) carry the
+   adapter of every older major in the window, proved by a CI job against that major's server image, before
+   `VERSION` moves. Major 2's train is the first to need one (major 1's adapter); none is built before it (ADR 0085
+   § Consequences). The web client and admin-web otherwise ship in the server's image and need nothing here.
 2. **The old major's last release, on the commit before the bump:** promote that commit's snapshot from `main`.
 3. **The release branch, cut from that release's tag.** Its own history counts on from it, so its first fix is
    `<old>.<n+1>`. The train ends every branch cut before it, so those get no more releases.
@@ -309,7 +330,7 @@ release is the one the new major is entered from after it:
 
 ```sh
 git switch release/<old>.x && git cherry-pick -x <fix-commit-on-main> && git push   # tested, not published
-gh workflow run ci.yml --ref release/<old>.x                                         # snapshot-<old>.<m>
+gh workflow run publish.yml --ref release/<old>.x                                    # snapshot-<old>.<m>
 # then promote snapshot-<old>.<m> from release/<old>.x (<old> moves, latest does not), then the current major's release
 ```
 

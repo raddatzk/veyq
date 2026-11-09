@@ -82,6 +82,7 @@ async function submit() {
     :visible="true"
     :header="t('node.move.title', { name: label })"
     :closable="!busy"
+    keep-on-outside
     :close-on-escape="!busy"
     class="move-dialog"
     @update:visible="emit('close')"

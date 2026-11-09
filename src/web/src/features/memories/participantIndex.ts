@@ -14,7 +14,8 @@
 // **Bounded.** At most {@link MAX_MEMORIES_PER_SCOPE} Memories of a scope are opened; the rest are not read and the result says
 // `partial` - the page says so honestly rather than pretend the list is whole. A scope that cannot be read (offline, a grant
 // that does not open) counts as `failedScopes` and also makes the result partial; every scope failing is an error.
-import { fetchTree, openTree, childEntryKey, openContentKey, type TreeNode } from '../../core/node/tree'
+import { fetchTree, openTree, type TreeNode } from '../../core/node/tree'
+import { keyResolver } from '../../core/node/keyResolver'
 import { zeroScopeKey, type ScopeKey } from '../spaces/epochs'
 import { listMyScopes, openScopeById } from '../spaces/scopes'
 import { ScopeKind } from '../../api/generated/scopes'
@@ -76,32 +77,9 @@ export function resetParticipantIndex(): void {
 
 class Abandoned extends Error {}
 
-/** A memoizing resolver of node content keys over one opened tree (the chain is walked once per node, not once per Memory). */
-function keyResolver(scopeId: string, epochs: ScopeKey, nodes: readonly TreeNode[]): (node: TreeNode) => Uint8Array | null {
-  const byId = new Map(nodes.map((n) => [n.id, n]))
-  const keys = new Map<string, Uint8Array | null>()
-  const resolve = (node: TreeNode, depth: number): Uint8Array | null => {
-    if (keys.has(node.id)) return keys.get(node.id)!
-    let key: Uint8Array | null = null
-    try {
-      if (node.parentId === null) key = openContentKey(scopeId, epochs.key, node)
-      else if (depth <= nodes.length) {
-        const parent = byId.get(node.parentId)
-        const parentKey = parent ? resolve(parent, depth + 1) : null
-        if (parent && parentKey) key = openContentKey(scopeId, childEntryKey(scopeId, parent, parentKey, node), node)
-      }
-    } catch {
-      key = null // a chain that does not open: this node is not read
-    }
-    keys.set(node.id, key)
-    return key
-  }
-  return (node) => resolve(node, 0)
-}
-
 function readScope(scopeId: string, scopeToken: string, label: string, epochs: ScopeKey, rows: Parameters<typeof openTree>[2], etag: string | null): ScopeEntry {
   const nodes = openTree(scopeId, epochs, rows)
-  const keyOf = keyResolver(scopeId, epochs, nodes)
+  const { keyOf } = keyResolver(scopeId, epochs, nodes)
   const memories: ParticipatedMemory[] = []
   let opened = 0
   let capped = false

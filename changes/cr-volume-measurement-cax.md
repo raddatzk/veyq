@@ -48,7 +48,7 @@ documented". Then it deletes the harness.
 
 | Fact | Locator |
 |---|---|
-| The release is built per architecture, arm64 included | `scripts/run_pipeline.py:463-470`; `ci.yml`'s `stack` job matrix |
+| The release is built per architecture, arm64 included | `scripts/run_pipeline.py:463-470`; `checks.yml`'s `stack` job matrix |
 | `veyqctl --unsigned-local` installs local images, a bare `name:tag` only | `scripts/run_stack_e2e.py:4-5` |
 | What a Compose install needs and how it runs | `site/src/content/docs/run/new-instance.mdx` |
 | The recipe's limits: application `mem_limit` 1 GiB, heap 60 % of it; MariaDB and Garage unlimited on Compose | `site/src/content/docs/run/plan.md` § Size the host |
@@ -146,6 +146,8 @@ members about 12 a minute end to end (20 joined, 31 profiled; Argon2id dominates
 The harness files phase 5 deletes are the ones listed there, plus `src/web/scripts/volumeHarness.mts`,
 `src/web/scripts/volumePrelude.mts`, the `installPinnedFetch` half of `src/web/scripts/apiTransport.mts`, `src/env.d.ts` in
 `src/web/tsconfig.scripts.json`'s `include`, and `measure` in `tests/e2e/tsconfig.json`'s `include`.
+`cr-search-at-volume` added a stage and a leg that go with them (in the same files and in `tests/e2e/measure/`): `seed spread`
+and `measure_volume.py search`, with `search.ts` and `search.config.ts`.
 
 ## Decisions this CR takes
 

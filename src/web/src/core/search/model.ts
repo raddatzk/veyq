@@ -1,0 +1,143 @@
+// The search's documents (ADR 0125 decisions 2 and 6): what a member can find, as plaintext derived from what the client
+// already opened - never a key, never a second source of truth. Core makes one document per node of every space it can open
+// (its name and where it lives); an application adds facets to its own kinds' documents through the registry
+// (`KindDescriptor.search`) and contributes documents of its own for the node on screen (`contribution.ts`: Memories' photos
+// of the open Memory).
+import { fold } from '../../shared/text/fold'
+import type { VeyqIconName } from '../../shared/ui/icons'
+
+/** Calendar years, both ends included: a Memory dated 2023-12-30 to 2024-01-02 is `{ from: 2023, to: 2024 }`. */
+export interface YearSpan {
+  from: number
+  to: number
+}
+
+/** Calendar months as `YYYY-MM`, both ends included: a Memory dated 2024-04-30 to 2024-05-02 is `{ from: '2024-04', to: '2024-05' }`. */
+export interface MonthSpan {
+  from: string
+  to: string
+}
+
+/** What a document carries beyond its name - each one a chip's predicate (`query.ts`). Every field is optional: a fact the
+ *  object does not have is left out, never a placeholder. */
+export interface SearchFacets {
+  /** The years the object spans (a Memory's date range). */
+  years?: YearSpan
+  /** The calendar months the object spans, `YYYY-MM`, both ends included (a Memory's date range): a month chip's. */
+  months?: MonthSpan
+  /** When it was captured, epoch milliseconds (a photo): its year matches a year chip, and the result row shows the day. */
+  capturedAt?: number
+  /** The places it names, as named (a Memory's place, a photo's place). */
+  places?: readonly string[]
+  /** The people in it, by user id (a Memory's participants) - never a name: names come from the directory when shown. */
+  people?: readonly string[]
+}
+
+/** One searchable object. */
+export interface SearchDocument {
+  /** The space it lives in. */
+  readonly scopeId: string
+  /** A node's kind, or a contributed kind (`memories.photo`). */
+  readonly kind: string
+  /** A node's id, or the contributed object's (a medium's id). */
+  readonly id: string
+  /** The revision it was derived at: a moved revision rebuilds the document. */
+  readonly revision: string
+  readonly name: string
+  /** The names of the nodes above it, outermost first - what a result row shows as where it lives. */
+  readonly path: readonly string[]
+  /** The ids of those nodes, in the same order: what an *In:* chip and the open node's place in the order ask
+   *  (`query.ts`, `results.ts`) - a node's id, never its name, so two nodes of one name are two places. An object's
+   *  (a photo's) ends with its own node. Empty for a document of no space (a person, a settings section). */
+  readonly pathIds: readonly string[]
+  readonly facets: SearchFacets
+  /** The node a contributed document belongs to (the open Memory); a node's own document: its own id. */
+  readonly nodeId: string
+  /** A contributed document's own opening (a photo's lightbox); a node opens through the navigation. */
+  readonly open?: () => void
+  /** A contributed document's icon; a node's comes from its kind. */
+  readonly icon?: VeyqIconName
+  /** `name` folded (`shared/text/fold.ts`), once. */
+  readonly foldedName: string
+  /** `facets.places` folded, once. */
+  readonly foldedPlaces: readonly string[]
+  /** Other names the object is found by as by its name (a person's `~username`). */
+  readonly aliases?: readonly string[]
+  /** `aliases` folded, once. */
+  readonly foldedAliases: readonly string[]
+  /** Words the object is found by at a word's start only, never inside one, and from the third typed character on (a
+   *  settings section's "E-Mail", "Kennwort"): a word the member does not see beside the name must not match a stray
+   *  letter, and where one is why a result is listed, its row draws it (`query.ts` `reasonKeyword`). */
+  readonly keywords?: readonly string[]
+  /** `keywords` folded, once. */
+  readonly foldedKeywords: readonly string[]
+  /** A document's own second line (a person's handle, a settings section's heading); a node's is where it lives. */
+  readonly subtitle?: string
+}
+
+/** The kind of a member's document (ADR 0125 decision 9): a person of this tenant, opened on their profile page. Core's
+ *  kind, with its own word for a kind chip (*Person*), as the settings section's below (*Setting*). */
+export const PERSON_DOCUMENT = 'person'
+/** The kind of a settings section's document (ADR 0125 decision 9): a section the settings rail offers now. */
+export const SETTINGS_DOCUMENT = 'settings'
+
+/** What an application contributes for the node on screen (`contribution.ts`): a document as the application knows it. */
+export interface ContributedDocument {
+  kind: string
+  id: string
+  revision: string
+  name: string
+  facets: SearchFacets
+  icon?: VeyqIconName
+  open: () => void
+}
+
+/**
+ * What an application finds in a whole space (`ApplicationRegistrar.search`, ADR 0125 decision 8a): an object of its own
+ * inside a node - Memories' photo or video - as the application knows it. Core makes the document of it: where it lives is
+ * its node's path in the space's tree, and choosing it opens that node's page with the object (`openRequest.ts`).
+ */
+export interface ScopeDocument {
+  kind: string
+  id: string
+  /** The node the object belongs to (a medium's Memory or chapter). */
+  nodeId: string
+  /** The seals it was read from: a document at an unchanged revision is kept, not opened again. */
+  revision: string
+  name: string
+  facets: SearchFacets
+  icon?: VeyqIconName
+}
+
+const NO_IDS: readonly string[] = Object.freeze([])
+
+/** Core's one way to make a document, so its folded fields are always there; `pathIds` left out is none (a document of
+ *  no space, or one no chip of a node can reach). */
+export function searchDocument(
+  d: Omit<SearchDocument, 'foldedName' | 'foldedPlaces' | 'foldedAliases' | 'foldedKeywords' | 'pathIds'> & { pathIds?: readonly string[] },
+): SearchDocument {
+  return {
+    ...d, pathIds: d.pathIds ?? NO_IDS, foldedName: fold(d.name), foldedPlaces: (d.facets.places ?? []).map(fold),
+    foldedAliases: (d.aliases ?? []).map(fold), foldedKeywords: (d.keywords ?? []).map(fold),
+  }
+}
+
+/** The years a document spans: its own span, else its capture year (local time, as the result row shows the day). */
+export function yearsOf(doc: Pick<SearchDocument, 'facets'>): YearSpan | null {
+  if (doc.facets.years) return doc.facets.years
+  const at = doc.facets.capturedAt
+  if (at === undefined || !Number.isFinite(at)) return null
+  const year = new Date(at).getFullYear()
+  return { from: year, to: year }
+}
+
+/** The months a document spans: its own span, else its capture month (local time, as {@link yearsOf}); null for an object
+ *  with neither - a Memory without a date matches no month. */
+export function monthsOf(doc: Pick<SearchDocument, 'facets'>): MonthSpan | null {
+  if (doc.facets.months) return doc.facets.months
+  const at = doc.facets.capturedAt
+  if (at === undefined || !Number.isFinite(at)) return null
+  const d = new Date(at)
+  const month = `${String(d.getFullYear()).padStart(4, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  return { from: month, to: month }
+}

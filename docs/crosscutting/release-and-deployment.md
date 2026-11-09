@@ -11,19 +11,19 @@
   [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
 **Built, first run on GitHub.** Everything below is in the tree unless it stands under
-[§ Decided, not built](#decided-not-built). The repository has a remote since 2026-11-05 and `ci.yml` has run there; no
+[§ Decided, not built](#decided-not-built). The repository has a remote since 2026-11-05 and the pipeline has run there; no
 release exists yet: `VERSION` is `0`, git holds no `v*` tag, and `scripts/applied_migrations.sha256` says
 `release: none`. A statement about what CI or a publish *does* is a statement about
-[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), held by `scripts/validate_release_identity.py`; what a run
-on GitHub has shown is inbox #471's list, and a local run goes through `scripts/run_pipeline.py`, which reads that file
-and runs what this machine can.
+[`checks.yml`](../../.github/workflows/checks.yml) (the pipeline) and [`publish.yml`](../../.github/workflows/publish.yml)
+(the snapshot), held by `scripts/validate_release_identity.py`; what a run on GitHub has shown is inbox #471's list,
+and a local run goes through `scripts/run_pipeline.py`, which reads checks.yml and runs what this machine can.
 
 ## The version
 
 A release is `<major>.<minor>`, a function of the commit ([ADR 0057](../decisions/0057-release-identity-and-deployment-recipe.md) § 1):
 
 - `VERSION` holds the **major** alone; the **minor** is the number of commits since the one that last changed `VERSION`.
-  `ci.yml`'s `version` job computes it offline and refuses a shallow clone, which would count 1.
+  The pipeline's `version` job computes it offline and refuses a shallow clone, which would count 1.
 - **Major `0` is pre-release:** it exercises the publish path and promises no upgrade path. The migration set is
   frozen by the first release of a major ≥ 1, which sets the `release:` line ([src/backend/CLAUDE.md](../../src/backend/CLAUDE.md) § Migrations).
 - **The release major is the protocol major** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
@@ -35,44 +35,55 @@ A release is `<major>.<minor>`, a function of the commit ([ADR 0057](../decision
 
 ## The pipeline
 
-`ci.yml` is the one pipeline per commit ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+`checks.yml` (**Checks**) is the one pipeline per commit ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
 decision 2). It runs on a push to `main` or `release/**` and on a pull request into one (a change to docs, Markdown or
-the site only is left to `trust-chain.yml`, which is unfiltered), on a weekly `schedule` and on a `workflow_dispatch`
-(those two publish, below). Its stages start
-together; the image build needs only the version, and lane L1 needs the build. Every job has a budget
-(`timeout-minutes`, held by `scripts/validate_pipeline_shape.py`). **The stages themselves are listed once**, in
+the site only is left to `trust-chain.yml`, which is unfiltered). Its stages start together; the image build needs
+only the version, and lane L1 needs the build. Every job has a budget (`timeout-minutes`, held by
+`scripts/validate_pipeline_shape.py`). **The stages themselves are listed once**, in
 [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
-**A push, a pull request and a local run publish nothing.** They run every stage and build every image (app, admin,
-tools; amd64 and arm64 — a pull request's lane on amd64 only) and write to no registry and no remote: the `version`
-job's `kind` is `none` for them, and every write of the file is gated on `kind == 'snapshot'`.
+**It publishes nothing.** A pull request and a local run run every stage and build every image (app, admin, tools;
+amd64 and arm64 — a pull request's lane on amd64 only) and write to no registry and no remote: the `version` job's
+`kind` is `none` for them, a pull request's images are built by `build-local`, which holds no write, and every write
+of the file is gated on `kind == 'stage'`. A push to `main` or `release/<major>.x` (`kind` `stage`) also **stages**:
+`build`, the one job with `packages: write`, on a push alone, pushes each image as `build-<sha>-<arch>`, and the lanes
+install exactly those (below). What a push stages is what Publish may sign.
 
 ## Publishing: a snapshot weekly, or by dispatch
 
-Two runs publish a **snapshot** when every stage is green (ADR 0091 decision 5, amended 2026-11-07): the weekly
-`schedule` (Monday 03:17 UTC; GitHub runs it on the default branch only, so it publishes `main`'s HEAD) and a
-`workflow_dispatch` — Actions → CI → *Run workflow* — on `main` or `release/<major>.x`, the one way a release branch's
-fix gets a snapshot. Neither publishes a HEAD that already carries a `snapshot-` tag: the `version` job reads the tags
-of its own full checkout, and such a run tests the commit again and writes nothing. Until 2026-11-07 every green push
-published; once Dependabot opened its pull requests that was a snapshot and a tag per dependency bump. A push, a
-schedule or a dispatch on any other branch is red at the `version` job. The two publishing events share a concurrency
-group per ref, apart from pushes and pull requests, so two publishing runs go one after the other and the later one
+**Publish** (`publish.yml`) publishes a **snapshot** (ADR 0091 decision 5, amended 2026-11-07) on two triggers: the
+weekly `schedule` (Monday 03:17 UTC; GitHub runs it on the default branch only, so it publishes `main`'s HEAD) and a
+`workflow_dispatch` — Actions → Publish → *Run workflow* — on `main` or `release/<major>.x`, the one way a release
+branch's fix gets a snapshot. It runs no pipeline and builds nothing: it publishes the **publishable commit's newest
+Checks push run**, and only when that run concluded `success` with its gate and every lane leg on both architectures
+green; a run still going, red, or cancelled by hand is refused, named, and Publish never starts Checks. The publishable
+commit is HEAD, or — Checks skips a commit that changes only what its push `paths-ignore` names (docs, Markdown, the
+site), so a docs-only HEAD has no run — the newest first-parent ancestor with a run, provided every commit after it is
+docs-only (amended 2026-11-08; within 50 commits, refused and named otherwise); every name the snapshot writes, its
+version and its `snapshot-` tag are that commit's. It takes minutes. It publishes nothing for a publishable commit that
+already carries a `snapshot-` tag (its own full checkout's tags), and is red on any other branch. Until 2026-11-07 every green push published, then for a few hours a Publish ran the pipeline itself; both are
+gone. Publish has its own concurrency group per ref, so two publishing runs go one after the other and the later one
 sees the earlier one's tag.
 
-1. `build` pushes each image under a staging tag, `build-<sha>-<arch>` — unsigned, carrying no published name.
+1. In the Checks push run, `build` pushes each image under a staging tag, `build-<sha>-<arch>` — unsigned, carrying
+   no published name — and keeps its digest as an artifact of the run (30 days).
 2. Lane L1 (`stack`) installs exactly those images, pulled by the digests `build` handed over
    ([ADR 0090](../decisions/0090-end-to-end-tests-boot-the-release-candidate.md) decision 2), and each green leg records
    what it ran (`scripts/snapshot.py lane-result`): its digests and the hash of the asset set it installed
-   (`release_assets.py --asset-set`, the manifest's asset map: what a promotion produces again from the same commit).
-3. `snapshot` runs only when every stage is green (the disabled `upgrade-proof`'s *skipped* tolerated);
-   `validate_release_identity.py` holds its `needs` to every stage of the file. It refuses first: a snapshot is
+   (`release_assets.py --asset-set`, the manifest's asset map: what a promotion produces again from the same commit),
+   kept as an artifact of the run too. The gate `green` needs every stage (the disabled `upgrade-proof`'s and the
+   other event's build's *skipped* tolerated); `validate_release_identity.py` holds its `needs` to every job of the file.
+3. Publish's `checks-run` finds the publishable commit and its run (`scripts/snapshot.py checks-run`: the first-parent
+   history and each commit's changed paths, then the API's runs and jobs of the commit), and `snapshot` checks that
+   commit out and downloads its digests and lane records by its run id and refuses unless every lane record names exactly
+   those digests and every staging tag still resolves to its digest (`snapshot.py staged`). It refuses next: a snapshot is
    **written once per commit and never replaced**, so each image's `<major>.<minor>-SNAPSHOT` and `sha-<commit>` must
    be free or already name exactly this build (a re-run of a half-done snapshot continues; a second build of the commit,
    or a version another commit took, is refused; a registry read that fails for any reason but "not found" is refused
    too). Then it names those digests `<major>.<minor>-SNAPSHOT` and `sha-<commit>` — no `<major>`, no `latest` — packages
    the chart as `<major>.<minor>-SNAPSHOT` (its `appVersion` is the image tag its values default to), signs the three
    images and the chart keylessly, and attaches each lane's result as a signed in-toto attestation per architecture
-   (`https://veyq.app/attestations/stack-lane/v1`: lane, architecture, outcome, shards, the digests, and the inputs —
+   (`https://veyq.app/attestations/stack-lane/v1`: lane, architecture, outcome, shards, the Checks run, the digests, and the inputs —
    the asset set; a predecessor and backups once lanes L2 and L3 exist) to the app and admin images. No GitHub Release.
 4. `snapshot-tag`, a job that holds `contents: write` and nothing else, sets the git tag `snapshot-<major>.<minor>` on
    the commit, so GitHub's release page offers the snapshots that can be promoted. Never `v…`. It creates the tag
@@ -80,12 +91,19 @@ sees the earlier one's tag.
    `GITHUB_TOKEN` push of a ref whose commit's `.github/workflows/` differs from every branch head, which is every
    tag on a commit main has since moved past with a workflow change (0.2347's tag, 2026-11-07). That the API is not held
    to that rule is reported by others, not documented by GitHub; the next such run proves it.
-5. **The image carries `<major>.<minor>`, never `-SNAPSHOT`**: a release is the snapshot's bytes, so the two carry
+5. **Staging images are deleted** by the weekly run's `staging-retention` 30 days after their push, unless their commit
+   is a branch tip (`scripts/staging_retention.py`, selftested; on from its first run, owner 2026-11-07). A staging
+   index is the image and its attestation manifest; a snapshot's own index names those two, so for a commit with a
+   snapshot the staging index goes alone, and for one without it goes with its children. The deletion is GitHub's
+   package API under the workflow's token — a public preview, proven by its first run.
+6. **The image carries `<major>.<minor>`, never `-SNAPSHOT`**: a release is the snapshot's bytes, so the two carry
    one name, and a snapshot reports the release it may become. Whether a digest *is* a release is the release
    signature's fact. Images published before this carry `<major>.<minor>-SNAPSHOT`.
 
 **Two signing identities**, both GitHub's OIDC issuer, in `raddatzk/veyq`, on `refs/heads/main` or
-`refs/heads/release/<major>.x`: a **snapshot** is signed by `.github/workflows/ci.yml`, a **release** by
+`refs/heads/release/<major>.x`: a **snapshot** is signed by `.github/workflows/publish.yml` (the file that holds the signing job: keyless
+signing names it, so `snapshot` is Publish's own job, not the pipeline's; snapshots signed by `ci.yml` before the split
+of 2026-11-07 are not promotable), a **release** by
 `.github/workflows/release.yml` — the promotion (below). The operator's check, [Verify a
 release](../../site/src/content/docs/run/verify-a-release.md), and `veyqctl` pin the release identity and reject the
 snapshot's, so a snapshot never verifies as a release; `validate_release_identity.py` holds both to that. The owner and
@@ -168,13 +186,20 @@ projection fails neither the tenant operation that triggered it nor the start.
 config-secret KEK, which the app generates onto its own claim ([ADR 0050](../decisions/0050-operator-config-secret-encryption.md))
 unless the operator names a Secret holding their own (`app.configSecret.existingSecret`, ADR 0118).
 The app migrates its schema at start, which is why it is one pod under `Recreate`. Two checks need `helm` and sit
-outside the guard glob, in `ci.yml`'s `chart` job: `scripts/chart_meta_check.py` holds the rendered manifests to these
+outside the guard glob, in the pipeline's `chart` job: `scripts/chart_meta_check.py` holds the rendered manifests to these
 rules, and `scripts/chart_upgrade_check.py` renders the predecessor's chart and the candidate's with the same values and
 fails on a change to a field Kubernetes refuses to change, or an operator's values the new schema refuses. With
 `--upgrade-major-entry` it renders the same comparison from the release's major entry
 ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md) decision 10), and says why and passes when there is
 none or it is the default predecessor. It renders, never installs; until the first release it informs and gates
 nothing.
+
+**The bundled database upgrades its own data directory.** When a release moves the bundled MariaDB to a newer version
+(2026-11-07: 11.4 to 12.3), its first start on the older directory backs the system tables up into that directory and
+runs `mariadb-upgrade`: the chart's StatefulSet and both Compose files set the image's `MARIADB_AUTO_UPGRADE=1`, and
+`scripts/validate_database_auto_upgrade.py` holds all three to it. Without it the newer server starts on the old system
+tables. An upgraded directory does not go back to the older MariaDB; the backup taken before the release change does. A
+database the operator runs (`mariadb.enabled: false`) is theirs to upgrade.
 
 **The config-secret key** ([ADR 0050](../decisions/0050-operator-config-secret-encryption.md)) is a file the app
 generates at its first start onto its own persistent volume (a named volume under Compose, a claim of its own under

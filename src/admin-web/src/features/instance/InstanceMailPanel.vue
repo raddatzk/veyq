@@ -14,6 +14,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../shared/ui/notALogin'
 import VeyqMessage, { type VeyqMessageTone } from '../../shared/ui/VeyqMessage.vue'
 import VeyqSwitch from '../../shared/ui/VeyqSwitch.vue'
 import {
@@ -171,25 +172,25 @@ const confirmation = computed<{ severity: VeyqMessageTone; text: string } | null
 
         <label>
           <span>{{ t('instanceMail.host') }}</span>
-          <VeyqInput v-model="host" class="mail-host" placeholder="smtp.example.com" autocomplete="off" />
+          <VeyqInput v-bind="NOT_A_LOGIN" v-model="host" class="mail-host" placeholder="smtp.example.com" autocomplete="off" />
         </label>
         <div class="mail-field-row">
           <label>
             <span>{{ t('instanceMail.port') }}</span>
-            <VeyqInput v-model="port" inputmode="numeric" placeholder="587" autocomplete="off" />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="port" inputmode="numeric" placeholder="587" autocomplete="off" />
           </label>
           <label>
             <span>{{ t('instanceMail.from') }}</span>
-            <VeyqInput v-model="from" class="mail-from" :placeholder="t('instanceMail.fromPlaceholder')" autocomplete="off" />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="from" class="mail-from" :placeholder="t('instanceMail.fromPlaceholder')" autocomplete="off" />
           </label>
         </div>
         <label>
           <span>{{ t('instanceMail.username') }}</span>
-          <VeyqInput v-model="username" autocomplete="off" />
+          <VeyqInput v-bind="NOT_A_LOGIN" v-model="username" autocomplete="off" />
         </label>
         <label>
           <span>{{ t('instanceMail.password') }}</span>
-          <VeyqInput v-model="password" class="mail-password" type="password" autocomplete="new-password" :placeholder="settings.passwordSet ? t('instanceMail.passwordKeep') : ''" />
+          <VeyqInput v-bind="NOT_A_LOGIN" v-model="password" class="mail-password" type="password" autocomplete="new-password" :placeholder="settings.passwordSet ? t('instanceMail.passwordKeep') : ''" />
           <small class="settings-muted">{{ settings.passwordSet ? t('instanceMail.passwordSetHint') : t('instanceMail.passwordHint') }}</small>
         </label>
         <div class="mail-toggle-row">

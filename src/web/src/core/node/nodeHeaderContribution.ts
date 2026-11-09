@@ -39,6 +39,21 @@ export function provideNoNodeHeader(): void {
   provide(nodeHeaderContributionKey, null)
 }
 
+/** The level core's header names its node at. A page has one `h1`, its subject (`docs/crosscutting/ui-web-styleguide.md`
+ *  § Heading levels); a region that draws a node page under another page's header - a bookmark's share shown in place
+ *  (ADR 0121 decision 1) - provides {@link provideNestedNodeHeading}, and the node it draws is named by an `h2`. */
+const nodeHeadingLevelKey: InjectionKey<1 | 2> = Symbol('veyq.nodeHeadingLevel')
+
+/** A region below a page's own header: every node header drawn in it is a section's, `h2`. */
+export function provideNestedNodeHeading(): void {
+  provide(nodeHeadingLevelKey, 2)
+}
+
+/** Core's header: the level it names its node at - 1 unless a region above nested it. */
+export function injectNodeHeadingLevel(): 1 | 2 {
+  return inject(nodeHeadingLevelKey, 1)
+}
+
 /** Core's node page: receive what the detail below contributes. The answer is the current contribution (empty without one). */
 export function provideNodeHeader(): ComputedRef<NodeHeaderContribution> {
   const sink = shallowRef<Builder | null>(null)

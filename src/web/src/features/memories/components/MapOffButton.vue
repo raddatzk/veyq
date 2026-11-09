@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// "Turn map off" — drawn on every Memories map that loads tiles (a level's and a person's `SpaceMap`, the place editor's and
+// "Turn map services off" — drawn on every Memories map that loads tiles (a level's and a person's `SpaceMap`, the place editor's and
 // the lightbox's `MemoryMap`), at the bottom left, on the attribution's line. It withdraws this browser's consent to the map
 // tiles and the place-name lookup at once (GDPR Art. 7(3): as easy as giving it, uc.memory.place A5): the flag is removed,
 // `mapsAvailable` turns false and the host unmounts its Leaflet map, so no further tile is requested. The one control for a

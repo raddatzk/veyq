@@ -17,6 +17,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../shared/ui/notALogin'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqSelect from '../../shared/ui/VeyqSelect.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
@@ -248,30 +249,30 @@ const OUTCOME_ICON: Record<InstanceStoreCheckStepOutcomeEnum, VeyqIconName> = {
         <template v-else>
           <label>
             {{ t('store.endpoint') }}
-            <VeyqInput v-model="form.endpoint" autocomplete="off" name="endpoint" :disabled="busy || fixed" />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="form.endpoint" autocomplete="off" name="endpoint" :disabled="busy || fixed" />
             <small class="settings-muted">{{ t('store.endpointHint') }}</small>
           </label>
           <label>
             {{ t('store.publicEndpoint') }}
-            <VeyqInput v-model="form.publicEndpoint" autocomplete="off" name="publicEndpoint" :disabled="busy" />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="form.publicEndpoint" autocomplete="off" name="publicEndpoint" :disabled="busy" />
             <small class="settings-muted">{{ t('store.publicEndpointHint') }}</small>
           </label>
           <label>
             {{ t('store.bucket') }}
-            <VeyqInput v-model="form.bucket" autocomplete="off" name="bucket" :disabled="busy || fixed" />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="form.bucket" autocomplete="off" name="bucket" :disabled="busy || fixed" />
             <small class="settings-muted">{{ isGarage ? t('store.bucketHintGarage') : t('store.bucketHintS3') }}</small>
           </label>
           <label>
             {{ t('store.region') }}
-            <VeyqInput v-model="form.region" autocomplete="off" name="region" :disabled="busy" />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="form.region" autocomplete="off" name="region" :disabled="busy" />
           </label>
           <label>
             {{ t('store.accessKey') }}
-            <VeyqInput v-model="form.accessKey" autocomplete="off" name="accessKey" :disabled="busy" />
+            <VeyqInput v-bind="NOT_A_LOGIN" v-model="form.accessKey" autocomplete="off" name="accessKey" :disabled="busy" />
           </label>
           <label>
             {{ t('store.secretKey') }}
-            <VeyqInput
+            <VeyqInput v-bind="NOT_A_LOGIN"
               v-model="form.secretKey"
               type="password"
               autocomplete="new-password"
@@ -285,11 +286,11 @@ const OUTCOME_ICON: Record<InstanceStoreCheckStepOutcomeEnum, VeyqIconName> = {
           <template v-if="isGarage">
             <label>
               {{ t('store.garageAdminEndpoint') }}
-              <VeyqInput v-model="form.garageAdminEndpoint" autocomplete="off" name="garageAdminEndpoint" :disabled="busy" />
+              <VeyqInput v-bind="NOT_A_LOGIN" v-model="form.garageAdminEndpoint" autocomplete="off" name="garageAdminEndpoint" :disabled="busy" />
             </label>
             <label>
               {{ t('store.garageAdminToken') }}
-              <VeyqInput
+              <VeyqInput v-bind="NOT_A_LOGIN"
                 v-model="form.garageAdminToken"
                 type="password"
                 autocomplete="new-password"

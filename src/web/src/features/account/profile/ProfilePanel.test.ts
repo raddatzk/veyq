@@ -38,7 +38,7 @@ const TENANT = { epoch: 0, key: K_TENANT }
 /** The name the panel sent, opened as every reader opens it. */
 const nameOf = (u: { sealedName?: string; wrappedNameValueKey?: string }) => openMemberName(TENANT, ADDRESS, u.sealedName, u.wrappedNameValueKey)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000d1', userId: '5c09e000-0000-4000-8000-0000000000d2' }
-const STORED = { username: 'kevin', ...sealName(TENANT, ADDRESS, { firstName: 'Kevin', lastName: 'Raddatz' }), avatarRevision: 0, requireGroupAddConsent: false }
+const STORED = { username: 'kevin', ...sealName(TENANT, ADDRESS, { firstName: 'Kevin', lastName: 'Raddatz' }), avatarRevision: 0, requireGroupAddConsent: false, donationBannerDismissed: false }
 
 const stubs = {
   VeyqButton: { props: ['label', 'loading'], template: '<button type="submit">{{ label }}</button>' },
@@ -81,7 +81,7 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
 
   it('loads and shows the stored name, unsealed on the device', async () => {
     const wrapper = await mountPanel()
-    expect((input(wrapper, 'username').element as HTMLInputElement).value).toBe('kevin')
+    expect((input(wrapper, 'nickname').element as HTMLInputElement).value).toBe('kevin')
     expect((input(wrapper, 'given-name').element as HTMLInputElement).value).toBe('Kevin')
     expect((input(wrapper, 'family-name').element as HTMLInputElement).value).toBe('Raddatz')
     expect(input(wrapper, 'given-name').attributes('disabled')).toBeUndefined() // the key is held: editable
@@ -89,7 +89,7 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
 
   it('saves the handle trimmed and lower-cased, with the name sealed at the member’s own address', async () => {
     const wrapper = await mountPanel()
-    await input(wrapper, 'username').setValue('  Kevin ')
+    await input(wrapper, 'nickname').setValue('  Kevin ')
     await input(wrapper, 'given-name').setValue('Kev')
     await input(wrapper, 'family-name').setValue('Raddatz')
     await save(wrapper)
@@ -115,9 +115,9 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
     expect(wrapper.text()).toContain(t('profile.noNameYet'))
     expect(input(wrapper, 'given-name').attributes('disabled')).toBeDefined()
     expect(input(wrapper, 'family-name').attributes('disabled')).toBeDefined()
-    expect(input(wrapper, 'username').attributes('disabled')).toBeUndefined()
+    expect(input(wrapper, 'nickname').attributes('disabled')).toBeUndefined()
 
-    await input(wrapper, 'username').setValue('newhandle')
+    await input(wrapper, 'nickname').setValue('newhandle')
     await save(wrapper)
     const update = sent()
     expect(update.username).toBe('newhandle')

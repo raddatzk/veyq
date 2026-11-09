@@ -97,7 +97,11 @@ layer.**
    the boundary — it re-admits the wiring. The same forcing function as the backend holds: logic worth mutating is
    lifted out of a `.vue` into a `.ts` composable, where it joins the tier and the component stays thin.
 
-4. **CI shape: on pull requests and pushes to `main`, path-gated, report-before-gate.** Web: Stryker's **incremental** cache
+4. **CI shape: on pull requests and pushes to `main`, path-gated, report-before-gate.** *Amended 2026-11-07
+   (cr-workflows-split-pipeline-callers): the two gates are one workflow, `mutation.yml`, started on the union of both
+   scopes; its `changes` job's path filter runs `crypto` (Stryker) and/or `backend` (PIT) by what the change touches,
+   so a backend-only change still runs the backend gate alone, and `validate_mutation_trigger_paths.py` holds the PIT
+   scope to both triggers and to the `backend` filter.* Web: Stryker's **incremental** cache
    (`incremental: true` + the cached report) is the cost control — it re-tests only mutants whose code *or
    covering tests* changed (⇒ ~1–3 min/PR), so a weakened assertion (a test edit, no source change) is caught,
    not missed. There is **no native git-`--since` in StrykerJS OSS** — that is arcmutate (§1, commercial), so do

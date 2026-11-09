@@ -55,6 +55,8 @@ const reactivatingId = ref<string | null>(null)
 // The switched-off links, folded under a count until opened.
 const offOpen = ref(false)
 const deletingId = ref<string | null>(null)
+// A row's request still running: a tap beside the dialog must not drop its answer (VeyqDialog `keepOnOutside`).
+const busyRow = computed(() => revokingId.value !== null || reactivatingId.value !== null || deletingId.value !== null)
 const actionError = ref(false)
 const copiedLinkId = ref<string | null>(null)
 
@@ -220,7 +222,7 @@ function fmtDate(d: Date): string {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="headerTitle" class="share-dialog" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :header="headerTitle" class="share-dialog" :keep-on-outside="busyRow" @update:visible="emit('close')">
     <div class="share-manage-head">
       <p class="share-intro">{{ introText }}</p>
       <VeyqButton v-if="canCreate" class="share-new-button" :label="t('share.createNew')" icon="plus" @click="openCreate" />

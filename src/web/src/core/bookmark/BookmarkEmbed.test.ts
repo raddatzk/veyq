@@ -186,7 +186,21 @@ describe('a bookmark\'s page shows its share in place', () => {
     const level = w.findComponent(LevelView)
     expect(level.props('access')).toMatchObject({ mode: 'guest', shareId: SHARE_ID, apiBase: AWAY })
     expect(level.findAll('.veyq-level-item-title').map((x) => x.text())).toEqual(['Briefe'])
+    // the bookmark's header is the page's one h1: the share's node is named under it as a section (styleguide § Heading levels)
+    expect(memberHeader(w).find('h1.veyq-node-header-title').text(), 'the bookmark\'s own name').toBe('Holiday')
+    expect(level.find('h2.veyq-node-header-title').text(), 'the share\'s node, nested').toBe('Urlaub')
+    expect(w.findAll('h1')).toHaveLength(1)
     expect(authenticatedCalls, 'the member\'s session is never used for the share').toEqual([])
+    w.unmount()
+  })
+
+  // uc.platform.support-the-project A2: the member's page already carries the banner (`AppShell.vue`), so the share in
+  // place brings no second one — it draws the share page's gates and views, not the share page.
+  it('brings no donation banner of its own: one banner per page', async () => {
+    const w = mountPage()
+    await flushPromises()
+    expect(w.findComponent(LevelView).findAll('.veyq-level-item-title').map((x) => x.text())).toEqual(['Briefe']) // the share is drawn
+    expect(w.find('[data-testid="donation-banner"]').exists()).toBe(false)
     w.unmount()
   })
 

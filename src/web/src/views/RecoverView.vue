@@ -193,11 +193,11 @@ async function setNewPassword() {
       <form v-if="opened && !done" class="veyq-form" @submit.prevent="setNewPassword">
         <label class="veyq-field">
           {{ t('recovery.newPassword') }}
-          <VeyqPassword v-model="newPassword" input-id="recovery-password" required @blur="checkBreaches" />
+          <VeyqPassword v-model="newPassword" input-id="recovery-password" autocomplete="new-password" required @blur="checkBreaches" />
         </label>
         <label class="veyq-field">
           {{ t('recovery.confirmPassword') }}
-          <VeyqPassword v-model="confirmPassword" input-id="recovery-confirm" required />
+          <VeyqPassword v-model="confirmPassword" input-id="recovery-confirm" autocomplete="new-password" required />
         </label>
         <small v-if="passwordHintKey(newPassword)" class="field-hint">{{ t(passwordHintKey(newPassword)!) }}</small>
         <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="recovery" :disabled="busy" />

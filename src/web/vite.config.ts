@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import type { Plugin } from 'vite'
 // `vitest/config`'s defineConfig extends Vite's with the `test` block (setupFiles below) while staying a valid
 // Vite config for `pnpm run dev`/`build`.
-import { defineConfig } from 'vitest/config'
+import { defaultExclude, defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { buildCsp, CSP_POLICY_FILE } from './src/shared/security/csp.ts'
 import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIGIN } from './src/shared/state/mapDefaults.ts'
@@ -298,6 +298,11 @@ export default defineConfig(({ command }) => {
       // 10 s and failed `check` with "Hook timed out" while every test in the file was green when run alone. A hook
       // timeout is not an assertion; 30 s keeps a real hang red without failing on load.
       hookTimeout: 30_000,
+      // `.stryker-tmp/` is out of the collection: an `inPlace` Stryker run (ADR 0045) keeps its backup of every file it
+      // rewrote there, test files included, and vitest's default exclude does not cover it — so the backup's copies ran
+      // too, and media.test.ts's copy failed the dry run on a fixture the backup does not hold (Stryker 10, measured
+      // 2026-11-07: 1,753 files in that backup).
+      exclude: [...defaultExclude, '**/.stryker-tmp/**'],
     },
     build: {
       // The minifier drops the bundled dependencies' license comments, so their MIT/Apache/BSD notices would never

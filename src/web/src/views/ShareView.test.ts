@@ -54,6 +54,7 @@ import type { NodeKind } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memories/kinds'
 import { OPERATOR_SECTION } from '../test/models'
 import type { OperatorSection } from '../core/terms/operatorSection'
+import { forgetDonationDismissalForTest } from '../core/project/donationDismissal'
 
 function mountShareView() {
   return mount(ShareView, {
@@ -266,5 +267,45 @@ describe('ShareView — a Memory drop: core\'s naming form and its "Not you?"', 
     await flushPromises()
     expect(loadGuestSession(SHARE_ID)).toBeNull()
     expect(wrapper.find('.share-name-card').exists()).toBe(true)
+  })
+})
+
+// uc.platform.support-the-project on the share page: a guest's banner, once, above the gates (no account is asked — the
+// guest-mode proof is `core/project/DonationBanner.guest.test.ts`), and the footer's project links in one place, the
+// instance footer (`OperatorIdentification`) — the page's former security link of its own is gone, not doubled.
+describe('ShareView — the donation banner and the footer links', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    forgetDonationDismissalForTest()
+    nameUploader()
+    serve(dropShare())
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
+  })
+
+  it('shows one banner at the top, and the footer links the security and donation pages once each', async () => {
+    const wrapper = mountShareView()
+    await flushPromises()
+    expect(wrapper.find('.share-view-header').exists()).toBe(true) // the content: the positive control
+    expect(wrapper.findAll('[data-testid="donation-banner"]')).toHaveLength(1)
+    expect(wrapper.find('.share-view').element.firstElementChild?.matches('[data-testid="donation-banner"]')).toBe(true)
+    const footerLinks = wrapper.findAll('.share-view-footer a').map((a) => a.attributes('href'))
+    expect(footerLinks.filter((h) => h === 'https://veyq.app/privacy/is-my-data-safe/')).toHaveLength(1)
+    expect(footerLinks.filter((h) => h === 'https://veyq.app/donate/')).toHaveLength(1)
+  })
+
+  it('a dismissed banner stays gone when the page is opened again', async () => {
+    const first = mountShareView()
+    await flushPromises()
+    await first.find('[data-testid="donation-banner-dismiss"]').trigger('click')
+    await flushPromises()
+    expect(first.find('[data-testid="donation-banner"]').exists()).toBe(false)
+    first.unmount()
+
+    forgetDonationDismissalForTest()
+    const again = mountShareView()
+    await flushPromises()
+    expect(again.find('.share-view-header').exists()).toBe(true)
+    expect(again.find('[data-testid="donation-banner"]').exists()).toBe(false)
+    again.unmount()
   })
 })

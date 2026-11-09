@@ -52,6 +52,7 @@ export const VEYQ_ICON_NAMES = [
   'inbox',
   'info-circle',
   'key',
+  'keyboard',
   'language',
   'link',
   'list',

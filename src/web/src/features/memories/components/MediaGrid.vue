@@ -339,6 +339,7 @@ function nearestIn(row: Row, x: number): string {
   return layout.value.tiles[best].id
 }
 
+// Listed in the shortcut overview: `../shortcuts.ts`, *In the gallery*.
 function onKeydown(event: KeyboardEvent) {
   if (event.altKey || event.ctrlKey || event.metaKey) return
   const cell = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-grid-id]')

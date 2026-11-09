@@ -83,7 +83,7 @@ function close() {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="t('export.title', { name: displayName })" class="export-dialog" @update:visible="close">
+  <VeyqDialog :visible="true" :header="t('export.title', { name: displayName })" class="export-dialog" keep-on-outside @update:visible="close">
     <form class="veyq-form" data-testid="export-dialog" @submit.prevent="save">
       <p v-if="step === 'preparing'" class="veyq-form-copy" role="status">{{ t('export.preparing') }}</p>
       <template v-else-if="prepared">

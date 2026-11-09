@@ -37,6 +37,9 @@ export interface MemoryRights extends NodeRights {
   setBanner: boolean
   /** Mark media and filter by marks (shared with the scope, sealed under the scope key `K_SC`, ADR 0068, ADR 0115). */
   mark: boolean
+  /** Narrow the gallery by its media's facts - day, year, place, kind, the original's name (uc.memory.gallery step 8). A
+   *  member's view only: a share guest has no search, so it has no filter field either (ADR 0125 decision 7). */
+  filterFacts: boolean
   /** Show who was there on a Memory (opaque ids in the node's sealed meta, ADR 0083) and the profile link of each. A MEMBER's,
    *  read-only ones included; NO share role has it - the interface shows a guest no participants. Editing the list is
    *  `editMeta`'s. (A personal scope has no participants: the view hides them there, the matrix knows no scope kind.) */
@@ -57,6 +60,7 @@ export const NO_MEMORY_RIGHTS: Readonly<MemoryRights> = Object.freeze({
   editMeta: false,
   setBanner: false,
   mark: false,
+  filterFacts: false,
   share: false,
   shareContribute: false,
   shareUpload: false,
@@ -98,6 +102,7 @@ function memberRights(access: MemberAccess, at: RightsTarget): MemoryRights {
     navigate: true,
     download: true,
     mark: true,
+    filterFacts: true,
     share: node.share,
     shareContribute: node.shareContribute,
     shareUpload: node.shareUpload,

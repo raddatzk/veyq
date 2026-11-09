@@ -672,11 +672,11 @@ Confirm the commit path works **before** phase 1 — it is one throwaway commit,
 discovering it at the point where you have the most to lose.
 **Where a CR's done-when says "green in CI", know which jobs can even run.** Two independent gates, and both bit
 during cr-e2e-orchestrator:
-- **Branch filters.** [`ci.yml`](../.github/workflows/ci.yml) triggers only on `main`, `release/**` and PRs
+- **Branch filters.** [`checks.yml`](../.github/workflows/checks.yml) triggers only on `main`, `release/**` and PRs
   *targeting* them, so pushing a feature branch runs **nothing**. That CR's Phase 5 said "push the branch so the job
-  runs"; the push produced zero runs. A pull request is how a branch gets a real run: `ci.yml`'s `workflow_dispatch`
-  is the **publish** since it absorbed `container.yml` (ADR 0091), and its version step refuses a dispatch on any
-  branch but `main` and `release/<major>.x`.
+  runs"; the push produced zero runs. A pull request is how a branch gets a real run: the one dispatch of the
+  pipeline is `publish.yml`'s, the **publish** (ADR 0091), and its version step refuses a dispatch on any branch but
+  `main` and `release/<major>.x`.
 - **`workflow_dispatch` resolves against the DEFAULT branch.** A workflow file that exists only on the feature
   branch cannot be dispatched at all — `HTTP 404: not found on the default branch`. This once described
   `trust-chain.yml`, `mutation*.yml` and `wiki-sync.yml`, which lived on a feature branch and not on `main`; that
@@ -690,11 +690,11 @@ during cr-e2e-orchestrator:
   and `admin-web` are not among them, is ADR 0040's note on what a row is.) No branch filter and no dispatch
   trick changes that; only publishing the repository does, which is the owner's
   call and tracked as inbox **#26** item (1). Until then, a local run over the **committed** tree is the
-  strongest available proof — `python3 scripts/run_pipeline.py` runs `ci.yml`'s jobs on a commit and names every
+  strongest available proof — `python3 scripts/run_pipeline.py` runs the pipeline's jobs on a commit and names every
   job and step it did not run — and a done-when must say exactly that rather than "green in CI". The two gates
   above stay because they are what bites *after* the remote exists.
 - **With no remote, a check only one CI job runs is a check nobody runs — so a done-when names that job.** The
-  surface checks and the glob do not cover `ci.yml`'s `web-e2e`, and that job carries more than the API suites: the
+  surface checks and the glob do not cover the pipeline's `web-e2e`, and that job carries more than the API suites: the
   tool self-tests of the backup, `veyqctl` and the upgrade proof, which read the backend's migrations and
   `scripts/`. On 2026-10-16 two migrations that seed rows each landed green past `./gradlew check` and the glob, and
   each made every restore onto a fresh install refuse; the first `run_pipeline.py --job web-e2e` was red in its
@@ -893,9 +893,11 @@ Compare trees, not occurrences. For an **automated, repeated** guard that re-inj
 every run, work on a throwaway *copy* of the tree, not the live one: `scripts/validate_guard_gaps.py`
 copies → forges → runs → discards, so even an abort leaves an orphaned tempdir, never a dirty tree
 (every guard's `__file__`-relative `ROOT` makes a copied `scripts/<guard>.py` resolve to the copy).
-Snapshot-restore is the interactive one-shot; a copy is its automated form. **Batching levers into one run is
-sound only across disjoint code paths AND disjoint tests:** a test stops at its first failed assertion, so two
-levers that redden the same test leave the second unproven (`cr-queued-rotation-owners-only-no-leased-join`
+Snapshot-restore is the interactive one-shot; a copy is its automated form. **Where a live dev server serves the tree,
+the one-shot bites a copy too:** an injection into a file the owner's Vite serves hot-reloads every mutant into their
+open page, so the lever goes into a copy beside the file, run by a copy of its test (2026-11-09, five search bites).
+**Batching levers into one run is sound only across disjoint code paths AND disjoint tests:** a test stops at its first
+failed assertion, so two levers that redden the same test leave the second unproven (`cr-queued-rotation-owners-only-no-leased-join`
 paired "derive from the oldest job" with "drop the re-queue's state gate", and the first answered for both).
 
 **First check the lever is wired to the mechanism at all.** Both traps below assume the lever *reaches* the code
@@ -1806,7 +1808,10 @@ stopped the CR — while under load the page path took 22.6–73.6 s and the cha
 reading was wrong; each was a different substrate, and only one was written down. So every timing carries
 `sysctl -n vm.loadavg` beside it, a before/after pair runs alternately in one window rather than hours apart,
 and a gate that authorises building is taken again quiet before it does — a gate measured once is § *bite the
-MEASUREMENT* left undone.
+MEASUREMENT* left undone. **A bound — a ceiling a reading must stay under — is judged at the load there is**, since the
+owner's work keeps this Mac from ever being quiet (a harness waiting for a load of 3 waited 25 minutes at 6–25): a bound
+that holds under load passes, since load only makes the numbers worse; one that fails gets one re-run and fails on a
+second; after a fix, both runs must hold. Let the load of your own last heavy step fall before the first run.
 
 ### Where a mapping depends on a library's output, one un-mocked test runs BEFORE the mapping
 
@@ -1882,7 +1887,7 @@ removed the lock one commit before implementation began, and only the brief's wa
 pull `build-<sha>-<arch>` by digest "on a push" — ADR 0091 decision 5's snapshot-per-push, decided and not built: the
 workflow pushed images on a dispatch only, so on a push there was nothing to pull, and the implementer re-cut the job
 (pull on the dispatch, build in the job on a push). A phase that wires into the pipeline measures what the workflow
-does today, per event (`grep -n "push:" .github/workflows/ci.yml`), and says which half of its sentence waits on
+does today, per event (the triggers of `.github/workflows/checks.yml` and `publish.yml`), and says which half of its sentence waits on
 which unbuilt decision.
 
 ### An owner's answer that reverses a decision is edited into every phase it reverses

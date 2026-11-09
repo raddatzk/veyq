@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// Settings → Personal → Map and place names (uc.memory.place A5, ADR 0016): this browser's one consent to the map tiles
+// Settings → Personal → Map services (uc.memory.place A5, ADR 0016): this browser's one consent to the map tiles
 // and the reverse geocoder, both client-direct third parties. It shows which services this server configured (the hosts of
 // the capabilities `useMapConfig` reads), what they receive, and a switch that gives or withdraws the consent at once —
-// the same flag the in-context prompts set and every map's "Turn map off" clears. Device-local (ADR 0022): nothing here
+// the same flag the in-context prompts set and every map's "Turn map services off" clears. Device-local (ADR 0022): nothing here
 // reaches the server. With no tile service there is nothing to consent to; the switch stays only while an earlier consent
 // is still stored, so it can be withdrawn too. A consent names its hosts: one stored for other hosts holds only for them,
 // so the switch shows off and the panel names the hosts it was given for (switching on agrees to the current ones).

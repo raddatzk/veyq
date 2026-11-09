@@ -11,6 +11,7 @@ vi.mock('./AppSidebar.vue', () => ({ default: { render: () => null } }))
 vi.mock('./AppTopbar.vue', () => ({ default: { render: () => null } }))
 vi.mock('../../features/account/profile/FinishProfilePrompt.vue', () => ({ default: { render: () => null } }))
 vi.mock('../../core/operator/OperatorIdentification.vue', () => ({ default: { render: () => null } }))
+vi.mock('../../core/project/DonationBanner.vue', () => ({ default: { render: () => null } }))
 vi.mock('../../app/activeSpace', async (orig) => ({
   ...(await orig<typeof import('../../app/activeSpace')>()),
   enterScope: vi.fn(),

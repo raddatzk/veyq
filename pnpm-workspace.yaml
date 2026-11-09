@@ -9,7 +9,7 @@ packages:
 
 # pnpm reads `overrides` only from the workspace root, so these hold for every member.
 #
-# qs: @stryker-mutator/core@9 -> typed-rest-client@~2.3.0 (2.3.1) pins qs at EXACTLY 6.15.1. That exact pin — not a
+# qs: @stryker-mutator/core@10 -> typed-rest-client@~2.3.0 (2.3.1) pins qs at EXACTLY 6.15.1. That exact pin — not a
 # range — is why an audit fix cannot resolve it without forcing. The floor has moved with the advisories: 6.15.1
 # carried GHSA-q8mj-m7cp-5q26 (qs.stringify DoS, fixed 6.15.2); then GHSA-x5fp-wj9c-mxmx (array-limit bypass,
 # <=6.15.3) and GHSA-4mjr-xmp4-gh2g (isBuffer DoS, <6.16.0) made 6.16.0 the first clean one (inbox #403); then

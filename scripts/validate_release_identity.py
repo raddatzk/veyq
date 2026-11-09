@@ -3,7 +3,24 @@
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
 **What it asserts.** Fourteen things (11 retired from this pipeline with the release kind, below), in the order a
-snapshot happens:
+snapshot happens. **Two files, one path of bytes** (ADR 0091 decisions 2 and 5, amended 2026-11-07,
+cr-workflows-split-pipeline-callers): `checks.yml` is the pipeline — every push and pull request — and a push to `main`
+or `release/<major>.x` STAGES its images (`kind == 'stage'`); `publish.yml` runs no pipeline and builds nothing, and
+signs and names what the publishable commit's wholly green Checks push run staged
+(`needs.checks-run.outputs.kind == 'snapshot'`). "The file" below is both files' jobs read together, each job answering to its own file's gate; what is one file's
+says so. What the split holds besides: no job of a pull request's run writes (`build`, the one job with `packages:
+write`, runs on a push alone; `build-local` is its matrix and steps for a pull request); no job of checks.yml asks for
+`id-token`; `snapshot`, `snapshot-tag` and `checks-run` are publish.yml's own (keyless signing names the file holding
+the signing job); publish.yml calls no workflow, builds nothing, downloads artifacts only from the run `checks-run`
+verified, runs `scripts/snapshot.py checks-run` (exactly `contents: read`, `actions: read`) before its snapshot and
+`snapshot.py staged` before the snapshot's first write, names the Checks run in each attestation, and deletes staging
+images only from its schedule-only `staging-retention` through `scripts/staging_retention.py`; and the names
+`snapshot.py` reads a Checks run by (the gate's, the lane's, the build matrix's images) are checks.yml's. And every
+name a snapshot writes is the **publishable commit**'s (amended 2026-11-08): `checks-run` starts at `$GITHUB_SHA` and
+outputs the commit it checked (HEAD, or a docs-only HEAD's newest tested ancestor); no step of `snapshot` or
+`snapshot-tag` reads `$GITHUB_SHA`, each checks out `needs.checks-run.outputs.commit`, each `$COMMIT` it uses is set
+from it, every `sha-` name and `--commit` is `$COMMIT`, and the staged-bytes check, the write-once refusal, the
+manifests, the image signatures, the predicates and the tag each name it.
 
   1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
      identity (ADR 0057 §1): the minor is the number of commits since `VERSION` last changed, so a checkout
@@ -12,22 +29,22 @@ snapshot happens:
      *executed* here, inside a throwaway git repository this guard builds — `VERSION` changed twice, then a
      known number of commits, an older commit carrying an older `snapshot-` tag, plus a shallow clone of it and a
      clone whose HEAD carries its own `snapshot-` tag — so the minor is asserted against a known count, never
-     against this repository's own history, which moves. Scenarios: the schedule on `main` and a dispatch on `main` and
-     on `release/<major>.x` (kind `snapshot`); the same three on a HEAD that already carries its snapshot, a push to
-     `main` and to `release/<major>.x`, a pull request and a local run (`runner.environment` `local`, as
+     against this repository's own history, which moves. Scenarios: a push to `main` and to `release/<major>.x`, and
+     one to `main` whose HEAD already carries its snapshot (kind `stage`); a pull request, a push to a branch that
+     disagrees with the tree or is not a release branch, and a local run (`runner.environment` `local`, as
      `scripts/run_pipeline.py` sets it) of a push to `main` and to a feature branch (kind `none`), every one stamping
-     `<major>.<minor>` and never `-SNAPSHOT` (ADR 0091 decision 5) — and, each must FAIL, a push, a schedule or a
-     dispatch on a branch that disagrees with the tree or is not a release branch, and a shallow checkout. Executing it is the only
+     `<major>.<minor>` and never `-SNAPSHOT` (ADR 0091 decision 5) — and, each must FAIL, a shallow checkout. Executing it is the only
      honest way to assert what a publish *would* stamp; reading it would only
      assert what it looks like. The step is also held to declaring no network tool at all (a `git` that talks to
      a remote included), because a version a registry decides is not an identity (ADR 0057 § Rejected), and to
      receiving each input the scenarios set from the expression a run sets it from. `scripts/release_assets.py`
      counts the release a second time, to name the release's assets, and is held to the step's count on the same
      history and to refusing the shallow clone.
-  3. **Only a publishing run writes; a snapshot refuses to replace itself, and its one git ref is `snapshot-…`.**
-     Every write in the file — found by what a step does (a login or build-push action, or a `run:` that pushes, logs
-     in, signs or attests), never listed — is gated on `needs.version.outputs.kind == 'snapshot'` by its step, its
-     job or its push input, so a pull request (Dependabot's included) and a local run write nothing.
+  3. **Only a staging push and a publish write; a snapshot refuses to replace itself, and its one git ref is
+     `snapshot-…`.** Every write in the files — found by what a step does (a login or build-push action, or a `run:`
+     that pushes, logs in, signs or attests), never listed — is gated by its step, its job or its push input on its
+     file's gate (`needs.version.outputs.kind == 'stage'` in checks.yml, `needs.checks-run.outputs.kind == 'snapshot'`
+     in publish.yml), so a pull request (Dependabot's included) and a local run write nothing.
      `workflow_dispatch` takes no input: a dispatch is a snapshot now, by hand, and a release is a promotion in a
      workflow of its own. The `snapshot` job holds `packages: write` and `id-token: write` and never `contents: write`; the
      `snapshot-tag` job needs it, is gated the same way and holds exactly `contents: write`; a ref write (`git push`, or
@@ -52,15 +69,17 @@ snapshot happens:
      which builds each target at two revisions on a warm cache and also refuses an OCI label the base image lends.
   9. **The snapshot waits on every stage** (ADR 0091 decision 2). The workflow is the one pipeline per commit, and
      its image build starts beside the tests instead of after them — which is sound only while nothing it builds is
-     published before every stage is green. So every other job of the file is in the `snapshot` job's `needs:`, found
-     by reading the file's jobs, never listed — except the jobs that come after it (they need it: its git tag); and
-     when its `if:` calls a status function (`always()`, `failure()`, `cancelled()`) — which lets it run past a failed
-     or skipped need — the condition requires `needs.<job>.result == 'success'` of every need, the one exception a job
-     that is literally `if: false`, whose `skipped` it may accept alongside `success` (the disabled upgrade proof).
+     published before every stage is green. So every other job of `checks.yml` is in its gate job's (`green`)
+     `needs:`, found by reading the file's jobs, never listed; when the gate's `if:` calls a status function
+     (`always()`, `failure()`, `cancelled()`) — which lets it run past a failed or skipped need — the condition requires
+     `needs.<job>.result == 'success'` of every need, the one exception a job that runs by design on no event (`if:
+     false`, the disabled upgrade proof) or on one event alone (`if: github.event_name == '<event>'`, the two image
+     builds), whose `skipped` it may accept alongside `success`; and `snapshot` is gated on `checks-run`'s verdict,
+     which publishes only a Checks run whose gate concluded `success` (scripts/snapshot.py, selftested).
  10. **The snapshot waits on lane L1** (ADR 0090 decision 2). Assertion 9 holds the snapshot to the jobs the file
      has, and cannot see one that is gone; so the job that runs `scripts/run_stack_e2e.py` — found by what it runs,
      never by its name — must exist, need `build`, run on every architecture the build matrix publishes, and be in
-     the snapshot's `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms.
+     the gate's `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms.
  13. **Each lane's result is attested by the snapshot, never by the lane** (ADR 0091 decision 5). The lane's job
      records each green leg (`scripts/snapshot.py lane-result`, gated like every write) and holds no `id-token`; the
      `snapshot` job assembles the predicates once (`scripts/snapshot.py predicates`) with `--arch` and `--shard` equal
@@ -88,34 +107,33 @@ snapshot happens:
      and a replaced draft are deleted. `promote` produces the files with the snapshot commit's own producer (the
      `snapshot` worktree), holds them to the plan (`scripts/promote.py assets`), and only then signs exactly `veyqctl`
      and the manifest into the producer's reserved bundle names; it packages the chart from the snapshot's commit as
-     `$VERSION` and signs it. Every job that runs cosign installs `ci.yml`'s cosign first, the Helm pin is `ci.yml`'s,
+     `$VERSION` and signs it. Every job that runs cosign installs publish.yml's cosign first, the Helm pin is the
+     pipeline's and publish.yml's (each states it: a caller's env does not reach a called workflow),
      the file states no certificate identity of its own, and no other workflow writes a GitHub Release. What
-     `scripts/promote.py` decides — every refusal — is `scripts/promote_selftest.py`'s, which `check` and `ci.yml`'s
-     `guards` run.
+     `scripts/promote.py` decides — every refusal — is `scripts/promote_selftest.py`'s, which `check` and the
+     pipeline's `guards` run.
  15. **A job that can write installs only hashed wheels.** Every `pip install` (also `python -m pip install`) of every
-     `release.yml` job, and of every `ci.yml` job whose permissions hold a `write` (`id-token`, `packages`, `contents`,
+     `release.yml` job, and of every job of the Checks and Publish runs whose permissions hold a `write` (`id-token`, `packages`, `contents`,
      or `write-all`), carries `--require-hashes`, `--only-binary :all:` and `-r <file>`; each such file exists and every
      requirement in it is `<name>==<version>` followed by its `--hash=sha256:` values (`scripts/requirements-release.txt`).
      What PyPI serves unpinned at install time runs with the job's token — in `promote` the release identity's.
-     `ci.yml`'s read-only jobs are out of scope: they reach only their own runner.
- 16. **No job relies on the implicit `success()` behind a job that can be skipped.** In `ci.yml` and `release.yml`,
+     The runs' read-only jobs are out of scope: they reach only their own runner.
+ 16. **No job relies on the implicit `success()` behind a job that can be skipped.** In the Checks and Publish runs and `release.yml`,
      a job whose needs reach a job with an `if:` (directly, or through the chain) states a status function in its own
      `if:` (`!cancelled()` or `always()`, never `success()`) and, for every such need, `needs.<job>.result == 'success'`
      (or a `contains(fromJSON(…), needs.<job>.result)`) as an `&&` term — GitHub's implicit `success()` looks at the
      whole chain, so a skipped job anywhere upstream skips everything after it. `!cancelled()` is the one negation the
      gating model of assertion 3 accepts.
- 17. **Only the weekly schedule and a dispatch publish, and never twice for one commit** (ADR 0091 decision 5, owner
-     2026-11-07). `ci.yml` triggers on `push`, `pull_request`, a `schedule` with at least one `cron` and
-     `workflow_dispatch`. Of assertion 2's executed scenarios, the events that came out `kind=snapshot` are exactly
-     `schedule` and `workflow_dispatch` — derived from what the step wrote, not from the expectations table, so a push
-     that publishes is red even with the table edited to expect it — and no scenario whose HEAD already carries a
-     `snapshot-` tag publishes, while the clone whose only `snapshot-` tag sits on an older commit does (a check
-     that reads "any snapshot tag exists" would stop every snapshot after the first). Assertion 3 holds every write to
-     that `kind`, so a push run cannot reach one. And the `concurrency.group` — *evaluated* for each event on `main`
-     and `release/<major>.x`, never matched as text — puts the schedule and a dispatch of a ref in one group and a
-     push or a pull request in another, per ref, never cancelled in progress: two publishing runs then go one after
-     the other, so the later one sees the earlier one's tag, and a push neither waits for a snapshot nor gets a
-     pending scheduled run cancelled by queueing behind it.
+ 17. **Only a push stages, only the weekly schedule and a dispatch publish** (ADR 0091 decision 5, owner 2026-11-07).
+     `checks.yml` triggers on exactly `push` and `pull_request`, `publish.yml` on exactly a `schedule` with at least one
+     `cron` and `workflow_dispatch`. Of assertion 2's executed scenarios, the events that came out `kind=stage` are
+     exactly `push` — derived from what the step wrote, not from the expectations table, so a pull request that stages
+     is red even with the table edited to expect it. Whether a HEAD already has its snapshot is publish.yml's
+     `checks-run` (its own checkout's tags). And each file's `concurrency.group` — *evaluated* for each event on
+     `main` and `release/<major>.x`, never matched as text — puts the schedule and a dispatch of a ref in one group
+     (publish.yml's) and a push or a pull request in another (checks.yml's), per ref, never cancelled in progress: two
+     publishing runs then go one after the other, so the later one sees the earlier one's tag, and a push neither waits
+     for a snapshot nor gets a pending scheduled run cancelled by queueing behind it.
   8. **The chart is the snapshot's third artifact** (ADR 0064). The refuse step checks `--image` for every published
      image (the build matrix) AND `--chart charts/<name>` (`Chart.yaml`'s `name`) under the workflow's own registry; the
      step that runs `helm package` sets `--version` and `--app-version` to the tree-derived version's `-SNAPSHOT`
@@ -142,7 +160,7 @@ snapshot happens:
      pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
      `infra/docker/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
-     `.github/workflows/ci.yml` actually publishes — the set is read out of that workflow's build
+     `.github/workflows/checks.yml` actually stages — the set is read out of that workflow's build
      matrix, never listed here (§ *a guard derives its anchor set from the code*). A recipe that builds is a
      recipe only `docker compose` can deploy: Compose hides it by building on the operator's host, and
      [ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)'s Helm chart cannot, because a
@@ -158,7 +176,7 @@ snapshot happens:
      0091 decision 5). Every `cosign verify` and `cosign verify-blob` (the one for `veyqctl` itself, ADR 0096
      decision 3) on `site/src/content/docs/run/verify-a-release.md` pins GitHub's OIDC issuer and one certificate
      identity; that identity **accepts** the release workflow (`RELEASE_WORKFLOW`, `.github/workflows/release.yml`)
-     on every branch assertion 2's scenarios turn into a publish, and **rejects** `ci.yml` — the snapshot identity —
+     on every branch assertion 2's scenarios turn into a publish, and **rejects** `publish.yml` — the snapshot identity —
      on each of those branches (a snapshot and its release are one digest, so accepting it verifies every snapshot as
      a release), every other workflow in `.github/workflows/`, non-release branches (which the version step must
      refuse as well), pull-request and tag refs (a `snapshot-` tag's included), another owner, a repository whose name
@@ -241,6 +259,21 @@ once Dependabot opened its pull requests each merged bump was a snapshot, three 
 of its own. Publishing moved to a weekly schedule and the dispatch, gated on HEAD having no snapshot yet; a push still
 runs the whole pipeline (ADR 0091 decision 2). Assertions 2 and 3 were reshaped with it: a push's scenarios now
 expect `none`.
+
+The split of `ci.yml` (cr-workflows-split-pipeline-callers, 2026-11-07, the owner's: one workflow per purpose before V1,
+and then the same day: Publish signs what Checks tested, and runs no pipeline) reshaped assertions 2, 3, 9, 13 and 17
+and added the split's own holds: the version step stages on a push and publishes nothing; every write answers to its
+own file's gate; the gate is checks.yml's `green`, which publish.yml reads through the API; no pull request's job
+writes; Publish builds nothing, downloads only from the run it verified and checks the staged bytes before its first
+write. No incident: each new hold was bitten once (a stage dropped from the gate, the snapshot ungated from
+`checks-run`, `packages: write` on `build-local`, `build` on every event, a write in a job a pull request runs, a
+build or a pipeline call in Publish, an artifact from another run, the staged-bytes check dropped or moved after a
+write, the version step staging a pull request, a tag pushed by git, a Helm pin that drifts).
+
+The publishable commit's hold was bought by a live defect (2026-11-08, Publish run 42484798393): main's HEAD
+`3ae1ae01c` and its parent changed only `site/**` and `docs/**`, which checks.yml's push filter ignores, so HEAD had no
+Checks run and Publish was red — weekly and on a dispatch — whenever main's tip was docs-only. Publish now publishes
+the newest tested ancestor, and the hold keeps a later edit from naming HEAD again anywhere a name is written.
 
 Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
 The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
@@ -371,7 +404,16 @@ import repo_layout  # where the deployment files and the test harnesses live (AD
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 VERSION_FILE = ROOT / "VERSION"
-WORKFLOW = ROOT / ".github/workflows/ci.yml"
+# Two workflows (ADR 0091 decisions 2 and 5, amended 2026-11-07; cr-workflows-split-pipeline-callers): `checks.yml` is
+# the pipeline — every push and pull request — and a push to a publishing branch STAGES its images; `publish.yml`
+# (weekly, and on a dispatch) runs no pipeline and builds nothing: it signs and names what the publishable commit's
+# green Checks run staged. WORKFLOW is the file that publishes — its keyless identity is the snapshot's.
+CHECKS = ROOT / ".github/workflows/checks.yml"
+WORKFLOW = ROOT / ".github/workflows/publish.yml"
+# checks.yml's job that needs every stage; publish.yml reads its result through the API (scripts/snapshot.py).
+GATE_JOB = "green"
+# publish.yml's job that finds the publishable commit and its green Checks run, and the weekly one that deletes old staging images.
+CHECKS_RUN_JOB, RETENTION_JOB = "checks-run", "staging-retention"
 # The tracked files whose written-down image tags assertion 4 scans: the deployment, and the two harnesses that run
 # the deployment (lane L1's overlay, the API fuzzer) - named, so a move of either does not quietly change the scan.
 TAG_SCAN_DIRS = (repo_layout.INFRA_DIR, repo_layout.E2E_STACK_DIR, repo_layout.FUZZ_DIR)
@@ -388,7 +430,8 @@ VERSION_JOB, VERSION_STEP = "version", "veyq-version"
 PUBLISH_JOB = "snapshot"
 SNAPSHOT_TAG_JOB = "snapshot-tag"
 REFUSE_STEP, TAG_STEP = "assert-snapshot-unpublished", "snapshot-tag"
-BUILD_JOB = "build"
+STAGED_STEP = "assert-staged"  # publish.yml's check that the bytes are the Checks run's (scripts/snapshot.py staged)
+BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
 # Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
 # The snapshot's decisions (assertion 13): a lane leg's record, the predicates, the write-once refusal.
@@ -405,7 +448,11 @@ RELEASE_WORKFLOW = ".github/workflows/release.yml"
 
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
-VERSION_EXPR = "${{ needs.version.outputs.version }}"
+VERSION_EXPR = "${{ needs.checks-run.outputs.version }}"  # publish.yml's: the version checks-run counted
+# publish.yml's publishable commit: HEAD, or a docs-only HEAD's newest tested ancestor (ADR 0091 decision 5, amended
+# 2026-11-08). Every name a snapshot writes is this commit's; `$GITHUB_SHA` is read by `checks-run` alone, as the start.
+COMMIT_EXPR = "${{ needs.checks-run.outputs.commit }}"
+STAGE_VERSION_EXPR = "${{ needs.version.outputs.version }}"  # checks.yml's: what the build stamps
 
 # A veyq image reference with a literal tag: `…/veyq:<tag>` or a bare `veyq:<tag>`. The character after `veyq`
 # must be `:`, so a `veyq-<something>:<tag>` sibling is not claimed as the app image — live today for
@@ -425,9 +472,12 @@ STEP_ENV = {
     "RUNNER_ENVIRONMENT": "${{ runner.environment }}",
 }
 
-# What every write of the pipeline is gated on: the `version` job's verdict that this run publishes a snapshot (a push
-# or a dispatch on a publishing branch, on GitHub's runners) — never a pull request, never a local run (ADR 0091 decision 5).
-PUBLISHES = "needs.version.outputs.kind == 'snapshot'"
+# What every write of checks.yml is gated on: the `version` job's verdict that this push stages (a push to a publishing
+# branch, on GitHub's runners) — never a pull request, never a local run (ADR 0091 decision 5, amended 2026-11-07).
+STAGES = "needs.version.outputs.kind == 'stage'"
+# What every write of publish.yml's snapshot is gated on: `checks-run`'s verdict that HEAD has a wholly green Checks
+# run and no snapshot yet.
+PUBLISHES = "needs.checks-run.outputs.kind == 'snapshot'"
 # A `run:` that writes to a registry or to the remote — a GitHub Release included. `uses:` writers are recognised by
 # action below. `cosign sign` matches `cosign sign-blob` too, and `cosign attest` is a write as well: both write to the
 # transparency log, and an attestation to the registry.
@@ -464,14 +514,13 @@ def non_release_branches(major: str) -> list[str]:
     return ["master", "develop", "main-next", f"release/{major}.x-rc", f"release/{major}.x/hotfix"]
 
 
-# Filled by assertion 2's scenarios: every branch a run on which the version step turns into a publish.
+# Filled by assertion 2's scenarios: every branch a run on which the version step stages, which are the branches a
+# snapshot is published from.
 publishing_branches: list[str] = []
-# Filled by the same scenarios, for assertion 17: (event, checkout, label) of every one that came out `kind=snapshot`.
+# Filled by the same scenarios, for assertion 17: (event, checkout, label) of every one that came out `kind=stage`.
 publishing_runs: list[tuple[str, str, str]] = []
-# The publishing events those scenarios ran on a HEAD that already has its snapshot (and the step did not refuse).
-tagged_probes: list[str] = []
-# The events that may publish (assertion 17, owner 2026-11-07): the weekly schedule and the owner's dispatch.
-PUBLISHING_EVENTS = {"schedule", "workflow_dispatch"}
+# The events that may stage (assertion 17): a push, and nothing else checks.yml runs on.
+STAGING_EVENTS = {"push"}
 
 errors: list[str] = []
 signing_cosign = ""  # assertion 11's installer pin, for the OK line
@@ -479,6 +528,10 @@ signing_cosign = ""  # assertion 11's installer pin, for the OK line
 
 def fail(message: str) -> None:
     errors.append(message)
+
+
+def rel_of(path: pathlib.Path) -> str:
+    return path.relative_to(ROOT).as_posix()
 
 
 # ---- 1. the release identity itself ------------------------------------------------------------------------
@@ -623,19 +676,37 @@ def run_scenario(script: str, checkout: pathlib.Path, env: dict[str, str]) -> tu
     return proc.returncode, written, (proc.stderr or proc.stdout).strip()
 
 
-workflow_doc: dict = {}
-if not WORKFLOW.is_file():
-    fail(f"{WORKFLOW.relative_to(ROOT)} is missing — there is no publish pipeline to hold to the tree")
-else:
-    try:
-        workflow_doc = yaml.safe_load(WORKFLOW.read_text()) or {}
-    except yaml.YAMLError as e:
-        fail(f"{WORKFLOW.relative_to(ROOT)} is not readable YAML: {e}")
+checks_doc: dict = {}  # checks.yml, the pipeline
+publish_doc: dict = {}  # publish.yml
+for path in (CHECKS, WORKFLOW):
+    if not path.is_file():
+        fail(f"{rel_of(path)} is missing — the pipeline is checks.yml and the snapshot publish.yml (ADR 0091 decisions "
+             f"2 and 5); without it there is no publish pipeline to hold to the tree")
+try:
+    checks_doc = yaml.safe_load(CHECKS.read_text()) or {} if CHECKS.is_file() else {}
+    publish_doc = yaml.safe_load(WORKFLOW.read_text()) or {} if WORKFLOW.is_file() else {}
+except yaml.YAMLError as e:
+    checks_doc, publish_doc = {}, {}
+    fail(f"checks.yml or publish.yml is not readable YAML: {e}")
+CHECKS_JOBS = set((checks_doc.get("jobs") or {}))
+PUBLISH_JOBS = set((publish_doc.get("jobs") or {}))
+if CHECKS_JOBS & PUBLISH_JOBS:
+    fail(f"checks.yml and publish.yml share job ids {sorted(CHECKS_JOBS & PUBLISH_JOBS)} — this guard reads their jobs "
+         f"together and holds each to its own file's rules")
+# Both files' jobs, read together where an assertion follows the bytes from the stage to the snapshot (a job's
+# file says which gate it answers to: STAGES in checks.yml, PUBLISHES in publish.yml).
+workflow_doc: dict = {"jobs": {**(checks_doc.get("jobs") or {}), **(publish_doc.get("jobs") or {})}} \
+    if checks_doc and publish_doc else {}
+
+
+def gate_of(job_name: str) -> str:
+    return STAGES if job_name in CHECKS_JOBS else PUBLISHES
+
 
 compute = step_by_id(workflow_doc, VERSION_JOB, VERSION_STEP) if workflow_doc else None
 if workflow_doc and compute is None:
     fail(
-        f"{WORKFLOW.relative_to(ROOT)}: no step `id: {VERSION_STEP}` in job `{VERSION_JOB}` — this guard "
+        f"{rel_of(CHECKS)}: no step `id: {VERSION_STEP}` in job `{VERSION_JOB}` — this guard "
         f"executes that step to assert what a publish would stamp, and cannot find it"
     )
 elif compute is not None and version_match:
@@ -665,57 +736,37 @@ elif compute is not None and version_match:
         release = f"{major}.{EXPECTED_MINOR}"
 
         def event(name: str, branch: str, runner: str = "github-hosted") -> dict[str, str]:
-            return {"EVENT_NAME": name, "REF_NAME": branch, "RUNNER_ENVIRONMENT": runner}
+            # `_EVENT` names the scenario's event for the checks below; the step itself reads EVENT_NAME.
+            return {"_EVENT": name, "EVENT_NAME": name, "REF_NAME": branch, "RUNNER_ENVIRONMENT": runner}
 
         # The stamp is `<major>.<minor>` on EVERY event (ADR 0091 decision 5: a release is the snapshot's bytes, so the
-        # two carry one name); only `kind` says whether the run publishes.
+        # two carry one name); only `kind` says whether the run stages.
         stamp = {"version": release, "major": major}
         # (label, checkout, env, expected exit, expected outputs). The checkout is build_history's key: `full` (HEAD has
         # no snapshot yet, its parent has), `tagged` (HEAD has its snapshot), `shallow`.
         scenarios = [
             (
-                # Owner 2026-11-07: a push runs the whole pipeline and publishes nothing (assertion 17).
+                # A push to a branch a snapshot is published from stages its images for publish.yml.
                 "a push to main",
-                "full", event("push", "main"), 0, {"kind": "none", **stamp},
+                "full", event("push", "main"), 0, {"kind": "stage", **stamp},
             ),
             (
                 f"a push to release/{major}.x",
-                "full", event("push", f"release/{major}.x"), 0, {"kind": "none", **stamp},
+                "full", event("push", f"release/{major}.x"), 0, {"kind": "stage", **stamp},
             ),
             (
-                # GitHub runs a schedule on the default branch only, so `main` is the one branch it reaches.
-                "the weekly schedule on main",
-                "full", event("schedule", "main"), 0, {"kind": "snapshot", **stamp},
+                # Staging names nothing, so a HEAD that has its snapshot stages again; publish.yml refuses a second one.
+                "a push to main, whose HEAD already has its snapshot",
+                "tagged", event("push", "main"), 0, {"kind": "stage", **stamp},
             ),
             (
-                "a dispatch on main",
-                "full", event("workflow_dispatch", "main"), 0, {"kind": "snapshot", **stamp},
-            ),
-            (
-                f"a dispatch on release/{major}.x",
-                "full", event("workflow_dispatch", f"release/{major}.x"), 0, {"kind": "snapshot", **stamp},
-            ),
-            (
-                # A snapshot is written once and never replaced: a HEAD that has one is tested again, not published.
-                "the weekly schedule on main, whose HEAD already has its snapshot",
-                "tagged", event("schedule", "main"), 0, {"kind": "none", **stamp},
-            ),
-            (
-                "a dispatch on main, whose HEAD already has its snapshot",
-                "tagged", event("workflow_dispatch", "main"), 0, {"kind": "none", **stamp},
-            ),
-            (
-                f"a dispatch on release/{major}.x, whose HEAD already has its snapshot",
-                "tagged", event("workflow_dispatch", f"release/{major}.x"), 0, {"kind": "none", **stamp},
-            ),
-            (
-                # Dependabot's included: a pull request builds and tests, and publishes nothing.
+                # Dependabot's included: a pull request builds and tests, and writes nothing.
                 "a pull request",
                 "full", event("pull_request", "12/merge"), 0, {"kind": "none", **stamp},
             ),
             (
                 # scripts/run_pipeline.py simulates a push on `runner.environment` `local`: a local run on main must
-                # not reach a registry, a signature or the remote.
+                # not reach a registry or the remote.
                 "a local run of a push to main",
                 "full", event("push", "main", runner="local"), 0, {"kind": "none", **stamp},
             ),
@@ -730,25 +781,19 @@ elif compute is not None and version_match:
                 "shallow", event("push", "main"), 1, {},
             ),
             (
-                "the weekly schedule on main from a shallow checkout",
-                "shallow", event("schedule", "main"), 1, {},
-            ),
-            (
                 "a pull request from a shallow checkout",
                 "shallow", event("pull_request", "12/merge"), 1, {},
             ),
         ] + [
-            # A ref that disagrees with the tree, and branches that are not release branches, must publish nothing:
-            # whatever publishes also signs, and assertion 7 holds the documented verify to rejecting exactly these
-            # (ADR 0057 §3: what signs and what verifies agree). `master` is the one a publish accepted until
-            # cr-image-provenance. A push, a schedule or a dispatch on such a branch is red, not a green run that
-            # looks like a publishing one.
+            # A ref that disagrees with the tree, and branches that are not release branches, stage nothing: a snapshot
+            # is published from the two branch shapes alone, and assertion 7 holds the documented verify to rejecting
+            # exactly these (ADR 0057 §3: what signs and what verifies agree). `master` is the one a publish accepted
+            # until cr-image-provenance. A push there builds and tests, and writes nothing.
             (
-                f"a {name} on {branch}, which is not a release branch of this tree",
-                "full", event(name, branch), 1, {},
+                f"a push to {branch}, which is not a release branch of this tree",
+                "full", event("push", branch), 0, {"kind": "none", **stamp},
             )
             for branch in [f"release/{int(major) + 7}.x", *non_release_branches(major)]
-            for name in ("push", "schedule", "workflow_dispatch")
         ]
         try:
             with tempfile.TemporaryDirectory(prefix="release_identity_") as tmp:
@@ -772,15 +817,14 @@ elif compute is not None and version_match:
                     pass
                 for label, checkout, env, expect_rc, expect in scenarios:
                     try:
-                        rc, written, message = run_scenario(script, checkouts[checkout], env)
+                        rc, written, message = run_scenario(
+                            script, checkouts[checkout], {k: v for k, v in env.items() if not k.startswith("_")})
                     except subprocess.TimeoutExpired:
                         fail(f"the `{VERSION_STEP}` step hung for {label} — a version derivation that waits is waiting on a network")
                         continue
-                    if rc == 0 and checkout == "tagged" and env["EVENT_NAME"] in PUBLISHING_EVENTS:
-                        tagged_probes.append(env["EVENT_NAME"])
-                    if rc == 0 and written.get("kind") == "snapshot":
+                    if rc == 0 and written.get("kind") == "stage":
                         publishing_branches.append(env["REF_NAME"])
-                        publishing_runs.append((env["EVENT_NAME"], checkout, label))
+                        publishing_runs.append((env["_EVENT"], checkout, label))
                     if expect_rc == 0 and rc != 0:
                         fail(f"the `{VERSION_STEP}` step fails for {label}: {message or f'exit {rc}'}")
                         continue
@@ -810,9 +854,9 @@ elif compute is not None and version_match:
 build_args = "\n".join(
     str((s.get("with") or {}).get("build-args") or "") for s in job_steps(workflow_doc, BUILD_JOB)
 )
-if workflow_doc and f"VEYQ_VERSION={VERSION_EXPR}" not in build_args:
+if workflow_doc and f"VEYQ_VERSION={STAGE_VERSION_EXPR}" not in build_args:
     fail(
-        f"the `{BUILD_JOB}` job does not pass `VEYQ_VERSION={VERSION_EXPR}` as a build-arg — the running "
+        f"the `{BUILD_JOB}` job does not pass `VEYQ_VERSION={STAGE_VERSION_EXPR}` as a build-arg — the running "
         f"instance would then report a release version that is not the one it was published under"
     )
 
@@ -1002,8 +1046,9 @@ if workflow_doc:
 
 if workflow_doc:
     # `on:` is a YAML 1.1 boolean, so PyYAML keys it as True. Enumerate the spelling rather than guess it.
-    triggers = workflow_doc.get("on", workflow_doc.get(True)) or {}
-    if (triggers.get("push") or {}).get("tags"):
+    triggers = publish_doc.get("on", publish_doc.get(True)) or {}
+    checks_triggers = checks_doc.get("on", checks_doc.get(True)) or {}
+    if (triggers.get("push") or {}).get("tags") or (checks_triggers.get("push") or {}).get("tags"):
         fail(
             f"{WORKFLOW.relative_to(ROOT)} triggers on a pushed tag. The pipeline CREATES `snapshot-<major>.<minor>`, "
             f"so a tag trigger could only re-run a commit whose snapshot exists — which the `{REFUSE_STEP}` step "
@@ -1084,13 +1129,14 @@ if workflow_doc:
     for job_name, step_id, must_contain, why in (
         (
             PUBLISH_JOB, REFUSE_STEP,
-            (f"{SNAPSHOT_SCRIPT} check-unpublished", '--version "$VERSION"', '--commit "$GITHUB_SHA"'),
+            (f"{SNAPSHOT_SCRIPT} check-unpublished", '--version "$VERSION"', '--commit "$COMMIT"'),
             "a snapshot is written once per commit and never replaced: a name that holds another build must FAIL the "
             "publish, and a registry error must not read as `nothing published yet` (ADR 0091 decision 5, ADR 0057 §1)",
         ),
         (
             SNAPSHOT_TAG_JOB, TAG_STEP,
-            ('tag="snapshot-${VERSION}"', 'refs/tags/${tag}', '"repos/${GITHUB_REPOSITORY}/git/refs"', "--method POST"),
+            ('tag="snapshot-${VERSION}"', 'refs/tags/${tag}', '"repos/${GITHUB_REPOSITORY}/git/refs"', "--method POST",
+             '"sha=${COMMIT}"'),
             "every snapshot gets the git tag `snapshot-<major>.<minor>` on its commit, from the tree-derived version "
             "(ADR 0091 decision 5)",
         ),
@@ -1105,6 +1151,9 @@ if workflow_doc:
                 f"the `{step_id}` step's `VERSION` is not `{VERSION_EXPR}` — it must key on the version the tree "
                 f"derived, never on a registry query or a hand-typed literal"
             )
+        if (step.get("env") or {}).get("COMMIT") != COMMIT_EXPR:
+            fail(f"the `{step_id}` step's `COMMIT` is not `{COMMIT_EXPR}` — it must name the commit `{CHECKS_RUN_JOB}` "
+                 f"checked, which a docs-only HEAD is not")
         for needle in must_contain:
             if needle not in body:
                 fail(f"the `{step_id}` step does not contain `{needle}` — {why}")
@@ -1122,9 +1171,9 @@ if workflow_doc:
 
     # The only push to the repository is the tag job's, and it never pushes a release's name: `v…` says "released"
     # (ADR 0057 §2), and every tag watcher reads a `v` tag as a release.
-    text = WORKFLOW.read_text()
+    text = "\n".join(w.read_text() for w in (CHECKS, WORKFLOW))
     if re.search(r"refs/tags/v|\bgit\s+tag\s+\"?v", text):
-        fail(f"{WORKFLOW.relative_to(ROOT)} names a `v…` tag — a snapshot's tag is never `v…`; that name is a promotion's "
+        fail(f"{rel_of(CHECKS)} or {rel_of(WORKFLOW)} names a `v…` tag — a snapshot's tag is never `v…`; that name is a promotion's "
              f"(ADR 0091 decision 5)")
     for job_name in sorted(jobs):
         for step in job_steps(workflow_doc, job_name):
@@ -1136,14 +1185,16 @@ if workflow_doc:
                 fail(f"job `{job_name}`, step `{step.get('name') or step.get('id')}` writes a GitHub Release — a "
                      f"snapshot gets none (ADR 0096 decision 3); a release is a promotion, in a workflow of its own")
 
-    # Every write is reachable only from a publishing run — never a pull request, never a local run. The set is derived
-    # from what the steps DO — a login or build-push action, or a `run:` that pushes, logs in, signs or attests — never
-    # listed, so a write added to any job is held without anyone remembering to add it here.
+    # Every write is reachable only from a staging push (checks.yml) or a publish of a green Checks run (publish.yml)
+    # — never a pull request, never a local run. The set is derived from what the steps DO — a login or build-push
+    # action, or a `run:` that pushes, logs in, signs or attests — never listed, so a write added to any job is held
+    # without anyone remembering to add it here. A job answers to its own file's gate (gate_of).
     registry_writes = 0
     for job_name, job in sorted(jobs.items()):
-        if not isinstance(job, dict):
+        if not isinstance(job, dict) or job_name == RETENTION_JOB:
             continue
-        job_gated = gated_on(job.get("if"), PUBLISHES)
+        gate = gate_of(job_name)
+        job_gated = gated_on(job.get("if"), gate)
         for step in job_steps(workflow_doc, job_name):
             uses = str(step.get("uses") or "")
             writes = []
@@ -1153,74 +1204,215 @@ if workflow_doc:
                 push = (step.get("with") or {}).get("push")
                 if push is not False and str(push).lower() != "false":
                     writes.append("pushes an image")
-                    if gated_on(push, PUBLISHES):
+                    if gated_on(push, gate):
                         registry_writes += 1
                         writes.pop()
             match = REGISTRY_WRITE_RUN.search(str(step.get("run") or ""))
             if match:
                 writes.append(f"runs `{match.group(0)}`")
             registry_writes += len(writes)
-            if writes and not (job_gated or gated_on(step.get("if"), PUBLISHES)):
+            if writes and not (job_gated or gated_on(step.get("if"), gate)):
                 fail(
                     f"job `{job_name}`, step `{step.get('name') or step.get('id')}` {' and '.join(writes)} when "
-                    f"`{PUBLISHES}` is not true — a pull request (Dependabot's included) and a local run write to no "
-                    f"registry and no remote. Gate the step, its job, or the push input on `{PUBLISHES}`."
+                    f"`{gate}` is not true — a pull request (Dependabot's included) and a local run write to no "
+                    f"registry and no remote. Gate the step, its job, or the push input on `{gate}`."
                 )
     if registry_writes == 0:
         fail(
-            f"{WORKFLOW.relative_to(ROOT)} has no registry write at all that this guard recognises — the gating "
-            f"assertion would then hold NOTHING and report green"
+            f"{rel_of(CHECKS)} and {rel_of(WORKFLOW)} have no registry write at all that this guard recognises — the "
+            f"gating assertion would then hold NOTHING and report green"
         )
 
+    # A pull request's run holds no write: every job of checks.yml but the push-only `build` reads, and `build` runs on
+    # a push alone (owner 2026-11-07). The two image builds are one definition — a pull request's `build-local` has
+    # `build`'s matrix and steps — so what a pull request proves is what a push stages.
+    for name in sorted(CHECKS_JOBS):
+        job = (checks_doc.get("jobs") or {}).get(name) or {}
+        perms = job.get("permissions", checks_doc.get("permissions"))
+        writes = sorted(k for k, v in (perms or {}).items() if v == "write") if isinstance(perms, dict) else \
+            (["write-all"] if perms == "write-all" else [])
+        push_only = " ".join(str(job.get("if") or "").split()) == "github.event_name == 'push'"
+        if name == BUILD_JOB:
+            if writes != ["packages"] or not push_only:
+                fail(f"{rel_of(CHECKS)}: `{BUILD_JOB}` holds {writes or 'no write'} on `if: {job.get('if')}` — it is the "
+                     f"one job with a write, `packages`, and runs on a push alone, so a pull request's run can write "
+                     f"nothing")
+        elif writes:
+            fail(f"{rel_of(CHECKS)}: job `{name}` holds `{', '.join(writes)}: write` — no job of checks.yml but the "
+                 f"push-only `{BUILD_JOB}` may write; a pull request runs every other one")
+    local = (checks_doc.get("jobs") or {}).get(LOCAL_BUILD_JOB) or {}
+    build = (checks_doc.get("jobs") or {}).get(BUILD_JOB) or {}
+    if " ".join(str(local.get("if") or "").split()) != "github.event_name == 'pull_request'" \
+            or local.get("strategy") != build.get("strategy") or local.get("steps") != build.get("steps"):
+        fail(f"{rel_of(CHECKS)}: `{LOCAL_BUILD_JOB}` is not `{BUILD_JOB}`'s matrix and steps on `if: "
+             f"github.event_name == 'pull_request'` — a pull request would prove another build than a push stages")
+    for name in sorted(CHECKS_JOBS):
+        if "id-token" in (((checks_doc.get("jobs") or {}).get(name) or {}).get("permissions") or {}):
+            fail(f"{rel_of(CHECKS)}: job `{name}` asks for `id-token` — nothing in checks.yml signs; a signature made "
+                 f"there would carry `checks.yml`'s identity, which no verification accepts")
+    for name in (PUBLISH_JOB, SNAPSHOT_TAG_JOB, CHECKS_RUN_JOB):
+        if name not in PUBLISH_JOBS:
+            fail(f"{rel_of(WORKFLOW)} has no `{name}` job — keyless signing names the file that holds the signing job, "
+                 f"so the snapshot's jobs are publish.yml's own")
+
+    # publish.yml runs no pipeline and builds nothing: no call of another workflow, no image build, no Gradle or pnpm.
+    for name, job in sorted((publish_doc.get("jobs") or {}).items()):
+        if isinstance(job, dict) and "uses" in job:
+            fail(f"{rel_of(WORKFLOW)}: job `{name}` calls `{job['uses']}` — Publish runs no pipeline; it signs what the "
+                 f"publishable commit's Checks run staged and tested (ADR 0091 decision 5, amended 2026-11-07)")
+        for step in job_steps(publish_doc, name):
+            body = str(step.get("run") or "")
+            if str(step.get("uses") or "").startswith("docker/build-push-action@") or re.search(
+                    r"\bdocker\s+build\b|\bbuildx\s+build\b|\bgradlew\b|\bpnpm\s+(?:install|run)\b", body):
+                fail(f"{rel_of(WORKFLOW)}: job `{name}`, step `{step.get('name')}` builds — Publish builds nothing; "
+                     f"the bytes it names are the ones Checks staged")
+            if str(step.get("uses") or "").startswith("actions/download-artifact@"):
+                given = step.get("with") or {}
+                if str(given.get("run-id") or "").replace(" ", "") != "${{needs.checks-run.outputs.run_id}}" \
+                        or not given.get("github-token"):
+                    fail(f"{rel_of(WORKFLOW)}: job `{name}`, step `{step.get('name')}` downloads artifacts from "
+                         f"`{given.get('run-id') or 'this run'}` — only from the Checks run `{CHECKS_RUN_JOB}` verified "
+                         f"(`run-id: ${{{{ needs.checks-run.outputs.run_id }}}}`, with a token)")
+
+    # checks-run decides, before anything writes: scripts/snapshot.py checks-run on this commit and branch.
+    finder = publish_doc.get("jobs", {}).get(CHECKS_RUN_JOB) or {}
+    finder_perms = finder.get("permissions") or {}
+    if finder and finder_perms != {"contents": "read", "actions": "read"}:
+        fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}` holds {finder_perms} — it reads the Checks run and the tree, and "
+             f"holds exactly `contents: read` and `actions: read`")
+    if finder and not any(f"{SNAPSHOT_SCRIPT} checks-run" in str(s.get("run") or "")
+                          and '--commit "$GITHUB_SHA"' in str(s.get("run") or "")
+                          and '--branch "$GITHUB_REF_NAME"' in str(s.get("run") or "")
+                          for s in job_steps(publish_doc, CHECKS_RUN_JOB)):
+        fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}` does not run `{SNAPSHOT_SCRIPT} checks-run` on this commit and "
+             f"branch — nothing finds the publishable commit's green Checks run before the snapshot signs")
+    if str((finder.get("outputs") or {}).get("kind") or "").replace(" ", "") != "${{steps.checks-run.outputs.kind}}":
+        fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}`'s `kind` output is not its `checks-run` step's — the gate every "
+             f"write of the snapshot answers to would come from somewhere else")
+    # The publishable commit (ADR 0091 decision 5, amended 2026-11-08): a docs-only HEAD has no Checks run, so
+    # `checks-run` resolves the tested commit, and every job after it checks that commit out and names it — never
+    # `$GITHUB_SHA`, which would put a tested run's bytes under an untested commit's name (and its tag on it).
+    if str((finder.get("outputs") or {}).get("commit") or "").replace(" ", "") != "${{steps.checks-run.outputs.commit}}":
+        fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}`'s `commit` output is not its `checks-run` step's — the commit the "
+             f"snapshot names would come from somewhere else than the one whose run was checked")
+    commit_ref = re.compile(r"\$\{?COMMIT\b")
+    for name in (PUBLISH_JOB, SNAPSHOT_TAG_JOB):
+        for step in job_steps(publish_doc, name):
+            label = f"{rel_of(WORKFLOW)}: job `{name}`, step `{step.get('name') or step.get('id')}`"
+            if re.search(r"GITHUB_SHA|github\.sha", yaml.safe_dump(step)):
+                fail(f"{label} reads `$GITHUB_SHA` — HEAD, which may be a docs-only commit no Checks run tested; it "
+                     f"names `{COMMIT_EXPR}`")
+            body = str(step.get("run") or "")
+            if commit_ref.search(body) and (step.get("env") or {}).get("COMMIT") != COMMIT_EXPR:
+                fail(f"{label} uses `$COMMIT` without `COMMIT: {COMMIT_EXPR}` in its env")
+            code = "\n".join(line for line in body.splitlines() if not line.lstrip().startswith("#"))
+            if re.search(r"\bsha-(?!\$\{COMMIT\})", code):
+                fail(f"{label} writes a `sha-` name of something other than `${{COMMIT}}`")
+            if re.search(r"--commit(?!\s+\"\$COMMIT\")\s", body):
+                fail(f"{label} passes a `--commit` other than `\"$COMMIT\"`")
+            if str(step.get("uses") or "").startswith("actions/checkout@") \
+                    and str((step.get("with") or {}).get("ref") or "") != COMMIT_EXPR:
+                fail(f"{label} checks out `{(step.get('with') or {}).get('ref') or 'HEAD'}`, not `{COMMIT_EXPR}` — the "
+                     f"chart and the lane matrix would be read from another tree than the one tested")
+    for step_id, needle in ((STAGED_STEP, f'{SNAPSHOT_SCRIPT} staged'), (REFUSE_STEP, "check-unpublished")):
+        body = str((step_by_id(publish_doc, PUBLISH_JOB, step_id) or {}).get("run") or "")
+        if needle not in body or '--commit "$COMMIT"' not in body:
+            fail(f"{rel_of(WORKFLOW)}: step `{step_id}` does not run `{needle}` with `--commit \"$COMMIT\"`")
+    for needle in ("imagetools create", "cosign sign --yes \"$image@", f"{SNAPSHOT_SCRIPT} predicates"):
+        steps = [s for s in job_steps(publish_doc, PUBLISH_JOB) if needle in str(s.get("run") or "")]
+        if not steps or not all(commit_ref.search(str(s.get("run"))) for s in steps):
+            fail(f"{rel_of(WORKFLOW)}: no `{PUBLISH_JOB}` step running `{needle}` names `$COMMIT` — the snapshot's "
+                 f"names, signatures and attestations are the publishable commit's")
+    publish_needs_raw = publish_job.get("needs") or []
+    if CHECKS_RUN_JOB not in ([publish_needs_raw] if isinstance(publish_needs_raw, str) else publish_needs_raw):
+        fail(f"the `{PUBLISH_JOB}` job does not need `{CHECKS_RUN_JOB}` — it would sign before anything found a green "
+             f"Checks run")
+    snapshot_steps = job_steps(publish_doc, PUBLISH_JOB)
+    staged_at = next((i for i, s in enumerate(snapshot_steps) if s.get("id") == STAGED_STEP
+                      and f"{SNAPSHOT_SCRIPT} staged" in str(s.get("run") or "")), None)
+    first_write_at = next((i for i, s in enumerate(snapshot_steps) if FIRST_PUBLISH_WRITE.search(str(s.get("run") or ""))
+                           or s.get("id") == REFUSE_STEP), None)
+    if staged_at is None or (first_write_at is not None and first_write_at < staged_at):
+        fail(f"the `{PUBLISH_JOB}` job does not run `{SNAPSHOT_SCRIPT} staged` (step `{STAGED_STEP}`) before its first "
+             f"write — it could name bytes the Checks run did not stage and test")
+
+    # The weekly staging retention: on the schedule alone, it holds what it deletes with and nothing else, and deletes
+    # through scripts/staging_retention.py only.
+    keeper = publish_doc.get("jobs", {}).get(RETENTION_JOB) or {}
+    if " ".join(str(keeper.get("if") or "").split()) != "github.event_name == 'schedule'" \
+            or keeper.get("permissions") != {"contents": "read", "packages": "write"} \
+            or not any("scripts/staging_retention.py" in str(s.get("run") or "") for s in job_steps(publish_doc, RETENTION_JOB)):
+        fail(f"{rel_of(WORKFLOW)}: `{RETENTION_JOB}` is not the schedule-only job holding `contents: read` and "
+             f"`packages: write` that runs scripts/staging_retention.py — the deletion of staging images must be the one "
+             f"its selftest holds")
+
     # ---- 9. the publish waits on every stage ------------------------------------------------------------------
-    # Every other job of the file is a stage (ADR 0091 decision 2), read from the file rather than listed, so a stage
-    # added later is held without anyone remembering this guard.
-    raw_needs = publish_job.get("needs") or []
-    publish_needs = [raw_needs] if isinstance(raw_needs, str) else [str(n) for n in raw_needs]
+    # Every job of checks.yml is a stage (ADR 0091 decision 2), read from the file rather than listed, so a stage
+    # added later is held without anyone remembering this guard. The gate job (`green`) needs every one of them, and
+    # publish.yml publishes only a run whose gate concluded `success` (scripts/snapshot.py checks-run, its name held
+    # here).
+    gate_job = (checks_doc.get("jobs") or {}).get(GATE_JOB) or {}
+    if not gate_job:
+        fail(f"{rel_of(CHECKS)} has no `{GATE_JOB}` job — nothing says every stage passed, so the publish cannot wait on "
+             f"them (ADR 0091 decision 2)")
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import snapshot as snapshot_script  # noqa: E402 — the names the publish reads the Checks run by
+    if gate_job and gate_job.get("name") != snapshot_script.GATE_JOB_NAME:
+        fail(f"{rel_of(CHECKS)}'s `{GATE_JOB}` is named `{gate_job.get('name')}`, scripts/snapshot.py reads "
+             f"`{snapshot_script.GATE_JOB_NAME}` — the publish would find no gate in a green run")
+    raw_needs = gate_job.get("needs") or []
+    gate_needs = [raw_needs] if isinstance(raw_needs, str) else [str(n) for n in raw_needs]
+    publish_needs = gate_needs  # what the snapshot waits on, through the gate (assertion 10 reads it too)
 
     def needs_of(name: str) -> set[str]:
         raw = (jobs.get(name) or {}).get("needs") or []
         return {raw} if isinstance(raw, str) else {str(n) for n in raw}
 
-    # The jobs after the publish (the snapshot's tag) are not stages it waits on: found by needing it, never listed.
-    downstream: set[str] = set()
-    grew = True
-    while grew:
-        grew = False
-        for name in jobs:
-            if name not in downstream and name != PUBLISH_JOB and needs_of(name) & (downstream | {PUBLISH_JOB}):
-                downstream.add(name)
-                grew = True
-    stage_jobs = sorted(str(j) for j, v in jobs.items()
-                        if j != PUBLISH_JOB and j not in downstream and isinstance(v, dict))
-    if publish_job and not stage_jobs:
-        fail(f"{WORKFLOW.relative_to(ROOT)} has no job besides `{PUBLISH_JOB}` — assertion 9 checked NOTHING")
+    stage_jobs = sorted(str(j) for j in CHECKS_JOBS if j != GATE_JOB)
+    if gate_job and not stage_jobs:
+        fail(f"{rel_of(CHECKS)} has no job besides `{GATE_JOB}` — assertion 9 checked NOTHING")
     for stage in stage_jobs:
-        if stage not in publish_needs:
+        if stage not in gate_needs:
             fail(
-                f"the `{PUBLISH_JOB}` job does not need `{stage}` — the build starts beside the tests, so the "
-                f"publish's `needs:` is the only thing that keeps an image of a commit whose `{stage}` is red from "
-                f"being published (ADR 0091 decision 2). Every other job of the file is a stage it waits on."
+                f"the `{GATE_JOB}` job does not need `{stage}` — the build starts beside the tests, so the gate's "
+                f"`needs:` is the only thing that keeps an image of a commit whose `{stage}` is red from being "
+                f"published (ADR 0091 decision 2). Every other job of {rel_of(CHECKS)} is a stage it waits on."
             )
-    publish_if = str(publish_job.get("if") or "").strip()
+    publish_if = str(gate_job.get("if") or "").strip()
     if publish_if.startswith("${{") and publish_if.endswith("}}"):
         publish_if = publish_if[3:-2].strip()
     if re.search(r"\b(?:always|failure|cancelled)\s*\(\s*\)", publish_if):
         # A status function lifts GitHub's implicit `success()`, so a failed or skipped need no longer stops the job
-        # by itself: the condition has to say, need by need, what it accepts.
+        # by itself: the condition has to say, need by need, what it accepts. A job that runs by design on no event
+        # (`if: false`) or on one event alone (`if: github.event_name == '<event>'`, the two builds) may be accepted
+        # as `skipped` too.
         terms = {" ".join(t.split()) for t in publish_if.split("&&")}
-        for need in publish_needs:
+        for need in gate_needs:
             accepted = f"needs.{need}.result == 'success'" in terms
-            need_job = jobs.get(need) or {}
-            if not accepted and (need_job.get("if") is False or str(need_job.get("if")).strip() == "false"):
+            need_if = " ".join(str((jobs.get(need) or {}).get("if")).split())
+            by_design = need_if in ("False", "false") or bool(re.fullmatch(r"github\.event_name == '[a-z_]+'", need_if))
+            if not accepted and by_design:
                 accepted = f"contains(fromJSON('[\"success\", \"skipped\"]'), needs.{need}.result)" in terms
             if not accepted:
                 fail(
-                    f"the `{PUBLISH_JOB}` job's `if:` calls a status function, which lets it run past a failed "
+                    f"the `{GATE_JOB}` job's `if:` calls a status function, which lets it run past a failed "
                     f"need, but it does not require `needs.{need}.result == 'success'` as one of its `&&` terms — a "
                     f"publish would go ahead on a red `{need}` (ADR 0091 decision 2). Only a job that is literally "
-                    f"`if: false` may be accepted as `skipped` too."
+                    f"`if: false`, or runs on one event alone, may be accepted as `skipped` too."
                 )
+    snapshot_if = " ".join(str(publish_job.get("if") or "").split())
+    if publish_job and not gated_on(publish_job.get("if"), PUBLISHES):
+        fail(f"the `{PUBLISH_JOB}` job is not gated on `{PUBLISHES}` (found `{snapshot_if}`) — it could sign without "
+             f"`{CHECKS_RUN_JOB}` having found a wholly green Checks run")
+    # The names scripts/snapshot.py reads a Checks run's jobs by, and the images it expects staged, are checks.yml's.
+    stack_name = str(((checks_doc.get("jobs") or {}).get("stack") or {}).get("name") or "")
+    if stack_name.replace("${{ matrix.arch }}", "{arch}").replace("${{ matrix.domain }}", "{domain}") \
+            != snapshot_script.LANE_JOB_NAME:
+        fail(f"{rel_of(CHECKS)}'s lane job is named `{stack_name}`, scripts/snapshot.py reads "
+             f"`{snapshot_script.LANE_JOB_NAME}` — the publish would find no lane leg in a green run")
+    build_images = [str(i) for i in (((build.get("strategy") or {}).get("matrix") or {}).get("image") or [])]
+    if tuple(build_images) != snapshot_script.BUILD_IMAGES:
+        fail(f"{rel_of(CHECKS)} stages {build_images}, scripts/snapshot.py expects {list(snapshot_script.BUILD_IMAGES)}")
 
     # ---- 10. the snapshot waits on lane L1 ----------------------------------------------------------------------
     # Assertion 9 holds the publish to every job the file HAS; it cannot see a job that is gone. Lane L1 is the one
@@ -1246,7 +1438,7 @@ if workflow_doc:
                  f"job pushed, so it must run after it (ADR 0090 decision 2)")
         if lane not in publish_needs or f"needs.{lane}.result == 'success'" not in {
                 " ".join(t.split()) for t in publish_if.split("&&")}:
-            fail(f"the `{PUBLISH_JOB}` job does not wait on lane L1 (`{lane}`) with `needs.{lane}.result == 'success'` "
+            fail(f"the `{GATE_JOB}` job does not wait on lane L1 (`{lane}`) with `needs.{lane}.result == 'success'` "
                  f"— the snapshot would be published on bytes the lane never installed (ADR 0090 decision 2)")
         lane_archs = {str(a) for a in (((lane_job.get("strategy") or {}).get("matrix") or {}).get("arch") or [])}
         if not build_archs:
@@ -1288,14 +1480,18 @@ if workflow_doc:
             fail(f"lane L1's job `{lane}` records no result (`{SNAPSHOT_SCRIPT} lane-result`) — the snapshot would carry "
                  f"no attestation of what the lane ran (ADR 0091 decision 5)")
         for _, step in records:
-            if not gated_on(step.get("if"), PUBLISHES):
-                fail(f"lane L1's job `{lane}` records its result when `{PUBLISHES}` is not true — a pull request pulled "
+            if not gated_on(step.get("if"), STAGES):
+                fail(f"lane L1's job `{lane}` records its result when `{STAGES}` is not true — a pull request pulled "
                      f"no digest to record")
         assembled = argv_lines(PUBLISH_JOB, f"{SNAPSHOT_SCRIPT} predicates")
         if len(assembled) != 1:
             fail(f"the `{PUBLISH_JOB}` job runs `{SNAPSHOT_SCRIPT} predicates` {len(assembled)} time(s), not once")
             continue
-        assembled_at, _, argv = assembled[0]
+        assembled_at, assembled_step, argv = assembled[0]
+        if str((assembled_step.get("env") or {}).get("RUN_URL") or "").replace(" ", "") \
+                != "${{needs.checks-run.outputs.run_url}}" or '--run "$RUN_URL"' not in str(assembled_step.get("run")):
+            fail(f"the `{PUBLISH_JOB}` job's attestations do not name the Checks run the lanes ran in (`--run \"$RUN_URL\"` "
+                 f"with `RUN_URL: ${{{{ needs.checks-run.outputs.run_url }}}}`) — a promotion reads which run a result is from")
         if sorted(flag_values(argv, "--arch")) != lane_archs or sorted(flag_values(argv, "--shard")) != lane_shards:
             fail(
                 f"the `{PUBLISH_JOB}` job assembles the attestations for architectures {sorted(flag_values(argv, '--arch'))} "
@@ -1499,13 +1695,13 @@ def published_images(workflow_text: str) -> set[str]:
 
 if not PROD_COMPOSE.is_file():
     fail(f"`{PROD_COMPOSE.relative_to(ROOT)}` is missing — there is no release recipe to check")
-elif not WORKFLOW.is_file():
-    fail(f"`{WORKFLOW.relative_to(ROOT)}` is missing — there is nothing to derive the published image set from")
+elif not CHECKS.is_file():
+    fail(f"`{rel_of(CHECKS)}` is missing — there is nothing to derive the published image set from")
 else:
-    publishable = published_images(WORKFLOW.read_text())
+    publishable = published_images(CHECKS.read_text())
     if not publishable:
         fail(
-            f"{WORKFLOW.relative_to(ROOT)}'s `{BUILD_JOB}` job declares no `strategy.matrix.image` — this "
+            f"{rel_of(CHECKS)}'s `{BUILD_JOB}` job declares no `strategy.matrix.image` — this "
             f"assertion would then accept every image name and report green while checking NOTHING"
         )
     try:
@@ -1548,7 +1744,7 @@ if workflow_doc:
         refuse_argv = shlex.split(str(refuse.get("run") or "").replace("\\\n", " "))
     except ValueError:
         refuse_argv = []
-    matrix_images = sorted(published_images(WORKFLOW.read_text())) if WORKFLOW.is_file() else []
+    matrix_images = sorted(published_images(CHECKS.read_text())) if CHECKS.is_file() else []
     if not chart_name:
         fail(f"{(CHART_DIR / 'Chart.yaml').relative_to(ROOT)} names no chart, so the chart's snapshot cannot be held")
     if (refuse.get("env") or {}).get("REGISTRY") != owner_expr:
@@ -1847,7 +2043,7 @@ else:
                     )
                 else:
                     verified_images.add(match.group(1))
-    for image in sorted(published_images(WORKFLOW.read_text()) if WORKFLOW.is_file() else set()):
+    for image in sorted(published_images(CHECKS.read_text()) if CHECKS.is_file() else set()):
         if commands and image not in verified_images:
             fail(
                 f"{VERIFY_PAGE.relative_to(ROOT)} never verifies `{REGISTRY}/{owner}/{image}` by digest. The publish "
@@ -1897,9 +2093,10 @@ else:
                 f"{values_file.relative_to(ROOT)}: `{key}.repository` defaults to `{want}`, which "
                 f"{VERIFY_PAGE.relative_to(ROOT)} never verifies by digest — a default nobody is told to verify"
             )
-    if WORKFLOW.is_file() and "certificate-identity" in WORKFLOW.read_text():
+    stating = [rel_of(w) for w in (CHECKS, WORKFLOW) if w.is_file() and "certificate-identity" in w.read_text()]
+    if stating:
         fail(
-            f"{snapshot_file} states a verification identity of its own. The identity is stated once, in "
+            f"{', '.join(stating)} state(s) a verification identity of its own. The identity is stated once, in "
             f"{VERIFY_PAGE.relative_to(ROOT)}, where this guard holds it to what signs — a second copy is one "
             f"nothing checks, and the one the workflow carried accepted any workflow on any ref."
         )
@@ -2054,7 +2251,8 @@ else:
                for s in rsteps("promote")):
         fail(f"{RELEASE_WORKFLOW}: `promote` does not sign the chart")
 
-    # The pins it shares with `ci.yml`: one cosign, one Helm.
+    # The pins it shares with the pipeline's runs: one cosign (publish.yml's `snapshot`), one Helm (checks.yml's
+    # `chart` and publish.yml's chart packaging carry it each, a caller's env not reaching a called workflow).
     ci_installer = [s for job in (workflow_doc.get("jobs") or {}) for s in job_steps(workflow_doc, job)
                     if str(s.get("uses") or "").startswith(COSIGN_INSTALLER)]
     ci_cosign = str(((ci_installer[0].get("with") or {}) if ci_installer else {}).get("cosign-release") or "")
@@ -2068,10 +2266,14 @@ else:
         for i in installs:
             if str((steps[i].get("with") or {}).get("cosign-release")) != ci_cosign:
                 fail(f"{RELEASE_WORKFLOW}: job `{job}` installs cosign {(steps[i].get('with') or {}).get('cosign-release')}, "
-                     f"`ci.yml` signs with {ci_cosign} — one cosign signs veyq (inbox #474)")
-    if (rdoc.get("env") or {}).get("HELM_SHA256") != (workflow_doc.get("env") or {}).get("HELM_SHA256") or \
-            (rdoc.get("env") or {}).get("HELM_VERSION") != (workflow_doc.get("env") or {}).get("HELM_VERSION"):
-        fail(f"{RELEASE_WORKFLOW}'s Helm pin is not `ci.yml`'s — the chart a release packages is the snapshot's Helm's")
+                     f"`{rel_of(WORKFLOW)}` signs with {ci_cosign} — one cosign signs veyq (inbox #474)")
+    helm_pins = {}
+    for path in (CHECKS, WORKFLOW, ROOT / RELEASE_WORKFLOW):
+        env = (yaml.safe_load(path.read_text()) or {}).get("env") or {} if path.is_file() else {}
+        helm_pins[rel_of(path)] = (env.get("HELM_VERSION"), env.get("HELM_SHA256"))
+    if len(set(helm_pins.values())) != 1 or None in next(iter(helm_pins.values())):
+        fail(f"the Helm pin differs between {helm_pins} — the chart a release packages is the snapshot's Helm's, and the "
+             f"chart check's (a caller's workflow-level env does not reach the pipeline, so each file states it)")
     release_summary = (f"; {RELEASE_WORKFLOW} is started by hand only, in group `veyq-release`, its {len(RELEASE_JOBS)} "
                        f"jobs each holding only what they write, builds nothing, moves the channels after publishing "
                        f"and publishes last")
@@ -2087,10 +2289,10 @@ for other in sorted(WORKFLOW.parent.glob("*.y*ml")):
 
 # ---- 15. a job that can write installs no Python package it has not pinned by hash ---------------------------------
 # Code PyPI serves at install time runs with the job's token: in `release.yml`'s `promote` the release identity's OIDC
-# token, in `check` the drafts, in `ci.yml`'s `build` the registry. So every `pip install` of every `release.yml` job,
-# and of every `ci.yml` job that holds a write permission (`id-token`, `packages`, `contents` …), installs exact
+# token, in `check` the drafts, in the pipeline's `build` the registry. So every `pip install` of every `release.yml` job,
+# and of every job of the Checks and Publish runs that holds a write permission (`id-token`, `packages`, `contents` …), installs exact
 # versions by hash and wheels only, from a requirements file whose every requirement carries its hashes. A read-only
-# job of `ci.yml` is out of scope: what it could reach is the runner it runs on.
+# job of those runs is out of scope: what it could reach is the runner it runs on.
 PIP_INSTALL = re.compile(r"\bpip3?\"?\s+install\b|\bpython3?\s+-m\s+pip\s+install\b")
 HASHED_REQUIREMENT = re.compile(r"^[A-Za-z0-9_.-]+==[0-9][^\s]*(?:\s+--hash=sha256:[0-9a-f]{64})+$")
 pip_summary = ""
@@ -2104,10 +2306,12 @@ def can_write(permissions: object) -> bool:
 
 held_installs = 0
 requirement_files: set[str] = set()
-for wf_path, every_job in ((WORKFLOW, False), (ROOT / RELEASE_WORKFLOW, True)):
-    if not wf_path.is_file():
+RELEASE_PATH = ROOT / RELEASE_WORKFLOW
+for wf_path, wf_doc, every_job in (
+        (WORKFLOW, publish_doc, False), (CHECKS, checks_doc, False),
+        (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {}, True)):
+    if not wf_doc:
         continue
-    wf_doc = yaml.safe_load(wf_path.read_text()) or {}
     default_permissions = wf_doc.get("permissions")
     for job_name, job in (wf_doc.get("jobs") or {}).items():
         if not isinstance(job, dict):
@@ -2145,7 +2349,7 @@ for rel in sorted(requirement_files):
             fail(f"`{rel}`: `{requirement[:80]}` is not `<name>==<version>` followed by its `--hash=sha256:` lines — "
                  f"every requirement of a writing job is exact and hashed")
 if held_installs == 0:
-    fail("no `pip install` found in release.yml or in a writing job of ci.yml — assertion 15 checked NOTHING; re-anchor "
+    fail("no `pip install` found in release.yml or in a writing job of the pipeline's runs — assertion 15 checked NOTHING; re-anchor "
          "it if the jobs no longer install Python packages")
 pip_summary = (f"; every one of the {held_installs} `pip install`(s) of a job that can write takes exact, hashed wheels "
                f"({', '.join(sorted(requirement_files))})")
@@ -2155,15 +2359,14 @@ pip_summary = (f"; every one of the {held_installs} `pip install`(s) of a job th
 # looks at the WHOLE chain of needs: a job skipped anywhere upstream skips everything after it. `snapshot` waits on the
 # switched-off `upgrade-proof` (`if: false`) and survives through `always()`; on the first real run (2026-11-06,
 # 42274582708) `snapshot-tag`, which needs `snapshot` and stated no status function, was skipped — the snapshot got no
-# tag. So in `ci.yml` and `release.yml` a job whose needs reach a job with an `if:` (one that can be skipped) states its
+# tag. So in the Checks and Publish runs and `release.yml` a job whose needs reach a job with an `if:` (one that can be skipped) states its
 # own gate: a status function (`always()`, `!cancelled()`) and, for each direct need that can be skipped or follows
 # one, that need's result (`needs.<job>.result == 'success'`, or a `contains(fromJSON(…), needs.<job>.result)`).
 STATUS_FUNCTION = re.compile(r"\b(?:always|cancelled|failure|success)\s*\(\s*\)")
 gates_checked = 0
-for wf_path in (WORKFLOW, ROOT / RELEASE_WORKFLOW):
-    if not wf_path.is_file():
-        continue
-    wf_jobs = (yaml.safe_load(wf_path.read_text()) or {}).get("jobs") or {}
+for wf_path, wf_doc in ((WORKFLOW, publish_doc), (CHECKS, checks_doc),
+                       (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {})):
+    wf_jobs = wf_doc.get("jobs") or {}
 
     def direct_needs(name: str) -> list[str]:
         raw = (wf_jobs.get(name) or {}).get("needs") or []
@@ -2208,7 +2411,8 @@ for wf_path in (WORKFLOW, ROOT / RELEASE_WORKFLOW):
                     f"failed or skipped `{need}`"
                 )
 if gates_checked == 0:
-    fail("no job in ci.yml or release.yml follows a job that can be skipped — assertion 16 checked NOTHING; re-anchor it")
+    fail("no job in the pipeline's runs or release.yml follows a job that can be skipped — assertion 16 checked NOTHING; "
+         "re-anchor it")
 
 
 # ---- 17. only the weekly schedule and a dispatch publish, and never twice for one commit ---------------------------
@@ -2312,69 +2516,75 @@ def evaluate_expression(text: str, context: dict[str, str]) -> str:
 
 
 publish_summary = ""
-if workflow_doc and version_match:
-    rel = WORKFLOW.relative_to(ROOT)
-    triggers = workflow_doc.get("on", workflow_doc.get(True)) or {}
-    for name in ("push", "pull_request", "workflow_dispatch"):
-        if name not in triggers:
-            fail(f"{rel} does not trigger on `{name}` — every push and pull request runs the whole pipeline (ADR 0091 "
-                 f"decision 2), and a dispatch is the owner's snapshot now (ADR 0091 decision 5)")
-    crons = [str(entry.get("cron")) for entry in (triggers.get("schedule") or [])
-             if isinstance(entry, dict) and entry.get("cron")] if isinstance(triggers.get("schedule"), list) else []
+if workflow_doc and checks_doc and version_match:
+    rel = rel_of(WORKFLOW)
+
+    def triggers_of(path: pathlib.Path) -> dict:
+        on = (yaml.safe_load(path.read_text()) or {})
+        on = on.get("on", on.get(True)) or {}
+        return {on: {}} if isinstance(on, str) else {e: {} for e in on} if isinstance(on, list) else dict(on)
+
+    # Each file starts what it is for, and nothing else (ADR 0091 decisions 4 and 5): checks.yml on every push and pull
+    # request, publish.yml on the weekly schedule and a dispatch.
+    checks_on, publish_on = triggers_of(CHECKS), triggers_of(WORKFLOW)
+    if set(checks_on) != {"push", "pull_request"}:
+        fail(f"{rel_of(CHECKS)} triggers on {sorted(map(str, checks_on))}, not exactly `push` and `pull_request` — every "
+             f"push and pull request runs the whole pipeline (ADR 0091 decision 2); the schedule and a dispatch are "
+             f"publish.yml's")
+    if set(publish_on) != {"schedule", "workflow_dispatch"}:
+        fail(f"{rel} triggers on {sorted(map(str, publish_on))}, not exactly `schedule` and `workflow_dispatch` — only "
+             f"the weekly schedule and the owner's dispatch publish (owner 2026-11-07); a push or a pull request is "
+             f"checks.yml's")
+    crons = [str(entry.get("cron")) for entry in (publish_on.get("schedule") or [])
+             if isinstance(entry, dict) and entry.get("cron")] if isinstance(publish_on.get("schedule"), list) else []
     if not crons:
         fail(f"{rel} has no `schedule` with a `cron` — the weekly snapshot (owner 2026-11-07) never runs, so `main` is "
              f"published only when someone remembers to dispatch")
     events = {event for event, _, _ in publishing_runs}
-    if events != PUBLISHING_EVENTS:
-        fail(f"the `{VERSION_STEP}` step turned {sorted(events) or 'no event'} into a publish, not exactly "
-             f"{sorted(PUBLISHING_EVENTS)} — a push runs the whole pipeline and publishes nothing; only the weekly "
-             f"schedule and a dispatch do (owner 2026-11-07)")
-    if set(tagged_probes) != PUBLISHING_EVENTS:
-        fail(f"assertion 2 runs {sorted(set(tagged_probes)) or 'no event'} on a HEAD that has its snapshot, not every "
-             f"one of {sorted(PUBLISHING_EVENTS)} — assertion 17's write-once half would check too little")
-    for event, checkout, label in publishing_runs:
-        if checkout == "tagged":
-            fail(f"the `{VERSION_STEP}` step publishes for {label} — that HEAD carries a `snapshot-` tag, and a snapshot "
-                 f"is written once and never replaced (ADR 0091 decision 5)")
-    if not any(checkout == "full" for _, checkout, _ in publishing_runs):
-        fail(f"the `{VERSION_STEP}` step publishes nothing for a HEAD whose only `snapshot-` tag is on its parent — read "
-             f"as `published`, an earlier snapshot would stop every later one")
+    if events != STAGING_EVENTS:
+        fail(f"the `{VERSION_STEP}` step turned {sorted(events) or 'no event'} into a staging run, not exactly "
+             f"{sorted(STAGING_EVENTS)} — a pull request and a local run write nothing; a push to a publishing branch "
+             f"stages what publish.yml signs")
 
-    concurrency = workflow_doc.get("concurrency")
-    group = str(concurrency.get("group") or "") if isinstance(concurrency, dict) else str(concurrency or "")
-    if not isinstance(concurrency, dict) or concurrency.get("cancel-in-progress") is not False:
-        fail(f"{rel}'s concurrency is {concurrency!r} — it needs a `group` and `cancel-in-progress: false`: a publish "
-             f"cancelled midway leaves a half-written snapshot behind")
+    # Concurrency: each file its own group, never cancelled in progress — a publish cancelled midway leaves a
+    # half-written snapshot, a push cancelled midway an untested, unpublishable commit.
+    groups: dict[str, str] = {}
+    for path, doc in ((CHECKS, checks_doc), (WORKFLOW, publish_doc)):
+        concurrency = doc.get("concurrency")
+        groups[rel_of(path)] = str(concurrency.get("group") or "") if isinstance(concurrency, dict) else ""
+        if not isinstance(concurrency, dict) or concurrency.get("cancel-in-progress") is not False:
+            fail(f"{rel_of(path)}'s concurrency is {concurrency!r} — it needs a `group` and `cancel-in-progress: false`: "
+                 f"a run cancelled midway leaves a half-written snapshot or an untested push behind")
     try:
         major = version_match.group(1)
 
-        def group_of(event: str, ref: str) -> str:
+        def group_of(path: pathlib.Path, event: str, ref: str) -> str:
             return EXPR.sub(lambda m: evaluate_expression(m.group(1), {"github.event_name": event, "github.ref": ref}),
-                            group)
+                            groups[rel_of(path)])
 
         refs = ["refs/heads/main", f"refs/heads/release/{major}.x"]
         seen: dict[str, tuple[str, str]] = {}
         for ref in refs:
-            schedule, dispatch = group_of("schedule", ref), group_of("workflow_dispatch", ref)
-            push, pull = group_of("push", ref), group_of("pull_request", "refs/pull/12/merge")
+            schedule, dispatch = group_of(WORKFLOW, "schedule", ref), group_of(WORKFLOW, "workflow_dispatch", ref)
+            push, pull = group_of(CHECKS, "push", ref), group_of(CHECKS, "pull_request", "refs/pull/12/merge")
             if schedule != dispatch:
                 fail(f"{rel}: on {ref} the schedule runs in concurrency group `{schedule}` and a dispatch in `{dispatch}` "
                      f"— two publishing runs of one ref must go one after the other, or both build a snapshot of a HEAD "
                      f"neither has tagged yet")
             for other, value in (("a push", push), ("a pull request", pull)):
                 if value == schedule:
-                    fail(f"{rel}: on {ref} {other} shares concurrency group `{value}` with the publishing runs — "
-                         f"queued behind one it delays the snapshot, and a push arriving while a scheduled run waits "
-                         f"cancels that run (GitHub keeps one pending run per group)")
+                    fail(f"{rel_of(CHECKS)}: on {ref} {other} shares concurrency group `{value}` with the publishing "
+                         f"runs — queued behind one it delays the snapshot, and a push arriving while a scheduled run "
+                         f"waits cancels that run (GitHub keeps one pending run per group)")
             for value, what in ((schedule, "publish"), (push, "push")):
                 if value in seen and seen[value] != (what, ref):
-                    fail(f"{rel}: concurrency group `{value}` is shared by {seen[value]} and {(what, ref)} — one group "
-                         f"per ref, or a push to one branch waits on another's run")
+                    fail(f"concurrency group `{value}` is shared by {seen[value]} and {(what, ref)} — one group per ref, "
+                         f"or a push to one branch waits on another's run")
                 seen.setdefault(value, (what, ref))
-        publish_summary = (f"; only the schedule ({', '.join(crons) or '?'}) and a dispatch publish, never a HEAD "
-                           f"that has its snapshot, in a concurrency group of their own")
+        publish_summary = (f"; only {rel}'s schedule ({', '.join(crons) or '?'}) and dispatch publish, never a HEAD "
+                           f"that has its snapshot, in a concurrency group apart from {rel_of(CHECKS)}'s")
     except (ValueError, KeyError) as e:
-        fail(f"{rel}'s concurrency group `{group}` cannot be evaluated here: {e}")
+        fail(f"a caller's concurrency group cannot be evaluated here: {e}")
 
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.

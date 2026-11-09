@@ -54,6 +54,8 @@ export function registerExpenses(registry: Registry): void {
     deleteTitle: 'expenses.delete',
     deleteCopy: 'expenses.deleteConfirm',
     nounWithArticle: 'expenses.aPot',
+    // Core's search (ADR 0125 decision 6): the kind's noun is its kind chip's word; a Pot is found by its name, no facets.
+    search: { label: 'expenses.kindPot' },
     list: { rows: potRows, tabLabel: 'expenses.title', emptyText },
     createDialog: PotCreateDialog,
     createEntry: {

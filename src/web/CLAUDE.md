@@ -346,6 +346,40 @@ here; the server is blind.
   visual (`NodeCoverImage`; Memories' cards and map draw `MemoryCoverImage` - the same `coverImageStyle` formula, pinned identical by a parity
   test), core's header (16:9 at its rows' height on every kind), the sidebar's Favorites; the icon is the default and a cover without a stored crop is a centred fit.
 
+  **The search is core's ([ADR 0125](../../docs/decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md), `core/search/`).**
+  The top bar's field (`SearchField.vue`, a share page has none) over an in-memory index of every space (`searchIndex.ts`:
+  each tree read by its ETag, opened with `openListedScope`, its keys zeroed in a `finally`; the active space follows
+  `treeStore`; `clearActiveSpace` drops it; nothing is written to any storage). A document is plaintext and never holds a
+  key. An application adds to it only through the registry: `KindDescriptor.search` (the kind's word, a `facets` hook
+  called with the node's key for that call only, the kinds of its documents), `app.search({ scopeDocuments })` (its objects
+  of a whole space - Memories' every photo, ADR 0125 decision 8a - asked on every walk, the active space's included, with
+  its last tag and documents and a lazy `keys()` whose node keys core zeroes when the hook returns) and, for the node on
+  screen, `contributeSearchDocuments` (`contribution.ts`, the header door's shape: the member's `SpaceView` provides it, a
+  guest's page does not, a bookmark's embed blocks it; its document of an object replaces the space's). An object found
+  outside the page opens its node and leaves `openRequest.ts`'s in-memory request, which the node's page takes - no
+  address. Memories: `features/memories/search.ts`. Text is compared through
+  `shared/text/fold.ts`, never `slugify`. A Memory's gallery filter (`features/memories/galleryFilter.ts`) reads its
+  text with the same grammar - `tailsOf`, `wordPrefix`, `suggestChips`, `satisfies`, `textRank` - and adds only the
+  capture day, a chip of its own; never a second copy of the chip logic. **One list after the suggestions** (decision 5,
+  `results.ts`): no result groups and no heading below *Filter by*; ordered by the match, then where the result lies (the
+  open node's subtree, the active space, the other spaces, then people and settings), then the name - each row says where
+  it lies; 10 drawn, "show more" adds 10. People and settings sections are documents of no space (decision 9,
+  `peopleAndSettings.ts`): the members from the directory's roster as last read (`tenantPeopleNow`), and the settings
+  sections from `features/settings/sections.ts` - **the one list the rail reads too**, gates and `ready` included, so never
+  a copy of the section list in the search; each is a kind with core's word (*Person*, *Setting*). **A chip is a predicate
+  over every document** (`satisfies`): no rule hides a kind of document while a chip is set - never add one. A node
+  something lies below is an *In:* chip, matched by the ids above a document (`SearchDocument.pathIds`, built with `path`
+  by `documents.ts` `placeOf`/`placeWithin`), never by a name: two nodes of one name are two chips. A section's `words` become its document's `keywords`,
+  matched from a word's start only and from the third typed character on (`MIN_KEYWORD`), ranked with a place match, and
+  drawn after the row's second line where one, not the label, is why the section is listed (`reasonKeyword`): a result
+  never stands there for a reason the member cannot see. One typed character matches word starts only (`MIN_INSIDE`). A row's bold part is `nameParts`
+  (`query.ts`: the match found in the folded name, mapped back by `foldMap`), drawn as text and a `strong` - never markup.
+  Per keystroke the field answers a query asked before from memory and narrows the closest shorter one's matches while
+  the text grows (`createMatcher`: in memory only, forgotten when the list closes, the documents move or the field goes),
+  and ranks the list only as far as it is shown (`results.ts` `firstRanked`); a new rule in `textRank` must stay
+  monotone in the text from the length the matcher narrows from (`EVERY_RULE`, today three characters), or the narrowing
+  drops a match - a rule that starts at a longer length raises that length.
+
   **Favorites are core's (inbox #409, [ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose
   `favorites` under the Master Key, the generated `favoritesApi()` of `api/client.ts`), `favoritesStore.ts` (the reactive set, optimistic
@@ -466,7 +500,10 @@ here; the server is blind.
   sentence in the application's words, the dialog checks the name against the level's children and never lists the new
   node's links (its own dialog does). There is no "New" entry for such a kind; Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any
   guest a write; `app.personSection(component)` and `app.itemReview(component)` (above, and the moderator's review of an
-  application's reported record);
+  application's reported record); `app.shortcuts(groups)` once - the keyboard shortcuts of the application's own screens
+  as `{ title, entries: [{ keys, label }] }` groups (`core/shortcuts/shortcuts.ts`), listed by core's `?` overview
+  (`core/shortcuts/ShortcutsDialog.vue`, uc.platform.keyboard-shortcuts) after core's own while the application is switched
+  on; a handler that spells a listed key points at its entry in a comment;
   `app.lifecycle(hooks)` once
   with `onScopeReset` / `onScopeEntered` and the **required** `onMasterKeyRotated` — material an application seals under the
   Master Key (Memories' item marks) is otherwise unverifiable after a rotation. There is no registry-wide rotation gate:

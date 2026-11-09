@@ -3,7 +3,7 @@
 // (`unwrapBlobKey`) and its one frame (`openFrame`, a thumbnail-sized frame). The single-operation benches give the
 // per-operation time; the 10,000 ones the total. `pnpm exec vitest bench src/features/memories/media.bench.ts`; `vitest run`
 // does not collect bench files, so `pnpm run check` is unchanged. TEMPORARY: `cr-volume-measurement-cax` deletes it.
-import { bench, describe, expect } from 'vitest'
+import { expect, test } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { planBlob, unwrapBlobKey } from '../../core/blob/transport'
@@ -38,20 +38,26 @@ expect(v1.openFrame(unwrapBlobKey(SCOPE, memoryKey, one.ref), 0, 1, one.frame).l
 const once = { iterations: 2000, warmupIterations: 100, time: 0 }
 const total = { iterations: 3, warmupIterations: 1, time: 0 }
 
-describe('one photo', () => {
-  bench('1 x unsealMeta', () => { unsealMeta(SCOPE, memoryKey, one.item) }, once)
-  bench('1 x unwrapBlobKey', () => { unwrapBlobKey(SCOPE, memoryKey, one.ref) }, once)
+test('one photo', async ({ bench }) => {
   const key = unwrapBlobKey(SCOPE, memoryKey, one.ref)
-  bench('1 x openFrame (40 KB)', () => { v1.openFrame(key, 0, 1, one.frame) }, once)
+  await bench.compare(
+    bench('1 x unsealMeta', () => { unsealMeta(SCOPE, memoryKey, one.item) }),
+    bench('1 x unwrapBlobKey', () => { unwrapBlobKey(SCOPE, memoryKey, one.ref) }),
+    bench('1 x openFrame (40 KB)', () => { v1.openFrame(key, 0, 1, one.frame) }),
+    once,
+  )
 })
 
-describe('10,000 photos', () => {
-  bench('10,000 x unsealMeta', () => { for (const p of photos) unsealMeta(SCOPE, memoryKey, p.item) }, total)
-  bench('10,000 x unwrapBlobKey', () => { for (const p of photos) unwrapBlobKey(SCOPE, memoryKey, p.ref) }, total)
-  bench('10,000 x (unsealMeta + unwrapBlobKey + openFrame)', () => {
-    for (const p of photos) {
-      unsealMeta(SCOPE, memoryKey, p.item)
-      v1.openFrame(unwrapBlobKey(SCOPE, memoryKey, p.ref), 0, 1, p.frame)
-    }
-  }, total)
+test('10,000 photos', async ({ bench }) => {
+  await bench.compare(
+    bench('10,000 x unsealMeta', () => { for (const p of photos) unsealMeta(SCOPE, memoryKey, p.item) }),
+    bench('10,000 x unwrapBlobKey', () => { for (const p of photos) unwrapBlobKey(SCOPE, memoryKey, p.ref) }),
+    bench('10,000 x (unsealMeta + unwrapBlobKey + openFrame)', () => {
+      for (const p of photos) {
+        unsealMeta(SCOPE, memoryKey, p.item)
+        v1.openFrame(unwrapBlobKey(SCOPE, memoryKey, p.ref), 0, 1, p.frame)
+      }
+    }),
+    total,
+  )
 })

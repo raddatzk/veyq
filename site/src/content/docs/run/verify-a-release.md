@@ -141,7 +141,7 @@ cosign verify "ghcr.io/raddatzk/charts/veyq@${chart_digest}" \
 
 A signature made by `release.yml`, veyq's release workflow, in `raddatzk/veyq`, on `main` or a `release/<major>.x`
 branch, under GitHub's own OIDC issuer — which are exactly the branches a release is promoted from, so what signs and
-what verifies agree. It rejects every other workflow in the repository — `ci.yml`, the pipeline that signs every
+what verifies agree. It rejects every other workflow in the repository — `publish.yml`, which signs every
 snapshot, first among them — every other branch, pull-request and tag refs, every other owner, and every repository
 whose name only starts with `veyq`: a looser pattern accepts a signature the veyq release never made, and a check that
 accepts anything a fork signs checks nothing. The upstream is written out rather than left as a placeholder for the
@@ -150,7 +150,7 @@ same reason. If you deploy your own fork's images, verify them against **your** 
 
 **A release, never a snapshot.** A green commit of `main` is published as a snapshot once a week, and any green
 commit of `main` or a `release/<major>.x` branch when the maintainer asks for one: its images as
-`<major>.<minor>-SNAPSHOT` and `sha-<commit>`, written once and never replaced, signed by `ci.yml`. A release is a snapshot promoted: the **same digests** get `<major>.<minor>`, `<major>` and `latest`, and a
+`<major>.<minor>-SNAPSHOT` and `sha-<commit>`, written once and never replaced, signed by `publish.yml`. A release is a snapshot promoted: the **same digests** get `<major>.<minor>`, `<major>` and `latest`, and a
 second signature, by `release.yml`. So the image's own version says nothing about which one you have — a snapshot
 reports the release it may become — and the name says little more, because a tag can move; **the release identity
 above is the answer**: a digest that verifies under it is a release, and one that does not is not. A snapshot has no
@@ -160,7 +160,7 @@ rollback target. Major `0` is pre-release and promises no upgrade path.
 ## How far this is proven
 
 **No release has been published yet**, and the workflow that signs one, `release.yml`, has never run (snapshots are
-published and signed by `ci.yml`; until the first release no digest verifies under the identity above, which is true:
+published and signed by `publish.yml`; until the first release no digest verifies under the identity above, which is true:
 none is a release). So no command here has run against a veyq release. The promotion checks its own work the way this
 page does before it publishes: it verifies `manifest.json` and `veyqctl` against their bundles under `veyqctl`'s own
 issuer and identity, and refuses to publish a release that fails it. The image half has been run as

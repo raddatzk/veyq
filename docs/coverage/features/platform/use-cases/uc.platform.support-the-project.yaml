@@ -1,0 +1,56 @@
+useCase: uc.platform.support-the-project
+feature: platform
+title: Learn that veyq can be supported, once
+# Each web criterion's load-bearing test was bitten when it was built (a stored dismissal dropped, the account write
+# dropped, the account flag ignored, a banner added to the public layout and to the bookmark embed, the footer's Donate
+# link removed, a guest banner that reads the account): each turned its tests red. The backend's half is the account
+# flag alone (a-members-dismissal-is-on-the-account); the banner, the browser's dismissal and the footer are the web's.
+acceptanceCriteria:
+  - id: the-banner-shows-until-dismissed
+    text: >-
+      A member in the signed-in app and a guest on a share page see one donation banner at the top: a labelled region
+      with the donation page's link (the German page in a German client) in a tab of its own with no opener and no
+      referrer, and a labelled dismiss button.
+    coverage:
+      web:
+        unit: [src/core/project/DonationBanner.guest.test.ts, src/components/app/AppShell.donation.test.ts, src/views/ShareView.test.ts]
+  - id: a-dismissal-holds-forever
+    text: >-
+      Dismissing hides the banner at once and this browser keeps the dismissal, so it stays gone on the next page load;
+      a stored dismissal that cannot be read counts as none, and one that cannot be written still hides the banner for
+      the visit. A guest's banner calls no authenticated client.
+    coverage:
+      web:
+        unit: [src/core/project/DonationBanner.guest.test.ts, src/views/ShareView.test.ts]
+  - id: a-members-dismissal-is-on-the-account
+    text: >-
+      A member's banner shows only while neither the account's flag nor this browser holds a dismissal; dismissing
+      writes the account's flag through the profile update and the browser's; a flag found set is copied into the
+      browser; a profile that cannot be read shows the banner, and a failed write keeps the browser's dismissal. The
+      server stores the flag on the account, serves it on the caller's own profile in every tenant, leaves it as it is
+      when an update omits it, and keeps one account's apart from another's.
+    coverage:
+      web:
+        unit: [src/core/project/DonationBanner.member.test.ts]
+      backend:
+        integration: [DonationBannerSliceTest.theDismissalIsStoredOnTheAccountAndServedInEveryTenant, DonationBannerSliceTest.anUpdateThatOmitsTheFlagLeavesItAsItIs, DonationBannerSliceTest.oneAccountsDismissalIsNotAnothers]
+  - id: never-on-the-way-in-and-one-per-page
+    text: >-
+      The login page and the rest of the public layout show no banner, and a bookmark's share shown in place brings
+      none of its own beside the member page's.
+    coverage:
+      web:
+        unit: [src/components/app/AppShell.donation.test.ts, src/views/LoginView.test.ts, src/core/bookmark/BookmarkEmbed.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The invite, join and recovery pages share the login page's public layout, which AppShell.donation.test.ts
+          proves banner-free; each view is not mounted on its own for it. Admin-web has no banner component at all.
+  - id: the-footer-links-the-project
+    text: >-
+      Every page that draws the instance footer — the signed-in app, a share page, the login page — links "Why is veyq
+      secure?" and "Donate" to the project's website in the reader's language, each in a tab of its own with no opener
+      and no referrer, whether or not the operator's values could be read; the share page carries them once.
+    coverage:
+      web:
+        unit: [src/core/operator/OperatorIdentification.test.ts, src/views/LoginView.test.ts, src/components/app/AppShell.donation.test.ts, src/views/ShareView.test.ts]

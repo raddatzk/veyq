@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // A password field with a reveal toggle (ADR 0107). There is no strength meter: the app judges a password by its own
 // policy notice. The field's accessible name is its label alone (ADR 0107 § Behaviour changed on purpose). `inputId` is
-// the `<input>`'s id, for a `<label for>`; `name` and `autocomplete` go onto the input; the caller's other attributes
-// land on the wrapper. The toggle is a real button, named from the catalog. A label's name is computed from its whole
+// the `<input>`'s id, for a `<label for>`; `name` and `autocomplete` go onto the input, and so do the password managers'
+// opt-outs where `notALogin` marks a secret that is no account credential (`./notALogin.ts`); the caller's other
+// attributes land on the wrapper. The toggle is a real button, named from the catalog. A label's name is computed from its whole
 // content, so a toggle inside the caller's `<label>` would add "Show password" to the field's name: the input therefore
 // names itself with the label's visible text, read again when the language changes. Sheets reach it by `veyq-password`,
 // its input by `veyq-input` (as every text field) or `veyq-password__input`, and the toggle by `veyq-password__toggle`
@@ -10,6 +11,7 @@
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqIcon from './VeyqIcon.vue'
+import { NOT_A_LOGIN } from './notALogin'
 
 const model = defineModel<string | null | undefined>()
 defineProps<{
@@ -19,6 +21,8 @@ defineProps<{
   required?: boolean
   disabled?: boolean
   fluid?: boolean
+  /** No account credential (a share link's password, an invite's): password managers are told to leave it alone. */
+  notALogin?: boolean
 }>()
 const emit = defineEmits<{ blur: [FocusEvent] }>()
 const { t, locale } = useI18n()
@@ -46,6 +50,7 @@ watch(locale, () => void nextTick(readLabel))
       :class="{ 'veyq-input--fluid': fluid }"
       :name="name"
       :autocomplete="autocomplete"
+      v-bind="notALogin ? NOT_A_LOGIN : {}"
       :required="required"
       :disabled="disabled"
       @blur="emit('blur', $event)"

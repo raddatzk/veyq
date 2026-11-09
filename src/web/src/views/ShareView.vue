@@ -11,7 +11,8 @@
 //  - for a `WRITE_ONLY` link, the drop page its root kind's application claimed (`registry.shareBodyFor`): its guest holds
 //    no key, so there is nothing to render the member's way (Memories' photo drop, Depot's drop box).
 // Anything else — a root kind nobody can render, or none named — is the explicit unavailable state, never a blank page.
-// A footer links to veyq's security docs (the client-integrity trust tier, ADR 0026).
+// Above the gates, the donation banner as a guest's (uc.platform.support-the-project: its dismissal stays in this browser);
+// the footer is the instance's, with veyq's own "Why is veyq secure?" and "Donate" in it (`OperatorIdentification`).
 //
 // The gates and what lies behind them are core's (`core/sharing/shareGates.ts`, drawn by `core/sharing/ShareGates.vue`),
 // which a bookmark's page runs too for a link it shows in place (ADR 0121); this page is their host for this origin's link,
@@ -52,6 +53,7 @@ import { reportNodes } from '../core/report/reportActions'
 import { ShareRole } from '../api/generated/sharing'
 import { setPreferenceAudience } from '../shared/state/scopedPreference'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
+import DonationBanner from '../core/project/DonationBanner.vue'
 import { closeGuestPage, openGuestPage } from '../core/sharing/guestNotice'
 import { openReport, useReportOffered } from '../core/report/report'
 import { linkReportKeys } from '../core/report/reportKeys'
@@ -84,14 +86,6 @@ const gates = useShareGates({
   locale,
 })
 const { status, head, access, needsTerms, needsNote } = gates
-
-// The security-doc footer link (ADR 0026 trust-tier honesty) — the published docs site (ADR 0087), locale-aware: the
-// German page sits under /de/ at the English page's path.
-const securityDocUrl = computed(() =>
-  locale.value === 'de'
-    ? 'https://veyq.app/de/privacy/is-my-data-safe/'
-    : 'https://veyq.app/privacy/is-my-data-safe/',
-)
 
 // An upload link's guest sees no node, so it reports the link itself (uc.moderation.report, ADR 0093 § 1): its name and
 // note, with `K_share`, which opens no content. A viewing guest reports what it sees from the views themselves.
@@ -141,10 +135,10 @@ watch(
 <template>
   <ShareReview v-if="moderation" :case-id="shareId" />
   <div v-else class="share-view">
+    <DonationBanner />
     <ShareGates :gates="gates" />
 
     <footer class="share-view-footer">
-      <a :href="securityDocUrl" target="_blank" rel="noopener noreferrer">{{ t('share.securityFooter') }}</a>
       <button v-if="reportsLink" type="button" class="share-view-report" @click="reportLink">{{ t('report.reportLink') }}</button>
       <OperatorIdentification />
     </footer>
@@ -175,12 +169,9 @@ watch(
   border-top: 1px solid var(--app-line);
   text-align: center;
 }
-.share-view-footer a,
 .share-view-report {
   color: var(--app-muted);
   font-size: 0.82rem;
-}
-.share-view-report {
   padding: 0;
   border: none;
   background: none;

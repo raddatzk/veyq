@@ -53,7 +53,7 @@ opt-in.**
   settings and withdrawn in settings or at the map, as decided in [ADR 0016](0016-geocoding-provider-neutrality.md):
   **off** ⇒ no map ⇒ **no location feature at all** (no pin, no name); **on** ⇒ tiles **and**
   geocoding (the basemap loads and reverse-geocoding is available; a name may still be typed manually on the map).
-  There is no tiles-on/geocoding-off middle stage. Every map that loads tiles carries the *Turn map off* control
+  There is no tiles-on/geocoding-off middle stage. Every map that loads tiles carries the *Turn map services off* control
   beside its attribution; a withdrawal removes the map, and with it the tile layer, at once.
   Where the **server** serves no map (`memories.map` off,
   [ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md)), there is

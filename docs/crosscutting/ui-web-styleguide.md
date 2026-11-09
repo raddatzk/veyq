@@ -248,6 +248,18 @@ or a one-off `1rem` label sitting in them.
   explicit label. Icon-only actions use `.veyq-icon-button` + an `aria-label`/tooltip. Two icon-only actions in one bar
   (a `NodeHeader`'s, a row's) never share an icon: the icon is the only thing a sighted user tells them apart by, so a new
   action's icon is checked against the list it joins.
+- **A centred dialog is at most a reading column wide, 36rem** (owner 2026-11-07; `.veyq-dialog--center` in each
+  surface's `shared/ui/layer.css`): unsized, a dialog takes its text's natural width, and one long sentence stretched it
+  across the screen. A dialog that needs more sets `--veyq-dialog-max-width: none` beside its own width (the expenses
+  entry, the space's trash, the localized markdown editor) — never a rule that out-ranks the default.
+- **A tap beside a dialog closes it only while it holds no field** (owner 2026-11-08; `VeyqDialog` in both surfaces): a
+  menu, a confirmation or a notice — the mobile navigation sheet among them — closes as Cancel would; a dialog with a
+  field to type into, pick, tick or toggle (native, or a layer component by its role or `aria-pressed`) stays open,
+  whether or not anything was entered, so a stray tap never loses what a form holds; and none closes while it may not
+  be closed (`closable: false`). A dialog that holds no field but would lose something sets `keepOnOutside` in that
+  state: a result shown once (an invite code, a report's reference), a running operation a close would abort or drop
+  (an export, a row's re-issue or restore), a destination chosen by browsing (move, copy, import) — the eleven audited
+  on 2026-11-08 are pinned in `shared/ui/dialogsKeptOnOutside.test.ts`. × and Escape close every closable one.
 - **Dialog footers use the one shared `.veyq-dialog-action-row`** (a `space-between` row; never a
   per-component `.dialog-actions` copy): **cancel/secondary anchored left, submit/confirm anchored right**;
   source order matches visual order. A **destructive tertiary** action that coexists with the primary confirm
@@ -328,7 +340,7 @@ One page, `/settings/<section>`, behind an unlocked vault
 shell's only door into it — the top bar carries none, and lint holds that — and beside it the menu carries only the
 theme and language quick-pickers and sign-out.
 
-- **The rail** mixes two axes. *Personal* is always there: appearance and language, map and place names (this browser's
+- **The rail** mixes two axes. *Personal* is always there: appearance and language, map services (this browser's
   map consent, uc.memory.place A5), sessions, password, adding a device
   (where the instance links devices), security, the trust reset (only while this device refuses a document), the
   profile (in a tenant), the way into moderation (for an appointed account) and erasing the account, last. *Shared
@@ -441,6 +453,20 @@ Visible focus states, accessible names, predictable keyboard behaviour. No hover
 essential actions. Text must not overflow on mobile — prefer existing responsive `.veyq-*` behaviour
 before component-specific media queries.
 
+### Password fields and password managers
+
+Owner 2026-11-07. Every password field says whether it is the person's veyq login, so a password manager fills the
+right ones and leaves the rest alone (`src/web/src/shared/ui/passwordFields.test.ts` and its admin-web twin are red on
+one that says neither):
+
+- **An account credential** (sign-in, registration, re-authentication, a new or confirmed password) carries its
+  standard token, `current-password` or `new-password`; the sign-in identifier is the e-mail (`username`), and a
+  per-tenant handle is a `nickname`, never a `username`.
+- **Anything else** — a share link's password (set, entered or kept on a bookmark), a PDF's, an invite's, an SMTP or
+  object-store secret — and every field in its form carries the managers' own opt-outs, which they read where they
+  ignore `autocomplete="off"`: `v-bind="NOT_A_LOGIN"` on a `VeyqInput`, `not-a-login` on a `VeyqPassword`
+  (`shared/ui/notALogin.ts` in each surface).
+
 ### Heading levels
 
 Owner 2026-10-24.
@@ -449,6 +475,8 @@ Owner 2026-10-24.
   file, a drop box, and a folder's level view.
 - **Sections are `h2`, and a head inside a section is one level deeper.** Never skip a level. A component used at
   two depths takes its level from its host, as `SpaceMap` does with `headingLevel`.
+- **A node page drawn under another page's header is a section of it** (owner 2026-11-07): a bookmark's share shown
+  in place names its node with an `h2`, a size smaller (`provideNestedNodeHeading`); the bookmark is the page's `h1`.
 - **A dialog's title heads the dialog,** not the page under it.
 - **The space's top level has the space's name as its `h1`** (owner 2026-10-24): it has no node to name, so the space
   is its subject — `LevelView`'s `spaceName`, core's `NodeHeader` with no actions.

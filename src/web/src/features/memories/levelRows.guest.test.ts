@@ -13,7 +13,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
 // A fake Leaflet for the one test that draws the real map (the others stub `SpaceMap`): it counts the tile layers made and
-// the maps removed, so a guest's "Turn map off" shows its effect.
+// the maps removed, so a guest's "Turn map services off" shows its effect.
 const leaflet = vi.hoisted(() => {
   const calls = { tileLayers: 0, removed: 0 }
   const map = {
@@ -224,7 +224,7 @@ describe('Memories rows for a share guest', () => {
     expect(authenticatedCalls).toEqual([])
   })
 
-  // uc.memory.place A5: a guest has no settings, so the map's own "Turn map off" is where a guest withdraws - the member's
+  // uc.memory.place A5: a guest has no settings, so the map's own "Turn map services off" is where a guest withdraws - the member's
   // very map, with nothing of the member's world reached.
   it('a guest withdraws the map consent on the map itself: the map is removed, no further tile layer, the prompt returns', async () => {
     setMapsConsent(true)

@@ -1,7 +1,8 @@
 # ADR 0085 — One major for the platform, moved on a yearly train; a client speaks every major since the train before last
 
 - Status: Accepted
-- Built: partly (not built: decision 5's client window, lane L3's archive holding decision 10's major entry)
+- Built: partly (not built: decision 5's client window — deferred until a major 2 is released, § Consequences —, lane
+  L3's archive holding decision 10's major entry)
 - Date: 2026-10-15
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
@@ -62,7 +63,10 @@ when it is built; the rule only says when a train lets it drop the oldest adapte
 **6. The window is the client's, never the server's.** A server speaks its own major only. A client older than the
 server's major shows "update this app" before login, as ADR 0032 does today, because updating an app is cheap for
 its user and updating a server is not cheap for its operator. The web client and `admin-web` come from the
-server's own image and always match it exactly.
+server's own image and always match it exactly — with one exception: the web client's guest view of a share embedded
+from **another** instance ([ADR 0121](0121-a-received-share-is-browsed-in-place-through-its-own-api.md) decision 4)
+speaks this window like an app, counted back from its own major. A share on a newer major is never embedded (no
+client knows a major released after it); it opens on its own server, whose client always matches.
 
 **7. A client does not police operators.**
 - **A flaw in the server:** the client keeps talking to it. Closing it is the operator's job, and self-hosting
@@ -118,6 +122,12 @@ keeps inside a major reaches the operators who have not left the previous major 
 
 - **Nothing to configure (decision 1).** Neither runtime target sets a major. The web client's gate, compiled from
   the same `VERSION`, still compares for equality (decision 6).
+- **No adapter is due before major 2 (owner 2026-11-09).** The window counts released majors only and major 0 is
+  pre-release, so until a major 2 is released every client's window is its own major alone: the native apps and the
+  web client's guest embed gate on equality and carry no adapter. The first adapter — major 1's — is due with major
+  2, in every native app and in the web client's guest embed, together with a CI job against a major-1 server image;
+  the train's step 1 ([`infra/README.md`](../../infra/README.md) § Cutting a release) holds it, so it is met before
+  `VERSION` moves to 2, not found after.
 - **The train is a procedure (decisions 2, 3 and 10)**, written in [`infra/README.md`](../../infra/README.md) § Cutting
   a release. The manifest's deprecation lifecycle stays deferred (ADR 0032 § Consequences) and is not needed for
   this.

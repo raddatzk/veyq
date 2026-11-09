@@ -15,6 +15,7 @@ import VeyqSearchField from '../../../shared/ui/VeyqSearchField.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import type { Person } from '../../../core/people/directory'
+import { fold } from '../../../shared/text/fold'
 
 const props = defineProps<{
   /** The scope's current members; null while they are being read. */
@@ -31,7 +32,6 @@ const draft = ref<string[]>([...props.selected])
 const former = computed(() => (props.people ? draft.value.filter((id) => !props.people!.some((p) => p.userId === id)) : []))
 const full = computed(() => draft.value.length >= props.max)
 const query = ref('')
-const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 const visiblePeople = computed(() => {
   const q = fold(query.value.trim())
   return props.people ? props.people.filter((p) => !q || fold(p.displayName).includes(q)) : []

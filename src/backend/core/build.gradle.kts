@@ -116,7 +116,7 @@ pitest {
     // third of its mutants (MembershipPolicy all of them) when it was tried.
     // Incremental analysis: PIT re-tests only mutants whose code OR covering tests changed since the cached
     // history, so a weakened assertion (a test edit, no source change) is still caught. The history file is the
-    // CI cache (mutation-backend.yml), mirroring Stryker's incremental report (ADR 0045 §4). Same path in/out:
+    // CI cache (mutation.yml's `backend` job), mirroring Stryker's incremental report (ADR 0045 §4). Same path in/out:
     // PIT reads the prior run, then writes the updated history for the next; a missing input on a cold run is fine.
     historyInputLocation.set(file("build/pitest/history.bin"))
     historyOutputLocation.set(file("build/pitest/history.bin"))

@@ -9,29 +9,36 @@ import Screenshot from '../../../../components/Screenshot.astro';
 
 Eine Erinnerung kann zeigen, **wo** es war, und als Pin auf der Karte deines Bereichs erscheinen.
 
-## Karten einschalten (einmalig)
+## Kartendienste
 
-Wenn du zum ersten Mal einen Ort festlegst, fragt veyq: **Karten für Orte aktivieren?** Eine Karte braucht Hilfe von
-außen. Die Kartenbilder werden von einem Kartenanbieter geladen, und wenn du einen Namen für einen Ort willst, wird
-der gewählte Punkt an einen Dienst geschickt, der daraus einen Namen macht. Beides geht direkt von deinem Gerät zu
-diesem Anbieter und nie über den veyq-Server. Du kannst es jederzeit wieder ausschalten: Wähle unten auf einer Karte
-**Karte ausschalten**, oder schalte es unter **Einstellungen** → **Karte und Ortsnamen** aus, wo du auch siehst, welche
-Anbieter dein Server nutzt. Karten verschwinden sofort; schon gefundene Ortsnamen bleiben. Wähle **Karten aktivieren**,
-um fortzufahren, oder **Abbrechen**, um Karten ausgeschaltet zu lassen.
+Eine Karte braucht Hilfe von außen, darum ist sie eine Einstellung von dir: **Kartendienste**, aus, bis du sie
+einschaltest. Eingeschaltet werden die Kartenbilder von einem Kartenanbieter geladen, und wenn du einen Namen für einen
+Ort willst, wird der gewählte Punkt an einen Dienst geschickt, der daraus einen Namen macht. Beides geht direkt von
+deinem Gerät zu diesem Anbieter, mit der IP-Adresse deines Geräts, und nie über den veyq-Server.
+
+Solange sie aus sind, öffnet **Ort festlegen** den Dialog nur mit dem Namen: Tippe ihn ein und wähle **Speichern**. Wo
+die Karte stünde, nennt der Dialog die Anbieter, die dein Server nutzt, und bietet **Kartendienste einschalten** an; die
+Karte erscheint dann im selben Dialog, und der getippte Name bleibt. Solange sie aus sind, geht nichts an einen Anbieter.
+
+Du kannst sie jederzeit wieder ausschalten: Wähle unten auf einer Karte **Kartendienste ausschalten**, oder schalte sie
+unter **Einstellungen** → **Kartendienste** aus, wo du auch siehst, welche Anbieter dein Server nutzt. Karten
+verschwinden sofort; schon gefundene Ortsnamen bleiben, und die, die andere gefunden haben, siehst du weiter als Text.
 
 Welcher Kartenanbieter und welcher Dienst für Ortsnamen genutzt werden, entscheidet die Person, die deinen Server
-betreibt. Ohne Dienst für Ortsnamen tippst du den Namen eines Orts selbst. Ohne Kartenanbieter wird nichts gefragt:
+betreibt. Ohne Dienst für Ortsnamen tippst du den Namen eines Orts selbst. Ohne Kartenanbieter wird nichts angeboten:
 siehe [Ohne Karte](#ohne-karte).
 
-<Screenshot id="memories-maps-consent" shows="Der Dialog Karten für Orte aktivieren? mit seinem Text und den Schaltflächen Abbrechen und Karten aktivieren" />
+<Screenshot id="memories-map-services-off" shows="Der Dialog Ort mit dem Angebot, die Kartendienste einzuschalten, den Namen der Anbieter, dem Namensfeld und den Schaltflächen Ort entfernen, Abbrechen und Speichern" />
 
 ## Einen Ort festlegen
 
 1. Öffne die Erinnerung und wähle in der Kopfzeile **Ort festlegen** (dort steht **Ort bearbeiten**, sobald es einen
    gibt).
-2. Eine Karte öffnet sich. Wurden deine Fotos mit eingeschaltetem Standort aufgenommen, beginnt sie an der Stelle, auf
-   die sie zeigen (**Folgt deinen Fotos**). Verschiebe den Pin, wenn du magst; dann steht dort **Eigener Ort**, und
-   **wieder folgen** nimmt es zurück.
+2. Sind die Kartendienste an, öffnet sich eine Karte. Wurden deine Fotos mit eingeschaltetem Standort aufgenommen,
+   beginnt sie an der Stelle, auf die sie zeigen (**Folgt deinen Fotos**). Verschiebe den Pin, wenn du magst; dann steht
+   dort **Eigener Ort**, und **wieder folgen** nimmt es zurück. Ohne solche Fotos zeigt die Karte die ganze Welt,
+   und der Pin ist ausgegraut: verschiebe die Karte dorthin, wo es war. Lässt du sie, wie sie ist, ist der Ort nur ein Name (**Nur ein Name – ohne
+   Position**) und auf keiner Karte.
 3. Gib dem Ort einen Namen: tippe einen eigenen ein („bei Oma“) oder wähle **Namen aus der Karte**, damit der
    Kartendienst einen vorschlägt. **Eigenen Namen eingeben** wechselt zurück.
 4. Wähle **Speichern**. **Ort entfernen** nimmt den Ort wieder weg.
@@ -47,7 +54,7 @@ aufgenommen, ist der Ort nur ein Name (**Nur ein Name – ohne Position**): Du s
 Erinnerung, aber auf keiner Karte, bis ein Foto mit Standort dazukommt. Nichts geht an einen Kartenanbieter oder einen
 Dienst für Ortsnamen.
 
-Sind Karten eingeschaltet, bietet der Dialog für eine neue Erinnerung außerdem **Ort automatisch ermitteln**; der Ort
+Sind die Kartendienste an, bietet der Dialog für eine neue Erinnerung außerdem **Ort automatisch ermitteln**; der Ort
 folgt dann deinen Fotos.
 
 ## Die Karte
@@ -57,4 +64,4 @@ nicht zu sehen.
 
 Der Ort wird zusammen mit der Erinnerung auf deinem Gerät verschlüsselt; veyqs Server erfährt weder den Ort noch die
 Koordinaten. Das Einzige, was dein Gerät je verlässt, ist der Punkt, der an den Kartenanbieter geht, und nur, wenn du
-Karten aktiviert hast.
+die Kartendienste eingeschaltet hast.

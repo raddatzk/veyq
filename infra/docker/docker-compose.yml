@@ -21,10 +21,13 @@ name: infra
 
 services:
   mariadb:
-    image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
+    image: mariadb:12.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9
     container_name: veyq-mariadb
     restart: unless-stopped
     environment:
+      # A data directory an older MariaDB wrote is upgraded on start: the image backs up the system tables into the data
+      # directory and runs mariadb-upgrade (a major bump such as 11.4 -> 12.3 left them on the old layout otherwise).
+      MARIADB_AUTO_UPGRADE: "1"
       MARIADB_DATABASE: veyq
       MARIADB_USER: veyq
       # Local throwaway only — matches application-dev.properties. Change both together for a non-default.
@@ -92,7 +95,7 @@ services:
   # (MIT, actively maintained) — NOT the archived MailHog (root CLAUDE.md: no EOL deps). Nothing is stored across
   # restarts (in-memory), which is exactly what a throwaway test mailbox wants.
   mailpit:
-    image: axllent/mailpit:v1.20.0@sha256:6105f08377323c3e11a21b6e5e51648e33151fb4e525aab8d0961573c9e94a4d
+    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     container_name: veyq-mailpit
     profiles: ["mail"]
     restart: unless-stopped

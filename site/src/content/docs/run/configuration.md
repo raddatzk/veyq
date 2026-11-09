@@ -143,7 +143,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | Value | Default | Meaning |
 |---|---|---|
 | `mariadb.enabled` | `true` | `false` uses a database of your own |
-| `mariadb.image` | `mariadb:11.4@sha256:…` | Pinned by digest |
+| `mariadb.image` | `mariadb:12.3@sha256:…` | Pinned by digest |
 | `mariadb.persistence.size` | `10Gi` | |
 | `mariadb.persistence.storageClass` | — | |
 | `mariadb.resources.limits.memory` | `1Gi` | |

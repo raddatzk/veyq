@@ -1,9 +1,9 @@
 useCase: uc.sharing.browse-a-received-share-in-place
 feature: sharing
 title: Browse a received share in place, inside the space
-# ADR 0121, changes/cr-browse-a-received-share-in-place.md (its live two-origin pass is the CR's P6).
+# ADR 0121 (its live two-origin pass, and what it did not prove, is the ADR's § Consequences).
 acceptanceCriteria:
-  # P2 (backend)
+  # the share API's CORS (backend)
   - id: share-api-answers-any-origin
     text: While core.public-shares.embeddable is effective, the public share API under /api/shares/{shareId}, /api/setup and /api/moderation/key answer a preflight 204 and carry Access-Control-Allow-Origin * and CORP cross-origin, never Access-Control-Allow-Credentials; switched off, and on every other path, they stay same-origin.
     coverage:
@@ -16,7 +16,7 @@ acceptanceCriteria:
           - ShareCrossOriginSliceTest.aCuratorsOperationOnALinkAndAMembersPathStaySameOrigin
           - ShareCrossOriginSliceTest.anOptionsThatIsNoPreflightIsStillAnUndeclaredMethod
           - ApiMethodIndexContractTest.theGuestShareOperationsOfferedCrossOriginAreTheContractsUnauthenticatedOnes
-  # P3 (backend; the dev policy in web)
+  # the CSP (backend; the dev policy in web)
   - id: csp-widened-only-while-on
     text: The app shell's connect-src gains the https scheme exactly while core.share-embedding is effective for the tenant; switched off by the operator or the tenant, the policy is as before.
     coverage:
@@ -28,13 +28,13 @@ acceptanceCriteria:
           - AppShellShareEmbeddingSliceTest.aTenantThatSwitchedItOffKeepsItOffOnTheDomainItMovedTo
       web:
         unit: [src/shared/security/csp.test.ts]
-  # P4 (the check), P5 (the fallback line)
+  # embeddability (the check, the fallback line)
   - id: embeds-only-what-says-it-may
     text: A bookmark embeds only where the share's instance serves the same major, core.public-shares and core.public-shares.embeddable; anything else falls back to opening the link, with its reason.
     coverage:
       web:
         unit: [src/core/sharing/shareInstance.test.ts, src/core/bookmark/BookmarkEmbed.test.ts]
-  # P4 (the seams), P5 (the embedded view)
+  # the guest's seams, the embedded view
   - id: guest-inside-member-page
     text: The embedded view reads and writes through the share's own API base under a guest access of its own; no member access, key or door reaches it, and device-kept guest state is keyed by the share's origin.
     coverage:
@@ -49,7 +49,7 @@ acceptanceCriteria:
           - src/features/expenses/domain/potApi.wire.test.ts
           - src/features/expenses/receipts.wire.test.ts
           - src/core/bookmark/BookmarkEmbed.test.ts
-  # P5
+  # the gates, the writes, the report
   - id: gates-writes-report
     text: The password, terms, note and naming gates run inline in the share page's order; a READ_WRITE write and a WRITE_ONLY drop reach the share's instance; a report seals to its moderation key.
     coverage:

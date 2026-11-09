@@ -8,6 +8,7 @@
 // or departed account) — by the name sealed at adding, so the balances still say whom one owes. A link guest reads no
 // directory: it is handed none and shows the sealed name.
 import type { Person } from '../../core/people/directory'
+import { fold } from '../../shared/text/fold'
 import type { Participant, PotLedger } from './domain/ledger'
 import type { ParticipantBody } from './domain/format'
 
@@ -49,17 +50,14 @@ export function addableMembers(pot: { readonly participants: readonly Pick<Parti
   return members.filter((m) => !taken.has(m.userId))
 }
 
-/** Case and accents aside: "Zoë" and "zoe" are the same letters. */
-const folded = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase()
-
 /** Whether [a] and [b] are the same name, case and accents aside. */
-export const sameName = (a: string, b: string): boolean => folded(a.trim()) === folded(b.trim())
+export const sameName = (a: string, b: string): boolean => fold(a.trim()) === fold(b.trim())
 
 /** The members of [members] whose display name holds [query], case and accents aside — the create dialog's suggestions
  *  while a name is typed; every one of them for a blank query. In the order given. */
 export function membersMatching(members: readonly Person[], query: string): Person[] {
-  const q = folded(query.trim())
-  return q ? members.filter((m) => folded(m.displayName).includes(q)) : [...members]
+  const q = fold(query.trim())
+  return q ? members.filter((m) => fold(m.displayName).includes(q)) : [...members]
 }
 
 /** A participant a writer adds: a name typed, or a member of the space chosen ({@link addableMembers}). */

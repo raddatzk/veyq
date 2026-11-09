@@ -26,7 +26,7 @@ const WO = guestAccessOf('WRITE_ONLY')
 
 /** A member on an opened Memory or chapter, as the detail has always offered it (cr-0049 … cr-0113). */
 const MEMBER_ON_NODE: Grant = {
-  navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setBanner: true, mark: true,
+  navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setBanner: true, mark: true, filterFacts: true,
   share: true, shareContribute: true, shareUpload: true, rename: true, delete: true, move: true, mediaTrash: true, buckets: true,
 }
 
@@ -45,16 +45,16 @@ const rows: [string, Access, RightsTarget, Grant][] = [
   ['member, drop box off: no uploader link', memberAccessOf({ publicSharesDropBox: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true, shareUpload: false }],
   ['member, a kind the registry will not share', member, at(MEMORY_KIND, { shareable: false }), { ...MEMBER_ON_NODE, createChapter: true, participants: true, share: false, shareContribute: false, shareUpload: false }],
   ['member, pending deletion, on a Memory: reads, links, marks only', pending, at(MEMORY_KIND), {
-    navigate: true, download: true, mark: true, share: true, shareContribute: true, shareUpload: true, mediaTrash: true, buckets: true, participants: true,
+    navigate: true, download: true, mark: true, filterFacts: true, share: true, shareContribute: true, shareUpload: true, mediaTrash: true, buckets: true, participants: true,
   }],
   // --- member, Memories switched off (uc.platform.switch-application-off): read-only, but a delete and its restore stay ---
   ['member, Memories off, in a folder: no new Memory', memoriesOff, at(FOLDER_KIND), { navigate: true }],
   ['member, Memories off, on a Memory: reads, downloads, marks, trash and delete; no write, no new link', memoriesOff, at(MEMORY_KIND), {
-    navigate: true, download: true, mark: true, mediaTrash: true, buckets: true, participants: true, deleteMedia: 'any', delete: true,
+    navigate: true, download: true, mark: true, filterFacts: true, mediaTrash: true, buckets: true, participants: true, deleteMedia: 'any', delete: true,
   }],
   ['member, Depot off, on a Memory: untouched (another application\'s switch)', memberAccessOf({ applicationsOff: new Set([DEPOT]) }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, participants: true }],
   ['member, Memories off and pending deletion: no delete either', memberAccessOf({ readonly: true, applicationsOff: new Set([MEMORIES]) }), at(MEMORY_KIND), {
-    navigate: true, download: true, mark: true, mediaTrash: true, buckets: true, participants: true,
+    navigate: true, download: true, mark: true, filterFacts: true, mediaTrash: true, buckets: true, participants: true,
   }],
   ['member on another application\'s kind', member, at(FILE), {}],
   ['member on an unknown kind', member, at('ZULU'), {}],
@@ -98,12 +98,12 @@ describe('memoryRights: the matrix', () => {
   })
 })
 
-// Rule 2 of #401: item marks (K_SC at E_0), the node's sealed meta, the media trash, the organizer, the
+// Rule 2 of #401: item marks (K_SC at E_0), the filter by facts (no search for a guest, ADR 0125 decision 7), the node's sealed meta, the media trash, the organizer, the
 // links and the node's own rename/delete never reach a guest — in any role, at any kind, wherever it stands. Nor does a
 // new Memory (owner decision 2026-10-14: the server lets no guest create one, core's `GuestCreatableKinds`).
 describe('memoryRights: member-only functions', () => {
   const MEMBER_ONLY: (keyof MemoryRights)[] = [
-    'mark', 'editMeta', 'setBanner', 'share', 'shareUpload', 'rename', 'delete', 'mediaTrash', 'buckets', 'createChapter', 'createMemory',
+    'mark', 'filterFacts', 'editMeta', 'setBanner', 'share', 'shareUpload', 'rename', 'delete', 'mediaTrash', 'buckets', 'createChapter', 'createMemory',
   ]
   it('no guest role grants any of them', () => {
     for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {

@@ -79,6 +79,9 @@ describe('collectLocatedPins', () => {
   const memRoot = content('memRoot', MEMORY_KIND, null, scopeKey, { location: located(4, 4) })
   const memPending = content('memPending', MEMORY_KIND, null, scopeKey, { location: pendingAuto })
   const memNameOnly = content('memNameOnly', MEMORY_KIND, null, scopeKey, { location: nameOnly })
+  // inbox #834: an untouched place editor stored its opening view (the world's centre) as a `fixed` point; one a hair away is real
+  const memOpeningView = content('memOpeningView', MEMORY_KIND, null, scopeKey, { location: located(20, 0) })
+  const memNearOpeningView = content('memNearOpeningView', MEMORY_KIND, null, scopeKey, { location: located(20.000001, 0) })
   const memLocked = content('memLocked', MEMORY_KIND, null, scopeKey, {
     location: located(9, 9),
     wrapUnder: v1.randomBytes(32), // K_node sealed under a key we don't have → nodeContentKey can't chain it
@@ -86,10 +89,11 @@ describe('collectLocatedPins', () => {
   const memMoved = content('memMoved', MEMORY_KIND, null, scopeKey, { location: located(7, 7), metaFor: 'memRoot' })
   const tree: TreeNode[] = [
     fA.node, fB.node, memA.node, chapA.node, memB.node, memRoot.node, memPending.node, memNameOnly.node, memLocked.node, memMoved.node,
+    memOpeningView.node, memNearOpeningView.node,
   ]
 
   it('root (null) pins every located MEMORY/CHAPTER across the whole tree', () => {
-    expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null))).toEqual(['chapA', 'memA', 'memB', 'memRoot'])
+    expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null))).toEqual(['chapA', 'memA', 'memB', 'memNearOpeningView', 'memRoot'])
   })
 
   it('carries each pin its unsealed location with the derived position', () => {
@@ -111,6 +115,12 @@ describe('collectLocatedPins', () => {
 
   it('skips a place that is a name only (no derived ⇒ no pin, never a pin at 0,0)', () => {
     expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null))).not.toContain('memNameOnly')
+  })
+
+  it('skips a `fixed` point at the place editor\'s opening view (no point, uc.memory.place E3); a hair away is a pin', () => {
+    const pins = collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null)
+    expect(ids(pins)).not.toContain('memOpeningView')
+    expect(pins.find((p) => p.node.id === uid('memNearOpeningView'))?.location.derived).toEqual({ lat: 20.000001, lng: 0 })
   })
 
   it('skips a node whose key cannot be chained (best-effort, never a broken map)', () => {

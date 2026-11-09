@@ -14,6 +14,7 @@ import StatementNotice from '../../features/moderation/statement/StatementNotice
 import { vSafeHtml } from '../../shared/security/trustedTypes'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../shared/ui/notALogin'
 import { apiBaseOf, shareIdOf } from './shareAt'
 import type { ShareGates } from './shareGates'
 
@@ -53,12 +54,12 @@ const g = props.gates
       <component :is="heading">{{ t('share.passwordTitle') }}</component>
       <p class="share-name-intro">{{ t('share.passwordIntro') }}</p>
       <label for="share-password-input">{{ t('share.passwordLabel') }}</label>
-      <VeyqInput
+      <VeyqInput v-bind="NOT_A_LOGIN"
         id="share-password-input"
         v-model="g.pwInput.value"
         type="password"
         name="share-password"
-        autocomplete="current-password"
+        autocomplete="off"
         :placeholder="t('share.passwordPlaceholder')"
         :disabled="g.pwBusy.value"
       />

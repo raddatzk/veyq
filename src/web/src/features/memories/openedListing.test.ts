@@ -57,7 +57,7 @@ const opens = (fn: typeof unsealMeta | typeof originalBlobMeta) => {
 }
 
 function setup() {
-  const filter = ref<((id: string) => boolean) | null>(null)
+  const filter = ref<((item: MediaItem) => boolean) | null>(null)
   const wrapper = mount(
     defineComponent({
       setup(_, { expose }) {
@@ -67,7 +67,7 @@ function setup() {
           node: () => treeNode(),
           memoryKey: () => KEY,
           onSettle: async () => {},
-          markFilter: () => filter.value,
+          filter: () => filter.value,
         }))
         return () => h('div')
       },
@@ -87,7 +87,7 @@ describe('the opened listing (ADR 0105 decision 3)', () => {
     vm.sortDir = 'oldest'
     await flushPromises()
     expect(vm.layoutItems.map((t) => t.id)).toEqual(['b', 'c', 'a'])
-    filter.value = (id) => id !== 'c'
+    filter.value = (it) => it.mediaId !== 'c'
     await flushPromises()
     expect(vm.layoutItems.map((t) => t.id)).toEqual(['b', 'a'])
     filter.value = null

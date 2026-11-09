@@ -8,7 +8,9 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { defineComponent, h } from 'vue'
 import NodeHeader from './NodeHeader.vue'
+import { provideNestedNodeHeading } from '../nodeHeaderContribution'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import {
   mergeHeaderActions,
@@ -54,6 +56,20 @@ const act = (id: string, over: Partial<NodeHeaderAction> = {}): NodeHeaderAction
 const labels = (w: ReturnType<typeof mountHeader>) => w.findAll('.veyq-node-header-action').map((b) => b.attributes('aria-label'))
 
 describe('NodeHeader', () => {
+  it('names its node with an h2 a size smaller where a region nests it under another page\'s header (a bookmark\'s share)', () => {
+    const Region = defineComponent({
+      setup() {
+        provideNestedNodeHeading()
+        return () => h(NodeHeader, { title: 'Trips', node: null, icon: 'folder' })
+      },
+    })
+    const w = mount(Region, { global: { plugins: [realI18n()] }, attachTo: document.body })
+    mounted.push(w)
+    expect(w.findAll('h1')).toHaveLength(0)
+    expect(w.get('h2.veyq-node-header-title').text()).toBe('Trips')
+    expect(w.get('.veyq-node-header').classes()).toContain('is-nested')
+  })
+
   it('draws the title as the page\'s one h1, the subtitle and the kind icon', () => {
     const w = mountHeader({ title: 'Trips', subtitle: '3 items', icon: 'folder' })
     // Every header opens its node's page, so its title is that page's h1 (styleguide § Heading levels).

@@ -10,7 +10,7 @@
 // **One door per application: its registrar (owner 2026-11-01).** `registerApplication({ id, name })` names the
 // application and answers its SCOPED registrar (`ApplicationRegistrar`), through which it registers everything else:
 // `app.kind(kind, descriptor)` per node kind, `app.route(slug | null)` once, `app.lifecycle(hooks)`, `app.shareBody(rootKind,
-// body)`, `app.folderUploadShare(kind, share)`, `app.personSection(component)`, `app.itemReview(component)`. Ownership comes from the call: a kind belongs to the
+// body)`, `app.folderUploadShare(kind, share)`, `app.personSection(component)`, `app.itemReview(component)`, `app.shortcuts(groups)`. Ownership comes from the call: a kind belongs to the
 // application whose registrar registered it, so no list of its kinds exists beside the registrations, and `app.id` is the
 // one place an application's id lives on the web side (its kinds' `contentSchema.application` is read from it). There are
 // no free register functions.
@@ -127,6 +127,10 @@
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
 // is an open string token (`core/node/kind.ts`), so no compiler checks that every kind is handled: this answer and its
 // tests (`registry.test.ts`) are what does.
+//
+// **Keyboard shortcuts (`app.shortcuts`, uc.platform.keyboard-shortcuts).** An application names the shortcuts of its own
+// screens ONCE, as groups of `{ keys, label }` (`core/shortcuts/shortcuts.ts`), its labels keys of its own namespace; core's
+// overview (`core/shortcuts/ShortcutsDialog.vue`) lists them after core's own, for an application switched on here only.
 import { nothingOfItsOwnToRekey, type RekeyContentHook, type ScopeRekeyParticipant } from '../node/rekey/hooks'
 import { defineAsyncComponent, type Component } from 'vue'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
@@ -143,6 +147,8 @@ import { slugify } from '../../shared/naming'
 import type { VeyqIconName } from '../../shared/ui/icons'
 import type { ExportContentHook, ImportContentHook } from '../export/hooks'
 import type { ManifestContent } from '../export/manifest'
+import type { ScopeDocument, SearchFacets } from '../search/model'
+import type { ShortcutGroup } from '../shortcuts/shortcuts'
 
 // The platform's own share dialog for a FOLDER (uc.sharing.share-public-viewer:folder-share-root), FOLDER's
 // `shareDialog` since P4c. LAZY for a reason: the dialog's module graph reaches this registry again (measured:
@@ -246,6 +252,11 @@ export interface KindDescriptor {
    *  `cover` in `contracts/platform/kinds/<owner>.json` (`kindsContract.test.ts`). Omitted: no
    *  cover, no action. FOLDER's is core's own, pre-registered. */
   cover?: KindCover
+  /** What the search knows of a node of this kind beyond its name (ADR 0125 decision 6): the kind's word for a kind chip,
+   *  the facets core asks for while it holds the node's key, and the kinds of the documents the kind's page contributes for
+   *  the node on screen (`core/search/contribution.ts`). Omitted: the node is found by its name alone and offers no kind
+   *  chip. FOLDER's is core's own, pre-registered. */
+  search?: KindSearch
   /** Export and import of this kind's CONTENT (ADR 0082): core walks the subtree and writes / reads the archive; the kind
    *  says what its content is. A kind with neither is left out of an export (with its subtree) and reported. FOLDER needs
    *  neither: it has no content. */
@@ -303,6 +314,79 @@ export interface KindCover {
    *  image derived at core's cover spec (Memories: the PREVIEW of a gallery medium whose original equals the file). Null:
    *  none, and the cover is uploaded. Best-effort - a failure is null. Omitted: every cover is uploaded. */
   findStored?(ctx: CoverFindContext): Promise<StoredBlob | null>
+}
+
+/** A kind's part in the search (ADR 0125 decision 6; `KindDescriptor.search`). */
+export interface KindSearch {
+  /** The i18n key, of the application's own namespace, of the kind's noun ("Memory"): what a kind chip says and matches. */
+  label: string
+  /**
+   * The facets of one node of the kind - a Memory's date range, place and participants. Core calls it while it holds the
+   * tree's keys, once per sealed meta (a document whose `wrappedMeta` did not change keeps its facets), and zeroes the keys
+   * after the walk: the hook keeps none, and anything it returns is plaintext the search holds in memory only. A throw is
+   * no facets. Omitted: none.
+   */
+  facets?(ctx: SearchFacetContext): SearchFacets
+  /** The kinds of the documents the kind's page contributes for its node, and its application's search of a space finds in
+   *  such a node (Memories: a photo, a video): each one's word for a kind chip and its icon in a result row. */
+  documents?: readonly SearchDocumentKind[]
+}
+
+/** A contributed document kind (`KindSearch.documents`). */
+export interface SearchDocumentKind {
+  /** The document's `kind` token, the application's own (`memories.photo`). */
+  kind: string
+  /** The i18n key of its noun, of the application's own namespace. */
+  label: string
+  icon: VeyqIconName
+}
+
+/**
+ * What an application adds to the search of a whole space (ADR 0125 decision 8a; `ApplicationRegistrar.search`): the objects
+ * of its own inside the space's nodes - Memories' photos and videos of every Memory. Core asks it once per space per walk.
+ */
+export interface ApplicationSearch {
+  /**
+   * The space's objects, or null when nothing moved since the answer `ctx.tag` names (a `304`): core keeps that answer's
+   * documents. Core calls it while it walks the space and zeroes every key `ctx.keys()` opened once it has returned; the
+   * hook keeps none, and what it returns is plaintext the search holds in memory only. A throw is a space not searched.
+   */
+  scopeDocuments(ctx: ScopeDocumentsContext): Promise<ScopeDocumentsAnswer | null>
+}
+
+/** What `ApplicationSearch.scopeDocuments` answers: its tag (what the next walk hands back as `ctx.tag`) and its objects. */
+export interface ScopeDocumentsAnswer {
+  tag: string | null
+  documents: readonly ScopeDocument[]
+}
+
+/** What `ApplicationSearch.scopeDocuments` is handed for one space. */
+export interface ScopeDocumentsContext {
+  scopeId: string
+  /** The tag of the hook's last answer for this space, or null (the first walk, or after a failure). */
+  tag: string | null
+  /** The hook's last documents for this space, by id: one at an unchanged `revision` is kept, not opened again. */
+  previous: ReadonlyMap<string, ScopeDocument>
+  /**
+   * The space's node keys, opened on the first call (a walk whose tree did not move opens them only now, so an answer that
+   * opens nothing costs no key) and valid until the hook returns: a node's content key, or null for a node not in the
+   * space's tree or whose chain does not open. Never kept.
+   */
+  keys(): Promise<(nodeId: string) => Uint8Array | null>
+  /** Run `steps` in core's slices (at most `SLICE_MS` of the main thread at a time), so a space of thousands of objects
+   *  never holds the page; rejects when the walk is abandoned between two. */
+  slices<T>(steps: Generator<void, T, void>): Promise<T>
+  /** Aborted when the index is reset (a sign-out, a re-lock): stop fetching. */
+  signal: AbortSignal
+}
+
+/** What a kind's `search.facets` is handed: the node and, for that call only, its key and its parent's (the scope key at the
+ *  scope root). */
+export interface SearchFacetContext {
+  scopeId: string
+  node: TreeNode
+  nodeKey: Uint8Array
+  parentKey: Uint8Array
 }
 
 /** What a kind's `cover.findStored` is handed: the node, its key and the picked file. */
@@ -589,6 +673,12 @@ export interface ApplicationRegistrar {
   /** Claim the review of a reported item (props `ItemReviewProps`): what a moderator sees of an application's record.
    *  The same component twice throws. */
   itemReview(component: Component): void
+  /** Add the application's objects to the search of every space (ADR 0125 decision 8a, {@link ApplicationSearch}): Memories'
+   *  photos and videos. Throws on a second one. */
+  search(search: ApplicationSearch): void
+  /** Name the keyboard shortcuts of the application's own screens, in the order the overview lists them (see the header).
+   *  Throws on a second call, on a group without an entry and on an entry without a key. */
+  shortcuts(groups: readonly ShortcutGroup[]): void
 }
 
 export interface Registry {
@@ -614,6 +704,10 @@ export interface Registry {
   personSections(): readonly Component[]
   /** The item reviews claimed, in registration order — each draws only the items that are its application's. */
   itemReviews(): readonly Component[]
+  /** Every application's part in the search of a whole space, in registration order. */
+  searches(): readonly { application: string; search: ApplicationSearch }[]
+  /** Every application's shortcut groups, in registration order, each with the application that named them. */
+  shortcuts(): readonly { application: string; groups: readonly ShortcutGroup[] }[]
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -691,7 +785,7 @@ export function createRegistry(): Registry {
       kind: FOLDER_KIND, icon: 'folder', header: { order: ['favorite', 'share', 'download', 'move', 'copy'] },
       shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
       placement: { root: true, parents: [FOLDER_KIND] }, cover: {}, copyLosses: ['node.copy.lossFolderCover'],
-      rekeyContent: nothingOfItsOwnToRekey,
+      rekeyContent: nothingOfItsOwnToRekey, search: { label: 'node.kindFolder' },
     }],
   ])
   const lifecycles = new Map<string, LifecycleHooks>()
@@ -705,6 +799,8 @@ export function createRegistry(): Registry {
   let uploadShare: FolderUploadShareRegistration | null = null
   const personSections: Component[] = []
   const itemReviews: Component[] = []
+  const searches = new Map<string, ApplicationSearch>()
+  const shortcuts = new Map<string, readonly ShortcutGroup[]>()
   // application id → its route slug, or null for the application with no segment.
   const routes = new Map<string, string | null>()
   const slugs = new Set<string>()
@@ -796,6 +892,21 @@ export function createRegistry(): Registry {
         if (itemReviews.includes(component)) throw new Error('this item review is already claimed')
         itemReviews.push(component)
       },
+      search(search: ApplicationSearch) {
+        if (searches.has(id)) throw new Error(`the search of ${id} is already registered`)
+        if (typeof search?.scopeDocuments !== 'function') throw new Error(`application ${id} registered no scopeDocuments hook`)
+        searches.set(id, search)
+      },
+      shortcuts(groups: readonly ShortcutGroup[]) {
+        if (shortcuts.has(id)) throw new Error(`the shortcuts of ${id} are already registered`)
+        for (const g of groups) {
+          if (g.entries.length === 0) throw new Error(`the shortcut group ${g.title} of ${id} has no entry`)
+          for (const e of g.entries) {
+            if (e.keys.length === 0 || e.keys.some((chord) => chord.length === 0)) throw new Error(`the shortcut ${e.label} of ${id} names no key`)
+          }
+        }
+        shortcuts.set(id, Object.freeze(groups.map((g) => Object.freeze({ ...g, entries: Object.freeze([...g.entries]) }))))
+      },
     })
   }
   return {
@@ -811,6 +922,8 @@ export function createRegistry(): Registry {
     folderUploadShare: () => uploadShare,
     personSections: () => [...personSections],
     itemReviews: () => [...itemReviews],
+    searches: () => [...searches].map(([application, search]) => ({ application, search })),
+    shortcuts: () => [...shortcuts].map(([application, groups]) => ({ application, groups })),
     scopeReset() {
       // Synchronous on purpose: callers (enterScope, clearActiveSpace) rely on the state being gone on return.
       for (const h of lifecycles.values()) h.onScopeReset?.()

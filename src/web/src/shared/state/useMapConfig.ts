@@ -7,8 +7,8 @@
 // middle stage. `mapsConsent` **off** ⇒ no map ⇒ no location feature; **on** ⇒ tiles **and** reverse geocoding.
 // Off by default — the user actively opts in.
 //
-// **Withdrawn as easily as given** (GDPR Art. 7(3), uc.memory.place A5): Settings → Map and place names
-// (`features/settings/MapsPanel.vue`) and the "Turn map off" control on every map call `setMapsConsent(false)`. The flag
+// **Withdrawn as easily as given** (GDPR Art. 7(3), uc.memory.place A5): Settings → Map services
+// (`features/settings/MapsPanel.vue`) and the "Turn map services off" control on every map call `setMapsConsent(false)`. The flag
 // is removed and `mapsAvailable` turns false at once, so every map unmounts its Leaflet instance (no further tile) and
 // every geocoding caller, which checks `geocodingAvailable` at call time, stops; what is already sealed stays. Another
 // tab of this browser follows through the `storage` event.

@@ -9,27 +9,33 @@ import Screenshot from '../../../components/Screenshot.astro';
 
 A Memory can show **where** it happened, and appear as a pin on the map of your space.
 
-## Turn on maps (once)
+## Map services
 
-The first time you set a location, veyq asks **Enable maps for locations?** A map needs help from outside. Map
-pictures are loaded from a map provider, and, if you want a name for a place, the point you chose is sent to a service
-that turns it into a name. Both go straight from your device to that provider and never through the veyq server. You
-can turn this off again at any time: choose **Turn map off** at the bottom of any map, or switch it off under
-**Settings** → **Map and place names**, which also shows which providers your server uses. Maps stop at once; place
-names already found stay. Choose **Enable maps** to continue, or **Cancel** to leave maps off.
+A map needs help from outside, so it is a setting of yours: **Map services**, off until you turn them on. Turned on,
+map pictures are loaded from a map provider, and, if you want a name for a place, the point you chose is sent to a
+service that turns it into a name. Both go straight from your device to that provider, with your device's IP address,
+and never through the veyq server.
+
+While they are off, **Set location** opens the dialog with just the name: type it and choose **Save**. Where the map
+would be, the dialog names the providers your server uses and offers **Turn map services on**; the map then appears in
+the same dialog, and the name you typed stays. Nothing is sent to a provider while they are off.
+
+You can turn them off again at any time: choose **Turn map services off** at the bottom of any map, or switch them off
+under **Settings** → **Map services**, which also shows which providers your server uses. Maps stop at once; place
+names already found stay, and you still see the ones others found, as text.
 
 Which map provider and which naming service are used is decided by whoever runs your server. Without a naming service
-you type a place's name yourself. Without a map provider nothing is asked: see
-[Without a map](#without-a-map).
+you type a place's name yourself. Without a map provider nothing is offered: see [Without a map](#without-a-map).
 
-<Screenshot id="memories-maps-consent" shows="The dialog Enable maps for locations? with its text and the Cancel and Enable maps buttons" />
+<Screenshot id="memories-map-services-off" shows="The Location dialog with the offer to turn map services on, naming the providers, the name field and the Remove location, Cancel and Save buttons" />
 
 ## Set a location
 
 1. Open the Memory and choose **Set location** in the header (it says **Edit location** once there is one).
-2. A map opens. If your photos were taken with location switched on, it starts at the spot they point to
-   (**Follows your photos**). Move the pin if you like; it then says **Your own spot**, and **follow photos** takes it
-   back.
+2. With map services on, a map opens. If your photos were taken with location switched on, it starts at the spot they
+   point to (**Follows your photos**). Move the pin if you like; it then says **Your own spot**, and **follow photos**
+   takes it back. Without such photos the map shows the whole world and the pin is greyed out: move the map to where it was. If you leave it as it is,
+   the place is a name only (**Name only — no position**) and is on no map.
 3. Give the place a name: type your own ("at grandma's"), or choose **Use the map's name** to let the map service
    suggest one. **Enter your own name** switches back.
 4. Choose **Save**. **Remove location** takes the place away again.
@@ -44,7 +50,7 @@ and appears on the map should your server show one later. If none of them were, 
 position**): you see it in the Memory's header, but it is on no map until a photo with a location is added. Nothing is
 sent to a map provider or a naming service.
 
-Once maps are enabled, the dialog for a new Memory also offers **Determine location automatically**; the place then
+With map services on, the dialog for a new Memory also offers **Determine location automatically**; the place then
 follows your photos.
 
 ## The map
@@ -53,4 +59,4 @@ Memories with a place are pins on the **Map view** of a folder. A Memory without
 
 The place is locked together with the Memory on your device; veyq's server learns neither the place nor the
 coordinates. The only thing that ever leaves your device is the point sent to the map provider, and only if you have
-enabled maps.
+turned map services on.

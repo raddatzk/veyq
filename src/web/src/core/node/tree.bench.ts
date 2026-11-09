@@ -6,7 +6,7 @@
 //
 // The control: if the realistic shape costs about 10x as much at 5,000 as at 500, the quadratic terms
 // in `openEntries` (the child lists copied per row, the queue taken from the front) do not matter yet at this size.
-import { bench, describe, expect } from 'vitest'
+import { expect, test } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import type { NodeSummary } from '../../api/generated/content'
 import type { ScopeKey } from '../../features/spaces/epochs'
@@ -61,8 +61,9 @@ for (const [name, r] of Object.entries(shapes)) {
   expect(openTree(SCOPE, epochs, r).length, `${name}: every row opens`).toBe(r.length)
 }
 
-describe('openTree', () => {
-  for (const [name, r] of Object.entries(shapes)) {
-    bench(`${name} rows`, () => { openTree(SCOPE, epochs, r) }, { iterations: 5, warmupIterations: 1, time: 0 })
-  }
+test('openTree', async ({ bench }) => {
+  await bench.compare(
+    ...Object.entries(shapes).map(([name, r]) => bench(`${name} rows`, () => { openTree(SCOPE, epochs, r) })),
+    { iterations: 5, warmupIterations: 1, time: 0 },
+  )
 })

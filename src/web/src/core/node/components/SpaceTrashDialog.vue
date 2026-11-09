@@ -150,7 +150,8 @@ onMounted(() => void load())
   <VeyqDialog
     :visible="true"
     :header="t('node.trash.title')"
-    :style="{ width: 'min(38rem, 92vw)' }"
+    :style="{ width: 'min(38rem, 92vw)', '--veyq-dialog-max-width': 'none' }"
+    :keep-on-outside="busy !== null"
     @update:visible="emit('close')"
   >
     <p class="dialog-copy">{{ t('node.trash.hint') }}</p>

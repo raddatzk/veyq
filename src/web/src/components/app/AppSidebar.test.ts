@@ -139,6 +139,8 @@ describe('AppSidebar space list', () => {
     await wrapper.get('.mobile-navigation-button').trigger('click')
     await flushPromises()
 
+    // A menu, not a form: it holds no field, so a tap beside the sheet closes it (VeyqDialog).
+    expect(wrapper.get('.dialog-stub').find('input, textarea, select, [role="combobox"], [role="checkbox"]').exists()).toBe(false)
     const items = wrapper.findAll('.mobile-nav-item')
     const texts = items.map((i) => i.text())
     expect(texts.some((s) => s.includes('Familie Muster'))).toBe(true) // the active tenant row

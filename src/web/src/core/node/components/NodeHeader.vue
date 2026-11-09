@@ -57,7 +57,8 @@
 // first two), and the name is shortened only below that.
 //
 // The title is its page's one `h1` (owner 2026-10-24, `docs/crosscutting/ui-web-styleguide.md` § Heading levels): every
-// header opens the page of the node it names — a Memory's, a file's, a drop box's, a Pot's, and a folder's level view.
+// header opens the page of the node it names — a Memory's, a file's, a drop box's, a Pot's, and a folder's level view. Drawn
+// under another page's header (a bookmark's share shown in place, `provideNestedNodeHeading`) it is an `h2`, a size smaller.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -86,6 +87,7 @@ import {
 } from '../nodeHeader'
 import { nodeNameErrorText, renameSelectionEnd } from '../nodeName'
 import { injectCoreNodeActions, useCoreHeaderActions } from '../coreNodeActions'
+import { injectNodeHeadingLevel } from '../nodeHeaderContribution'
 import type { TreeNode } from '../tree'
 
 const props = withDefaults(
@@ -112,6 +114,7 @@ const props = withDefaults(
   { icon: undefined, cover: false, subtitle: undefined, actions: () => [], order: () => [], facts: () => [], linkPeople: false, rename: null },
 )
 const { t } = useI18n()
+const headingTag = injectNodeHeadingLevel() === 2 ? 'h2' : 'h1'
 const view = injectCoreNodeActions()
 const coreActions = useCoreHeaderActions(() => props.node)
 const parts = computed(() => partitionHeaderActions(orderHeaderActions(mergeHeaderActions(coreActions.value, props.actions).filter((a) => a.shown), props.order)))
@@ -334,7 +337,7 @@ onBeforeUnmount(() => {
   <header
     ref="header"
     class="veyq-node-header"
-    :class="{ 'has-leading': hasLeading, 'is-compact': compact }"
+    :class="{ 'has-leading': hasLeading, 'is-compact': compact, 'is-nested': headingTag === 'h2' }"
     :style="rowStyle"
     :data-layout-width="layoutWidth ?? undefined"
   >
@@ -371,11 +374,11 @@ onBeforeUnmount(() => {
     </div>
     <div class="veyq-node-header-body">
       <div ref="titleRow" class="veyq-node-header-titlerow">
-        <!-- The page's one h1. Where the name may be renamed it holds a real button that turns it into a field (Enter
+        <!-- The page's one h1 (h2 where nested). Where the name may be renamed it holds a real button that turns it into a field (Enter
              writes, Esc cancels) - with no tooltip (owner 2026-11-04): the field shows the whole name; a name that cannot be
              renamed has it as the title's tooltip. The heading is named by the name itself (`aria-label`), so the button's
              "Rename “…”" never becomes the page's heading. -->
-        <h1 ref="titleEl" class="veyq-node-header-title" :class="{ 'is-editing': editing }" :title="rename ? undefined : title" :aria-label="title">
+        <component :is="headingTag" ref="titleEl" class="veyq-node-header-title" :class="{ 'is-editing': editing }" :title="rename ? undefined : title" :aria-label="title">
           <VeyqInput
             v-if="editing"
             ref="nameInput"
@@ -397,7 +400,7 @@ onBeforeUnmount(() => {
             {{ title }}
           </button>
           <template v-else>{{ title }}</template>
-        </h1>
+        </component>
         <div v-if="parts.buttons.length || parts.menuOnly.length" ref="actionsEl" class="veyq-node-header-actions">
           <VeyqTooltip v-for="a in buttons" :key="a.id" :text="a.label">
             <VeyqButton

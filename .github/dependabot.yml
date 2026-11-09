@@ -29,6 +29,9 @@ multi-ecosystem-groups:
   images:
     schedule:
       interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
 
 updates:
   # The pnpm workspace's one lockfile is at the root (src/web/, src/admin-web/, src/packages/crypto/ and tests/e2e/ are its
@@ -37,12 +40,18 @@ updates:
   # lockfile, which carries pnpm's own pin as a first YAML document, is unproven like the rest of this file). It bumps the openapi-generator-cli WRAPPER only: the generator
   # JAR it runs is chosen by `generator-cli.version` in src/web/ and src/admin-web/openapitools.json and pinned in
   # scripts/openapi_generator_jar.sha256, which no ecosystem here reads — that bump is by hand, at a release.
-  # Daily, as the former `app-runtime` group was. The limit is 5 (the documented default, spelled out): the minor/patch
-  # group is one PR, and each major beside it is one more — a limit of 1 would let a single stuck major block the group.
+  # Weekly, Saturday 06:00 Europe/Berlin (owner 2026-11-07), and so is every entry here: the pull requests and their
+  # Checks runs are ready on Saturday, so what is merged over the weekend is in the snapshot `publish.yml` cuts on Monday at
+  # 03:17 UTC. Security updates follow Dependabot's alerts, not this schedule. The limit is 5 (the documented default,
+  # spelled out): the minor/patch group is one PR, and each major beside it is one more — a limit of 1 would let a
+  # single stuck major block the group.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
     groups:
       npm-minor-patch:
         patterns:
@@ -60,7 +69,7 @@ updates:
       - dependency-name: "typescript"
         update-types:
           - "version-update:semver-major"
-      # CI runs Node 22 (`node-version: "22"` in ci.yml); the types follow the runtime, not the newest Node. Lifted
+      # CI runs Node 22 (`node-version: "22"` in checks.yml); the types follow the runtime, not the newest Node. Lifted
       # together with that runtime bump, by hand in the same commit.
       - dependency-name: "@types/node"
         update-types:
@@ -69,12 +78,14 @@ updates:
   # The docs site is its own package with its own lockfile, deliberately outside the root workspace (site/package.json
   # says why), so the entry above never reads it (remembered, NOT read from dependabot-core: the file fetcher follows
   # the root's pnpm-workspace.yaml `packages`, and site/ is none of them). Without this entry its tree aged unseen — undici sat at an advisory version until an ORT run found it
-  # (2026-10-30). Weekly rather than daily: the site ships nothing in an image, only the GitHub Pages build. Its limit
-  # is 5 for the same reason as the root entry's.
+  # (2026-10-30). Weekly in the root entry's slot. Its limit is 5 for the same reason as the root entry's.
   - package-ecosystem: "npm"
     directory: "/site"
     schedule:
       interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
     groups:
       site:
         patterns:
@@ -103,11 +114,14 @@ updates:
   # src/backend/settings.gradle.kts's `include(":core")`-style calls (SettingsFileParser#subproject_paths, Kotlin DSL
   # parentheses matched, `:apps:memories` → apps/memories) and fetches each subproject's build file; it adds buildSrc
   # when the directory exists, and gradle/libs.versions.toml at this entry's root. So no `directories:` list.
-  # Daily and a limit of 5, as the root npm entry and for the same reason.
+  # Weekly in the root npm entry's slot, with a limit of 5 for the same reason.
   - package-ecosystem: "gradle"
     directory: "/src/backend"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
     groups:
       gradle-minor-patch:
         patterns:
@@ -133,26 +147,88 @@ updates:
     patterns:
       - "*"
     multi-ecosystem-group: "images"
+    # Every rule here keeps a base on its LTS line (owner 2026-11-07: "only LTS"); PR #11 proposed node 25 and ubuntu
+    # 26.04 beside the bumps that were taken. A Docker tag is read as a version and a suffix (dependabot-core main,
+    # 2026-11-07: docker/lib/dependabot/docker/tag.rb `VERSION_WITH_SFX`, version.rb `Version.new`), so `22-bookworm-slim`
+    # is version 22 with suffix `-bookworm-slim`, `1.30-alpine` is 1.30, `24.04` is 24.04, and only a tag of the same
+    # suffix is proposed. Whether a member of a multi-ecosystem group may carry `ignore` is unproven, as the compose
+    # entry below says; the first run after this edit shows it.
+    ignore:
+      # src/tools/Dockerfile copies the client from the server's own image (`FROM mariadb:…`): the same LTS bound as the
+      # compose entry below, or this entry proposes the rolling releases the compose one holds back.
+      - dependency-name: "mariadb"
+        versions:
+          - ">= 12.4"
+      # The web build stages (src/backend/ and src/admin-web/Dockerfile) on Node's LTS lines, which are the even
+      # majors; an odd major is never LTS and is out of support six months after its release (nodejs.org/dist/index.json,
+      # 2026-11-07: 22 Jod, 24 Krypton and 26 Lithium are LTS, 23 and 25 are not, 27 is in alpha). A range per odd
+      # major, the next one included before its tag exists. The next EVEN major is still proposed, and with these rules
+      # it is what arrives (26-bookworm-slim is tagged): it is not taken in the group. The owner decides when Node
+      # moves, and it then moves in one commit with `node-version` in the workflows and with `@types/node`, whose
+      # major the npm entry above ignores for that reason.
+      - dependency-name: "node"
+        versions:
+          - ">= 23, < 24"
+          - ">= 25, < 26"
+          - ">= 27, < 28"
+      # The admin image on nginx's STABLE branch, the even minor (src/admin-web/Dockerfile says why: a mainline tag
+      # stops receiving builds once the next mainline opens). PR #11 proposed 1.31, which is mainline (measured
+      # 2026-11-07: `nginxinc/nginx-unprivileged:1.31-alpine` is `mainline-alpine`'s index, `1.30-alpine` is
+      # `stable-alpine`'s). The next stable minor, 1.32, is still proposed; 1.30's own digest moves still arrive.
+      - dependency-name: "nginxinc/nginx-unprivileged"
+        versions:
+          - ">= 1.31, < 1.32"
+          - ">= 1.33, < 1.34"
+          - ">= 1.35, < 1.36"
+      # The tools image's base follows the MariaDB image's base BY HAND, never on its own: src/tools/Dockerfile copies
+      # the `mariadb` client out of `mariadb:12.3`, which is Ubuntu 24.04 (noble), and the C library must match (its
+      # comment says so, measured with `ldd`). Everything after 24.04 is held, the interim 24.10, 25.04 and 25.10 tags
+      # included (they exist on Docker Hub, 2026-11-07, and 24.10 sorts above 24.04); 24.04's own digest moves still
+      # arrive. Lifted, and moved, together with the MariaDB pin whose base moves.
+      - dependency-name: "ubuntu"
+        versions:
+          - ">= 24.05"
 
   # `docker-compose` matches `(docker-)?compose(-\w+)?(.<suffix>)?.ya?ml`, so both infra/docker/docker-compose.yml
   # and the release recipe infra/docker/docker-compose.prod.yml.
+  # MariaDB on its LTS line only (owner 2026-11-07: "only LTS makes sense"): 12.3 is the LTS, and the releases after
+  # it are rolling ones (13.0's community support ends with 2026), so nothing from 12.4 on is proposed. 12.3's own
+  # digest moves still arrive. The next LTS is moved to by hand, the bound below with it — a database major is a
+  # migration step of its own, never one bump in a group. Whether a member of a multi-ecosystem group may carry
+  # `ignore` the docs leave unsaid (remembered from the options reference: `ignore` is a per-entry key); the first run
+  # after this edit proves it was accepted.
   - package-ecosystem: "docker-compose"
     directory: "/infra/docker"
     patterns:
       - "*"
     multi-ecosystem-group: "images"
+    ignore:
+      - dependency-name: "mariadb"
+        versions:
+          - ">= 12.4"
+      # Held on v2.0.0 until the move is done by hand (owner 2026-11-07): from v2.1 a fresh node answers the admin API
+      # 500 "Layout not ready" (the e2e harness reads only 503), from v2.5 its cold /health answers 503, so the chart's
+      # probes never let it become ready, and v2.5 cannot be downgraded (veyqctl rollback would start the old store on
+      # migrated metadata). Measured on throwaway containers on 2026-11-07. Lifted with that move.
+      - dependency-name: "dxflrs/garage"
+        versions:
+          - ">= 2.1"
 
-  # `helm` reads Chart.yaml dependencies (the chart has none) AND every `image:` string in values*.yaml — the
-  # chart's mariadb and garage pins. The ci/ values files sit one directory down and name no third-party image.
-  - package-ecosystem: "helm"
-    directory: "/infra/kubernetes/charts/veyq"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "images"
-
-  # Reached by no ecosystem: the backup tool's `*_IMAGE` constants in src/tools/instance_backup.py. Its mariadb pin
-  # shares a `repo:tag` with the compose files, so a bump there turns validate_image_pins.py red until the constant
-  # follows by hand; its rclone pin appears nowhere else and is bumped by hand, deliberately, at a release.
+  # Reached by no ecosystem: the chart's mariadb and garage pins (infra/kubernetes/charts/veyq/values.yaml). There was
+  # a `helm` entry, and it could never update them: Dependabot's helm updater skips every digest-pinned image on
+  # purpose ("digest-pinned images resolve by digest, so a tag-only bump would silently keep the old image",
+  # helm/lib/dependabot/helm/file_updater/image_updater.rb, read on main 2026-11-07), then fails "Expected content to
+  # change!" — red on every run since 2026-11-05. The `images` group's pull request never appeared either (the compose
+  # job logged "created"), most likely because of that failure — inferred, not shown. Removed 2026-11-07. Each pin shares its `repo:tag` with
+  # the compose files, so the group's pull request is red at validate_image_pins.py until the chart's line follows, by
+  # hand, in that same pull request.
+  # Reached by no ecosystem either: the backup tool's `*_IMAGE` constants in src/tools/instance_backup.py. Each shares
+  # its repository with a pin an ecosystem does reach — mariadb with the compose files, rclone with src/tools/Dockerfile's
+  # `FROM rclone/rclone:…` — so a bump there turns validate_image_pins.py red (one repository, one tag; one `repo:tag`,
+  # one digest) until the constant follows, by hand, in that same pull request (PR #11: rclone 1.75.0 → 1.75.2).
+  # The same holds for two more sites no ecosystem reads: tests/e2e/stack/docker-compose.e2e.yml (its directory is not
+  # this entry's), whose mailpit pin is the dev compose file's, and scripts/measure_volume.py's `PROBE_IMAGE`, the
+  # release recipe's busybox. PR #11 left both behind.
 
   # Every action is pinned `owner/repo@<commit sha> # v<major>.<minor>.<patch>` (scripts/validate_action_pins.py).
   # Re-read 2026-10-17 (dependabot-core main de71a59): a SHA pin is bumped to the commit of the newest version tag
@@ -162,12 +238,15 @@ updates:
   # `previous_version_from_comment`, via `most_specific_version_tags_for_sha`); otherwise it keeps the comment
   # verbatim. A floating major (`# v4`) has moved off the pinned SHA by the time a bump arrives, so it would stay
   # standing beside a v7 SHA; a full-version tag never moves, so it is always rewritten.
-  # Reached by no ecosystem: an action's `with:` inputs. ci.yml's `cosign-release` (the cosign the publish signs
+  # Reached by no ecosystem: an action's `with:` inputs. checks.yml's `cosign-release` (the cosign the publish signs
   # with) is bumped by hand; scripts/validate_release_identity.py holds it to src/tools/veyqctl.py's COSIGN_MIN_VERSION.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
     groups:
       actions:
         patterns:

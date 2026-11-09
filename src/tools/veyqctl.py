@@ -59,7 +59,7 @@ release's manifest, so `check` verifies too.
 sign-blob` into `manifest.json.bundle`, an asset beside it, and `fetch_manifest` — the one entry that reads a manifest
 from a source — runs the host's `cosign verify-blob` on the manifest's exact bytes against that bundle and the one
 identity that releases veyq (GitHub's OIDC issuer and `release.yml` of `raddatzk/veyq` on `main` or a
-`release/<major>.x` branch — the promotion's workflow, never `ci.yml`, whose signature only says "snapshot" (ADR 0091
+`release/<major>.x` branch — the promotion's workflow, never `publish.yml`, whose signature only says "snapshot" (ADR 0091
 decision 5) — the identity the Run area's *Verify a release* page documents, and `scripts/validate_release_identity.py`
 assertion 7 holds both to what signs) BEFORE a single field of it is read — so no sha256 and no digest in it is
 trusted unless veyq's release signed it, whether it came from GitHub, a mirror or a directory. A missing bundle is
@@ -203,7 +203,7 @@ GITHUB_DOWNLOAD = f"https://github.com/{UPSTREAM}/releases/download"
 
 # The identity that releases veyq (ADR 0057 §3): the same two values the Run area's `verify-a-release.md` passes to
 # `cosign verify`, held to what signs by `scripts/validate_release_identity.py` assertion 7, which reads them here. The
-# promotion's workflow (`release.yml`), not the pipeline that signs every snapshot (`ci.yml`): a snapshot and its
+# promotion's workflow (`release.yml`), not the workflow that signs every snapshot (`publish.yml`): a snapshot and its
 # release are the same digest, so only the identity tells a release from a snapshot (ADR 0091 decision 5). The owner
 # and repository are the upstream the chart's `home:` names, which the guard derives them from.
 COSIGN_OIDC_ISSUER = "https://token.actions.githubusercontent.com"

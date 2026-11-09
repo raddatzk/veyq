@@ -17,7 +17,7 @@ check (total still > 0).
 Why it is not a `validate_*.py`: the web check shells out to `git diff`, but the trust-chain glob's harness
 (`validate_guard_gaps.py`) copies the tree **without** `.git` (none of its targets reads history) — so a
 git-dependent check cannot live there (cr-0180). This fabricates its own Stryker/PIT reports **and** a throwaway
-git repo, so it needs no real mutation run; it is invoked from `mutation.yml` / `mutation-backend.yml` beside the
+git repo, so it needs no real mutation run; it is invoked from both jobs of `mutation.yml` (`crypto`, `backend`) beside the
 real checks. Runnable locally:
 
     python3 scripts/mutation_meta_check_selftest.py

@@ -181,6 +181,80 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
 
+  /api/scopes/{scopeId}/media:
+    get:
+      tags: [media]
+      operationId: listScopeMedia
+      summary: List every live medium of a space — what the member's search opens (ADR 0125 decision 8a).
+      description: >
+        Every live medium on a live node of the scope, each tagged with its `nodeId`, in pages ordered by `mediaId` — what
+        a member's search reads to find a photo or a video of any Memory by its capture time, place and name
+        ([ADR 0125](../../../docs/decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)
+        decision 8a). A row carries only what opens those: the listed tier (`wrappedMeta`), the original's blob ref with its
+        sealed blob meta, and its uploader (`ownerKey`); the page carries, per node of its rows that has one, the node's
+        sealed drop private key and the wrapped key of every WRITE_ONLY identity among the node's rows, so a row a
+        WRITE_ONLY guest added opens from the page alone (ADR 0031 point 7). The client opens each row under its node's
+        key, which it holds while it walks the space's tree. A medium of a trashed node, a trashed medium and nothing of
+        another scope is listed. A medium a moderator blocked is kept and marked (`blockedByOperator`), as in
+        `listNodeMedia`; the search makes nothing of it.
+        **Pages (ADR 0033 decision 6):** at most `limit` media per answer, `more: true` while media remain past them; the
+        client asks again with the last `mediaId` it was given as `after`.
+        **Freshness (ADR 0081):** a read without `after` carries an `ETag` derived from the scope's tree revision, the item
+        revisions of its live nodes and the moderation blocks of the scope — everything the listing is a function of — read
+        before the rows; echoed as `If-None-Match` while none moved, it answers `304` with no body and reads no media. A
+        later page (`after` given) is never conditional and carries no tag; the client keeps the first page's.
+        **Operator-blind:** opaque ids, counters, sizes and wraps; never a name, a time or a place in clear. What the
+        server learns is that a member read every listing of a space (ADR 0125 § Consequences).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - name: after
+          x-veyq-visibility: id
+          in: query
+          required: false
+          description: >
+            The last `mediaId` of the page before; the answer continues with the media past it in `mediaId` order.
+            Omitted => from the beginning.
+          schema: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsLimit"
+        - name: If-None-Match
+          x-veyq-visibility: structure
+          in: header
+          required: false
+          description: >
+            The `ETag` of the client's last first page of this read. When it equals the tag the scope has now, `304`.
+            Ignored on a later page (`after` given).
+          schema: { type: string, maxLength: 80, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
+      responses:
+        "200":
+          description: One page of the scope's live media, and the per-node keys its WRITE_ONLY rows open with.
+          headers:
+            ETag:
+              x-veyq-visibility: structure
+              description: >
+                On a read without `after`: the scope's tag for this listing — echo it as `If-None-Match` on the next read.
+                Absent on a later page.
+              schema: { type: string, example: "\"2a9b1d4a6e8b2c1f2a9b1d4a6e8b2c1f\"" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScopeMediaPage" }
+        "304":
+          description: Not Modified — the client's `If-None-Match` equals the scope's tag for this listing; no body.
+        "400":
+          description: Malformed request — a parameter outside its contract.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+
   /api/scopes/{scopeId}/nodes/{nodeId}/media-rekey:
     get:
       tags: [media]
@@ -1085,6 +1159,109 @@ components:
             identity key wrapped to the node's drop key. A row whose identity is listed here is sealed under that
             identity's key; every other row under `K_node` (ADR 0031 point 7).
           items: { $ref: "#/components/schemas/UploaderKey" }
+
+    ScopeMediaPage:
+      type: object
+      description: >
+        One page of `listScopeMedia`: the scope's live media in `mediaId` order, and the per-node keys its WRITE_ONLY rows
+        open with.
+      required: [media, nodes, more]
+      properties:
+        media:
+          type: array
+          description: The live media past `after`, each tagged with its node — at most `limit` of them, in `mediaId` order.
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ScopeMedium" }
+        more:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Media remain past this page — ask again with the last `mediaId` as `after` until this is false.
+          example: false
+        nodes:
+          type: array
+          description: >
+            One entry per node of this page's rows that has a sealed drop private key: the key and the wrapped key of every
+            WRITE_ONLY identity that added one of the node's rows on this page (ADR 0031 point 7). A row of a node not
+            listed here, or whose identity its node's entry does not name, opens under `K_node`.
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ScopeMediaNode" }
+
+    ScopeMediaNode:
+      type: object
+      description: What opens the rows a WRITE_ONLY guest added to one node, as `listNodeMedia`'s page carries it for its node.
+      required: [nodeId, sealedDropPrivateKey, uploaderKeys]
+      properties:
+        nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        sealedDropPrivateKey:
+          type: string
+          description: The node's drop private key sealed under its `K_node` (as `NodeSummary.sealedDropPrivateKey`; opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: c2VhbGVkLWRyb3Ata2V5
+        uploaderKeys:
+          type: array
+          description: The wrapped key of every WRITE_ONLY identity that added one of this node's rows on the page.
+          items: { $ref: "#/components/schemas/UploaderKey" }
+
+    ScopeMedium:
+      type: object
+      description: >
+        One live medium of the scope, narrowed to what the search opens: its node, its listed tier, its original's blob ref
+        with the sealed blob meta (the name it was uploaded under and its type), and its uploader. No derivative, no
+        bucket, no time: the gallery's `MediaSummary` carries those, and the search reads none of them.
+      required: [nodeId, mediaId, blobId, chunkCount, byteSize, wrappedBlobKey, metaRevision, blockedByOperator]
+      properties:
+        blockedByOperator:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            A moderator blocked this medium, or its node or a node above it (uc.moderation.take-a-measure), as in
+            `MediaSummary`. Kept in the listing, not left out; the search makes no document of it.
+          example: false
+        nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 2
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 131072
+        wrappedBlobKey:
+          type: string
+          description: The original blob's `K_blob` wrapped under `K_node`, or under the uploader's key for a WRITE_ONLY row (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+        wrappedBlobMeta:
+          type: [string, "null"]
+          description: The original's sealed blob meta, under its `K_blob`, exactly as its upload declared it; null when it declared none.
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWJsb2ItbWV0YQ==
+        wrappedMeta:
+          type: [string, "null"]
+          description: The listed tier, as `MediaSummary.wrappedMeta` (capture time, place, GPS); null when none was sealed.
+          contentEncoding: base64
+          maxLength: 512
+          example: bWV0YS1jaXBoZXJ0ZXh0
+        metaRevision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: How many times `wrappedMeta` was replaced, as `MediaSummary.metaRevision`.
+          minimum: 0
+          example: 2
+        ownerKey:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          description: The uploader's opaque `owner_key`, as `MediaSummary.ownerKey` — a `share:{identityId}` row opens under that identity's key when its node's entry names it.
+          maxLength: 64
+          example: "user:2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"
 
     UploaderKey:
       type: object

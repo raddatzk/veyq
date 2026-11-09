@@ -165,7 +165,7 @@ function close() {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="title" :closable="!running" :close-on-escape="!running" class="copy-dialog" @update:visible="close">
+  <VeyqDialog :visible="true" :header="title" :closable="!running" :close-on-escape="!running" class="copy-dialog" keep-on-outside @update:visible="close">
     <form class="veyq-form" data-testid="copy-dialog" @submit.prevent="submit">
       <p class="veyq-form-copy">{{ single ? t('node.copy.hint') : t('node.copy.many.hint') }}</p>
       <MoveBrowser v-model:place="place" :nodes="nodes" :access="access" :tree="tree" :root-label="rootLabel" :disabled="running" />

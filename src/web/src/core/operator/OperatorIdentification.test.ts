@@ -87,6 +87,34 @@ describe('OperatorIdentification (uc.admin.operator-details, web)', () => {
     expect(authenticatedCalls).toEqual([])
   })
 
+  // uc.platform.support-the-project `the-footer-links-the-project`: veyq's own two links, beside the instance's, always —
+  // no read needed, so a failed read leaves them standing — to the project's website in the reader's language, each in a
+  // tab of its own that takes no referrer and no opener (a share page keeps its `#k=` key).
+  it('always links "Why is veyq secure?" and "Donate" to the project website, in a tab of its own', async () => {
+    fakeApi(publicOperatorApi, { getOperatorDetails: () => Promise.reject(new Error('offline')) })
+    const w = await mountIt()
+    const links = w.findAll('.operator-identification__project')
+    expect(links.map((l) => [l.text(), l.attributes('href')])).toEqual([
+      ['Why is veyq secure?', 'https://veyq.app/privacy/is-my-data-safe/'],
+      ['Donate', 'https://veyq.app/donate/'],
+    ])
+    for (const l of links) {
+      expect(l.attributes('target')).toBe('_blank')
+      expect(l.attributes('rel')).toBe('noopener noreferrer')
+    }
+    expect(authenticatedCalls).toEqual([])
+  })
+
+  it('links the German project pages in a German client', async () => {
+    stubApi(publicOperatorApi, { getOperatorDetails: details() })
+    i18n.global.locale.value = 'de'
+    const w = await mountIt()
+    expect(w.findAll('.operator-identification__project').map((l) => [l.text(), l.attributes('href')])).toEqual([
+      ['Wieso ist veyq sicher?', 'https://veyq.app/de/privacy/is-my-data-safe/'],
+      ['Spenden', 'https://veyq.app/de/donate/'],
+    ])
+  })
+
   it('speaks the page’s language', async () => {
     stubApi(publicOperatorApi, { getOperatorDetails: identified })
     i18n.global.locale.value = 'de'

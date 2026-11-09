@@ -254,7 +254,9 @@ export default defineConfigWithVueTs(
     // notice. `FinishProfilePrompt.vue` is the fourth: the one-time "finish your profile" notice carries a member whose
     // profile is empty to Your profile (ADR 0084 decision 7), as one component with one dismissal.
     // `ConfirmEmailChangeView.vue` is the fifth, the twin of the second: the page a change mail's link opens, whose one
-    // onward step is the same Security card, now showing the new address (uc.account.change-email). A further legitimate
+    // onward step is the same Security card, now showing the new address (uc.account.change-email). `SearchField.vue` is
+    // the sixth: a settings section is a search result (ADR 0125 decision 9), offered from the hub's own list with the
+    // rail's gates (`features/settings/sections.ts`), so it opens no section the rail does not offer. A further legitimate
     // door is one more `ignores` entry. LIMIT: a path
     // assembled at runtime is not a literal and is not seen (`'/' + 'settings'`, a variable passed as `path`,
     // `window.location`). And flat config resolves a rule by name, last block wins: a later block that sets
@@ -264,7 +266,7 @@ export default defineConfigWithVueTs(
     ignores: [
       'src/**/*.test.ts', 'src/router.ts', 'src/components/app/ProfileMenu.vue', 'src/views/SettingsHubView.vue',
       'src/views/ConfirmEmailView.vue', 'src/views/ConfirmEmailChangeView.vue', 'src/features/account/trustReset/TrustResetLink.vue',
-      'src/features/account/profile/FinishProfilePrompt.vue',
+      'src/features/account/profile/FinishProfilePrompt.vue', 'src/core/search/SearchField.vue',
     ],
     rules: {
       'no-restricted-syntax': ['error', ...SETTINGS_DOOR],

@@ -21,6 +21,8 @@
 //   seed-volume.mts photos --bare --target N  the 'No derivatives' Chapter: media with no derivative tier
 //   seed-volume.mts tree --target N           the 'Volume tree' group, realistic shape, to exactly N nodes
 //   seed-volume.mts tree --wide N             the 'Volume wide' group: one Memory holding N Chapters
+//   seed-volume.mts spread --target N         the tenant's and the owner's personal space, each to N nodes, Memories
+//                                             dated and placed (the search's three spaces, ADR 0125 § Consequences)
 //   seed-volume.mts members --target N        the tenant, to exactly N members (owner included), each complete
 //   seed-volume.mts upload --count N          scenario: the first member uploads N phone-sized photos, one at a time
 //   seed-volume.mts marks --cap N             the 'Volume marks' Memory: N photos the owner has marked, one more unmarked
@@ -42,7 +44,9 @@ import { updateTenantMailSettings } from '../src/features/tenant/tenantMailSetti
 import { memberInviteFragment, registerThroughMemberInvite } from '../src/test/memberJoin'
 import { generateInviteCode } from '@veyq/crypto/invite'
 import { inviteMember, listScopeMembers } from '../src/features/spaces/members'
-import { createGroup, listMyGroups, openScopeById, type OpenedScope } from '../src/features/spaces/scopes'
+import { createGroup, ensurePersonalScope, listMyGroups, openScope, openScopeById, type OpenedScope } from '../src/features/spaces/scopes'
+import { ScopeKind } from '../src/api/generated/scopes'
+import { sealNodeMeta } from '../src/core/node/nodeMeta'
 import { createContentNode, listTree, nodeContentKey, type TreeNode, type NodeParent } from '../src/core/node/tree'
 import { FOLDER_KIND } from '../src/core/node/kind'
 import { hashForNode, TENANT_SCOPE } from '../src/core/node/location'
@@ -307,6 +311,73 @@ async function tree(target: number, shape: 'realistic' | 'wide'): Promise<void> 
   }
 }
 
+// --- spread (the search's spaces) -----------------------------------------------------------------------------------
+
+const SPREAD_PLACES = ['Kevelaer', 'Kiel', 'Köln', 'Konstanz', 'Kyoto', 'Berlin', 'Hamburg', 'Rome', 'Lisbon', 'Oslo', 'Vienna', 'Bruges']
+type SpreadSpec = Spec & { meta?: Record<string, unknown> }
+
+/** A household's own trees for the search's measurement: Folders holding Memories holding Chapters, 1 : 5 : 20 as
+ *  {@link realistic}, but named as people name them (a place and a year) and each Memory sealed with the meta the search
+ *  reads (a date range and a place), so a year or place chip has something to find. Names are unique by construction. */
+function* spread(): Generator<SpreadSpec> {
+  for (let f = 0; ; f++) {
+    const folder = `Trips ${pad(f)}`
+    yield { kind: FOLDER_KIND, name: folder, parent: null }
+    for (let m = 0; m < 5; m++) {
+      const i = f * 5 + m
+      const place = SPREAD_PLACES[i % SPREAD_PLACES.length]
+      const year = 2012 + (i % 14)
+      const memory = `${place} ${year} (${pad(f)}-${m})`
+      const meta = {
+        date: { mode: 'range', from: `${year}-07-01`, to: `${year}-07-14` },
+        location: { name: place, nameSource: 'manual', derivedMode: 'fixed' },
+      }
+      yield { kind: MEMORY_KIND, name: memory, parent: folder, meta }
+      for (let c = 0; c < 4; c++) yield { kind: CHAPTER_KIND, name: `Day ${c + 1} of ${memory}`, parent: memory }
+    }
+  }
+}
+
+/** Fill `scope` with {@link spread}'s shape to exactly `target` nodes (a stopped run resumes). */
+async function fillSpread(scope: OpenedScope, label: string, target: number): Promise<number> {
+  const rows = await listTree(scope.scopeId, scope.epochs)
+  const byName = new Map<string, { id: string; key: Uint8Array; epoch: number; scopeEpoch: number }>()
+  for (const n of rows) byName.set(n.name, { id: n.id, key: nodeContentKey(scope.scopeId, scope.epochs, rows, n.id)!, epoch: n.epoch, scopeEpoch: n.scopeEpoch })
+  let count = rows.length
+  console.log(`spread: the ${label} space holds ${count} nodes, target ${target}`)
+  const p = progress(`spread ${label}`, 'nodes')
+  for (const s of spread()) {
+    if (count >= target) break
+    if (byName.has(s.name)) continue
+    const parentRef = s.parent === null ? null : byName.get(s.parent)
+    if (s.parent !== null && !parentRef) die(`parent '${s.parent}' of '${s.name}' is missing — the ${label} space was not filled by this seeder`)
+    const parent: NodeParent = parentRef ? { id: parentRef.id, key: parentRef.key, epoch: parentRef.epoch, scopeEpoch: parentRef.scopeEpoch } : null
+    const sealer = s.meta ? (key: Uint8Array, node: { scopeId: string; nodeId: string }) => sealNodeMeta(key, node, { v: 1, ...s.meta }) : undefined
+    const made = await createContentNode(scope.scopeId, scope.epochs, parent, s.kind as typeof FOLDER_KIND, s.name, sealer)
+    byName.set(s.name, { id: made.nodeId, key: made.contentKey, epoch: made.epoch, scopeEpoch: made.scopeEpoch })
+    count++
+    p.tick()
+  }
+  const after = (await listTree(scope.scopeId, scope.epochs)).length
+  console.log(`spread: ${label} ${p.end()}; it now holds ${after}`)
+  if (after !== target) die(`the ${label} space holds ${after}, not the target ${target}`)
+  return after
+}
+
+/** The tenant's space and the owner's personal space, each to `target` nodes of {@link spread}'s shape: with the tree
+ *  stage's group, the three spaces the search walks. */
+async function spreadSpaces(target: number): Promise<void> {
+  const a = accounts()
+  await signIn(a.owner)
+  const tenant = await tenantScope()
+  await ensurePersonalScope()
+  const personal = await openScope(ScopeKind.Personal)
+  if (!personal) die('the owner holds no personal space')
+  await fillSpread(tenant, 'tenant', target)
+  await fillSpread(personal, 'personal', target)
+  remember({ spread: { tenantScopeId: tenant.scopeId, personalScopeId: personal.scopeId, place: SPREAD_PLACES[0], perSpace: target } })
+}
+
 // --- members --------------------------------------------------------------------------------------------------------
 
 const FIRST_NAMES = ['Ada', 'Ben', 'Cleo', 'Dara', 'Emil', 'Fenja', 'Gil', 'Hanna', 'Ivo', 'Jule']
@@ -544,10 +615,11 @@ try {
       if (flags.has('wide')) await tree(intFlag(flags, 'wide') + 1, 'wide')
       else await tree(intFlag(flags, 'target'), 'realistic')
       break
+    case 'spread': await spreadSpaces(intFlag(flags, 'target')); break
     case 'members': await members(intFlag(flags, 'target')); break
     case 'upload': await upload(intFlag(flags, 'count')); break
     case 'marks': await marks(intFlag(flags, 'cap'), flags.has('width') ? intFlag(flags, 'width') : 6); break
-    default: die('usage: seed-volume.mts birth | photos --target N [--bare] | tree --target N | tree --wide N | members --target N | upload --count N | marks --cap N')
+    default: die('usage: seed-volume.mts birth | photos --target N [--bare] | tree --target N | tree --wide N | spread --target N | members --target N | upload --count N | marks --cap N')
   }
 } catch (e) {
   const response = (e as { response?: unknown } | null)?.response

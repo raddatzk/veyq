@@ -33,12 +33,20 @@ an application owns and how the two meet — is [Applications](../../apps/README
 - [uc.platform.copy-node](use-cases/uc.platform.copy-node.md) — **built (web)** (inbox #423, ADR 0082 decision 11: a
   member copies a node and its subtree within a space; the client re-creates it through the export/import hooks and uploads
   every file again, so the server never learns it is a copy.)
+- [uc.platform.search](use-cases/uc.platform.search.md) — **built (web)** ([ADR 0125](../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md):
+  one search field across every space of the tenant, chips for space, date, place, person and kind, results grouped by
+  the open Memory, this space and other spaces; built in the client over the trees and listings it already reads.)
+- [uc.platform.keyboard-shortcuts](use-cases/uc.platform.keyboard-shortcuts.md) — **built (web)** (`?` opens an overview of
+  every shortcut, core's and each application's, built from what they register.)
 - [uc.platform.switch-application-off](use-cases/uc.platform.switch-application-off.md) — **built**
   (an application switched off for the instance or a tenant is
   read-only — every write refused, every read, download and removal kept.)
 - [uc.platform.erase-switched-off-application](use-cases/uc.platform.erase-switched-off-application.md) — **built**
   (an application left off for the window, `veyq.application.off.retention`, is erased in the tenant on a day every member is told by banner and mail;
   switched on before the day, nothing is lost.)
+- [uc.platform.support-the-project](use-cases/uc.platform.support-the-project.md) — **built (web, backend, contracts)**
+  (ADR 0124: a member in the signed-in app and a guest on a share page see a donation banner once, dismissed forever —
+  in the browser, and on the account for a member; every page's footer links "Why is veyq secure?" and "Donate".)
 
 ## Enablers
 

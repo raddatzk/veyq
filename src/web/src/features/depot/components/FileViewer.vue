@@ -23,6 +23,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } fro
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqInput from '../../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../../shared/ui/notALogin'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { formatBytes } from '../../../shared/formatBytes'
@@ -253,7 +254,7 @@ onBeforeUnmount(() => {
       >
         <p class="file-viewer-password-title">{{ t('depot.viewer.pdf.passwordTitle', { name }) }}</p>
         <label class="file-viewer-password-label" :for="passwordFieldId">{{ t('depot.viewer.pdf.passwordLabel') }}</label>
-        <VeyqInput
+        <VeyqInput v-bind="NOT_A_LOGIN"
           :id="passwordFieldId"
           ref="passwordInput"
           v-model="password"
