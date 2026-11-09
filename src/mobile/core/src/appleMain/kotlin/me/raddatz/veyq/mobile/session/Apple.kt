@@ -9,8 +9,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives
 import me.raddatz.veyq.mobile.crypto.Primitives
-import me.raddatz.veyq.mobile.navigation.Connections
-import me.raddatz.veyq.mobile.navigation.TenantRef
 import platform.Foundation.NSData
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.create
@@ -129,33 +127,13 @@ object AppleSessions {
     suspend fun signIn(server: String, email: String, password: String, secretKey: String, device: ThisDevice): VeyqAccount =
         VeyqAccount.signIn(LibsodiumPrimitives, server, email, password, secretKey, device, client)
 
-    @Throws(SignInFailure::class, kotlin.coroutines.cancellation.CancellationException::class)
-    suspend fun unlockOnDevice(record: TrustedDevice, password: String, device: ThisDevice): VeyqAccount =
-        VeyqAccount.unlockOnDevice(LibsodiumPrimitives, record, password, device, client)
-
-    @Throws(SignInFailure::class, kotlin.coroutines.cancellation.CancellationException::class)
-    suspend fun resume(record: TrustedDevice, device: ThisDevice): VeyqAccount =
-        VeyqAccount.resume(LibsodiumPrimitives, record, device, client)
-
-    /**
-     * Trusts this device with [account] after a sign-in: staying signed in when [remember] (declined at the prompt, the
-     * password trust instead), else the password trust. Never fails the sign-in: false when no trust was enrolled.
-     */
-    @Throws(kotlin.coroutines.cancellation.CancellationException::class)
-    suspend fun trust(account: VeyqAccount, password: String, remember: Boolean): Boolean = runCatching {
-        if (!remember) account.trustThisDevice(password, stayingSignedIn = false)
-        else try {
-            account.trustThisDevice(null, stayingSignedIn = true)
-        } catch (e: DeviceAuthFailed) {
-            account.trustThisDevice(password, stayingSignedIn = false)
-        }
-    }.map { it != VeyqAccount.TrustOutcome.NOT_OFFERED }.getOrDefault(false)
-
-    /** The servers the app is signed in to, typed for Swift (a generic class is awkward across the boundary). */
-    fun connections(): Connections<VeyqAccount> = Connections()
-
-    @Throws(SignInFailure::class, kotlin.coroutines.cancellation.CancellationException::class)
-    suspend fun open(account: VeyqAccount, tenant: TenantRef): TenantSession = account.open(tenant)
+    /** The way in (core's `SessionModel`) over libsodium and URLSession; [signInElsewhere] in the share extension. */
+    fun sessionModel(
+        device: ThisDevice,
+        hidden: me.raddatz.veyq.mobile.navigation.Hidden,
+        recent: me.raddatz.veyq.mobile.navigation.RecentUses,
+        signInElsewhere: Boolean,
+    ): SessionModel<VeyqAccount, TenantSession> = SessionModel.accounts(LibsodiumPrimitives, device, client, hidden, recent, signInElsewhere)
 
     /** An Expenses Pot of [tenant], opened and read; null when the tenant holds no such open Pot. */
     @Throws(Exception::class)

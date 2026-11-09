@@ -41,7 +41,7 @@ with both apps behaving as before on a device for what it touched, and commits o
 7. **A file's view (`FileView.open`, both apps; the drift settled: core decides and reads) and a settled upload's offer (`DepotFiles.offerFor`, no test yet: its jobs need a session) done 2026-11-10; left: file facts as data, the uploader's wording, drop boxes, send-a-copy.** **Depot.** Files and their facts, uploader, the file view's decision and reads, uploads and their settling, drop
    boxes, send-a-copy's state.
 8. **Details' labels and values and a Memory's chapters done 2026-11-10 (`MediaDetails.label`, `shown`, `chapters`; Apple's two other labels settled to the web's); the gallery and upload stay thin pass-throughs.** **Memories.** Gallery, chapters, details rows and uploaders as data, the upload's refresh rule.
-9. **Session.** Start and resume, sign-in with the trust fallback, unlock, switching, sign-out, managed servers, the
+9. **Done 2026-11-10** (`session/SessionModel.kt` over a `Door`, `SessionModelTest` with its bite; both apps' way in is a gate they draw, the opened tenant they wire; `DeviceTrustLiveTest` and both devlogin passes green; a declined unlock prompt now clears the earlier error, which both apps kept). **Session.** Start and resume, sign-in with the trust fallback, unlock, switching, sign-out, managed servers, the
    per-tenant reset; the platform supplies `ThisDevice` and whether it is the share extension. Last: it touches key
    material; proved by `DeviceTrustLiveTest` and both devlogin passes.
 10. **Done 2026-11-09, ahead of its turn** (slice 1 needed its keys, and the Apple app had no German). **One catalog.** The words move into the core's catalog and are generated into `strings.xml` and the String

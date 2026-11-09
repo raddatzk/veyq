@@ -3,7 +3,7 @@ import VeyqCore
 
 struct SignInView: View {
     let working: Bool
-    let error: String?
+    let error: Msg?
     /// Opened by "Add server": titled so, and left again with Cancel.
     var adding: Bool = false
     var onCancel: () -> Void = {}
@@ -16,7 +16,7 @@ struct SignInView: View {
     @State private var remember = false
 
     init(
-        working: Bool, error: String?, adding: Bool = false, server: String? = nil, email: String? = nil,
+        working: Bool, error: Msg?, adding: Bool = false, server: String? = nil, email: String? = nil,
         onCancel: @escaping () -> Void = {}, onSignIn: @escaping (String, String, String, String, Bool) -> Void
     ) {
         self.working = working
@@ -67,7 +67,7 @@ struct SignInView: View {
                 Text(say(.signinRememberHint))
             }
             if let error {
-                Section { Text(Self.message(error)).foregroundStyle(.red) }
+                Section { Text(say(error)).foregroundStyle(.red) }
             }
             Section {
                 // Confirming is the web's green role (`--app-primary`), not the accent.
@@ -94,19 +94,6 @@ struct SignInView: View {
         .tint(Role.accent)
         .frame(maxWidth: 520)
     }
-
-    static func message(_ reason: String) -> String {
-        switch reason {
-        case "UNREACHABLE": say(.signinErrorUnreachable)
-        case "INCOMPATIBLE": say(.signinErrorIncompatible)
-        case "CREDENTIALS": say(.signinErrorCredentials)
-        case "SECRET_KEY": say(.signinErrorSecretKey)
-        case "NO_TENANT": say(.signinErrorNoTenant)
-        case "DEVICE_NOT_TRUSTED": say(.signinErrorDeviceNotTrusted)
-        case "SESSION_ENDED": say(.signinErrorSessionEnded)
-        default: say(.signinErrorOther)
-        }
-    }
 }
 
 /// An account this device trusts (ADR 0123 decision 8): the password alone for a password-trusted one, a button that
@@ -114,7 +101,7 @@ struct SignInView: View {
 struct UnlockView: View {
     let record: TrustedDevice
     let working: Bool
-    let error: String?
+    let error: Msg?
     let onUnlock: (String) -> Void
     let onOther: () -> Void
 
@@ -143,7 +130,7 @@ struct UnlockView: View {
                 Text(remembered ? say(.unlockRememberedHint) : say(.unlockPasswordHint))
             }
             if let error {
-                Section { Text(SignInView.message(error)).foregroundStyle(.red) }
+                Section { Text(say(error)).foregroundStyle(.red) }
             }
             Section {
                 Button {

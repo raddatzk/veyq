@@ -77,7 +77,7 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String
             }
             androidx.compose.material3.Switch(checked = remember, onCheckedChange = { remember = it }, enabled = !state.working)
         }
-        state.error?.let { Text(signInError(it), color = MaterialTheme.colorScheme.error) }
+        state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
         // Confirming is the web's green role (`--app-primary`), not the accent.
         val palette = LocalPalette.current
         Button(
@@ -96,20 +96,6 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String
         }
     }
 }
-
-@Composable
-private fun signInError(reason: String): String = stringResource(
-    when (reason) {
-        "UNREACHABLE" -> R.string.signin_error_unreachable
-        "INCOMPATIBLE" -> R.string.signin_error_incompatible
-        "CREDENTIALS" -> R.string.signin_error_credentials
-        "SECRET_KEY" -> R.string.signin_error_secret_key
-        "NO_TENANT" -> R.string.signin_error_no_tenant
-        "DEVICE_NOT_TRUSTED" -> R.string.signin_error_device_not_trusted
-        "SESSION_ENDED" -> R.string.signin_error_session_ended
-        else -> R.string.signin_error_other
-    },
-)
 
 @Composable
 private fun StartingScreen() {
@@ -151,7 +137,7 @@ fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -
             OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.signin_password)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
         }
-        state.error?.let { Text(signInError(it), color = MaterialTheme.colorScheme.error) }
+        state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
         Button(
             onClick = { onUnlock(password) },
             enabled = !state.working,
