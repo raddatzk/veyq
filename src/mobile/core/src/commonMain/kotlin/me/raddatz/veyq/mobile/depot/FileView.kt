@@ -21,10 +21,10 @@ object FileView {
     enum class Kind { IMAGE, MEDIA, PDF, TEXT, TOO_LARGE, EMPTY, UNSUPPORTED }
 
     /**
-     * What to show: its [kind], the sniffed [mime] and its [extension] (what a file handed to the platform's viewer is named
+     * What to show: its [kind], the sniffed [mime] and its [fileExtension] (what a file handed to the platform's viewer is named
      * by), how many [frames] to read for it (all, or a text's first [TEXT_CAP] bytes), and whether a text is [truncated].
      */
-    data class Decision(val kind: Kind, val mime: String? = null, val extension: String? = null, val frames: Int = 0, val truncated: Boolean = false)
+    data class Decision(val kind: Kind, val mime: String? = null, val fileExtension: String? = null, val frames: Int = 0, val truncated: Boolean = false)
 
     /** The decision for a file of [chunkCount] frames, [total] plaintext bytes, whose first frame is [head]. */
     fun decide(head: ByteArray, chunkCount: Int, total: Long, claimedType: String?, claimedName: String?): Decision {

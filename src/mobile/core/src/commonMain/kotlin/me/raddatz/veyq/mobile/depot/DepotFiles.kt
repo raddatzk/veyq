@@ -75,6 +75,10 @@ object DepotFiles {
         blobs.framesTo(file.scopeId, blobId, file.chunkCount, key, first, minOf(until, file.chunkCount), sink)
     }
 
+    /** The name [file] (node [nodeName]) is downloaded as (core's `downloadName`: the node's name, else its uploaded one). */
+    fun downloadName(file: File?, nodeName: String): String =
+        me.raddatz.veyq.mobile.blob.DownloadName.of(file?.type, "file", nodeName, file?.uploadedName)
+
     /** What an upload or a replace ended in. */
     enum class Outcome {
         DONE,

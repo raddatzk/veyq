@@ -30,7 +30,7 @@ class FileViewTest {
         assertEquals(Kind.UNSUPPORTED, FileView.decide(text, 1, 13, "application/octet-stream", "blob").kind)
         // markup claimed as html is shown as its TEXT, never rendered
         assertEquals(FileView.Decision(Kind.TEXT, "text/plain", "txt", 1), FileView.decide(html, 1, html.size.toLong(), "text/html", "x.html"))
-        assertEquals("jpg", FileView.decide(byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0), 1, 4, null, "evil.html").extension)
+        assertEquals("jpg", FileView.decide(byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0), 1, 4, null, "evil.html").fileExtension)
     }
 
     @Test
