@@ -1,0 +1,49 @@
+package me.raddatz.veyq.mobile.navigation
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+
+/** The shell's rules after a read and after a folder on Home's path changed, both apps' once (ADR 0127). */
+class ShellModelTest {
+    private val tenantSpace = SpaceRef("t", "TENANT", "Family")
+    private val personal = SpaceRef("p", "PERSONAL", "Mine")
+    private val pot = ObjectRef("t", "pot", "EXPENSES_POT", ApplicationId.EXPENSES, "Trip")
+
+    private fun folder(id: String, parent: String?, name: String = id) = NodeRef("t", id, parent, NodeRef.FOLDER, name)
+
+    @Test
+    fun the_app_starts_on_the_object_last_used_else_on_the_default_space() {
+        val onPot = ShellModel.next(null, listOf(personal, tenantSpace), pot)
+        assertEquals(pot, onPot.openObject)
+        assertEquals("t", onPot.space, "the default space is the tenant's")
+        val home = ShellModel.next(null, listOf(personal, tenantSpace), null)
+        assertNull(home.openObject)
+        assertNull(home.application)
+        assertEquals("t", home.space)
+    }
+
+    @Test
+    fun a_read_keeps_the_shell_but_a_space_no_longer_listed_gives_way() {
+        val prior = Shell.start(null, "p").enter(FolderRef("a", "A"))
+        assertSame(prior, ShellModel.next(prior, listOf(personal, tenantSpace), pot))
+        val gone = ShellModel.next(prior, listOf(tenantSpace), pot)
+        assertEquals("t", gone.space)
+        assertEquals(emptyList(), gone.path)
+    }
+
+    @Test
+    fun a_folder_on_the_path_renamed_or_moved_is_shown_where_it_is_and_one_trashed_gives_way_to_its_parent() {
+        val shell = Shell.start(null, "t").enter(FolderRef("a", "A")).enter(FolderRef("b", "B"))
+        val renamed = ShellModel.relocated(shell, listOf(folder("a", null), folder("b", "a", "B2")), "b")
+        assertEquals(listOf("a", "B2"), renamed.path.map { it.name })
+        val moved = ShellModel.relocated(shell, listOf(folder("a", null), folder("c", null), folder("b", "c")), "b")
+        assertEquals(listOf("c", "b"), moved.path.map { it.nodeId })
+        val trashed = ShellModel.relocated(shell, listOf(folder("a", null)), "b")
+        assertEquals(listOf("a"), trashed.path.map { it.nodeId })
+        val rootTrashed = ShellModel.relocated(shell, emptyList(), "a")
+        assertEquals(emptyList(), rootTrashed.path)
+        assertSame(shell, ShellModel.relocated(shell, emptyList(), "elsewhere"), "a node off the path leaves it as it is")
+    }
+}

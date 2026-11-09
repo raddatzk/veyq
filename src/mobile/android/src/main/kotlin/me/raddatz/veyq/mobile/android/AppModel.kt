@@ -115,9 +115,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     )
     private var started = false
 
-    /** The current tenant as read, before what this device hides is taken out. */
-    private class Raw(val spaces: List<SpaceRef>, val nodes: List<NodeRef>, val favorites: List<ObjectRef>, val off: Set<String>)
-    private var raw: Raw? = null
+    /** The shell over the current tenant (core's `ShellModel`): its lists, where the person is, the actions on a node. */
+    private var shellModel: me.raddatz.veyq.mobile.navigation.ShellModel? = null
+    private var shellWatch: kotlinx.coroutines.Job? = null
 
     private val _screen = MutableStateFlow<Screen>(Screen.Starting)
     val screen: StateFlow<Screen> = _screen.asStateFlow()
@@ -272,13 +272,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun setTenantHidden(account: VeyqAccount, tenant: TenantRef, value: Boolean) {
         hidden.setTenantHidden(account.key, tenant.tenantId, value)
         refreshManaged()
-        rebuild()
+        shellModel?.state?.value?.let(::publish)
     }
 
     fun setSpaceHidden(scopeId: String, value: Boolean) {
         hidden.setSpaceHidden(scopeId, value)
         refreshManaged()
-        rebuild()
+        shellModel?.rebuild()
     }
 
     /**
@@ -297,7 +297,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 next == null -> {
                     recent.clear() // the device forgets what was opened once no account is left on it
                     hidden.clear()
-                    raw = null
+                    shellWatch?.cancel()
+                    shellModel = null
                     showLocked()
                 }
                 wasCurrent -> show(next.first, next.second)
@@ -345,10 +346,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         resumeRekeys(t)
         _pot.value = null
         readReportOffered()
-        raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff())
+        val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
+        shellWatch?.cancel()
+        shellModel = model
+        startPending = true
+        model.load(openLastUsed = _incoming.value == null)
+        shellWatch = viewModelScope.launch { model.state.collect { it?.let(::publish) } }
         readRowDetails(t)
         syncAvatars(t)
-        rebuild(start = true)
     }
 
     // ---- what another app shared (ADR 0126) ----
@@ -393,80 +398,49 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- core's actions on a node ----
 
-    /** Whether [ref] is pinned; null while its space's pin set is not loaded (no heart is offered then). */
     /** Whether [ref] is a guest's identity folder or lies in one (core's answer over the tree last read). */
-    fun inIdentityFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean = tenantSession?.inIdentityFolder(ref.scopeId, ref.nodeId) ?: false
+    fun inIdentityFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean = shellModel?.inIdentityFolder(ref) ?: false
 
-    fun isFavorite(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean? = tenantSession?.isFavorite(ref.scopeId, ref.nodeId)
+    /** Whether [ref] is pinned; null while its space's pin set is not loaded (no heart is offered then). */
+    fun isFavorite(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean? = shellModel?.isFavorite(ref)
 
     /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */
     suspend fun toggleFavorite(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean {
-        val t = tenantSession ?: return false
-        val now = t.isFavorite(ref.scopeId, ref.nodeId) ?: return false
-        val stored = runCatching { t.setFavorite(ref.scopeId, ref.nodeId, !now) }.getOrDefault(false)
-        refreshLists(t)
-        return stored
+        val m = shellModel ?: return false
+        return m.toggleFavorite(ref).also { readRowDetails(m.tenant) }
     }
 
+    /** The lists read anew (core's shell), with each row's facts. */
     private suspend fun refreshLists(t: me.raddatz.veyq.mobile.session.TenantSession) {
-        runCatching { raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff()) }
         readRowDetails(t)
-        rebuild()
+        shellModel?.refresh()
     }
 
     /**
-     * Moves [ref] with everything under it to the space's trash; a page whose node went leaves for its parent. What came of
-     * it, and the node as it was before (what an undo restores).
+     * Moves [ref] with everything under it to the space's trash (core's shell: a page whose node went leaves for its
+     * parent); an open Pot of it closes. What came of it, and the node as it was before (what an undo restores).
      */
     suspend fun trash(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<me.raddatz.veyq.mobile.session.NodeTrash.Deleted, me.raddatz.veyq.mobile.session.OpenNode?> {
-        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to null
-        val before = runCatching { t.node(ref.scopeId, ref.nodeId) }.getOrNull()
-        val deleted = runCatching { me.raddatz.veyq.mobile.session.NodeTrash.delete(t, ref.scopeId, ref.nodeId) }.getOrDefault(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED)
-        if (deleted == me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED || deleted == me.raddatz.veyq.mobile.session.NodeTrash.Deleted.GONE) {
-            if ((_screen.value as? Screen.Signed)?.shell?.openObject?.nodeId == ref.nodeId) goBack()
-            // a folder on Home's path went: Home shows the folder above it
-            updateShell { s -> if (s.path.any { it.nodeId == ref.nodeId }) s.copy(path = s.path.takeWhile { it.nodeId != ref.nodeId }) else s }
-            if (_pot.value?.ref?.nodeId == ref.nodeId) {
-                _pot.value = null
-                potSession = null
-            }
+        val m = shellModel ?: return me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to null
+        val r = m.trash(ref)
+        if (r.gone && _pot.value?.ref?.nodeId == ref.nodeId) {
+            _pot.value = null
+            potSession = null
         }
-        refreshLists(t)
-        return deleted to before
+        readRowDetails(m.tenant)
+        return r.outcome to r.before
     }
 
     /** Brings [node] back from the trash under its name (the undo of [trash]); false when it could not be. */
     suspend fun restore(node: me.raddatz.veyq.mobile.session.OpenNode): Boolean {
-        val t = tenantSession ?: return false
-        val tokenInput = tokenInputFor(node.kind, node.name) ?: return false
-        val restored = runCatching { me.raddatz.veyq.mobile.session.NodeTrash.restore(t, node, tokenInput) }.getOrNull()
-        refreshLists(t)
-        return restored == me.raddatz.veyq.mobile.session.NodeTrash.Restored.RESTORED
+        val m = shellModel ?: return false
+        return (m.undoTrash(node) == null).also { readRowDetails(m.tenant) }
     }
 
-    /**
-     * Renames [ref] to [name] (core's `NodeRename`: the placement, then its open links' names); the lists are read anew
-     * and an open page follows the node under its new name. What came of it.
-     */
+    /** Renames [ref] to [name] (core's shell: an open page follows it under its new name). What came of it. */
     suspend fun rename(ref: me.raddatz.veyq.mobile.navigation.NodeAt, name: String): me.raddatz.veyq.mobile.session.NodeRename.Result {
-        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeRename.Result(me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED)
-        val r = runCatching { me.raddatz.veyq.mobile.session.NodeRename.rename(t, ref.scopeId, ref.nodeId, name, ::tokenInputFor, System.currentTimeMillis()) }
-            .getOrDefault(me.raddatz.veyq.mobile.session.NodeRename.Result(me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED))
-        if (r.outcome == me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED) {
-            refreshLists(t)
-            val renamed = runCatching { t.objects() }.getOrDefault(emptyList()).firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }
-            if (renamed != null && (_screen.value as? Screen.Signed)?.shell?.openObject?.nodeId == ref.nodeId) updateShell { it.goBack().open(renamed) }
-            relocate(t, ref)
-        }
-        return r
-    }
-
-    /** Home's path read anew where [ref] is a folder on it (renamed or moved): the folder shown is where it is now. */
-    private suspend fun relocate(t: me.raddatz.veyq.mobile.session.TenantSession, ref: me.raddatz.veyq.mobile.navigation.NodeAt) {
-        val shell = (_screen.value as? Screen.Signed)?.shell ?: return
-        if (shell.path.none { it.nodeId == ref.nodeId }) return
-        val tree = runCatching { t.nodes() }.getOrDefault(emptyList()).filter { it.scopeId == ref.scopeId }
-        updateShell { it.at(tree, it.folder?.nodeId) }
+        val m = shellModel ?: return me.raddatz.veyq.mobile.session.NodeRename.Result(me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED)
+        return m.rename(ref, name).result.also { readRowDetails(m.tenant) }
     }
 
     /**
@@ -601,19 +575,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     val placement = me.raddatz.veyq.mobile.AppKinds.placement
 
     /** Every node of [scopeId] this device opens: what the move browser walks. */
-    suspend fun scopeNodes(scopeId: String): List<me.raddatz.veyq.mobile.navigation.NodeRef> {
-        val t = tenantSession ?: return emptyList()
-        return runCatching { t.nodes() }.getOrDefault(emptyList()).filter { it.scopeId == scopeId }
-    }
+    suspend fun scopeNodes(scopeId: String): List<me.raddatz.veyq.mobile.navigation.NodeRef> = shellModel?.scopeNodes(scopeId).orEmpty()
 
-    /** Moves [ref] under [to] (null: the space's root), its name kept; the lists are read anew. */
+    /** Moves [ref] under [to] (null: the space's root), its name kept (core's shell). */
     suspend fun move(ref: me.raddatz.veyq.mobile.navigation.NodeAt, to: String?): me.raddatz.veyq.mobile.session.NodeMove.Result {
-        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeMove.Result(me.raddatz.veyq.mobile.session.NodeMove.Outcome.FAILED)
-        val r = runCatching { me.raddatz.veyq.mobile.session.NodeMove.move(t, ref.scopeId, ref.nodeId, to, ::tokenInputFor, placement) }
-            .getOrDefault(me.raddatz.veyq.mobile.session.NodeMove.Result(me.raddatz.veyq.mobile.session.NodeMove.Outcome.FAILED))
-        refreshLists(t)
-        if (r.outcome == me.raddatz.veyq.mobile.session.NodeMove.Outcome.MOVED) relocate(t, ref)
-        return r
+        val m = shellModel ?: return me.raddatz.veyq.mobile.session.NodeMove.Result(me.raddatz.veyq.mobile.session.NodeMove.Outcome.FAILED)
+        return m.move(ref, to).result.also { readRowDetails(m.tenant) }
     }
 
     /**
@@ -635,29 +602,20 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     // ---- the space's trash (core's NodeTrash) ----
 
     /** The trash of [scopeId] (the root of each deleted subtree); null when it could not be read. */
-    suspend fun trash(scopeId: String): List<me.raddatz.veyq.mobile.session.NodeTrash.Trashed>? {
-        val t = tenantSession ?: return null
-        return runCatching { me.raddatz.veyq.mobile.session.NodeTrash.list(t, scopeId) }.getOrNull()
-    }
+    suspend fun trash(scopeId: String): List<me.raddatz.veyq.mobile.session.NodeTrash.Trashed>? = shellModel?.trashOf(scopeId)
 
     /** Whether the app can bring [row] back: its kind's fold of a name is known here. */
-    fun canRestore(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed): Boolean = tokenInputFor(row.kind, row.name) != null
+    fun canRestore(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed): Boolean = shellModel?.canRestore(row) ?: false
 
     /** Brings [row] back from the trash, under [newName] after its own was taken; the lists are read anew. */
     suspend fun restoreFromTrash(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed, newName: String? = null): me.raddatz.veyq.mobile.session.NodeTrash.Restored {
-        val refused = me.raddatz.veyq.mobile.session.NodeTrash.Restored.REFUSED
-        val t = tenantSession ?: return refused
-        val token = tokenInputFor(row.kind, newName?.trim() ?: row.name) ?: return refused
-        val r = runCatching { me.raddatz.veyq.mobile.session.NodeTrash.restoreFromTrash(t, row, token, newName) }.getOrDefault(refused)
-        refreshLists(t)
-        return r
+        val m = shellModel ?: return me.raddatz.veyq.mobile.session.NodeTrash.Restored.REFUSED
+        return m.restoreFromTrash(row, newName).also { readRowDetails(m.tenant) }
     }
 
     /** Erases [row] and everything under it now: irreversible. */
-    suspend fun purge(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed): me.raddatz.veyq.mobile.session.NodeTrash.Purged {
-        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeTrash.Purged.FAILED
-        return runCatching { me.raddatz.veyq.mobile.session.NodeTrash.purge(t, row.scopeId, row.id) }.getOrDefault(me.raddatz.veyq.mobile.session.NodeTrash.Purged.FAILED)
-    }
+    suspend fun purge(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed): me.raddatz.veyq.mobile.session.NodeTrash.Purged =
+        shellModel?.purge(row) ?: me.raddatz.veyq.mobile.session.NodeTrash.Purged.FAILED
 
     // ---- an open Pot (Expenses) ----
 
@@ -1212,18 +1170,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * `FolderNameDialog`): the lists are read anew. Why not, in the web's words, or null once created.
      */
     suspend fun createFolder(scopeId: String, parentId: String?, name: String): String? {
-        val t = tenantSession ?: return getApplication<Application>().getString(R.string.folder_failed)
-        val n = name.trim()
-        if (n.isEmpty()) return getApplication<Application>().getString(R.string.folder_name_empty)
-        val r = runCatching {
-            me.raddatz.veyq.mobile.session.FolderCreate.create(t, scopeId, parentId, n)
-        }.getOrNull()
-        refreshLists(t)
-        return when (r) {
-            is me.raddatz.veyq.mobile.session.NodeCreate.Result.Done -> null
-            is me.raddatz.veyq.mobile.session.NodeCreate.Result.Refused -> getApplication<Application>().text(me.raddatz.veyq.mobile.words.Notices.folderRefused(r.reason))
-            null -> getApplication<Application>().text(me.raddatz.veyq.mobile.words.Notices.folderRefused(null))
-        }
+        val app = getApplication<Application>()
+        val m = shellModel ?: return app.text(me.raddatz.veyq.mobile.words.Notices.folderRefused(null))
+        return m.createFolder(scopeId, parentId, name)?.let { app.text(it) }.also { readRowDetails(m.tenant) }
     }
 
     /** What the drawer's "New" asked Home to create ("folder" or "pot"), until Home opens its dialog. */
@@ -1334,9 +1283,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             t.forgetTree()
-            raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff())
-            readRowDetails(t)
-            rebuild()
+            refreshLists(t)
             _creating.value = CreatingPot(message = r.outcome.takeIf { it != PotCreate.Outcome.CREATED }?.name)
             done()
             t.objects().firstOrNull { it.nodeId == nodeId }?.let(::open)
@@ -1427,13 +1374,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun copyFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt, to: String?): String? {
         val app = getApplication<Application>()
-        val t = tenantSession ?: return app.getString(R.string.copy_failed)
-        val deleted = app.getString(R.string.pot_deleted_person)
-        val r = runCatching {
-            me.raddatz.veyq.mobile.export.SubtreeCopy.duplicate(t, ref.scopeId, ref.nodeId, to, me.raddatz.veyq.mobile.AppKinds.copies(deleted) { java.util.UUID.randomUUID().toString() })
-        }.getOrNull()
-        refreshLists(t)
-        return me.raddatz.veyq.mobile.words.Notices.subtreeCopyRefused(r?.outcome)?.let { app.text(it) }
+        val m = shellModel ?: return app.getString(R.string.copy_failed)
+        return m.duplicate(ref, to, app.getString(R.string.pot_deleted_person)) { java.util.UUID.randomUUID().toString() }
+            ?.let { app.text(it) }.also { readRowDetails(m.tenant) }
     }
 
     suspend fun openReceipt(receiptId: String): ByteArray? = potSession?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }
@@ -1447,32 +1390,29 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The shell's lists from what was read, less what this device hides; on [start], the shell where the app opens. */
-    private fun rebuild(start: Boolean = false) {
-        val r = raw ?: return
+    /** Whether the next publish is the shell's first over a tenant ("Manage servers" closes then). */
+    private var startPending = false
+
+    /** The screen over [state], the core shell's, with this device's servers and the tenant shown. */
+    private fun publish(state: me.raddatz.veyq.mobile.navigation.ShellModel.State) {
         val (account, tenant) = connections.current ?: return
-        val spaces = hidden.visibleSpaces(r.spaces)
-        val nodes = hidden.visibleNodes(r.nodes, r.spaces)
-        val objects = nodes.mapNotNull { it.asObject() }
-        val favorites = hidden.visibleObjects(r.favorites, r.spaces)
         val prior = _screen.value as? Screen.Signed
-        val defaultSpace = Home.defaultSpace(spaces)?.scopeId
-        val shell = when {
-            start || prior == null -> Shell.start(if (_incoming.value == null) recent.lastUsed(objects) else null, defaultSpace)
-            prior.shell.space != null && spaces.none { it.scopeId == prior.shell.space } -> prior.shell.switchSpace(defaultSpace ?: "")
-            else -> prior.shell
-        }
+        val start = startPending
+        startPending = false
+        val l = state.lists
         _screen.value = Screen.Signed(
-            shell = shell,
+            shell = state.shell,
             tenant = tenant,
             server = account.label,
             servers = connections.all.map { c -> ServerEntry(c, c.label, hidden.visibleTenants(c.key, c.tenants, if (c == account) tenant else null)) },
-            applications = drawerApplications(r.off).map { it.id },
-            filters = Home.filters(r.off),
-            drawer = drawerList(objects, favorites),
-            spaces = spaces,
-            nodes = nodes,
-            objects = objects,
-            favorites = favorites,
+            applications = l.applications,
+            filters = l.filters,
+            drawer = l.drawer,
+            spaces = l.spaces,
+            nodes = l.nodes,
+            objects = l.objects,
+            favorites = l.favorites,
+            switching = if (start) false else prior?.switching ?: false,
             managing = if (start) null else prior?.managing,
         )
     }
@@ -1484,8 +1424,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun goBack() = updateShell { it.goBack() }
 
     fun open(ref: ObjectRef) {
-        recent.record(ref, System.currentTimeMillis())
-        _screen.update { s -> if (s is Screen.Signed) s.copy(shell = s.shell.open(ref), drawer = drawerList(s.objects, s.favorites)) else s }
+        shellModel?.open(ref)
     }
 
     fun select(tab: BarTab) = updateShell { it.select(tab) }
@@ -1499,10 +1438,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return if (host == "localhost" || host.endsWith(".localhost")) "http://$t" else "https://$t"
     }
 
-    private fun updateShell(f: (Shell) -> Shell) = _screen.update { s -> if (s is Screen.Signed) s.copy(shell = f(s.shell)) else s }
-
-    private fun drawerList(objects: List<ObjectRef>, favorites: List<ObjectRef>) =
-        arrange(favorites, recent.resolve(objects), favoritesLimit = 6, recentLimit = 8)
+    private fun updateShell(f: (Shell) -> Shell) {
+        shellModel?.update(f)
+    }
 
     private fun persistRecent(keys: List<UseKey>) {
         prefs.edit().putString("uses", keys.joinToString("\n") { "${it.scopeId}\t${it.nodeId}\t${it.lastUsedEpochMs}" }).apply()

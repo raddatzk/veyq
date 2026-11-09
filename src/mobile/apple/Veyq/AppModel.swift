@@ -102,10 +102,9 @@ final class AppModel {
     private let hidden: Hidden
 
     /// The current tenant as read, before what this device hides is taken out.
-    private var rawSpaces: [SpaceRef] = []
-    private var rawNodes: [NodeRef] = []
-    private var rawFavorites: [ObjectRef] = []
-    private var rawOff: Set<String> = []
+    /// The shell over the current tenant (core's `ShellModel`): its lists, where the person is, the actions on a node.
+    @ObservationIgnored private var shellModel: ShellModel?
+    @ObservationIgnored private var shellWatch: ShellModel.Watch?
     private var managedSpaces: [String: [SpaceRef]] = [:]
 
     init(inExtension: Bool = false) {
@@ -295,13 +294,14 @@ final class AppModel {
     func setTenantHidden(_ account: VeyqAccount, _ tenant: TenantRef, _ value: Bool) {
         hidden.setTenantHidden(connectionKey: account.key, tenantId: tenant.tenantId, hidden: value)
         if managing != nil { managing = managed() }
-        rebuild(start: false)
+        applyShell(start: false)
     }
 
     func setSpaceHidden(_ scopeId: String, _ value: Bool) {
         hidden.setSpaceHidden(scopeId: scopeId, hidden: value)
         if managing != nil { managing = managed() }
-        rebuild(start: false)
+        shellModel?.rebuild()
+        applyShell(start: false)
     }
 
     /// Signs out of one server; if it was current, another one held becomes current, else the unlock of an account
@@ -363,10 +363,13 @@ final class AppModel {
         pot = nil
         reportOffered = false
         Task { await readReportOffered() }
-        rawSpaces = try await t.spaces()
-        rawNodes = try await t.nodes()
-        rawFavorites = try await t.favorites()
-        rawOff = t.applicationsOff()
+        let model = ShellModel(tenant: t, hidden: hidden, recent: recent, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
+        shellWatch?.stop()
+        shellModel = model
+        try await model.load(openLastUsed: incoming == nil)
+        shellWatch = model.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.applyShell(start: false) }
+        }
         await readDetails(t, reset: true)
         await readCovers(t)
         // The pictures the directory names a revision for, in the background; the letters show meanwhile.
@@ -377,30 +380,33 @@ final class AppModel {
         }
         self.tenant = tenant
         server = account.label
-        rebuild(start: true)
+        applyShell(start: true)
         screen = .signed
     }
 
-    /// The shell's lists from what was read, less what this device hides; on `start`, the shell where the app opens.
-    private func rebuild(start: Bool) {
-        guard let current = connections.current, let account = current.first, let tenant = current.second else { return }
-        spaces = hidden.visibleSpaces(spaces: rawSpaces)
-        nodes = hidden.visibleNodes(nodes: rawNodes, spaces: rawSpaces)
-        objects = nodes.compactMap { $0.asObject() }
-        favorites = hidden.visibleObjects(objects: rawFavorites, spaces: rawSpaces)
-        applications = ApplicationsKt.drawerApplications(applicationsOff: rawOff).map { $0.id }
-        filters = [nil] + ApplicationsKt.availableApplications(applicationsOff: rawOff).map { $0.id }
+    /// The shell as core's model holds it now, with this device's servers; on `start`, the drawer opens on Home.
+    private func applyShell(start: Bool) {
+        guard let current = connections.current, let account = current.first, let tenant = current.second,
+              let state = shellModel?.current else { return }
+        let l = state.lists
+        spaces = l.spaces
+        nodes = l.nodes
+        objects = l.objects
+        favorites = l.favorites
+        applications = l.applications
+        filters = l.filters.map { $0 as? ApplicationId }
+        drawer = l.drawer
         servers = connections.all.map { c in
             ServerEntry(account: c, tenants: hidden.visibleTenants(connectionKey: c.key, tenants: c.tenants, current: c == account ? tenant : nil))
         }
-        let defaultSpace = Home.shared.defaultSpace(spaces: spaces)?.scopeId
-        if start {
-            shell = Shell.companion.start(lastUsed: incoming == nil ? recent.lastUsed(objects: objects) : nil, space: defaultSpace)
-            drawerOpen = shell.isHome && shell.space == nil
-        } else if let s = shell.space, !spaces.contains(where: { $0.scopeId == s }) {
-            shell = shell.switchSpace(scopeId: defaultSpace ?? "")
-        }
-        refreshDrawer()
+        shell = state.shell
+        if start { drawerOpen = shell.isHome && shell.space == nil }
+    }
+
+    /// The shell moved by `change` (its transitions are `Shell`'s), at once.
+    private func moveShell(_ change: @escaping (Shell) -> Shell) {
+        shellModel?.update(change: change)
+        applyShell(start: false)
     }
 
     // MARK: What another app shared (ADR 0126)
@@ -420,7 +426,7 @@ final class AppModel {
     /// Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
     /// they go (ADR 0126 decision 1) — the start does the same while the session is still opening.
     func receiveShare(_ incoming: Incoming) {
-        shell = Shell.companion.start(lastUsed: nil, space: shell.space)
+        moveShell { Shell.companion.start(lastUsed: nil, space: $0.space) }
         self.incoming = incoming
     }
 
@@ -471,18 +477,18 @@ final class AppModel {
 
     /// Pins or unpins `ref`, then the lists are read anew; false when it was not stored (the heart goes back).
     func toggleFavorite(_ ref: NodeAt) async -> Bool {
-        guard let t = tenantSession, let now = t.isFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId)?.boolValue else { return false }
-        let stored = (try? await t.setFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId, on: !now))?.boolValue ?? false
-        await refreshLists(t)
+        guard let m = shellModel else { return false }
+        let stored = (try? await m.toggleFavorite(ref: ref))?.boolValue ?? false
+        await readDetails(m.tenant)
+        applyShell(start: false)
         return stored
     }
 
     private func refreshLists(_ t: TenantSession) async {
-        rawNodes = (try? await t.nodes()) ?? rawNodes
-        rawFavorites = (try? await t.favorites()) ?? rawFavorites
+        try? await shellModel?.refresh()
+        applyShell(start: false)
         await readDetails(t)
         await readCovers(t)
-        rebuild(start: false)
     }
 
     /// What a delete says at the bottom of the shell: moved to the trash, with the node as it was for its Undo; or why not.
@@ -498,19 +504,11 @@ final class AppModel {
 
     /// Moves `ref` with everything under it to the space's trash; a page whose node went leaves for its parent.
     func trash(_ ref: NodeAt) async {
-        guard let t = tenantSession else { return }
-        let before = try? await t.node(scopeId: ref.scopeId, nodeId: ref.nodeId)
-        let deleted = (try? await NodeTrash.shared.delete(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId)) ?? .failed
-        if deleted == .trashed || deleted == .gone {
-            if shell.openObject?.nodeId == ref.nodeId { goBack() }
-            if pot?.ref.nodeId == ref.nodeId { pot = nil; potSession = nil }
-        }
-        await refreshLists(t)
-        // a folder on Home's path went: Home shows the folder above it
-        if deleted == .trashed || deleted == .gone, let i = shell.path.firstIndex(where: { $0.nodeId == ref.nodeId }) {
-            shell = shell.at(tree: await scopeNodes(ref.scopeId), folderId: i > 0 ? shell.path[i - 1].nodeId : nil)
-        }
-        trashNotice = TrashNotice(message: say(notice: Notices.shared.trashed(outcome: deleted, name: ref.name)), node: deleted == .trashed ? (before ?? nil) : nil)
+        guard let m = shellModel, let r = try? await m.trash(ref: ref) else { return }
+        if r.gone, pot?.ref.nodeId == ref.nodeId { pot = nil; potSession = nil }
+        applyShell(start: false)
+        await readDetails(m.tenant)
+        trashNotice = TrashNotice(message: say(notice: r.notice), node: r.undoable ? r.before : nil)
     }
 
     /// The Undo of the last delete: the node back from the trash under its name, as it was.
@@ -522,17 +520,13 @@ final class AppModel {
             }
             return
         }
-        guard let notice = trashNotice, let node = notice.node, let t = tenantSession else { return }
+        guard let notice = trashNotice, let node = notice.node, let m = shellModel else { return }
         trashNotice = nil
-        var restored = false
-        if let tokenInput = Self.tokenInputFor(kind: node.kind, name: node.name) {
-            let r = try? await NodeTrash.shared.restore(tenant: t, node: node, tokenInput: tokenInput, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS)
-            restored = r == .restored
-        }
-        await refreshLists(t)
-        if !restored {
-            trashNotice = TrashNotice(message: say(.trashUndoFailed, node.name), node: nil)
-        }
+        var failed: VeyqCore.Notice?
+        do { failed = try await m.undoTrash(node: node) } catch { failed = Notices.shared.trashUndoFailed(name: node.name) }
+        applyShell(start: false)
+        await readDetails(m.tenant)
+        if let failed { trashNotice = TrashNotice(message: say(notice: failed), node: nil) }
     }
 
     func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
@@ -757,22 +751,17 @@ final class AppModel {
     }
 
     func scopeNodes(_ scopeId: String) async -> [NodeRef] {
-        guard let t = tenantSession else { return [] }
-        return ((try? await t.nodes()) ?? []).filter { $0.scopeId == scopeId }
+        (try? await shellModel?.scopeNodes(scopeId: scopeId)) ?? []
     }
 
     /// Moves `ref` under `to` (nil: the space's root), its name kept; the lists are read anew. With `toName`, the bottom of
     /// the shell says where it went and offers its undo back to `from`.
     func move(_ ref: NodeAt, to: String?, toName: String?, from: String?) async -> NodeMove.Outcome {
-        guard let t = tenantSession else { return .failed }
-        let r = try? await NodeMove.shared.move(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, to: to,
-            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
-            allows: placement, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
-        )
-        await refreshLists(t)
-        if r?.outcome == .moved { await relocate(ref) }
-        let outcome = r?.outcome ?? .failed
+        guard let m = shellModel else { return .failed }
+        let r = try? await m.move(ref: ref, to: to)
+        applyShell(start: false)
+        await readDetails(m.tenant)
+        let outcome = r?.result.outcome ?? .failed
         if outcome == .moved, let toName {
             trashNotice = TrashNotice(
                 message: say(.moveMoved, ref.name, toName), node: nil, moveBack: MoveBack(ref: ref, to: from)
@@ -797,34 +786,14 @@ final class AppModel {
         return outcome
     }
 
-    /// Home's path read anew where `ref` is a folder on it (renamed or moved): the folder shown is where it is now.
-    private func relocate(_ ref: NodeAt) async {
-        guard shell.path.contains(where: { $0.nodeId == ref.nodeId }) else { return }
-        shell = shell.at(tree: await scopeNodes(ref.scopeId), folderId: shell.folder?.nodeId)
-    }
-
     /// Renames `ref` to `name` (core's `NodeRename`: the placement, then its open links' names); the lists are read anew
     /// and an open page follows the node under its new name. Why it did not land, in core's words, or nil once renamed;
     /// `linksFailed` says a link kept the old name (the rename stands).
     func rename(_ ref: NodeAt, to name: String) async -> (problem: String?, linksFailed: Bool) {
-        guard let t = tenantSession else { return (say(.nodeSaveFailed), false) }
-        let r = try? await NodeRename.shared.rename(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, name: name,
-            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
-            nowMs: Int64(Date().timeIntervalSince1970 * 1000), waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
-        )
-        guard let r else { return (say(.nodeSaveFailed), false) }
-        switch r.outcome {
-        case .renamed:
-            await refreshLists(t)
-            await relocate(ref)
-            if shell.openObject?.nodeId == ref.nodeId,
-               let renamed = ((try? await t.objects()) ?? []).first(where: { $0.scopeId == ref.scopeId && $0.nodeId == ref.nodeId }) {
-                shell = shell.goBack().open(ref: renamed)
-            }
-            return (nil, !(r.links?.failed.isEmpty ?? true))
-        default: return (Notices.shared.renameRefused(r: r).map { say(notice: $0) }, false)
-        }
+        guard let m = shellModel, let r = try? await m.rename(ref: ref, name: name) else { return (say(.nodeSaveFailed), false) }
+        applyShell(start: false)
+        await readDetails(m.tenant)
+        return (r.notice.map { say(notice: $0) }, r.linksFailed)
     }
 
     /// How a kind folds a name to its slug token's input: the composition root's answer (`AppKinds`, the web's
@@ -838,28 +807,24 @@ final class AppModel {
 
     /// The trash of `scopeId` (the root of each deleted subtree); nil when it could not be read.
     func trashOf(_ scopeId: String) async -> [NodeTrash.Trashed]? {
-        guard let t = tenantSession else { return nil }
-        return try? await NodeTrash.shared.list(tenant: t, scopeId: scopeId)
+        (try? await shellModel?.trashOf(scopeId: scopeId)) ?? nil
     }
 
     /// Whether the app can bring `row` back: its kind's fold of a name is known here.
-    func canRestore(_ row: NodeTrash.Trashed) -> Bool { Self.tokenInputFor(kind: row.kind, name: row.name) != nil }
+    func canRestore(_ row: NodeTrash.Trashed) -> Bool { shellModel?.canRestore(row: row) ?? false }
 
     /// Brings `row` back from the trash, under `newName` after its own was taken; the lists are read anew.
     func restoreFromTrash(_ row: NodeTrash.Trashed, newName: String?) async -> NodeTrash.Restored {
-        guard let t = tenantSession,
-              let token = Self.tokenInputFor(kind: row.kind, name: newName?.trimmingCharacters(in: .whitespaces) ?? row.name) else { return .refused }
-        let r = (try? await NodeTrash.shared.restoreFromTrash(
-            tenant: t, node: row, tokenInput: token, newName: newName, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
-        )) ?? .refused
-        await refreshLists(t)
+        guard let m = shellModel else { return .refused }
+        let r = (try? await m.restoreFromTrash(row: row, newName: newName)) ?? .refused
+        applyShell(start: false)
+        await readDetails(m.tenant)
         return r
     }
 
     /// Erases `row` and everything under it now: irreversible.
     func purge(_ row: NodeTrash.Trashed) async -> NodeTrash.Purged {
-        guard let t = tenantSession else { return .failed }
-        return (try? await NodeTrash.shared.purge(tenant: t, scopeId: row.scopeId, nodeId: row.id)) ?? .failed
+        (try? await shellModel?.purge(row: row)) ?? .failed
     }
 
     // MARK: An open Pot (Expenses)
@@ -915,8 +880,9 @@ final class AppModel {
         var details = pots
         for (id, f) in read { details[id] = Self.fileDetails(f) }
         // a drop box's row: how many guests have a folder in it (Depot's `people`)
-        for box in rawNodes where box.kind == DepotFiles.shared.DROPBOX {
-            let n = rawNodes.filter { $0.parentId == box.nodeId && $0.kind == "FOLDER" }.count
+        let listed = shellModel?.current?.lists.nodes ?? []
+        for box in listed where box.kind == DepotFiles.shared.DROPBOX {
+            let n = listed.filter { $0.parentId == box.nodeId && $0.kind == "FOLDER" }.count
             details[box.nodeId] = [n == 0 ? say(.dropboxPeopleNone) : say(.dropboxPeople, n)]
         }
         rowDetails = details
@@ -1242,16 +1208,11 @@ final class AppModel {
     /// Creates a folder named `name` in the space and folder on screen, core's folder (the web's `FolderNameDialog`); the
     /// lists are read anew. Why not, in the web's words, or nil once created.
     func createFolder(name: String) async -> String? {
-        guard let t = tenantSession, let scopeId = shell.space else { return say(.folderFailed) }
-        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if n.isEmpty { return say(.folderNameEmpty) }
-        let r = try? await FolderCreate.shared.create(tenant: t, scopeId: scopeId, parentId: shell.folder?.nodeId, name: n)
-        await refreshLists(t)
-        if r is NodeCreateResultDone { return nil }
-        if let refused = r as? NodeCreateResultRefused, refused.reason == .nameTaken {
-            return say(.folderNameTaken)
-        }
-        return say(.folderFailed)
+        guard let m = shellModel, let scopeId = shell.space else { return say(.folderFailed) }
+        let refused = try? await m.createFolder(scopeId: scopeId, parentId: shell.folder?.nodeId, name: name)
+        applyShell(start: false)
+        await readDetails(m.tenant)
+        return refused.map { say(notice: $0) }
     }
 
     /// What the drawer's "New" asked Home to create, until Home opens its dialog.
@@ -1372,11 +1333,7 @@ final class AppModel {
             return false
         }
         t.forgetTree()
-        rawNodes = (try? await t.nodes()) ?? rawNodes
-        rawFavorites = (try? await t.favorites()) ?? rawFavorites
-        await readDetails(t)
-        await readCovers(t)
-        rebuild(start: false)
+        await refreshLists(t)
         creatingPot = CreatingPot(message: r.outcome == .created ? nil : r.outcome.name)
         if let ref = ((try? await t.objects()) ?? []).first(where: { $0.nodeId == nodeId }) { open(ref) }
         return true
@@ -1451,18 +1408,13 @@ final class AppModel {
     }
 
     func copyFolder(_ ref: NodeAt, to: String?, toName: String) async -> String? {
-        guard let t = tenantSession else { return say(.theCopyFailed) }
-        let r = try? await SubtreeCopy.shared.duplicate(
-            tenant: t, scopeId: ref.scopeId, rootId: ref.nodeId, parentId: to,
-            kinds: AppKinds.shared.copies(deletedName: say(.potDeletedPerson), uuid: { @Sendable in UUID().uuidString.lowercased() })
-        )
-        await refreshLists(t)
-        switch r?.outcome {
-        case .copied:
-            trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName), node: nil, moveBack: nil)
-            return nil
-        default: return Notices.shared.subtreeCopyRefused(outcome: r?.outcome).map { say(notice: $0) }
-        }
+        guard let m = shellModel else { return say(.theCopyFailed) }
+        let refused = try? await m.duplicate(ref: ref, to: to, deletedName: say(.potDeletedPerson), uuid: { @Sendable in UUID().uuidString.lowercased() })
+        applyShell(start: false)
+        await readDetails(m.tenant)
+        if let refused { return say(notice: refused) }
+        trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName), node: nil, moveBack: nil)
+        return nil
     }
 
     func openReceipt(_ receiptId: String) async -> Data? {
@@ -1476,21 +1428,20 @@ final class AppModel {
     /// Forgets the open Pot's last refusal (a sheet closed).
     func clearPotMessage() { pot?.message = nil }
 
-    func choose(_ app: ApplicationId?) { shell = shell.choose(app: app); drawerOpen = false }
-    func switchSpace(_ scopeId: String) { shell = shell.switchSpace(scopeId: scopeId) }
-    func enter(_ folder: FolderRef) { shell = shell.enter(folder: folder) }
-    func setFilter(_ app: ApplicationId?) { shell = shell.filter(app: app) }
-    func goBack() { shell = shell.goBack() }
+    func choose(_ app: ApplicationId?) { moveShell { $0.choose(app: app) }; drawerOpen = false }
+    func switchSpace(_ scopeId: String) { moveShell { $0.switchSpace(scopeId: scopeId) } }
+    func enter(_ folder: FolderRef) { moveShell { $0.enter(folder: folder) } }
+    func setFilter(_ app: ApplicationId?) { moveShell { $0.filter(app: app) } }
+    func goBack() { moveShell { $0.goBack() } }
 
     func open(_ ref: ObjectRef) {
-        recent.record(ref: ref, atEpochMs: Int64(Date().timeIntervalSince1970 * 1000))
-        shell = shell.open(ref: ref)
+        shellModel?.open(ref: ref)
+        applyShell(start: false)
         drawerOpen = false
-        refreshDrawer()
     }
 
-    func select(_ tab: BarTab) { shell = shell.select(tab: tab) }
-    func search(_ on: Bool) { shell = shell.search(on: on) }
+    func select(_ tab: BarTab) { moveShell { $0.select(tab: tab) } }
+    func search(_ on: Bool) { moveShell { $0.search(on: on) } }
 
     func applicationList(_ app: ApplicationId) -> ArrangedList {
         ListsKt.arrange(
@@ -1500,10 +1451,6 @@ final class AppModel {
             favoritesLimit: nil,
             recentLimit: nil
         )
-    }
-
-    private func refreshDrawer() {
-        drawer = ListsKt.arrange(favorites: favorites, uses: recent.resolve(objects: objects), all: [], favoritesLimit: 6, recentLimit: 8)
     }
 
     /// A bare host gets https, except a dev `*.localhost` host, which the dev backend serves on http.

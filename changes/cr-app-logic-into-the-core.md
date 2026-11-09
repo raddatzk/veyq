@@ -31,9 +31,9 @@ with both apps behaving as before on a device for what it touched, and commits o
    10). Android's screen tables and Apple's model sentences go.
 2. **Form done 2026-11-09** (`LinkForm`, `ShareWords`; the actions move with the shell, slice 4). **Links and re-keys.** `LinkForm` (the new-link and edit rules: password required, minimum length, keep/remove on
    edit, the last allowed day, end of day, write-only for a drop box) and the link actions with the re-key resume.
-3. **Node actions.** Favorite, trash with its undo, restore, rename (and the move a rename may imply), move with its
+3. **Done 2026-11-09, with slice 4's lists and navigation** (`navigation/ShellModel.kt`: favorite, trash and its undo, the trash sheet, rename, move, new folder, copy; a page whose node went leaves, a folder on the path follows). **Node actions.** Favorite, trash with its undo, restore, rename (and the move a rename may imply), move with its
    way back, copy, create folder, report; the header's rights input (what a kind shares, covers, copies, downloads).
-4. **Shell.** The lists (`Raw`, rebuild, row details as data), navigation, the drawer, refresh after a write, the
+4. **Lists and navigation done 2026-11-09 (`ShellModel`); left: row details as data, the covers' index, "New", the link actions.** **Shell.** The lists (`Raw`, rebuild, row details as data), navigation, the drawer, refresh after a write, the
    covers' index (decoding stays native), search's name filter, "New", picking a place for shared files.
 5. **Share-in.** The incoming/taken state machine and the one fitting rule; readers stay native.
 6. **Pot.** Load, the live poll as a core watch (Swift's own loop goes), writes, creation (its parent from the shell),
