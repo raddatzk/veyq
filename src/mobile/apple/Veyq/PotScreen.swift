@@ -171,6 +171,7 @@ private struct EntriesList: View {
 
     var body: some View {
         List {
+            NodeHeroRow()
             if view.entries.isEmpty {
                 Text(view.canWrite ? "No entries yet. Add the first one." : "No entries yet.").foregroundStyle(Role.muted)
             }
@@ -255,6 +256,7 @@ private struct OverviewList: View {
 
     var body: some View {
         List {
+            NodeHeroRow()
             Section {
                 ForEach(view.balances, id: \.id) { p in
                     HStack(spacing: 12) {

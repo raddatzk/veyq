@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.android
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -264,6 +265,36 @@ private fun labelOf(id: String, node: NodeAt, contribution: HeaderContribution, 
     Plan.REPORT -> stringResource(R.string.report_action)
     Plan.DELETE -> contribution.deleteTitle
     else -> contribution.actions.firstOrNull { it.id == id }?.label ?: id
+}
+
+/**
+ * Core's head of a node's page (the web's `NodeHeader` leading visual, ADR 0110): what the shell hands the body of the node on
+ * screen, which places it first in its scroll so it moves with the page as the web's header does, with the side inset its
+ * scroll does not already give. Outside a node's page, nothing.
+ */
+internal val LocalNodeHero = androidx.compose.runtime.staticCompositionLocalOf<@Composable (inset: androidx.compose.ui.unit.Dp) -> Unit> { {} }
+
+/**
+ * A node's cover across the page's width, 16:9, framed as stored (core's covers); where it may be changed ([canSet]), a tap
+ * opens core's cover sheet. A node without a cover shows nothing here: its cover is set from the header's menu (a phone
+ * keeps the room the web's empty frame would take).
+ */
+@Composable
+internal fun NodeCoverHero(node: NodeAt, model: AppModel, canSet: Boolean, inset: androidx.compose.ui.unit.Dp = 16.dp) {
+    val palette = LocalPalette.current
+    val key = model.covers.collectAsStateWithLifecycle().value[node.nodeId]?.first ?: return
+    var image by remember(node.nodeId, key) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    androidx.compose.runtime.LaunchedEffect(node.nodeId, key) { image = model.coverHero(node) }
+    var editing by remember { mutableStateOf(false) }
+    val change = stringResource(R.string.cover_change)
+    Box(
+        Modifier.fillMaxWidth().padding(horizontal = inset, vertical = 8.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(16.dp))
+            .background(role(palette.surface))
+            .then(if (canSet) Modifier.clickable(onClickLabel = change) { editing = true } else Modifier),
+    ) {
+        image?.let { Image(it, null, Modifier.matchParentSize(), contentScale = ContentScale.Crop) }
+    }
+    if (editing) CoverSheet(node, model) { editing = false }
 }
 
 /**

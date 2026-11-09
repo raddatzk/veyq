@@ -209,7 +209,15 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 }
             },
         ) { padding ->
+            // the node on screen's head, which its body places first (core's, for every kind)
+            val paged = shell.openObject?.at
+                ?: shell.space?.takeIf { shell.application == null && !shell.searching }?.let { shell.folderAt(it) }
+            val pagedContribution = paged?.let { KindPages.of(it.kind)?.header?.invoke(it, model) }
+            val hero: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { inset ->
+                if (paged != null) NodeCoverHero(paged, model, canSet = KindPages.of(paged.kind)?.takesCover == true && pagedContribution?.cover != false, inset = inset)
+            }
             Box(Modifier.padding(padding).fillMaxSize()) {
+              androidx.compose.runtime.CompositionLocalProvider(LocalNodeHero provides hero) {
                 when {
                     shell.searching -> SearchScreen(s.objects, onOpen = model::open, onClose = { model.search(false) })
                     shell.openObject != null -> KindPages.of(shell.openObject!!.kind)?.body?.invoke(shell.openObject!!, shell.selectedTab, model)
@@ -218,6 +226,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     shell.application == ApplicationId.EXPENSES -> ExpensesList(s, model)
                     else -> ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open)
                 }
+              }
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }
@@ -307,10 +316,11 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
             }
         }
         val level = s.level
-        if (level.isEmpty()) {
-            Empty()
-        } else {
+        val hero = LocalNodeHero.current
+        run {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
+                item(key = "hero") { hero(8.dp) }
+                if (level.isEmpty()) item(key = "empty") { Empty() }
                 items(level, key = { it.scopeId + it.nodeId }) { node ->
                     val folder = node.asFolder()
                     if (folder != null) {

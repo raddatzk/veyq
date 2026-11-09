@@ -254,9 +254,15 @@ struct Bar: View {
         }
     }
 
+    /// The head of the node on screen (core's, for every kind): its body places it first in its list.
+    private func hero(_ node: NodeAt) -> NodeHero {
+        let page = KindPage.of(node.kind)
+        return NodeHero(model: model, node: node, canSet: page?.takesCover == true && page?.header(node, model)?.cover != false)
+    }
+
     @ViewBuilder private func content(_ key: String) -> some View {
         if let ref = model.shell.openObject, let body = KindPage.of(ref.kind)?.body {
-            body(ref, key, model)
+            body(ref, key, model).environment(\.nodeHero, hero(ref.at))
         } else if let ref = model.shell.openObject {
             ObjectPlaceholder(ref: ref, tab: key)
         } else if let app = model.shell.application, app == .expenses {
@@ -265,7 +271,7 @@ struct Bar: View {
             ArrangedListView(list: model.applicationList(app), onOpen: model.open)
                 .navigationTitle(Names.application(app))
         } else {
-            HomeView(model: model)
+            HomeView(model: model).environment(\.nodeHero, model.shell.space.flatMap { model.shell.folderAt(scopeId: $0) }.map(hero))
         }
     }
 }
@@ -287,6 +293,7 @@ struct HomeView: View {
 
     var body: some View {
         List {
+            NodeHeroRow()
             if model.filters.count > 1 {
                 Picker("Filter", selection: Binding(get: { model.shell.filter }, set: { model.setFilter($0) })) {
                     ForEach(Array(model.filters.enumerated()), id: \.offset) { _, f in

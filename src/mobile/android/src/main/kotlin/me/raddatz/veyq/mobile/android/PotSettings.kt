@@ -60,6 +60,7 @@ internal fun potRefusal(outcome: String): String = stringResource(
 @Composable
 internal fun PotSettings(view: PotView, state: AppModel.PotState, model: AppModel) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LocalNodeHero.current(0.dp)
         if (!view.ready) {
             Text(stringResource(if (view.canChangeSettings) R.string.settings_missing else R.string.settings_missing_read_only))
         }

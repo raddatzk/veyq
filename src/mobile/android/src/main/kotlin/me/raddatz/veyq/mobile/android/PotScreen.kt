@@ -160,9 +160,11 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
     var editing by remember { mutableStateOf<Pair<String, PotView.Editing>?>(null) }
     var viewing by remember { mutableStateOf<PotView.EntryRow?>(null) }
     val palette = LocalPalette.current
+    val hero = LocalNodeHero.current
     CreateAction(stringResource(R.string.pot_add), shown = view.canWrite && view.people.isNotEmpty(), onClick = { adding = true }) { list, bottom ->
-        if (view.entries.isEmpty()) Note(stringResource(if (view.canWrite) R.string.pot_no_entries else R.string.pot_no_entries_readonly))
         LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
+            item(key = "hero") { hero(16.dp) }
+            if (view.entries.isEmpty()) item(key = "empty") { Note(stringResource(if (view.canWrite) R.string.pot_no_entries else R.string.pot_no_entries_readonly)) }
             items(view.entries, key = { it.id }) { e ->
                 // Every viewer opens an entry: a writer to edit it, a reader to read it (one dialog, inbox #401).
                 Row(
@@ -238,7 +240,9 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
 @Composable
 private fun Overview(view: PotView, state: AppModel.PotState, model: AppModel) {
     val palette = LocalPalette.current
+    val hero = LocalNodeHero.current
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+        item(key = "hero") { hero(0.dp) }
         item { Section(stringResource(R.string.pot_balances)) }
         items(view.balances, key = { it.id }) { p ->
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

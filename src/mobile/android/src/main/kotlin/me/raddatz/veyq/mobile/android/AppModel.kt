@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.android
 
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
@@ -733,6 +734,18 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             val opened = runCatching { me.raddatz.veyq.mobile.session.NodeCover.openFramed(t, ref.nodeId) }.getOrNull() ?: return@withContext null
             runCatching { picture(android.graphics.ImageDecoder.createSource(java.nio.ByteBuffer.wrap(opened.bytes))).asImageBitmap() }.getOrNull()?.let { it to opened.crop }
         }
+
+    /** [ref]'s cover as its page's head shows it: the framed part of the stored picture, at up to 2048 px; null: none. */
+    suspend fun coverHero(ref: me.raddatz.veyq.mobile.navigation.NodeAt): androidx.compose.ui.graphics.ImageBitmap? {
+        val (image, crop) = coverSource(ref) ?: return null
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            runCatching {
+                val whole = image.asAndroidBitmap()
+                val (x, y, w, h) = me.raddatz.veyq.mobile.session.CoverFrame.pixels(crop, whole.width, whole.height).toList()
+                android.graphics.Bitmap.createBitmap(whole, x, y, w, h).asImageBitmap()
+            }.getOrNull()
+        }
+    }
 
     /** Moves the crop of [ref]'s cover, its picture kept (the web's `keep`); false when it did not land. */
     suspend fun recropCover(ref: me.raddatz.veyq.mobile.navigation.NodeAt, crop: me.raddatz.veyq.mobile.session.NodeCover.Crop): Boolean {

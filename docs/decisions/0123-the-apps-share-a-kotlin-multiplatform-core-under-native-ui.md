@@ -275,8 +275,11 @@ implementation exists but what holds it to the first.
   reopens as it was framed in any client (`CoverFrameTest`; fill turned to fit turns it red); a new picture is uploaded with
   its crop, the stored one framed anew moves only the crop (`NodeCover.recrop`, a plain meta write, the blob kept), and every
   list draws the framed part (`CoverFrame.pixels`). Measured 2026-11-09: `CoverCropLiveTest` (framed, read back, re-framed
-  with its blob kept), a frame dragged on Android and one pinched on iOS shown so in the web's header. The cover as the page
-  header's leading visual is not built. A level
+  with its blob kept), a frame dragged on Android and one pinched on iOS shown so in the web's header. The page's head shows
+  the cover as the web's header does its leading visual — 16:9 across the page's width, framed as stored, opening the cover
+  sheet where it may change — first in the body's scroll, so it moves with the page (core's `NodeCoverHero`, handed to every
+  kind's body by the shell, `LocalNodeHero` / `\.nodeHero`, on a Pot's three tabs and a folder's level); a node without a
+  cover shows no empty frame, unlike the web: a phone keeps that room, and the cover is set from the header's menu. A level
   creates as the web's "New" menu does (decision 9's creating action in its menu form, and the drawer's "New" opening it on
   Home): a folder there (`session/FolderCreate.kt`, its name refused where a sibling folds the same) or a Pot there. A
   folder Home shows has core's actions as the web's level header does — favorite, rename, move, cover, report, delete with

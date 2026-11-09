@@ -43,6 +43,7 @@ struct PotSettings: View {
 
     var body: some View {
         List {
+            NodeHeroRow()
             if !view.ready {
                 Section {
                     Text(view.canChangeSettings

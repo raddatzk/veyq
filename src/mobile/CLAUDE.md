@@ -120,7 +120,8 @@ A node's header is core's, for every kind (ADR 0123, the web's `NodePage` + `Nod
 plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns every dialog behind it, and a kind only
 registers its page — `KindPages` (Android) / `KindPage` (Apple): it brings a share sheet, takes a cover, contributes a
 subtitle, its rights narrowing, its copy and download doors and own actions, and draws its body. A new kind registers
-there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own.
+there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own. Its body places core's head
+first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `NodeHeroRow()` (Apple) —, never a cover of its own.
 
 ## Traps
 

@@ -246,6 +246,61 @@ struct NodeHeaderActions: View {
     }
 }
 
+/// Core's head of a node's page (the web's `NodeHeader` leading visual, ADR 0110): what the shell hands the body of the node
+/// on screen (`\.nodeHero`), which places `NodeHeroRow` first in its list so it moves with the page as the web's header does.
+struct NodeHero {
+    let model: AppModel
+    let node: NodeAt
+    /// The cover may be changed here: a tap opens core's cover sheet.
+    let canSet: Bool
+}
+
+extension EnvironmentValues {
+    @Entry var nodeHero: NodeHero?
+}
+
+/// The page's head as a list's first row: the node's cover, or no row where it has none (a phone keeps the room the web's
+/// empty frame would take; the cover is set from the header's menu).
+struct NodeHeroRow: View {
+    @Environment(\.nodeHero) private var hero
+
+    var body: some View {
+        if let hero, hero.model.covers[hero.node.nodeId] != nil {
+            NodeCoverHero(model: hero.model, node: hero.node, canSet: hero.canSet)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
+        }
+    }
+}
+
+/// A node's cover across the page's width, 16:9, framed as stored (core's covers); where it may be changed, a tap opens
+/// core's cover sheet.
+struct NodeCoverHero: View {
+    @Bindable var model: AppModel
+    let node: NodeAt
+    let canSet: Bool
+    @State private var image: CGImage?
+    @State private var editing = false
+
+    var body: some View {
+        let picture = Role.surface
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .overlay {
+                if let image { Image(decorative: image, scale: 1).resizable().scaledToFill() }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .task(id: model.covers[node.nodeId]?.blobId) { image = await model.coverHero(node) }
+        if canSet {
+            Button { editing = true } label: { picture }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Change Cover…")
+                .sheet(isPresented: $editing) { CoverSheet(model: model, node: node) }
+        } else {
+            picture.accessibilityHidden(true)
+        }
+    }
+}
+
 /// Core's cover dialog (the web's `CoverDialog` around its 16:9 `ImageCropper`): the one place a node's cover is chosen,
 /// framed and removed. Its source is the stored cover, framed anew (only the crop moves: the web's `keep`), or a picture
 /// picked here from the system's photo picker, uploaded with its crop; a drag pans it and a pinch or the slider zooms it

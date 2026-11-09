@@ -840,6 +840,12 @@ final class AppModel {
         return (image, opened.crop)
     }
 
+    /// `ref`'s cover as its page's head shows it: the framed part of the stored picture, at up to 2048 px; nil: none.
+    func coverHero(_ ref: NodeAt) async -> CGImage? {
+        guard let source = await coverSource(ref) else { return nil }
+        return Self.framed(source.image, source.crop)
+    }
+
     /// Moves the crop of `ref`'s cover, its picture kept (the web's `keep`); false when it did not land.
     func recropCover(_ ref: NodeAt, crop: NodeCover.Crop) async -> Bool {
         guard let t = tenantSession else { return false }
