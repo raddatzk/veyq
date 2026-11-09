@@ -378,10 +378,10 @@ implementation exists but what holds it to the first.
   provider, Apple's file importer): only its files make nodes, each directory's subfolders named before its files (the
   archive's safe name, numbered on while a slug is taken); the tenant asked first whether the bytes fit
   (`checkTenantStorageFit`, advisory — a check that does not answer lets it go on); the top folder numbered past the
-  level's siblings, never merged; every folder made depth first, one that cannot be made said with what is in it; then the
-  files one after another, each tried twice but a refusal for room; nothing rolled back (measured 2026-11-09:
+  level's siblings, never merged; every folder made depth first, one that cannot be made said with what is in it; then
+  every file a job of the upload queue (below); nothing rolled back (measured 2026-11-09:
   `FolderUploadTest` — the slug rule taken out turns it red —; `DepotLiveTest` uploading a nested directory with a case
-  clash and a file of three frames twice, the second as "App up (2)", every file read back to the byte and the web listing
+  clash and a file of three frames twice, the second beside the first, every file read back to the byte and the web listing
   it; a directory picked on Android uploaded whole, which the web lists). Measured on iOS as well, 2026-11-09: a guest's
   folder moved out of a drop box after its question, a drop box's link switched off and on again from its context menu, a
   directory picked in the Files importer uploaded whole (the web listing it), the copy dialog's storage check, a guest's
@@ -439,6 +439,27 @@ implementation exists but what holds it to the first.
   its position and altitude, the photos picker offering "with location" by default).
   Not built yet: the live poll, zoom, the slideshow, edits (date, place, participants, capture-time correction, trash),
   item marks, buckets, the map, sharing, the re-key, export and copy.
+- **One upload queue, core's** (owner 2026-11-09: "the same split as the web"). Every upload of every application runs
+  through core's `blob/UploadQueue.kt`, the web's `core/blob/queue.ts` rule for rule: one job at a time in enqueue order,
+  progress as a fraction, "preparing" until a job's first progress, one automatic retry of a transient failure, none of a
+  refusal no retry helps (`quota_exceeded`, `capability_disabled`, or one the job declares final), a cancel settled as
+  cancelled, a given-up job abandoned once, and the next job's on-device stage prepared while the one before it is on the
+  wire (`UploadQueueTest`, each of those rules taken out turns it red, measured 2026-11-09). The split is the web's: core
+  holds the queue and each application's job (Depot's `DepotFiles.UploadJob` and `ReplaceJob`, `FolderUpload.prepare`
+  making the folders and handing its files to the queue, Memories' `MediaUpload.Job` with its tiers, digest and metadata
+  as its on-device stage); a platform holds only what touches it — the picked file read at any offset (core's
+  `UploadSource`: Android's content descriptor, Apple's `FileUploadSource` inside the file's security scope, so the queue
+  may read it long after the pick), a medium's tiers (`MediaUpload.Deriver`: `ImageDecoder`/`MediaMetadataRetriever`,
+  ImageIO/AVFoundation) and its words. Each app draws the queue as its platform does (the web's `UploadStatusMenu.vue`):
+  Android a row under the top bar opening a bottom sheet, Apple a toolbar progress opening a sheet — every batch with each
+  file's state, its cancel and its retry; what a refusal offers (a name a file holds: its replace; content someone
+  replaced: "Replace anyway") is said once as the shell's notice. The queue outlives a screen, not the account: a sign-out
+  or a switch of tenant empties it, as the web's reload does (measured 2026-11-09: `DepotLiveTest` uploads a nested
+  directory through it; Android added photos and a video through it, the row showing them under way and gone once in; iOS added photos
+  and a video from the photo library through it, each with its position, the toolbar's button checked once they were in
+  and gone a moment later).
+  Not built yet: an upload that goes on while the app is in the background (a foreground service, a background task),
+  and the gallery's placeholder tiles for what is under way.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's

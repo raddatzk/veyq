@@ -104,6 +104,9 @@ object MediaUpload {
         override val sizeBytes get() = source.size
         override val prepares get() = true
 
+        /** The file it uploads (where the app reads it). */
+        val picked: UploadSource get() = source
+
         /** The medium this job added, once it is done. */
         var mediaId: String? = null
             private set

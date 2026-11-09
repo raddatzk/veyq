@@ -31,7 +31,10 @@ import kotlin.random.Random
  * main thread.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class UploadQueue(dispatcher: CoroutineDispatcher = Dispatchers.Default) {
+class UploadQueue(dispatcher: CoroutineDispatcher) {
+    /** The app's queue, on [Dispatchers.Default]. */
+    constructor() : this(Dispatchers.Default)
+
     enum class Status { QUEUED, PREPARING, UPLOADING, DONE, FAILED, CANCELLED }
 
     /** A job's refusal, by its code (`quota_exceeded`, an application's own `exists`, …): what [Item.error] says. */

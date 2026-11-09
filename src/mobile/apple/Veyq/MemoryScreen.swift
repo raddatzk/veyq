@@ -54,7 +54,7 @@ struct MemoryScreen: View {
         }
         .navigationTitle(ref.name)
         // photos and videos come from the photo library or from files
-        .createMenu("Add Photos", shown: model.uploading == nil) {
+        .createMenu("Add Photos", shown: true) {
             Button { pickingPhotos = true } label: { Label("Photo Library", systemImage: "photo.on.rectangle") }
             Button { pickingFiles = true } label: { Label("Files", systemImage: "folder") }
         }
@@ -68,13 +68,12 @@ struct MemoryScreen: View {
                 for item in picked {
                     if let file = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(file.url) }
                 }
-                await model.uploadMedia(scopeId: ref.scopeId, nodeId: ref.nodeId, urls: urls, fromPhotos: true)
-                for url in urls { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+                model.uploadMedia(scopeId: ref.scopeId, nodeId: ref.nodeId, label: ref.name, urls: urls, fromPhotos: true)
             }
         }
         .background(EmptyView().fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.image, .movie], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
-            Task { await model.uploadMedia(scopeId: ref.scopeId, nodeId: ref.nodeId, urls: urls, fromPhotos: false) }
+            model.uploadMedia(scopeId: ref.scopeId, nodeId: ref.nodeId, label: ref.name, urls: urls, fromPhotos: false)
         })
         // read again whenever the lists are, and when a medium of this device is in
         .task(id: "\(model.rowDetails.count)/\(model.galleryRevision)") {

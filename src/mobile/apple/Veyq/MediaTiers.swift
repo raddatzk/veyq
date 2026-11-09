@@ -3,6 +3,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
+import VeyqCore
 
 /// A picked photo's or video's tiers on an Apple device (the web's `mediaDeriver.ts`, which core's `MediaUpload.Derived`
 /// names): the `PREVIEW` JPEG from the original — upright (ImageIO applies the orientation), its long edge at most 2048,
@@ -74,5 +75,28 @@ enum MediaTiers {
         guard let dest = CGImageDestinationCreateWithData(out as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
         return CGImageDestinationFinalize(dest) ? out as Data : nil
+    }
+}
+
+/// Core's `MediaUpload.Deriver` on an Apple device: the tiers of a picked file (`MediaTiers`), read inside its security
+/// scope, handed back on any thread.
+final class MediaDeriver: NSObject, MediaUploadDeriver, @unchecked Sendable {
+    static let shared = MediaDeriver()
+
+    func derive(source: UploadSource, type: String, done: @escaping (MediaUpload.Derived) -> Void) {
+        nonisolated(unsafe) let done = done
+        let url = AppleMemories.shared.urlOf(source: source)
+        Task.detached {
+            var tiers = MediaTiers.Derived()
+            if let url {
+                let scoped = url.startAccessingSecurityScopedResource()
+                tiers = await MediaTiers.derive(url, type: type)
+                if scoped { url.stopAccessingSecurityScopedResource() }
+            }
+            done(AppleMemories.shared.derived(
+                preview: tiers.preview, thumbnail: tiers.thumbnail,
+                width: tiers.width.map { KotlinInt(value: Int32($0)) }, height: tiers.height.map { KotlinInt(value: Int32($0)) }
+            ))
+        }
     }
 }

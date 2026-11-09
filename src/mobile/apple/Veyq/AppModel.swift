@@ -309,6 +309,7 @@ final class AppModel {
     /// password trust stays (as on the web).
     func signOut(_ account: VeyqAccount) {
         let wasCurrent = connections.current?.first == account
+        if wasCurrent { uploads.clear() }
         connections.remove(connection: account)
         Task {
             try? await account.signOut()
@@ -355,6 +356,8 @@ final class AppModel {
         let t = try await AppleSessions.shared.open(account: account, tenant: tenant)
         // a member's write pulls its path forward, and the scopes served as re-keying are finished in the background
         t.rekeyRules = AppKinds.shared.rules
+        if let was = tenantSession, was.account !== account || was.tenant.tenantId != tenant.tenantId { uploads.clear() }
+        watchUploads()
         tenantSession = t
         resumeRekeys(t)
         pot = nil
@@ -723,43 +726,33 @@ final class AppModel {
     /// Moves each time a medium this device uploaded is in (a gallery on screen reads itself again).
     private(set) var galleryRevision = 0
 
-    /// Adds the picked photos and videos (`urls`; `fromPhotos`: copies the Photos picker handed over, whose own dates are
-    /// no capture time) to Memory or chapter `nodeId` (`MediaUpload`), one after another, each one's tiers derived here
-    /// (`MediaTiers`); the shell shows which is on its way. A quota or an application switched off stops the rest and is
-    /// said once; what else did not go up is said.
-    func uploadMedia(scopeId: String, nodeId: String, urls: [URL], fromPhotos: Bool) async {
+    /// Queues the picked photos and videos (`urls`; `fromPhotos`: copies the Photos picker handed over, whose own dates are
+    /// no capture time, removed once each is in or cancelled) for Memory or chapter `nodeId` (`label` its name;
+    /// `MediaUpload.Job`): each one's tiers derived here (`MediaTiers`) while the one before it is on the wire; each one in
+    /// moves the gallery on screen, the batch's end the lists (the Memory's date range).
+    func uploadMedia(scopeId: String, nodeId: String, label: String, urls: [URL], fromPhotos: Bool) {
         guard let t = tenantSession else { return }
-        var failed: [String] = []
-        for (i, url) in urls.enumerated() {
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard let p = Picked(url) else { continue }
-            uploading = urls.count > 1 ? "\(p.name) (\(i + 1)/\(urls.count))" : p.name
-            let type = MediaUpload.shared.typeOf(given: p.type, name: p.name, head: KotlinByteArray(size: 0))
-            let tiers = await MediaTiers.derive(p.url, type: type)
-            let r = try? await AppleMemories.shared.upload(
-                tenant: t, scopeId: scopeId, nodeId: nodeId, path: p.url.path, type: p.type, name: p.name,
-                modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) },
-                preview: tiers.preview, thumbnail: tiers.thumbnail,
-                width: tiers.width.map { KotlinInt(value: Int32($0)) }, height: tiers.height.map { KotlinInt(value: Int32($0)) },
-                now: Int64(Date().timeIntervalSince1970 * 1000)
+        let jobs: [UploadQueueJob] = urls.compactMap { url in
+            guard let p = Picked(url) else { return nil }
+            return AppleMemories.shared.uploadJob(
+                tenant: t, scopeId: scopeId, nodeId: nodeId, url: url, name: p.name, size: p.size, type: p.type,
+                modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) }, deriver: MediaDeriver.shared
             )
-            switch r?.outcome {
-            case .done: galleryRevision += 1
-            case .noRoom:
-                uploading = nil
-                notice = Notice(text: String(localized: "“\(p.name)” could not be added: there is no room left in this space’s storage."))
-                return
-            case .switchedOff:
-                uploading = nil
-                notice = Notice(text: String(localized: "Memories is switched off here, so nothing can be added."))
-                return
-            default: failed.append(p.name)
-            }
         }
-        uploading = nil
-        await refreshLists(t)
-        if !failed.isEmpty { notice = Notice(text: String(localized: "Could not add: \(failed.joined(separator: ", ")). Please try again.")) }
+        uploads.enqueue(jobs: jobs, label: label, key: nodeId, onSettled: { @Sendable item in
+            let done = item.status == .done
+            // a copy is kept while its upload may still be retried
+            if fromPhotos, done || item.status == .cancelled, let job = item.job as? MediaUpload.Job,
+               let url = AppleMemories.shared.urlOf(source: job.picked) {
+                try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+            }
+            Task { @MainActor [weak self] in if done { self?.galleryRevision += 1 } }
+        }, onFinished: { @Sendable _ in
+            Task { @MainActor [weak self] in
+                guard let self, let t = self.tenantSession else { return }
+                await self.refreshLists(t)
+            }
+        })
     }
 
     /// `item`'s original read at any offset, for a player (`MemoryMedia.reader`); nil where it does not open here.
@@ -1053,20 +1046,37 @@ final class AppModel {
         return SentCopy(url: url)
     }
 
-    /// The name of the file being uploaded, while one is.
-    private(set) var uploading: String?
+    /// The app's one upload queue (core's `UploadQueue`, the web's `core/blob/queue.ts`): every application's uploads, one
+    /// after another, retried once; the shell's uploads button shows it (`UploadsButton`). It outlives a screen, not the
+    /// account: a sign-out or a switch of tenant empties it.
+    let uploads = UploadQueue()
 
-    /// A picked file as an upload reads it: its path (while its security scope is open), name, size, type, modified time.
+    /// The queue as it stands, on the main actor (its watch).
+    private(set) var uploadState: UploadQueue.State?
+    @ObservationIgnored private var uploadWatch: UploadQueue.Watch?
+
+    /// The name of a picked directory whose folders are being made before its files queue up.
+    private(set) var preparing: String?
+
+    private func watchUploads() {
+        guard uploadWatch == nil else { return }
+        uploadWatch = uploads.watch { @Sendable state in
+            nonisolated(unsafe) let state = state
+            Task { @MainActor [weak self] in self?.uploadState = state }
+        }
+    }
+
+    /// A picked file as an upload lists it: its name, size, type, modified time (read inside its security scope).
     private struct Picked {
-        let url: URL
         let name: String
         let size: Int64
         let type: String
         let modifiedAt: Int64?
 
         init?(_ url: URL) {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .contentTypeKey, .nameKey]) else { return nil }
-            self.url = url
             name = values.name ?? url.lastPathComponent
             size = Int64(values.fileSize ?? 0)
             type = values.contentType?.preferredMIMEType ?? "application/octet-stream"
@@ -1074,58 +1084,90 @@ final class AppModel {
         }
     }
 
-    /// Uploads the picked `urls` one after another under the level shown (`DepotFiles.upload`): a name a file already holds
-    /// offers its replace (Depot's `replaceConfirm`), a refusal says why.
-    func uploadFiles(_ urls: [URL]) async {
+    /// The level shown, by name: where an upload lands.
+    private var levelLabel: String {
+        shell.folder?.name ?? Names.spaceName(spaces.first { $0.scopeId == shell.space })
+    }
+
+    /// Queues the picked `urls` as new files under the level shown (`DepotFiles.UploadJob`): a name a file already holds
+    /// offers its replace (Depot's `replaceConfirm`).
+    func uploadFiles(_ urls: [URL]) {
         guard let t = tenantSession, let scopeId = shell.space else { return }
-        for url in urls {
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard let p = Picked(url) else { continue }
-            uploading = p.name
-            let r = try? await AppleDepot.shared.upload(
-                tenant: t, scopeId: scopeId, parentId: shell.folder?.nodeId, path: p.url.path, name: p.name, size: p.size, type: p.type,
+        let parentId = shell.folder?.nodeId
+        let jobs: [UploadQueueJob] = urls.compactMap { url in
+            guard let p = Picked(url) else { return nil }
+            return AppleDepot.shared.uploadJob(
+                tenant: t, scopeId: scopeId, parentId: parentId, url: url, name: p.name, size: p.size, type: p.type,
                 modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) }
             )
-            uploading = nil
-            await refreshLists(t)
-            if let r, r.outcome == .exists, let existing = r.existing {
-                notice = Notice(
-                    text: String(localized: "Replace “\(p.name)”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history."),
-                    action: String(localized: "Replace File")
-                ) { [weak self] in await self?.replaceFile(existing, url: url, expected: self?.files[existing]?.blobId) }
-            } else if let problem = Self.uploadProblem(p.name, r?.outcome) {
-                notice = Notice(text: problem)
-            }
+        }
+        enqueueDepot(jobs, label: levelLabel, key: parentId ?? scopeId)
+    }
+
+    private func enqueueDepot(_ jobs: [UploadQueueJob], label: String, key: String?) {
+        uploads.enqueue(jobs: jobs, label: label, key: key, onSettled: { @Sendable item in
+            nonisolated(unsafe) let item = item
+            Task { @MainActor [weak self] in await self?.depotSettled(item) }
+        }, onFinished: nil)
+    }
+
+    /// A Depot item settled: the lists read anew; a name a file holds offers that file's replace, content someone replaced
+    /// meanwhile "Replace anyway" — each said once, the item taken out of the tray (its notice says it).
+    private func depotSettled(_ item: UploadQueue.Item) async {
+        guard let t = tenantSession else { return }
+        await refreshLists(t)
+        guard item.status == .failed else { return }
+        if let job = item.job as? DepotFiles.UploadJob, item.error == DepotFiles.Codes.shared.EXISTS, let existing = job.existing {
+            uploads.remove(id: item.id)
+            let picked = job.picked
+            notice = Notice(
+                text: String(localized: "Replace “\(item.name)”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history."),
+                action: String(localized: "Replace File")
+            ) { [weak self] in self?.replace(existing, source: picked, expected: self?.files[existing]?.blobId) }
+        } else if let job = item.job as? DepotFiles.ReplaceJob, item.error == DepotFiles.Codes.shared.STALE {
+            uploads.remove(id: item.id)
+            let picked = job.picked
+            let current = job.currentBlobId
+            let nodeId = job.file.nodeId
+            notice = Notice(
+                text: String(localized: "“\(item.name)” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first."),
+                action: String(localized: "Replace anyway")
+            ) { [weak self] in self?.replace(nodeId, source: picked, expected: current) }
         }
     }
 
+    /// Queues file `nodeId`'s content replaced with `source` over `expected`.
+    private func replace(_ nodeId: String, source: UploadSource, expected: String?) {
+        guard let t = tenantSession, let f = files[nodeId] else { return }
+        enqueueDepot([DepotFiles.ReplaceJob(tenant: t, file: f, source: source, expectedBlobId: expected, name: source.name)], label: source.name, key: nodeId)
+    }
+
     /// Depot's "Upload folder…": the directory at `url` (the system's folder picker) listed here — only its files, hidden ones
-    /// included, as the web's directory input holds them — and uploaded under the level shown (`FolderUpload`); what did not
-    /// go up is said, in the web's words.
+    /// included, as the web's directory input holds them —, its folders made under the level shown (`FolderUpload`) and its
+    /// files queued as one batch under its name; what could not be made is said, in the web's words.
     func uploadFolder(_ url: URL) async {
         guard let t = tenantSession, let scopeId = shell.space else { return }
         let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let files = Self.folderFiles(url)
-        let report = try? await AppleDepot.shared.uploadFolder(
-            tenant: t, scopeId: scopeId, parentId: shell.folder?.nodeId, rootName: url.lastPathComponent, files: files
-        ) { @Sendable name, done, total in
-            Task { @MainActor [weak self] in self?.uploading = "\(name) (\(done.intValue + 1)/\(total.intValue))" }
-        }
-        uploading = nil
+        if scoped { url.stopAccessingSecurityScopedResource() }
+        preparing = url.lastPathComponent
+        let report = try? await AppleDepot.shared.prepareFolder(
+            tenant: t, scopeId: scopeId, parentId: shell.folder?.nodeId, root: url, rootName: url.lastPathComponent, files: files
+        )
+        preparing = nil
         await refreshLists(t)
         guard let report else { notice = Notice(text: String(localized: "That didn’t work — please try again.")); return }
         let size = ByteCountFormatter.string(fromByteCount: report.bytes, countStyle: .file)
-        var said: [String] = []
         switch report.outcome {
-        case .noRoom: said = [String(localized: "“\(report.name)” was not uploaded: there is not enough storage space for it (\(size)). Free some space, or ask whoever runs your space.")]
-        case .rootFailed: said = [String(localized: "“\(report.name)” could not be created, so nothing of it was uploaded.")]
-        default:
-            said = report.failedFolders.map { String(localized: "The folder “\($0)” could not be created, so nothing in it was uploaded.") }
-                + report.failedFiles.compactMap { Self.uploadProblem($0.first as String? ?? "", $0.second) }
+        case .noRoom: notice = Notice(text: String(localized: "“\(report.name)” was not uploaded: there is not enough storage space for it (\(size)). Free some space, or ask whoever runs your space."))
+        case .rootFailed: notice = Notice(text: String(localized: "“\(report.name)” could not be created, so nothing of it was uploaded."))
+        case .ready:
+            if !report.failedFolders.isEmpty {
+                notice = Notice(text: report.failedFolders.map { String(localized: "The folder “\($0)” could not be created, so nothing in it was uploaded.") }.joined(separator: "\n"))
+            }
+            enqueueDepot(report.jobs, label: report.name, key: report.rootId)
+        default: break
         }
-        if !said.isEmpty { notice = Notice(text: said.joined(separator: "\n")) }
     }
 
     /// The files below the directory at `url` (hidden ones included, as the web's directory input holds them), each by its
@@ -1149,39 +1191,25 @@ final class AppModel {
         return files
     }
 
-    /// Replaces file `nodeId` with the file at `url` over `expected`, and says how it went (a content changed meanwhile
-    /// offers "Replace anyway").
-    func replaceFile(_ nodeId: String, url: URL, expected: String?) async {
-        guard let t = tenantSession, let f = files[nodeId] else { return }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let p = Picked(url) else { return }
-        uploading = p.name
-        let r = try? await AppleDepot.shared.replace(
-            tenant: t, file: f, path: p.url.path, name: p.name, size: p.size, type: p.type,
+    /// The header's "Replace…": file `nodeId`'s content replaced with the picked file at `url` over `expected`, queued.
+    func replaceFile(_ nodeId: String, url: URL, expected: String?) {
+        guard let t = tenantSession, let f = files[nodeId], let p = Picked(url) else { return }
+        let job = AppleDepot.shared.replaceJob(
+            tenant: t, file: f, url: url, name: p.name, size: p.size, type: p.type,
             modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) }, expectedBlobId: expected
         )
-        uploading = nil
-        await refreshLists(t)
-        if r?.outcome == .stale {
-            let current = r?.currentBlobId
-            notice = Notice(text: Self.uploadProblem(p.name, .stale) ?? "", action: String(localized: "Replace anyway")) { [weak self] in
-                await self?.replaceFile(nodeId, url: url, expected: current)
-            }
-        } else if let problem = Self.uploadProblem(p.name, r?.outcome) {
-            notice = Notice(text: problem)
-        }
+        enqueueDepot([job], label: p.name, key: nodeId)
     }
 
-    /// Why an upload of `name` did not land, in Depot's words (`depot.errors.*`), or nil once it did.
-    private static func uploadProblem(_ name: String, _ outcome: DepotFiles.Outcome?) -> String? {
-        switch outcome {
-        case .done: nil
-        case .takenByOther: String(localized: "“\(name)” was not uploaded: a folder, Memory or file with a similar name already exists here.")
-        case .stale: String(localized: "“\(name)” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first.")
-        case .noRoom: String(localized: "“\(name)” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.")
-        case .busy: String(localized: "The space’s key is being renewed. Try again in a moment.")
-        default: String(localized: "“\(name)” could not be uploaded.")
+    /// Why `item` did not go up, in its application's words (the uploads list's line under it); nil while it may still.
+    func uploadProblem(_ item: UploadQueue.Item) -> String? {
+        guard item.status == .failed else { return nil }
+        switch item.error {
+        case UploadQueue.companion.QUOTA_EXCEEDED: return String(localized: "No space left. Items in a trash still take up space until they are removed for good.")
+        case UploadQueue.companion.APPLICATION_OFF: return String(localized: "This application is switched off here.")
+        case DepotFiles.Codes.shared.NAME_TAKEN: return String(localized: "A folder, Memory or file with a similar name already exists here.")
+        case DepotFiles.Codes.shared.BUSY: return String(localized: "The space’s key is being renewed. Try again in a moment.")
+        default: return String(localized: "Failed")
         }
     }
 

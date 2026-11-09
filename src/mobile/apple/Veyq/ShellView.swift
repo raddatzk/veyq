@@ -265,13 +265,13 @@ struct Bar: View {
         .fileImporter(isPresented: Binding(get: { model.replacing != nil }, set: { if !$0 { model.replacing = nil } }), allowedContentTypes: [.item]) { result in
             guard let nodeId = model.replacing, case .success(let url) = result else { return }
             model.replacing = nil
-            Task { await model.replaceFile(nodeId, url: url, expected: model.files[nodeId]?.blobId) }
+            model.replaceFile(nodeId, url: url, expected: model.files[nodeId]?.blobId)
         }
         .overlay(alignment: .top) {
-            if let name = model.uploading {
+            if let name = model.preparing {
                 VStack(spacing: 4) {
                     ProgressView()
-                    Text("Uploading “\(name)”…").font(.footnote).foregroundStyle(Role.muted)
+                    Text("Creating the folders of “\(name)”…").font(.footnote).foregroundStyle(Role.muted)
                 }
                 .padding(10)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
@@ -288,6 +288,8 @@ struct Bar: View {
                 Button(action: onMenu) { Image(systemName: "line.3.horizontal") }
             }
         }
+        // what is being uploaded (core's queue), while something is
+        ToolbarItem(placement: .primaryAction) { UploadsButton(model: model) }
         // An open object's header: core's actions for every kind (the web's `NodePage` + `NodeHeader`), with what its kind's
         // page contributes.
         ToolbarItem(placement: .primaryAction) {
@@ -408,7 +410,7 @@ struct HomeView: View {
         // Depot's "Upload files": the system's picker hands over the files chosen, uploaded here one after another
         .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
-            Task { await model.uploadFiles(urls) }
+            model.uploadFiles(urls)
         }
         // Depot's "Upload folder…": the folder picker hands over one directory, uploaded here whole (a second importer on its
         // own view: SwiftUI presents only one per view)
