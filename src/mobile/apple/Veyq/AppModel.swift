@@ -1019,6 +1019,59 @@ final class AppModel {
         return written == nil ? nil : url
     }
 
+    /// Why a node was left out of a download or a copy, in the web's words (`export.reason.*`, `node.copy.reason.*`).
+    private static func leftOutLine(_ s: NodeExport.Skipped) -> String {
+        let reason = switch s.reason {
+        case NodeExport.shared.NOTHING_TO_EXPORT: String(localized: "nothing in it")
+        case SubtreeCopy.shared.NOT_COPYABLE: String(localized: "cannot be copied yet")
+        default: String(localized: "not supported")
+        }
+        return String(localized: "“\(s.name)”: \(reason)")
+    }
+
+    /// Folder `ref` with everything under it as the web's ZIP in a temporary file (core's `NodeExport`, the kinds the
+    /// composition root exports), and what it left out as lines to say; nil when it did not finish.
+    func downloadFolder(_ ref: NodeAt) async -> Downloaded? {
+        guard let t = tenantSession else { return nil }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
+        let url = dir.appendingPathComponent(NodeExport.shared.fileName(name: ref.name))
+        let skipped = try? await FileDownloads.shared.subtree(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, kinds: AppKinds.shared.exports(deletedName: String(localized: "deleted person")),
+            appVersion: String(VeyqAccount.companion.MAJOR), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: url.path
+        )
+        guard let skipped else { return nil }
+        return Downloaded(url: url, leftOut: skipped.map(Self.leftOutLine))
+    }
+
+    /// What a copy of folder `ref` would make (its kinds) and leave out (as lines to say), before anything is written.
+    func copyPreview(_ ref: NodeAt) async -> (kinds: Set<String>, leftOut: [String]) {
+        guard let t = tenantSession,
+              let p = try? await SubtreeCopy.shared.preview(tenant: t, scopeId: ref.scopeId, rootId: ref.nodeId,
+                                                           kinds: AppKinds.shared.copies(deletedName: "", uuid: { @Sendable in "" })) else { return ([], []) }
+        return (p.kinds, p.leftOut.map(Self.leftOutLine))
+    }
+
+    /// Copies folder `ref` with everything under it to `to` (nil: the space's top) in its space (core's `SubtreeCopy`): a new
+    /// folder tree under fresh keys, each Pot by Expenses' copy; the lists are read anew and the shell says where it went.
+    /// Why not, or nil once copied.
+    func copyFolder(_ ref: NodeAt, to: String?, toName: String) async -> String? {
+        guard let t = tenantSession else { return String(localized: "The copy did not go through. Nothing was left behind; please try again.") }
+        let r = try? await SubtreeCopy.shared.duplicate(
+            tenant: t, scopeId: ref.scopeId, rootId: ref.nodeId, parentId: to,
+            kinds: AppKinds.shared.copies(deletedName: String(localized: "deleted person"), uuid: { @Sendable in UUID().uuidString.lowercased() })
+        )
+        await refreshLists(t)
+        switch r?.outcome {
+        case .copied:
+            trashNotice = TrashNotice(message: String(localized: "“\(ref.name)” is copied to “\(toName)”."), node: nil, moveBack: nil)
+            return nil
+        case .nameTaken: return String(localized: "There is no free name for the copy there. Rename it first, or choose another place.")
+        case .nothingToCopy: return String(localized: "Nothing here can be copied by this version of veyq.")
+        default: return String(localized: "The copy did not go through. What it made was moved to the trash; please try again.")
+        }
+    }
+
     func openReceipt(_ receiptId: String) async -> Data? {
         guard let session = potSession else { return nil }
         return (try? await AppleSessions.shared.openReceipt(pot: session, receiptId: receiptId)) ?? nil

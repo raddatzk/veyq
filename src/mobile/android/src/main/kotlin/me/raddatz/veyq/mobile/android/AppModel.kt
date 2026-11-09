@@ -939,6 +939,70 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         done
     }
 
+    /** Why a node was left out of a download or a copy, in the web's words (`export.reason.*`, `node.copy.reason.*`). */
+    private fun leftOutLine(s: me.raddatz.veyq.mobile.export.NodeExport.Skipped): String {
+        val app = getApplication<Application>()
+        val reason = app.getString(
+            when (s.reason) {
+                me.raddatz.veyq.mobile.export.NodeExport.NOTHING_TO_EXPORT -> R.string.left_out_nothing
+                me.raddatz.veyq.mobile.export.SubtreeCopy.NOT_COPYABLE -> R.string.left_out_not_copyable
+                else -> R.string.left_out_unsupported
+            },
+        )
+        return app.getString(R.string.left_out_line, s.name, reason)
+    }
+
+    /**
+     * Writes folder [ref] and everything under it as the web's ZIP into [out] (core's `NodeExport.walk` and `write`, the kinds
+     * the composition root exports); what it left out, as lines to say, or null when it did not finish.
+     */
+    suspend fun downloadFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt, out: java.io.OutputStream): List<String>? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val t = tenantSession ?: return@withContext null
+        val deleted = getApplication<Application>().getString(R.string.pot_deleted_person)
+        val skipped = runCatching {
+            val walked = me.raddatz.veyq.mobile.export.NodeExport.walk(t, ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.AppKinds.exports(deleted)) ?: return@runCatching null
+            out.buffered(1 shl 16).let { b ->
+                me.raddatz.veyq.mobile.export.NodeExport.write(
+                    walked.root, me.raddatz.veyq.mobile.session.VeyqAccount.MAJOR.toString(), System.currentTimeMillis(),
+                    { java.security.MessageDigest.getInstance("SHA-256").digest(it) },
+                ) { b.write(it) }
+                b.flush()
+            }
+            walked.skipped
+        }.getOrNull()
+        runCatching { out.close() }
+        skipped?.map(::leftOutLine)
+    }
+
+    /** What a copy of folder [ref] would make (its kinds) and leave out (as lines to say), before anything is written. */
+    suspend fun copyPreview(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<Set<String>, List<String>> {
+        val t = tenantSession ?: return emptySet<String>() to emptyList()
+        val p = runCatching {
+            me.raddatz.veyq.mobile.export.SubtreeCopy.preview(t, ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.AppKinds.copies("") { "" })
+        }.getOrNull() ?: return emptySet<String>() to emptyList()
+        return p.kinds to p.leftOut.map(::leftOutLine)
+    }
+
+    /**
+     * Copies folder [ref] with everything under it to [to] (null: the space's top) in its space (core's `SubtreeCopy`): a new
+     * folder tree under fresh keys, each Pot by Expenses' copy; the lists are read anew. Why not, or null once copied.
+     */
+    suspend fun copyFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt, to: String?): String? {
+        val app = getApplication<Application>()
+        val t = tenantSession ?: return app.getString(R.string.copy_failed)
+        val deleted = app.getString(R.string.pot_deleted_person)
+        val r = runCatching {
+            me.raddatz.veyq.mobile.export.SubtreeCopy.duplicate(t, ref.scopeId, ref.nodeId, to, me.raddatz.veyq.mobile.AppKinds.copies(deleted) { java.util.UUID.randomUUID().toString() })
+        }.getOrNull()
+        refreshLists(t)
+        return when (r?.outcome) {
+            me.raddatz.veyq.mobile.export.SubtreeCopy.Outcome.COPIED -> null
+            me.raddatz.veyq.mobile.export.SubtreeCopy.Outcome.NAME_TAKEN -> app.getString(R.string.copy_name_taken)
+            me.raddatz.veyq.mobile.export.SubtreeCopy.Outcome.NOTHING_TO_COPY -> app.getString(R.string.copy_nothing)
+            else -> app.getString(R.string.copy_failed_rolled_back)
+        }
+    }
+
     suspend fun openReceipt(receiptId: String): ByteArray? = potSession?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }
 
     /** The receipts the last save left out for want of room (the entry was saved). */

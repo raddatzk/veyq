@@ -15,10 +15,36 @@ struct HeaderContribution {
     let deleteQuestion: String
     /// The copy door: copies to the folder chosen (nil: the space's top; then its name), answers why not, or nil once copied.
     var copy: ((String?, String) async -> String?)?
-    /// The download door: writes the node's ZIP to a temporary file, its URL once whole.
-    var download: (() async -> URL?)?
+    /// What the copy dialog says before anything is written: what does not come along and what is left out (the web's).
+    var copyNotes: (() async -> CopyNotes)?
+    /// The download door: writes the node's ZIP to a temporary file; it and what it left out, or nil when not whole.
+    var download: (() async -> Downloaded?)?
     /// The application's own actions, merged into core's plan where the kind's order puts them.
     var actions: [OwnAction] = []
+}
+
+/// What a copy leaves behind (`losses`, the kinds' `copyLosses` after core's line) and leaves out (`leftOut`).
+struct CopyNotes {
+    var losses: [String]
+    var leftOut: [String] = []
+}
+
+/// A download written: the file, and what it left out (lines to say).
+struct Downloaded {
+    let url: URL
+    var leftOut: [String] = []
+}
+
+/// What a copy of a node of `kind` leaves behind, in its kind's words (the web descriptor's `copyLosses`).
+func copyLosses(_ kind: String) -> [String] {
+    switch kind {
+    case "FOLDER": [String(localized: "A folder’s cover.")]
+    case PotSession.companion.KIND: [
+        String(localized: "The history of each entry and the deleted entries: a copy starts every entry at its current version."),
+        String(localized: "A Pot’s cover."),
+    ]
+    default: []
+    }
 }
 
 /// An action of the application's own on its node's header.
@@ -50,10 +76,18 @@ struct KindPage {
         }
     }
 
-    private static let folder = KindPage(shareable: true, takesCover: true, header: { node, _ in
+    /// Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`).
+    private static let folder = KindPage(shareable: true, takesCover: true, header: { node, model in
         HeaderContribution(
             deleteTitle: String(localized: "Delete Folder"),
-            deleteQuestion: String(localized: "“\(node.name)” and everything in it go to the trash.")
+            deleteQuestion: String(localized: "“\(node.name)” and everything in it go to the trash."),
+            copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
+            copyNotes: {
+                let p = await model.copyPreview(node)
+                var seen = Set<String>()
+                return CopyNotes(losses: p.kinds.sorted().flatMap(copyLosses).filter { seen.insert($0).inserted }, leftOut: p.leftOut)
+            },
+            download: { await model.downloadFolder(node) }
         )
     })
 
@@ -78,7 +112,8 @@ struct KindPage {
                 default: String(localized: "The copy did not go through. Nothing was left behind; please try again.")
                 }
             } : nil,
-            download: { await model.downloadPot(ref) }
+            copyNotes: { CopyNotes(losses: copyLosses(PotSession.companion.KIND)) },
+            download: { await model.downloadPot(ref).map { Downloaded(url: $0) } }
         )
     }, body: { ref, key, model in AnyView(PotScreen(model: model, ref: ref, tab: key)) })
 }
@@ -104,6 +139,8 @@ struct NodeHeaderActions: View {
     @State private var failed: String?
     @State private var downloading = false
     @State private var downloaded: URL?
+    /// What the last download left out, said once its file is saved.
+    @State private var leftOut: [String] = []
 
     private var plan: NodeHeader.Plan {
         let page = KindPage.of(node.kind)
@@ -148,7 +185,7 @@ struct NodeHeaderActions: View {
         .sheet(isPresented: shown(NodeHeader.shared.REPORT)) { ReportSheet(model: model, ref: node) }
         .sheet(isPresented: shown(NodeHeader.shared.COVER)) { CoverSheet(model: model, node: node) }
         .sheet(isPresented: shown(NodeHeader.shared.MOVE)) { NodeMoveSheet(model: model, ref: node) }
-        .sheet(isPresented: shown(NodeHeader.shared.COPY)) { NodeMoveSheet(model: model, ref: node, copy: contribution.copy) }
+        .sheet(isPresented: shown(NodeHeader.shared.COPY)) { NodeMoveSheet(model: model, ref: node, copy: contribution.copy, notes: contribution.copyNotes) }
         // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.
         .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
             cleanUpDownload()
@@ -235,14 +272,24 @@ struct NodeHeaderActions: View {
     private func download() async {
         guard let door = contribution.download else { return }
         downloading = true
-        let url = await door()
+        let written = await door()
         downloading = false
-        if let url { downloaded = url } else { failed = String(localized: "“\(node.name)” could not be downloaded. Please try again.") }
+        if let written {
+            leftOut = written.leftOut
+            downloaded = written.url
+        } else {
+            failed = String(localized: "“\(node.name)” could not be downloaded. Please try again.")
+        }
     }
 
     private func cleanUpDownload() {
         if let url = downloaded { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         downloaded = nil
+        // what the archive left out, said once the save sheet is gone
+        if !leftOut.isEmpty {
+            failed = String(localized: "Left out, because this version cannot download them: \(leftOut.joined(separator: "; "))")
+            leftOut = []
+        }
     }
 }
 

@@ -406,6 +406,14 @@
     <string name="copy_losses">What does not come along:</string>
     <string name="copy_loss_always">Shares, favourites, the trash and the original upload times. You become the owner of the copy.</string>
     <string name="copy_loss_pot">The history of each entry and the deleted entries: a copy starts every entry at its current version.</string>
+    <string name="copy_loss_folder_cover">A folder’s cover.</string>
+    <string name="copy_left_out">Left out, because this version cannot copy them:</string>
+    <string name="copy_failed_rolled_back">The copy did not go through. What it made was moved to the trash; please try again.</string>
+    <string name="download_left_out">Left out, because this version cannot download them: %1$s</string>
+    <string name="left_out_line">“%1$s”: %2$s</string>
+    <string name="left_out_unsupported">not supported</string>
+    <string name="left_out_nothing">nothing in it</string>
+    <string name="left_out_not_copyable">cannot be copied yet</string>
     <string name="copy_loss_cover">A Pot’s cover.</string>
     <string name="copy_done">“%1$s” is copied to “%2$s”.</string>
     <string name="copy_failed">The copy did not go through. Nothing was left behind; please try again.</string>

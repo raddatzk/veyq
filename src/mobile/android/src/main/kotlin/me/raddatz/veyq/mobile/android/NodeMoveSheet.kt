@@ -55,8 +55,12 @@ internal fun NodeMoveSheet(
     /** The browser as "Copy to…" (the web's `CopyNodesDialog`): copies to the place chosen, answers why not or null once
      *  copied; a copy may go where its original is. Null: the move. */
     copy: (suspend (to: String?) -> String?)? = null,
+    /** What the copy leaves behind and out, read before anything is written (the kind's; null: core's line alone). */
+    notes: (suspend () -> CopyNotes)? = null,
     onClose: () -> Unit,
 ) {
+    var read by remember { mutableStateOf<CopyNotes?>(null) }
+    LaunchedEffect(ref, notes) { read = notes?.invoke() }
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     var tree by remember { mutableStateOf<List<NodeRef>?>(null) }
@@ -77,8 +81,13 @@ internal fun NodeMoveSheet(
             if (copy != null) {
                 // what a copy leaves behind, in the web's words (core's, then the kind's `copyLosses`)
                 Text(stringResource(R.string.copy_losses), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                listOf(R.string.copy_loss_always, R.string.copy_loss_pot, R.string.copy_loss_cover).forEach {
-                    Text("• " + stringResource(it), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                (listOf(stringResource(R.string.copy_loss_always)) + read?.losses.orEmpty()).forEach {
+                    Text("• $it", style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                }
+                val left = read?.leftOut.orEmpty()
+                if (left.isNotEmpty()) {
+                    Text(stringResource(R.string.copy_left_out), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                    left.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = role(palette.muted)) }
                 }
             }
             val nodes = tree

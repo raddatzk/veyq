@@ -32,7 +32,7 @@ A Gradle build of its own, run through its own wrapper.
   `LedgerRulesTest`; `BigTest` holds `expenses/Big.kt` to `java.math.BigInteger`. A rule of `expenses/Ledger.kt` or
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
   (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries (`PotViewPeopleTest`, `PotViewEntriesTest`), of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`), of
-  core's `session/NodeMove.kt` browser rules (`NodeMoveTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), and of core's `session/NodeRekey.kt` frontier and what it
+  core's `session/NodeMove.kt` browser rules (`NodeMoveTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`), and of core's `session/NodeRekey.kt` frontier and what it
   leaves to another device (`NodeRekeyRulesTest`).
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
@@ -84,7 +84,10 @@ A Gradle build of its own, run through its own wrapper.
   removes it again; with `VEYQ_LIVE_COVER_KEEP=1` it stays, for the web's rows and header. `VEYQ_LIVE_COVER_CROP=<pot name>`
   (`--tests '*CoverCropLiveTest*'`) sets a drawn cover framed on its left half, reads the crop back, frames it on its right
   half by a crop-only write (the blob kept) and removes it — kept with `VEYQ_LIVE_COVER_KEEP=1`: the web's header then shows
-  the blue half with the white disc. `VEYQ_LIVE_REPORT=<pot name>` reports a fresh Pot beside it — its three keys open here, the server answers with a
+  the blue half with the white disc. `VEYQ_LIVE_FOLDER="<root folder>/<folder>"` (`--tests '*FolderLiveTest*'`) downloads that folder whole and
+  reads the archive back (every folder a directory without content, every payload to its SHA-256; `VEYQ_LIVE_EXPORT_OUT=<file>`
+  keeps it, for the web's import: New, Upload files, the archive), then copies it beside itself and checks a fresh session
+  reads every Pot of the copy as the original's; the copy is trashed unless `VEYQ_LIVE_COPY_KEEP=1`. `VEYQ_LIVE_REPORT=<pot name>` reports a fresh Pot beside it — its three keys open here, the server answers with a
   receipt — and trashes it; each run leaves an open report for the dev moderators, so run it once, not in a loop. `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
   names taken and a sibling's refused, and trashes it; `VEYQ_LIVE_RENAME_TARGET="<from>|<to>"` renames the root Pot
   `<from>` (created when there is none) and prints what the re-seal of its links did — with a link the web minted on it,

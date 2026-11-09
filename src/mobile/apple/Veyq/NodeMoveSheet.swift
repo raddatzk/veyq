@@ -11,6 +11,9 @@ struct NodeMoveSheet: View {
     /// The browser as "Copy to…" (the web's `CopyNodesDialog`), its kind's copy door: copies to the place chosen (nil: the
     /// space's top; then its name), answers why not, or nil once copied. A copy may go where its original is. Nil: the move.
     var copy: ((String?, String) async -> String?)? = nil
+    /// What the copy leaves behind and out, read before anything is written (the kind's; nil: core's line alone).
+    var notes: (() async -> CopyNotes)? = nil
+    @State private var read: CopyNotes?
     private var copying: Bool { copy != nil }
     @Environment(\.dismiss) private var dismiss
     @State private var tree: [NodeRef]?
@@ -57,10 +60,16 @@ struct NodeMoveSheet: View {
                     // what a copy leaves behind, in the web's words (core's, then the kind's `copyLosses`)
                     Section("What does not come along") {
                         Text("Shares, favourites, the trash and the original upload times. You become the owner of the copy.")
-                        Text("The history of each entry and the deleted entries: a copy starts every entry at its current version.")
-                        Text("A Pot’s cover.")
+                        ForEach(read?.losses ?? [], id: \.self) { Text($0) }
                     }
                     .font(.footnote).foregroundStyle(Role.muted)
+                    .task { read = await notes?() }
+                    if let left = read?.leftOut, !left.isEmpty {
+                        Section("Left out, because this version cannot copy them:") {
+                            ForEach(left, id: \.self) { Text($0) }
+                        }
+                        .font(.footnote).foregroundStyle(Role.muted)
+                    }
                 }
                 Section {
                     // The trail: the space's root, then each folder down to the place on screen.

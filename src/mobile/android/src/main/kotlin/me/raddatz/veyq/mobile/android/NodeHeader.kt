@@ -76,11 +76,16 @@ internal class HeaderContribution(
     val deleteQuestion: String,
     /** The copy door: copies to the folder chosen (null: the space's top), answers why not, or null once copied. */
     val copy: (suspend (to: String?) -> String?)? = null,
-    /** The download door: writes the node's ZIP to the stream, true once whole. */
-    val download: (suspend (java.io.OutputStream) -> Boolean)? = null,
+    /** What the copy dialog says before anything is written: what does not come along and what is left out (the web's). */
+    val copyNotes: (suspend () -> CopyNotes)? = null,
+    /** The download door: writes the node's ZIP to the stream; what it left out (lines to say), or null when not whole. */
+    val download: (suspend (java.io.OutputStream) -> List<String>?)? = null,
     /** The application's own actions, merged into core's plan where the kind's order puts them. */
     val actions: List<OwnAction> = emptyList(),
 )
+
+/** What a copy leaves behind ([losses], the kinds' `copyLosses` after core's line) and leaves out ([leftOut]). */
+internal class CopyNotes(val losses: List<String>, val leftOut: List<String> = emptyList())
 
 /** An action of the application's own on its node's header. */
 internal class OwnAction(val id: String, val label: String, val icon: ImageVector, val slot: Plan.Slot = Plan.Slot.ANY, val onClick: () -> Unit)
@@ -132,10 +137,17 @@ internal fun NodeHeaderActions(
         if (uri == null || door == null) return@rememberLauncherForActivityResult
         scope.launch {
             val out = runCatching { context.contentResolver.openOutputStream(uri) }.getOrNull()
-            val ok = out != null && out.use { door(it) }
+            val left = out?.use { door(it) }
             // a half archive is no download: the document goes again
-            if (!ok) runCatching { android.provider.DocumentsContract.deleteDocument(context.contentResolver, uri) }
-            snackbar.showSnackbar(if (ok) downloaded else downloadFailed)
+            if (left == null) runCatching { android.provider.DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            snackbar.showSnackbar(
+                when {
+                    left == null -> downloadFailed
+                    left.isEmpty() -> downloaded
+                    else -> downloaded + " " + context.getString(R.string.download_left_out, left.joinToString("; "))
+                },
+                duration = if (left.isNullOrEmpty()) SnackbarDuration.Short else SnackbarDuration.Long,
+            )
         }
     }
     val favoriteFailed = stringResource(R.string.node_favorite_failed)
@@ -207,7 +219,7 @@ internal fun NodeHeaderActions(
         }, onClose = close)
         Plan.COPY -> NodeMoveSheet(node, rootName, model, onMoved = { to, _ ->
             scope.launch { snackbar.showSnackbar(context.getString(R.string.copy_done, node.name, to)) }
-        }, copy = contribution.copy, onClose = close)
+        }, copy = contribution.copy, notes = contribution.copyNotes, onClose = close)
         Plan.DELETE -> AlertDialog(
             onDismissRequest = close,
             title = { Text(contribution.deleteTitle) },

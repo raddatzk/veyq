@@ -284,7 +284,18 @@ implementation exists but what holds it to the first.
   Home): a folder there (`session/FolderCreate.kt`, its name refused where a sibling folds the same) or a Pot there. A
   folder Home shows has core's actions as the web's level header does — favorite, rename, move, cover, report, delete with
   its undo (`navigation/NodeAt`, the node any of them takes, whatever its kind) — and Home's path is read anew from the tree
-  where the folder shown was renamed or moved (`Shell.at`); a folder's download and copy are not built.
+  where the folder shown was renamed or moved (`Shell.at`). A folder downloads and copies whole, as the web's
+  `exportSubtree.ts` and `copySubtree.ts` do it: the download walks the subtree (`export/NodeExport.kt` `walk`), each folder a
+  directory without content, each kind the build exports its content (`AppKinds.exports`: a Pot), the rest left out with what
+  is under it and said after the save, and writes the directories, then the payloads, then the manifest, as the web does; the
+  copy (`export/SubtreeCopy.kt`) plans first — the copy dialog names what does not come along (core's line, each copied
+  kind's `copyLosses`) and what is left out —, then creates top-down, the root beside its original as "name (2)" and so on, a
+  folder as core's new folder and a Pot by `PotCopy`, and moves what it made to the trash where it fails part-way.
+  Measured 2026-11-09: `FolderExportTest` (the layout and the manifest; an empty folder's children turn it red); a folder of
+  a Pot with a receipt and a folder holding a Pot, downloaded by `FolderLiveTest` and imported by the web's upload screen,
+  the Pot there opening with its entry; the same folder copied by `FolderLiveTest` and from Android's header, every Pot of the
+  copy reading as the original's (a copy that skips what is under a folder turns it red). The web's storage check before a
+  copy (`checkTenantStorageFit`) is not made here yet.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's

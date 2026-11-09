@@ -25,10 +25,18 @@ internal class KindPage(
 
 /** The pages this build registers, by kind: core's folder and each application's kinds (the composition root). */
 internal object KindPages {
-    private val folder = KindPage(shareable = true, takesCover = true, header = { node, _ ->
+    /** Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`). */
+    private val folder = KindPage(shareable = true, takesCover = true, header = { node, model ->
+        val context = LocalContext.current
         HeaderContribution(
             deleteTitle = stringResource(R.string.folder_delete),
             deleteQuestion = stringResource(R.string.folder_delete_confirm, node.name),
+            copy = { to -> model.copyFolder(node, to) },
+            copyNotes = {
+                val (kinds, left) = model.copyPreview(node)
+                CopyNotes(kinds.flatMap { copyLosses(context, it) }.distinct(), left)
+            },
+            download = { out -> model.downloadFolder(node, out) },
         )
     })
 
@@ -44,6 +52,13 @@ internal object KindPages {
     }
 }
 
+/** What a copy of a node of [kind] leaves behind, in its kind's words (the web descriptor's `copyLosses`). */
+private fun copyLosses(context: android.content.Context, kind: String): List<String> = when (kind) {
+    "FOLDER" -> listOf(context.getString(R.string.copy_loss_folder_cover))
+    PotSession.KIND -> listOf(context.getString(R.string.copy_loss_pot), context.getString(R.string.copy_loss_cover))
+    else -> emptyList()
+}
+
 @Composable
 private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
     val context = LocalContext.current
@@ -57,6 +72,7 @@ private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
         cover = writable,
         deleteTitle = stringResource(R.string.pot_delete),
         deleteQuestion = stringResource(R.string.pot_delete_confirm, node.name),
+        copyNotes = { CopyNotes(copyLosses(context, PotSession.KIND)) },
         copy = if (writable) { to ->
             val r = model.copyPot(ref, to)
             when (r.outcome) {
@@ -68,6 +84,6 @@ private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
                 PotCopy.Outcome.FAILED -> context.getString(R.string.copy_failed)
             }
         } else null,
-        download = { out -> model.downloadPot(ref, out) },
+        download = { out -> if (model.downloadPot(ref, out)) emptyList() else null },
     )
 }
