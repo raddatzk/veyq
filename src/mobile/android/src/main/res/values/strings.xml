@@ -378,4 +378,13 @@
     <string name="report_rate_limited">Too many reports in a short time. Try again later.</string>
     <string name="report_unavailable">Some of what you selected cannot be read here any more, so it cannot be reported. Reload the page.</string>
     <string name="report_not_found">Some of what you selected is not here any more. Reload the page.</string>
+    <string name="share_edit">Edit</string>
+    <string name="share_save">Save</string>
+    <string name="share_renew">Renew link</string>
+    <string name="share_renew_confirm">This makes a new link and deletes the old one. Hand out the new link.</string>
+    <string name="share_delete">Delete link</string>
+    <string name="share_delete_confirm">Delete this link for good? It can never be switched on or renewed again. Entries guests wrote stay in the Pot.</string>
+    <string name="share_password_keep">•••••••• (unchanged)</string>
+    <string name="share_password_lost">Its password cannot be read here any more, so it cannot be renewed without losing it.</string>
+    <string name="share_gone">This link was already renewed or deleted — the list now shows the current links.</string>
 </resources>

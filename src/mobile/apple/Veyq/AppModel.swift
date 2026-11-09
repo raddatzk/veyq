@@ -587,6 +587,54 @@ final class AppModel {
         return r
     }
 
+    private func rekeyHook(_ ref: ObjectRef) -> NodeRekeyContentRekey? {
+        ref.kind == PotSession.companion.KIND ? PotRekey.shared.content : nil
+    }
+
+    /// Edits one of this member's open links on `ref` in place: label, password (nil untouched, blank removed), end, role.
+    func editLink(_ ref: ObjectRef, shareId: String, edit: ShareLinkChanges.Edit) async -> ShareLinkChanges.Changed {
+        let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
+        guard let t = tenantSession else { return failed }
+        return (try? await ShareLinkChanges.shared.edit(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, edit: edit, nowMs: Int64(Date().timeIntervalSince1970 * 1000)
+        )) ?? failed
+    }
+
+    /// Renews link `shareId` on `ref`: a new address carrying its settings, the old one closed and the node re-keyed.
+    func renewLink(_ ref: ObjectRef, shareId: String) async -> ShareLinkChanges.Changed {
+        let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
+        guard let t = tenantSession else { return failed }
+        let r = (try? await ShareLinkChanges.shared.renew(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, content: rekeyHook(ref),
+            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
+            uuid: { @Sendable in UUID().uuidString.lowercased() }, nowMs: Int64(Date().timeIntervalSince1970 * 1000),
+            waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
+        )) ?? failed
+        await potRekeyed(ref)
+        return r
+    }
+
+    /// Deletes link `shareId` on `ref` for good.
+    func deleteLink(_ ref: ObjectRef, shareId: String) async -> ShareLinkChanges.Changed {
+        let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
+        guard let t = tenantSession else { return failed }
+        let r = (try? await ShareLinkChanges.shared.delete(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, content: rekeyHook(ref),
+            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
+            uuid: { @Sendable in UUID().uuidString.lowercased() }, nowMs: Int64(Date().timeIntervalSince1970 * 1000)
+        )) ?? failed
+        await potRekeyed(ref)
+        return r
+    }
+
+    /// An open Pot read anew under its key, after a link to it closed and it may have been re-keyed.
+    private func potRekeyed(_ ref: ObjectRef) async {
+        if pot?.ref == ref, let session = potSession {
+            _ = try? await session.rekeyed()
+            if potSession === session { pot?.view = PotView(session: session) }
+        }
+    }
+
     // MARK: A move (core's NodeMove)
 
     /// Where a move's undo puts the node back.

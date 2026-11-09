@@ -14,7 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -81,6 +82,19 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
     var fresh by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
+    var editing by remember { mutableStateOf<ShareLinks.Link?>(null) }
+    var renewing by remember { mutableStateOf<ShareLinks.Link?>(null) }
+    var deleting by remember { mutableStateOf<ShareLinks.Link?>(null) }
+    val changedText = { o: me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome ->
+        when (o) {
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE -> null
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE_REKEY_PENDING -> context.getString(R.string.share_closed_rekeying)
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.PASSWORD_LOST -> context.getString(R.string.share_password_lost)
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.GONE -> context.getString(R.string.share_gone)
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.RULES -> context.getString(R.string.share_requirement_refused)
+            else -> context.getString(R.string.share_failed)
+        }
+    }
     suspend fun load() {
         val read = model.shareLinks(ref)
         if (read == null) failed = true else { links = read; failed = false }
@@ -96,8 +110,18 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
             val made = fresh
             when {
                 made != null -> FreshLink(made) { fresh = null }
+                editing != null -> NewLinkForm(rules, onCancel = { editing = null }, editing = editing) { role, label, password, expiresAt ->
+                    val link = editing!!
+                    val r = model.editLink(ref, link.shareId, me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit(label, password, expiresAt, role))
+                    changedText(r.outcome).also {
+                        if (it == null) {
+                            editing = null
+                            scope.launch { load() }
+                        }
+                    }
+                }
                 creating -> NewLinkForm(rules, onCancel = { creating = false }) { role, label, password, expiresAt ->
-                    val minted = model.mintLink(ref, role, label, password, expiresAt)
+                    val minted = model.mintLink(ref, role, label, password.orEmpty(), expiresAt)
                     if (minted.outcome == ShareLinks.Outcome.CREATED) {
                         creating = false
                         fresh = minted.url
@@ -115,7 +139,14 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
                         list == null -> CircularProgressIndicator(Modifier.padding(16.dp).align(Alignment.CenterHorizontally))
                         else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
                             items(list, key = { it.shareId }) { link ->
-                                LinkRow(link, busy = busy == link.shareId, onSwitchOff = if (link.enabled && link.mine) {
+                                LinkRow(
+                                    link, busy = busy == link.shareId,
+                                    // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one,
+                                    // delete a switched-off one the server lets go (`FolderShareDialog`)
+                                    onEdit = if (link.mine && link.enabled && link.url != null) ({ editing = link }) else null,
+                                    onRenew = if (link.mine || !link.enabled) ({ renewing = link }) else null,
+                                    onDelete = if (!link.enabled && link.deletable) ({ deleting = link }) else null,
+                                    onSwitchOff = if (link.enabled && link.mine) {
                                     {
                                         busy = link.shareId
                                         scope.launch {
@@ -129,7 +160,8 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
                                             load()
                                         }
                                     }
-                                } else null)
+                                } else null,
+                                )
                                 HorizontalDivider()
                             }
                         }
@@ -138,10 +170,53 @@ internal fun PotShareSheet(ref: ObjectRef, model: AppModel, onClose: () -> Unit)
             }
         }
     }
+    renewing?.let { link ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { renewing = null },
+            title = { Text(stringResource(R.string.share_renew)) },
+            text = { Text(stringResource(R.string.share_renew_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    renewing = null
+                    busy = link.shareId
+                    scope.launch {
+                        val r = model.renewLink(ref, link.shareId)
+                        busy = null
+                        notice = changedText(r.outcome)
+                        if (r.url != null) fresh = r.url
+                        load()
+                    }
+                }) { Text(stringResource(R.string.share_renew)) }
+            },
+            dismissButton = { TextButton(onClick = { renewing = null }) { Text(stringResource(R.string.trash_cancel)) } },
+        )
+    }
+    deleting?.let { link ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text(stringResource(R.string.share_delete)) },
+            text = { Text(stringResource(R.string.share_delete_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    busy = link.shareId
+                    scope.launch {
+                        notice = changedText(model.deleteLink(ref, link.shareId).outcome)
+                        busy = null
+                        load()
+                    }
+                }) { Text(stringResource(R.string.share_delete), color = role(palette.danger)) }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.trash_cancel)) } },
+        )
+    }
 }
 
 @Composable
-private fun LinkRow(link: ShareLinks.Link, busy: Boolean, onSwitchOff: (() -> Unit)?) {
+private fun LinkRow(
+    link: ShareLinks.Link, busy: Boolean, onSwitchOff: (() -> Unit)?,
+    onEdit: (() -> Unit)? = null, onRenew: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
+) {
     val palette = LocalPalette.current
     val context = LocalContext.current
     val copied = stringResource(R.string.share_copied)
@@ -169,10 +244,24 @@ private fun LinkRow(link: ShareLinks.Link, busy: Boolean, onSwitchOff: (() -> Un
         if (url != null && link.enabled) IconButton(onClick = { copy(context, url); android.widget.Toast.makeText(context, copied, android.widget.Toast.LENGTH_SHORT).show() }) {
             Icon(Icons.Outlined.ContentCopy, stringResource(R.string.share_copy))
         }
-        // Switched off at once, as the web does: the Pot gets a new key, so the link opens nothing any more.
+        // The row's other actions in one overflow menu (Material 3); switching off is at once, as the web does: the Pot gets a
+        // new key, so the link opens nothing any more. Renew and delete ask first.
         if (busy) CircularProgressIndicator(Modifier.padding(12.dp).width(20.dp))
-        else if (onSwitchOff != null) IconButton(onClick = onSwitchOff) {
-            Icon(Icons.Outlined.Block, stringResource(R.string.share_switch_off), tint = role(palette.danger))
+        else if (onEdit != null || onRenew != null || onSwitchOff != null || onDelete != null) {
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
+                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                    onEdit?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_edit)) }, onClick = { menu = false; a() }) }
+                    onRenew?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_renew)) }, onClick = { menu = false; a() }) }
+                    onSwitchOff?.let { a ->
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_switch_off), color = role(palette.danger)) }, onClick = { menu = false; a() })
+                    }
+                    onDelete?.let { a ->
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_delete), color = role(palette.danger)) }, onClick = { menu = false; a() })
+                    }
+                }
+            }
         }
     }
 }
@@ -204,16 +293,24 @@ private fun FreshLink(url: String, onDone: () -> Unit) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NewLinkForm(rules: ShareLinks.Rules, onCancel: () -> Unit, onCreate: suspend (String, String, String, String?) -> String?) {
+private fun NewLinkForm(
+    rules: ShareLinks.Rules, onCancel: () -> Unit,
+    /** The link an edit changes (its settings fill the form; a password left blank stays as it is); null mints a new one. */
+    editing: ShareLinks.Link? = null,
+    /** role, label, password (null: untouched, blank: none), end; answers why not, or null once done. */
+    onCreate: suspend (String, String, String?, String?) -> String?,
+) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var role by remember { mutableStateOf(ShareLinks.READ) }
-    var label by remember { mutableStateOf("") }
-    var withPassword by remember { mutableStateOf(rules.passwordRequired) }
+    var role by remember { mutableStateOf(editing?.role ?: ShareLinks.READ) }
+    var label by remember { mutableStateOf(editing?.label.orEmpty()) }
+    val hadPassword = editing?.passwordRequired == true
+    var withPassword by remember { mutableStateOf(rules.passwordRequired || hadPassword) }
     var password by remember { mutableStateOf("") }
     val lastDay = rules.maxDays?.let { LocalDate.now().plusDays(it.toLong() - 1) }
-    var withEnd by remember { mutableStateOf(rules.maxDays != null) }
-    var end by remember { mutableStateOf(lastDay ?: LocalDate.now().plusDays(30)) }
+    val editEnd = editing?.expiresAt?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull() }
+    var withEnd by remember { mutableStateOf(rules.maxDays != null || editEnd != null) }
+    var end by remember { mutableStateOf(editEnd ?: lastDay ?: LocalDate.now().plusDays(30)) }
     var picking by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -245,6 +342,7 @@ private fun NewLinkForm(rules: ShareLinks.Rules, onCancel: () -> Unit, onCreate:
         password, { password = it }, label = { Text(stringResource(R.string.share_password_section)) }, singleLine = true,
         visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         isError = password.isNotEmpty() && password.trim().length < PASSWORD_MIN,
+        placeholder = if (hadPassword) ({ Text(stringResource(R.string.share_password_keep)) }) else null,
         supportingText = { Text(stringResource(R.string.share_password_short, PASSWORD_MIN)) }, modifier = Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.padding(6.dp))
@@ -283,7 +381,8 @@ private fun NewLinkForm(rules: ShareLinks.Rules, onCancel: () -> Unit, onCreate:
         ) { DatePicker(state) }
     }
     problem?.let { Text(it, color = role(palette.danger), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
-    val passwordOk = !withPassword || password.trim().length >= PASSWORD_MIN
+    // an edit keeps the password where the field stays blank
+    val passwordOk = !withPassword || password.trim().length >= PASSWORD_MIN || (hadPassword && password.isEmpty())
     Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
         TextButton(onClick = onCancel, enabled = !saving) { Text(stringResource(R.string.trash_cancel)) }
         Spacer(Modifier.width(8.dp))
@@ -294,12 +393,19 @@ private fun NewLinkForm(rules: ShareLinks.Rules, onCancel: () -> Unit, onCreate:
                 // the end of the picked local day (`FolderShareDialog`: 23:59:59.999 there)
                 val expiresAt = if (withEnd) end.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().minusMillis(1).toString() else null
                 scope.launch {
-                    problem = onCreate(role, label, if (withPassword) password else "", expiresAt)
+                    val pw = when {
+                        withPassword && password.isEmpty() && hadPassword -> null
+                        withPassword -> password
+                        hadPassword -> ""
+                        editing != null -> null
+                        else -> ""
+                    }
+                    problem = onCreate(role, label, pw, expiresAt)
                     saving = false
                 }
             },
             enabled = passwordOk && !saving,
-        ) { Text(stringResource(R.string.share_create)) }
+        ) { Text(stringResource(if (editing != null) R.string.share_save else R.string.share_create)) }
     }
 }
 

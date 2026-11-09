@@ -513,6 +513,46 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return r
     }
 
+    private fun rekeyHook(ref: ObjectRef) = if (ref.kind == PotSession.KIND) me.raddatz.veyq.mobile.expenses.PotRekey.content else null
+
+    /** Edits one of this member's open links on [ref] in place: label, password (null untouched, blank removed), end, role. */
+    suspend fun editLink(ref: ObjectRef, shareId: String, edit: me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
+        val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
+        val t = tenantSession ?: return failed
+        return runCatching { me.raddatz.veyq.mobile.session.ShareLinkChanges.edit(t, ref.scopeId, ref.nodeId, shareId, edit, System.currentTimeMillis()) }.getOrDefault(failed)
+    }
+
+    /** Renews link [shareId] on [ref]: a new address carrying its settings, the old one closed and the node re-keyed. */
+    suspend fun renewLink(ref: ObjectRef, shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
+        val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
+        val t = tenantSession ?: return failed
+        val r = runCatching {
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.renew(t, ref.scopeId, ref.nodeId, shareId, rekeyHook(ref), ::tokenInputFor, { java.util.UUID.randomUUID().toString() }, System.currentTimeMillis())
+        }.getOrDefault(failed)
+        potRekeyed(ref)
+        return r
+    }
+
+    /** Deletes link [shareId] on [ref] for good. */
+    suspend fun deleteLink(ref: ObjectRef, shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
+        val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
+        val t = tenantSession ?: return failed
+        val r = runCatching {
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.delete(t, ref.scopeId, ref.nodeId, shareId, rekeyHook(ref), ::tokenInputFor, { java.util.UUID.randomUUID().toString() }, System.currentTimeMillis())
+        }.getOrDefault(failed)
+        potRekeyed(ref)
+        return r
+    }
+
+    /** An open Pot read anew under its key, after a link to it closed and it may have been re-keyed. */
+    private suspend fun potRekeyed(ref: ObjectRef) {
+        val session = potSession
+        if (_pot.value?.ref == ref && session != null) {
+            runCatching { session.rekeyed() }
+            if (potSession === session) _pot.update { it?.copy(view = PotView(session)) }
+        }
+    }
+
     // ---- a move (core's NodeMove) ----
 
     /**

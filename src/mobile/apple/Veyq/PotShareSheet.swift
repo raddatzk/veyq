@@ -15,15 +15,26 @@ struct PotShareSheet: View {
     @State private var fresh: String?
     @State private var busy: String?
     @State private var notice: String?
+    @State private var editing: ShareLinks.Link?
+    @State private var renewing: ShareLinks.Link?
+    @State private var deleting: ShareLinks.Link?
 
     var body: some View {
         NavigationStack {
             Group {
                 if let fresh {
                     FreshLinkView(url: fresh) { self.fresh = nil }
+                } else if let link = editing {
+                    NewLinkForm(rules: model.linkRules(), editing: link, onCancel: { editing = nil }) { role, label, password, expiresAt in
+                        let r = await model.editLink(ref, shareId: link.shareId, edit: ShareLinkChanges.Edit(label: label, password: password, expiresAt: expiresAt, role: role))
+                        guard r.outcome == .done else { return Self.changed(r.outcome) }
+                        editing = nil
+                        await load()
+                        return nil
+                    }
                 } else if creating {
                     NewLinkForm(rules: model.linkRules(), onCancel: { creating = false }) { role, label, password, expiresAt in
-                        let minted = await model.mintLink(ref, role: role, label: label, password: password, expiresAt: expiresAt)
+                        let minted = await model.mintLink(ref, role: role, label: label, password: password ?? "", expiresAt: expiresAt)
                         guard minted.outcome == .created, let url = minted.url else { return Self.problem(minted.outcome) }
                         creating = false
                         fresh = url
@@ -41,6 +52,46 @@ struct PotShareSheet: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
         .task { await load() }
+        .alert("Renew link", isPresented: Binding(get: { renewing != nil }, set: { if !$0 { renewing = nil } }), presenting: renewing) { link in
+            Button("Renew link") { Task { await renew(link) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("This makes a new link and deletes the old one. Hand out the new link.")
+        }
+        .alert("Delete link", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { link in
+            Button("Delete link", role: .destructive) { Task { await delete(link) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Delete this link for good? It can never be switched on or renewed again. Entries guests wrote stay in the Pot.")
+        }
+    }
+
+    private func renew(_ link: ShareLinks.Link) async {
+        busy = link.shareId
+        let r = await model.renewLink(ref, shareId: link.shareId)
+        busy = nil
+        notice = r.outcome == .done ? nil : Self.changed(r.outcome)
+        if let url = r.url { fresh = url }
+        await load()
+    }
+
+    private func delete(_ link: ShareLinks.Link) async {
+        busy = link.shareId
+        let r = await model.deleteLink(ref, shareId: link.shareId)
+        busy = nil
+        notice = r.outcome == .done ? nil : Self.changed(r.outcome)
+        await load()
+    }
+
+    private static func changed(_ outcome: ShareLinkChanges.Outcome) -> String {
+        switch outcome {
+        case .doneRekeyPending:
+            String(localized: "The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.")
+        case .passwordLost: String(localized: "Its password cannot be read here any more, so it cannot be renewed without losing it.")
+        case .gone: String(localized: "This link was already renewed or deleted — the list now shows the current links.")
+        case .rules: String(localized: "This space now requires a password or an end date on every link. Add what is missing and try again.")
+        default: String(localized: "That didn’t work — please try again.")
+        }
     }
 
     private var list: some View {
@@ -58,7 +109,33 @@ struct PotShareSheet: View {
                     Text("Your links could not be loaded.").foregroundStyle(Role.danger)
                 } else if let links {
                     ForEach(links, id: \.shareId) { link in
-                        LinkRow(link: link, busy: busy == link.shareId, onSwitchOff: link.enabled && link.mine ? { Task { await switchOff(link) } } : nil)
+                        // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one, switch
+                        // off an own one that is on, delete a switched-off one the server lets go (`FolderShareDialog`)
+                        let canEdit = link.mine && link.enabled && link.url != nil
+                        let canRenew = link.mine || !link.enabled
+                        let canSwitchOff = link.enabled && link.mine
+                        let canDelete = !link.enabled && link.deletable
+                        LinkRow(link: link, busy: busy == link.shareId)
+                            // Apple's HIG: a row's actions as swipe actions and its context menu, as Mail's
+                            .swipeActions(edge: .trailing) {
+                                if canSwitchOff {
+                                    Button("Revoke", systemImage: "nosign", role: .destructive) { Task { await switchOff(link) } }
+                                }
+                                if canDelete {
+                                    Button("Delete link", systemImage: "trash", role: .destructive) { deleting = link }
+                                }
+                            }
+                            .swipeActions(edge: .leading) {
+                                if canRenew { Button("Renew link", systemImage: "arrow.clockwise") { renewing = link }.tint(Role.accent) }
+                            }
+                            .contextMenu {
+                                if canEdit { Button("Edit", systemImage: "pencil") { editing = link } }
+                                if canRenew { Button("Renew link", systemImage: "arrow.clockwise") { renewing = link } }
+                                if canSwitchOff {
+                                    Button("Revoke", systemImage: "nosign", role: .destructive) { Task { await switchOff(link) } }
+                                }
+                                if canDelete { Button("Delete link", systemImage: "trash", role: .destructive) { deleting = link } }
+                            }
                     }
                 } else {
                     ProgressView().frame(maxWidth: .infinity)
@@ -101,7 +178,6 @@ struct PotShareSheet: View {
 private struct LinkRow: View {
     let link: ShareLinks.Link
     let busy: Bool
-    let onSwitchOff: (() -> Void)?
     @State private var copied = false
 
     private var roleWord: String {
@@ -132,13 +208,7 @@ private struct LinkRow: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Copy link")
             }
-            if busy {
-                ProgressView()
-            } else if let onSwitchOff {
-                Button(action: onSwitchOff) { Image(systemName: "nosign").foregroundStyle(Role.danger) }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Revoke")
-            }
+            if busy { ProgressView() }
         }
     }
 }
@@ -169,8 +239,11 @@ private let passwordMin = 10
 /// not, or nil once minted.
 private struct NewLinkForm: View {
     let rules: ShareLinks.Rules
+    /// The link an edit changes (its settings fill the form; a password left blank stays as it is); nil mints a new one.
+    var editing: ShareLinks.Link? = nil
     let onCancel: () -> Void
-    let onCreate: (String, String, String, String?) async -> String?
+    /// role, label, password (nil: untouched, blank: none), end; answers why not, or nil once done.
+    let onCreate: (String, String, String?, String?) async -> String?
     @State private var role = ShareLinks.shared.READ
     @State private var label = ""
     @State private var withPassword = false
@@ -180,7 +253,14 @@ private struct NewLinkForm: View {
     @State private var problem: String?
     @State private var saving = false
 
+    private var hadPassword: Bool { editing?.passwordRequired == true }
     private var maxDays: Int? { rules.maxDays.map { Int(truncating: $0) } }
+
+    private static func parse(_ instant: String) -> Date? {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.date(from: instant) ?? ISO8601DateFormatter().date(from: instant)
+    }
     private var lastDay: Date? { maxDays.map { Calendar.current.date(byAdding: .day, value: $0 - 1, to: Calendar.current.startOfDay(for: Date()))! } }
 
     var body: some View {
@@ -200,7 +280,7 @@ private struct NewLinkForm: View {
             Section {
                 Toggle("Password protection", isOn: $withPassword).disabled(rules.passwordRequired)
                 if withPassword {
-                    SecureField("Password", text: $password)
+                    SecureField(hadPassword ? "•••••••• (unchanged)" : "Password", text: $password)
                     Text("At least \(passwordMin) characters.").font(.caption)
                         .foregroundStyle(!password.isEmpty && password.trimmingCharacters(in: .whitespaces).count < passwordMin ? Role.danger : Role.muted)
                 }
@@ -223,18 +303,33 @@ private struct NewLinkForm: View {
                     problem = nil
                     // the end of the picked local day (`FolderShareDialog`: 23:59:59.999 there)
                     let expiresAt: String? = withEnd ? Self.endOfDay(end) : nil
+                    let pw: String? = if withPassword && password.isEmpty && hadPassword { nil }
+                        else if withPassword { password }
+                        else if hadPassword { "" }
+                        else if editing != nil { nil }
+                        else { "" }
                     Task {
-                        problem = await onCreate(role, label, withPassword ? password : "", expiresAt)
+                        problem = await onCreate(role, label, pw, expiresAt)
                         saving = false
                     }
                 } label: {
-                    HStack { Spacer(); if saving { ProgressView() } else { Text("Create link").fontWeight(.semibold) }; Spacer() }
+                    HStack { Spacer(); if saving { ProgressView() } else { Text(editing == nil ? "Create link" : "Save").fontWeight(.semibold) }; Spacer() }
                 }
-                .disabled(saving || (withPassword && password.trimmingCharacters(in: .whitespaces).count < passwordMin))
+                // an edit keeps the password where the field stays blank
+                .disabled(saving || (withPassword && password.trimmingCharacters(in: .whitespaces).count < passwordMin && !(hadPassword && password.isEmpty)))
                 Button("Cancel", action: onCancel).disabled(saving)
             }
         }
         .onAppear {
+            if let editing {
+                role = editing.role
+                label = editing.label
+                withPassword = rules.passwordRequired || editing.passwordRequired
+                if let e = editing.expiresAt, let d = Self.parse(e) { withEnd = true; end = d; return }
+                withEnd = maxDays != nil
+                end = lastDay ?? Calendar.current.date(byAdding: .day, value: 30, to: Date())!
+                return
+            }
             withPassword = rules.passwordRequired
             withEnd = maxDays != nil
             end = lastDay ?? Calendar.current.date(byAdding: .day, value: 30, to: Date())!
