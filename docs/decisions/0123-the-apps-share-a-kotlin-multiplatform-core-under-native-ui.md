@@ -414,8 +414,19 @@ implementation exists but what holds it to the first.
   platform's own controls (measured 2026-11-09: `MemoryLiveTest` reading a 25-frame MP4 the web uploaded backwards in
   uneven ranges to the byte; on both platforms the video played, sought forward into frames not read yet and back, and
   a downloaded original matched the uploaded file's SHA-256).
-  Not built yet: the live poll, zoom, the slideshow, the upload, edits (date, place, participants, capture-time
-  correction, trash), item marks, buckets, the map, sharing, the re-key, export and copy.
+  A member's upload is core's (`memories/MediaUpload.kt`, the web's `addMedia`), byte for byte the web's records: the
+  type (given, else the extension's, else sniffed), the original's SHA-256 in its sealed meta, the metadata read from the
+  bytes in core — `media/ExifReader.kt` (EXIF, XMP, IPTC from a JPEG, TIFF, PNG, WebP, HEIC, AVIF: the tags the web's
+  ExifReader seam names) and `media/VideoHeader.kt` (an MP4's or a QuickTime file's capture time and display size), mapped
+  onto the listed and the EXIF tier by `memories/MediaMetadata.kt` as `media.ts` maps them, an EXIF date read as the
+  device's wall clock as the web reads it —, one start request for the original and the two JPEG tiers each under its
+  own key wrapped bound to the medium, the frames sent direct to the store, one `media-batch` completion, at the node's
+  epoch, the job tried twice; the platform only derives the tiers (measured 2026-11-09: `MediaMetadataFixtureTest` holds
+  the readers to the web's own fixtures and expectations — a HEIC whose `Exif` item is not found turns it red —;
+  `MemoryUploadLiveTest` uploaded the web's fixture photo and dated clip, and the web's lightbox showed the camera,
+  exposure, position, title and rating of the one and the container time of the other).
+  Not built yet: the live poll, zoom, the slideshow, edits (date, place, participants, capture-time correction, trash),
+  item marks, buckets, the map, sharing, the re-key, export and copy.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's

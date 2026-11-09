@@ -9,7 +9,7 @@ import kotlinx.serialization.json.put
 
 /**
  * A blob's sealed metadata (its type, the name it was uploaded under, its last modification), a port of
- * `src/packages/crypto/src/blobMeta.ts`: compact UTF-8 JSON in a fixed key order `{v, type, name?, modifiedAt?}`,
+ * `src/packages/crypto/src/blobMeta.ts`: compact UTF-8 JSON in a fixed key order `{v, type, name?, modifiedAt?, sha256?}`,
  * padded with spaces to the next multiple of 256 bytes (the ciphertext tells only which of four buckets it fell into),
  * sealed under the blob's own key with the purpose-only `blob-meta` seal. Pinned by `v1.json#seal.sym['blob-meta']`.
  * Written once, at the upload's declare.
@@ -20,6 +20,7 @@ object BlobMeta {
     private const val TYPE_BYTES = 127
     private const val NAME_BYTES = 255
     private const val MAX_SAFE = 9_007_199_254_740_991L
+    private val SHA256_B64URL = Regex("^[A-Za-z0-9_-]{43}$")
 
     /** What a reader gets back: the type ('' when unknown), and the name and modification time when present. */
     data class Opened(val v: Long, val type: String, val name: String?, val modifiedAt: Long?)
@@ -54,8 +55,8 @@ object BlobMeta {
         clampUtf8(nfc(name.filterNot { isControl(it.code) }).trim(), NAME_BYTES).trimEnd()
 
     /** The padded plaintext. A type over 127 bytes or with a control character is written as ''; a negative or unsafe
-     *  `modifiedAt` is left out. */
-    fun encode(type: String, name: String?, modifiedAt: Long?): ByteArray {
+     *  `modifiedAt` is left out, and so is a [sha256] that is not a 32-byte digest in base64url (a medium's original). */
+    fun encode(type: String, name: String?, modifiedAt: Long?, sha256: String? = null): ByteArray {
         val t = if (type.none { isControl(it.code) } && type.encodeToByteArray().size <= TYPE_BYTES) type else ""
         val n = name?.let(::normalizeName).orEmpty()
         val doc = buildJsonObject {
@@ -63,6 +64,7 @@ object BlobMeta {
             put("type", t)
             if (n.isNotEmpty()) put("name", n)
             if (modifiedAt != null && modifiedAt in 0..MAX_SAFE) put("modifiedAt", modifiedAt)
+            if (sha256 != null && SHA256_B64URL.matches(sha256)) put("sha256", sha256)
         }
         val body = doc.toString().encodeToByteArray()
         val out = ByteArray(((body.size + BUCKET - 1) / BUCKET) * BUCKET) { 0x20 }
@@ -79,8 +81,8 @@ object BlobMeta {
         Opened(v, str("type").orEmpty(), str("name")?.takeIf { it.isNotEmpty() }, modified)
     }.getOrNull()
 
-    fun seal(suite: V1, blobKey: ByteArray, type: String, name: String?, modifiedAt: Long?): ByteArray =
-        suite.seal(Context("blob-meta"), blobKey, encode(type, name, modifiedAt))
+    fun seal(suite: V1, blobKey: ByteArray, type: String, name: String?, modifiedAt: Long?, sha256: String? = null): ByteArray =
+        suite.seal(Context("blob-meta"), blobKey, encode(type, name, modifiedAt, sha256))
 
     /** The served meta opened under the blob's key; null when it is not this blob's or malformed ("no meta"). */
     fun open(suite: V1, blobKey: ByteArray, sealed: ByteArray): Opened? =

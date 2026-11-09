@@ -59,9 +59,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     /** Why an upload did not complete: the server's code (`budget_exceeded`, `quota_exceeded`, `too_many_blobs`, …). */
     class UploadRefused(val code: String) : Exception("upload_refused: $code")
 
-    /** The blob-key seal's context: the wrap is bound to the node it belongs to and to its role. */
-    private fun keyContext(scopeId: String, nodeId: String, blobId: String, role: String) =
-        Context("blob-key", "scopeId" to scopeId, "ownerId" to nodeId, "blobId" to blobId, "role" to role)
+    /** The blob-key seal's context: the wrap is bound to the record it belongs to (a node, a medium) and to its role. */
+    private fun keyContext(scopeId: String, ownerId: String, blobId: String, role: String) =
+        Context("blob-key", "scopeId" to scopeId, "ownerId" to ownerId, "blobId" to blobId, "role" to role)
 
     /** Every application blob of [nodeId], paged by cursor; only the first page is conditional on [ifNoneMatch]. */
     suspend fun list(scopeId: String, nodeId: String, ifNoneMatch: String? = null): Listing? {
@@ -178,24 +178,53 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     internal suspend fun reserveAndPumpFrames(
         scopeId: String, node: OpenNode, role: String, size: Long, type: String, name: String?, modifiedAt: Long?,
         read: suspend (from: Long, length: Int) -> ByteArray,
-    ): Pair<String, Plan> {
-        val key = account.primitives.randomBytes(32)
-        val blobId = NodeCreate.uuid(account)
-        val count = V1.chunkCount(size)
-        val item = BlobUploadRequestItem(
-            blobId = blobId, ownerId = node.id, role = role, chunkCount = count,
-            byteSize = size + V1.FRAME_OVERHEAD.toLong() * count,
-            wrappedBlobKey = b64(suite.seal(keyContext(scopeId, node.id, blobId, role), node.key, key)),
-            wrappedBlobMeta = b64(BlobMeta.seal(suite, key, type, name, modifiedAt)),
-        )
-        val started = account.respond { blobApi.startBlobUploads(scopeId, BlobUploadsBatchRequest(listOf(item))) }
+    ): Pair<String, Plan> = reserveAndPumpAll(scopeId, node.id, node.key, listOf(Outgoing(role, size, type, name, modifiedAt, null, read))).single()
+
+    /** One blob an upload sends: its role, its plaintext's size and bytes (a frame at a time), and what its meta seals. */
+    internal class Outgoing(
+        val role: String, val size: Long, val type: String, val name: String?, val modifiedAt: Long?, val sha256: String?,
+        val read: suspend (from: Long, length: Int) -> ByteArray,
+    )
+
+    /**
+     * [blobs] of the record [ownerId] (a node; a medium, whose original and tiers are one record), each sealed under a
+     * fresh `K_blob` wrapped under [wrapKey] bound to [ownerId] and its role, reserved in ONE start request (the web's
+     * `startBlobUploads`) and pumped one after another; their upload ids and plans, in order. Throws [UploadRefused] with
+     * the first item's refusal (`quota_exceeded` refuses them all).
+     */
+    internal suspend fun reserveAndPumpAll(scopeId: String, ownerId: String, wrapKey: ByteArray, blobs: List<Outgoing>): List<Pair<String, Plan>> {
+        val keys = blobs.map { account.primitives.randomBytes(32) }
+        val items = blobs.mapIndexed { i, b ->
+            val blobId = NodeCreate.uuid(account)
+            val count = V1.chunkCount(b.size)
+            BlobUploadRequestItem(
+                blobId = blobId, ownerId = ownerId, role = b.role, chunkCount = count,
+                byteSize = b.size + V1.FRAME_OVERHEAD.toLong() * count,
+                wrappedBlobKey = b64(suite.seal(keyContext(scopeId, ownerId, blobId, b.role), wrapKey, keys[i])),
+                wrappedBlobMeta = b64(BlobMeta.seal(suite, keys[i], b.type, b.name, b.modifiedAt, b.sha256)),
+            )
+        }
+        val started = account.respond { blobApi.startBlobUploads(scopeId, BlobUploadsBatchRequest(items)) }
         if (!started.success) throw UploadRefused(codeOf(started.response.bodyAsText()) ?: "start ${started.status}")
-        val res = started.body().results.single()
-        res.error?.let { throw UploadRefused(it) }
-        val uploadId = res.uploadId ?: throw UploadRefused("no upload id")
+        val results = started.body().results
+        if (results.size != items.size) throw UploadRefused("start_mismatch")
+        results.firstNotNullOfOrNull { it.error }?.let { throw UploadRefused(it) }
+        return blobs.mapIndexed { i, b ->
+            val res = results[i]
+            val uploadId = res.uploadId ?: throw UploadRefused("no upload id")
+            pump(scopeId, uploadId, keys[i], items[i].chunkCount, b.size, res.presignedPuts, b.read)
+            uploadId to Plan(items[i].blobId, items[i].chunkCount, items[i].byteSize, items[i].wrappedBlobKey, ownerId)
+        }
+    }
+
+    /** Seals and PUTs the frames of one reserved upload, signing each window as it is reached (and once more on a 403). */
+    private suspend fun pump(
+        scopeId: String, uploadId: String, key: ByteArray, count: Int, size: Long, first: List<PresignedUrl>?,
+        read: suspend (from: Long, length: Int) -> ByteArray,
+    ) {
         val signed = HashMap<Int, String>()
         fun keep(urls: List<PresignedUrl>?) = urls.orEmpty().forEach { signed[it.index] = it.url }
-        keep(res.presignedPuts)
+        keep(first)
         suspend fun sign(from: Int) {
             val w = account.respond { blobApi.presignBlobUploadWindows(scopeId, BlobUploadWindowsRequest(listOf(BlobUploadWindowRequestItem(uploadId, from)))) }
             if (!w.success) throw UploadRefused("window ${w.status}")
@@ -217,7 +246,6 @@ class ApplicationBlobs(private val tenant: TenantSession) {
             }
             if (status !in 200..299) throw UploadRefused("chunk_put_failed:$status")
         }
-        return uploadId to Plan(blobId, count, item.byteSize, item.wrappedBlobKey, node.id)
     }
 
     /**
