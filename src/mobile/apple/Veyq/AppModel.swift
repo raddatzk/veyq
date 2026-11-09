@@ -414,6 +414,17 @@ final class AppModel {
         self.incoming = incoming
     }
 
+    /// Files dropped onto the app (ADR 0124 decision 9): an open Pot that takes them opens its new expense with them at once;
+    /// anywhere else they wait in the pick mode, as a share's do.
+    func receiveDrop(_ incoming: Incoming) {
+        if let ref = shell.openObject, ref.kind == PotSession.companion.KIND, pot?.ref == ref, let view = pot?.view,
+           view.canWrite, !view.people.isEmpty, !incoming.files.isEmpty {
+            self.incoming = incoming
+        } else {
+            receiveShare(incoming)
+        }
+    }
+
     func cancelShare() {
         incoming = nil
         onShareDone?(false)

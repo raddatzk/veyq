@@ -1,7 +1,7 @@
 # ADR 0124 — The apps take what the system shares; the chosen node's kind decides what it becomes
 
 - Status: Accepted
-- Built: yes (Android's share target, iOS's share extension, the pick mode on both, the app group and the shared keychain group)
+- Built: partly (Android's share target, iOS's share extension, the pick mode on both, a drop onto the Apple app, the app group and the shared keychain group; not built: a drop onto the Android app)
 - Date: 2026-11-08
 
 ## Context
@@ -53,6 +53,10 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
 8. **Android's share target is an activity of the app**, in its process, for `ACTION_SEND` and `ACTION_SEND_MULTIPLE`
    of `image/*` and `application/pdf`: the session, the navigation and the editor are the app's own.
 
+9. **A drop onto the app is a share** (owner 2026-11-09: a screenshot's thumbnail dragged onto veyq). Where it lands
+   decides: an open Pot that takes it — writable, with people — opens its new expense with the files at once; anywhere
+   else they wait in the pick mode, as a share's do. The files are read as a share's are (decisions 6 and 7).
+
 ## Consequences
 
 - **Built:** decision 4 — the app group's defaults (`apple/Veyq/Shared.swift`, the move of an earlier installation's)
@@ -71,5 +75,9 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   shared from the Photos app was placed in a Pot after Face ID, saved as a new expense's receipt, and opened on the web
   (measured 2026-11-08 in the iOS Simulator); the editor closed unsaved returned to the pick mode, and the pick mode's
   cancel ended the request — on Android likewise (measured the same day on the emulator).
+- **Built on Apple, decision 9:** the shell takes images and PDFs dropped onto it (`apple/Veyq/IncomingFiles.swift`, the
+  one reader the share extension uses too, re-encoding a HEIC through ImageIO so macOS reads the same way;
+  `AppModel.receiveDrop`). The reader is measured through the extension; a drop itself is not, since the Simulator's one
+  scripted finger cannot hold a thumbnail and switch apps. Android's drag and drop is not built.
 - App groups and keychain groups need the developer team's signing: a Simulator build is signed ad hoc with them; a device
   build needs the team's provisioning profile with the group.

@@ -25,6 +25,11 @@ struct ShellView: View {
         .environment(\.rowDetails, model.rowDetails)
         .environment(\.avatars, model.avatars)
         .environment(\.picking, model.incoming != nil)
+        // An image or a PDF dragged onto the app — a screenshot's thumbnail, a photo from another app (ADR 0124 decision 9).
+        .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
+            Task { model.receiveDrop(await IncomingFiles.read(providers)) }
+            return true
+        }
         .sheet(isPresented: Binding(get: { model.managing != nil }, set: { if !$0 { model.managing = nil } })) {
             ManageView(model: model)
         }
