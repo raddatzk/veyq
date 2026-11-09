@@ -58,18 +58,39 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
      left until a member of several tenants asks for it.
 4. **One search field. Metadata is expressed as chips.**
    - **The chips:** space, year (a Memory matches when its date range overlaps the year, a photo when it was
-     captured in it), place, person, kind. Each chip is a typed predicate over a document's
-     fields, not text.
+     captured in it), month, place, person, kind, and *In:* a node. Each chip is a typed predicate over a document's
+     fields, not text, and a predicate over **every** document - a person and a settings section included (decision 9):
+     a document that lacks the field a chip asks about does not satisfy it. A year chip leaves out every person, since a
+     person has no year; *Person: Kevin* means "content Kevin takes part in", and his profile does not satisfy it.
+   - **Every kind has a word** (owner, 2026-11-09: "the same for nearly everything"): the kinds the applications name, and
+     core's two, *Person* and *Setting* (de *Person*, *Einstellung*). *Kind: Person* lists only people.
+   - **In: a node.** A node that holds something - a folder, a Memory, a Chapter - is offered as *In: <name>* when the
+     typed text starts a word of its name, beside the node itself as a result. Its predicate is "lies below that node":
+     a node below it, or an object of a node at or below it (a photo by its Memory). It is matched by the node's id,
+     never its name, and it scopes to the node's space. Two nodes of one name are two suggestions, each with where it
+     lives as its second line.
    - **Suggestions:** typing suggests chips. A year offers the year, a member's name the person, a known place the
-     place.
+     place, a kind's word the kind, a node's name *In:* that node.
    - **Free text:** whatever is not turned into a chip stays text, matched against names, case- and
      diacritic-insensitive.
-5. **Results are grouped by where the member stands: the open Memory, then this space, then other spaces.** Ranking
-   happens only within a group, and an empty group is not shown.
-   - **Why groups:** a hidden context weight would order the same query differently depending on where the member
-     stands, with nothing on screen saying why. A group's heading says it. (Owner, 2026-11-08: the open Memory's
-     content comes first.)
-6. **Core owns the field, the search model, the chips' grammar, the grouping and the names of every node.** An
+5. **The list has two areas: the chip suggestions (*Filter by*), then ONE list of results** (owner, 2026-11-09: "keep it
+   simple - suggestions and results as two separate areas, suggestions first; where a result lies should set the order,
+   not a group"). No heading stands below *Filter by*.
+   - **The order:** match quality first - an exact name, then a prefix, then a word's start, then inside a word, then a
+     place or a settings section's word -, then where the result lies - the open node's subtree, then the active space,
+     then the other spaces, then people and settings -, then the name's collation. A strong match elsewhere comes before
+     a weak one here; where the member stands breaks ties and never hides a result.
+   - **Each row says where its result lies**: another space's result its space and path, this space's its path, a person
+     their `~username`, a settings section its heading on the rail. So the order needs no heading to be read.
+   - **Paging:** the first 10 results are drawn, and "show more" adds 10; the count is exact.
+   - **Why one list, and why the groups went:** a member read five headed groups (the open node, this space, other
+     spaces, people, settings) for what one ordered list with a place on every row says, and a strong match in another
+     space was buried under a weak one here. The groups also cost: the first keystroke's longest task is mostly the
+     first list's render, not the matching (cr-search-polish measured it at volume), and five groups of eight drew up to
+     45 rows where one list draws 11. An invisible context weight was rejected earlier because nothing on screen said
+     why a result came first; here the place is a tie-break after the match, and every row names it. (Owner, 2026-11-08:
+     the open Memory's content comes first - it still does, at an equal match.)
+6. **Core owns the field, the search model, the chips' grammar, the order of the results and the names of every node.** An
    application contributes the searchable documents and facets of its own kinds through the build-time registry
    ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md): core never imports an application).
    - **Memories contributes:**
@@ -111,8 +132,8 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
    - **(c) Semantic search.** Deferred. Embeddings in the browser need WebAssembly or WebGPU, the CSP grants no
      `'wasm-unsafe-eval'` ([CSP](../crosscutting/cc.security.csp.md)), and a model is tens of MB. Its natural home is
      the native apps.
-9. **People and settings are results too, each in a group of its own after the spaces' groups: People, then
-   Settings.** (Owner, 2026-11-09.)
+9. **People and settings are results too: two kinds in the one list of decision 5, after content at an equal match.**
+   (Owner, 2026-11-09.)
    - **People:**
      - A person result is a member of this tenant, named as the directory names them: the real name under the
        tenant key, else the username.
@@ -127,9 +148,11 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
        read one list with one set of gates.
      - Choosing one opens that section.
      - The entries are the client's own words, so they tell the server nothing.
-   - **Why groups of their own:** a person or a settings section lives in no space, so the spaces' grouping
-     (decision 5) has no place for them. Their fixed position after content keeps a query's content results where
-     they were.
+   - **Kinds, not a rule of their own:** each has its kind word (*Person*, *Setting*), and a chip is a predicate over them
+     as over content (decision 4). No rule hides them while a chip is set: a chip they cannot satisfy leaves them out by
+     itself, and *Kind: Person* shows only them. They live in no space, so their place in the order is after every
+     space's: a query's content results keep their order, and a person or a section still comes first where it matches
+     better.
 
 ## Consequences
 
@@ -166,5 +189,7 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
 - **Rejected alternatives:**
   - A persistent on-device index (decision 2).
   - Server-side blinded tokens (decision 1).
-  - A single ranked list with an invisible context weight (decision 5).
+  - A single ranked list with an invisible context weight that can lift a weaker match above a stronger one
+    (decision 5: the place breaks ties only, and every row names it).
+  - Result groups by place, with headings (decision 5's first form, built and replaced on 2026-11-09).
   - Searching only the active space: the owner wants every space.

@@ -41,13 +41,17 @@
      the rail and the search read one list with one set of gates (`features/settings/sections.ts`), and while a gate's
      answer is out no section is offered (ADR 0125 decision 9).
 4. **Type the query.** The member types. Each token that reads as a known facet is offered as a chip: a year, a month with its year ("Mai 2024",
-   "May 2024" - a Memory matches when its range overlaps the month, a photo when captured in it), a member's name (person), a place a document carries, a space's name, a kind's word. Choosing a suggestion
-   turns the token into a chip; the rest stays text. The chip suggestions stand under a heading of their own
+   "May 2024" - a Memory matches when its range overlaps the month, a photo when captured in it), a member's name (person), a place a document carries, a space's name, a kind's word -
+   every kind has one, core's *Person* and *Setting* included -, and the name of a node that holds something (a folder, a
+   Memory, a Chapter) as *In: <name>*, which narrows to what lies below that node in its space (a photo by its Memory).
+   Choosing a suggestion turns the token into a chip; the rest stays text. A chip is a predicate over every document: a
+   person or a settings section satisfies it only where it carries what the chip asks (a year chip lists no person, *Kind:
+   Person* only people, and *Person: Kevin* means content Kevin takes part in, not his profile). The chip suggestions stand under a heading of their own
    (*Filter by*), apart from the results, because a person suggestion and a person result can carry the same name
    while one filters and the other opens. The first entry of the list is highlighted, a suggestion or a result, and
    **Enter** takes the highlighted one. Once the member moves the highlight (arrow keys or pointer), it stays on that
    entry while they type on, as long as the entry is still in the list. When it drops out, the first entry of its
-   group is highlighted, or the first entry of the list when that group is gone. The moved-to entry is still
+   area - the suggestions or the results - is highlighted, or the first entry of the list when that area is empty. The moved-to entry is still
    remembered, and when it is listed again (e.g. after Backspace) it is highlighted again. A new move replaces it;
    choosing an entry or closing the list forgets it (owner, 2026-11-09).
 5. **Match.**
@@ -55,15 +59,17 @@
      ignoring case and diacritics. A settings section also matches by a few words of its own ("E-Mail" finds the
      mail section, "Kennwort" the password), kept with the section in the one list the rail reads; such a word matches
      from a word's start only, since the member never sees it.
-   - Within a group, an exact or prefix match of the name ranks above a match inside a word, and a name match above a
-     place match.
-6. **Show the results in groups,** each ranked within itself: the open node's - headed by its name, *In “Rom 2024”*,
-   holding what its page contributed and the nodes below it (when a node's page is open, not a folder) -, **In this
-   space**, **Other spaces** (each result naming its space and its path; a photo goes where its Memory goes, its
-   Memory's path and its day in its second line), then **People** (each with their picture or
-   initial and `~username`) and **Settings** (each with its heading on the rail). The part of a name the text matched is shown in bold. An empty group is not shown. A chip is a
-   filter over content: while one is set, People and Settings are not shown. A member's name offers them as a person
-   chip and lists them as a person - the chip filters, the person opens their profile.
+   - An exact match of the name ranks first, then a prefix, then a word's start, then a match inside a word, then a
+     match of a place or of a settings section's word.
+6. **Show the results as one list** after the suggestions, with no heading of its own (ADR 0125 decision 5). It is
+   ordered by the match (step 5), then by where the result lies - below the open node (what its page contributed and
+   the nodes below it, while a node's page is open, not a folder), then the active space, then the other spaces, then
+   people and settings -, then by the name's collation: a strong match elsewhere comes before a weak one here. Each row
+   says where it lies: another space's result its space and path, this space's its path (a photo its Memory's path and
+   its day), a person their picture or initial and `~username`, a settings section its heading on the rail. The part of
+   a name the text matched is shown in bold. The first 10 results are shown; "show more" adds 10, and the count is
+   exact. A member's name offers them as a person chip and lists them as a person - the chip filters, the person opens
+   their profile.
 7. **Open a result.** The member chooses one. A node opens where it lives, switching the active space when it lies in
    another. A photo of the open Memory opens in its lightbox; a photo of another Memory opens that Memory (in its space)
    with the photo in the lightbox. A person opens their profile page. A settings
@@ -75,6 +81,10 @@
   tree is re-read, its documents are replaced, and the results update without losing the query.
 - **A2 — no result:** the field says nothing was found and names what was searched: names, dates, places and people
   in every space - a photo's own place and date included - and members and settings.
+- **A3 — two nodes of one name:** the text matches the names of two nodes that hold something - *Reisen* in the
+  tenant's space and *Reisen* in a group, or two in one space. Each is its own *In:* suggestion, with where it lives as
+  its second line (its space and the path above it), and each chip narrows to its own node's subtree: the chip names the
+  node by its id, never its name.
 - **E1 — a space cannot be opened** (its key is not on this device yet, a fetch fails, a rotation is in flight): its
   results are left out, and the result list names that space as not searched. The other spaces are unaffected.
 - **E2 — the member is removed from a space, or the space is rotated:** its tree no longer fetches or opens, or it moved.
@@ -97,7 +107,8 @@
 - **One source of truth.** A document is derived from an object and its revision. The index never holds a value the
   tree or the listing does not.
 - **Accessible.** The field is a combobox a screen reader can drive: the number of results is announced politely as
-  it changes, each group is named by its heading, and adding or removing a chip is announced.
+  it changes, the suggestions are named by their heading and the results by their own name, and adding or removing a
+  chip is announced.
 - **Core never imports an application.** What an application contributes reaches core through the registry
   ([ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
 
