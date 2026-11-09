@@ -3,7 +3,7 @@ package me.raddatz.veyq.mobile.expenses
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** What a Pot takes from a share (ADR 0124 decision 2): images and PDFs within its receipts' rules, at most 100 at once. */
+/** What a Pot takes from a share (ADR 0126 decision 2): images and PDFs within its receipts' rules, at most 100 at once. */
 class PotShareTest {
     private class F(val type: String?, val name: String?, val size: Long)
 

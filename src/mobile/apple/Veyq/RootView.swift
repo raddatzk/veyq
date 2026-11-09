@@ -1,7 +1,7 @@
 import SwiftUI
 import VeyqCore
 
-/// What the app shows for its screen state; the app's and the share extension's one root (ADR 0124).
+/// What the app shows for its screen state; the app's and the share extension's one root (ADR 0126).
 struct RootView: View {
     @Bindable var model: AppModel
 
@@ -21,7 +21,7 @@ struct RootView: View {
         case .unlock(let record, let working, let error):
             UnlockView(record: record, working: working, error: error, onUnlock: model.unlock(password:), onOther: model.otherAccount)
         case .needsApp:
-            // The share extension with no account this device trusts: the app signs in (ADR 0124 decision 5).
+            // The share extension with no account this device trusts: the app signs in (ADR 0126 decision 5).
             VStack(spacing: 16) {
                 Brand()
                 Text("Open veyq and sign in first. Then you can share to it.").multilineTextAlignment(.center).foregroundStyle(Role.text)

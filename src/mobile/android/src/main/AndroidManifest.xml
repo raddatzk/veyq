@@ -38,7 +38,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- What another app shares to veyq (ADR 0124): images and PDFs, to the app's own task (singleTask), so the
+            <!-- What another app shares to veyq (ADR 0126): images and PDFs, to the app's own task (singleTask), so the
                  session, the navigation and the editor are the app's. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

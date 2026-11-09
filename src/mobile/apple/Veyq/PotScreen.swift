@@ -15,7 +15,7 @@ struct PotScreen: View {
         let people: [PotView.Person]
         let form: EntryForm
         var invalid = false
-        /// What another app shared, as the new expense's receipts (ADR 0124).
+        /// What another app shared, as the new expense's receipts (ADR 0126).
         var pending: [PotSession.PendingReceipt] = []
         var fromShare = false
     }

@@ -351,7 +351,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         rebuild(start = true)
     }
 
-    // ---- what another app shared (ADR 0124) ----
+    // ---- what another app shared (ADR 0126) ----
 
     private val _incoming = MutableStateFlow<ShareIn.Incoming?>(null)
     /** Files shared to veyq, waiting for the Pot they go to (the pick mode); null when none waits. */
@@ -362,7 +362,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
-     * they go (ADR 0124 decision 1) — the start does the same while the session is still opening.
+     * they go (ADR 0126 decision 1) — the start does the same while the session is still opening.
      */
     fun receiveShare(incoming: ShareIn.Incoming) {
         updateShell { Shell.start(null, it.space) }

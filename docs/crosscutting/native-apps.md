@@ -4,12 +4,13 @@ The current picture of the V2 native apps in `src/mobile/` (inbox #438): what ea
 against the web client, and what is open. The decisions are [ADR 0122](../decisions/0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md)
 (one app, its navigation), [ADR 0123](../decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
 (the shared Kotlin core under a native UI; its Consequences record each slice with what was measured, and are this
-page's source for every "measured") and [ADR 0124](../decisions/0124-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md) (the
+page's source for every "measured") and [ADR 0126](../decisions/0126-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md) (the
 share target). This page is kept current as slices land; a row moves from open to built in the commit that builds it.
 
 ## The split
 
-Everything that is not drawing a screen or talking to the device belongs in the Kotlin core (owner 2026-11-09): the
+Everything that is not drawing a screen or talking to the device belongs in the Kotlin core (owner 2026-11-09,
+[ADR 0127](../decisions/0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): the
 suite, the API, the session, the navigation model, every application's domain and its flows, the upload queue — and,
 still to move there, each screen's state and actions and which notice an outcome raises. A platform keeps only its UI,
 built to its own guidelines, and what only it can do: the system pickers and share sheets, the secure store, decoding
@@ -29,8 +30,9 @@ it into the core comes before a third platform.
 | Windows | no | — | — | — |
 | Linux | no | — | — | — |
 
-Windows and Linux are wanted (owner 2026-11-09), each with its own native UI — WinUI on Windows, GTK/libadwaita on
-Linux — over the same core (Kotlin/Native `mingwX64` / `linuxX64`, or the JVM target); not decided in an ADR yet.
+Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
+([ADR 0127](../decisions/0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
+libadwaita in Kotlin on the JVM, Windows WinUI 3 in C# over the core as a Kotlin/Native library.
 
 ## Built, by area
 
@@ -51,7 +53,7 @@ a node's cover with its crop, core's header for every kind, a report to the mode
 **Sharing.** Links on a Pot, a folder or a file (READ, READ_WRITE, "Add files only" drop boxes, at a space's top
 level too): create, edit, renew, switch off and on, delete; closing a link re-keys the subtree, an interrupted re-key
 is resumed — measured 2026-11-09. Taking shared images and PDFs into a Pot from the system's share sheet (Android, iOS;
-ADR 0124), measured 2026-11-08.
+ADR 0126), measured 2026-11-08.
 
 **Expenses.** Every web use case: create a Pot, record entries, receipts, balances, an entry's history, exchange
 rates, participants, share, verify the ledger; the live poll; export and copy of a Pot — measured 2026-11-08/09.
@@ -73,7 +75,7 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
 **Platforms and form factors**
 - Android: an adaptive layout for tablets and large windows (the sidebar open, list and detail side by side).
 - iPad and macOS: run, look at and fix the split view; macOS has no share extension.
-- Windows (WinUI) and Linux (GTK/libadwaita): the ADR, then the apps.
+- Windows (WinUI) and Linux (GTK/libadwaita): the apps (ADR 0127 decisions 4 and 5).
 - The logic still in both app models moved into the core (§ The split), before Windows and Linux.
 - A CI job for the apps.
 

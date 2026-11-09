@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile.expenses
 
 /**
- * What a Pot takes when something is shared to veyq (ADR 0124 decision 2, owner 2026-11-08): images and PDFs within its
+ * What a Pot takes when something is shared to veyq (ADR 0126 decision 2, owner 2026-11-08): images and PDFs within its
  * receipts' rules, which open the editor of a new expense with them as its receipts. Expenses' answer; the apps' pick mode
  * asks it, core's navigation knows no application.
  */

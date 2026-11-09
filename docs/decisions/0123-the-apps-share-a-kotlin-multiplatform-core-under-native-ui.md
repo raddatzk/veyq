@@ -3,6 +3,7 @@
 - Status: Accepted
 - Built: partly — what stands and what is open is [native-apps](../crosscutting/native-apps.md)
 - Date: 2026-11-08
+- Extended by: [ADR 0127](0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) (all of an app's logic in the core; Windows and Linux)
 
 ## Context
 

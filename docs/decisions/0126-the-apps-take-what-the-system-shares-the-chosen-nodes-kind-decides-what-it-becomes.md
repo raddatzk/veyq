@@ -1,4 +1,4 @@
-# ADR 0124 — The apps take what the system shares; the chosen node's kind decides what it becomes
+# ADR 0126 — The apps take what the system shares; the chosen node's kind decides what it becomes
 
 - Status: Accepted
 - Built: partly (Android's share target, iOS's share extension, the pick mode on both, a drop onto the Apple app, the app group and the shared keychain group; not built: a drop onto the Android app)

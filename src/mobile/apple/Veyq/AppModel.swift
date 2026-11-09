@@ -52,7 +52,7 @@ final class AppModel {
         case signIn(working: Bool, error: String?, adding: Bool, server: String?, email: String?)
         /// An account this device trusts: the password alone, or the person's authentication.
         case unlock(record: TrustedDevice, working: Bool, error: String?)
-        /// In the share extension with no account this device trusts: the app signs in, not the extension (ADR 0124).
+        /// In the share extension with no account this device trusts: the app signs in, not the extension (ADR 0126).
         case needsApp
         case signed
     }
@@ -76,7 +76,7 @@ final class AppModel {
 
     private let connections = AppleSessions.shared.connections()
     private let device: ThisDevice
-    /// The share extension's model (ADR 0124): it signs in only from what the app left and moves nothing of the app's.
+    /// The share extension's model (ADR 0126): it signs in only from what the app left and moves nothing of the app's.
     let inExtension: Bool
 
     private static func makeDevice(inExtension: Bool) -> ThisDevice {
@@ -87,7 +87,7 @@ final class AppModel {
         #endif
         let keychain = KeychainStore(movesLegacy: !inExtension)
         if !inExtension {
-            // What the share extension reads too lives in the app group (ADR 0124); an earlier installation's move there.
+            // What the share extension reads too lives in the app group (ADR 0126); an earlier installation's move there.
             Shared.moveIntoGroup()
             // A first start after an installation: the Keychain may still hold an earlier installation's items.
             if !Shared.defaults.bool(forKey: "veyq.installed") {
@@ -403,7 +403,7 @@ final class AppModel {
         refreshDrawer()
     }
 
-    // MARK: What another app shared (ADR 0124)
+    // MARK: What another app shared (ADR 0126)
 
     /// Files shared to veyq, waiting for the Pot they go to (the pick mode), and how many were left out.
     struct Incoming {
@@ -418,13 +418,13 @@ final class AppModel {
     var onShareDone: ((Bool) -> Void)?
 
     /// Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
-    /// they go (ADR 0124 decision 1) — the start does the same while the session is still opening.
+    /// they go (ADR 0126 decision 1) — the start does the same while the session is still opening.
     func receiveShare(_ incoming: Incoming) {
         shell = Shell.companion.start(lastUsed: nil, space: shell.space)
         self.incoming = incoming
     }
 
-    /// Files dropped onto the app (ADR 0124 decision 9): an open Pot that takes them opens its new expense with them at once;
+    /// Files dropped onto the app (ADR 0126 decision 9): an open Pot that takes them opens its new expense with them at once;
     /// anywhere else they wait in the pick mode, as a share's do.
     func receiveDrop(_ incoming: Incoming) {
         if let ref = shell.openObject, ref.kind == PotSession.companion.KIND, pot?.ref == ref, let view = pot?.view,
