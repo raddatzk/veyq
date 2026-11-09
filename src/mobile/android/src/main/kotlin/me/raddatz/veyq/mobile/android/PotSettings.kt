@@ -74,14 +74,11 @@ internal fun PotSettings(view: PotView, state: me.raddatz.veyq.mobile.expenses.P
     }
 }
 
-/** The currencies this device knows, by code (`java.util.Currency`; the web asks `Intl` the same). */
-internal val currencies: List<String> by lazy {
-    java.util.Currency.getAvailableCurrencies().map { it.currencyCode }.filter { RevisionFormat.CURRENCY.matches(it) }.distinct().sorted()
-}
+/** The currencies offered, by code: core's one table (the web's `Intl`). */
+internal val currencies: List<String> get() = me.raddatz.veyq.mobile.expenses.Currencies.known
 
-/** The minor-unit digits of [code] (the euro 2, the yen 0, the dinar 3), within the format's 0..4. */
-internal fun minorUnitsOf(code: String): Int =
-    runCatching { java.util.Currency.getInstance(code).defaultFractionDigits }.getOrDefault(2).let { if (it < 0) 2 else it.coerceIn(0, 4) }
+/** The minor-unit digits of [code] (the euro 2, the yen 0, the dinar 3): core's one table. */
+internal fun minorUnitsOf(code: String): Int = me.raddatz.veyq.mobile.expenses.Currencies.minorUnits(code)
 
 /** The base currency: chosen while the Pot holds no money entry, fixed from its first one on. */
 @OptIn(ExperimentalMaterial3Api::class)

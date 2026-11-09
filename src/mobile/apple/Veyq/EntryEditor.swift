@@ -127,15 +127,12 @@ struct EntryEditor: View {
     @State private var receiptsUI = ReceiptsUI()
     @Environment(\.dismiss) private var dismiss
 
-    private static let currencies: [String] = Array(Set(Locale.commonISOCurrencyCodes.filter { $0.count == 3 && $0 == $0.uppercased() })).sorted()
+    /// The currencies offered, by code: core's one table (the web's `Intl`).
+    private static var currencies: [String] { Currencies.shared.known }
     private static let defaults = ["food", "groceries", "accommodation", "transport", "leisure", "household", "other"]
 
-    private static func minorUnits(_ code: String) -> Int32 {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = code
-        return Int32(min(4, max(0, f.maximumFractionDigits)))
-    }
+    /// The minor-unit digits of `code` (the euro 2, the yen 0, the dinar 3): core's one table.
+    private static func minorUnits(_ code: String) -> Int32 { Currencies.shared.minorUnits(code: code) }
 
     private var ids: [String] { people.map(\.id) }
     /// A reader sees the same entry read only: rights remove functions, never a reader's own screen (inbox #401).

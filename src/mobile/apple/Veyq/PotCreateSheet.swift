@@ -14,14 +14,11 @@ struct PotCreateSheet: View {
     @State private var people: [PotCreate.NewPerson] = []
     @State private var members: [Person] = []
 
-    private static let currencies: [String] = Array(Set(Locale.commonISOCurrencyCodes.filter { $0.count == 3 && $0 == $0.uppercased() })).sorted()
+    /// The currencies offered, by code: core's one table (the web's `Intl`).
+    private static var currencies: [String] { Currencies.shared.known }
 
-    private static func minorUnits(_ code: String) -> Int32 {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = code
-        return Int32(min(4, max(0, f.maximumFractionDigits)))
-    }
+    /// The minor-unit digits of `code` (the euro 2, the yen 0, the dinar 3): core's one table.
+    private static func minorUnits(_ code: String) -> Int32 { Currencies.shared.minorUnits(code: code) }
 
     private func key(_ p: PotCreate.NewPerson) -> String { p.userId.map { "member:\($0)" } ?? "name:\(p.name.lowercased())" }
 

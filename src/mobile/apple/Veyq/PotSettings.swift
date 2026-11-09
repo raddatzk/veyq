@@ -30,16 +30,11 @@ struct PotSettings: View {
 
     private var saving: Bool { model.pot?.saving == true }
 
-    /// The currencies this device knows, by code (the web asks `Intl` the same).
-    private static let currencies: [String] = Array(Set(Locale.commonISOCurrencyCodes.filter { $0.count == 3 && $0 == $0.uppercased() })).sorted()
+    /// The currencies offered, by code: core's one table (the web's `Intl`).
+    private static var currencies: [String] { Currencies.shared.known }
 
-    /// The minor-unit digits of `code` (the euro 2, the yen 0, the dinar 3), within the format's 0...4.
-    private static func minorUnits(_ code: String) -> Int32 {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = code
-        return Int32(min(4, max(0, f.maximumFractionDigits)))
-    }
+    /// The minor-unit digits of `code` (the euro 2, the yen 0, the dinar 3): core's one table.
+    private static func minorUnits(_ code: String) -> Int32 { Currencies.shared.minorUnits(code: code) }
 
     var body: some View {
         List {
